@@ -510,6 +510,43 @@ void main()
 }
 )glsl";
 
+// Shader containing dead code that an optimizer can eliminate. Used to observe
+// SPIR-V size differences between optimization modes.
+constexpr const char* kFragmentWithDeadCode = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(location = 0) in vec2 vUV;
+void main()
+{
+    float unused0 = vUV.x * 2.0;
+    float unused1 = unused0 + vUV.y;
+    float unused2 = unused1 * unused0 - vUV.x;
+    vec4 unusedVec = vec4(unused2, unused1, unused0, 1.0) * 0.0;
+    outColor = vec4(1.0, 0.0, 0.0, 1.0) + unusedVec * 0.0;
+}
+)glsl";
+
+// Header file body pulled in via a system-style #include (searched through the
+// external -I directories set on TranspileOptions::includePaths).
+constexpr const char* kIncludeHeaderBody = R"glsl(
+vec4 getTestColor()
+{
+    return vec4(1.0, 0.5, 0.25, 1.0);
+}
+)glsl";
+
+// Fragment shader that requires a system #include to be resolvable.
+constexpr const char* kFragmentWithSystemInclude = R"glsl(
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include <yup_test_include_header.glsl>
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = getTestColor();
+}
+)glsl";
+
 } // namespace
 
 //==============================================================================
@@ -673,6 +710,168 @@ TEST_F (ShaderTranspilerTests, CompileToSPIRV_TessEvalShader)
 
     ASSERT_TRUE (result.wasOk());
     EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+//==============================================================================
+// compileToSPIRV — SPIR-V optimization / validation / debug info
+//==============================================================================
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_OptimizationNoneCompiles)
+{
+    TranspileOptions opts;
+    opts.spirvOptimization = SpvOptimizationMode::none;
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithDeadCode, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_OptimizationSizeCompiles)
+{
+    TranspileOptions opts;
+    opts.spirvOptimization = SpvOptimizationMode::size;
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithDeadCode, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_OptimizationPerformanceCompiles)
+{
+    TranspileOptions opts;
+    opts.spirvOptimization = SpvOptimizationMode::performance;
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithDeadCode, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_OptimizationDoesNotGrowDeadCode)
+{
+    TranspileOptions noneOpts;
+    noneOpts.spirvOptimization = SpvOptimizationMode::none;
+
+    TranspileOptions sizeOpts;
+    sizeOpts.spirvOptimization = SpvOptimizationMode::size;
+
+    auto unoptimized = transpiler->compileToSPIRV (
+        kFragmentWithDeadCode, ShaderStage::fragment, ShaderLanguage::glsl, noneOpts);
+    auto optimized = transpiler->compileToSPIRV (
+        kFragmentWithDeadCode, ShaderStage::fragment, ShaderLanguage::glsl, sizeOpts);
+
+    ASSERT_TRUE (unoptimized.wasOk()) << unoptimized.getErrorMessage();
+    ASSERT_TRUE (optimized.wasOk()) << optimized.getErrorMessage();
+
+    // Whether or not the SPIRV-Tools optimizer is linked in, size-optimized
+    // output must never be larger than the unoptimized binary.
+    EXPECT_LE (optimized.getValue().getSize(), unoptimized.getValue().getSize());
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_ValidationPassesForValidShader)
+{
+    TranspileOptions opts;
+    opts.spirvValidate = true;
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_DebugInfoProducesLargerBinary)
+{
+    TranspileOptions plainOpts;
+
+    TranspileOptions debugOpts;
+    debugOpts.spirvDebugInfo = true;
+
+    auto plain = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl, plainOpts);
+    auto debug = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl, debugOpts);
+
+    ASSERT_TRUE (plain.wasOk()) << plain.getErrorMessage();
+    ASSERT_TRUE (debug.wasOk()) << debug.getErrorMessage();
+
+    // Debug info adds OpSource / OpName / OpLine entries, growing the binary.
+    EXPECT_GT (debug.getValue().getSize(), plain.getValue().getSize());
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_DebugInfoDecompilesToValidTarget)
+{
+    TranspileOptions opts;
+    opts.spirvDebugInfo = true;
+
+    auto spirv = transpiler->compileToSPIRV (
+        kFragmentWithUniforms, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    auto decompiled = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::msl);
+
+    ASSERT_TRUE (decompiled.wasOk()) << decompiled.getErrorMessage();
+    EXPECT_TRUE (decompiled.getValue().contains ("metal"));
+}
+
+//==============================================================================
+// compileToSPIRV — include paths
+//==============================================================================
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_IncludeFailsWithoutSearchPath)
+{
+    // No include paths set: the default ForbidIncluder must reject the #include.
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithSystemInclude, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().isNotEmpty());
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_IncludeResolvesFromSearchPath)
+{
+    const auto includeDir = File::getSpecialLocation (File::tempDirectory)
+                                .getChildFile ("yup_shader_include_test");
+    ASSERT_TRUE (includeDir.createDirectory().wasOk());
+
+    const auto headerFile = includeDir.getChildFile ("yup_test_include_header.glsl");
+    ASSERT_TRUE (headerFile.replaceWithText (kIncludeHeaderBody));
+
+    TranspileOptions opts;
+    opts.includePaths.push_back (includeDir.getFullPathName());
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithSystemInclude, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    headerFile.deleteFile();
+    includeDir.deleteRecursively();
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_GT (result.getValue().getSize(), sizeof (uint32_t) * 5u);
+}
+
+TEST_F (ShaderTranspilerTests, CompileToSPIRV_IncludeFailsWhenHeaderMissingInSearchPath)
+{
+    const auto includeDir = File::getSpecialLocation (File::tempDirectory)
+                                .getChildFile ("yup_shader_include_missing_test");
+    ASSERT_TRUE (includeDir.createDirectory().wasOk());
+
+    // Directory exists but does not contain the requested header.
+    TranspileOptions opts;
+    opts.includePaths.push_back (includeDir.getFullPathName());
+
+    auto result = transpiler->compileToSPIRV (
+        kFragmentWithSystemInclude, ShaderStage::fragment, ShaderLanguage::glsl, opts);
+
+    includeDir.deleteRecursively();
+
+    EXPECT_TRUE (result.failed());
 }
 
 //==============================================================================
@@ -2309,4 +2508,164 @@ TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_MSL_StageInputAndOutputSlots)
     {
         EXPECT_EQ (so.backendSlot, ~0u);
     }
+}
+
+//==============================================================================
+// TranspileOptions::toCacheKeyPayload
+//==============================================================================
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DefaultsAreDeterministic)
+{
+    TranspileOptions a;
+    TranspileOptions b;
+
+    EXPECT_EQ (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_EntryPointAffectsKey)
+{
+    TranspileOptions a;
+    a.entryPoint = "main";
+
+    TranspileOptions b;
+    b.entryPoint = "vertexMain";
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_GlslVersionAffectsKey)
+{
+    TranspileOptions a;
+    a.glslVersion = 450;
+
+    TranspileOptions b;
+    b.glslVersion = 330;
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_EsFlagAffectsKey)
+{
+    TranspileOptions a;
+    a.es = false;
+
+    TranspileOptions b;
+    b.es = true;
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_HlslShaderModelAffectsKey)
+{
+    TranspileOptions a;
+    a.hlslShaderModel = 50;
+
+    TranspileOptions b;
+    b.hlslShaderModel = 60;
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_OptimizationModeAffectsKey)
+{
+    TranspileOptions none;
+    none.spirvOptimization = SpvOptimizationMode::none;
+
+    TranspileOptions size;
+    size.spirvOptimization = SpvOptimizationMode::size;
+
+    TranspileOptions perf;
+    perf.spirvOptimization = SpvOptimizationMode::performance;
+
+    EXPECT_NE (none.toCacheKeyPayload(), size.toCacheKeyPayload());
+    EXPECT_NE (none.toCacheKeyPayload(), perf.toCacheKeyPayload());
+    EXPECT_NE (size.toCacheKeyPayload(), perf.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_ValidateFlagAffectsKey)
+{
+    TranspileOptions a;
+
+    TranspileOptions b;
+    b.spirvValidate = true;
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DebugInfoFlagAffectsKey)
+{
+    TranspileOptions a;
+
+    TranspileOptions b;
+    b.spirvDebugInfo = true;
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_IncludePathsAffectKey)
+{
+    TranspileOptions a;
+
+    TranspileOptions b;
+    b.includePaths.push_back ("/shaders/common");
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_IncludePathOrderIsDeterministic)
+{
+    TranspileOptions a;
+    a.includePaths = { "/shaders/common", "/shaders/lib" };
+
+    TranspileOptions b;
+    b.includePaths = { "/shaders/lib", "/shaders/common" };
+
+    // Include paths are sorted before hashing, so ordering must not matter.
+    EXPECT_EQ (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DifferentIncludePathsDiffer)
+{
+    TranspileOptions a;
+    a.includePaths = { "/shaders/common" };
+
+    TranspileOptions b;
+    b.includePaths = { "/shaders/other" };
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DefinesAffectKey)
+{
+    TranspileOptions a;
+
+    TranspileOptions b;
+    b.defines.set ("FOO", "1");
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DefineOrderIsDeterministic)
+{
+    TranspileOptions a;
+    a.defines.set ("FOO", "1");
+    a.defines.set ("BAR", "2");
+
+    TranspileOptions b;
+    b.defines.set ("BAR", "2");
+    b.defines.set ("FOO", "1");
+
+    // Defines are sorted before hashing, so insertion order must not matter.
+    EXPECT_EQ (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+TEST (TranspileOptionsTests, CacheKeyPayload_DefineValueAffectsKey)
+{
+    TranspileOptions a;
+    a.defines.set ("FOO", "1");
+
+    TranspileOptions b;
+    b.defines.set ("FOO", "2");
+
+    EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
 }

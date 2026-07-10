@@ -1053,7 +1053,25 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
 
     int defaultVersion = (sourceLang == ShaderLanguage::essl) ? 300 : 100;
 
-    if (! shader.parse (&resources, defaultVersion, false, messages))
+    if (! options.includePaths.empty())
+    {
+        DirStackFileIncluder includer;
+
+        for (const auto& path : options.includePaths)
+            includer.pushExternalDirectory (path.toStdString());
+
+        if (! shader.parse (&resources, defaultVersion, false, messages, includer))
+        {
+            String infoLog = shader.getInfoLog();
+            String debugLog = shader.getInfoDebugLog();
+
+            if (infoLog.isEmpty() && debugLog.isNotEmpty())
+                return makeResultValueFail (debugLog);
+
+            return makeResultValueFail (infoLog);
+        }
+    }
+    else if (! shader.parse (&resources, defaultVersion, false, messages))
     {
         String infoLog = shader.getInfoLog();
         String debugLog = shader.getInfoDebugLog();
@@ -1080,8 +1098,26 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
 
     std::vector<uint32_t> spirv;
     glslang::SpvOptions spvOptions;
-    spvOptions.disableOptimizer = ! options.spirvOptimize;
-    spvOptions.optimizeSize = options.spirvOptimize;
+
+    switch (options.spirvOptimization)
+    {
+        case SpvOptimizationMode::none:
+            spvOptions.disableOptimizer = true;
+            spvOptions.optimizeSize = false;
+            break;
+        case SpvOptimizationMode::size:
+            spvOptions.disableOptimizer = false;
+            spvOptions.optimizeSize = true;
+            break;
+        case SpvOptimizationMode::performance:
+            spvOptions.disableOptimizer = false;
+            spvOptions.optimizeSize = false;
+            break;
+    }
+
+    spvOptions.validate = options.spirvValidate;
+    spvOptions.generateDebugInfo = options.spirvDebugInfo;
+
     glslang::GlslangToSpv (*program.getIntermediate (glslStage), spirv, &spvOptions);
 
     if (spirv.empty())

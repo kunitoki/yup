@@ -25,6 +25,15 @@ namespace yup
 {
 
 //==============================================================================
+/** SPIR-V optimization mode applied during compilation. */
+enum class SpvOptimizationMode
+{
+    none,       /**< No optimization (glslang optimizer disabled). */
+    size,       /**< Optimize the generated SPIR-V for size. */
+    performance /**< Optimize the generated SPIR-V for performance. */
+};
+
+//==============================================================================
 /** Options controlling transpilation behavior. */
 struct TranspileOptions
 {
@@ -46,11 +55,20 @@ struct TranspileOptions
     /** When true, flip the Y coordinate in vertex output (MSL). */
     bool flipVertY = false;
 
-    /** Enable SPIR-V optimization (requires SPIRV-Tools linked into glslang). */
-    bool spirvOptimize = false;
+    /** SPIR-V optimization mode (requires SPIRV-Tools linked into glslang). */
+    SpvOptimizationMode spirvOptimization = SpvOptimizationMode::none;
+
+    /** When true, run SPIR-V validation after compilation. */
+    bool spirvValidate = false;
+
+    /** When true, emit debug info into the SPIR-V binary. */
+    bool spirvDebugInfo = false;
 
     /** Preprocessor defines (name → value, empty string for no-value defines). */
     HashMap<String, String> defines;
+
+    /** Include search paths for resolving #include directives (-I&lt;dir&gt; style). */
+    std::vector<String> includePaths;
 
     //==========================================================================
     /**
@@ -68,7 +86,16 @@ struct TranspileOptions
                 << "|hlslSM:" << hlslShaderModel
                 << "|mslFBF:" << (mslUsesFramebufferFetch ? '1' : '0')
                 << "|flipY:" << (flipVertY ? '1' : '0')
-                << "|spvOpt:" << (spirvOptimize ? '1' : '0');
+                << "|spvOpt:" << static_cast<int> (spirvOptimization)
+                << "|spvValidate:" << (spirvValidate ? '1' : '0')
+                << "|spvDebug:" << (spirvDebugInfo ? '1' : '0');
+
+        // Include paths sorted for determinism
+        std::vector<String> sortedPaths (includePaths.begin(), includePaths.end());
+        std::sort (sortedPaths.begin(), sortedPaths.end());
+
+        for (const auto& p : sortedPaths)
+            payload << "|inc:" << p;
 
         // Defines sorted for determinism
         std::vector<std::pair<String, String>> sortedDefines;
