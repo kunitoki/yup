@@ -143,7 +143,7 @@ public:
     Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
 
     /** Constructs a Graphics object for rendering into an Image on the GPU. */
-    Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor = 0) noexcept;
+    Graphics (GraphicsContext& context, std::unique_ptr<OffscreenTarget> target, uint32_t clearColor = 0) noexcept;
 
     /** Constructs a Graphics object rendering into an externally-owned offscreen target.
 
@@ -154,7 +154,7 @@ public:
         @param target       Reference to the externally-owned offscreen target.
         @param clearColor   ARGB clear color applied at the start of the offscreen frame.
     */
-    Graphics (GraphicsContext& context, GraphicsContext::OffscreenTarget& target, uint32_t clearColor = 0) noexcept;
+    Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t clearColor = 0) noexcept;
 
     //==============================================================================
     /** Saves the current state of the Graphics object.
@@ -770,8 +770,8 @@ private:
 
     GraphicsContext& context;
 
-    std::unique_ptr<GraphicsContext::OffscreenTarget> ownedOffscreenTarget;
-    GraphicsContext::OffscreenTarget* offscreenTarget = nullptr;
+    std::unique_ptr<OffscreenTarget> ownedOffscreenTarget;
+    OffscreenTarget* offscreenTarget = nullptr;
 
     rive::Factory& factory;
     std::unique_ptr<rive::Renderer> ownedRenderer;

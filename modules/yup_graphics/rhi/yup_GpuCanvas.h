@@ -164,7 +164,7 @@ private:
     GpuCanvas() = default;
 
     GraphicsContext* ctx = nullptr;
-    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
+    std::unique_ptr<OffscreenTarget> offscreenTarget;
     std::unique_ptr<Graphics> graphics;
     GpuTexture::Ptr cachedTexture;
     bool frameOpen = false;
