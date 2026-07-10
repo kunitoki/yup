@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Breaking changes
 
 - macOS: OpenGL rendering backend disabled in favor of Metal
+- `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
 
 ### Graphics
 
@@ -47,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Bug Fixes
 
+- Lottie: track mattes (alpha, alpha-inverted, luma, luma-inverted) now composite the matte source's *rendered alpha* — including its fill opacity, gradients, and anti-aliased edges — instead of hard-clipping the target to the source silhouette. The matte source and target are rendered into offscreen GPU buffers (sized to the fitted on-screen resolution) and multiplied by a fullscreen matte-composite shader. A partially transparent matte source now shows through correctly (e.g. `matte_two_item_with_lowerlayer.json`, whose 65%-opacity source blends the white matted ellipse to pink over the red layer beneath). Falls back to the previous geometric-clip behaviour when no GPU is available (e.g. headless rendering).
 - Lottie: `EllipseShape` paths now start at the top (12 o'clock) and follow the shape direction (clockwise for `d == 1`, counter-clockwise for `d == 3`), matching Lottie's convention. Previously they started at the right (3 o'clock) going counter-clockwise, which placed trimmed arcs at the wrong position (e.g. the expanding rings in `world_locations.json` were cut short on the right).
 - `Path::withRoundedCorners()` left one corner sharp on closed subpaths whose geometry ended with an explicit segment back to the start vertex (as produced by Lottie bezier `toPath()`). The duplicated start/end point formed a zero-length edge that made that corner degenerate. The trailing duplicate is now dropped, and corners are rounded with a cubic arc (circle kappa) instead of a single quadratic through the vertex, so a square with a full Round Corners modifier becomes a proper circle (e.g. the morphing loader shape in `loader.json`).
 - Lottie: trailing top-level modifiers (trim, repeater, rounded-corner) in a shape layer now apply to every preceding top-level group in the run, not just the last one, so a single trim animates all shapes it should (e.g. the knife in `it's_lunch_time!.json`, and the segmented strokes in `imprint.json` / `fingerprint_success.json`). Trailing paints similarly reach all preceding paint-less groups.

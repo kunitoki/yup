@@ -52,7 +52,8 @@ public:
                                    float frameNo,
                                    Rectangle<float> bounds,
                                    Fitting fitting = Fitting::scaleToFit,
-                                   Justification justification = Justification::center);
+                                   Justification justification = Justification::center,
+                                   AnimationRenderResources* renderResources = nullptr);
 
 private:
     static void renderComposition (Graphics& g,
@@ -62,7 +63,8 @@ private:
                                    Fitting fitting,
                                    Justification justification,
                                    float opacity,
-                                   std::optional<Color> paintOverride = std::nullopt);
+                                   std::optional<Color> paintOverride,
+                                   AnimationRenderResources* renderResources);
 
     static AffineTransform calculateViewTransform (Size<float> compSize,
                                                    Rectangle<float> targetArea,
@@ -97,7 +99,8 @@ private:
         AffineTransform viewTransform; ///< composition-space → screen-space
         float opacity = 1.0f;
         std::optional<Color> paintOverride;
-        PrecompCache* precompCache = nullptr; ///< Owned by the outermost renderComposition call.
+        PrecompCache* precompCache = nullptr;                ///< Owned by the outermost renderComposition call.
+        AnimationRenderResources* renderResources = nullptr; ///< Optional persistent GPU resources (matte pipeline).
 
         AffineTransform resolveLayerTransform (const AnimationLayer& layer) const;
     };
@@ -120,6 +123,11 @@ private:
                                      const RenderContext& ctx,
                                      const AnimationLayer* matteSource,
                                      float opacity);
+    static bool renderLayerWithMatte (Graphics& g,
+                                      const AnimationLayer& layer,
+                                      const RenderContext& ctx,
+                                      const AnimationLayer& matteSource,
+                                      float opacity);
     static void renderDropShadow (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity);
     static void renderLayerContent (Graphics& g, const AnimationLayer& layer, const RenderContext& ctx, float opacity);
     static void renderShapeLayer (Graphics& g, const ShapeLayer& layer, const RenderContext& ctx, float opacity);

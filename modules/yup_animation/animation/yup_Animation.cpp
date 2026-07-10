@@ -119,38 +119,41 @@ void Animation::renderFrame (Graphics& g,
                              float frameNo,
                              Rectangle<float> bounds,
                              Fitting fitting,
-                             Justification justification) const
+                             Justification justification,
+                             AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
-    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, fitting, justification);
+    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, fitting, justification, renderResources);
 }
 
 void Animation::renderAtTime (Graphics& g,
                               float timeInSeconds,
                               Rectangle<float> bounds,
                               Fitting fitting,
-                              Justification justification) const
+                              Justification justification,
+                              AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtTime (timeInSeconds);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification, renderResources);
 }
 
 void Animation::renderAtProgress (Graphics& g,
                                   float progress,
                                   Rectangle<float> bounds,
                                   Fitting fitting,
-                                  Justification justification) const
+                                  Justification justification,
+                                  AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtProgress (progress);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification, renderResources);
 }
 
 //==============================================================================

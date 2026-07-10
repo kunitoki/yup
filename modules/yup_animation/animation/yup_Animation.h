@@ -100,12 +100,16 @@ public:
 
     //==============================================================================
     /** Renders the given frame into @p g, fitted inside @p bounds using the given
-        @p fitting and @p justification, mirroring Drawable::paint semantics. */
+        @p fitting and @p justification, mirroring Drawable::paint semantics.
+
+        Pass an optional @p renderResources to reuse the GPU matte-composite
+        pipeline across calls (compiled once instead of per frame). */
     void renderFrame (Graphics& g,
                       float frameNo,
                       Rectangle<float> bounds,
                       Fitting fitting = Fitting::scaleToFit,
-                      Justification justification = Justification::center) const;
+                      Justification justification = Justification::center,
+                      AnimationRenderResources* renderResources = nullptr) const;
 
     /** Renders the frame corresponding to @p timeInSeconds using the given
         @p fitting and @p justification. */
@@ -113,7 +117,8 @@ public:
                        float timeInSeconds,
                        Rectangle<float> bounds,
                        Fitting fitting = Fitting::scaleToFit,
-                       Justification justification = Justification::center) const;
+                       Justification justification = Justification::center,
+                       AnimationRenderResources* renderResources = nullptr) const;
 
     /** Renders the frame at a normalised progress in [0, 1] using the given
         @p fitting and @p justification. */
@@ -121,7 +126,8 @@ public:
                            float progress,
                            Rectangle<float> bounds,
                            Fitting fitting = Fitting::scaleToFit,
-                           Justification justification = Justification::center) const;
+                           Justification justification = Justification::center,
+                           AnimationRenderResources* renderResources = nullptr) const;
 
     //==============================================================================
     /** Serialises the composition to a Lottie JSON string. */
