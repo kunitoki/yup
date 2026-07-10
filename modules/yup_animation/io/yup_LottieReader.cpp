@@ -348,6 +348,8 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     comp->startFrame = varFloat (root["ip"]);
     comp->endFrame = varFloat (root["op"], 60.0f);
 
+    frameRate_ = comp->frameRate > 0.0f ? comp->frameRate : 60.0f;
+
     parseAssets (root["assets"], *comp);
 
     const var& layersVar = root["layers"];
@@ -1157,10 +1159,12 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rd->hidden = (bool) itemObj["hd"];
         rd->radius = parseProperty<float> (itemObj["r"], extractFloat);
     }
-    else if (ty == "mm") // Merge Paths - not yet supported (gap 26)
+    else if (ty == "mm") // Merge Paths
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Merge Path (mm) is not supported yet";
+        auto* mm = group.addMergePaths();
+        mm->name = varString (itemObj["nm"]);
+        mm->hidden = (bool) itemObj["hd"];
+        mm->mode = static_cast<AnimationMergePaths::Mode> (varInt (itemObj["mm"], 1));
     }
 }
 
@@ -1462,11 +1466,107 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
         }
     }
 
+    parsePositionBounce (pObj, t);
+
     t.scale = parseProperty<Size<float>> (ksObj["s"], extractSize);
 }
 
 //==============================================================================
+void LottieReader::parsePositionBounce (const var& positionObj, AnimationTransform& transform)
+{
+    const String expr = varString (positionObj["x"]);
+    if (expr.isEmpty())
+        return;
+
+    // Match the AfterEffects inertial-bounce ("overshoot") expression, which
+    // combines amp/freq/decay constants with a decaying sine driven by the
+    // incoming velocity at the last keyframe.
+    if (! (expr.contains ("amp") && expr.contains ("freq") && expr.contains ("decay")
+           && expr.containsIgnoreCase ("Math.sin") && expr.containsIgnoreCase ("Math.exp")))
+        return;
+
+    auto extractConstant = [&expr] (const String& name, float defaultValue) -> float
+    {
+        const int idx = expr.indexOf (name + " =");
+        if (idx < 0)
+            return defaultValue;
+
+        const int eq = expr.indexOf (idx, "=");
+        const int semi = expr.indexOf (eq, ";");
+        if (eq < 0 || semi < 0)
+            return defaultValue;
+
+        return expr.substring (eq + 1, semi).trim().getFloatValue();
+    };
+
+    InertialBounceParams params;
+    params.amplitude = extractConstant ("amp", 0.05f);
+    params.frequency = extractConstant ("freq", 2.0f);
+    params.decay = extractConstant ("decay", 2.0f);
+    params.timeMax = 2.0f;
+    params.frameRate = frameRate_;
+
+    if (! params.isActive())
+        return;
+
+    // Incoming velocity (pixels per second) at the last keyframe, derived from
+    // the final animated segment so the overshoot magnitude matches the motion.
+    Point<float> startValue {};
+    Point<float> endValue {};
+    float spanFrames = 0.0f;
+
+    if (transform.spatialKeyframes.size() >= 2)
+    {
+        const auto& last = transform.spatialKeyframes.back();
+        const auto& prev = transform.spatialKeyframes[transform.spatialKeyframes.size() - 2];
+        startValue = prev.value;
+        endValue = prev.endValue.value_or (last.value);
+        spanFrames = last.frame - prev.frame;
+    }
+    else if (transform.position.isAnimated() && transform.position.getKeyframes().size() >= 2)
+    {
+        const auto& kfs = transform.position.getKeyframes();
+        const auto& last = kfs.back();
+        const auto& prev = kfs[kfs.size() - 2];
+        startValue = prev.value;
+        endValue = prev.endValue.value_or (last.value);
+        spanFrames = last.frame - prev.frame;
+    }
+    else
+    {
+        return;
+    }
+
+    if (spanFrames <= 1e-5f)
+        return;
+
+    params.velocity = (endValue - startValue) * (frameRate_ / spanFrames);
+    transform.positionBounce = params;
+}
+
+//==============================================================================
 // Property parsing
+
+namespace
+{
+// Detects AfterEffects loopOut() expressions and configures the property to
+// repeat its keyframe range. Only the 'cycle' variant (the default) is applied;
+// other variants (pingpong / continue / offset) are left as a held final value.
+template <typename T>
+void applyLoopExpression (AnimationProperty<T>& property, const var& propObj)
+{
+    const String expr = varString (propObj["x"]);
+    if (! expr.containsIgnoreCase ("loopOut"))
+        return;
+
+    if (expr.containsIgnoreCase ("pingpong")
+        || expr.containsIgnoreCase ("continue")
+        || expr.containsIgnoreCase ("offset"))
+        return;
+
+    property.setLoopMode (AnimationProperty<T>::LoopMode::cycle);
+}
+} // namespace
 
 template <typename T>
 AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
@@ -1556,7 +1656,9 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
         }
     }
 
-    return builder.build();
+    auto result = builder.build();
+    applyLoopExpression (result, propObj);
+    return result;
 }
 
 AnimationEasing LottieReader::parseEasing (const var& kfObj)

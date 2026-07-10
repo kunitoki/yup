@@ -57,6 +57,7 @@ private:
     static var serializeTrim (const AnimationTrim& trim);
     static var serializeRepeater (const AnimationRepeater& repeater);
     static var serializeRoundedCorner (const AnimationRoundedCorner& rc);
+    static var serializeMergePaths (const AnimationMergePaths& mm);
     static var serializeTransform (const AnimationTransform& t);
     static var serializeMasks (const std::vector<AnimationMask::Ptr>& masks);
     static var serializeMask (const AnimationMask& mask);
