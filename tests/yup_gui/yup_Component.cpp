@@ -1975,6 +1975,10 @@ protected:
 
         root->addChildComponent (*parent);
         parent->addChildComponent (*child);
+
+        root->setVisible (true);
+        parent->setVisible (true);
+        child->setVisible (true);
     }
 
     std::unique_ptr<DragDropComponent> root;
