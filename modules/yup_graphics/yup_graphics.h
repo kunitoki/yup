@@ -181,6 +181,7 @@ class Context;
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_StrokeType.h"
 #include "graphics/yup_FillType.h"
+#include "context/yup_OffscreenTarget.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
 #include "rhi/yup_ShaderBindingMap.h"

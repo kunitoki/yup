@@ -287,6 +287,9 @@ public:
         if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
+        if (m_offscreenDepth > 0)
+            return nullptr;
+
         auto renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
         if (renderCanvas == nullptr)
             return nullptr;
@@ -309,6 +312,9 @@ public:
 
         renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
         renderContext->beginFrame (frameDesc);
+
+        if (renderContext == m_offscreenRenderContext.get())
+            ++m_offscreenDepth;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
@@ -326,6 +332,9 @@ public:
         renderContext->flush ({ target.getRenderTarget() });
 
         renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
+
+        if (renderContext == m_offscreenRenderContext.get())
+            --m_offscreenDepth;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -437,6 +446,7 @@ private:
     Options m_options;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
+    int m_offscreenDepth = 0;
     std::unique_ptr<rive::ore::ContextGL> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_offscreenRenderTarget;
 

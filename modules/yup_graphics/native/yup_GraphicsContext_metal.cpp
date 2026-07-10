@@ -338,6 +338,12 @@ public:
         if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
             return nullptr;
 
+        // If the shared offscreen context is already in a frame, another
+        // offscreen target cannot be created on it. The caller (e.g.
+        // TransparencyLayer, GpuCanvas) must handle nullptr gracefully.
+        if (m_offscreenDepth > 0)
+            return nullptr;
+
         auto target = std::make_unique<OffscreenTargetMetal>();
         target->width = width;
         target->height = height;
@@ -374,6 +380,9 @@ public:
             return;
 
         renderContext->beginFrame (frameDesc);
+
+        if (renderContext == m_offscreenRenderContext.get())
+            ++m_offscreenDepth;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
@@ -387,6 +396,9 @@ public:
         id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
         renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
         [commandBuffer commit];
+
+        if (renderContext == m_offscreenRenderContext.get())
+            --m_offscreenDepth;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -442,6 +454,7 @@ private:
     const Options m_fiddleOptions;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
+    int m_offscreenDepth = 0;
     std::unique_ptr<rive::ore::ContextMetal> m_oreContext;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];

@@ -285,7 +285,11 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
         height,
         rive::math::msb (width | height),
         rive::GPUTextureFormat::rgba32,
-        texturePixels.data());
+        texturePixels.data(),
+        1,     /* blockWidth */
+        1,     /* blockHeight */
+        false, /* srgb */
+        true); /* generateRemainingMips */
 
     if (riveTex == nullptr)
         return false;
