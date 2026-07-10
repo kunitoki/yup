@@ -135,6 +135,7 @@
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
+#include "component/yup_DragAndDropData.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"

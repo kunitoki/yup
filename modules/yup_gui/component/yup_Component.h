@@ -1098,6 +1098,40 @@ public:
 
     //==============================================================================
     /**
+        Called to determine whether the component is interested in a drag-and-drop payload.
+
+        This acts as the opt-in gate for drop handling. It defaults to returning false,
+        so a component must override this and return true to receive itemsDropped calls.
+
+        On SDL2 this is consulted only at drop time, as the backend provides no live
+        drag hover feedback.
+
+        @param data The payload that would be dropped.
+
+        @return true if the component wants to handle the payload.
+
+        @see itemsDropped
+     */
+    virtual bool isInterestedInDrag (const DragAndDropData& data);
+
+    /**
+        Called when a drag-and-drop payload is dropped onto the component.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events. If the component does not handle
+        the drop it should return false, allowing the payload to bubble up to parents.
+
+        @param position The drop position, in component-local coordinates.
+        @param data     The dropped payload.
+
+        @return true if the component handled the drop.
+
+        @see isInterestedInDrag
+     */
+    virtual bool itemsDropped (const Point<float>& position, const DragAndDropData& data);
+
+    //==============================================================================
+    /**
         Add a mouse listener to the component.
 
         @param listener The mouse listener to add.
@@ -1283,6 +1317,7 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    bool internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);

@@ -137,6 +137,7 @@
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
+#include "component/yup_DragAndDropData.cpp"
 #include "component/yup_Component.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"

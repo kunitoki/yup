@@ -25,6 +25,7 @@
 #include "yup_gui/yup_ComboBox.cpp"
 #include "yup_gui/yup_Component.cpp"
 #include "yup_gui/yup_Desktop.cpp"
+#include "yup_gui/yup_DragAndDropData.cpp"
 #include "yup_gui/yup_FileChooser.cpp"
 #include "yup_gui/yup_Label.cpp"
 #include "yup_gui/yup_ListBox.cpp"

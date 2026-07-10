@@ -132,6 +132,7 @@ public:
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);
+    void handleItemsDropped (const Point<float>& position, const DragAndDropData& data);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
@@ -204,7 +205,8 @@ private:
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
-
+    Array<File> pendingDroppedFiles;
+    String pendingDroppedText;
     RelativeTime doubleClickTime;
 
     RectangleList<float> currentRepaintAreas;

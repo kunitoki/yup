@@ -1071,6 +1071,10 @@ void Component::mouseDoubleClick (const MouseEvent& event) {}
 
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
+bool Component::isInterestedInDrag (const DragAndDropData& data) { return false; }
+
+bool Component::itemsDropped (const Point<float>& position, const DragAndDropData& data) { return false; }
+
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
@@ -1506,6 +1510,32 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
         return;
 
     mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
+}
+
+//==============================================================================
+
+bool Component::internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    // Convert the window (root) position into this component's local coordinates,
+    // mirroring MouseEvent::withRelativePositionTo.
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+        {
+            if (current->itemsDropped (localPosition, data))
+                return true;
+        }
+
+        // Ascend to the parent: the parent-local position adds back this component's offset.
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+
+    return false;
 }
 
 //==============================================================================
