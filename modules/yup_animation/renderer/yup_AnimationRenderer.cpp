@@ -440,8 +440,14 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
     if (ctx.precompCache != nullptr)
     {
         // Render precomp to an offscreen canvas once, then cache for reuse.
-        const int w = static_cast<int> (layer.layerSize.getWidth());
-        const int h = static_cast<int> (layer.layerSize.getHeight());
+        // Size the offscreen target to the on-screen device resolution so the
+        // cached texture is not upscaled (which would lose quality). The current
+        // graphics transform maps layer space to device pixels, so its scale
+        // factor tells us how many device pixels each layer unit occupies.
+        const float deviceScale = jlimit (1.0f, 8.0f, g.getTransform().getScaleFactor());
+
+        const int w = static_cast<int> (std::ceil (layer.layerSize.getWidth() * deviceScale));
+        const int h = static_cast<int> (std::ceil (layer.layerSize.getHeight() * deviceScale));
 
         if (w > 0 && h > 0)
         {
@@ -451,10 +457,10 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
                 {
                     auto& offscreenG = canvas->beginDraw();
 
-                    SceneContext offscreenScene { ctx.scene.comp, localFrame, Size<float> (static_cast<float> (w), static_cast<float> (h)) };
+                    SceneContext offscreenScene { ctx.scene.comp, localFrame, layer.layerSize };
                     offscreenScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { offscreenScene, AffineTransform::identity(), 1.0f, ctx.paintOverride, ctx.precompCache };
+                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
@@ -823,6 +829,7 @@ void AnimationRenderer::renderGroup (Graphics& g,
     const AnimationTrim* activeTrim = nullptr;
     const AnimationRepeater* activeRepeater = nullptr;
     const AnimationRoundedCorner* activeRoundedCorner = parentRoundedCorner;
+    const AnimationMergePaths* activeMergePaths = nullptr;
 
     if (group.hasAnyModifier)
     {
@@ -834,13 +841,21 @@ void AnimationRenderer::renderGroup (Graphics& g,
                 activeRepeater = child.repeater.get();
             if (child.kind == AnimationGroup::ChildKind::RoundedCorner && child.roundedCorner != nullptr)
                 activeRoundedCorner = child.roundedCorner.get();
+            if (child.kind == AnimationGroup::ChildKind::MergePaths && child.mergePaths != nullptr)
+                activeMergePaths = child.mergePaths.get();
         }
     }
 
     const bool hasRepeater = activeRepeater != nullptr && ! activeRepeater->hidden;
     const bool hasTrim = activeTrim != nullptr && ! activeTrim->hidden;
     const bool hasRounded = activeRoundedCorner != nullptr && ! activeRoundedCorner->hidden;
-    const bool hasModifiers = hasRounded || hasTrim || hasRepeater;
+    // Only boolean merge modes (Add/Subtract/Intersect/Exclude) resolve to a path
+    // boolean op. Plain "Merge" (mode 1) keeps the default concatenation so the
+    // fill winding rule still carves holes (e.g. the counters in "O" and "A").
+    const bool hasMergePaths = activeMergePaths != nullptr
+                            && ! activeMergePaths->hidden
+                            && activeMergePaths->isBooleanMerge();
+    const bool hasModifiers = hasRounded || hasTrim || hasRepeater || hasMergePaths;
 
     std::vector<Path> currentPaths;
     std::vector<Path> preparedCache;
@@ -849,6 +864,19 @@ void AnimationRenderer::renderGroup (Graphics& g,
     auto computePrepared = [&]
     {
         preparedCache = currentPaths;
+
+        // Merge Paths combines all collected geometry into a single shape using a
+        // boolean operation, resolving overlapping/mixed-winding sub-paths correctly.
+        if (hasMergePaths && preparedCache.size() > 1)
+        {
+            const auto op = activeMergePaths->toBooleanOperation();
+            Path merged = preparedCache.front();
+            for (size_t i = 1; i < preparedCache.size(); ++i)
+                merged = merged.combinedWith (preparedCache[i], op);
+
+            preparedCache.clear();
+            preparedCache.push_back (std::move (merged));
+        }
 
         if (hasRounded)
         {
@@ -985,6 +1013,27 @@ void AnimationRenderer::renderGroup (Graphics& g,
         else if (child.kind == AnimationGroup::ChildKind::Group && child.group != nullptr)
         {
             renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner);
+
+            // A nested group without its own paint acts as a geometry container
+            // (e.g. Merge Paths sub-groups). Its combined geometry must feed the
+            // parent group's subsequent fills/strokes, so collect it here.
+            const bool hasOwnPaint = std::any_of (child.group->children.begin(),
+                                                  child.group->children.end(),
+                                                  [] (const AnimationGroup::ChildItem& c)
+            {
+                return c.kind == AnimationGroup::ChildKind::Fill
+                    || c.kind == AnimationGroup::ChildKind::Stroke;
+            });
+
+            if (! hasOwnPaint)
+            {
+                Path nestedGeometry = buildMatteClipPathForGroup (*child.group, frameNo, AffineTransform::identity());
+                if (! nestedGeometry.isEmpty())
+                {
+                    currentPaths.push_back (std::move (nestedGeometry));
+                    preparedValid = false;
+                }
+            }
         }
     }
 }

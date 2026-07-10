@@ -103,14 +103,14 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
         return { positionX.getValueAt (frameNo), positionY.getValueAt (frameNo) };
 
     if (spatialKeyframes.empty())
-        return position.getValueAt (frameNo);
+        return applyPositionBounce (position.getValueAt (frameNo), frameNo);
 
     // Spatial bezier interpolation with position tangents
     if (frameNo <= spatialKeyframes.front().frame)
         return spatialKeyframes.front().value;
 
     if (frameNo >= spatialKeyframes.back().frame)
-        return spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value);
+        return applyPositionBounce (spatialKeyframes.back().endValue.value_or (spatialKeyframes.back().value), frameNo);
 
     int lo = 0;
     int hi = static_cast<int> (spatialKeyframes.size()) - 2;
@@ -156,6 +156,36 @@ Point<float> AnimationTransform::positionAt (float frameNo) const
 
     const auto bezier = CubicBezier::fromPoints (P0, P1, P2, P3);
     return bezier.pointAt (bezier.tAtLength (t * segLen, segLen));
+}
+
+Point<float> AnimationTransform::applyPositionBounce (Point<float> settledValue, float frameNo) const
+{
+    if (! positionBounce.isActive() || positionBounce.frameRate <= 0.0f)
+        return settledValue;
+
+    // Frame of the last position keyframe: the bounce oscillates around the
+    // settled value only after the animation has reached its final keyframe.
+    float lastFrame = 0.0f;
+    if (! spatialKeyframes.empty())
+        lastFrame = spatialKeyframes.back().frame;
+    else if (position.isAnimated() && ! position.getKeyframes().empty())
+        lastFrame = position.getKeyframes().back().frame;
+    else
+        return settledValue;
+
+    if (frameNo <= lastFrame)
+        return settledValue;
+
+    const float tSec = (frameNo - lastFrame) / positionBounce.frameRate;
+    if (tSec <= 0.0f || tSec >= positionBounce.timeMax)
+        return settledValue;
+
+    // value + velocity * amp * sin(freq * t * 2pi) / exp(decay * t)
+    const float factor = positionBounce.amplitude
+                       * std::sin (positionBounce.frequency * tSec * MathConstants<float>::twoPi)
+                       / std::exp (positionBounce.decay * tSec);
+
+    return settledValue + positionBounce.velocity * factor;
 }
 
 } // namespace yup

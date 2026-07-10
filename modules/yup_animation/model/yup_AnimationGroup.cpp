@@ -91,4 +91,16 @@ AnimationRoundedCorner* AnimationGroup::addRoundedCorner()
     return raw;
 }
 
+AnimationMergePaths* AnimationGroup::addMergePaths()
+{
+    auto mp = new AnimationMergePaths();
+    AnimationMergePaths* raw = mp;
+    ChildItem item;
+    item.kind = ChildKind::MergePaths;
+    item.mergePaths = mp;
+    children.push_back (std::move (item));
+    hasAnyModifier = true;
+    return raw;
+}
+
 } // namespace yup

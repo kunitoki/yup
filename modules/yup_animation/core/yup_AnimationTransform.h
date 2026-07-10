@@ -39,6 +39,32 @@ struct SpatialPositionKeyframe
 };
 
 //==============================================================================
+/** Parameters for AfterEffects inertial bounce expression (amp/freq/decay).
+
+    The expression `amp, freq, decay, n = 0` produces an exponentially-decaying
+    sine-wave overshoot past the last position keyframe. Store the extracted
+    parameters here so positionAt can apply them at runtime.
+*/
+struct InertialBounceParams
+{
+    float amplitude = 0.0f;  //< scale factor (Lottie: "amp = ...")
+    float frequency = 0.0f;  //< Hz (Lottie: "freq = ...")
+    float decay = 0.0f;      //< decay exponent (Lottie: "decay = ...")
+    float frameRate = 60.0f; //< composition frame rate, for frame <-> second conversion
+    float timeMax = 2.0f;    //< duration of the overshoot in seconds (Lottie: "time_max")
+
+    /** Incoming velocity at the last keyframe (pixels per second), computed from
+        the keyframe data at parse-time using the composition frame rate. */
+    Point<float> velocity {};
+
+    /** True when the parameters produce a visible bounce. */
+    [[nodiscard]] bool isActive() const noexcept
+    {
+        return amplitude > 0.0f && frequency > 0.0f && decay > 0.0f;
+    }
+};
+
+//==============================================================================
 /** Bundles all Lottie transform channels as animated properties.
 
     Call toAffineTransform(frameNo) to collapse all channels into a single
@@ -73,6 +99,9 @@ public:
         When populated, overrides the linear interpolation in position.getValueAt(). */
     std::vector<SpatialPositionKeyframe> spatialKeyframes;
 
+    /** Inertial bounce (overshoot) applied to position past the last keyframe. */
+    InertialBounceParams positionBounce;
+
     //==============================================================================
     /** Evaluates all channels and returns the composed AffineTransform at frameNo. */
     [[nodiscard]] AffineTransform toAffineTransform (float frameNo) const;
@@ -89,6 +118,9 @@ public:
     [[nodiscard]] Point<float> positionAt (float frameNo) const;
 
 private:
+    /** Adds the inertial bounce overshoot to a settled position value. */
+    [[nodiscard]] Point<float> applyPositionBounce (Point<float> settledValue, float frameNo) const;
+
     mutable std::optional<AffineTransform> cachedStaticXf;
     mutable std::vector<float> cachedSegmentLengths;
 };
