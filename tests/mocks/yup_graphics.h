@@ -61,13 +61,13 @@ public:
 
     void end (void* nativeHandle) override { real->end (nativeHandle); }
 
-    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override { return real->createOffscreenTarget (width, height); }
+    std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int width, int height) override { return real->createOffscreenTarget (width, height); }
 
-    void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
+    void beginOffscreen (yup::OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
 
-    void endOffscreen (OffscreenTarget& target) override { real->endOffscreen (target); }
+    void endOffscreen (yup::OffscreenTarget& target) override { real->endOffscreen (target); }
 
-    bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) override { return real->readOffscreenPixels (target, dst, dstSize); }
+    bool readOffscreenPixels (yup::OffscreenTarget& target, void* dst, size_t dstSize) override { return real->readOffscreenPixels (target, dst, dstSize); }
 
 private:
     std::unique_ptr<yup::GraphicsContext> real;
@@ -78,7 +78,7 @@ private:
 // Mock yup::GraphicsContext::OffscreenTarget
 // ==============================================================================
 
-class MockOffscreenTarget : public yup::GraphicsContext::OffscreenTarget
+class MockOffscreenTarget : public yup::OffscreenTarget
 {
 public:
     explicit MockOffscreenTarget (int w, int h)
@@ -128,24 +128,24 @@ class OreAndTargetGraphicsContext : public OreInjectedGraphicsContext
 {
 public:
     OreAndTargetGraphicsContext (rive::ore::Context* oreCtx,
-                                 std::unique_ptr<yup::GraphicsContext::OffscreenTarget> target)
+                                 std::unique_ptr<yup::OffscreenTarget> target)
         : OreInjectedGraphicsContext (oreCtx)
         , injectedTarget (std::move (target))
     {
     }
 
-    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override
+    std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int, int) override
     {
         // Move the target back out — the caller takes ownership.
         // For repeated use, set up the mock to be reusable.
         return std::move (injectedTarget);
     }
 
-    void setNextOffscreenTarget (std::unique_ptr<OffscreenTarget> target)
+    void setNextOffscreenTarget (std::unique_ptr<yup::OffscreenTarget> target)
     {
         injectedTarget = std::move (target);
     }
 
 private:
-    std::unique_ptr<OffscreenTarget> injectedTarget;
+    std::unique_ptr<yup::OffscreenTarget> injectedTarget;
 };
