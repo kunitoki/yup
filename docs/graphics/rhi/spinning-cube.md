@@ -50,7 +50,7 @@ auto result = GpuPipeline::compileFromGlsl (ctx, vertGlsl, fragGlsl, options);
 if (result.wasOk())
     cubePipeline = result.getValue();
 else
-    statusLabel->setText (result.getError(), dontSendNotification);
+    statusLabel->setText (result.getErrorMessage(), dontSendNotification);
 ```
 
 See [Pipelines & shaders](pipelines.md) for the vertex layout and options in

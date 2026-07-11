@@ -54,6 +54,6 @@ html_title = "YUP Documentation"
 html_static_path = ["_static"]
 
 html_theme_options = {
-    "light_logo": None,
-    "dark_logo": None,
+    "light_logo": "_static/logo-light.png",
+    "dark_logo": "_static/logo-dark.png",
 }
