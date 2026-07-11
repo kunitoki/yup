@@ -46,13 +46,13 @@ concept guides, walkthroughs, and reference material.
 
 getting-started/index
 modules
+build-system/index
+core/index
+multithreading/index
+data/index
 graphics/index
 imaging/index
 ui/index
 audio/index
-data/index
-multithreading/index
-core/index
 scripting/index
-build-system/index
 ```
