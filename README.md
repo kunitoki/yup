@@ -27,7 +27,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 ## Try It
 
 - Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
-- Read the build guides: [standalone applications](./docs/Building%20Standalone.md), [audio plugins](./docs/Building%20Plugins.md), [module format](./docs/YUP%20Module%20Format.md).
+- Read the build guides: [standalone applications](./docs/build-system/building-standalone.md), [audio plugins](./docs/build-system/building-plugins.md), [module format](./docs/build-system/module-format.md).
 
 ## Screenshots
 
@@ -400,10 +400,11 @@ endif()
 ## Documentation
 Start with the guides in this repository:
 
-- [Building standalone applications](./docs/Building%20Standalone.md)
-- [Building audio plugins](./docs/Building%20Plugins.md)
-- [DataTree tutorial](./docs/tutorials/DataTree%20Tutorial.md)
-- [YUP module format](./docs/YUP%20Module%20Format.md)
+- [Documentation home](./docs/index.md)
+- [Building standalone applications](./docs/build-system/building-standalone.md)
+- [Building audio plugins](./docs/build-system/building-plugins.md)
+- [DataTree tutorial](./docs/data/datatree-tutorial.md)
+- [YUP module format](./docs/build-system/module-format.md)
 
 ## Contributing
 YUP is looking for collaborators who want to help shape a permissively licensed C++ app, graphics, audio, and plugin framework. Useful contributions include:
