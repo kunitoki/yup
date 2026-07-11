@@ -8,152 +8,337 @@ dependencies are pulled in automatically by the [CMake API](build-system/cmake-a
 ```{note}
 All `yup_*` modules share the same version number. Modules also depend on a few
 bundled third-party libraries (`zlib`, `rive`, `rive_renderer`, `libclipper2`,
-`xsimd`), which are resolved for you by the build system.
+`xsimd`), which are resolved for you by the build system. In the diagrams below,
+third-party dependencies are drawn with a dashed outline.
 ```
 
-## Modules by area
+Each module is listed below with its direct dependencies. Arrows point from a
+module to the things it depends on.
 
-The modules map onto the documentation areas as follows.
+## Core
 
-### Core
+Foundational modules used across the whole framework. See the [Core](core/index.md) area.
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_core` | The essential set of basic YUP classes, required by all other modules. | `zlib` |
-| `yup_simd` | SIMD operations using SSE, AVX, FMA, NEON, and the Accelerate framework. | `yup_core`, `xsimd` |
+### yup_core
 
-See the [Core](core/index.md) area.
+The foundation every other module builds on: strings, containers, files and
+streams, memory management, math, time, threading, networking, and data
+interchange. It has no YUP dependencies and only pulls in `zlib` for
+compression.
 
-### Multithreading & events
+```mermaid
+flowchart LR
+    yup_core:::self --> zlib:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_events` | The application main event loop, messages, timers, and async dispatch. | `yup_core` |
+### yup_simd
 
-See the [Multithreading](multithreading/index.md) area. Threading primitives
-themselves live in `yup_core`.
+Vectorized math primitives across SSE, AVX, FMA, NEON, and Apple's Accelerate
+framework, wrapping the `xsimd` library behind a YUP-friendly API. Used wherever
+tight numeric loops matter — DSP, audio, and graphics.
 
-### Graphics
+```mermaid
+flowchart LR
+    yup_simd:::self --> yup_core
+    yup_simd --> xsimd:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_graphics` | The essential set of basic YUP graphics classes, including the RHI. | `yup_core`, `yup_simd`, `yup_shading`, `rive`, `rive_renderer`, `libclipper2` |
-| `yup_shading` | Shader source, transpilation, and shader bundles. | `yup_core` |
-| `yup_animation` | Lottie-compatible animation model with rendering and export. | `yup_core`, `yup_graphics` |
+## Events & multithreading
 
-See the [Graphics](graphics/index.md) area. Bitmap image handling in
-`yup_graphics` is documented separately in the [Imaging](imaging/index.md) area.
+The event loop and messaging layer. See the [Multithreading](multithreading/index.md)
+area; threading primitives themselves live in `yup_core`.
 
-### UI
+### yup_events
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_gui` | The essential set of basic YUP user-interface classes. | `yup_events`, `yup_data_model`, `yup_graphics`, `rive` |
-| `yup_audio_gui` | Audio-related GUI components (waveforms, meters, spectrum, graph views). | `yup_audio_basics`, `yup_audio_formats`, `yup_audio_processors`, `yup_audio_graph`, `yup_dsp`, `yup_gui` |
+The application event loop and messaging layer: the message thread, timers,
+async callbacks, and inter-object notifications. It underpins any interactive or
+long-running YUP application.
 
-See the [UI](ui/index.md) area. (`yup_audio_gui` bridges UI and audio.)
+```mermaid
+flowchart LR
+    yup_events:::self --> yup_core
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
 
-### Audio
+## Graphics
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_audio_basics` | Audio buffer manipulation, MIDI message handling, synthesis, etc. | `yup_core`, `yup_simd` |
-| `yup_audio_devices` | Play and record from audio and MIDI I/O devices. | `yup_audio_basics`, `yup_events` |
-| `yup_audio_formats` | Audio file format readers and writers. | `yup_audio_basics`, `yup_simd` |
-| `yup_dsp` | The essential set of basic YUP DSP (filters, designers, spectral analysis). | `yup_core`, `yup_audio_basics`, `yup_simd` |
-| `yup_audio_processors` | The essential set of basic YUP audio processing classes. | `yup_audio_basics`, `yup_data_model`, `yup_dsp` |
-| `yup_audio_graph` | `AudioProcessor`-based audio and MIDI processing graph. | `yup_audio_processors`, `yup_data_model` |
-| `yup_audio_plugin_client` | Wrap your own processor as a CLAP / VST3 plugin. | `yup_audio_processors`, `yup_gui` |
-| `yup_audio_plugin_host` | In-process hosting of VST3, CLAP, LV2, and AU (v2/v3) plugins. | `yup_audio_processors` |
+The rendering stack. See the [Graphics](graphics/index.md) area; bitmap image
+handling is documented separately in the [Imaging](imaging/index.md) area.
 
-See the [Audio](audio/index.md) area.
+### yup_shading
 
-### Data
+Shader authoring support: shader-source containers, transpilation, and the
+`.ysl` shader-bundle format consumed by the graphics RHI for
+[offline shader compilation](graphics/rhi/offline-shaders.md).
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_data_model` | The essential set of basic YUP data-model classes (`DataTree`). | `yup_events` |
+```mermaid
+flowchart LR
+    yup_shading:::self --> yup_core
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
 
-See the [Data](data/index.md) area.
+### yup_graphics
 
-### Scripting
+The 2D drawing stack and the low-level GPU RHI, rendered through the Rive
+renderer. Covers the graphics context, primitives, paths, fonts, SVG, imaging,
+and GPU pipelines.
 
-| Module | Description | Depends on |
-| ------ | ----------- | ---------- |
-| `yup_python` | Python bindings to create and work on YUP apps. | `yup_core` |
+```mermaid
+flowchart LR
+    yup_graphics:::self --> yup_core
+    yup_graphics --> yup_simd
+    yup_graphics --> yup_shading
+    yup_graphics --> rive:::ext
+    yup_graphics --> rive_renderer:::ext
+    yup_graphics --> libclipper2:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
 
-See the [Scripting](scripting/index.md) area.
+### yup_animation
 
-## Dependency graph
+A Lottie-compatible animation model with playback, rendering, and export,
+layered on top of the graphics stack.
 
-The arrows point from a module to the `yup_*` modules it depends on. Third-party
-dependencies are omitted for clarity.
+```mermaid
+flowchart LR
+    yup_animation:::self --> yup_core
+    yup_animation --> yup_graphics
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+## Data
+
+Structured, observable data models. See the [Data](data/index.md) area.
+
+### yup_data_model
+
+The `DataTree` data model: hierarchical, observable, transactional,
+schema-validatable data with an XPath-like query engine.
+
+```mermaid
+flowchart LR
+    yup_data_model:::self --> yup_events
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+## UI
+
+The GUI toolkit. See the [UI](ui/index.md) area.
+
+### yup_gui
+
+The GUI toolkit: components, windowing, events, layout, and widgets that paint
+through the graphics stack and bind to the data model.
+
+```mermaid
+flowchart LR
+    yup_gui:::self --> yup_events
+    yup_gui --> yup_data_model
+    yup_gui --> yup_graphics
+    yup_gui --> rive:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_gui
+
+Audio-specific GUI components — waveforms, meters, spectrum analyzers, and
+audio-graph editor views — bridging the UI and audio stacks.
+
+```mermaid
+flowchart LR
+    yup_audio_gui:::self --> yup_audio_basics
+    yup_audio_gui --> yup_audio_formats
+    yup_audio_gui --> yup_audio_processors
+    yup_audio_gui --> yup_audio_graph
+    yup_audio_gui --> yup_dsp
+    yup_audio_gui --> yup_gui
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+## Audio
+
+The audio-first stack. See the [Audio](audio/index.md) area.
+
+### yup_audio_basics
+
+Core audio and MIDI data types: audio buffers, MIDI messages, synthesis
+helpers, and processing utilities.
+
+```mermaid
+flowchart LR
+    yup_audio_basics:::self --> yup_core
+    yup_audio_basics --> yup_simd
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_devices
+
+Real-time audio and MIDI I/O: enumerate, open, and stream from the platform's
+audio and MIDI devices.
+
+```mermaid
+flowchart LR
+    yup_audio_devices:::self --> yup_audio_basics
+    yup_audio_devices --> yup_events
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_formats
+
+Reading and writing audio files across the supported sound formats.
+
+```mermaid
+flowchart LR
+    yup_audio_formats:::self --> yup_audio_basics
+    yup_audio_formats --> yup_simd
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_dsp
+
+DSP building blocks: filters and filter designers, crossovers, and spectral
+analysis.
+
+```mermaid
+flowchart LR
+    yup_dsp:::self --> yup_core
+    yup_dsp --> yup_audio_basics
+    yup_dsp --> yup_simd
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_processors
+
+The `AudioProcessor` model — the unit of audio processing that plugins and the
+audio graph are built from — plus parameter handling.
+
+```mermaid
+flowchart LR
+    yup_audio_processors:::self --> yup_audio_basics
+    yup_audio_processors --> yup_data_model
+    yup_audio_processors --> yup_dsp
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_graph
+
+A node-based processing graph of `AudioProcessor`s for routing audio and MIDI,
+backed by the data model.
+
+```mermaid
+flowchart LR
+    yup_audio_graph:::self --> yup_audio_processors
+    yup_audio_graph --> yup_data_model
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_plugin_client
+
+Wrap your own `AudioProcessor` as a CLAP or VST3 plugin (and a standalone app).
+See [Building plugins](build-system/building-plugins.md).
+
+```mermaid
+flowchart LR
+    yup_audio_plugin_client:::self --> yup_audio_processors
+    yup_audio_plugin_client --> yup_gui
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+### yup_audio_plugin_host
+
+In-process hosting of third-party VST3, CLAP, LV2, and AU (v2/v3) plugins.
+
+```mermaid
+flowchart LR
+    yup_audio_plugin_host:::self --> yup_audio_processors
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+## Scripting
+
+Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) area.
+
+### yup_python
+
+Python bindings for creating and driving YUP applications from scripts.
+
+```mermaid
+flowchart LR
+    yup_python:::self --> yup_core
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
+## Complete dependency graph
+
+The full `yup_*` module graph in one view (third-party dependencies omitted for
+clarity).
 
 ```mermaid
 flowchart TD
-    core[yup_core]
-    simd[yup_simd]
-    events[yup_events]
-    shading[yup_shading]
-    graphics[yup_graphics]
-    animation[yup_animation]
-    data[yup_data_model]
-    gui[yup_gui]
-    dsp[yup_dsp]
-    ab[yup_audio_basics]
-    adev[yup_audio_devices]
-    afmt[yup_audio_formats]
-    aproc[yup_audio_processors]
-    agraph[yup_audio_graph]
-    agui[yup_audio_gui]
-    aclient[yup_audio_plugin_client]
-    ahost[yup_audio_plugin_host]
-    python[yup_python]
+    simd[yup_simd] --> core[yup_core]
+    events[yup_events] --> core
+    shading[yup_shading] --> core
+    python[yup_python] --> core
 
-    simd --> core
-    events --> core
-    shading --> core
-    python --> core
-
-    graphics --> core
+    graphics[yup_graphics] --> core
     graphics --> simd
     graphics --> shading
 
-    animation --> core
+    animation[yup_animation] --> core
     animation --> graphics
 
-    data --> events
+    data[yup_data_model] --> events
 
-    gui --> events
+    gui[yup_gui] --> events
     gui --> data
     gui --> graphics
 
-    ab --> core
+    ab[yup_audio_basics] --> core
     ab --> simd
 
-    dsp --> core
+    dsp[yup_dsp] --> core
     dsp --> ab
     dsp --> simd
 
-    afmt --> ab
+    afmt[yup_audio_formats] --> ab
     afmt --> simd
 
-    adev --> ab
+    adev[yup_audio_devices] --> ab
     adev --> events
 
-    aproc --> ab
+    aproc[yup_audio_processors] --> ab
     aproc --> data
     aproc --> dsp
 
-    agraph --> aproc
+    agraph[yup_audio_graph] --> aproc
     agraph --> data
 
-    aclient --> aproc
+    aclient[yup_audio_plugin_client] --> aproc
     aclient --> gui
 
-    ahost --> aproc
+    ahost[yup_audio_plugin_host] --> aproc
 
-    agui --> ab
+    agui[yup_audio_gui] --> ab
     agui --> afmt
     agui --> aproc
     agui --> agraph

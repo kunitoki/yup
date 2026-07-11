@@ -316,7 +316,7 @@ Before suggesting code, verify:
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
 - [ ] Consistent documentation for public APIs or public build system methods
-- [ ] Documentation is added, updated or removed depending on the changes being done 
+- [ ] Documentation in @docs/ is reviewed, added, updated or removed depending on the changes being done 
 - [ ] Changes are updated in @CHANGELOG.md, they should be brief
 
 ## Differences with JUCE

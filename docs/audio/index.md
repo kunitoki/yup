@@ -8,6 +8,12 @@ framework.
 `yup_audio_graph`, `yup_audio_processors`, `yup_dsp`, `yup_audio_plugin_client`,
 `yup_audio_plugin_host`.
 
+```{warning}
+**Work in progress.** This area is still being written. Concept guides for the
+audio graph, DSP building blocks, processors, and the plugin model are still to
+come.
+```
+
 ## Topics
 
 - **Audio basics** - buffers, sample formats, and the audio process load
@@ -25,8 +31,3 @@ framework.
 ## Related
 
 - [Building audio plugins](../build-system/building-plugins.md)
-
-```{note}
-This area is being fleshed out. Concept guides for the audio graph, DSP
-building blocks, and the plugin model will be added here.
-```

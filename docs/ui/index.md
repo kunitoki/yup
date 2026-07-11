@@ -5,6 +5,12 @@ paint through the [graphics](../graphics/index.md) stack.
 
 **Modules covered:** `yup_gui`, `yup_events`, `yup_audio_gui`.
 
+```{warning}
+**Work in progress.** This area is still being written and currently covers only
+the [profiling guide](profiling-component-paint.md) below. Concept guides for the
+component model, windowing, layout, widgets, and theming are still to come.
+```
+
 ## Topics
 
 - **Components** - the `Component` tree, painting, hit-testing, and focus.
@@ -17,11 +23,6 @@ paint through the [graphics](../graphics/index.md) stack.
 
 - [Profiling component paint](profiling-component-paint.md) - measure and reduce
   the cost of `Component::paint`.
-
-```{note}
-This area is being fleshed out. Concept guides for the component model,
-windowing, and theming will be added here.
-```
 
 ```{toctree}
 :hidden:
