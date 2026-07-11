@@ -778,6 +778,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
     layer->matteType = static_cast<AnimationLayer::MatteType> (matteType);
     layer->isMatteSource = varInt (layerObj["td"]) != 0;
 
+    layer->transform.autoOrient = layer->autoOrient;
     parseTransform (layerObj["ks"], layer->transform, (bool) layerObj["ddd"]);
     parseMasks (layerObj["masksProperties"], *layer);
     parseEffects (layerObj["ef"], *layer);

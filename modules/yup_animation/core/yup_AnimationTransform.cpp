@@ -32,11 +32,22 @@ AffineTransform AnimationTransform::toAffineTransform (float frameNo) const
 
     const Point<float> a = anchor.getValueAt (frameNo);
     const Size<float> s = scale.getValueAt (frameNo);
-    const float r = is3DData ? rotationZ.getValueAt (frameNo) : rotation.getValueAt (frameNo);
+    float r = is3DData ? rotationZ.getValueAt (frameNo) : rotation.getValueAt (frameNo);
     const float sk = skew.getValueAt (frameNo);
     const float sa = skewAxis.getValueAt (frameNo);
 
     const Point<float> p = positionAt (frameNo);
+
+    if (autoOrient)
+    {
+        constexpr float sampleOffset = 0.01f;
+        const Point<float> before = positionAt (frameNo - sampleOffset);
+        const Point<float> after = positionAt (frameNo + sampleOffset);
+        const Point<float> direction = after - before;
+
+        if (direction.getX() * direction.getX() + direction.getY() * direction.getY() > 1.0e-8f)
+            r += radiansToDegrees (std::atan2 (direction.getY(), direction.getX()));
+    }
 
     // Compose: translate(p) * rotate(r) * skew * scale(s/100) * translate(-a)
     AffineTransform t;

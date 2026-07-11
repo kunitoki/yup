@@ -144,6 +144,32 @@ TEST_F (LottieReaderTests, ParseDataSetsNoErrorForValidJson)
     EXPECT_TRUE (errorMsg.isEmpty());
 }
 
+TEST_F (LottieReaderTests, ParseFilePreservesBellSolidColor)
+{
+    const auto file = getLottieTestDataDir().getChildFile ("bell.json");
+    auto comp = LottieReader::parseFile (file);
+
+    ASSERT_NE (comp, nullptr);
+    ASSERT_GE (comp->layers.size(), 2u);
+
+    const auto* solid = dynamic_cast<const SolidLayer*> (comp->layers[1].get());
+    ASSERT_NE (solid, nullptr);
+    EXPECT_EQ (solid->solidColor, Color (0xFF000000));
+}
+
+TEST_F (LottieReaderTests, ParseDataReadsLayerAutoOrient)
+{
+    auto comp = LottieReader::parseData (R"json({
+        "v": "5.5.2", "ip": 0, "op": 10, "fr": 30, "w": 100, "h": 100,
+        "layers": [{ "ty": 3, "ind": 1, "ao": 1, "ks": {} }]
+    })json");
+
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+    EXPECT_TRUE (comp->layers[0]->autoOrient);
+    EXPECT_TRUE (comp->layers[0]->transform.autoOrient);
+}
+
 TEST_F (LottieReaderTests, ParseDataParsesCompositionProperties)
 {
     auto comp = LottieReader::parseData (kLottieReaderBaseJson);

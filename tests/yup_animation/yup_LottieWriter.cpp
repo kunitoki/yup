@@ -536,6 +536,22 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesLayerCount)
     EXPECT_EQ (readback->layers.size(), 2u);
 }
 
+TEST_F (LottieWriterTests, Roundtrip_PreservesLayerAutoOrient)
+{
+    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_FALSE (comp->layers.empty());
+    comp->layers[0]->autoOrient = true;
+    comp->layers[0]->transform.autoOrient = true;
+
+    auto readback = LottieReader::parseData (LottieWriter::toJson (*comp));
+
+    ASSERT_NE (readback, nullptr);
+    ASSERT_FALSE (readback->layers.empty());
+    EXPECT_TRUE (readback->layers[0]->autoOrient);
+    EXPECT_TRUE (readback->layers[0]->transform.autoOrient);
+}
+
 TEST_F (LottieWriterTests, Roundtrip_PreservesLayerNames)
 {
     auto comp = LottieReader::parseData (kShapeAndNullJson);
