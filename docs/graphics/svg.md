@@ -83,8 +83,8 @@ fonts - are resolved during parsing.
 
 ```cpp
 Drawable::ParseOptions options;
-options.baseDirectory   = File ("/assets/icons");  // resolves relative hrefs
-options.allowDataImages = true;                     // permit data: URIs
+options.baseDirectory    = File ("/assets/icons");  // resolves relative hrefs
+options.allowDataImages  = true;                     // permit data: URIs
 options.allowLocalImages = true;                    // permit local file hrefs
 
 drawable.parseSVG (svgFile, options);

@@ -1,8 +1,8 @@
 # Data Interchange
 
 `yup_core` provides a dynamically-typed value (`var`), object model
-(`DynamicObject`), and parsers/serializers for JSON and XML - the tools for
-configuration, document formats, and interop.
+(`DynamicObject`), and a JSON parser/serializer - the tools for configuration,
+document formats, and interop. XML has its own [dedicated page](xml.md).
 
 ## var
 
@@ -85,27 +85,21 @@ Related helpers:
 
 ## XML
 
-`XmlElement` is a mutable XML DOM node; `XmlDocument` parses text or files into
-one.
+`yup_core` ships a small, self-contained XML DOM: `XmlElement` (a mutable node)
+and `XmlDocument` (a parser for text and files).
 
 ```cpp
-// Parse
 if (auto root = XmlDocument::parse (xmlText))       // std::unique_ptr<XmlElement>
 {
-    String attr = root->getStringAttribute ("version");
+    String version = root->getStringAttribute ("version");
 
     for (auto* child : root->getChildIterator())
         process (child->getTagName());
 }
-
-// Build
-XmlElement config ("config");
-config.setAttribute ("version", 2);
-auto* item = config.createNewChildElement ("item");
-item->addTextElement ("value");
-
-String xml = config.toString();
 ```
+
+See the dedicated [XML](xml.md) page for parsing, attributes, child navigation,
+text content, building, and serialization.
 
 ## Serialization
 
@@ -121,6 +115,7 @@ these primitives for observable, serializable document trees.
 
 ## See also
 
+- [XML](xml.md) - the full `XmlElement` / `XmlDocument` reference.
 - [Serialization](serialisation.md) - describe and persist your own types.
 - [Containers](containers.md) - `var`, `NamedValueSet`, `DynamicObject`.
 - [Files & streams](files-and-streams.md) - parse from and write to streams.

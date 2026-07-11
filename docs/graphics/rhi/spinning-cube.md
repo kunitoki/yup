@@ -7,7 +7,7 @@ through a separable Gaussian blur post-process.
 The complete, runnable source lives in the graphics example under
 [`examples/graphics/source/examples/SpinningCubeDemo.h`](https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h).
 
-![The RHI spinning cube demo](_static/images/yup_rhi_cube.jpg)
+![The RHI spinning cube demo](../../_static/images/yup_rhi_cube.jpg)
 
 ## What it demonstrates
 

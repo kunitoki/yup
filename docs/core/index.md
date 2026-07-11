@@ -29,7 +29,8 @@ guidance together.
 - [Maths](maths.md) - `Range`, `NormalisableRange`, `Random`, `BigInteger`,
   `Expression`, and statistics helpers.
 - [Time](time.md) - `Time`, `RelativeTime`, and `PerformanceCounter`.
-- [Data interchange](data-interchange.md) - `var`, `DynamicObject`, JSON, XML.
+- [Data interchange](data-interchange.md) - `var`, `DynamicObject`, and JSON.
+- [XML](xml.md) - the `XmlElement` / `XmlDocument` DOM and parser.
 - [Serialization](serialisation.md) - the `SerialisationTraits` framework,
   `BinaryArchive`, and `var`/JSON conversion.
 - [System & application](system-and-app.md) - `SystemStats`, `Uuid`,
@@ -60,6 +61,7 @@ results-and-errors
 maths
 time
 data-interchange
+xml
 serialisation
 system-and-app
 networking
