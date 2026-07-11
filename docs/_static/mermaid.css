@@ -1,0 +1,19 @@
+/* ==========================================================================
+   Mermaid diagram rendering fixes for the Clarity theme.
+
+   Intentionally does NOT set font-size on diagram text: Mermaid applies its own
+   inline font-size (see mermaid_init_js in conf.py) and measures label boxes
+   with it. Overriding font-size here would resize the text after the node
+   boxes were computed, causing the misalignment / clipping this file avoids.
+   ========================================================================== */
+
+.mermaid {
+    text-align: center;
+    margin: 1.5rem 0;
+    line-height: normal;
+}
+
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}

@@ -79,6 +79,12 @@ html_theme = "sphinx_clarity_theme"
 html_title = "YUP Documentation"
 html_static_path = ["_static"]
 
+# Only sizes the Mermaid container/SVG. Text font-size is left to Mermaid's own
+# inline styling (see mermaid_init_js) so label measurement matches rendering.
+html_css_files = [
+    "mermaid.css",
+]
+
 html_theme_options = {
     "light_logo": "_static/logo-light.png",
     "dark_logo": "_static/logo-dark.png",
