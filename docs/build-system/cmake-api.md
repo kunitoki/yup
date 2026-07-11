@@ -134,7 +134,7 @@ that are not specified will fall back to sensible defaults.
 | `TARGET_NAME` | string | *(required)* | Base name for all generated targets. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
 | `TARGET_IDE_GROUP` | string | - | IDE folder group name (e.g. "Examples"). |
-| `TARGET_APP_ID` | string | `org.kunitoki.yup.<TARGET_NAME>` | Bundle identifier. |
+| `TARGET_APP_ID` | string | - | Bundle identifier (e.g. `com.mycompany.MyPlugin`). Used as the macOS bundle id. |
 | `TARGET_APP_NAMESPACE` | string | - | App namespace (e.g. `com.mycompany`). |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |
 
@@ -147,6 +147,7 @@ that are not specified will fall back to sensible defaults.
 | `PLUGIN_CREATE_AU` | ON\|OFF | OFF | Build an AUv2 plugin target (macOS only). |
 | `PLUGIN_CREATE_AUv3` | ON\|OFF | OFF | Build an AUv3 plugin target (macOS only). |
 | `PLUGIN_CREATE_AAX` | ON\|OFF | OFF | Build an AAX plugin target. Requires AAX SDK. |
+| `PLUGIN_CREATE_LV2` | ON\|OFF | OFF | Build an LV2 plugin target (in progress). |
 | `PLUGIN_CREATE_STANDALONE` | ON\|OFF | OFF | Build a standalone executable. |
 
 At least one format must be enabled, otherwise configuration fails with an error.
@@ -258,6 +259,7 @@ All codesigning options are macOS-only and have no effect on other platforms.
 | `DEFINITIONS` | list | - | Additional compile definitions applied to all format targets. |
 | `OPTIONS` | list | - | Additional compile options applied to all format targets. |
 | `LINK_OPTIONS` | list | - | Additional linker options applied to all format targets. |
+| `ADDITIONAL_LIBRARIES` | list | - | Extra libraries to link into all format targets (in addition to `MODULES`). |
 
 ---
 
@@ -278,15 +280,41 @@ also be used independently for non-plugin GUI applications.
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Target name for the executable. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
+| `TARGET_CONSOLE` | ON\|OFF | OFF | Build a console app (no windowing/SDL2, no macOS bundle). |
 | `TARGET_IDE_GROUP` | string | - | IDE folder group name. |
-| `TARGET_APP_NAMESPACE` | string | - | App namespace for bundle identifier generation. |
+| `TARGET_APP_NAMESPACE` | string | - | App namespace; the bundle id is `<namespace>.<TARGET_NAME>`. |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |
 | `TARGET_ICON` | path | *(built-in)* | Path to an application icon image. |
+| `TARGET_WHEEL` | ON\|OFF | OFF | Build as a loadable module (e.g. a Python wheel) instead of an executable. |
 | `DEFINITIONS` | list | - | Additional compile definitions. |
 | `COMPILE_OPTIONS` | list | - | Additional compile options. |
 | `MODULES` | list | - | YUP module dependencies. |
 | `SOURCES` | list | - | Additional source files. |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
+
+```{note}
+`yup_standalone_app` derives the macOS/app bundle identifier from
+`TARGET_APP_NAMESPACE` (as `<namespace>.<TARGET_NAME>`). Unlike `yup_audio_plugin`
+it has **no** `TARGET_APP_ID` argument.
+```
+
+##### Emscripten / WebAssembly
+
+These arguments only affect the Emscripten build and are ignored elsewhere.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `INITIAL_MEMORY` | integer | `65536000` | Initial WASM heap size in bytes (`-sINITIAL_MEMORY`). |
+| `PTHREAD_POOL_SIZE` | integer | `8` | Size of the pthread pool (`-sPTHREAD_POOL_SIZE`). |
+| `STACK_SIZE` | integer | `2097152` | Stack size in bytes (`-sSTACK_SIZE`). |
+| `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
+| `PRELOAD_FILES` | list | - | Files to preload into the virtual filesystem (`--preload-file`), e.g. `"local/path@/vfs/path"`. |
+
+##### Apple
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `CUSTOM_PLIST` | path | *(built-in)* | Custom `Info.plist` template for the app bundle. |
 
 ---
 
