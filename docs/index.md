@@ -29,6 +29,7 @@ concept guides, walkthroughs, and reference material.
 
 ## Quick links
 
+- [All modules and their usage](modules.md) — the full module list, grouped by area, with dependencies.
 - Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
@@ -38,6 +39,7 @@ concept guides, walkthroughs, and reference material.
 :maxdepth: 2
 
 getting-started/index
+modules
 graphics/index
 ui/index
 audio/index

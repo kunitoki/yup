@@ -35,6 +35,26 @@ myst_heading_anchors = 3
 # Mermaid support) and through Sphinx.
 myst_fence_as_directive = ["mermaid"]
 
+# -- Mermaid configuration ---------------------------------------------------
+#
+# Pin a recent Mermaid and configure the client-side renderer. The two settings
+# that matter most for legible, correctly-sized diagrams:
+#   * flowchart.htmlLabels = false forces SVG-native <text> labels. HTML
+#     (foreignObject) labels are measured with the browser's default font but
+#     rendered with the theme font, which makes text overflow / misalign with
+#     node boxes. SVG text is measured and rendered with the same font.
+#   * fontFamily + themeVariables.fontSize set an explicit font so Mermaid's
+#     text measurement matches what is drawn (no tiny or clipped labels).
+mermaid_version = "11.6.0"
+
+mermaid_init_js = """mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: 'loose',
+    fontFamily: 'trebuchet ms, Segoe UI, Helvetica, Arial, sans-serif',
+    flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' },
+    themeVariables: { fontSize: '16px' }
+});"""
+
 autosectionlabel_prefix_document = True
 
 source_suffix = {
