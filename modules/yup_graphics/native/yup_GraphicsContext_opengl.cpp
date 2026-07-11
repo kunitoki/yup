@@ -94,9 +94,8 @@ public:
         }
 #endif
 
-        m_renderContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
-        m_offscreenRenderContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
-        if (! m_renderContext || ! m_offscreenRenderContext)
+        m_renderContext = rive::gpu::RenderContextGLImpl::MakeContext (m_renderContextOptions);
+        if (! m_renderContext)
         {
             fprintf (stderr, "Failed to create a renderer.\n");
             return;
@@ -213,13 +212,21 @@ public:
 
     //==============================================================================
 
-    struct OffscreenTargetGL : public OffscreenTarget
+    struct OffscreenContextSlot
+    {
+        std::unique_ptr<rive::gpu::RenderContext> renderContext;
+        bool frameActive = false;
+    };
+
+    struct OffscreenTargetGL : public RenderableTarget
     {
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
+        rive::gpu::RenderContext* mirrorContext = nullptr;
         mutable rive::rcp<rive::gpu::Texture> sampledMirrorTex;
+        OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
 
@@ -254,7 +261,7 @@ public:
             if (sampledMirrorTex != nullptr)
                 return sampledMirrorTex;
 
-            if (renderContext == nullptr || renderCanvas == nullptr)
+            if (mirrorContext == nullptr || renderCanvas == nullptr)
                 return nullptr;
 
             auto renderImage = renderCanvas->renderImage();
@@ -264,7 +271,7 @@ public:
             if (auto sourceTex = renderImage->refTexture())
             {
                 auto mirrorImage = rive::getCanvasImportMirrorGL (
-                    renderContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
+                    mirrorContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
 
                 if (mirrorImage != nullptr)
                     sampledMirrorTex = mirrorImage->refTexture();
@@ -284,21 +291,43 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || m_offscreenRenderContext == nullptr)
+        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
             return nullptr;
 
-        if (m_offscreenDepth > 0)
-            return nullptr;
-
-        auto renderCanvas = m_offscreenRenderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+        auto renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
         if (renderCanvas == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetGL>();
         target->width = width;
         target->height = height;
-        target->renderContext = m_offscreenRenderContext.get();
+        target->renderContext = nullptr;
+        target->mirrorContext = m_renderContext.get();
+        target->contextSlot = nullptr;
         target->renderCanvas = std::move (renderCanvas);
+        return target;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0)
+            return nullptr;
+
+        auto* contextSlot = acquireOffscreenContext();
+        if (contextSlot == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetGL>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = contextSlot->renderContext.get();
+        target->mirrorContext = contextSlot->renderContext.get();
+        target->contextSlot = contextSlot;
+
+        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
         return target;
     }
 
@@ -307,14 +336,12 @@ public:
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
 
         auto renderContext = target.getRenderContext();
-        if (renderContext == nullptr)
+        if (renderContext == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
             return;
 
         renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
         renderContext->beginFrame (frameDesc);
-
-        if (renderContext == m_offscreenRenderContext.get())
-            ++m_offscreenDepth;
+        target.contextSlot->frameActive = true;
     }
 
     void endOffscreen (OffscreenTarget& baseTarget) override
@@ -322,7 +349,7 @@ public:
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
 
         auto renderContext = target.getRenderContext();
-        if (renderContext == nullptr)
+        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
             return;
 
         // Rebind this context's internal textures right before flushing: any other context's work since beginOffscreen()
@@ -332,9 +359,7 @@ public:
         renderContext->flush ({ target.getRenderTarget() });
 
         renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
-
-        if (renderContext == m_offscreenRenderContext.get())
-            --m_offscreenDepth;
+        target.contextSlot->frameActive = false;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -370,6 +395,24 @@ public:
     }
 
 private:
+    OffscreenContextSlot* acquireOffscreenContext()
+    {
+        for (const auto& slot : m_offscreenContextPool)
+        {
+            if (! slot->frameActive)
+                return slot.get();
+        }
+
+        auto slot = std::make_unique<OffscreenContextSlot>();
+        slot->renderContext = rive::gpu::RenderContextGLImpl::MakeContext (m_renderContextOptions);
+        if (slot->renderContext == nullptr)
+            return nullptr;
+
+        auto* result = slot.get();
+        m_offscreenContextPool.push_back (std::move (slot));
+        return result;
+    }
+
     void createOffscreenResources()
     {
         if (m_width <= 0 || m_height <= 0)
@@ -444,9 +487,9 @@ private:
 
 private:
     Options m_options;
+    rive::gpu::RenderContextGLImpl::ContextOptions m_renderContextOptions;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    std::unique_ptr<rive::gpu::RenderContext> m_offscreenRenderContext;
-    int m_offscreenDepth = 0;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
     std::unique_ptr<rive::ore::ContextGL> m_oreContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_offscreenRenderTarget;
 

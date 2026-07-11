@@ -144,6 +144,7 @@ public:
 
 private:
     friend class GpuCanvas;
+    friend class GpuTarget;
 
     GpuRenderPass() = default;
 

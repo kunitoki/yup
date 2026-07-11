@@ -70,6 +70,67 @@ void main() {
 
 //==============================================================================
 
+AnimationRenderResources::MatteCanvasLease::MatteCanvasLease (AnimationRenderResources& owner, size_t slotIndex) noexcept
+    : owner_ (std::addressof (owner))
+    , slotIndex_ (slotIndex)
+{
+}
+
+AnimationRenderResources::MatteCanvasLease::MatteCanvasLease (MatteCanvasLease&& other) noexcept
+    : owner_ (std::exchange (other.owner_, nullptr))
+    , slotIndex_ (other.slotIndex_)
+{
+}
+
+AnimationRenderResources::MatteCanvasLease& AnimationRenderResources::MatteCanvasLease::operator= (MatteCanvasLease&& other) noexcept
+{
+    if (this != std::addressof (other))
+    {
+        release();
+        owner_ = std::exchange (other.owner_, nullptr);
+        slotIndex_ = other.slotIndex_;
+    }
+
+    return *this;
+}
+
+AnimationRenderResources::MatteCanvasLease::~MatteCanvasLease()
+{
+    release();
+}
+
+bool AnimationRenderResources::MatteCanvasLease::isValid() const noexcept
+{
+    return owner_ != nullptr
+        && slotIndex_ < owner_->matteCanvasPool_.size();
+}
+
+GpuCanvas& AnimationRenderResources::MatteCanvasLease::getTargetCanvas() const noexcept
+{
+    jassert (isValid());
+    return *owner_->matteCanvasPool_[slotIndex_].targetCanvas;
+}
+
+GpuCanvas& AnimationRenderResources::MatteCanvasLease::getSourceCanvas() const noexcept
+{
+    jassert (isValid());
+    return *owner_->matteCanvasPool_[slotIndex_].sourceCanvas;
+}
+
+GpuCanvas& AnimationRenderResources::MatteCanvasLease::getResultCanvas() const noexcept
+{
+    jassert (isValid());
+    return *owner_->matteCanvasPool_[slotIndex_].resultCanvas;
+}
+
+void AnimationRenderResources::MatteCanvasLease::release() noexcept
+{
+    if (auto* owner = std::exchange (owner_, nullptr))
+        owner->releaseMatteCanvasSlot (slotIndex_);
+}
+
+//==============================================================================
+
 GpuPipeline::Ptr AnimationRenderResources::getMattePipeline (GraphicsContext& context)
 {
     if (mattePipelineCompiled_)
@@ -106,10 +167,118 @@ GpuPipeline::Ptr AnimationRenderResources::getMattePipeline (GraphicsContext& co
     return mattePipeline_;
 }
 
+AnimationRenderResources::MatteCanvasLease AnimationRenderResources::acquireMatteCanvases (GraphicsContext& context, int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return {};
+
+    if (matteCanvasContext_ != nullptr && matteCanvasContext_ != std::addressof (context))
+    {
+        const bool hasActiveLease = std::any_of (matteCanvasPool_.begin(), matteCanvasPool_.end(), [] (const auto& slot)
+        {
+            return slot.inUse;
+        });
+        jassert (! hasActiveLease);
+        if (hasActiveLease)
+            return {};
+
+        matteCanvasPool_.clear();
+    }
+
+    matteCanvasContext_ = std::addressof (context);
+
+    for (size_t i = 0; i < matteCanvasPool_.size(); ++i)
+    {
+        auto& slot = matteCanvasPool_[i];
+        if (! slot.inUse && slot.width == width && slot.height == height)
+        {
+            slot.inUse = true;
+            return { *this, i };
+        }
+    }
+
+    MatteCanvasSlot slot;
+    slot.targetCanvas = GpuCanvas::create (context, width, height);
+    slot.sourceCanvas = GpuCanvas::create (context, width, height);
+    slot.resultCanvas = GpuCanvas::create (context, width, height);
+    if (slot.targetCanvas == nullptr || slot.sourceCanvas == nullptr || slot.resultCanvas == nullptr)
+        return {};
+
+    slot.width = width;
+    slot.height = height;
+    slot.inUse = true;
+    matteCanvasPool_.push_back (std::move (slot));
+    return { *this, matteCanvasPool_.size() - 1 };
+}
+
+GpuCanvas::Ptr AnimationRenderResources::getPrecompCanvas (GraphicsContext& context, const String& key, int width, int height)
+{
+    if (width <= 0 || height <= 0)
+        return nullptr;
+
+    if (matteCanvasContext_ != nullptr && matteCanvasContext_ != std::addressof (context))
+    {
+        const bool hasActiveLease = std::any_of (matteCanvasPool_.begin(), matteCanvasPool_.end(), [] (const auto& slot)
+        {
+            return slot.inUse;
+        });
+        jassert (! hasActiveLease);
+        if (hasActiveLease)
+            return nullptr;
+
+        matteCanvasPool_.clear();
+        precompCanvasPool_.clear();
+    }
+
+    matteCanvasContext_ = std::addressof (context);
+
+    for (auto& slot : precompCanvasPool_)
+    {
+        if (slot.key != key)
+            continue;
+
+        if (slot.width == width && slot.height == height)
+            return slot.canvas;
+
+        auto resizedCanvas = GpuCanvas::create (context, width, height);
+        if (resizedCanvas == nullptr)
+            return nullptr;
+
+        slot.canvas = std::move (resizedCanvas);
+        slot.width = width;
+        slot.height = height;
+        return slot.canvas;
+    }
+
+    auto canvas = GpuCanvas::create (context, width, height);
+    if (canvas == nullptr)
+        return nullptr;
+
+    precompCanvasPool_.push_back ({ key, canvas, width, height });
+    return canvas;
+}
+
+void AnimationRenderResources::releaseMatteCanvasSlot (size_t slotIndex) noexcept
+{
+    if (slotIndex >= matteCanvasPool_.size())
+        return;
+
+    jassert (matteCanvasPool_[slotIndex].inUse);
+    matteCanvasPool_[slotIndex].inUse = false;
+}
+
 void AnimationRenderResources::reset()
 {
+    jassert (std::none_of (matteCanvasPool_.begin(), matteCanvasPool_.end(), [] (const auto& slot)
+    {
+        return slot.inUse;
+    }));
+
     mattePipeline_ = nullptr;
     mattePipelineCompiled_ = false;
+    matteCanvasContext_ = nullptr;
+    matteCanvasPool_.clear();
+    precompCanvasPool_.clear();
 }
 
 } // namespace yup

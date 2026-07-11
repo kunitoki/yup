@@ -315,8 +315,9 @@ Before suggesting code, verify:
 - [ ] Proper TDD and ensure tests cover new functionality
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
-- [ ] Documentation for public APIs or build system
-- [ ] Keep changes updated in @CHANGELOG.md
+- [ ] Consistent documentation for public APIs or public build system methods
+- [ ] Documentation is added, updated or removed depending on the changes being done 
+- [ ] Changes are updated in @CHANGELOG.md, they should be brief
 
 ## Differences with JUCE
 

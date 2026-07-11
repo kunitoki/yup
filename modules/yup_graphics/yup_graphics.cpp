@@ -124,9 +124,9 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 //==============================================================================
 
 #include "native/yup_GraphicsContext_headless.cpp"
-#include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
+#include "context/yup_GraphicsContext.cpp"
 #include "rhi/yup_GpuTexture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
@@ -149,6 +149,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "rhi/yup_GpuPipeline.cpp"
 #include "rhi/yup_GpuFrame.cpp"
 #include "rhi/yup_GpuRenderPass.cpp"
+#include "rhi/yup_GpuTarget.cpp"
 #include "rhi/yup_GpuCanvas.cpp"
 #include "rhi/yup_GpuPipelineCache.cpp"
 

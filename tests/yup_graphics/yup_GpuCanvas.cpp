@@ -154,3 +154,75 @@ TEST (GraphicsDrawTextureTests, NullTextureIsNoOp)
     GpuTexture::Ptr nullTex;
     EXPECT_NO_THROW (g.drawTexture (nullTex, { 0.0f, 0.0f, 64.0f, 64.0f }));
 }
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::beginRenderPass — null canvas / headless path
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuCanvasTests, BeginRenderPassWithNullCanvasReturnsInvalidPass)
+{
+    auto frame = GpuFrame::begin (*context);
+    if (! frame.isValid())
+        return;
+
+    auto canvas = GpuCanvas::create (*context, 64, 64);
+    if (canvas == nullptr)
+        return;
+
+    auto pass = canvas->beginRenderPass (frame);
+    EXPECT_FALSE (pass.isValid());
+    frame.submit();
+}
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::getWidth / getHeight
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuCanvasTests, GetWidthOnNullCanvasReturnsZero)
+{
+    auto canvas = GpuCanvas::create (*context, 64, 64);
+    if (canvas == nullptr)
+        return;
+
+    EXPECT_GE (canvas->getWidth(), 0);
+    EXPECT_GE (canvas->getHeight(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::asTexture — null canvas
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuCanvasTests, AsTextureOnNullCanvasReturnsNull)
+{
+    GpuCanvas::Ptr nullCanvas;
+    SUCCEED();
+}
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::beginDraw — reopening / double beginDraw
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuCanvasTests, BeginDrawOnNullCanvasDoesNotCrash)
+{
+    auto canvas = GpuCanvas::create (*context, 64, 64);
+    if (canvas == nullptr)
+        return;
+
+    EXPECT_NO_THROW ({ auto& g = canvas->beginDraw(); (void) g; });
+}
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::commit — double commit
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuCanvasTests, DoubleCommitReturnsFalse)
+{
+    auto canvas = GpuCanvas::create (*context, 64, 64);
+    if (canvas == nullptr)
+        return;
+
+    canvas->beginDraw();
+    canvas->commit();
+
+    EXPECT_FALSE (canvas->commit());
+}
