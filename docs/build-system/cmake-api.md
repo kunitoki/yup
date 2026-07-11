@@ -133,9 +133,9 @@ that are not specified will fall back to sensible defaults.
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Base name for all generated targets. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
-| `TARGET_IDE_GROUP` | string | — | IDE folder group name (e.g. "Examples"). |
+| `TARGET_IDE_GROUP` | string | - | IDE folder group name (e.g. "Examples"). |
 | `TARGET_APP_ID` | string | `org.kunitoki.yup.<TARGET_NAME>` | Bundle identifier. |
-| `TARGET_APP_NAMESPACE` | string | — | App namespace (e.g. `com.mycompany`). |
+| `TARGET_APP_NAMESPACE` | string | - | App namespace (e.g. `com.mycompany`). |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |
 
 #### Format Toggles
@@ -155,16 +155,16 @@ At least one format must be enabled, otherwise configuration fails with an error
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `PLUGIN_ID` | string | — | Globally-unique plugin identifier (e.g. `com.mycompany.MyPlugin`). |
+| `PLUGIN_ID` | string | - | Globally-unique plugin identifier (e.g. `com.mycompany.MyPlugin`). |
 | `PLUGIN_NAME` | string | `<TARGET_NAME>` | Display name shown in DAWs. |
-| `PLUGIN_VENDOR` | string | — | Vendor/company name. |
-| `PLUGIN_EMAIL` | string | — | Contact email address. |
+| `PLUGIN_VENDOR` | string | - | Vendor/company name. |
+| `PLUGIN_EMAIL` | string | - | Contact email address. |
 | `PLUGIN_VERSION` | string | `1` | Plugin version string. |
-| `PLUGIN_DESCRIPTION` | string | — | Short description of the plugin. |
-| `PLUGIN_URL` | string | — | Website URL for the plugin. |
+| `PLUGIN_DESCRIPTION` | string | - | Short description of the plugin. |
+| `PLUGIN_URL` | string | - | Website URL for the plugin. |
 | `PLUGIN_IS_SYNTH` | ON\|OFF | OFF | Whether the plugin is a synthesizer (affects format-specific defaults). |
 | `PLUGIN_IS_MONO` | ON\|OFF | OFF | Whether the plugin is mono (affects CLAP feature defaults). |
-| `PLUGIN_COPYRIGHT` | string | — | Copyright string added to Info.plist on macOS. |
+| `PLUGIN_COPYRIGHT` | string | - | Copyright string added to Info.plist on macOS. |
 
 #### AU-Specific
 
@@ -185,7 +185,7 @@ At least one format must be enabled, otherwise configuration fails with an error
 | `PLUGIN_AAX_PLUGIN_ID_NATIVE` | 4-char | *(required)* | AAX native plugin ID (e.g. `YpSN`). |
 | `PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE` | 4-char | *(required)* | AAX AudioSuite plugin ID (e.g. `YpSA`). |
 | `PLUGIN_AAX_CATEGORY` | string | *(auto)* | AAX plugin category (e.g. `AAX_ePlugInCategory_Example`). If omitted, auto-derived from `PLUGIN_IS_SYNTH`. |
-| `PLUGIN_AAX_PAGE_TABLE_FILE` | path | — | Path to an AAX page table resource file. |
+| `PLUGIN_AAX_PAGE_TABLE_FILE` | path | - | Path to an AAX page table resource file. |
 
 #### CLAP-Specific
 
@@ -226,10 +226,10 @@ All codesigning options are macOS-only and have no effect on other platforms.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `PLUGIN_CODESIGN_IDENTITY` | string | `-` | Codesigning identity. Default `-` means ad-hoc signing. Set to `"Developer ID Application: ..."` for distribution. |
-| `PLUGIN_CODESIGN_TEAM` | string | — | 10-character Apple Developer Team ID. When set, configures `DEVELOPMENT_TEAM` Xcode attribute. |
+| `PLUGIN_CODESIGN_TEAM` | string | - | 10-character Apple Developer Team ID. When set, configures `DEVELOPMENT_TEAM` Xcode attribute. |
 | `PLUGIN_APPLE_ENTITLEMENTS` | path | *(built-in)* | Path to a custom entitlements plist file. If omitted, the built-in AUv3 entitlements are used for AUv3 targets; other formats have no entitlements by default. |
 | `PLUGIN_HARDENED_RUNTIME` | ON\|OFF | OFF | Enable macOS hardened runtime (required for notarization). Adds `--options runtime` to codesign. |
-| `PLUGIN_HARDENED_RUNTIME_OPTIONS` | list | — | Space-separated list of entitlement keys to add to the entitlements plist when hardened runtime is enabled (e.g. `com.apple.security.device.audio-input`). |
+| `PLUGIN_HARDENED_RUNTIME_OPTIONS` | list | - | Space-separated list of entitlement keys to add to the entitlements plist when hardened runtime is enabled (e.g. `com.apple.security.device.audio-input`). |
 
 #### Copy & Install
 
@@ -241,23 +241,23 @@ All codesigning options are macOS-only and have no effect on other platforms.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `PLUGIN_ICON_BIG` | path | — | Path to a large icon image file. |
-| `PLUGIN_ICON_SMALL` | path | — | Path to a small icon image file. |
+| `PLUGIN_ICON_BIG` | path | - | Path to a large icon image file. |
+| `PLUGIN_ICON_SMALL` | path | - | Path to a small icon image file. |
 
 #### Custom Plist Injection
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `PLUGIN_CUSTOM_PLIST` | list | — | Additional plist key-value strings to merge into the target's Info.plist. |
+| `PLUGIN_CUSTOM_PLIST` | list | - | Additional plist key-value strings to merge into the target's Info.plist. |
 
 #### Dependencies
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `MODULES` | list | *(required)* | YUP module dependencies (e.g. `yup::yup_gui yup::yup_audio_processors`). |
-| `DEFINITIONS` | list | — | Additional compile definitions applied to all format targets. |
-| `OPTIONS` | list | — | Additional compile options applied to all format targets. |
-| `LINK_OPTIONS` | list | — | Additional linker options applied to all format targets. |
+| `DEFINITIONS` | list | - | Additional compile definitions applied to all format targets. |
+| `OPTIONS` | list | - | Additional compile options applied to all format targets. |
+| `LINK_OPTIONS` | list | - | Additional linker options applied to all format targets. |
 
 ---
 
@@ -278,15 +278,15 @@ also be used independently for non-plugin GUI applications.
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Target name for the executable. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
-| `TARGET_IDE_GROUP` | string | — | IDE folder group name. |
-| `TARGET_APP_NAMESPACE` | string | — | App namespace for bundle identifier generation. |
+| `TARGET_IDE_GROUP` | string | - | IDE folder group name. |
+| `TARGET_APP_NAMESPACE` | string | - | App namespace for bundle identifier generation. |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |
 | `TARGET_ICON` | path | *(built-in)* | Path to an application icon image. |
-| `DEFINITIONS` | list | — | Additional compile definitions. |
-| `COMPILE_OPTIONS` | list | — | Additional compile options. |
-| `MODULES` | list | — | YUP module dependencies. |
-| `SOURCES` | list | — | Additional source files. |
-| `LINK_OPTIONS` | list | — | Additional linker options. |
+| `DEFINITIONS` | list | - | Additional compile definitions. |
+| `COMPILE_OPTIONS` | list | - | Additional compile options. |
+| `MODULES` | list | - | YUP module dependencies. |
+| `SOURCES` | list | - | Additional source files. |
+| `LINK_OPTIONS` | list | - | Additional linker options. |
 
 ---
 

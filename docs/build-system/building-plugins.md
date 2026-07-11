@@ -230,6 +230,6 @@ cmake --build build --config Release
 
 ## Additional Resources
 
-- [CMake API Reference](CMake%20API.md) — Full reference of all CMake options and functions
+- [CMake API Reference](CMake%20API.md) - Full reference of all CMake options and functions
 - [CLAP Documentation](https://cleveraudio.org/)
 - [VST3 Documentation](https://developer.steinberg.help/hub/display/VST)
