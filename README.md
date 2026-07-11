@@ -413,7 +413,7 @@ YUP is looking for collaborators who want to help shape a permissively licensed 
 - reporting API friction while building real applications;
 - contributing DSP, GUI, audio graph, and plugin-hosting fixes.
 
-Open an issue or pull request on the [YUP repository](https://github.com/kunitoki/yup).
+Open an [issue](https://github.com/kunitoki/yup/issues) or [pull request](https://github.com/kunitoki/yup/pulls) on the [repository](https://github.com/kunitoki/yup).
 
 
 ## License
