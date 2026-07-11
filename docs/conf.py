@@ -7,9 +7,10 @@
 
 import datetime
 
-project = "YUP"
+project = "YUP!"
 copyright = f"{datetime.datetime.now().year}, kunitoki@gmail.com"
 author = "kunitoki@gmail.com"
+github = "https://github.com/kunitoki/yup"
 
 # -- General configuration ---------------------------------------------------
 
@@ -67,8 +68,37 @@ html_css_files = [
 ]
 
 html_theme_options = {
-    "accent_color": "blue",
+    "accent_color": "indigo",
     "color_mode": "auto",
-    "github_url": "https://github.com/kunitoki/yup",
+    "github_url": github,
     "nav_socials": ["github"],
+    "light_logo": "logo-light.png",
+    "dark_logo": "logo-dark.png",
+    # "announcement": "The content of the announcement",
+    "nav_links": [
+        {
+            "title": "Getting Started",
+            "url": "getting-started/index",
+        },
+        {
+            "title": "Build System",
+            "url": "build-system/index",
+        },
+        {
+            "title": "Core",
+            "url": "core/index",
+        },
+        {
+            "title": "Graphics",
+            "url": "graphics/index",
+        },
+        {
+            "title": "Imaging",
+            "url": "imaging/index",
+        },
+        {
+            "title": "Audio",
+            "url": "audio/index",
+        }
+    ]
 }
