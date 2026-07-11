@@ -8,23 +8,24 @@ It is built on the open source [Rive](https://rive.app/) renderer.
 
 ## In this area
 
-- [Primitives](primitives.md) — `Point`, `Rectangle`, `Color`, `ColorGradient`,
-  `Path`, `AffineTransform`, `StrokeType`, `BlendMode` — the value types every
+- [Primitives](primitives.md) - `Point`, `Rectangle`, `Color`, `ColorGradient`,
+  `Path`, `AffineTransform`, `StrokeType`, `BlendMode` - the value types every
   drawing call consumes.
-- [The Graphics class](graphics-class.md) — the immediate-mode 2D drawing API:
+- [The Graphics class](graphics-class.md) - the immediate-mode 2D drawing API:
   state model, fills, strokes, text, images, transforms, clipping, transparency
   layers, and offscreen rendering.
-- [How to draw](drawing.md) — a task-oriented guide with copy-paste examples for
+- [How to draw](drawing.md) - a task-oriented guide with copy-paste examples for
   common drawing patterns: backgrounds, buttons, text, paths, gradients, and more.
-- [Fonts & text layout](fonts.md) — the `Font` resource, variable-font axes,
+- [Fonts & text layout](fonts.md) - the `Font` resource, variable-font axes,
   OpenType features, `StyledText`, and themed font access.
-- [Images](images.md) — creating, loading, and saving bitmaps; pixel access;
-  the format codecs; and the CPU/GPU texture bridge.
-- [Drawables & SVG](svg.md) — parsing and painting SVG with `Drawable`, fitting
+- [Drawables & SVG](svg.md) - parsing and painting SVG with `Drawable`, fitting
   modes, and custom image/font resolvers.
-- [RHI — GPU Rendering Hardware Interface](rhi/index.md) — the backend-agnostic
+- [RHI - GPU Rendering Hardware Interface](rhi/index.md) - the backend-agnostic
   low-level GPU layer: frames, render passes, pipelines, buffers, textures, and
   offscreen targets.
+
+Bitmap image handling - creating, loading, saving, and drawing images - has its
+own [Imaging](../imaging/index.md) area.
 
 ## Key building blocks
 
@@ -59,7 +60,6 @@ primitives
 graphics-class
 drawing
 fonts
-images
 svg
 rhi/index
 ```

@@ -78,8 +78,8 @@ Use the bounds to size a component or to compute an aspect-correct target area.
 ## SVGDocument & parse options
 
 `Drawable::parseSVG` accepts a `ParseOptions` struct (aliased as
-`Drawable::ParseOptions`) that controls how external references — images and
-fonts — are resolved during parsing.
+`Drawable::ParseOptions`) that controls how external references - images and
+fonts - are resolved during parsing.
 
 ```cpp
 Drawable::ParseOptions options;
@@ -92,7 +92,7 @@ drawable.parseSVG (svgFile, options);
 
 ### Custom image resolver
 
-Supply your own loader to intercept `<image>` hrefs — useful for virtual file
+Supply your own loader to intercept `<image>` hrefs - useful for virtual file
 systems or embedded resources. Return `std::nullopt` to fall back to the default:
 
 ```cpp
@@ -139,13 +139,13 @@ The parser handles a broad subset of SVG, including:
 - `viewBox` with `preserveAspectRatio` fitting and justification.
 
 ```{note}
-For direct access to the parsed model — elements, gradients, and bounds — an
+For direct access to the parsed model - elements, gradients, and bounds - an
 `SVGDocument` exposes its `SVGData` through `visit()`. Most applications only
 need `Drawable`; reach for `SVGDocument` when building custom SVG tooling.
 ```
 
 ## See also
 
-- [The Graphics class](graphics-class.md) — the context `Drawable` paints into.
-- [Images](images.md) — how SVG `<image>` hrefs become `Image` objects.
-- [Fonts & text layout](fonts.md) — how SVG `<text>` resolves fonts.
+- [The Graphics class](graphics-class.md) - the context `Drawable` paints into.
+- [Images](../imaging/index.md) - how SVG `<image>` hrefs become `Image` objects.
+- [Fonts & text layout](fonts.md) - how SVG `<text>` resolves fonts.

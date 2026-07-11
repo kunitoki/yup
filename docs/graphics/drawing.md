@@ -99,7 +99,7 @@ g.drawImage (screenshot, targetRect);
 ## Draw a GPU-calculated texture
 
 When you already have a `GpuTexture::Ptr` from a canvas or render pass, draw it
-directly — no `Image` allocation needed:
+directly - no `Image` allocation needed:
 
 ```cpp
 g.drawTexture (offscreenCanvas->asTexture(), getLocalBounds().to<float>());
@@ -216,7 +216,7 @@ auto sidebar = area.removeFromLeft (80.0f);
 
 ## See also
 
-- [Graphics class reference](graphics-class.md) — the full API surface.
-- [Primitives](primitives.md) — `Color`, `Point`, `Rectangle`, `Path`,
+- [Graphics class reference](graphics-class.md) - the full API surface.
+- [Primitives](primitives.md) - `Color`, `Point`, `Rectangle`, `Path`,
   `AffineTransform`, `ColorGradient`, `StrokeType`.
-- [RHI](rhi/index.md) — step down for custom GPU pipelines and render passes.
+- [RHI](rhi/index.md) - step down for custom GPU pipelines and render passes.

@@ -41,7 +41,8 @@ themselves live in `yup_core`.
 | `yup_shading` | Shader source, transpilation, and shader bundles. | `yup_core` |
 | `yup_animation` | Lottie-compatible animation model with rendering and export. | `yup_core`, `yup_graphics` |
 
-See the [Graphics](graphics/index.md) area.
+See the [Graphics](graphics/index.md) area. Bitmap image handling in
+`yup_graphics` is documented separately in the [Imaging](imaging/index.md) area.
 
 ### UI
 
@@ -162,5 +163,5 @@ flowchart TD
 
 ## See also
 
-- [Module format](build-system/module-format.md) — how a module is declared.
-- [CMake API](build-system/cmake-api.md) — how to add modules to your target.
+- [Module format](build-system/module-format.md) - how a module is declared.
+- [CMake API](build-system/cmake-api.md) - how to add modules to your target.

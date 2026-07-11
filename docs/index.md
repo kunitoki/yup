@@ -19,6 +19,7 @@ concept guides, walkthroughs, and reference material.
 
 - [Getting Started](getting-started/index.md) - install YUP, build the examples, and create your first project.
 - [Graphics](graphics/index.md) - the graphics context, 2D drawing, the **RHI** GPU layer, shaders, fonts, SVG, and animation.
+- [Imaging](imaging/index.md) - bitmap images: pixels, loading, saving, and drawing.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
 - [Data](data/index.md) - the `DataTree` model and serialization.
@@ -29,7 +30,7 @@ concept guides, walkthroughs, and reference material.
 
 ## Quick links
 
-- [All modules and their usage](modules.md) — the full module list, grouped by area, with dependencies.
+- [All modules and their usage](modules.md) - the full module list, grouped by area, with dependencies.
 - Example apps: [graphics](https://github.com/kunitoki/yup/tree/main/examples/graphics), [audio graph](https://github.com/kunitoki/yup/tree/main/examples/audiograph), [plugin](https://github.com/kunitoki/yup/tree/main/examples/plugin), [console](https://github.com/kunitoki/yup/tree/main/examples/console).
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
@@ -41,6 +42,7 @@ concept guides, walkthroughs, and reference material.
 getting-started/index
 modules
 graphics/index
+imaging/index
 ui/index
 audio/index
 data/index

@@ -8,7 +8,7 @@ and drawing APIs.
 ```{note}
 YUP uses American English: it is `Color` (not `Colour`) and `center` (not
 `centred`). Geometry primitives convert between numeric types with the templated
-`.to<T>()` method — for example `bounds.to<float>()` — not `toFloat`.
+`.to<T>()` method - for example `bounds.to<float>()` - not `toFloat`.
 ```
 
 ## Point
@@ -46,7 +46,7 @@ auto ints   = s.to<int>();
 ## Rectangle
 
 `Rectangle<ValueType>` is the workhorse for layout and drawing. It stores an
-origin plus a size and offers a large fluent API for slicing and insetting —
+origin plus a size and offers a large fluent API for slicing and insetting -
 ideal for laying out a `Component` inside its bounds.
 
 ```cpp
@@ -59,7 +59,7 @@ auto smaller  = r.withSizeKeepingCenter (100, 40); // keep center, resize
 
 ### Slicing layout
 
-`removeFrom*` mutates the rectangle and returns the slice it removed — the
+`removeFrom*` mutates the rectangle and returns the slice it removed - the
 canonical way to divide an area into regions:
 
 ```cpp
@@ -109,8 +109,8 @@ g.setFillColorGradient (gradient);
 g.fillRect (bounds);
 ```
 
-Gradients support a `Spread` mode — `Pad` (clamp to endpoints), `Repeat`
-(tile), or `Reflect` (mirrored tile) — and any number of intermediate stops for
+Gradients support a `Spread` mode - `Pad` (clamp to endpoints), `Repeat`
+(tile), or `Reflect` (mirrored tile) - and any number of intermediate stops for
 multi-color gradients.
 
 ## Path
@@ -145,11 +145,11 @@ shapes.addArc (arcBounds, 0.0f, MathConstants<float>::pi, true);
 
 Stroking is configured with three related types:
 
-- **`StrokeType`** — bundles a `width`, a `StrokeJoin`, and a `StrokeCap`. It is
+- **`StrokeType`** - bundles a `width`, a `StrokeJoin`, and a `StrokeCap`. It is
   immutable with fluent `withWidth` / `withJoin` / `withCap` builders. The
   default is width `1.0`, `Miter` join, `Butt` cap.
-- **`StrokeJoin`** — how two segments meet: `Miter`, `Round`, or `Bevel`.
-- **`StrokeCap`** — how open ends are drawn: `Butt`, `Round`, or `Square`.
+- **`StrokeJoin`** - how two segments meet: `Miter`, `Round`, or `Bevel`.
+- **`StrokeCap`** - how open ends are drawn: `Butt`, `Round`, or `Square`.
 
 ```cpp
 StrokeType stroke { 3.0f, StrokeJoin::Round, StrokeCap::Round };
@@ -185,6 +185,6 @@ g.setBlendMode (BlendMode::Multiply);
 
 ## See also
 
-- [The Graphics class](graphics-class.md) — the drawing API that consumes these
+- [The Graphics class](graphics-class.md) - the drawing API that consumes these
   primitives.
-- [How to draw](drawing.md) — a practical drawing guide.
+- [How to draw](drawing.md) - a practical drawing guide.

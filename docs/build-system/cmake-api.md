@@ -290,6 +290,91 @@ also be used independently for non-plugin GUI applications.
 
 ---
 
+### `yup_add_embedded_binary_resources`
+
+```cmake
+yup_add_embedded_binary_resources(<library_name>
+    OUT_DIR        <subdir>
+    HEADER         <header_file_name>
+    [NAMESPACE     <namespace>]
+    RESOURCE_NAMES <symbol>...
+    RESOURCES      <path>...)
+```
+
+Embeds one or more arbitrary binary files directly into the executable, with no
+runtime file I/O. It generates C++ source at configure time and produces a
+linkable `OBJECT` library that exposes each resource as a byte array. This is
+the portable way to ship assets - images, fonts, `.riv`/`.lottie` files, shader
+bundles, config blobs - including on platforms without a conventional
+filesystem (Android, WebAssembly).
+
+For each entry, a matching pair of symbols is emitted into the given namespace:
+
+```cpp
+extern const uint8_t     <RESOURCE_NAME>_data[];
+extern const std::size_t <RESOURCE_NAME>_size;
+```
+
+#### Arguments
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `<library_name>` | string | *(required)* | Name of the generated `OBJECT` library target (first positional argument). |
+| `OUT_DIR` | string | *(required)* | Subdirectory under the build tree where the generated `.cpp`/`.inc`/header are written. |
+| `HEADER` | string | *(required)* | File name of the generated header declaring the symbols. |
+| `NAMESPACE` | string | - | C++ namespace wrapping the declarations. Omit for the global namespace. |
+| `RESOURCE_NAMES` | list | *(required)* | Symbol base names, one per resource. Paired positionally with `RESOURCES`. |
+| `RESOURCES` | list | *(required)* | Source file paths to embed. Paired positionally with `RESOURCE_NAMES`. |
+
+`RESOURCE_NAMES` and `RESOURCES` are parallel lists: the *n*-th name is bound to
+the *n*-th file. The library is regenerated only when a resource's bytes change,
+so incremental builds stay fast. The target is placed in the `EmbeddedResources`
+IDE folder.
+
+#### Example
+
+```cmake
+yup_add_embedded_binary_resources(
+    "${target_name}_binary_data"
+    OUT_DIR BinaryData
+    HEADER  BinaryData.h
+    NAMESPACE MyApp
+    RESOURCE_NAMES
+        Settings
+        Logo
+    RESOURCES
+        "resources/config/settings.json"
+        "resources/images/logo.png")
+
+# Link the object library into your target.
+yup_standalone_app(
+    # ...
+    MODULES
+        yup::yup_gui
+        libpng
+        "${target_name}_binary_data")   # << add the resources library
+```
+
+Consume the bytes at runtime through the generated header:
+
+```cpp
+#include <BinaryData.h>
+
+yup::MemoryInputStream stream (MyApp::Settings_data, MyApp::Settings_size, false);
+
+auto result = yup::Image::loadFromData (
+    yup::Span<const uint8_t> (MyApp::Logo_data, MyApp::Logo_size));
+```
+
+```{tip}
+To compile and embed GPU shaders offline, use the higher-level
+`yup_add_shader_bundle()` helper, which builds a `.ysl` bundle at configure time
+and embeds it through this function. See
+[Offline shader compilation](../graphics/rhi/offline-shaders.md).
+```
+
+---
+
 ## Plugin Format-Specific Notes
 
 ### CLAP Features

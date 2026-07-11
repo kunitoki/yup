@@ -139,6 +139,10 @@ YUP provides several ways to manage application resources:
 
 1. **Embedded Resources**
 
+Embed asset bytes straight into the executable with
+[`yup_add_embedded_binary_resources`](cmake-api.md#yup_add_embedded_binary_resources)
+(see the CMake API reference for the full argument list):
+
 ```cmake
 // In your CMakeLists.txt
 yup_add_embedded_binary_resources (

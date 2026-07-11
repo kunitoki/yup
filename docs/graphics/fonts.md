@@ -92,7 +92,7 @@ auto titleFont = font.withHeight (24.0f);
 
 ## StyledText
 
-`StyledText` is a pre-laid-out, optionally rich text block — a batch built from
+`StyledText` is a pre-laid-out, optionally rich text block - a batch built from
 one or more font/style runs. Use it when you need mixed styling in a single
 paragraph or want to measure text before drawing.
 
@@ -145,7 +145,7 @@ g.strokeFittedText (styledText, textBounds);
 
 ## See also
 
-- [The Graphics class](graphics-class.md) — `fillFittedText`, `strokeFittedText`.
-- [How to draw](drawing.md) — drawing text examples.
-- [SVG](svg.md) — SVG text elements use the `ParseOptions::fontResolver` to
+- [The Graphics class](graphics-class.md) - `fillFittedText`, `strokeFittedText`.
+- [How to draw](drawing.md) - drawing text examples.
+- [SVG](svg.md) - SVG text elements use the `ParseOptions::fontResolver` to
   supply custom fonts.

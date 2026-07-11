@@ -22,11 +22,12 @@ cases:
 
 ### 1. From a shader bundle (recommended)
 
-`compileFromBundle()` consumes a pre-built [`ShaderBundle`](../../build-system/module-format.md)
-(typically loaded from a `.ysl` file). It automatically picks the native shader
-variant for the active backend (Metal → MSL, Direct3D → HLSL, OpenGL(ES) →
-GLSL/ESSL, WebGPU → WGSL) and derives the mandatory binding-map sidecar from the
-bundled reflection data. It works **without** the shader transpiler compiled in.
+`compileFromBundle()` consumes a pre-built [`ShaderBundle`](offline-shaders.md)
+(typically compiled offline into a `.ysl` file and embedded). It automatically
+picks the native shader variant for the active backend (Metal → MSL, Direct3D →
+HLSL, OpenGL(ES) → GLSL/ESSL, WebGPU → WGSL) and derives the mandatory
+binding-map sidecar from the bundled reflection data. It works **without** the
+shader transpiler compiled in.
 
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (

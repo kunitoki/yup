@@ -3,7 +3,7 @@
 `Graphics` is the high-level, immediate-mode 2D drawing interface. It renders
 fills, strokes, paths, text, images, and GPU textures into a rendering surface
 through the active [`GraphicsContext`](#the-graphicscontext). You rarely
-construct one yourself — the most common way to obtain a `Graphics` is inside
+construct one yourself - the most common way to obtain a `Graphics` is inside
 [`Component::paint`](../ui/index.md).
 
 ```cpp
@@ -76,11 +76,11 @@ g.setFeather (2.0f);                  // soft edge falloff
 
 ## Transform, drawing area, and clip
 
-- **Transform** — an `AffineTransform` applied to all subsequent geometry.
+- **Transform** - an `AffineTransform` applied to all subsequent geometry.
   `setTransform` replaces it; `addTransform` composes on top of the current one.
-- **Drawing area** — the rectangle drawing is offset into and clipped against
+- **Drawing area** - the rectangle drawing is offset into and clipped against
   (`setDrawingArea` / `getDrawingArea`). `fillAll()` fills this area.
-- **Clip path** — a rectangle or `Path` that constrains drawing
+- **Clip path** - a rectangle or `Path` that constrains drawing
   (`setClipPath` / `getClipPath`).
 
 ```cpp
@@ -97,8 +97,8 @@ width and style come from the current stroke state.
 
 | Shape          | Fill                                        | Stroke                                        |
 | -------------- | ------------------------------------------- | --------------------------------------------- |
-| Whole area     | `fillAll()`                                 | —                                             |
-| Line           | —                                           | `strokeLine (x1, y1, x2, y2)`                 |
+| Whole area     | `fillAll()`                                 | -                                             |
+| Line           | -                                           | `strokeLine (x1, y1, x2, y2)`                 |
 | Rectangle      | `fillRect (r)`                              | `strokeRect (r)`                              |
 | Rounded rect   | `fillRoundedRect (r, radius)`               | `strokeRoundedRect (r, radius)`               |
 | Ellipse        | `fillEllipse (r)`                           | `strokeEllipse (r)`                           |
@@ -142,12 +142,12 @@ g.drawTexture (gpuTexture, targetRect);   // draw a GPU texture directly
 
 `drawTexture` composites a [`GpuTexture`](rhi/buffers-and-textures.md#gputexture)
 straight from the RHI (e.g. `GpuCanvas::asTexture()`) without allocating a
-CPU-side image — the fast path for GPU-generated content.
+CPU-side image - the fast path for GPU-generated content.
 
 ## Transparency layers
 
-For correct *group* opacity — where a set of overlapping shapes must fade as a
-single unit — use a transparency layer. It renders offscreen, then composites
+For correct *group* opacity - where a set of overlapping shapes must fade as a
+single unit - use a transparency layer. It renders offscreen, then composites
 the finished result back with the layer opacity.
 
 ```cpp
@@ -168,7 +168,7 @@ Inside the layer, coordinates are layer-local: the target area's top-left is
 ## Offscreen rendering into an Image
 
 `Graphics` can be constructed to render into an `Image` on the GPU and read the
-result back on the CPU — useful for thumbnails, export, and tests.
+result back on the CPU - useful for thumbnails, export, and tests.
 
 ```cpp
 Image target { 512, 512, PixelFormat::RGBA };
@@ -186,7 +186,7 @@ Related methods: `isOffscreen()`, `commitOffscreenTarget()`, `commitToImage()`
 round-trip), and `readPixelsToImage()`.
 
 ```{tip}
-For richer GPU work — custom pipelines, render passes, and post-processing —
+For richer GPU work - custom pipelines, render passes, and post-processing -
 step down to the [RHI](rhi/index.md). `GpuCanvas` in particular bridges 2D
 `Graphics` drawing and low-level render passes on one surface.
 ```
@@ -212,6 +212,6 @@ a ready-to-use `Graphics` to each `Component::paint`.
 
 ## See also
 
-- [Primitives](primitives.md) — the value types drawing calls consume.
-- [How to draw](drawing.md) — a practical, task-oriented drawing guide.
-- [RHI](rhi/index.md) — the low-level GPU layer beneath `Graphics`.
+- [Primitives](primitives.md) - the value types drawing calls consume.
+- [How to draw](drawing.md) - a practical, task-oriented drawing guide.
+- [RHI](rhi/index.md) - the low-level GPU layer beneath `Graphics`.
