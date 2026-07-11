@@ -35,6 +35,11 @@ concept guides, walkthroughs, and reference material.
 - [Building standalone applications](build-system/building-standalone.md)
 - [Building audio plugins](build-system/building-plugins.md)
 
+## External resources
+
+- [YUP on GitHub](https://github.com/kunitoki/yup) - source code, issues, releases, discussion and roadmaps.
+- [YUP on DeepWiki](https://deepwiki.com/kunitoki/yup) - high level information on the framework extracted by a llm.
+
 ```{toctree}
 :hidden:
 :maxdepth: 2
