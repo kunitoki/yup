@@ -28,7 +28,7 @@ using namespace yup;
 namespace
 {
 
-class TrackingOffscreenTarget : public OffscreenTarget
+class TrackingOffscreenTarget : public RenderableTarget
 {
 public:
     TrackingOffscreenTarget (int targetWidth, int targetHeight)
@@ -42,6 +42,8 @@ public:
     int getHeight() const noexcept override { return height; }
 
     rive::gpu::RenderTarget* getRenderTarget() noexcept override { return nullptr; }
+
+    rive::gpu::RenderContext* getRenderContext() noexcept override { return nullptr; }
 
     rive::rcp<rive::gpu::Texture> adoptAsTexture() override { return nullptr; }
 
@@ -80,6 +82,8 @@ public:
     void end (void* nativeHandle) override { realContext->end (nativeHandle); }
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
 
     void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override { ++beginOffscreenCalls; }
 

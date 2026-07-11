@@ -188,7 +188,7 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
 }
 
 //==============================================================================
-rive::Factory* getOffscreenFactory (GraphicsContext& context, OffscreenTarget* target) noexcept
+rive::Factory* getOffscreenFactory (GraphicsContext& context, RenderableTarget* target) noexcept
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -197,7 +197,7 @@ rive::Factory* getOffscreenFactory (GraphicsContext& context, OffscreenTarget* t
     return context.factory();
 }
 
-std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, OffscreenTarget* target, int width, int height)
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, RenderableTarget* target, int width, int height)
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -251,12 +251,12 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
 }
 
 Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
-    : Graphics (context, context.createOffscreenTarget (image.getWidth(), image.getHeight()), clearColor)
+    : Graphics (context, context.createRenderableTarget (image.getWidth(), image.getHeight()), clearColor)
 {
     offscreenTargetImage = std::addressof (image);
 }
 
-Graphics::Graphics (GraphicsContext& context, std::unique_ptr<OffscreenTarget> target, uint32_t clearColor) noexcept
+Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor) noexcept
     : context (context)
     , ownedOffscreenTarget (std::move (target))
     , offscreenTarget (ownedOffscreenTarget.get())
@@ -285,7 +285,7 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<OffscreenTarget> t
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
 
-Graphics::Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t clearColor) noexcept
+Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor) noexcept
     : context (context)
     , offscreenTarget (std::addressof (target))
     , factory (*getOffscreenFactory (context, offscreenTarget))
@@ -450,7 +450,7 @@ Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<floa
     if (width <= 0 || height <= 0)
         return;
 
-    auto target = parent.getGraphicsContext().createOffscreenTarget (width, height);
+    auto target = parent.getGraphicsContext().createRenderableTarget (width, height);
     if (target == nullptr)
         return;
 

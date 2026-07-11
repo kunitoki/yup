@@ -180,6 +180,20 @@ public:
     */
     virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
 
+    /** Creates platform-specific GPU offscreen resources backed by a dedicated render context.
+
+        Unlike createOffscreenTarget(), the returned RenderableTarget reserves a
+        backend-owned RenderContext, which is required to drive a 2D Graphics frame
+        (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
+        surfaces to avoid allocating a dedicated context.
+
+        @param width The width of the offscreen target in pixels.
+        @param height The height of the offscreen target in pixels.
+
+        @return A unique pointer to a RenderableTarget object, or nullptr on failure.
+    */
+    virtual std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) = 0;
+
     /** Begins a GPU frame targeting the given offscreen surface.
 
         A target may have only one active frame. Nested frames are supported when

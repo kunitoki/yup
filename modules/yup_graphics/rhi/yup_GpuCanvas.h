@@ -25,6 +25,7 @@ namespace yup
 class GraphicsContext;
 class Graphics;
 class GpuTexture;
+class GpuTarget;
 class GpuFrame;
 class GpuRenderPass;
 struct GpuRenderOptions;
@@ -36,6 +37,11 @@ class Image;
     GpuCanvas consolidates the creation, rendering, and readback of an offscreen
     GPU target into a single, backend-agnostic object. It replaces the lower-level
     GraphicsContext::createOffscreenTarget / beginOffscreen / endOffscreen API.
+
+    GpuCanvas builds on a GpuTarget (accessible via getTarget()) but is backed by
+    a dedicated render context, which adds 2D drawing through beginDraw()/commit().
+    For render-pass-only work that does not need 2D drawing primitives, prefer
+    GpuTarget, which avoids allocating a dedicated render context.
 
     Typical usage:
     @code
@@ -75,6 +81,14 @@ public:
         @param height   Height in pixels (must be > 0).
     */
     static GpuCanvas::Ptr create (GraphicsContext& ctx, int width, int height);
+
+    //==============================================================================
+    /** Returns the underlying GpuTarget backing this canvas.
+
+        The GpuTarget provides the render-pass, texture, and readback surface that
+        GpuCanvas builds its 2D drawing on. May be nullptr if creation failed.
+    */
+    GpuTarget::Ptr getTarget() const noexcept;
 
     //==============================================================================
     /** Returns the width of this canvas in pixels. */
@@ -164,9 +178,8 @@ private:
     GpuCanvas() = default;
 
     GraphicsContext* ctx = nullptr;
-    std::unique_ptr<OffscreenTarget> offscreenTarget;
+    GpuTarget::Ptr target;
     std::unique_ptr<Graphics> graphics;
-    GpuTexture::Ptr cachedTexture;
     bool frameOpen = false;
     bool committed = false;
 

@@ -63,6 +63,8 @@ public:
 
     std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int width, int height) override { return real->createOffscreenTarget (width, height); }
 
+    std::unique_ptr<yup::RenderableTarget> createRenderableTarget (int width, int height) override { return real->createRenderableTarget (width, height); }
+
     void beginOffscreen (yup::OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
 
     void endOffscreen (yup::OffscreenTarget& target) override { real->endOffscreen (target); }
@@ -75,10 +77,10 @@ private:
 };
 
 // ==============================================================================
-// Mock yup::GraphicsContext::OffscreenTarget
+// Mock yup::GraphicsContext::RenderableTarget
 // ==============================================================================
 
-class MockOffscreenTarget : public yup::OffscreenTarget
+class MockOffscreenTarget : public yup::RenderableTarget
 {
 public:
     explicit MockOffscreenTarget (int w, int h)
@@ -121,14 +123,15 @@ private:
 
 // ==============================================================================
 // Test helper: OreInjectedGraphicsContext that also injects an offscreen target.
-// Overrides createOffscreenTarget to return a pre-built MockOffscreenTarget.
+// Overrides createOffscreenTarget / createRenderableTarget to return a pre-built
+// MockOffscreenTarget.
 // ==============================================================================
 
 class OreAndTargetGraphicsContext : public OreInjectedGraphicsContext
 {
 public:
     OreAndTargetGraphicsContext (rive::ore::Context* oreCtx,
-                                 std::unique_ptr<yup::OffscreenTarget> target)
+                                 std::unique_ptr<MockOffscreenTarget> target)
         : OreInjectedGraphicsContext (oreCtx)
         , injectedTarget (std::move (target))
     {
@@ -141,11 +144,17 @@ public:
         return std::move (injectedTarget);
     }
 
-    void setNextOffscreenTarget (std::unique_ptr<yup::OffscreenTarget> target)
+    std::unique_ptr<yup::RenderableTarget> createRenderableTarget (int, int) override
+    {
+        // Move the target back out — the caller takes ownership.
+        return std::move (injectedTarget);
+    }
+
+    void setNextOffscreenTarget (std::unique_ptr<MockOffscreenTarget> target)
     {
         injectedTarget = std::move (target);
     }
 
 private:
-    std::unique_ptr<yup::OffscreenTarget> injectedTarget;
+    std::unique_ptr<MockOffscreenTarget> injectedTarget;
 };

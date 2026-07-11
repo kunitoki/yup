@@ -218,12 +218,13 @@ public:
         bool frameActive = false;
     };
 
-    struct OffscreenTargetGL : public OffscreenTarget
+    struct OffscreenTargetGL : public RenderableTarget
     {
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
+        rive::gpu::RenderContext* mirrorContext = nullptr;
         mutable rive::rcp<rive::gpu::Texture> sampledMirrorTex;
         OffscreenContextSlot* contextSlot = nullptr;
 
@@ -260,7 +261,7 @@ public:
             if (sampledMirrorTex != nullptr)
                 return sampledMirrorTex;
 
-            if (renderContext == nullptr || renderCanvas == nullptr)
+            if (mirrorContext == nullptr || renderCanvas == nullptr)
                 return nullptr;
 
             auto renderImage = renderCanvas->renderImage();
@@ -270,7 +271,7 @@ public:
             if (auto sourceTex = renderImage->refTexture())
             {
                 auto mirrorImage = rive::getCanvasImportMirrorGL (
-                    renderContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
+                    mirrorContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
 
                 if (mirrorImage != nullptr)
                     sampledMirrorTex = mirrorImage->refTexture();
@@ -290,6 +291,25 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
+        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+            return nullptr;
+
+        auto renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
+        if (renderCanvas == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetGL>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = nullptr;
+        target->mirrorContext = m_renderContext.get();
+        target->contextSlot = nullptr;
+        target->renderCanvas = std::move (renderCanvas);
+        return target;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
+    {
         if (width <= 0 || height <= 0)
             return nullptr;
 
@@ -301,6 +321,7 @@ public:
         target->width = width;
         target->height = height;
         target->renderContext = contextSlot->renderContext.get();
+        target->mirrorContext = contextSlot->renderContext.get();
         target->contextSlot = contextSlot;
 
         target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));

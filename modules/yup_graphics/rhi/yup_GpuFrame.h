@@ -93,6 +93,7 @@ public:
 
 private:
     friend class GpuCanvas;
+    friend class GpuTarget;
     friend class GpuRenderPass;
 
     GpuFrame() = default;

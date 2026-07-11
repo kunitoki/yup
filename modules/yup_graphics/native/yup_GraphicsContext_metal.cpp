@@ -291,7 +291,7 @@ public:
         bool frameActive = false;
     };
 
-    struct OffscreenTargetMetal : public OffscreenTarget
+    struct OffscreenTargetMetal : public RenderableTarget
     {
         int width = 0;
         int height = 0;
@@ -340,6 +340,24 @@ public:
     };
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetMetal>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = nullptr;
+        target->contextSlot = nullptr;
+        target->renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                  static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
         if (width <= 0 || height <= 0)
             return nullptr;

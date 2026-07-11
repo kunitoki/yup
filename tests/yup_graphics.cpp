@@ -32,6 +32,7 @@
 #include "yup_graphics/yup_Graphics.cpp"
 #include "yup_graphics/yup_GraphicsOffscreen.cpp"
 #include "yup_graphics/yup_GpuCanvas.cpp"
+#include "yup_graphics/yup_GpuTarget.cpp"
 #include "yup_graphics/yup_GpuPipeline.cpp"
 #include "yup_graphics/yup_GpuPipelineMocked.cpp"
 #include "yup_graphics/yup_Image.cpp"

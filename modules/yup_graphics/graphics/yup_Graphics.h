@@ -143,18 +143,18 @@ public:
     Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
 
     /** Constructs a Graphics object for rendering into an Image on the GPU. */
-    Graphics (GraphicsContext& context, std::unique_ptr<OffscreenTarget> target, uint32_t clearColor = 0) noexcept;
+    Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor = 0) noexcept;
 
-    /** Constructs a Graphics object rendering into an externally-owned offscreen target.
+    /** Constructs a Graphics object rendering into an externally-owned renderable target.
 
         The target is not owned by this Graphics and must outlive it. Begins the
         offscreen GPU frame immediately. Used by GpuCanvas, which owns the target.
 
         @param context      Reference to the GraphicsContext to use for offscreen rendering.
-        @param target       Reference to the externally-owned offscreen target.
+        @param target       Reference to the externally-owned renderable target.
         @param clearColor   ARGB clear color applied at the start of the offscreen frame.
     */
-    Graphics (GraphicsContext& context, OffscreenTarget& target, uint32_t clearColor = 0) noexcept;
+    Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor = 0) noexcept;
 
     /** Finalizes an uncommitted offscreen frame without retaining its result. */
     ~Graphics();
@@ -773,8 +773,8 @@ private:
 
     GraphicsContext& context;
 
-    std::unique_ptr<OffscreenTarget> ownedOffscreenTarget;
-    OffscreenTarget* offscreenTarget = nullptr;
+    std::unique_ptr<RenderableTarget> ownedOffscreenTarget;
+    RenderableTarget* offscreenTarget = nullptr;
 
     rive::Factory& factory;
     std::unique_ptr<rive::Renderer> ownedRenderer;

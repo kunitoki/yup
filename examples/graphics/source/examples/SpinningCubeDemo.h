@@ -206,11 +206,11 @@ public:
         if (w < 2 || h < 2 || ! gpuInitialized)
             return;
 
-        // 1. Create an empty GpuCanvas for the scene (used purely as a render
-        //    target - no 2D commit required).
+        // 1. Create an empty GpuTarget for the scene (used purely as a render
+        //    target - no 2D drawing, so no dedicated render context is needed).
         if (sceneCanvas == nullptr || sceneCanvas->getWidth() != w || sceneCanvas->getHeight() != h)
         {
-            sceneCanvas = yup::GpuCanvas::create (*capturedContext, w, h);
+            sceneCanvas = yup::GpuTarget::create (*capturedContext, w, h);
             if (sceneCanvas == nullptr)
                 return;
         }
@@ -244,17 +244,17 @@ public:
 
             // Ping-pong render targets reused across frames (recreated on resize).
             if (blurCanvasA == nullptr || blurCanvasA->getWidth() != w || blurCanvasA->getHeight() != h)
-                blurCanvasA = yup::GpuCanvas::create (*capturedContext, w, h);
+                blurCanvasA = yup::GpuTarget::create (*capturedContext, w, h);
 
             if (blurCanvasB == nullptr || blurCanvasB->getWidth() != w || blurCanvasB->getHeight() != h)
-                blurCanvasB = yup::GpuCanvas::create (*capturedContext, w, h);
+                blurCanvasB = yup::GpuTarget::create (*capturedContext, w, h);
 
             if (blurCanvasA != nullptr && blurCanvasB != nullptr)
             {
                 // Both blur passes share a single GpuFrame.
                 auto frame = yup::GpuFrame::begin (*capturedContext);
 
-                auto runPass = [&] (yup::GpuCanvas& passCanvas, const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
+                auto runPass = [&] (yup::GpuTarget& passCanvas, const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
                 {
                     BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
 
@@ -972,7 +972,7 @@ void main() {
 
     // ---- Per-frame cube render pass -----------------------------------------
 
-    void renderCube (yup::GpuCanvas& canvas, int w, int h, const yup::GpuTexture::Ptr& lottieTexture)
+    void renderCube (yup::GpuTarget& canvas, int w, int h, const yup::GpuTexture::Ptr& lottieTexture)
     {
         if (cubePipeline == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
             return;
@@ -1010,14 +1010,14 @@ void main() {
     yup::GpuPipeline::Ptr cubePipeline;
     yup::GpuBuffer::Ptr cubeVBO;
     yup::GpuBuffer::Ptr cubeIBO;
-    yup::GpuCanvas::Ptr sceneCanvas;
+    yup::GpuTarget::Ptr sceneCanvas;
 
     // Blur pass (GpuPipeline fullscreen triangle).
     yup::GpuPipeline::Ptr blurPipeline;
 
     // Ping-pong blur render targets, reused across frames (recreated on resize).
-    yup::GpuCanvas::Ptr blurCanvasA;
-    yup::GpuCanvas::Ptr blurCanvasB;
+    yup::GpuTarget::Ptr blurCanvasA;
+    yup::GpuTarget::Ptr blurCanvasB;
 
     // Lottie texture source sampled by the cube faces.
     static constexpr int kLottieTextureSize = 512;

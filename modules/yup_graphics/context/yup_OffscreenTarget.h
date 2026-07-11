@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -28,11 +28,13 @@ namespace yup
     Created by GraphicsContext::createOffscreenTarget(); passed to
     beginOffscreen/endOffscreen and readOffscreenPixels.
 
-    Targets are assigned a backend-owned RenderContext. A context is reserved
-    while a target frame is active, allowing recursive offscreen rendering
-    (TransparencyLayer inside GpuCanvas, nested precomps) without re-entering
-    beginFrame and allowing sequential targets to reuse an idle context. The
-    GraphicsContext must outlive every OffscreenTarget it creates.
+    An OffscreenTarget is the low-level render surface used by GPU render passes
+    (GpuTarget/GpuRenderPass). Its backing RenderCanvas is allocated from the
+    context's main RenderContext, so it does not reserve a dedicated offscreen
+    render context and cannot drive a 2D Graphics frame. Use RenderableTarget
+    (created via createRenderableTarget) when 2D drawing is required.
+
+    The GraphicsContext must outlive every OffscreenTarget it creates.
 */
 class YUP_API OffscreenTarget
 {
@@ -47,9 +49,6 @@ public:
 
     /** Returns the underlying Rive render target. */
     virtual rive::gpu::RenderTarget* getRenderTarget() noexcept = 0;
-
-    /** Returns the Rive render context used by this offscreen target. */
-    virtual rive::gpu::RenderContext* getRenderContext() noexcept { return nullptr; }
 
     /** Returns the underlying Rive render canvas, if this target is backed by one. */
     virtual rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept { return nullptr; }

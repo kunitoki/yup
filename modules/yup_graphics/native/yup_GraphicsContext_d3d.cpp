@@ -179,7 +179,7 @@ public:
         bool frameActive = false;
     };
 
-    struct OffscreenTargetD3D : public OffscreenTarget
+    struct OffscreenTargetD3D : public RenderableTarget
     {
         int width = 0;
         int height = 0;
@@ -216,7 +216,50 @@ public:
         }
     };
 
+    ComPtr<ID3D11Texture2D> createStagingTexture (int width, int height)
+    {
+        D3D11_TEXTURE2D_DESC stagingDesc {};
+        stagingDesc.Width = static_cast<UINT> (width);
+        stagingDesc.Height = static_cast<UINT> (height);
+        stagingDesc.MipLevels = 1;
+        stagingDesc.ArraySize = 1;
+        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        stagingDesc.SampleDesc.Count = 1;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+        ComPtr<ID3D11Texture2D> staging;
+        auto hr = m_gpu->CreateTexture2D (&stagingDesc, nullptr, staging.ReleaseAndGetAddressOf());
+        if (FAILED (hr))
+            return nullptr;
+
+        return staging;
+    }
+
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetD3D>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = nullptr;
+        target->contextSlot = nullptr;
+
+        target->renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                  static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        target->stagingTexture = createStagingTexture (width, height);
+        if (target->stagingTexture == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
         if (width <= 0 || height <= 0)
             return nullptr;
@@ -236,17 +279,8 @@ public:
         if (target->renderCanvas == nullptr)
             return nullptr;
 
-        D3D11_TEXTURE2D_DESC stagingDesc {};
-        stagingDesc.Width = static_cast<UINT> (width);
-        stagingDesc.Height = static_cast<UINT> (height);
-        stagingDesc.MipLevels = 1;
-        stagingDesc.ArraySize = 1;
-        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        stagingDesc.SampleDesc.Count = 1;
-        stagingDesc.Usage = D3D11_USAGE_STAGING;
-        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        auto hr = m_gpu->CreateTexture2D (&stagingDesc, nullptr, target->stagingTexture.ReleaseAndGetAddressOf());
-        if (FAILED (hr))
+        target->stagingTexture = createStagingTexture (width, height);
+        if (target->stagingTexture == nullptr)
             return nullptr;
 
         return target;
@@ -295,6 +329,14 @@ public:
         const size_t bytesPerRow = static_cast<size_t> (target.width) * 4u;
         if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
             return false;
+
+        // Light (render-pass-only) targets never run endOffscreen, so the staging
+        // texture is populated here on demand from the render canvas texture.
+        if (target.getRenderContext() == nullptr)
+        {
+            if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+                m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
+        }
 
         D3D11_MAPPED_SUBRESOURCE mapped {};
         HRESULT hr = m_gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
