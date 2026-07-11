@@ -15,6 +15,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
+    "sphinxcontrib.mermaid",
 ]
 
 myst_enable_extensions = [
@@ -28,6 +29,11 @@ myst_enable_extensions = [
 
 # Auto-generate anchors for headings so cross-file links stay stable.
 myst_heading_anchors = 3
+
+# Render plain ```mermaid fenced blocks as the sphinxcontrib.mermaid directive.
+# This keeps the same source rendering as a diagram both on GitHub (native
+# Mermaid support) and through Sphinx.
+myst_fence_as_directive = ["mermaid"]
 
 autosectionlabel_prefix_document = True
 

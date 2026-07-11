@@ -2,3 +2,4 @@ sphinx>=7.0
 myst-parser>=2.0
 linkify-it-py>=2.0
 sphinx-clarity-theme>=2.0
+sphinxcontrib-mermaid>=0.9
