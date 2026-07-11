@@ -34,10 +34,6 @@ public:
     void paint (yup::Graphics& g) override
     {
         g.fillAll (yup::Colours::black);
-
-        //g.setColour (yup::Colours::white);
-        //g.setFont (16.0f);
-        //g.drawText ("Hello, YUP!", getLocalBounds(), yup::Justification::centred);
     }
 
     void userTriedToCloseWindow() override
