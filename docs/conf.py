@@ -5,8 +5,10 @@
 #
 # Full list of options: https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import datetime
+
 project = "YUP"
-copyright = "2026, kunitoki@gmail.com"
+copyright = f"{datetime.datetime.now().year}, kunitoki@gmail.com"
 author = "kunitoki@gmail.com"
 
 # -- General configuration ---------------------------------------------------
@@ -31,29 +33,10 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 # Render plain ```mermaid fenced blocks as the sphinxcontrib.mermaid directive.
-# This keeps the same source rendering as a diagram both on GitHub (native
-# Mermaid support) and through Sphinx.
+# This keeps the same source rendering as a diagram both on GitHub (native Mermaid support) and through Sphinx.
 myst_fence_as_directive = ["mermaid"]
 
-# -- Mermaid configuration ---------------------------------------------------
-#
-# Pin a recent Mermaid and configure the client-side renderer. The two settings
-# that matter most for legible, correctly-sized diagrams:
-#   * flowchart.htmlLabels = false forces SVG-native <text> labels. HTML
-#     (foreignObject) labels are measured with the browser's default font but
-#     rendered with the theme font, which makes text overflow / misalign with
-#     node boxes. SVG text is measured and rendered with the same font.
-#   * fontFamily + themeVariables.fontSize set an explicit font so Mermaid's
-#     text measurement matches what is drawn (no tiny or clipped labels).
-mermaid_version = "11.6.0"
-
-mermaid_init_js = """mermaid.initialize({
-    startOnLoad: true,
-    securityLevel: 'loose',
-    fontFamily: 'trebuchet ms, Segoe UI, Helvetica, Arial, sans-serif',
-    flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' },
-    themeVariables: { fontSize: '16px' }
-});"""
+mermaid_output_format = "png"
 
 autosectionlabel_prefix_document = True
 
@@ -78,13 +61,7 @@ exclude_patterns = [
 html_theme = "sphinx_clarity_theme"
 html_title = "YUP Documentation"
 html_static_path = ["_static"]
-
-# Only sizes the Mermaid container/SVG. Text font-size is left to Mermaid's own
-# inline styling (see mermaid_init_js) so label measurement matches rendering.
-html_css_files = [
-    "mermaid.css",
-]
-
+html_css_files = []
 html_theme_options = {
     "light_logo": "_static/logo-light.png",
     "dark_logo": "_static/logo-dark.png",
