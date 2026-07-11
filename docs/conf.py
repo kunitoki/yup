@@ -72,8 +72,8 @@ html_theme_options = {
     "color_mode": "auto",
     "github_url": github,
     "nav_socials": ["github"],
-    "light_logo": "logo-light.png",
-    "dark_logo": "logo-dark.png",
+    "light_logo": "_static/logo-light.png",
+    "dark_logo": "_static/logo-dark.png",
     # "announcement": "The content of the announcement",
     "nav_links": [
         {
