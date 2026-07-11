@@ -33,13 +33,13 @@ myst_enable_extensions = [
 myst_heading_anchors = 3
 
 # Render plain ```mermaid fenced blocks as the sphinxcontrib.mermaid directive.
-# This keeps the same source rendering as a diagram both on GitHub (native Mermaid support) and through Sphinx.
+# This keeps the same source rendering as a diagram both on GitHub (native
+# Mermaid support) and through Sphinx.
 myst_fence_as_directive = ["mermaid"]
 
-mermaid_output_format = "png"
-
+# -- Mermaid configuration ---------------------------------------------------
+mermaid_version = "11.6.0"
 autosectionlabel_prefix_document = True
-
 source_suffix = {
     ".md": "markdown",
 }

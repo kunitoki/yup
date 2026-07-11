@@ -59,19 +59,6 @@ RHI rendering follows a strict hierarchy:
 4. **Finish the pass** with `finish()` (or let it finish on destruction).
 5. **Submit the frame** with `submit()` (or let it submit on destruction).
 
-```mermaid
-flowchart LR
-    A([GpuFrame::begin]) --> B[beginRenderPass]
-    B --> C[setPipeline / bind resources]
-    C --> D{draw or drawIndexed}
-    D --> C
-    D --> E[pass.finish]
-    E --> F{more passes?}
-    F -- yes --> B
-    F -- no --> G[frame.submit]
-    G --> H([waitForGPU – optional])
-```
-
 ```cpp
 auto frame = GpuFrame::begin (ctx);
 auto pass  = target->beginRenderPass (frame, { true, Colors::black });
