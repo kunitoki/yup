@@ -1,0 +1,15 @@
+.mermaid svg text,
+.mermaid-container svg text {
+    text-anchor: middle !important;
+    dominant-baseline: central !important;
+}
+
+.mermaid svg .label foreignObject,
+.mermaid-container svg .label foreignObject {
+    line-height: 1 !important;
+}
+
+.mermaid foreignObject,
+.mermaid-container foreignObject {
+    text-align: center !important;
+}
