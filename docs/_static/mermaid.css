@@ -1,15 +1,26 @@
-.mermaid svg text,
-.mermaid-container svg text {
+/* Target everything inside the Mermaid SVG */
+.mermaid svg *,
+.mermaid-container svg * {
     text-anchor: middle !important;
     dominant-baseline: central !important;
-}
-
-.mermaid svg .label foreignObject,
-.mermaid-container svg .label foreignObject {
-    line-height: 1 !important;
-}
-
-.mermaid foreignObject,
-.mermaid-container foreignObject {
     text-align: center !important;
+    line-height: 1.2 !important;
+}
+
+/* Specifically for foreignObject labels (HTML inside SVG) */
+.mermaid svg foreignObject,
+.mermaid-container svg foreignObject {
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.mermaid svg foreignObject div,
+.mermaid-container svg foreignObject div {
+    width: 100% !important;
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
