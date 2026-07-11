@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_core
+    optionalDeps:       glslang spirv_cross
 
   END_YUP_MODULE_DECLARATION
 

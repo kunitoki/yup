@@ -120,7 +120,10 @@ Possible values:
   - (Compulsory) A longer description (but still only one line of text, please!).
 
 - dependencies
-  - (Optional) A list (space or comma-separated) of other modules that are required by this one.
+  - (Optional) A list (space or comma-separated) of other modules that are **required** by this one and are always linked. These are the module's hard dependencies and must form a directed acyclic graph (no cycles).
+
+- optionalDeps
+  - (Optional) A list (space or comma-separated) of modules or libraries this module uses **only when they are also present** in the build (guarded by `#if YUP_MODULE_AVAILABLE_<name>`). Advisory metadata: it is parsed but never force-links anything, so optional deps may safely form cycles.
 
 - website
   - (Optional) A URL linking to useful info about the module.
@@ -167,6 +170,37 @@ Possible values:
 - linuxPackages
   - (Optional) A list (space or comma-separated) pkg-config packages that should be used to pass compiler (CFLAGS) and linker (LDFLAGS) flags.
 
+## Optional dependencies
+
+The `dependencies:` field declares **hard** dependencies that are always linked.
+Modules can also have **soft (optional)** dependencies: features guarded by the
+preprocessor macro `YUP_MODULE_AVAILABLE_<name>`, which is defined automatically
+by the build system whenever that library or module is present in the target's
+`MODULES` list. If the dependency is absent, the guarded code is silently
+excluded.
+
+Soft dependencies have no `dependencies:` entry — they never force a library to
+be linked and never create dependency cycles. They are purely opportunistic: add
+the optional library to your CMake target and the feature turns on. They are
+declared for clarity and tooling via the `optionalDeps:` field.
+
+| Scope | Declaration field | Runtime mechanism | Example |
+| ----- | ----------------- | ----------------- | ------- |
+| Required | `dependencies:` | always linked | `yup_graphics` always depends on `yup_core` |
+| Optional | `optionalDeps:` | `#if YUP_MODULE_AVAILABLE_<name>` | `yup_graphics` gains PNG support when `libpng` is linked |
+
+```{note}
+`optionalDeps:` is advisory: the build system parses it but does **not** link
+those modules. Enabling an optional feature still requires adding the library to
+your target's `MODULES`. The field exists so the dependency graph is
+self-describing for docs and tooling.
+```
+
+```{tip}
+The per-module pages in [Modules](../modules.md) list each module's optional
+dependencies and what they unlock.
+```
+
 Here's an example block:
 
     BEGIN_YUP_MODULE_DECLARATION
@@ -180,6 +214,7 @@ Here's an example block:
      license:          ISC
 
      dependencies:     yup_audio_basics yup_audio_formats yup_events
+     optionalDeps:     yup_graphics
      osxFrameworks:    CoreAudio CoreMIDI DiscRecording
      iosFrameworks:    CoreAudio CoreMIDI AudioToolbox AVFoundation
      linuxLibs:        asound

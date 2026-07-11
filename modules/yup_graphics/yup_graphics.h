@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_core yup_simd yup_shading rive rive_renderer libclipper2
+    optionalDeps:       libpng libjpeg libwebp libgif
     appleFrameworks:    Metal
     searchpaths:        native
 

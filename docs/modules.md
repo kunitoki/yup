@@ -8,12 +8,38 @@ dependencies are pulled in automatically by the [CMake API](build-system/cmake-a
 ```{note}
 All `yup_*` modules share the same version number. Modules also depend on a few
 bundled third-party libraries (`zlib`, `rive`, `rive_renderer`, `libclipper2`,
-`xsimd`), which are resolved for you by the build system. In the diagrams below,
-third-party dependencies are drawn with a dashed outline.
+`xsimd`), which are resolved for you by the build system.
 ```
 
-Each module is listed below with its direct dependencies. Arrows point from a
-module to the things it depends on.
+## Required vs optional dependencies
+
+Modules have two kinds of dependency:
+
+- **Required (hard) dependencies** — declared in the module's
+  [`dependencies:`](build-system/module-format.md) line and always linked. These
+  are the solid arrows in the diagrams below (third-party ones drawn with a
+  dashed outline).
+- **Optional (soft) dependencies** — code guarded by
+  `#if YUP_MODULE_AVAILABLE_<name>`. The feature is compiled in **only when that
+  module/library is also present in the build**, and is silently skipped
+  otherwise. There is no hard link, so optional deps never create dependency
+  cycles. These are the dotted arrows labelled *optional*.
+
+```{tip}
+Optional dependencies are how you unlock extra features: link the optional
+library into your target's `MODULES` and the guarded code activates
+automatically. For example, adding `libpng` enables PNG support in
+`yup_graphics` (see [Imaging](imaging/index.md)).
+```
+
+Beyond the ones shown, some base modules also *soft-detect* higher-level modules
+purely for platform glue (e.g. `yup_core` and `yup_events` adapt their
+Android/iOS message-loop integration when `yup_gui` is present). These are
+internal integration points, activated automatically when both modules are in
+the build, and are not something you add explicitly.
+
+Each module is listed below with its dependencies. Arrows point from a module to
+the things it depends on.
 
 ## Core
 
@@ -24,27 +50,32 @@ Foundational modules used across the whole framework. See the [Core](core/index.
 The foundation every other module builds on: strings, containers, files and
 streams, memory management, math, time, threading, networking, and data
 interchange. It has no YUP dependencies and only pulls in `zlib` for
-compression.
+compression. Optionally integrates `sqlite3_library` to enable `SqliteDatabase`.
 
 ```mermaid
 flowchart LR
     yup_core:::self --> zlib:::ext
+    yup_core -. optional .-> sqlite3_library:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_simd
 
 Vectorized math primitives across SSE, AVX, FMA, NEON, and Apple's Accelerate
 framework, wrapping the `xsimd` library behind a YUP-friendly API. Used wherever
-tight numeric loops matter — DSP, audio, and graphics.
+tight numeric loops matter — DSP, audio, and graphics. Optionally provides
+interop adapters for `eigen_library` when present.
 
 ```mermaid
 flowchart LR
     yup_simd:::self --> yup_core
     yup_simd --> xsimd:::ext
+    yup_simd -. optional .-> eigen_library:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ## Events & multithreading
@@ -74,20 +105,26 @@ handling is documented separately in the [Imaging](imaging/index.md) area.
 
 Shader authoring support: shader-source containers, transpilation, and the
 `.ysl` shader-bundle format consumed by the graphics RHI for
-[offline shader compilation](graphics/rhi/offline-shaders.md).
+[offline shader compilation](graphics/rhi/offline-shaders.md). When both
+`glslang` and `spirv_cross` are present, the runtime shader transpiler
+(`YUP_ENABLE_SHADER_TRANSPILER`) is enabled.
 
 ```mermaid
 flowchart LR
     yup_shading:::self --> yup_core
+    yup_shading -. optional .-> glslang:::opt
+    yup_shading -. optional .-> spirv_cross:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_graphics
 
 The 2D drawing stack and the low-level GPU RHI, rendered through the Rive
 renderer. Covers the graphics context, primitives, paths, fonts, SVG, imaging,
-and GPU pipelines.
+and GPU pipelines. Image-codec support is optional: link `libpng`, `libjpeg`,
+`libwebp`, and/or `libgif` to enable the corresponding [image formats](imaging/loading.md#available-formats).
 
 ```mermaid
 flowchart LR
@@ -97,8 +134,13 @@ flowchart LR
     yup_graphics --> rive:::ext
     yup_graphics --> rive_renderer:::ext
     yup_graphics --> libclipper2:::ext
+    yup_graphics -. optional .-> libpng:::opt
+    yup_graphics -. optional .-> libjpeg:::opt
+    yup_graphics -. optional .-> libwebp:::opt
+    yup_graphics -. optional .-> libgif:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_animation
@@ -198,28 +240,43 @@ flowchart LR
 
 ### yup_audio_formats
 
-Reading and writing audio files across the supported sound formats.
+Reading and writing audio files across the supported sound formats. Codec
+support is optional and enabled by linking the matching library: `dr_libs`
+(WAV, MP3), `libvorbis` + `libogg` (Ogg Vorbis), `opus_library` (Opus),
+`flac_library` (FLAC), plus `hmp3_library` as an alternative MP3 path. (CoreAudio
+on Apple and Media Foundation on Windows are used automatically where available.)
 
 ```mermaid
 flowchart LR
     yup_audio_formats:::self --> yup_audio_basics
     yup_audio_formats --> yup_simd
+    yup_audio_formats -. optional .-> dr_libs:::opt
+    yup_audio_formats -. optional .-> libvorbis:::opt
+    yup_audio_formats -. optional .-> libogg:::opt
+    yup_audio_formats -. optional .-> opus_library:::opt
+    yup_audio_formats -. optional .-> flac_library:::opt
+    yup_audio_formats -. optional .-> hmp3_library:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_dsp
 
 DSP building blocks: filters and filter designers, crossovers, and spectral
-analysis.
+analysis. Optionally uses `pffft_library` for fast FFTs and `bungee_library`
+for time-stretching / pitch-shifting when linked.
 
 ```mermaid
 flowchart LR
     yup_dsp:::self --> yup_core
     yup_dsp --> yup_audio_basics
     yup_dsp --> yup_simd
+    yup_dsp -. optional .-> pffft_library:::opt
+    yup_dsp -. optional .-> bungee_library:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ### yup_audio_processors
@@ -279,19 +336,31 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 ### yup_python
 
-Python bindings for creating and driving YUP applications from scripts.
+Python bindings for creating and driving YUP applications from scripts. Its only
+hard dependency is `yup_core`; it additionally generates bindings for
+`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_audio_basics`,
+`yup_audio_devices`, and `yup_audio_processors` when those modules are present in
+the build.
 
 ```mermaid
 flowchart LR
     yup_python:::self --> yup_core
+    yup_python -. optional .-> yup_events:::opt
+    yup_python -. optional .-> yup_data_model:::opt
+    yup_python -. optional .-> yup_graphics:::opt
+    yup_python -. optional .-> yup_gui:::opt
+    yup_python -. optional .-> yup_audio_basics:::opt
+    yup_python -. optional .-> yup_audio_devices:::opt
+    yup_python -. optional .-> yup_audio_processors:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+    classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
 ## Complete dependency graph
 
-The full `yup_*` module graph in one view (third-party dependencies omitted for
-clarity).
+The full `yup_*` module graph of **required** dependencies in one view
+(third-party and optional dependencies omitted for clarity).
 
 ```mermaid
 flowchart TD

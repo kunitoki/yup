@@ -51,6 +51,7 @@
     license:            ISC
 
     dependencies:       yup_core xsimd
+    optionalDeps:       eigen_library
     appleFrameworks:    Accelerate
 
   END_YUP_MODULE_DECLARATION

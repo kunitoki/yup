@@ -51,6 +51,7 @@
     license:            ISC
 
     dependencies:       zlib
+    optionalDeps:       sqlite3_library yup_events
     macFrameworks:      Cocoa Foundation IOKit Security
     iosFrameworks:      Foundation UIKit
     iosSimFrameworks:   Foundation UIKit
