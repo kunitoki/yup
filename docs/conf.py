@@ -1,7 +1,7 @@
 # Configuration file for the Sphinx documentation builder.
 #
 # This builds the YUP documentation set. Sources are authored in MyST Markdown
-# so they render both on GitHub and through Sphinx with the Clarity theme.
+# so they render both on GitHub and through Sphinx with the Shibuya theme.
 #
 # Full list of options: https://www.sphinx-doc.org/en/master/usage/configuration.html
 
@@ -58,15 +58,17 @@ exclude_patterns = [
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = "sphinx_clarity_theme"
+html_theme = "shibuya"
 html_title = "YUP Documentation"
 html_static_path = ["_static"]
 
 html_css_files = [
-    "mermaid.css",
+    "readthedocs-flyout.css",
 ]
 
 html_theme_options = {
-    "light_logo": "logo-light.png",
-    "dark_logo": "logo-dark.png",
+    "accent_color": "blue",
+    "color_mode": "auto",
+    "github_url": "https://github.com/kunitoki/yup",
+    "nav_socials": ["github"],
 }
