@@ -105,7 +105,7 @@ String value = headers.getValue ("Content-Type", /* default */ "text/plain");
 
 `Identifier` is an interned, immutable string optimized for fast comparison
 (pointer equality). Use it for property names, node types, and other repeated
-keys - for example in the [DataTree](../data/datatree-tutorial.md) model.
+keys - for example in the [DataTree](../data/datatree.md) model.
 
 ```cpp
 static const Identifier propertyName ("width");

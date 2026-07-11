@@ -403,10 +403,6 @@ endif()
 Start with the guides in this repository:
 
 - [Documentation home](./docs/index.md)
-- [Building standalone applications](./docs/build-system/building-standalone.md)
-- [Building audio plugins](./docs/build-system/building-plugins.md)
-- [DataTree tutorial](./docs/data/datatree-tutorial.md)
-- [YUP module format](./docs/build-system/module-format.md)
 
 ## Contributing
 YUP is looking for collaborators who want to help shape a permissively licensed C++ app, graphics, audio, and plugin framework. Useful contributions include:

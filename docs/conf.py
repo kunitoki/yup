@@ -64,7 +64,8 @@ html_title = "YUP Documentation"
 html_static_path = ["_static"]
 
 html_css_files = [
-    "readthedocs-flyout.css",
+    "shibuya-override.css",
+    "rtd-flyout.css",
 ]
 
 html_theme_options = {

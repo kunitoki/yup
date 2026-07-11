@@ -115,7 +115,7 @@ to and from archives (binary or `var`/JSON) with a single per-type description â
 [Serialization](serialisation.md) page.
 
 ```{seealso}
-The [DataTree](../data/datatree-tutorial.md) model in `yup_data_model` builds on
+The [DataTree](../data/index.md) model in `yup_data_model` builds on
 these primitives for observable, serializable document trees.
 ```
 
