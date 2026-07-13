@@ -1320,7 +1320,7 @@ TEST_F (AnimationRendererTests, RenderEmptyCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1333,7 +1333,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderSolidLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kSolidLayerJson);
+    auto comp = LottieReader::parseData (kSolidLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1346,7 +1346,7 @@ TEST_F (AnimationRendererTests, RenderSolidLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderNullLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kNullLayerJson);
+    auto comp = LottieReader::parseData (kNullLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1359,7 +1359,7 @@ TEST_F (AnimationRendererTests, RenderNullLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderHiddenLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kHiddenLayerJson);
+    auto comp = LottieReader::parseData (kHiddenLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_TRUE (comp->layers[0]->hidden);
@@ -1374,7 +1374,7 @@ TEST_F (AnimationRendererTests, RenderHiddenLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderMultiLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMultiLayerJson);
+    auto comp = LottieReader::parseData (kMultiLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1388,7 +1388,7 @@ TEST_F (AnimationRendererTests, RenderMultiLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderAtVariousFrameNumbersDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1406,7 +1406,7 @@ TEST_F (AnimationRendererTests, RenderAtVariousFrameNumbersDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithScaleToFitAndFillDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1425,7 +1425,7 @@ TEST_F (AnimationRendererTests, RenderWithScaleToFitAndFillDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderIntoSmallBoundsDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (1, 1);
@@ -1438,7 +1438,7 @@ TEST_F (AnimationRendererTests, RenderIntoSmallBoundsDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderIntoLargeBoundsDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (1000, 1000);
@@ -1474,7 +1474,7 @@ TEST_F (AnimationRendererTests, RenderProgrammaticallyBuiltCompositionDoesNotCra
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithPartialOpacityDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kPartialOpacityShapeJson);
+    auto comp = LottieReader::parseData (kPartialOpacityShapeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1492,7 +1492,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithPartialOpacityDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithDropShadowDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kDropShadowShapeJson);
+    auto comp = LottieReader::parseData (kDropShadowShapeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1509,7 +1509,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithDropShadowDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithFillEffectDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kFillEffectJson);
+    auto comp = LottieReader::parseData (kFillEffectJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1526,7 +1526,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithFillEffectDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithAddMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskAddJson);
+    auto comp = LottieReader::parseData (kMaskAddJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1539,7 +1539,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithAddMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithSubtractMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskSubtractJson);
+    auto comp = LottieReader::parseData (kMaskSubtractJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1552,7 +1552,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithSubtractMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithIntersectMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskIntersectJson);
+    auto comp = LottieReader::parseData (kMaskIntersectJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1565,7 +1565,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithIntersectMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithInvertedMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskInvertedJson);
+    auto comp = LottieReader::parseData (kMaskInvertedJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1582,7 +1582,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithInvertedMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsSimultaneousDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kTrimPathsSimultaneousJson);
+    auto comp = LottieReader::parseData (kTrimPathsSimultaneousJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1595,7 +1595,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsSimultaneousDoesNot
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsIndividuallyDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kTrimPathsIndividuallyJson);
+    auto comp = LottieReader::parseData (kTrimPathsIndividuallyJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1612,7 +1612,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsIndividuallyDoesNot
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithRepeaterDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kRepeaterJson);
+    auto comp = LottieReader::parseData (kRepeaterJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1629,7 +1629,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithRepeaterDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderLayerWithAlphaMatteDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kAlphaMatteJson);
+    auto comp = LottieReader::parseData (kAlphaMatteJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1646,7 +1646,7 @@ TEST_F (AnimationRendererTests, RenderLayerWithPartialOpacityMatteSourceDoesNotC
     // Matte source fill at 65% opacity: a correct alpha matte multiplies the
     // target's alpha by the source's rendered alpha. On a headless context this
     // exercises the geometric-clip fallback path.
-    auto comp = LottieReader::parseData (kAlphaMatteJson);
+    auto comp = LottieReader::parseData (kAlphaMatteJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1676,7 +1676,7 @@ TEST_F (AnimationRendererTests, RenderLayerWithPartialOpacityMatteSourceDoesNotC
 
 TEST_F (AnimationRendererTests, RenderLayerWithParentChainDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kParentChainJson);
+    auto comp = LottieReader::parseData (kParentChainJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1694,7 +1694,7 @@ TEST_F (AnimationRendererTests, RenderLayerWithParentChainDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithDashStrokeDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kDashStrokeJson);
+    auto comp = LottieReader::parseData (kDashStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1711,7 +1711,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithDashStrokeDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderLayerNotYetVisibleAtFrameZeroDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kLayerOutOfRangeJson);
+    auto comp = LottieReader::parseData (kLayerOutOfRangeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_FLOAT_EQ (comp->layers[0]->inFrame, 20.0f);
@@ -1734,7 +1734,7 @@ TEST_F (AnimationRendererTests, RenderLayerNotYetVisibleAtFrameZeroDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientFillDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kGradientFillJson);
+    auto comp = LottieReader::parseData (kGradientFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1747,7 +1747,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientFillDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientStrokeDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kGradientStrokeJson);
+    auto comp = LottieReader::parseData (kGradientStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1764,7 +1764,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientStrokeDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithEllipseAndPolystarDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kEllipseAndPolystarJson);
+    auto comp = LottieReader::parseData (kEllipseAndPolystarJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1781,7 +1781,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithEllipseAndPolystarDoesNotCra
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithDifferenceMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskDifferenceJson);
+    auto comp = LottieReader::parseData (kMaskDifferenceJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1798,7 +1798,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithDifferenceMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithShadowOnlyDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShadowOnlyJson);
+    auto comp = LottieReader::parseData (kShadowOnlyJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1815,7 +1815,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithShadowOnlyDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderPrecompLayerDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kPrecompJson);
+    auto comp = LottieReader::parseData (kPrecompJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_GE (comp->layers.size(), 1u);
 
@@ -1829,7 +1829,7 @@ TEST_F (AnimationRendererTests, RenderPrecompLayerDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderPrecompLayerAtVariousFramesDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kPrecompJson);
+    auto comp = LottieReader::parseData (kPrecompJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1851,7 +1851,7 @@ TEST_F (AnimationRendererTests, RenderPrecompLayerAtVariousFramesDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingNoneDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1864,7 +1864,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingNoneDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingFitWidthDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1877,7 +1877,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingFitWidthDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingFitHeightDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 200);
@@ -1890,7 +1890,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingFitHeightDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingScaleToFillDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1903,7 +1903,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingScaleToFillDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingCenterCropDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1916,7 +1916,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingCenterCropDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingCenterInsideDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 200);
@@ -1929,7 +1929,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingCenterInsideDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingStretchWidthDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1942,7 +1942,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingStretchWidthDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingStretchHeightDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 200);
@@ -1955,7 +1955,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingStretchHeightDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithFittingTileDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1972,7 +1972,7 @@ TEST_F (AnimationRendererTests, RenderWithFittingTileDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithLeftJustificationDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1985,7 +1985,7 @@ TEST_F (AnimationRendererTests, RenderWithLeftJustificationDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithRightJustificationDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1998,7 +1998,7 @@ TEST_F (AnimationRendererTests, RenderWithRightJustificationDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithTopJustificationDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -2011,7 +2011,7 @@ TEST_F (AnimationRendererTests, RenderWithTopJustificationDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithBottomJustificationDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -2024,7 +2024,7 @@ TEST_F (AnimationRendererTests, RenderWithBottomJustificationDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithCenterJustificationDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -2041,7 +2041,7 @@ TEST_F (AnimationRendererTests, RenderWithCenterJustificationDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderWithRenderResourcesDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);

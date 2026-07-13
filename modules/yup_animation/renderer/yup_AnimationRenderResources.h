@@ -81,8 +81,8 @@ public:
         MatteCanvasLease (AnimationRenderResources& owner, size_t slotIndex) noexcept;
         void release() noexcept;
 
-        AnimationRenderResources* owner_ = nullptr;
-        size_t slotIndex_ = 0;
+        AnimationRenderResources* owner = nullptr;
+        size_t slotIndex = 0;
     };
 
     //==============================================================================
@@ -132,11 +132,11 @@ private:
 
     void releaseMatteCanvasSlot (size_t slotIndex) noexcept;
 
-    GpuPipeline::Ptr mattePipeline_;
-    bool mattePipelineCompiled_ = false;
-    GraphicsContext* matteCanvasContext_ = nullptr;
-    std::vector<MatteCanvasSlot> matteCanvasPool_;
-    std::vector<PrecompCanvasSlot> precompCanvasPool_;
+    GpuPipeline::Ptr mattePipeline;
+    bool mattePipelineCompiled = false;
+    GraphicsContext* matteCanvasContext = nullptr;
+    std::vector<MatteCanvasSlot> matteCanvasPool;
+    std::vector<PrecompCanvasSlot> precompCanvasPool;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationRenderResources)
 };

@@ -814,7 +814,7 @@ class LottieRoundtripTests : public ::testing::Test
 
 TEST_F (LottieRoundtripTests, ParseMinimalJson)
 {
-    auto comp = LottieReader::parseData (kMinimalLottieJson);
+    auto comp = LottieReader::parseData (kMinimalLottieJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     EXPECT_EQ (comp->name, "Test");
@@ -827,7 +827,7 @@ TEST_F (LottieRoundtripTests, ParseMinimalJson)
 
 TEST_F (LottieRoundtripTests, ParsedLayerCountMatchesInput)
 {
-    auto comp = LottieReader::parseData (kMinimalLottieJson);
+    auto comp = LottieReader::parseData (kMinimalLottieJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     EXPECT_EQ (comp->layers.size(), 1u);
@@ -837,7 +837,7 @@ TEST_F (LottieRoundtripTests, ParsedLayerCountMatchesInput)
 
 TEST_F (LottieRoundtripTests, ResolvesLayerPositionExpressionReferences)
 {
-    auto comp = LottieReader::parseData (kLayerPositionExpressionJson);
+    auto comp = LottieReader::parseData (kLayerPositionExpressionJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -855,7 +855,7 @@ TEST_F (LottieRoundtripTests, ResolvesLayerPositionExpressionReferences)
 
 TEST_F (LottieRoundtripTests, ResolvesMultipleLayersWithSamePositionExpression)
 {
-    auto comp = LottieReader::parseData (kMultiLayerPositionExpressionJson);
+    auto comp = LottieReader::parseData (kMultiLayerPositionExpressionJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 3u);
 
@@ -877,7 +877,7 @@ TEST_F (LottieRoundtripTests, ResolvesMultipleLayersWithSamePositionExpression)
 
 TEST_F (LottieRoundtripTests, ResolvesPrecompAssetLayerPositionExpressionReferences)
 {
-    auto comp = LottieReader::parseData (kPrecompAssetLayerExpressionJson);
+    auto comp = LottieReader::parseData (kPrecompAssetLayerExpressionJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto asset = comp->assets["pre_0"];
@@ -894,7 +894,7 @@ TEST_F (LottieRoundtripTests, ResolvesPrecompAssetLayerPositionExpressionReferen
 
 TEST_F (LottieRoundtripTests, ResolvesShapeContentExpressionReferences)
 {
-    auto comp = LottieReader::parseData (kShapeContentExpressionJson);
+    auto comp = LottieReader::parseData (kShapeContentExpressionJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -917,7 +917,7 @@ TEST_F (LottieRoundtripTests, ResolvesShapeContentExpressionReferences)
 
 TEST_F (LottieRoundtripTests, ParsesShapeTransformSkew)
 {
-    auto comp = LottieReader::parseData (kShapeTransformSkewJson);
+    auto comp = LottieReader::parseData (kShapeTransformSkewJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -931,7 +931,7 @@ TEST_F (LottieRoundtripTests, ParsesShapeTransformSkew)
 
 TEST_F (LottieRoundtripTests, ParsesRepeaterOffset)
 {
-    auto comp = LottieReader::parseData (kShapeRepeaterOffsetJson);
+    auto comp = LottieReader::parseData (kShapeRepeaterOffsetJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -950,13 +950,13 @@ TEST_F (LottieRoundtripTests, ParsesRepeaterOffset)
 
 TEST_F (LottieRoundtripTests, WriteAndReparse)
 {
-    auto original = LottieReader::parseData (kMinimalLottieJson);
+    auto original = LottieReader::parseData (kMinimalLottieJson).valueOr (nullptr);
     ASSERT_NE (original, nullptr);
 
     const String json = LottieWriter::toJson (*original);
     EXPECT_FALSE (json.isEmpty());
 
-    auto reparsed = LottieReader::parseData (json);
+    auto reparsed = LottieReader::parseData (json).valueOr (nullptr);
     ASSERT_NE (reparsed, nullptr);
 
     EXPECT_EQ (reparsed->name, original->name);
@@ -966,7 +966,7 @@ TEST_F (LottieRoundtripTests, WriteAndReparse)
 
 TEST_F (LottieRoundtripTests, ParsesDropShadowEffect)
 {
-    auto comp = LottieReader::parseData (kDropShadowJson);
+    auto comp = LottieReader::parseData (kDropShadowJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -984,7 +984,7 @@ TEST_F (LottieRoundtripTests, ParsesDropShadowEffect)
 
 TEST_F (LottieRoundtripTests, ParsesFillEffect)
 {
-    auto comp = LottieReader::parseData (kFillEffectExampleJson);
+    auto comp = LottieReader::parseData (kFillEffectExampleJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1004,7 +1004,7 @@ TEST_F (LottieRoundtripTests, ParsesFillEffect)
 
 TEST_F (LottieRoundtripTests, ParsesNoneMaskMode)
 {
-    auto comp = LottieReader::parseData (kNoneMaskJson);
+    auto comp = LottieReader::parseData (kNoneMaskJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1054,7 +1054,7 @@ TEST_F (LottieRoundtripTests, CompositionCanAddShapeLayer)
 
 TEST_F (LottieRoundtripTests, AnimatedPathKeyframesUnwrapShapeValues)
 {
-    auto comp = LottieReader::parseData (kAnimatedPathJson);
+    auto comp = LottieReader::parseData (kAnimatedPathJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1077,7 +1077,7 @@ TEST_F (LottieRoundtripTests, AnimatedPathKeyframesUnwrapShapeValues)
 
 TEST_F (LottieRoundtripTests, TerminalKeyframeUsesPreviousEndValue)
 {
-    auto comp = LottieReader::parseData (kTerminalKeyframeJson);
+    auto comp = LottieReader::parseData (kTerminalKeyframeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1100,7 +1100,7 @@ TEST_F (LottieRoundtripTests, ResolvesImageLayersInsideNestedPrecomps)
         return std::nullopt;
     };
 
-    auto comp = LottieReader::parseData (kNestedPrecompImageJson, options);
+    auto comp = LottieReader::parseData (kNestedPrecompImageJson, options).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto compB = comp->assets["comp_b"];

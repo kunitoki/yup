@@ -177,8 +177,6 @@ public:
 private:
     AnimationComposition() = default;
 
-    HashMap<String, PropertyOverrideSet> propertyOverrides;
-
     static void setPropertyOverrideImpl (PropertyOverrideSet& set, AnimationPropertyID id, AnimationPropertyOverride<float> override)
     {
         set.setFloatOverride (id, std::move (override));
@@ -198,6 +196,8 @@ private:
     {
         set.setSizeOverride (id, std::move (override));
     }
+
+    HashMap<String, PropertyOverrideSet> propertyOverrides;
 };
 
 } // namespace yup

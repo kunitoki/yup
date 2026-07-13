@@ -1023,6 +1023,13 @@ void AnimationRenderer::renderGroup (Graphics& g,
     // star shapes in pumped_up.json / mughead.json).
     const bool mergesNestedGeometry = activeMergePaths != nullptr && ! activeMergePaths->hidden;
     const bool hasModifiers = hasRounded || hasTrim || hasRepeater || hasMergePaths;
+    const bool hasDirectPaint = std::any_of (group.children.begin(),
+                                             group.children.end(),
+                                             [] (const AnimationGroup::ChildItem& child)
+    {
+        return child.kind == AnimationGroup::ChildKind::Fill
+            || child.kind == AnimationGroup::ChildKind::Stroke;
+    });
 
     std::vector<Path> currentPaths;
     std::vector<Path> preparedCache;
@@ -1184,11 +1191,9 @@ void AnimationRenderer::renderGroup (Graphics& g,
         {
             renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner);
 
-            // A nested group without its own paint acts as a geometry container
-            // for the parent's Merge Paths. Without an active Merge Paths modifier
-            // the group is self-contained — do NOT feed its geometry into the
-            // parent's paints (avoids filling construction-guide shapes).
-            if (! mergesNestedGeometry)
+            // A nested group without its own paint can supply geometry to a
+            // parent paint or Merge Paths modifier.
+            if (! mergesNestedGeometry && ! hasDirectPaint)
                 continue;
 
             const bool hasOwnPaint = std::any_of (child.group->children.begin(),
