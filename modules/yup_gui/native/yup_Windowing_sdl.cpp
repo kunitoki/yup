@@ -1739,6 +1739,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
+                SDL_RaiseWindow (window);
+
                 pendingDroppedFiles.clear();
                 pendingDroppedText.clear();
             }
