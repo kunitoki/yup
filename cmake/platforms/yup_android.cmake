@@ -95,9 +95,9 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_android_copy_sdl2_activity)
+function (_yup_android_copy_sdl_activity)
     set (JAVA_SOURCE_RELATIVE_FOLDER app/src/main/java)
-    set (SOURCE_FOLDER ${CMAKE_BINARY_DIR}/externals/SDL2/android-project/${JAVA_SOURCE_RELATIVE_FOLDER}/org)
+    set (SOURCE_FOLDER ${CMAKE_BINARY_DIR}/externals/SDL3/android-project/${JAVA_SOURCE_RELATIVE_FOLDER}/org)
     file (COPY ${SOURCE_FOLDER} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${JAVA_SOURCE_RELATIVE_FOLDER})
 endfunction()
 

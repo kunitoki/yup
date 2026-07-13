@@ -49,9 +49,11 @@
 
 //==============================================================================
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
-#include <SDL2/SDL_main.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_system.h>
+#include <SDL3/SDL_video.h>
+#include <SDL3/SDL_main.h>
 
 //==============================================================================
 
@@ -163,6 +165,6 @@
 
 //==============================================================================
 
-#include "native/yup_WindowingUtilities_sdl2.cpp"
-#include "native/yup_Windowing_sdl2.h"
-#include "native/yup_Windowing_sdl2.cpp"
+#include "native/yup_WindowingUtilities_sdl.cpp"
+#include "native/yup_Windowing_sdl.h"
+#include "native/yup_Windowing_sdl.cpp"

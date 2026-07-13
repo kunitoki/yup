@@ -149,7 +149,7 @@ public:
 
     //==============================================================================
     void handleEvent (SDL_Event* event);
-    static int eventDispatcher (void* userdata, SDL_Event* event);
+    static bool eventDispatcher (void* userdata, SDL_Event* event);
 
     //==============================================================================
     static std::atomic_flag isInitialised;

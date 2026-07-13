@@ -38,127 +38,48 @@ endmacro()
 
 #==============================================================================
 
-function (_yup_fetch_sdl2)
-    if (TARGET sdl2::sdl2)
+function (_yup_fetch_sdl)
+    if (TARGET sdl::sdl)
         return()
     endif()
 
-    _yup_fetchcontent_declare (SDL2
+    _yup_message (STATUS "Fetching SDL3")
+
+    _yup_fetchcontent_declare (SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-2.32.8)
+        GIT_TAG release-3.4.12)
 
     set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)
     set (SDL_STATIC ON CACHE BOOL "" FORCE)
     set (SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
+    set (SDL_TEST_LIBRARYS OFF CACHE BOOL "" FORCE)
     set (SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set (SDL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+    set (SDL_DISABLE_INSTALL_DOCS ON CACHE BOOL "" FORCE)
+    set (SDL_INSTALL_EXAMPLES OFF CACHE BOOL "" FORCE)
     set (SDL_AUDIO_ENABLED_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+    set (SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
+    set (SDL_HIDAPI_LIBUSB OFF CACHE BOOL "" FORCE)
+    set (SDL_HIDAPI OFF CACHE BOOL "" FORCE)
+    set (SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+    set (SDL_HAPTIC OFF CACHE BOOL "" FORCE)
 
-    FetchContent_MakeAvailable (SDL2)
+    FetchContent_MakeAvailable (SDL3)
 
     if (APPLE)
-        target_compile_options (SDL2-static PRIVATE
+        target_compile_options (SDL3-static PRIVATE
             -Wno-deprecated-declarations
             -Wno-gnu-folding-constant)
     endif()
 
-    set_target_properties (SDL2-static PROPERTIES
+    set_target_properties (SDL3-static PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
 
-    set_target_properties (SDL2main PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (SDL2_test PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (sdl_headers_copy PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (uninstall PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (SDL3_test PROPERTIES FOLDER "Tests")
 
-    add_library (sdl2::sdl2 ALIAS SDL2-static)
-endfunction()
-
-#==============================================================================
-
-function (_yup_target_list_contains target_list target_name output_variable)
-    foreach (target IN LISTS target_list)
-        if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")
-            set (${output_variable} ON PARENT_SCOPE)
-            return()
-        endif()
-
-        if (TARGET "${target}")
-            get_target_property (aliased_target "${target}" ALIASED_TARGET)
-            if ("${aliased_target}" STREQUAL "${target_name}")
-                set (${output_variable} ON PARENT_SCOPE)
-                return()
-            endif()
-        endif()
-    endforeach()
-
-    set (${output_variable} OFF PARENT_SCOPE)
-endfunction()
-
-#==============================================================================
-
-function (_yup_definitions_enable definitions definition_name output_variable)
-    set (enabled OFF)
-
-    foreach (definition IN LISTS definitions)
-        string (REGEX REPLACE "^-D" "" normalized_definition "${definition}")
-
-        if (normalized_definition MATCHES "^${definition_name}($|=)")
-            set (enabled ON)
-
-            if (normalized_definition MATCHES "^${definition_name}=")
-                string (REGEX REPLACE "^${definition_name}=(.*)$" "\\1" definition_value "${normalized_definition}")
-                string (STRIP "${definition_value}" definition_value)
-                string (REGEX REPLACE "^\"(.*)\"$" "\\1" definition_value "${definition_value}")
-                string (REGEX REPLACE "^'(.*)'$" "\\1" definition_value "${definition_value}")
-                string (TOUPPER "${definition_value}" definition_value)
-
-                if ("${definition_value}" STREQUAL "0"
-                    OR "${definition_value}" STREQUAL "OFF"
-                    OR "${definition_value}" STREQUAL "FALSE"
-                    OR "${definition_value}" STREQUAL "NO")
-                    set (enabled OFF)
-                endif()
-            endif()
-        endif()
-    endforeach()
-
-    set (${output_variable} "${enabled}" PARENT_SCOPE)
-endfunction()
-
-#==============================================================================
-
-function (_yup_collect_audio_plugin_host_dependencies definitions output_variable)
-    set (dependencies "")
-
-    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP enable_clap)
-    if (enable_clap)
-        _yup_fetch_clap()
-        list (APPEND dependencies clap)
-    endif()
-
-    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3 enable_vst3)
-    if (enable_vst3)
-        _yup_fetch_vst3sdk()
-        list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
-    endif()
-
-    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2 enable_lv2)
-    if (enable_lv2)
-        _yup_fetch_lv2()
-        list (APPEND dependencies lv2-headers lilv-static)
-    endif()
-
-    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)
-    if (enable_au AND YUP_PLATFORM_MAC)
-        list (APPEND dependencies
-            "-framework AudioUnit"
-            "-framework AudioToolbox"
-            "-framework CoreAudio"
-            "-framework CoreFoundation")
-    endif()
-
-    set (${output_variable} "${dependencies}" PARENT_SCOPE)
+    add_library (sdl::sdl ALIAS SDL3-static)
 endfunction()
 
 #==============================================================================
@@ -167,6 +88,8 @@ function (_yup_fetch_perfetto)
     if (TARGET perfetto::perfetto)
         return()
     endif()
+
+    _yup_message (STATUS "Fetching Perfetto")
 
     _yup_fetchcontent_declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
@@ -250,4 +173,39 @@ function (_yup_find_fftw3 target_name)
 
     target_include_directories (${target_name} PRIVATE PkgConfig::FFTW)
     target_link_libraries (${target_name} PRIVATE FFTW::Float)
+endfunction()
+
+#==============================================================================
+
+function (_yup_collect_audio_plugin_host_dependencies definitions output_variable)
+    set (dependencies "")
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP enable_clap)
+    if (enable_clap)
+        _yup_fetch_clap()
+        list (APPEND dependencies clap)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3 enable_vst3)
+    if (enable_vst3)
+        _yup_fetch_vst3sdk()
+        list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2 enable_lv2)
+    if (enable_lv2)
+        _yup_fetch_lv2()
+        list (APPEND dependencies lv2-headers lilv-static)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)
+    if (enable_au AND YUP_PLATFORM_MAC)
+        list (APPEND dependencies
+            "-framework AudioUnit"
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework CoreFoundation")
+    endif()
+
+    set (${output_variable} "${dependencies}" PARENT_SCOPE)
 endfunction()

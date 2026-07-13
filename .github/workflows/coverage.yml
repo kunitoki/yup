@@ -21,7 +21,7 @@ on:
       - "!**/native/*_mac.*"
       - "!**/native/*_metal.*"
       - "!**/native/*_opengl.*"
-      - "!**/native/*_sdl2.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
     branches:
@@ -46,7 +46,7 @@ on:
       - "!**/native/*_mac.*"
       - "!**/native/*_metal.*"
       - "!**/native/*_opengl.*"
-      - "!**/native/*_sdl2.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
     branches:
@@ -113,7 +113,7 @@ jobs:
           "*/native/*_mac.*" \
           "*/native/*_wasm.*" \
           "*/native/*_windows.*" \
-          "*/native/*_sdl2.*" \
+          "*/native/*_sdl.*" \
           "*/native/*_opengl.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info

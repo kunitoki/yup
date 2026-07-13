@@ -95,7 +95,7 @@ function (yup_audio_plugin)
 
     # ==== Find dependencies
     include (FetchContent)
-    _yup_fetch_sdl2()
+    _yup_fetch_sdl()
 
     _yup_target_list_contains ("${YUP_ARG_MODULES}" yup_audio_plugin_host has_audio_plugin_host)
     if (has_audio_plugin_host)
