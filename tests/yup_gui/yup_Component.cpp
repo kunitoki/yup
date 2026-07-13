@@ -2311,8 +2311,8 @@ TEST_F (ComponentDragDropTest, DragEnterPositionIsLocalToComponent)
 
     // Window position (85,85) maps to child-local (10,10)
     ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.x, 10.0f);
-    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.y, 10.0f);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getY(), 10.0f);
 }
 
 TEST_F (ComponentDragDropTest, DragEnterBubblesToParentIfInterested)
