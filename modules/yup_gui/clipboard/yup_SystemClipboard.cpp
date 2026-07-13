@@ -136,7 +136,7 @@ bool SystemClipboard::copyToClipboard (const Array<ClipboardData>& data, std::fu
 
     return SDL_SetClipboardData (clipboardDataCallback,
                                  clipboardCleanupCallback,
-                                 state,
+                                 state.get(),
                                  mimeTypePtrs.data(),
                                  mimeTypePtrs.size());
 }

@@ -254,18 +254,20 @@ void* getNativeWindowHandle (SDL_Window* window)
     return reinterpret_cast<void*> ((HWND) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
 #elif YUP_LINUX
     const auto videoDriver = StringRef (SDL_GetCurrentVideoDriver());
-    if (videoDriver == "x11")
+    if (videoDriver == StringRef ("x11"))
     {
         //Display* xdisplay = (Display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
         Window xwindow = static_cast<Window> (SDL_GetNumberProperty (props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
         return reinterpret_cast<void*> (xwindow);
     }
-    else if (videoDriver == "wayland")
+    else if (videoDriver == StringRef ("wayland"))
     {
         //struct wl_display* display = (struct wl_display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
         struct wl_surface* surface = (struct wl_surface*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
         return reinterpret_cast<void*> (surface);
     }
+
+    return nullptr;
 #elif YUP_ANDROID
     return reinterpret_cast<void*> (SDL_GetPointerProperty (props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
 #else
@@ -284,9 +286,9 @@ void* getNativeDisplayHandle (SDL_Window* window)
     [[maybe_unused]] SDL_PropertiesID props = SDL_GetWindowProperties (window);
 
     const auto videoDriver = StringRef (SDL_GetCurrentVideoDriver());
-    if (videoDriver == "x11")
+    if (videoDriver == StringRef ("x11"))
         return (Display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-    else if (videoDriver == "wayland")
+    else if (videoDriver == StringRef ("wayland"))
         return (struct wl_display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
 
     return nullptr;
