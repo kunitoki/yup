@@ -93,7 +93,7 @@ function (yup_standalone_app)
     list (REMOVE_DUPLICATES module_include_dirs)
 
     # ==== Find dependencies
-    if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
+    if (NOT "${target_console}")
         _yup_message (STATUS "${target_name} - Fetching SDL library")
         _yup_fetch_sdl()
         list (APPEND additional_libraries sdl::sdl)
