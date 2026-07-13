@@ -90,6 +90,11 @@ function (yup_audio_plugin)
 
     set_target_properties (${target_name}_shared PROPERTIES
         FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+        C_VISIBILITY_PRESET hidden
+        CXX_VISIBILITY_PRESET hidden
+        OBJC_VISIBILITY_PRESET hidden
+        OBJCXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
         XCODE_GENERATE_SCHEME ON)
 
