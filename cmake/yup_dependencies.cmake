@@ -79,10 +79,12 @@ function (_yup_fetch_sdl)
 
     FetchContent_MakeAvailable (SDL3)
 
-    if (APPLE)
+    if (YUP_PLATFORM_MAC OR YUP_PLATFORM_IOS)
         target_compile_options (SDL3-static PRIVATE
             -Wno-deprecated-declarations
             -Wno-gnu-folding-constant)
+    elseif (YUP_PLATFORM_EMSCRIPTEN)
+        target_compile_options (SDL3-static PRIVATE -pthread)
     endif()
 
     set_target_properties (SDL3-static PROPERTIES
