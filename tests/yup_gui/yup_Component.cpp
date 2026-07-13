@@ -189,6 +189,26 @@ public:
     {
         return comp.internalItemsDropped (data, windowPosition);
     }
+
+    static void triggerItemDragEnter (Component& comp,
+                                      const Point<float>& windowPosition,
+                                      const DragAndDropData& data)
+    {
+        comp.internalItemDragEnter (data, windowPosition);
+    }
+
+    static void triggerItemDragMove (Component& comp,
+                                     const Point<float>& windowPosition,
+                                     const DragAndDropData& data)
+    {
+        comp.internalItemDragMove (data, windowPosition);
+    }
+
+    static void triggerItemDragExit (Component& comp,
+                                     const DragAndDropData& data)
+    {
+        comp.internalItemDragExit (data);
+    }
 };
 
 } // namespace yup
@@ -2050,12 +2070,40 @@ public:
         return handlesDrop;
     }
 
+    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
+    {
+        ++dragEnterCount;
+        lastDragEnterPosition = position;
+        lastDragEnterData = data;
+    }
+
+    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
+    {
+        ++dragMoveCount;
+        lastDragMovePosition = position;
+        lastDragMoveData = data;
+    }
+
+    void itemDragExit (const DragAndDropData& data) override
+    {
+        ++dragExitCount;
+        lastDragExitData = data;
+    }
+
     bool interested = false;
     bool handlesDrop = false;
     int interestQueryCount = 0;
     int dropCount = 0;
+    int dragEnterCount = 0;
+    int dragMoveCount = 0;
+    int dragExitCount = 0;
     Point<float> lastDropPosition;
     DragAndDropData lastDropData;
+    Point<float> lastDragEnterPosition;
+    DragAndDropData lastDragEnterData;
+    Point<float> lastDragMovePosition;
+    DragAndDropData lastDragMoveData;
+    DragAndDropData lastDragExitData;
 };
 
 } // namespace
@@ -2239,4 +2287,160 @@ TEST_F (ComponentDragDropTest, MixedPayloadDelivered)
     ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDropData.hasFiles());
     EXPECT_TRUE (child->lastDropData.hasText());
+}
+
+// =============================================================================
+
+TEST_F (ComponentDragDropTest, DragEnterCalledWhenInterested)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 1);
+    EXPECT_EQ (child->dragMoveCount, 0);
+    EXPECT_EQ (child->dragExitCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterPositionIsLocalToComponent)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    // Window position (85,85) maps to child-local (10,10)
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.x, 10.0f);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.y, 10.0f);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 1);
+    EXPECT_EQ (parent->dragEnterCount, 1);
+    EXPECT_EQ (root->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterNotCalledWhenNotInterested)
+{
+    child->interested = false;
+    parent->interested = false;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (parent->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragMoveCalledForSameComponent)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragMoveCount, 1);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (child->dragExitCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragMoveBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragMoveCount, 1);
+    EXPECT_EQ (parent->dragMoveCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DragExitCalledWhenInterested)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_EQ (child->dragExitCount, 1);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (child->dragMoveCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragExitBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_EQ (child->dragExitCount, 1);
+    EXPECT_EQ (parent->dragExitCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterRespectsDisabledComponent)
+{
+    child->interested = true;
+    child->setEnabled (false);
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterRespectsHiddenComponent)
+{
+    child->interested = true;
+    child->setVisible (false);
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragEnter)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ File ("/tmp/a.txt") });
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDragEnterData.hasText());
+    EXPECT_EQ (child->lastDragEnterData.getText(), String ("hello"));
+    EXPECT_TRUE (child->lastDragEnterData.hasFiles());
+    EXPECT_EQ (child->lastDragEnterData.getFiles().size(), 1);
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragMove)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDragMoveData.hasText());
+    EXPECT_EQ (child->lastDragMoveData.getText(), String ("hello"));
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragExit)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withFiles ({ File ("/tmp/a.txt") });
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_TRUE (child->lastDragExitData.hasFiles());
+    EXPECT_EQ (child->lastDragExitData.getFiles().size(), 1);
 }

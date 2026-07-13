@@ -59,13 +59,13 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 {
     incReferenceCount();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: constructing native component: component=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (&component))) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))) << ", bounds=" << component.getBounds().toString() << ", visible=" << String (component.isVisible() ? "true" : "false") << ", renderContinuous=" << String (shouldRenderContinuous ? "true" : "false") << ", updateOnlyWhenFocused=" << String (updateOnlyWhenFocused ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: constructing native component: component=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (&component))) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))) << ", bounds=" << component.getBounds().toString() << ", visible=" << String (component.isVisible() ? "true" : "false") << ", renderContinuous=" << String (shouldRenderContinuous ? "true" : "false") << ", updateOnlyWhenFocused=" << String (updateOnlyWhenFocused ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
     Desktop::getInstance()->registerNativeComponent (this);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered native component");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered native component");
 
     SDL_AddEventWatch (eventDispatcher, this);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered window event watch");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered window event watch");
 
     // Setup window hints and get flags
     windowFlags = setContextWindowHints (currentGraphicsApi);
@@ -90,7 +90,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     // Create the window, renderer and parent it
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: creating window: title=" << component.getTitle() << ", flags=" << String::toHexString (static_cast<int> (windowFlags)) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: creating window: title=" << component.getTitle() << ", flags=" << String::toHexString (static_cast<int> (windowFlags)) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))));
 
 #if YUP_WINDOWS
     if (parent != nullptr)
@@ -134,7 +134,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 
         if (childHwnd == nullptr)
         {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create child window");
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create child window");
             return;
         }
 
@@ -145,7 +145,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 
         if (window == nullptr)
         {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to wrap child window with SDL: " << SDL_GetError());
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to wrap child window with SDL: " << SDL_GetError());
             DestroyWindow (childHwnd);
             return;
         }
@@ -156,18 +156,18 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         window = SDL_CreateWindow (component.getTitle().toRawUTF8(), 1, 1, windowFlags);
         if (window == nullptr)
         {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create heavyweight window: " << SDL_GetError());
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create heavyweight window: " << SDL_GetError());
             return; // TODO - raise something ?
         }
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
 
 #if ! YUP_WINDOWS
     if (parent != nullptr)
     {
         setNativeParent (parent, window);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: set native parent");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: set native parent");
     }
 #endif
 
@@ -176,12 +176,12 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
         {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create GL context: " << SDL_GetError());
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create GL context: " << SDL_GetError());
             return; // TODO - raise something ?
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: created GL context");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
     }
 
     // Create the rendering context
@@ -194,11 +194,11 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create YUP GraphicsContext");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create YUP GraphicsContext");
         return; // TODO - raise something ?
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: created YUP GraphicsContext");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created YUP GraphicsContext");
 
     // Resize after callbacks are in place
     setBounds (
@@ -214,12 +214,12 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     // Start the rendering
     startRendering();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: native component constructed: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: native component constructed: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
 }
 
 SDL2ComponentNative::~SDL2ComponentNative()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: destroying native component: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroying native component: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
 
     updateMouseCapture (false);
 
@@ -231,11 +231,11 @@ SDL2ComponentNative::~SDL2ComponentNative()
 
     // Remove event watch
     SDL_RemoveEventWatch (eventDispatcher, this);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered window event watch");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered window event watch");
 
     // Unregister this component from the desktop
     Desktop::getInstance()->unregisterNativeComponent (this);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered native component");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered native component");
 
     // Destroy graphics resources before the SDL window
     renderer.reset();
@@ -245,11 +245,11 @@ SDL2ComponentNative::~SDL2ComponentNative()
     if (window != nullptr)
     {
         SDL_DestroyWindow (window);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: destroyed window");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroyed window");
         window = nullptr;
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: native component destroyed");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: native component destroyed");
 }
 
 //==============================================================================
@@ -284,11 +284,11 @@ void SDL2ComponentNative::setVisible (bool shouldBeVisible)
 {
     if (window == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setVisible skipped: window is null, visible=" << String (shouldBeVisible ? "true" : "false"));
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setVisible skipped: window is null, visible=" << String (shouldBeVisible ? "true" : "false"));
         return;
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setVisible " << String (shouldBeVisible ? "true" : "false") << ", currentFlags=" << String::toHexString (static_cast<int> (SDL_GetWindowFlags (window))));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setVisible " << String (shouldBeVisible ? "true" : "false") << ", currentFlags=" << String::toHexString (static_cast<int> (SDL_GetWindowFlags (window))));
 
     if (shouldBeVisible)
     {
@@ -314,7 +314,7 @@ void SDL2ComponentNative::toFront()
 {
     if (window != nullptr && isVisible())
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: raise window");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: raise window");
         SDL_RaiseWindow (window);
     }
 }
@@ -337,7 +337,7 @@ void SDL2ComponentNative::setSize (const Size<int>& newSize)
 {
     if (window == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setSize skipped: window is null, size=" << newSize.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize skipped: window is null, size=" << newSize.toString());
         return;
     }
 
@@ -345,7 +345,7 @@ void SDL2ComponentNative::setSize (const Size<int>& newSize)
 
     if (auto currentSize = getSize(); currentSize != newSize)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setSize " << currentSize.toString() << " -> " << newSize.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize " << currentSize.toString() << " -> " << newSize.toString());
         SDL_SetWindowSize (window, jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
     }
 }
@@ -364,7 +364,7 @@ void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setPosition skipped: window is null, position=" << newPosition.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setPosition skipped: window is null, position=" << newPosition.toString());
         return;
     }
 
@@ -372,7 +372,7 @@ void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 
     if (auto currentPosition = getPosition(); currentPosition != newPosition)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setPosition " << currentPosition.toString() << " -> " << newPosition.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setPosition " << currentPosition.toString() << " -> " << newPosition.toString());
         SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
     }
 }
@@ -395,7 +395,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 #else
     if (window == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setBounds skipped: window is null, bounds=" << newBounds.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds skipped: window is null, bounds=" << newBounds.toString());
         return;
     }
 
@@ -426,7 +426,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 
     if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setBounds size " << currentSize.toString() << " -> " << adjustedBounds.getSize().toString() << ", requested=" << newBounds.toString() << ", margins=" << leftMargin << "," << topMargin << "," << rightMargin << "," << bottomMargin);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds size " << currentSize.toString() << " -> " << adjustedBounds.getSize().toString() << ", requested=" << newBounds.toString() << ", margins=" << leftMargin << "," << topMargin << "," << rightMargin << "," << bottomMargin);
         SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
     }
 
@@ -434,7 +434,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 
     if (auto currentPosition = getPosition(); currentPosition != adjustedBounds.getPosition())
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setBounds position " << currentPosition.toString() << " -> " << adjustedBounds.getPosition().toString() << ", requested=" << newBounds.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds position " << currentPosition.toString() << " -> " << adjustedBounds.getPosition().toString() << ", requested=" << newBounds.toString());
         SDL_SetWindowPosition (window, adjustedBounds.getX(), adjustedBounds.getY());
     }
 
@@ -454,11 +454,11 @@ void SDL2ComponentNative::setFullScreen (bool shouldBeFullScreen)
 {
     if (window == nullptr)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setFullScreen skipped: window is null, fullScreen=" << String (shouldBeFullScreen ? "true" : "false"));
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setFullScreen skipped: window is null, fullScreen=" << String (shouldBeFullScreen ? "true" : "false"));
         return;
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: setFullScreen " << String (shouldBeFullScreen ? "true" : "false") << ", current=" << String (isFullScreen() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setFullScreen " << String (shouldBeFullScreen ? "true" : "false") << ", current=" << String (isFullScreen() ? "true" : "false"));
 
     if (shouldBeFullScreen)
     {
@@ -836,14 +836,14 @@ void SDL2ComponentNative::renderContext()
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: resize render target " << currentContentWidth << "x" << currentContentHeight << " -> " << contentWidth << "x" << contentHeight << ", dpiScale=" << getScaleDpi());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: resize render target " << currentContentWidth << "x" << currentContentHeight << " -> " << contentWidth << "x" << contentHeight << ", dpiScale=" << getScaleDpi());
 
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 
         repaint();
     }
@@ -962,7 +962,7 @@ void SDL2ComponentNative::renderContext()
 
 void SDL2ComponentNative::startRendering()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
     lastRenderTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
     frameRateStartTimeSeconds = lastRenderTimeSeconds;
@@ -981,19 +981,19 @@ void SDL2ComponentNative::startRendering()
 
     repaint();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: startRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
 }
 
 void SDL2ComponentNative::stopRendering()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: stopRendering requested: rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering requested: rendering=" << String (isRendering() ? "true" : "false"));
 
     if constexpr (renderDrivenByTimer)
     {
         if (isTimerRunning())
         {
             stopTimer();
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: stopped render timer");
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render timer");
         }
     }
     else
@@ -1004,11 +1004,11 @@ void SDL2ComponentNative::stopRendering()
             notify();
             renderEvent.signal();
             stopThread (-1);
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: stopped render thread");
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render thread");
         }
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: stopRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
 }
 
 bool SDL2ComponentNative::isRendering() const
@@ -1254,6 +1254,37 @@ void SDL2ComponentNative::handleItemsDropped (const Point<float>& position, cons
         target->internalItemsDropped (data, position);
 }
 
+void SDL2ComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
+{
+    Component* target = findComponentForMouseEvent (position);
+
+    if (target != nullptr)
+    {
+        if (lastComponentUnderDrag == nullptr)
+        {
+            target->internalItemDragEnter (data, position);
+        }
+        else if (lastComponentUnderDrag != target)
+        {
+            lastComponentUnderDrag->internalItemDragExit (data);
+            target->internalItemDragEnter (data, position);
+        }
+        else
+        {
+            target->internalItemDragMove (data, position);
+        }
+    }
+    else
+    {
+        if (lastComponentUnderDrag != nullptr)
+        {
+            lastComponentUnderDrag->internalItemDragExit (data);
+        }
+    }
+
+    lastComponentUnderDrag = target;
+}
+
 //==============================================================================
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
@@ -1262,11 +1293,11 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
     if (internalBoundsChange)
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleMoved ignored during internal bounds change: " << xpos << " " << ypos);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMoved ignored during internal bounds change: " << xpos << " " << ypos);
         return;
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleMoved " << screenBounds.getX() << " " << screenBounds.getY() << " -> " << xpos << " " << ypos << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMoved " << screenBounds.getX() << " " << screenBounds.getY() << " -> " << xpos << " " << ypos << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
 
     if (context == nullptr)
         return;
@@ -1281,7 +1312,7 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
         auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
 #endif
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after move: " << nativeWindowPos.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent window position sync after move: " << nativeWindowPos.toString());
         setPosition (nativeWindowPos.getTopLeft());
 
         xpos = nativeWindowPos.getX();
@@ -1297,7 +1328,7 @@ void SDL2ComponentNative::handleResized (int width, int height)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleResized " << screenBounds.getWidth() << "x" << screenBounds.getHeight() << " -> " << width << "x" << height << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleResized " << screenBounds.getWidth() << "x" << screenBounds.getHeight() << " -> " << width << "x" << height << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parentWindow))));
 
     if (context == nullptr)
         return;
@@ -1316,7 +1347,7 @@ void SDL2ComponentNative::handleResized (int width, int height)
         auto nativeWindowPos = Rectangle<int> (0, 0, 1, 1);
 #endif
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: parent window position sync after resize: " << nativeWindowPos.toString());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: parent window position sync after resize: " << nativeWindowPos.toString());
         setPosition (nativeWindowPos.getTopLeft());
     }
 
@@ -1330,7 +1361,7 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleFocusChanged " << String (gotFocus ? "true" : "false") << ", rendering=" << String (isRendering() ? "true" : "false"));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleFocusChanged " << String (gotFocus ? "true" : "false") << ", rendering=" << String (isRendering() ? "true" : "false"));
 
     if (gotFocus)
     {
@@ -1393,7 +1424,7 @@ bool SDL2ComponentNative::hasNativeKeyboardFocus() const
 
 void SDL2ComponentNative::handleMinimized()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleMinimized");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMinimized");
     PopupMenu::dismissAllPopups();
 
     stopRendering();
@@ -1401,19 +1432,19 @@ void SDL2ComponentNative::handleMinimized()
 
 void SDL2ComponentNative::handleMaximized()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleMaximized");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMaximized");
     repaint();
 }
 
 void SDL2ComponentNative::handleRestored()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleRestored");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleRestored");
     repaint();
 }
 
 void SDL2ComponentNative::handleExposed()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleExposed");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleExposed");
     repaint();
 }
 
@@ -1421,7 +1452,7 @@ void SDL2ComponentNative::handleContentScaleChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleContentScaleChanged dpiScale=" << getScaleDpi());
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleContentScaleChanged dpiScale=" << getScaleDpi());
 
     component.internalContentScaleChanged (getScaleDpi());
 
@@ -1432,7 +1463,7 @@ void SDL2ComponentNative::handleDisplayChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: handleDisplayChanged");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleDisplayChanged");
 
     component.internalDisplayChanged();
 }
@@ -1741,6 +1772,17 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             {
                 SDL_RaiseWindow (window);
 
+                // Clean up any previous drag enter state
+                if (lastComponentUnderDrag != nullptr)
+                {
+                    auto data = DragAndDropData()
+                                    .withFiles (pendingDroppedFiles)
+                                    .withText (pendingDroppedText);
+
+                    lastComponentUnderDrag->internalItemDragExit (data);
+                    lastComponentUnderDrag = nullptr;
+                }
+
                 pendingDroppedFiles.clear();
                 pendingDroppedText.clear();
             }
@@ -1768,6 +1810,20 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
+        case SDL_EVENT_DROP_POSITION:
+        {
+            if (event->drop.windowID == SDL_GetWindowID (window))
+            {
+                auto data = DragAndDropData()
+                                .withFiles (pendingDroppedFiles)
+                                .withText (pendingDroppedText);
+
+                handleItemsDragPosition ({ event->drop.x, event->drop.y }, data);
+            }
+
+            break;
+        }
+
         case SDL_EVENT_DROP_COMPLETE:
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DROP_COMPLETE");
@@ -1780,6 +1836,13 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
                 if (! data.isEmpty())
                     handleItemsDropped (getCursorPosition(), data);
+
+                // Clean up drag enter/exit tracking
+                if (lastComponentUnderDrag != nullptr)
+                {
+                    lastComponentUnderDrag->internalItemDragExit (data);
+                    lastComponentUnderDrag = nullptr;
+                }
 
                 pendingDroppedFiles.clear();
                 pendingDroppedText.clear();
@@ -2192,29 +2255,29 @@ void Desktop::setCurrentMouseLocation (const Point<float>& location)
 
 YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: initialising windowing");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: initialising windowing");
 
     const int compiledVersion = SDL_VERSION;
     const int linkedVersion = SDL_GetVersion();
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: compiled version=" << getSDLVersionString (compiledVersion) << ", linked version=" << getSDLVersionString (linkedVersion));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: compiled version=" << getSDLVersionString (compiledVersion) << ", linked version=" << getSDLVersionString (linkedVersion));
 
     // Do not install signal handlers
     SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: disabled SDL signal handlers");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: disabled SDL signal handlers");
 
     // Initialise SDL
     SDL_SetMainReady();
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: SDL main marked ready");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: main marked ready");
 
     const auto alreadyInitialised = SDL_WasInit (sdlDefaultSubsystems);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: requested subsystems=" << String::toHexString (static_cast<int> (sdlDefaultSubsystems)) << ", already initialised=" << String::toHexString (static_cast<int> (alreadyInitialised)));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: requested subsystems=" << String::toHexString (static_cast<int> (sdlDefaultSubsystems)) << ", already initialised=" << String::toHexString (static_cast<int> (alreadyInitialised)));
 
     if ((alreadyInitialised & sdlDefaultSubsystems) != sdlDefaultSubsystems)
     {
         if (! SDL_InitSubSystem (sdlDefaultSubsystems))
         {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: error initialising SDL: " << SDL_GetError());
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: error initialising SDL: " << SDL_GetError());
 
             jassertfalse;
             YUPApplicationBase::quit();
@@ -2222,24 +2285,24 @@ YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
             return;
         }
 
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: SDL subsystems initialised");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems initialised");
     }
     else
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: SDL subsystems were already initialised");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems were already initialised");
     }
 
     // Update available displays
     Desktop::getInstance()->updateScreens();
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: updated screens");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: updated screens");
 
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered display event watch");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered display event watch");
 
     // Set the default theme now in all platforms except ios
 #if ! YUP_IOS
     ApplicationTheme::setGlobalTheme (createThemeVersion1());
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered default theme");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
 #endif
 
     // Inject the event loop
@@ -2271,17 +2334,17 @@ YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
     {
         const MessageManagerLock mmLock;
         ApplicationTheme::setGlobalTheme (createThemeVersion1());
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered default theme");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
     }
 #endif
 
     SDL2ComponentNative::isInitialised.test_and_set();
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: windowing initialised");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: windowing initialised");
 }
 
 YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: shutting down windowing");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: shutting down windowing");
 
     SDL2ComponentNative::isInitialised.clear();
 
@@ -2289,10 +2352,10 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
     if (auto desktop = Desktop::getInstanceWithoutCreating())
     {
         SDL_RemoveEventWatch (displayEventDispatcher, desktop);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered display event watch");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered display event watch");
 
         desktop->deleteInstance();
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: deleted desktop instance");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: deleted desktop instance");
     }
 
     auto messageManager = MessageManager::getInstanceWithoutCreating();
@@ -2308,22 +2371,22 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
         ApplicationTheme::setGlobalTheme (nullptr);
     }
 
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered default theme");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered default theme");
 
     // Unregister event loop
     if (messageManager != nullptr)
     {
         messageManager->registerEventLoopCallback (nullptr);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unregistered event loop callback");
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered event loop callback");
     }
 
     // Quit only the subsystems YUP initialised.
     SDL_QuitSubSystem (sdlDefaultSubsystems);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: SDL subsystems quit");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems quit");
 
 #if YUP_STANDALONE_APPLICATION
     std::atexit (&SDL_Quit);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: registered SDL_Quit at exit");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
 #endif
 }
 

@@ -1078,6 +1078,12 @@ bool Component::isInterestedInDrag (const DragAndDropData& data) { return false;
 
 bool Component::itemsDropped (const Point<float>& position, const DragAndDropData& data) { return false; }
 
+void Component::itemDragEnter (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragMove (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragExit (const DragAndDropData& data) {}
+
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
@@ -1539,6 +1545,49 @@ bool Component::internalItemsDropped (const DragAndDropData& data, const Point<f
     }
 
     return false;
+}
+
+//==============================================================================
+
+void Component::internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragEnter (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragMove (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragExit (const DragAndDropData& data)
+{
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragExit (data);
+    }
 }
 
 //==============================================================================

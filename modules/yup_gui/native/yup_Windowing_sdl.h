@@ -133,6 +133,7 @@ public:
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);
     void handleItemsDropped (const Point<float>& position, const DragAndDropData& data);
+    void handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
@@ -200,6 +201,7 @@ private:
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
+    WeakReference<Component> lastComponentUnderDrag;
     WeakReference<Component> currentTextInputComponent;
 
     HashMap<int, char> keyState;
