@@ -125,8 +125,8 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           style,
                                           0,
                                           0,
-                                          jmax (1, screenBounds.getWidth()),
-                                          jmax (1, screenBounds.getHeight()),
+                                          1,
+                                          1,
                                           reinterpret_cast<HWND> (parent),
                                           nullptr,
                                           GetModuleHandleW (nullptr),
@@ -153,10 +153,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     else
 #endif
     {
-        window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
-                                   jmax (1, screenBounds.getWidth()),
-                                   jmax (1, screenBounds.getHeight()),
-                                   windowFlags);
+        window = SDL_CreateWindow (component.getTitle().toRawUTF8(), 1, 1, windowFlags);
         if (window == nullptr)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL2: unable to create heavyweight window: " << SDL_GetError());
@@ -799,21 +796,22 @@ void SDL2ComponentNative::handleAsyncUpdate()
 
 void SDL2ComponentNative::timerCallback()
 {
-#if YUP_WINDOWS
-    if (currentMouseButtons != MouseEvent::noButtons && window != nullptr)
+    if (window != nullptr) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
-        POINT cursorPos;
-        if (GetCursorPos (&cursorPos))
-        {
-            ScreenToClient (reinterpret_cast<HWND> (getNativeHandle()), &cursorPos);
+        int windowX = 0, windowY = 0;
+        SDL_GetWindowPosition (window, &windowX, &windowY);
 
-            auto cursorPosition = Point<float> { static_cast<float> (cursorPos.x), static_cast<float> (cursorPos.y) };
+        float mouseX = 0.0f, mouseY = 0.0f;
+        SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
-            if (lastMouseMovePosition != cursorPosition)
-                handleMouseMoveOrDrag (cursorPosition);
-        }
+        const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
+                                                   mouseY - static_cast<float> (windowY) };
+
+        if (lastMouseMovePosition != cursorPosition)
+            handleMouseMoveOrDrag (cursorPosition);
     }
-#endif
+
+    pollCapturedMouseState();
 
     renderContext();
 }
@@ -824,8 +822,6 @@ void SDL2ComponentNative::renderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
 
-    pollCapturedMouseState();
-
     if (context == nullptr)
         return;
 
@@ -833,10 +829,7 @@ void SDL2ComponentNative::renderContext()
     auto contentWidth = contentSize.getWidth();
     auto contentHeight = contentSize.getHeight();
 
-    if (contentWidth == 0 || contentHeight == 0)
-        return;
-
-    if (! isVisible())
+    if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
         return;
 
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
@@ -1635,6 +1628,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
+            /*
         case SDL_EVENT_MOUSE_MOTION:
         {
             //YUP_MODULE_DBG (GUI_WINDOWING, "SDL_MOUSEMOTION " << event->motion.x << " " << event->motion.y);
@@ -1646,6 +1640,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             break;
         }
+        */
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {

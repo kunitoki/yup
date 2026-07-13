@@ -94,6 +94,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (options.isVisible == shouldBeVisible)
         return;
 
+    const bool wasShowing = isShowing();
+
     options.isVisible = shouldBeVisible;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -104,7 +106,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    visibilityChanged();
+    if (wasShowing != isShowing())
+        internalVisibilityChanged();
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -1649,6 +1652,28 @@ void Component::internalDetachedFromNative()
 
         if (bailOutChecker.shouldBailOut())
             return;
+    }
+}
+
+//==============================================================================
+
+void Component::internalVisibilityChanged()
+{
+    visibilityChanged();
+
+    auto bailOutChecker = BailOutChecker (this);
+
+    for (int index = children.size(); --index >= 0;)
+    {
+        auto child = children.getUnchecked (index);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (child->isVisible())
+            child->internalVisibilityChanged();
+
+        index = jmin (index, children.size());
     }
 }
 

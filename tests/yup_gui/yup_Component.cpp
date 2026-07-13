@@ -1593,6 +1593,106 @@ TEST_F (ComponentMockTest, EnhancedVirtualMethodCallbacks)
     mockComponent->setBounds (10.0f, 20.0f, 500.0f, 600.0f);
 }
 
+TEST_F (ComponentMockTest, VisibilityChangedFiresOnlyWhenShowingChanges)
+{
+    // Default component is not visible
+    EXPECT_FALSE (mockComponent->isVisible());
+    EXPECT_FALSE (mockComponent->isShowing());
+
+    // Attach to a visible parent — setVisible fires visibilityChanged because parent is showing.
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    parent->setVisible (true);
+
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->addAndMakeVisible (*mockComponent);
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_TRUE (mockComponent->isShowing());
+
+    // Hide parent — visibilityChanged fires on the parent, and on every visible child
+    // whose showing state flips because the ancestor was hidden.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (false);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());  // Own flag untouched
+    EXPECT_FALSE (mockComponent->isShowing()); // Ancestor chain now hidden
+
+    // Show parent again — child must be told it is now really showing.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (true);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_TRUE (mockComponent->isShowing());
+}
+
+TEST_F (ComponentMockTest, AddAndMakeVisibleUnderHiddenParentDoesNotFireVisibilityChanged)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    // parent starts invisible (default).  Mock is invisible (default).
+
+    // addAndMakeVisible calls setVisible(true), but because the parent is not showing,
+    // visibilityChanged must NOT be called — the child is not actually showing yet.
+    // (NiceMock silently ignores the unexpected visibilityChanged call, so we expect none.)
+    parent->addAndMakeVisible (*mockComponent);
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_FALSE (mockComponent->isShowing());
+
+    // Later, when the parent becomes visible, the child must receive visibilityChanged.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (true);
+}
+
+TEST_F (ComponentMockTest, VisibilityChangePropagatesThroughDeepHierarchy)
+{
+    auto grandparent = std::make_unique<ComponentMock> ("gp");
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    auto child = std::make_unique<ComponentMock> ("child");
+
+    grandparent->setVisible (true);
+    EXPECT_CALL (*parent, visibilityChanged());
+    grandparent->addAndMakeVisible (*parent);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+
+    EXPECT_CALL (*child, visibilityChanged());
+    parent->addAndMakeVisible (*child);
+    ::testing::Mock::VerifyAndClearExpectations (child.get());
+
+    EXPECT_TRUE (child->isShowing());
+
+    // Hiding grandparent should fire on grandparent, parent, and child
+    EXPECT_CALL (*grandparent, visibilityChanged());
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*child, visibilityChanged());
+    grandparent->setVisible (false);
+
+    EXPECT_FALSE (child->isShowing());
+
+    // An invisible child of the hidden parent is NOT affected — it was already hidden.
+    auto invisibleChild = std::make_unique<ComponentMock> ("inv");
+    parent->addChildComponent (*invisibleChild); // isVisible stays false
+
+    // Making the parent visible only fires on parent (not the invisible child).
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (invisibleChild.get());
+
+    EXPECT_CALL (*grandparent, visibilityChanged());
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*child, visibilityChanged());
+    grandparent->setVisible (true);
+
+    ::testing::Mock::VerifyAndClearExpectations (invisibleChild.get());
+    EXPECT_FALSE (invisibleChild->isShowing());
+}
+
 TEST_F (ComponentMockTest, BailOutCheckerClass)
 {
     // Test BailOutChecker functionality

@@ -1328,6 +1328,7 @@ private:
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalVisibilityChanged();
     void internalAttachedToNative();
     void internalDetachedFromNative();
 

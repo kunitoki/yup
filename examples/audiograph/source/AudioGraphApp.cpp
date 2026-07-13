@@ -144,6 +144,9 @@ void AudioGraphApp::visibilityChanged()
 {
     if (isVisible())
     {
+        if (editorPanel)
+            editorPanel->reloadViews();
+
         deviceManager.addAudioCallback (this);
         audioCallbackRegistered = true;
     }
