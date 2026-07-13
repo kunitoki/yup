@@ -30,7 +30,12 @@ if (YUP_PLATFORM_MAC)
     set (CMAKE_XCODE_GENERATE_SCHEME OFF)
 endif()
 
-project (yup VERSION ${yup_version})
+set (yup_languages C CXX)
+if (YUP_PLATFORM_APPLE)
+    list (APPEND yup_languages OBJC OBJCXX)
+endif()
+
+project (yup VERSION ${yup_version} LANGUAGES ${yup_languages})
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Options
