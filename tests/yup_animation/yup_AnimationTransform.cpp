@@ -178,6 +178,20 @@ TEST_F (AnimationTransformTests, SpatialPositionFollowsCircularArc)
     }
 }
 
+TEST_F (AnimationTransformTests, AutoOrientAlignsWithMotionPath)
+{
+    AnimationTransform t;
+    t.autoOrient = true;
+    t.position = Vec2Property::Builder {}
+                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), AnimationEasing::linear())
+                     .keyframe (10.0f, Point<float> (0.0f, 100.0f), AnimationEasing::linear())
+                     .build();
+
+    const auto transformed = Point<float> (1.0f, 0.0f).transformed (t.toAffineTransform (5.0f));
+    EXPECT_NEAR (transformed.getX(), 0.0f, 0.01f);
+    EXPECT_NEAR (transformed.getY(), 51.0f, 0.01f);
+}
+
 // =============================================================================
 // Rotation
 // =============================================================================

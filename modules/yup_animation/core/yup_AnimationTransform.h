@@ -83,6 +83,9 @@ public:
     FloatProperty skew { AnimationProperty<float>::staticValue (0.0f) };
     FloatProperty skewAxis { AnimationProperty<float>::staticValue (0.0f) };
 
+    /** When true, aligns the local X axis with the instantaneous position motion path. */
+    bool autoOrient = false;
+
     /** 3D rotation channels (Lottie "rx", "ry", "rz").
         When is3DData is true, these replace the 2D rotation for 3D layers. */
     bool is3DData = false;

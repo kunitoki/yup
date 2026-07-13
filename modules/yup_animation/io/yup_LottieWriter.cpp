@@ -89,6 +89,7 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
     obj->setProperty ("sr", var ((double) layer.timeStretch));
     obj->setProperty ("ddd", var (0));
     obj->setProperty ("hd", var (layer.hidden));
+    obj->setProperty ("ao", var (layer.autoOrient));
     obj->setProperty ("bm", var (static_cast<int> (layer.blendMode)));
     obj->setProperty ("tt", var (static_cast<int> (layer.matteType)));
 
