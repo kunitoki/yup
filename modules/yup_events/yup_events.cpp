@@ -71,14 +71,12 @@
 
 #elif YUP_EMSCRIPTEN
 #include <emscripten.h>
-
 #include <deque>
 #include <mutex>
 
 #elif YUP_ANDROID
 #include <jni.h>
-
-#include <SDL2/SDL_system.h>
+#include <SDL3/SDL_system.h>
 
 #endif
 

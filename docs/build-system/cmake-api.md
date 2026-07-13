@@ -280,7 +280,7 @@ also be used independently for non-plugin GUI applications.
 |---|---|---|---|
 | `TARGET_NAME` | string | *(required)* | Target name for the executable. |
 | `TARGET_VERSION` | string | *(required)* | Version in `major.minor.patch` format. |
-| `TARGET_CONSOLE` | ON\|OFF | OFF | Build a console app (no windowing/SDL2, no macOS bundle). |
+| `TARGET_CONSOLE` | ON\|OFF | OFF | Build a console app (no windowing/SDL, no macOS bundle). |
 | `TARGET_IDE_GROUP` | string | - | IDE folder group name. |
 | `TARGET_APP_NAMESPACE` | string | - | App namespace; the bundle id is `<namespace>.<TARGET_NAME>`. |
 | `TARGET_CXX_STANDARD` | integer | `20` | C++ standard version. |

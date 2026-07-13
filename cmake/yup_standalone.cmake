@@ -70,7 +70,7 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE "${target_app_namespace}"
             APPLICATION_VERSION "${target_version}")
 
-        _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
+        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_fetch_sdl()
         _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
 
