@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class SDL2ComponentNative final
+class SDLComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
@@ -37,14 +37,14 @@ class SDL2ComponentNative final
 
 public:
     //==============================================================================
-    using Ptr = ReferenceCountedObjectPtr<SDL2ComponentNative>;
+    using Ptr = ReferenceCountedObjectPtr<SDLComponentNative>;
 
     //==============================================================================
-    SDL2ComponentNative (Component& component,
-                         const Options& options,
-                         void* parent);
+    SDLComponentNative (Component& component,
+                        const Options& options,
+                        void* parent);
 
-    ~SDL2ComponentNative() override;
+    ~SDLComponentNative() override;
 
     //==============================================================================
     void setTitle (const String& title) override;

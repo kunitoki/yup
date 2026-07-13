@@ -35,16 +35,16 @@ static String getSDLVersionString (int version)
 
 //==============================================================================
 
-std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
-int SDL2ComponentNative::mouseCaptureRequestCount = 0;
-uint32_t SDL2ComponentNative::lastCapturedMouseButtonState = 0;
-bool SDL2ComponentNative::popupDismissalCheckPending = false;
+std::atomic_flag SDLComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+int SDLComponentNative::mouseCaptureRequestCount = 0;
+uint32_t SDLComponentNative::lastCapturedMouseButtonState = 0;
+bool SDLComponentNative::popupDismissalCheckPending = false;
 
 //==============================================================================
 
-SDL2ComponentNative::SDL2ComponentNative (Component& component,
-                                          const Options& options,
-                                          void* parent)
+SDLComponentNative::SDLComponentNative (Component& component,
+                                        const Options& options,
+                                        void* parent)
     : ComponentNative (component, options.flags)
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
@@ -217,7 +217,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: native component constructed: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
 }
 
-SDL2ComponentNative::~SDL2ComponentNative()
+SDLComponentNative::~SDLComponentNative()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroying native component: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
 
@@ -254,7 +254,7 @@ SDL2ComponentNative::~SDL2ComponentNative()
 
 //==============================================================================
 
-void SDL2ComponentNative::setTitle (const String& title)
+void SDLComponentNative::setTitle (const String& title)
 {
     if (windowTitle == title)
         return;
@@ -265,7 +265,7 @@ void SDL2ComponentNative::setTitle (const String& title)
     windowTitle = title;
 }
 
-String SDL2ComponentNative::getTitle() const
+String SDLComponentNative::getTitle() const
 {
 #if ! (YUP_EMSCRIPTEN && RIVE_WEBGL)
     if (window == nullptr)
@@ -280,7 +280,7 @@ String SDL2ComponentNative::getTitle() const
 
 //==============================================================================
 
-void SDL2ComponentNative::setVisible (bool shouldBeVisible)
+void SDLComponentNative::setVisible (bool shouldBeVisible)
 {
     if (window == nullptr)
     {
@@ -303,14 +303,14 @@ void SDL2ComponentNative::setVisible (bool shouldBeVisible)
     }
 }
 
-bool SDL2ComponentNative::isVisible() const
+bool SDLComponentNative::isVisible() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_HIDDEN) == 0;
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::toFront()
+void SDLComponentNative::toFront()
 {
     if (window != nullptr && isVisible())
     {
@@ -321,7 +321,7 @@ void SDL2ComponentNative::toFront()
 
 //==============================================================================
 
-Size<int> SDL2ComponentNative::getContentSize() const
+Size<int> SDLComponentNative::getContentSize() const
 {
     const auto dpiScale = getScaleDpi();
 
@@ -333,7 +333,7 @@ Size<int> SDL2ComponentNative::getContentSize() const
 
 //==============================================================================
 
-void SDL2ComponentNative::setSize (const Size<int>& newSize)
+void SDLComponentNative::setSize (const Size<int>& newSize)
 {
     if (window == nullptr)
     {
@@ -350,7 +350,7 @@ void SDL2ComponentNative::setSize (const Size<int>& newSize)
     }
 }
 
-Size<int> SDL2ComponentNative::getSize() const
+Size<int> SDLComponentNative::getSize() const
 {
     int width = 0, height = 0;
 
@@ -360,7 +360,7 @@ Size<int> SDL2ComponentNative::getSize() const
     return { width, height };
 }
 
-void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
+void SDLComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr)
     {
@@ -377,7 +377,7 @@ void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
     }
 }
 
-Point<int> SDL2ComponentNative::getPosition() const
+Point<int> SDLComponentNative::getPosition() const
 {
     int x = 0, y = 0;
 
@@ -387,7 +387,7 @@ Point<int> SDL2ComponentNative::getPosition() const
     return { x, y };
 }
 
-void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
+void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
 #if YUP_ANDROID
     screenBounds = Rectangle<int> (0, 0, getSize());
@@ -443,14 +443,14 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 #endif
 }
 
-Rectangle<int> SDL2ComponentNative::getBounds() const
+Rectangle<int> SDLComponentNative::getBounds() const
 {
     return screenBounds;
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::setFullScreen (bool shouldBeFullScreen)
+void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
 {
     if (window == nullptr)
     {
@@ -484,27 +484,27 @@ void SDL2ComponentNative::setFullScreen (bool shouldBeFullScreen)
     }
 }
 
-bool SDL2ComponentNative::isFullScreen() const
+bool SDLComponentNative::isFullScreen() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_FULLSCREEN) != 0;
 }
 
 //==============================================================================
 
-bool SDL2ComponentNative::isDecorated() const
+bool SDLComponentNative::isDecorated() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_BORDERLESS) == 0;
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::setOpacity (float opacity)
+void SDLComponentNative::setOpacity (float opacity)
 {
     if (window != nullptr)
         SDL_SetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
 }
 
-float SDL2ComponentNative::getOpacity() const
+float SDLComponentNative::getOpacity() const
 {
     if (window != nullptr)
         return SDL_GetWindowOpacity (window);
@@ -514,7 +514,7 @@ float SDL2ComponentNative::getOpacity() const
 
 //==============================================================================
 
-void SDL2ComponentNative::setFocusedComponent (Component* comp)
+void SDLComponentNative::setFocusedComponent (Component* comp)
 {
     const auto focusNativeWindowIfNeeded = [&]
     {
@@ -582,41 +582,41 @@ void SDL2ComponentNative::setFocusedComponent (Component* comp)
     focusNativeWindowIfNeeded();
 }
 
-Component* SDL2ComponentNative::getFocusedComponent() const
+Component* SDLComponentNative::getFocusedComponent() const
 {
     return hasNativeKeyboardFocus() ? lastComponentFocused.get() : nullptr;
 }
 
 //==============================================================================
 
-bool SDL2ComponentNative::isContinuousRepaintingEnabled() const
+bool SDLComponentNative::isContinuousRepaintingEnabled() const
 {
     return shouldRenderContinuous;
 }
 
-void SDL2ComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
+void SDLComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
 {
     shouldRenderContinuous = shouldBeEnabled;
 }
 
-bool SDL2ComponentNative::isAtomicModeEnabled() const
+bool SDLComponentNative::isAtomicModeEnabled() const
 {
     return renderAtomicMode;
 }
 
-void SDL2ComponentNative::enableAtomicMode (bool shouldBeEnabled)
+void SDLComponentNative::enableAtomicMode (bool shouldBeEnabled)
 {
     renderAtomicMode = shouldBeEnabled;
 
     repaint();
 }
 
-bool SDL2ComponentNative::isWireframeEnabled() const
+bool SDLComponentNative::isWireframeEnabled() const
 {
     return renderWireframe;
 }
 
-void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
+void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
 {
     renderWireframe = shouldBeEnabled;
 
@@ -625,43 +625,43 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 
 //==============================================================================
 
-void SDL2ComponentNative::repaint()
+void SDLComponentNative::repaint()
 {
     currentRepaintAreas.clearQuick();
 
     currentRepaintAreas.add (Rectangle<float>().withSize (getSize().to<float>()));
 }
 
-void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
+void SDLComponentNative::repaint (const Rectangle<float>& rect)
 {
     currentRepaintAreas.add (rect);
 }
 
-const RectangleList<float>& SDL2ComponentNative::getRepaintAreas() const
+const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
 {
     return currentRepaintAreas;
 }
 
 //==============================================================================
 
-float SDL2ComponentNative::getScaleDpi() const
+float SDLComponentNative::getScaleDpi() const
 {
     return context != nullptr ? context->dpiScale (getNativeHandle()) : 1.0f;
 }
 
-float SDL2ComponentNative::getCurrentFrameRate() const
+float SDLComponentNative::getCurrentFrameRate() const
 {
     return currentFrameRate.load (std::memory_order_relaxed);
 }
 
-float SDL2ComponentNative::getDesiredFrameRate() const
+float SDLComponentNative::getDesiredFrameRate() const
 {
     return desiredFrameRate;
 }
 
 //==============================================================================
 
-Point<float> SDL2ComponentNative::getCursorPosition() const
+Point<float> SDLComponentNative::getCursorPosition() const
 {
     float x = 0, y = 0;
 
@@ -672,28 +672,28 @@ Point<float> SDL2ComponentNative::getCursorPosition() const
 
 //==============================================================================
 
-rive::Factory* SDL2ComponentNative::getFactory()
+rive::Factory* SDLComponentNative::getFactory()
 {
     return context ? context->factory() : nullptr;
 }
 
 //==============================================================================
 
-GraphicsContext* SDL2ComponentNative::getGraphicsContext()
+GraphicsContext* SDLComponentNative::getGraphicsContext()
 {
     return context.get();
 }
 
 //==============================================================================
 
-void* SDL2ComponentNative::getNativeHandle() const
+void* SDLComponentNative::getNativeHandle() const
 {
     return getNativeWindowHandle (window);
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::startTextInput (Component& component)
+void SDLComponentNative::startTextInput (Component& component)
 {
     if (window == nullptr)
         return;
@@ -712,7 +712,7 @@ void SDL2ComponentNative::startTextInput (Component& component)
     updateTextInputRect (component);
 }
 
-void SDL2ComponentNative::updateTextInputRect (Component& component)
+void SDLComponentNative::updateTextInputRect (Component& component)
 {
     if (window == nullptr || currentTextInputComponent != std::addressof (component))
         return;
@@ -730,7 +730,7 @@ void SDL2ComponentNative::updateTextInputRect (Component& component)
     SDL_SetTextInputArea (window, &sdlRect, 0);
 }
 
-void SDL2ComponentNative::stopTextInput (Component& component)
+void SDLComponentNative::stopTextInput (Component& component)
 {
     if (window == nullptr)
         return;
@@ -745,7 +745,7 @@ void SDL2ComponentNative::stopTextInput (Component& component)
 
 //==============================================================================
 
-void SDL2ComponentNative::run()
+void SDLComponentNative::run()
 {
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
@@ -784,7 +784,7 @@ void SDL2ComponentNative::run()
     }
 }
 
-void SDL2ComponentNative::handleAsyncUpdate()
+void SDLComponentNative::handleAsyncUpdate()
 {
     if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
@@ -794,7 +794,7 @@ void SDL2ComponentNative::handleAsyncUpdate()
     renderEvent.signal();
 }
 
-void SDL2ComponentNative::timerCallback()
+void SDLComponentNative::timerCallback()
 {
     if (window != nullptr) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
@@ -818,7 +818,7 @@ void SDL2ComponentNative::timerCallback()
 
 //==============================================================================
 
-void SDL2ComponentNative::renderContext()
+void SDLComponentNative::renderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
 
@@ -960,7 +960,7 @@ void SDL2ComponentNative::renderContext()
 
 //==============================================================================
 
-void SDL2ComponentNative::startRendering()
+void SDLComponentNative::startRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
@@ -984,7 +984,7 @@ void SDL2ComponentNative::startRendering()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
 }
 
-void SDL2ComponentNative::stopRendering()
+void SDLComponentNative::stopRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering requested: rendering=" << String (isRendering() ? "true" : "false"));
 
@@ -1011,7 +1011,7 @@ void SDL2ComponentNative::stopRendering()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
 }
 
-bool SDL2ComponentNative::isRendering() const
+bool SDLComponentNative::isRendering() const
 {
     if constexpr (renderDrivenByTimer)
         return isTimerRunning();
@@ -1021,7 +1021,7 @@ bool SDL2ComponentNative::isRendering() const
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
+void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1051,7 +1051,7 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
     lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
     currentKeyModifiers = modifiers;
@@ -1083,7 +1083,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
     lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
     currentKeyModifiers = modifiers;
@@ -1143,7 +1143,7 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData)
+void SDLComponentNative::handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1176,7 +1176,7 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const 
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
+void SDLComponentNative::handleMouseEnter (const Point<float>& position)
 {
     if (currentMouseButtons != MouseEvent::noButtons)
         return;
@@ -1196,7 +1196,7 @@ void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
     }
 }
 
-void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
+void SDLComponentNative::handleMouseLeave (const Point<float>& position)
 {
     if (currentMouseButtons != MouseEvent::noButtons)
         return;
@@ -1218,7 +1218,7 @@ void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
 
 //==============================================================================
 
-void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
+void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 1);
@@ -1229,7 +1229,7 @@ void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
         component.internalKeyDown (keys, position);
 }
 
-void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
+void SDLComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 0);
@@ -1240,7 +1240,7 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
         component.internalKeyUp (keys, position);
 }
 
-void SDL2ComponentNative::handleTextInput (const String& textInput)
+void SDLComponentNative::handleTextInput (const String& textInput)
 {
     if (! hasNativeKeyboardFocus() || currentTextInputComponent == nullptr)
         return;
@@ -1248,13 +1248,13 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
     currentTextInputComponent->internalTextInput (textInput);
 }
 
-void SDL2ComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
+void SDLComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
 {
     if (Component* target = findComponentForMouseEvent (position))
         target->internalItemsDropped (data, position);
 }
 
-void SDL2ComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
+void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
 {
     Component* target = findComponentForMouseEvent (position);
 
@@ -1287,7 +1287,7 @@ void SDL2ComponentNative::handleItemsDragPosition (const Point<float>& position,
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMoved (int xpos, int ypos)
+void SDLComponentNative::handleMoved (int xpos, int ypos)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1324,7 +1324,7 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
     screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
-void SDL2ComponentNative::handleResized (int width, int height)
+void SDLComponentNative::handleResized (int width, int height)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1357,7 +1357,7 @@ void SDL2ComponentNative::handleResized (int width, int height)
     repaint();
 }
 
-void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
+void SDLComponentNative::handleFocusChanged (bool gotFocus)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1417,12 +1417,12 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
     }
 }
 
-bool SDL2ComponentNative::hasNativeKeyboardFocus() const
+bool SDLComponentNative::hasNativeKeyboardFocus() const
 {
     return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) != 0;
 }
 
-void SDL2ComponentNative::handleMinimized()
+void SDLComponentNative::handleMinimized()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMinimized");
     PopupMenu::dismissAllPopups();
@@ -1430,25 +1430,25 @@ void SDL2ComponentNative::handleMinimized()
     stopRendering();
 }
 
-void SDL2ComponentNative::handleMaximized()
+void SDLComponentNative::handleMaximized()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMaximized");
     repaint();
 }
 
-void SDL2ComponentNative::handleRestored()
+void SDLComponentNative::handleRestored()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleRestored");
     repaint();
 }
 
-void SDL2ComponentNative::handleExposed()
+void SDLComponentNative::handleExposed()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleExposed");
     repaint();
 }
 
-void SDL2ComponentNative::handleContentScaleChanged()
+void SDLComponentNative::handleContentScaleChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1459,7 +1459,7 @@ void SDL2ComponentNative::handleContentScaleChanged()
     handleResized (screenBounds.getWidth(), screenBounds.getHeight());
 }
 
-void SDL2ComponentNative::handleDisplayChanged()
+void SDLComponentNative::handleDisplayChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1468,7 +1468,7 @@ void SDL2ComponentNative::handleDisplayChanged()
     component.internalDisplayChanged();
 }
 
-void SDL2ComponentNative::handleUserTriedToCloseWindow()
+void SDLComponentNative::handleUserTriedToCloseWindow()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1477,7 +1477,7 @@ void SDL2ComponentNative::handleUserTriedToCloseWindow()
 
 //==============================================================================
 
-Component* SDL2ComponentNative::findComponentForMouseEvent (const Point<float>& position)
+Component* SDLComponentNative::findComponentForMouseEvent (const Point<float>& position)
 {
     Component* child = component.findComponentAt (position);
     if (child == nullptr)
@@ -1506,7 +1506,7 @@ Component* SDL2ComponentNative::findComponentForMouseEvent (const Point<float>& 
     return nullptr;
 }
 
-void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
+void SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
     Component* child = findComponentForMouseEvent (event.getPosition());
 
@@ -1533,7 +1533,7 @@ void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 //==============================================================================
 
-void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
+void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1633,7 +1633,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
 //==============================================================================
 
-void SDL2ComponentNative::handleEvent (SDL_Event* event)
+void SDLComponentNative::handleEvent (SDL_Event* event)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
@@ -1858,7 +1858,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
 //==============================================================================
 
-bool SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
+bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
     switch (event->type)
     {
@@ -1872,7 +1872,7 @@ bool SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
         {
             if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
             {
-                if (auto nativeComponent = dynamic_cast<SDL2ComponentNative*> (component.get()))
+                if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
                     nativeComponent->handleEvent (event);
                 else
                     YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown component");
@@ -1887,7 +1887,7 @@ bool SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
 //==============================================================================
 
-void SDL2ComponentNative::triggerPopupDismissalCheck()
+void SDLComponentNative::triggerPopupDismissalCheck()
 {
     if (popupDismissalCheckPending)
         return;
@@ -1903,7 +1903,7 @@ void SDL2ComponentNative::triggerPopupDismissalCheck()
     }
 }
 
-void SDL2ComponentNative::dismissPopupsIfNoNativeWindowHasFocus()
+void SDLComponentNative::dismissPopupsIfNoNativeWindowHasFocus()
 {
     popupDismissalCheckPending = false;
 
@@ -1913,7 +1913,7 @@ void SDL2ComponentNative::dismissPopupsIfNoNativeWindowHasFocus()
     PopupMenu::dismissAllPopups();
 }
 
-bool SDL2ComponentNative::anyNativeWindowHasKeyboardFocus()
+bool SDLComponentNative::anyNativeWindowHasKeyboardFocus()
 {
     auto* desktop = Desktop::getInstanceWithoutCreating();
 
@@ -1924,7 +1924,7 @@ bool SDL2ComponentNative::anyNativeWindowHasKeyboardFocus()
     {
         ignoreUnused (userdata);
 
-        if (auto* sdlNativeComponent = dynamic_cast<SDL2ComponentNative*> (nativeComponent))
+        if (auto* sdlNativeComponent = dynamic_cast<SDLComponentNative*> (nativeComponent))
         {
             if (sdlNativeComponent->hasNativeKeyboardFocus())
                 return true;
@@ -1934,7 +1934,7 @@ bool SDL2ComponentNative::anyNativeWindowHasKeyboardFocus()
     return false;
 }
 
-bool SDL2ComponentNative::anyNativeWindowContains (Point<float> screenPosition)
+bool SDLComponentNative::anyNativeWindowContains (Point<float> screenPosition)
 {
     auto* desktop = Desktop::getInstanceWithoutCreating();
 
@@ -1958,7 +1958,7 @@ bool SDL2ComponentNative::anyNativeWindowContains (Point<float> screenPosition)
 
 //==============================================================================
 
-void SDL2ComponentNative::updateMouseCapture (bool shouldBeActive)
+void SDLComponentNative::updateMouseCapture (bool shouldBeActive)
 {
     if (! shouldCaptureMouse)
         shouldBeActive = false;
@@ -1976,7 +1976,7 @@ void SDL2ComponentNative::updateMouseCapture (bool shouldBeActive)
     mouseCaptureActive = false;
 }
 
-void SDL2ComponentNative::pollCapturedMouseState()
+void SDLComponentNative::pollCapturedMouseState()
 {
     if (mouseCaptureRequestCount <= 0 || SDL_WasInit (SDL_INIT_VIDEO) == 0)
         return;
@@ -2001,7 +2001,7 @@ void SDL2ComponentNative::pollCapturedMouseState()
     });
 }
 
-bool SDL2ComponentNative::requestMouseCapture()
+bool SDLComponentNative::requestMouseCapture()
 {
     if (SDL_WasInit (SDL_INIT_VIDEO) == 0)
         return false;
@@ -2020,7 +2020,7 @@ bool SDL2ComponentNative::requestMouseCapture()
     return true;
 }
 
-void SDL2ComponentNative::releaseMouseCapture()
+void SDLComponentNative::releaseMouseCapture()
 {
     if (mouseCaptureRequestCount <= 0)
         return;
@@ -2042,7 +2042,7 @@ ComponentNative::Ptr ComponentNative::createFor (Component& component,
                                                  const Options& options,
                                                  void* parent)
 {
-    return ComponentNative::Ptr (ReferenceCountedObjectAdopt, new SDL2ComponentNative (component, options, parent));
+    return ComponentNative::Ptr (ReferenceCountedObjectAdopt, new SDLComponentNative (component, options, parent));
 }
 
 //==============================================================================
@@ -2338,7 +2338,7 @@ YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
     }
 #endif
 
-    SDL2ComponentNative::isInitialised.test_and_set();
+    SDLComponentNative::isInitialised.test_and_set();
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: windowing initialised");
 }
 
@@ -2346,7 +2346,7 @@ YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: shutting down windowing");
 
-    SDL2ComponentNative::isInitialised.clear();
+    SDLComponentNative::isInitialised.clear();
 
     // Shutdown desktop
     if (auto desktop = Desktop::getInstanceWithoutCreating())

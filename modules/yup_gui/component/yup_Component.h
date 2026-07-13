@@ -1382,7 +1382,7 @@ private:
 
     friend class ComponentNative;
     friend class ComponentTestHelper;
-    friend class SDL2ComponentNative;
+    friend class SDLComponentNative;
     friend class WeakReference<Component>;
 
     using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
