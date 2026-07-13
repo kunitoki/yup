@@ -17,7 +17,7 @@ namespace rive::gpu
 template <typename T> class GradDataArray
 {
 public:
-    static_assert(std::is_pod_v<T>);
+    static_assert(std::is_standard_layout_v<T>);
 
     GradDataArray(const T data[], size_t count)
     {
