@@ -78,13 +78,13 @@ public:
 
         @return The text from the clipboard, or an empty string if no text is available.
     */
-    static String getTextFromClipboard();
+    [[nodiscard]] static String getTextFromClipboard();
 
     /** Checks whether the clipboard contains non-empty text.
 
         @return True if the clipboard exists and has text content.
     */
-    static bool hasClipboardText();
+    [[nodiscard]] static bool hasClipboardText();
 
     ///@}
 
@@ -102,8 +102,7 @@ public:
                           clears this data. Use this to release external resources.
         @return           True on success, false on failure.
     */
-    static bool copyToClipboard (const ClipboardData& data,
-                                 std::function<void()> onRelease = {});
+    [[nodiscard]] static bool copyToClipboard (const ClipboardData& data, std::function<void()> onRelease = {});
 
     /** Places multiple data items on the clipboard, each with a different MIME type.
 
@@ -115,8 +114,7 @@ public:
                           clears this batch. Use this to release external resources.
         @return           True on success, false on failure.
     */
-    static bool copyToClipboard (const Array<ClipboardData>& data,
-                                 std::function<void()> onRelease = {});
+    [[nodiscard]] static bool copyToClipboard (const Array<ClipboardData>& data, std::function<void()> onRelease = {});
 
     /** Retrieves clipboard data for the specified MIME type.
 
@@ -124,26 +122,26 @@ public:
         @return          A ClipboardData containing the MIME type and payload, or an
                          empty ClipboardData if the data is not available.
     */
-    static ClipboardData getFromClipboard (const String& mimeType);
+    [[nodiscard]] static ClipboardData getFromClipboard (const String& mimeType);
 
     /** Checks whether the clipboard contains data for the given MIME type.
 
         @param mimeType  The MIME type to check for.
         @return          True if data exists in the clipboard for that MIME type.
     */
-    static bool hasClipboardData (const String& mimeType);
+    [[nodiscard]] static bool hasClipboardData (const String& mimeType);
 
     /** Retrieves the list of MIME types currently available in the clipboard.
 
         @return  The available MIME types.
     */
-    static StringArray getClipboardMimeTypes();
+    [[nodiscard]] static StringArray getClipboardMimeTypes();
 
     /** Clears all data from the system clipboard.
 
         @return  True on success, false on failure.
     */
-    static bool clearClipboardData();
+    [[nodiscard]] static bool clearClipboardData();
 
     ///@}
 
@@ -166,13 +164,13 @@ public:
         @return  The text from the primary selection, or an empty string if
                  no text is available.
     */
-    static String getTextFromPrimarySelection();
+    [[nodiscard]] static String getTextFromPrimarySelection();
 
     /** Checks whether the primary selection contains non-empty text.
 
         @return  True if the primary selection has text content.
     */
-    static bool hasPrimarySelectionText();
+    [[nodiscard]] static bool hasPrimarySelectionText();
 
     ///@}
 
