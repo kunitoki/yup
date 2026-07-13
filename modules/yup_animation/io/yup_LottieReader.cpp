@@ -125,23 +125,17 @@ inline Color parseHexColor (const String& hex)
 } // namespace
 
 //==============================================================================
-LottieReader::LottieReader (const LottieLoadOptions& options, String* outError)
-    : options_ (options)
-    , errorOut_ (outError)
+LottieReader::LottieReader (const LottieLoadOptions& optionsToUse)
+    : options (optionsToUse)
 {
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseFile (const File& file,
-                                                   const LottieLoadOptions& options,
-                                                   String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseFile (const File& file,
+                                                                const LottieLoadOptions& options)
 {
     if (! file.existsAsFile())
-    {
-        if (outError != nullptr)
-            *outError = "File not found: " + file.getFullPathName();
-        return {};
-    }
+        return makeResultValueFail ("File not found: " + file.getFullPathName());
 
     LottieLoadOptions opts = options;
     if (opts.resourceDirectory == File())
@@ -149,46 +143,32 @@ AnimationComposition::Ptr LottieReader::parseFile (const File& file,
 
     auto stream = file.createInputStream();
     if (stream == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "Failed to open file: " + file.getFullPathName();
-        return {};
-    }
+        return makeResultValueFail ("Failed to open file: " + file.getFullPathName());
 
-    return parseStream (*stream, opts, outError);
+    return parseStream (*stream, opts);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseData (const String& jsonText,
-                                                   const LottieLoadOptions& options,
-                                                   String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseData (const String& jsonText,
+                                                                const LottieLoadOptions& options)
 {
     var root;
     const Result parseResult = JSON::parse (jsonText, root);
     if (parseResult.failed())
-    {
-        if (outError != nullptr)
-            *outError = "JSON parse error: " + parseResult.getErrorMessage();
-        return {};
-    }
+        return makeResultValueFail ("JSON parse error: " + parseResult.getErrorMessage());
 
-    LottieReader reader (options, outError);
+    LottieReader reader (options);
     return reader.parseRoot (root);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
-                                                     const LottieLoadOptions& options,
-                                                     String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseStream (InputStream& stream,
+                                                                  const LottieLoadOptions& options)
 {
     MemoryBlock data;
     const auto bytesRead = stream.readIntoMemoryBlock (data);
     if (bytesRead == 0 || data.isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "Empty or unreadable stream";
-        return {};
-    }
+        return makeResultValueFail ("Empty or unreadable stream");
 
     // .lottie ZIP archives start with "PK" magic bytes
     if (data.getSize() >= 2 && memcmp (data.getData(), "PK", 2) == 0)
@@ -198,31 +178,19 @@ AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
 
         const auto* manifestEntry = zip.getEntry ("manifest.json", true);
         if (manifestEntry == nullptr)
-        {
-            if (outError != nullptr)
-                *outError = "manifest.json not found in .lottie stream";
-            return {};
-        }
+            return makeResultValueFail ("manifest.json not found in .lottie stream");
 
         std::unique_ptr<InputStream> manifestStream (zip.createStreamForEntry (*manifestEntry));
         if (manifestStream == nullptr)
-            return {};
+            return makeResultValueFail ("Failed to open manifest.json in .lottie stream");
 
         var manifest;
         if (JSON::parse (manifestStream->readEntireStreamAsString(), manifest).failed())
-        {
-            if (outError != nullptr)
-                *outError = "Failed to parse manifest.json";
-            return {};
-        }
+            return makeResultValueFail ("Failed to parse manifest.json");
 
         const auto* anims = safeArray (manifest["animations"]);
         if (anims == nullptr || anims->isEmpty())
-        {
-            if (outError != nullptr)
-                *outError = "No animations found in manifest";
-            return {};
-        }
+            return makeResultValueFail ("No animations found in manifest");
 
         const auto& anim = (*anims)[0];
         const String animId = varString (anim["id"]);
@@ -232,20 +200,16 @@ AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
 
         const auto* jsonEntry = zip.getEntry (jsonPath, true);
         if (jsonEntry == nullptr)
-        {
-            if (outError != nullptr)
-                *outError = "Animation JSON not found inside archive: " + jsonPath;
-            return {};
-        }
+            return makeResultValueFail ("Animation JSON not found inside archive: " + jsonPath);
 
         std::unique_ptr<InputStream> jsonStream (zip.createStreamForEntry (*jsonEntry));
         if (jsonStream == nullptr)
-            return {};
+            return makeResultValueFail ("Failed to open animation JSON inside archive: " + jsonPath);
 
-        return parseData (jsonStream->readEntireStreamAsString(), options, outError);
+        return parseData (jsonStream->readEntireStreamAsString(), options);
     }
 
-    return parseData (data.toString(), options, outError);
+    return parseData (data.toString(), options);
 }
 
 //==============================================================================
@@ -275,43 +239,30 @@ std::vector<String> LottieReader::listAnimationIds (const File& lottieZipFile)
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseFromZip (const File& lottieZipFile,
-                                                      const String& animationId,
-                                                      const LottieLoadOptions& options,
-                                                      String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseFromZip (const File& lottieZipFile,
+                                                                   const String& animationId,
+                                                                   const LottieLoadOptions& options)
 {
     ZipFile zip (lottieZipFile);
 
     // Read manifest
     const ZipFile::ZipEntry* manifestEntry = zip.getEntry ("manifest.json", true);
     if (manifestEntry == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "manifest.json not found in .lottie file";
-        return {};
-    }
+        return makeResultValueFail ("manifest.json not found in .lottie file");
 
     std::unique_ptr<InputStream> manifestStream (zip.createStreamForEntry (*manifestEntry));
     if (manifestStream == nullptr)
-        return {};
+        return makeResultValueFail ("Failed to open manifest.json in .lottie file");
 
     var manifest;
     if (JSON::parse (manifestStream->readEntireStreamAsString(), manifest).failed())
-    {
-        if (outError != nullptr)
-            *outError = "Failed to parse manifest.json";
-        return {};
-    }
+        return makeResultValueFail ("Failed to parse manifest.json");
 
     // Find the target animation path from the manifest
     String jsonPath;
     const auto* anims = safeArray (manifest["animations"]);
     if (anims == nullptr || anims->isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "No animations found in manifest";
-        return {};
-    }
+        return makeResultValueFail ("No animations found in manifest");
 
     for (const var& anim : *anims)
     {
@@ -326,29 +277,21 @@ AnimationComposition::Ptr LottieReader::parseFromZip (const File& lottieZipFile,
     }
 
     if (jsonPath.isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "Animation id not found in manifest: " + animationId;
-        return {};
-    }
+        return makeResultValueFail ("Animation id not found in manifest: " + animationId);
 
     const ZipFile::ZipEntry* jsonEntry = zip.getEntry (jsonPath, true);
     if (jsonEntry == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "Animation JSON not found inside archive: " + jsonPath;
-        return {};
-    }
+        return makeResultValueFail ("Animation JSON not found inside archive: " + jsonPath);
 
     std::unique_ptr<InputStream> jsonStream (zip.createStreamForEntry (*jsonEntry));
     if (jsonStream == nullptr)
-        return {};
+        return makeResultValueFail ("Failed to open animation JSON inside archive: " + jsonPath);
 
-    return parseData (jsonStream->readEntireStreamAsString(), options, outError);
+    return parseData (jsonStream->readEntireStreamAsString(), options);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseRoot (const var& root)
 {
     auto comp = AnimationComposition::create (
         { varFloat (root["w"], 500.0f), varFloat (root["h"], 500.0f) },
@@ -375,15 +318,13 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     // Validate composition (gap 22)
     if (comp->version.isEmpty())
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: missing version";
-        return {};
+        errorMessage = "Invalid Lottie: missing version";
+        return makeResultValueFail (errorMessage);
     }
     if (comp->startFrame > comp->endFrame)
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: startFrame > endFrame";
-        return {};
+        errorMessage = "Invalid Lottie: startFrame > endFrame";
+        return makeResultValueFail (errorMessage);
     }
 
     if (const auto* markersArr = safeArray (root["markers"]))
@@ -398,7 +339,7 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
         }
     }
 
-    return comp;
+    return makeResultValueOk (std::move (comp));
 }
 
 //==============================================================================
@@ -451,9 +392,9 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
                 }
             }
 
-            if (! asset->bitmap.has_value() && options_.imageResolver)
+            if (! asset->bitmap.has_value() && options.imageResolver)
             {
-                auto img = options_.imageResolver (asset->path, options_.resourceDirectory);
+                auto img = options.imageResolver (asset->path, options.resourceDirectory);
                 if (img.has_value())
                     asset->bitmap = std::move (img);
             }
@@ -739,11 +680,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
 
     // Self-parenting check
     if (layer->parentId >= 0 && layer->id == layer->parentId)
-    {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: layer references itself as parent";
         return {};
-    }
 
     // Hidden layers - downgrade to Null to save resources (gap 23)
     if (layer->hidden)

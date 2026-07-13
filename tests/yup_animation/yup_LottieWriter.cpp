@@ -462,11 +462,11 @@ TEST_F (LottieWriterTests, ToJson_ContainsRequiredTopLevelFields)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesCompositionName)
 {
-    auto comp = LottieReader::parseData (kMinimalJson);
+    auto comp = LottieReader::parseData (kMinimalJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, "MinimalComp");
@@ -474,11 +474,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesCompositionName)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesFrameRate)
 {
-    auto comp = LottieReader::parseData (kMinimalJson);
+    auto comp = LottieReader::parseData (kMinimalJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->frameRate, 25.0f);
@@ -486,11 +486,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesFrameRate)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesSize)
 {
-    auto comp = LottieReader::parseData (kMinimalJson);
+    auto comp = LottieReader::parseData (kMinimalJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->size.getWidth(), 200.0f);
@@ -499,11 +499,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesSize)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesStartAndEndFrames)
 {
-    auto comp = LottieReader::parseData (kMinimalJson);
+    auto comp = LottieReader::parseData (kMinimalJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->startFrame, 0.0f);
@@ -512,12 +512,12 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesStartAndEndFrames)
 
 TEST_F (LottieWriterTests, Roundtrip_EmptyLayerList)
 {
-    auto comp = LottieReader::parseData (kMinimalJson);
+    auto comp = LottieReader::parseData (kMinimalJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     EXPECT_EQ (comp->layers.size(), 0u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->layers.size(), 0u);
@@ -525,12 +525,12 @@ TEST_F (LottieWriterTests, Roundtrip_EmptyLayerList)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesLayerCount)
 {
-    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    auto comp = LottieReader::parseData (kShapeAndNullJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->layers.size(), 2u);
@@ -538,13 +538,13 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesLayerCount)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesLayerAutoOrient)
 {
-    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    auto comp = LottieReader::parseData (kShapeAndNullJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_FALSE (comp->layers.empty());
     comp->layers[0]->autoOrient = true;
     comp->layers[0]->transform.autoOrient = true;
 
-    auto readback = LottieReader::parseData (LottieWriter::toJson (*comp));
+    auto readback = LottieReader::parseData (LottieWriter::toJson (*comp)).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_FALSE (readback->layers.empty());
@@ -554,11 +554,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesLayerAutoOrient)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesLayerNames)
 {
-    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    auto comp = LottieReader::parseData (kShapeAndNullJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 2u);
@@ -568,11 +568,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesLayerNames)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesLayerTypes)
 {
-    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    auto comp = LottieReader::parseData (kShapeAndNullJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 2u);
@@ -593,7 +593,7 @@ TEST_F (LottieWriterTests, Roundtrip_ProgrammaticCompositionMetadata)
     comp->endFrame = 65.0f;
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, String ("MyAnimation"));
@@ -614,7 +614,7 @@ TEST_F (LottieWriterTests, Roundtrip_ProgrammaticLayers)
     ASSERT_EQ (comp->layers.size(), 2u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 2u);
@@ -630,12 +630,12 @@ TEST_F (LottieWriterTests, Roundtrip_ProgrammaticLayers)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesMarkers)
 {
-    auto comp = LottieReader::parseData (kMarkerJson);
+    auto comp = LottieReader::parseData (kMarkerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->markers.size(), 2u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->markers.size(), 2u);
@@ -645,11 +645,11 @@ TEST_F (LottieWriterTests, Roundtrip_PreservesMarkers)
 
 TEST_F (LottieWriterTests, Roundtrip_PreservesMarkerTiming)
 {
-    auto comp = LottieReader::parseData (kMarkerJson);
+    auto comp = LottieReader::parseData (kMarkerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->markers.size(), 2u);
@@ -676,10 +676,11 @@ TEST_F (LottieWriterTests, ToFile_WritesToTemporaryFileAndCanBeReadBack)
     EXPECT_TRUE (writeResult.wasOk());
     EXPECT_TRUE (tempFile.exists());
 
-    String outError;
-    auto readback = LottieReader::parseFile (tempFile, {}, &outError);
+    auto readbackResult = LottieReader::parseFile (tempFile);
 
-    ASSERT_NE (readback, nullptr) << outError;
+    ASSERT_TRUE (readbackResult.wasOk()) << readbackResult.getErrorMessage();
+    auto readback = readbackResult.getReference();
+    ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, String ("FileRoundtripTest"));
     EXPECT_EQ (readback->layers.size(), 1u);
     EXPECT_FLOAT_EQ (readback->frameRate, 25.0f);
@@ -693,13 +694,13 @@ TEST_F (LottieWriterTests, ToFile_WritesToTemporaryFileAndCanBeReadBack)
 
 TEST_F (LottieWriterTests, Roundtrip_StatsAreConsistentAfterWriteAndRead)
 {
-    auto comp = LottieReader::parseData (kShapeAndNullJson);
+    auto comp = LottieReader::parseData (kShapeAndNullJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const auto originalStats = comp->computeStats();
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
     ASSERT_NE (readback, nullptr);
 
     const auto readbackStats = readback->computeStats();
@@ -715,13 +716,13 @@ TEST_F (LottieWriterTests, Roundtrip_StatsAreConsistentAfterWriteAndRead)
 
 TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesType)
 {
-    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_EQ (comp->layers[0]->getType(), AnimationLayer::Type::Solid);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -730,11 +731,11 @@ TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesType)
 
 TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesSize)
 {
-    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
 
@@ -746,7 +747,7 @@ TEST_F (LottieWriterTests, Roundtrip_SolidLayerPreservesSize)
 
 TEST_F (LottieWriterTests, ToJson_SolidLayerContainsSolidColorField)
 {
-    auto comp = LottieReader::parseData (kSolidLayerExampleJson);
+    auto comp = LottieReader::parseData (kSolidLayerExampleJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -761,11 +762,11 @@ TEST_F (LottieWriterTests, ToJson_SolidLayerContainsSolidColorField)
 
 TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesLayerType)
 {
-    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    auto comp = LottieReader::parseData (kShapeWithFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -774,7 +775,7 @@ TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesLayerType)
 
 TEST_F (LottieWriterTests, ToJson_ShapeLayerWithFillContainsShapesField)
 {
-    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    auto comp = LottieReader::parseData (kShapeWithFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -784,7 +785,7 @@ TEST_F (LottieWriterTests, ToJson_ShapeLayerWithFillContainsShapesField)
 
 TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesGroupCount)
 {
-    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    auto comp = LottieReader::parseData (kShapeWithFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     const auto* sl = dynamic_cast<const ShapeLayer*> (comp->layers[0].get());
@@ -792,7 +793,7 @@ TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesGroupCount)
     const auto originalGroupCount = sl->groups.size();
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -807,11 +808,11 @@ TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithFillPreservesGroupCount)
 
 TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithStrokePreservesType)
 {
-    auto comp = LottieReader::parseData (kShapeWithStrokeJson);
+    auto comp = LottieReader::parseData (kShapeWithStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -820,7 +821,7 @@ TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithStrokePreservesType)
 
 TEST_F (LottieWriterTests, ToJson_ShapeLayerWithStrokeContainsStrokeType)
 {
-    auto comp = LottieReader::parseData (kShapeWithStrokeJson);
+    auto comp = LottieReader::parseData (kShapeWithStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -833,11 +834,11 @@ TEST_F (LottieWriterTests, ToJson_ShapeLayerWithStrokeContainsStrokeType)
 
 TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithEllipsePreservesType)
 {
-    auto comp = LottieReader::parseData (kShapeWithEllipseJson);
+    auto comp = LottieReader::parseData (kShapeWithEllipseJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -846,7 +847,7 @@ TEST_F (LottieWriterTests, Roundtrip_ShapeLayerWithEllipsePreservesType)
 
 TEST_F (LottieWriterTests, ToJson_ShapeLayerWithEllipseContainsEllipseType)
 {
-    auto comp = LottieReader::parseData (kShapeWithEllipseJson);
+    auto comp = LottieReader::parseData (kShapeWithEllipseJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -859,13 +860,13 @@ TEST_F (LottieWriterTests, ToJson_ShapeLayerWithEllipseContainsEllipseType)
 
 TEST_F (LottieWriterTests, Roundtrip_LayerWithMaskPreservesMaskCount)
 {
-    auto comp = LottieReader::parseData (kShapeWithMaskJson);
+    auto comp = LottieReader::parseData (kShapeWithMaskJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_EQ (comp->layers[0]->masks.size(), 1u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -874,7 +875,7 @@ TEST_F (LottieWriterTests, Roundtrip_LayerWithMaskPreservesMaskCount)
 
 TEST_F (LottieWriterTests, ToJson_LayerWithMaskContainsMasksPropertiesField)
 {
-    auto comp = LottieReader::parseData (kShapeWithMaskJson);
+    auto comp = LottieReader::parseData (kShapeWithMaskJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -887,13 +888,13 @@ TEST_F (LottieWriterTests, ToJson_LayerWithMaskContainsMasksPropertiesField)
 
 TEST_F (LottieWriterTests, Roundtrip_HiddenLayerPreservesHiddenState)
 {
-    auto comp = LottieReader::parseData (kHiddenShapeLayerJson);
+    auto comp = LottieReader::parseData (kHiddenShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_TRUE (comp->layers[0]->hidden);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -906,14 +907,14 @@ TEST_F (LottieWriterTests, Roundtrip_HiddenLayerPreservesHiddenState)
 
 TEST_F (LottieWriterTests, Roundtrip_LayerInOutFramesArePreserved)
 {
-    auto comp = LottieReader::parseData (kLayerWithInOutJson);
+    auto comp = LottieReader::parseData (kLayerWithInOutJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_FLOAT_EQ (comp->layers[0]->inFrame, 10.0f);
     EXPECT_FLOAT_EQ (comp->layers[0]->outFrame, 80.0f);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -923,13 +924,13 @@ TEST_F (LottieWriterTests, Roundtrip_LayerInOutFramesArePreserved)
 
 TEST_F (LottieWriterTests, Roundtrip_LayerStartFrameIsPreserved)
 {
-    auto comp = LottieReader::parseData (kLayerWithInOutJson);
+    auto comp = LottieReader::parseData (kLayerWithInOutJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_FLOAT_EQ (comp->layers[0]->startFrame, 5.0f);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -947,7 +948,7 @@ TEST_F (LottieWriterTests, Roundtrip_ProgrammaticSolidLayer)
     comp->addSolidLayer ("RedSolid", Color (0xFFFF0000), { 80.0f, 60.0f });
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     ASSERT_EQ (readback->layers.size(), 1u);
@@ -966,7 +967,7 @@ TEST_F (LottieWriterTests, Roundtrip_ProgrammaticSolidLayer)
 
 TEST_F (LottieWriterTests, ToJson_LayerContainsTransformField)
 {
-    auto comp = LottieReader::parseData (kShapeWithFillJson);
+    auto comp = LottieReader::parseData (kShapeWithFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const std::string json = LottieWriter::toJson (*comp).toStdString();
@@ -984,11 +985,11 @@ TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesName)
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, String ("Goal"));
@@ -999,11 +1000,11 @@ TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesFrameRate)
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->frameRate, 30.0f);
@@ -1014,11 +1015,11 @@ TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesSize)
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->size.getWidth(), 1080.0f);
@@ -1030,11 +1031,11 @@ TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesLayerCount)
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->layers.size(), 3u);
@@ -1045,13 +1046,13 @@ TEST_F (LottieWriterTests, Roundtrip_GoalLottiePreservesMarkers)
     const File file = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const auto originalMarkerCount = comp->markers.size();
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->markers.size(), originalMarkerCount);
@@ -1062,12 +1063,12 @@ TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesLayerCount)
     const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 21u);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->layers.size(), 21u);
@@ -1078,11 +1079,11 @@ TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesName)
     const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, String ("Comp 1"));
@@ -1093,11 +1094,11 @@ TEST_F (LottieWriterTests, Roundtrip_JollyWalkerPreservesFrameRate)
     const File file = getLottieTestDataDir().getChildFile ("jolly_walker.json");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_FLOAT_EQ (readback->frameRate, 60.0f);
@@ -1108,11 +1109,11 @@ TEST_F (LottieWriterTests, Roundtrip_ImageTestPreservesAssetCount)
     const File file = getLottieTestDataDir().getChildFile ("image_test.json");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->assets.size(), 1u);
@@ -1123,11 +1124,11 @@ TEST_F (LottieWriterTests, Roundtrip_ImageEmbeddedPreservesAssetCount)
     const File file = getLottieTestDataDir().getChildFile ("image_embedded.json");
     ASSERT_TRUE (file.existsAsFile());
 
-    auto comp = LottieReader::parseFile (file);
+    auto comp = LottieReader::parseFile (file).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const String json = LottieWriter::toJson (*comp);
-    auto readback = LottieReader::parseData (json);
+    auto readback = LottieReader::parseData (json).valueOr (nullptr);
 
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->assets.size(), 1u);
@@ -1138,7 +1139,7 @@ TEST_F (LottieWriterTests, ToFile_GoalLottieWriteAndReadBack)
     const File inputFile = getLottieTestDataDir().getChildFile ("goal.lottie");
     ASSERT_TRUE (inputFile.existsAsFile());
 
-    auto comp = LottieReader::parseFile (inputFile);
+    auto comp = LottieReader::parseFile (inputFile).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const File tempFile = File::createTempFile ("lottie_writer_goal.json");
@@ -1146,10 +1147,11 @@ TEST_F (LottieWriterTests, ToFile_GoalLottieWriteAndReadBack)
     EXPECT_TRUE (writeResult.wasOk());
     EXPECT_TRUE (tempFile.exists());
 
-    String outError;
-    auto readback = LottieReader::parseFile (tempFile, {}, &outError);
+    auto readbackResult = LottieReader::parseFile (tempFile);
 
-    ASSERT_NE (readback, nullptr) << outError;
+    ASSERT_TRUE (readbackResult.wasOk()) << readbackResult.getErrorMessage();
+    auto readback = readbackResult.getReference();
+    ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->name, String ("Goal"));
     EXPECT_FLOAT_EQ (readback->frameRate, 30.0f);
     EXPECT_FLOAT_EQ (readback->size.getWidth(), 1080.0f);
@@ -1164,14 +1166,14 @@ TEST_F (LottieWriterTests, ToFile_JollyWalkerWriteAndReadBack)
     const File inputFile = getLottieTestDataDir().getChildFile ("jolly_walker.json");
     ASSERT_TRUE (inputFile.existsAsFile());
 
-    auto comp = LottieReader::parseFile (inputFile);
+    auto comp = LottieReader::parseFile (inputFile).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     const File tempFile = File::createTempFile ("lottie_writer_jolly.json");
     const Result writeResult = LottieWriter::toFile (*comp, tempFile);
     EXPECT_TRUE (writeResult.wasOk());
 
-    auto readback = LottieReader::parseFile (tempFile);
+    auto readback = LottieReader::parseFile (tempFile).valueOr (nullptr);
     ASSERT_NE (readback, nullptr);
     EXPECT_EQ (readback->layers.size(), 21u);
 

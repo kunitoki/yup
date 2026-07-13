@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Breaking changes
 
 - macOS: OpenGL rendering backend disabled in favor of Metal
+- `LottieReader::parseFile()`, `parseData()`, `parseStream()`, and `parseFromZip()` now return `ResultValue<AnimationComposition::Ptr>` and no longer take a trailing `String* outError` out-parameter; check `wasOk()`/`failed()` and read the message via `getErrorMessage()`.
 - `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
 
 ### Graphics
