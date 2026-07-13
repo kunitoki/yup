@@ -204,7 +204,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))
 - Improved fonts: better layouting, variable font axis manipulation, embedded fallback font ([#55](https://github.com/kunitoki/yup/pull/55))
-- Clipboard support ([#55](https://github.com/kunitoki/yup/pull/55))
+- Clipboard support: text, MIME-typed data with lazy callbacks, and primary selection ([#55](https://github.com/kunitoki/yup/pull/55))
 
 #### Audio GUI (`yup_audio_gui`)
 - New `yup_audio_gui` module ([#70](https://github.com/kunitoki/yup/pull/70))
