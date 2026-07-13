@@ -267,8 +267,8 @@ extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*);
 int YUPApplicationBase::main()
 {
 #if YUP_ANDROID
-    auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
-    auto clazz = (jobject) SDL_AndroidGetActivity();
+    auto env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+    auto clazz = (jobject) SDL_GetAndroidActivity();
     JavaVM* vm = nullptr;
 
     if (env != nullptr && env->GetJavaVM (&vm) == 0)
