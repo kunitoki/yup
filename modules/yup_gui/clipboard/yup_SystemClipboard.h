@@ -141,7 +141,7 @@ public:
 
         @return  True on success, false on failure.
     */
-    [[nodiscard]] static bool clearClipboardData();
+    static bool clearClipboardData();
 
     ///@}
 
