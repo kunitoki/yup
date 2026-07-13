@@ -85,7 +85,7 @@ public:
 
     template <typename T> T* makePODArray(size_t count)
     {
-        static_assert(std::is_standard_layout<T>::value);
+        static_assert(std::is_trivially_copyable<T>::value);
         return reinterpret_cast<T*>(alloc<alignof(T)>(count * sizeof(T)));
     }
 
@@ -105,7 +105,7 @@ private:
 template <typename T, size_t AlignmentInBytes = alignof(T)>
 class TrivialArrayAllocator : private TrivialBlockAllocator
 {
-    static_assert(std::is_standard_layout<T>::value);
+    static_assert(std::is_trivially_copyable<T>::value);
 
 public:
     TrivialArrayAllocator(size_t initialCount) :
