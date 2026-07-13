@@ -2185,11 +2185,14 @@ void Desktop::updateScreens()
         if (! SDL_GetDisplayBounds (displayID, &bounds))
             continue;
 
+        SDL_Rect usableBounds = bounds;
+        SDL_GetDisplayUsableBounds (displayID, &usableBounds);
+
         auto screen = std::make_unique<Screen>();
         screen->name = String::fromUTF8 (SDL_GetDisplayName (displayID));
         screen->isPrimary = (displayID == primaryDisplay);
         screen->virtualPosition = Point<int> (bounds.x, bounds.y);
-        screen->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
+        screen->workArea = Rectangle<int> (usableBounds.x, usableBounds.y, usableBounds.w, usableBounds.h);
 
         const float contentScale = SDL_GetDisplayContentScale (displayID);
         screen->contentScaleX = contentScale > 0.0f ? contentScale : 1.0f;

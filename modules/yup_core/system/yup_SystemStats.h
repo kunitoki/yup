@@ -304,12 +304,14 @@ public:
     */
     static void setApplicationCrashHandler (CrashHandlerFunction);
 
+    //==============================================================================
     /** Returns true if this code is running inside an app extension sandbox.
         This function will always return false on windows, linux and android.
     */
     static bool isRunningInAppExtensionSandbox() noexcept;
 
 #if YUP_MAC
+    /** Returns true if the app sandbox is enabled. */
     static bool isAppSandboxEnabled();
 #endif
 
