@@ -35,6 +35,8 @@
     dependencies:         yup_events yup_data_model yup_graphics rive
     optionalDeps:         yup_audio_gui
     appleFrameworks:      Metal
+    iosFrameworks:        CoreMotion
+    iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
 
