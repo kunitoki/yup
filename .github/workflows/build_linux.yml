@@ -44,10 +44,10 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - name: Configure
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - name: Build SDL2
+    - name: Build SDL
       run: |
-        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL2-static
-        cmake --build ${{ runner.workspace }}/build --config Release --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v5
