@@ -26,7 +26,7 @@ include (${CMAKE_CURRENT_LIST_DIR}/../yup_utilities.cmake)
 function (_yup_android_prepare_gradle)
     set (options "")
     set (one_value_args
-        BASE_PATH MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
+        BASE_PATH MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION NDK_VERSION
         TARGET_NAME TARGET_ICON ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
         APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
     set (multi_value_args "")
@@ -48,6 +48,7 @@ function (_yup_android_prepare_gradle)
     _yup_set_default (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
     _yup_set_default (YUP_ANDROID_ABI "arm64-v8a")
     _yup_set_default (YUP_ANDROID_CMAKE_VERSION "${CMAKE_VERSION}")
+    _yup_set_default (YUP_ANDROID_NDK_VERSION "27.2.12479018")
 
     _yup_join_list_with_separator ("${YUP_ANDROID_ABI}" "\n            " "abiFilters += \"" "\"" YUP_ANDROID_ABI)
     _yup_version_string_to_version_code (${YUP_ANDROID_APPLICATION_VERSION} YUP_ANDROID_APPLICATION_VERSION_CODE)

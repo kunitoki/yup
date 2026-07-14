@@ -369,8 +369,7 @@ struct Application : yup::YUPApplication
 #if YUP_IOS
             window->centreWithSize ({ 320, 480 });
 #elif YUP_ANDROID
-            window->centreWithSize ({ 1080, 2400 });
-            // window->setFullScreen(true);
+            window->centreWithSize ({ 720, 1280 });
 #else
             window->centreWithSize ({ 1024, 768 });
 #endif

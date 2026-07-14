@@ -198,7 +198,7 @@ Emscripten SDK (at least version 4.0.22).
 
 
 ### Android
-JDK 17, Android SDK, and NDK (at least r26d).
+JDK 17, Android SDK, and NDK (at least r27c).
 
 
 ## Installation
