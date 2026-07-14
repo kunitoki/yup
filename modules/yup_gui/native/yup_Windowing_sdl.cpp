@@ -796,6 +796,7 @@ void SDLComponentNative::handleAsyncUpdate()
 
 void SDLComponentNative::timerCallback()
 {
+#if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
         int windowX = 0, windowY = 0;
@@ -812,6 +813,7 @@ void SDLComponentNative::timerCallback()
     }
 
     pollCapturedMouseState();
+#endif
 
     renderContext();
 }
@@ -1659,11 +1661,9 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-            /*
+#if YUP_MOBILE || YUP_EMSCRIPTEN
         case SDL_EVENT_MOUSE_MOTION:
         {
-            //YUP_MODULE_DBG (GUI_WINDOWING, "SDL_MOUSEMOTION " << event->motion.x << " " << event->motion.y);
-
             auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
 
             if (event->motion.windowID == SDL_GetWindowID (window))
@@ -1671,7 +1671,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             break;
         }
-        */
+#endif
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {

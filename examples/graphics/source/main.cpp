@@ -33,7 +33,7 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
-#if YUP_ANDROID
+#if YUP_MOBILE
 #include <BinaryData.h>
 #endif
 

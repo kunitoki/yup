@@ -38,7 +38,7 @@ public:
         if (factory == nullptr)
             return false;
 
-#if YUP_ANDROID
+#if YUP_MOBILE
         yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
         auto artboardFile = yup::ArtboardFile::load (is, *factory);
 #else

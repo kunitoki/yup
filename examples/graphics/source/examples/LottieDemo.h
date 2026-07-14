@@ -171,10 +171,9 @@ public:
             playPauseButton->setButtonText ("Play");
         };
 
-#if YUP_ANDROID
+#if YUP_MOBILE
         yup::MemoryInputStream is (yup::LottieFile_data, yup::LottieFile_size, false);
         loadStream (is);
-
 #else
         loadFile (getAssetPath (YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE));
 #endif
