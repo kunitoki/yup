@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Breaking changes
 
-- macOS: OpenGL rendering backend disabled in favor of Metal
+- macOS: OpenGL rendering backend removed in favor of Metal only
 - `LottieReader::parseFile()`, `parseData()`, `parseStream()`, and `parseFromZip()` now return `ResultValue<AnimationComposition::Ptr>` and no longer take a trailing `String* outError` out-parameter; check `wasOk()`/`failed()` and read the message via `getErrorMessage()`.
 - `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
 
@@ -201,6 +201,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `MouseListener` weak-referenceable interface for all mouse events; `Component::addMouseListener()` / `removeMouseListener()` ([#30](https://github.com/kunitoki/yup/pull/30))
 - Improved slider components (knob, linear, range) and button components ([#70](https://github.com/kunitoki/yup/pull/70))
 - Unified drag-and-drop support in `Component`: `isInterestedInDrag()` / `itemsDropped()` virtuals with a fluent `DragAndDropData` payload (files and text on SDL, URIs reserved for future backends); drops dispatch to the topmost interested component and bubble up to parents
+- Added unit coverage for `SystemClipboard` data formats and `Component` drag-and-drop callbacks
 
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))

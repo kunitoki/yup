@@ -2134,6 +2134,17 @@ protected:
     std::unique_ptr<DragDropComponent> child;
 };
 
+TEST_F (ComponentTest, DefaultDragAndDropCallbacksDoNotHandlePayload)
+{
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_FALSE (child->isInterestedInDrag (data));
+    EXPECT_FALSE (child->itemsDropped ({ 10.0f, 20.0f }, data));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragEnter (data, { 10.0f, 20.0f }));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragMove (data, { 15.0f, 25.0f }));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragExit (data));
+}
+
 TEST_F (ComponentDragDropTest, InterestedTopmostHandlesDrop)
 {
     child->interested = true;
