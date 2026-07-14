@@ -238,6 +238,11 @@ function (yup_standalone_app)
                 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
 
+    elseif (YUP_PLATFORM_ANDROID)
+       target_link_options (${target_name} PRIVATE
+            "-Wl,-z,max-page-size=16384"
+            "-Wl,-z,common-page-size=16384")
+
     elseif (YUP_PLATFORM_LINUX)
         set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 

@@ -58,7 +58,7 @@ ios_simulator PLATFORM="SIMULATORARM64":
 [macos]
 android:
   cmake -G Xcode -B build -DYUP_TARGET_ANDROID=ON
-  -open -a /Applications/Android\ Studio.app build/examples/render
+  -open -a /Applications/Android\ Studio.app build/examples/graphics
 
 [doc("generate and open project for Android using Android Studio (windows)")]
 [windows]

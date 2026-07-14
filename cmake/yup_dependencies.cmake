@@ -20,19 +20,27 @@
 #==============================================================================
 
 macro (_yup_fetchcontent_declare name)
-    cmake_parse_arguments (_yup_fcd "" "GIT_REPOSITORY;GIT_TAG" "GIT_SUBMODULES" ${ARGN})
+    cmake_parse_arguments (YUP_ARG "" "GIT_REPOSITORY;GIT_TAG" "GIT_SUBMODULES" ${ARGN})
 
-    set (_yup_fcd_submodules_args "")
-    if (DEFINED _yup_fcd_GIT_SUBMODULES)
-        set (_yup_fcd_submodules_args GIT_SUBMODULES ${_yup_fcd_GIT_SUBMODULES})
+    set (submodules_args "")
+    if (DEFINED YUP_ARG_GIT_SUBMODULES)
+        set (submodules_args GIT_SUBMODULES ${YUP_ARG_GIT_SUBMODULES})
+    endif()
+
+    # Shallow clones (--depth 1) only work with branch or tag names, not commit hashes
+    set (shallow ON)
+    if (YUP_ARG_GIT_TAG MATCHES "^[0-9a-fA-F]{7,40}$")
+        set (shallow OFF)
     endif()
 
     FetchContent_Declare(
         "${name}"
-        GIT_REPOSITORY "${_yup_fcd_GIT_REPOSITORY}"
-        GIT_TAG        "${_yup_fcd_GIT_TAG}"
+        GIT_REPOSITORY "${YUP_ARG_GIT_REPOSITORY}"
+        GIT_TAG        "${YUP_ARG_GIT_TAG}"
+        GIT_SHALLOW    ${shallow}
         GIT_SUBMODULES_RECURSE ON
-        ${_yup_fcd_submodules_args}
+        UPDATE_DISCONNECTED ON
+        ${submodules_args}
         SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
 endmacro()
 

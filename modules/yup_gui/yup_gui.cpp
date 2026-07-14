@@ -53,9 +53,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_system.h>
 #include <SDL3/SDL_video.h>
-#if ! YUP_ANDROID
 #define SDL_MAIN_HANDLED
-#endif
 #include <SDL3/SDL_main.h>
 
 //==============================================================================
