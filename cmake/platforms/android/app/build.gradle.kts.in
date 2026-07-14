@@ -5,6 +5,7 @@ plugins {
 android {
     namespace = "@YUP_ANDROID_APPLICATION_NAMESPACE@"
     compileSdk = @YUP_ANDROID_COMPILE_SDK_VERSION@
+    ndkVersion = "@YUP_ANDROID_NDK_VERSION@"
 
     defaultConfig {
         applicationId = "@YUP_ANDROID_APPLICATION_ID@"
@@ -77,6 +78,7 @@ android {
     packaging {
         jniLibs {
             keepDebugSymbols += "*/*/*.so"
+            useLegacyPackaging = false
         }
     }
 

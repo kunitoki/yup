@@ -173,7 +173,7 @@ public:
 
 private:
     friend class YUPApplication;
-    friend class SDL2ComponentNative;
+    friend class SDLComponentNative;
 
     Desktop();
 

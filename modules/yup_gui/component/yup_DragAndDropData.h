@@ -56,7 +56,7 @@ public:
 
     /** Returns a copy of this object with the given URIs set.
 
-        Reserved for future URI-capable backends; SDL2 leaves this empty.
+        Reserved for future URI-capable backends; SDL leaves this empty.
 
         @param uris The URIs to associate with the drop.
     */

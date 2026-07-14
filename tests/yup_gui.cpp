@@ -35,6 +35,7 @@
 #include "yup_gui/yup_ScrollBar.cpp"
 #include "yup_gui/yup_Slider.cpp"
 #include "yup_gui/yup_SwitchButton.cpp"
+#include "yup_gui/yup_SystemClipboard.cpp"
 #include "yup_gui/yup_TextButton.cpp"
 #include "yup_gui/yup_TextEditor.cpp"
 #include "yup_gui/yup_ThemeVersion1.cpp"

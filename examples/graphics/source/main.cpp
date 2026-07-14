@@ -33,7 +33,7 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
-#if YUP_ANDROID
+#if YUP_MOBILE
 #include <BinaryData.h>
 #endif
 
@@ -62,6 +62,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"
+#include "examples/ClipboardDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
@@ -161,6 +162,7 @@ public:
         registerDemo<ArtboardDemo> ("Artboard", counter++);
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
+        registerDemo<ClipboardDemo> ("Clipboard", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
         registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
@@ -367,8 +369,7 @@ struct Application : yup::YUPApplication
 #if YUP_IOS
             window->centreWithSize ({ 320, 480 });
 #elif YUP_ANDROID
-            window->centreWithSize ({ 1080, 2400 });
-            // window->setFullScreen(true);
+            window->centreWithSize ({ 720, 1280 });
 #else
             window->centreWithSize ({ 1024, 768 });
 #endif

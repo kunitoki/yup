@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Breaking changes
 
-- macOS: OpenGL rendering backend disabled in favor of Metal
+- macOS: OpenGL rendering backend removed in favor of Metal only
 - `LottieReader::parseFile()`, `parseData()`, `parseStream()`, and `parseFromZip()` now return `ResultValue<AnimationComposition::Ptr>` and no longer take a trailing `String* outError` out-parameter; check `wasOk()`/`failed()` and read the message via `getErrorMessage()`.
 - `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
 
@@ -48,8 +48,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
 
+### Build System
+
+- Fetched third-party dependencies (SDL3, Perfetto, plugin SDKs) are now cloned shallowly (`--depth 1`) and skip network update checks on reconfigure, speeding up fresh configures and reconfigures. Shallow cloning is automatically disabled when a `GIT_TAG` is a commit hash.
+- Android: full 16 KB page size compatibility — generated Gradle projects bumped to AGP 8.5.2 / Gradle 8.7 (uncompressed native libraries are zip-aligned to 16 KB), `jniLibs` packaging made explicitly non-legacy, and `ndkVersion` pinned to r27c (overridable via `NDK_VERSION`), which ships a 16 KB-aligned `libc++_shared.so`. CI NDK updated to r27c accordingly. Application shared libraries were already linked with `-Wl,-z,max-page-size=16384`.
+
 ### Bug Fixes
 
+- iOS applications now use the `UIScene` lifecycle, removing UIKit's legacy lifecycle warning and ensuring SDL windows are created for the connected scene.
 - Offscreen GPU rendering now supports recursive targets on Metal, OpenGL/GLES, and D3D11. Render contexts are reserved only while a target frame is active, so Lottie alpha/luma mattes, isolated-opacity layers, and cached precomps retain GPU compositing when rendered into an `Image` or `GpuCanvas` without allocating a context per sequential target. Repeated Lottie matte and precomp renders now reuse their canvases rather than allocating GPU textures each frame. Metal child targets allocate only their Rive render-canvas output texture; the CPU readback staging texture is created only when pixels are requested.
 - Lottie: track mattes (alpha, alpha-inverted, luma, luma-inverted) now composite the matte source's *rendered alpha* — including its fill opacity, gradients, and anti-aliased edges — instead of hard-clipping the target to the source silhouette. The matte source and target are rendered into offscreen GPU buffers (sized to the fitted on-screen resolution) and multiplied by a fullscreen matte-composite shader. A partially transparent matte source now shows through correctly (e.g. `matte_two_item_with_lowerlayer.json`, whose 65%-opacity source blends the white matted ellipse to pink over the red layer beneath). Falls back to the previous geometric-clip behaviour when no GPU is available (e.g. headless rendering).
 - Lottie: `EllipseShape` paths now start at the top (12 o'clock) and follow the shape direction (clockwise for `d == 1`, counter-clockwise for `d == 3`), matching Lottie's convention. Previously they started at the right (3 o'clock) going counter-clockwise, which placed trimmed arcs at the wrong position (e.g. the expanding rings in `world_locations.json` were cut short on the right).
@@ -63,6 +69,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Lottie / `AnimationRenderer::renderComposition`: content that extends beyond the composition viewport (e.g. shapes with coordinates outside the `w`/`h` bounds, as in `jolly_walker.json`) now clips to the fitted composition rectangle instead of the full target bounds, so it no longer spills into the letterbox / pillarbox area when the target rectangle is not the composition's aspect ratio.
 - `AnimationTransform::positionAt()` spatial bezier motion paths were nearly straight instead of curved: the second control point used the *next* keyframe's incoming tangent (`k1.tangentIn`) rather than the current segment's own tangent (`k0.tangentIn`). In Lottie both `to` and `ti` belong to the keyframe starting the segment, so a circular motion path (e.g. a shape orbiting on a bezier arc) collapsed toward linear interpolation.
 - OpenGL / WebGL: the main frame's rive flush went silently blank (draws degenerate, screen frozen on the last good frame) whenever a `GpuCanvas` committed mid-frame. `endOffscreen()`'s `unbindGLInternalResources()` wipes the shared GL texture units, but the main render context's internal textures (tessellation/gradient/feather/atlas) were only rebound at `begin()` — before `paint()` — so any offscreen 2D flush during paint left the main flush sampling incomplete textures (no GL error; GLES returns zeros). The GL backend now calls `invalidateGLState()` on the flushing context immediately before every `flush()` (main frame and offscreen), making each flush self-contained regardless of how many rive/ore contexts interleave on the one real GL context. Fixes `SpinningCubeDemo` on WASM/WebGL2 appearing frozen (with sporadic 5-15 s updates) and the page turning sluggish while the app still reported ~57 FPS.
+- `Graphics::drawTexture` / `drawImage` / transparency layers rendered nothing (transparent) whenever the rive frame ran in atomic interlock mode — always the case on the iOS simulator, and on any platform when raster ordering is disabled. The composite was implemented as a path draw with an image paint, which atomic-mode shaders cannot sample; `Graphics::renderTexture` now routes through `rive::Renderer::drawImage`, which falls back to a dedicated image-rect draw in atomic mode. Fixes invisible Lottie precomps/mattes, `GpuCanvas` composites, and the SpinningCube demo output on the iOS simulator.
+- OpenGL / WebGL: `GpuCanvas` textures drawn with `Graphics::drawTexture` (Lottie precomp caches and matte composites) rendered vertically flipped, because the GL canvas source texture is stored bottom-up. `GpuTexture::getOrAdoptGpuTexture()` now prefers the Y-flipped sampled mirror — kept fresh at each canvas flush — matching what `GpuRenderPass` already did for sampled inputs. No change on Metal/D3D, where the mirror is null.
+- SDL3 windowing: mouse move/drag was broken on touch platforms (iOS, Android). Motion was synthesized only by polling `SDL_GetGlobalMouseState`, which has no backend implementation there and falls back to window-relative coordinates, so subtracting the window position shifted every move. Touch platforms now consume the touch-synthesized `SDL_EVENT_MOUSE_MOTION` events directly; desktop keeps the global-cursor poll (needed for embedded plugin editors).
+- SDL3 windowing: mouse drag events were lost inside embedded plugin editors (notably on macOS, where the host owns the native application so SDL never receives Cocoa mouse focus and suppresses drag motion). Dragging is now synthesized by polling the global cursor while a button is held, on the message thread, for all platforms.
 - UBSAN and ASAN fixes throughout the codebase
 
 ---
@@ -199,12 +209,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComponentNative::getGraphicsContext()` virtual method allowing components to access the GPU context for offscreen operations ([#119](https://github.com/kunitoki/yup/pull/119))
 - `MouseListener` weak-referenceable interface for all mouse events; `Component::addMouseListener()` / `removeMouseListener()` ([#30](https://github.com/kunitoki/yup/pull/30))
 - Improved slider components (knob, linear, range) and button components ([#70](https://github.com/kunitoki/yup/pull/70))
-- Unified drag-and-drop support in `Component`: `isInterestedInDrag()` / `itemsDropped()` virtuals with a fluent `DragAndDropData` payload (files and text on SDL2, URIs reserved for future backends); drops dispatch to the topmost interested component and bubble up to parents
+- Unified drag-and-drop support in `Component`: `isInterestedInDrag()` / `itemsDropped()` virtuals with a fluent `DragAndDropData` payload (files and text on SDL, URIs reserved for future backends); drops dispatch to the topmost interested component and bubble up to parents
+- Added unit coverage for `SystemClipboard` data formats and `Component` drag-and-drop callbacks
 
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))
 - Improved fonts: better layouting, variable font axis manipulation, embedded fallback font ([#55](https://github.com/kunitoki/yup/pull/55))
-- Clipboard support ([#55](https://github.com/kunitoki/yup/pull/55))
+- Clipboard support: text, MIME-typed data with lazy callbacks, and primary selection ([#55](https://github.com/kunitoki/yup/pull/55))
 
 #### Audio GUI (`yup_audio_gui`)
 - New `yup_audio_gui` module ([#70](https://github.com/kunitoki/yup/pull/70))

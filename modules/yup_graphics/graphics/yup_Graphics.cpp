@@ -946,31 +946,28 @@ bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Recta
     if (targetArea.isEmpty())
         return false;
 
+    const auto textureWidth = static_cast<float> (texture->width());
+    const auto textureHeight = static_cast<float> (texture->height());
+    if (textureWidth <= 0.0f || textureHeight <= 0.0f)
+        return false;
+
     const auto& options = currentRenderOptions();
-    const auto blendMode = toBlendMode (options.blendMode);
 
-    static const auto unitRectPath = []
-    {
-        auto unitRectPath = rive::make_rcp<rive::RiveRenderPath>();
-        unitRectPath->line ({ 1, 0 });
-        unitRectPath->line ({ 1, 1 });
-        unitRectPath->line ({ 0, 1 });
-        unitRectPath->close();
-        return unitRectPath;
-    }();
+    // Draw through the renderer's image path instead of a path with an image
+    // paint: frames in atomic interlock mode (e.g. iOS simulator, or when
+    // raster ordering is disabled) do not support image paints on paths, and
+    // drawImage() falls back to a dedicated image-rect draw there.
+    auto renderImage = rive::make_rcp<rive::RiveRenderImage> (std::move (texture));
 
-    rive::RiveRenderPaint paint;
-    paint.image (std::move (texture), 1.0f);
-    paint.blendMode (blendMode);
-
-    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
+    // drawImage() maps the image to the rect [0, 0, width, height].
+    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth() / textureWidth,
+                                                          targetArea.getHeight() / textureHeight)
                                     .translated (targetArea.getX(), targetArea.getY())
                                     .followedBy (options.getTransform());
 
     renderer.save();
     renderer.transform (imageTransform.toMat2D());
-    renderer.modulateOpacity (options.opacity);
-    renderer.drawPath (unitRectPath.get(), std::addressof (paint));
+    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), toBlendMode (options.blendMode), options.opacity);
     renderer.restore();
 
     return true;

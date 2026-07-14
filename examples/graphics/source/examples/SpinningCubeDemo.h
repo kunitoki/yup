@@ -608,7 +608,7 @@ void main() {
 
     void initLottie()
     {
-#if YUP_ANDROID
+#if YUP_MOBILE
         yup::MemoryInputStream is (yup::LottieFile_data, yup::LottieFile_size, false);
         auto anim = yup::Animation::loadFromStream (is);
 #else

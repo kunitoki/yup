@@ -70,9 +70,9 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE "${target_app_namespace}"
             APPLICATION_VERSION "${target_version}")
 
-        _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
-        _yup_fetch_sdl2()
-        _yup_android_copy_sdl2_activity()
+        _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
+        _yup_fetch_sdl()
+        _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
 
         return()
     endif()
@@ -93,10 +93,10 @@ function (yup_standalone_app)
     list (REMOVE_DUPLICATES module_include_dirs)
 
     # ==== Find dependencies
-    if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
-        _yup_message (STATUS "${target_name} - Fetching SDL2 library")
-        _yup_fetch_sdl2()
-        list (APPEND additional_libraries sdl2::sdl2)
+    if (NOT "${target_console}")
+        _yup_message (STATUS "${target_name} - Fetching SDL library")
+        _yup_fetch_sdl()
+        list (APPEND additional_libraries sdl::sdl)
     endif()
 
     # ==== Enable profiling
@@ -237,6 +237,11 @@ function (yup_standalone_app)
             COMMAND ${CMAKE_COMMAND} -E copy
                 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
+
+    elseif (YUP_PLATFORM_ANDROID)
+       target_link_options (${target_name} PRIVATE
+            "-Wl,-z,max-page-size=16384"
+            "-Wl,-z,common-page-size=16384")
 
     elseif (YUP_PLATFORM_LINUX)
         set_target_properties (${target_name} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)

@@ -33,7 +33,10 @@ set (link_libraries "")
 if (ANDROID)
     include (../../cmake/yup.cmake)
     yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+endif()
 
+# ==== Embed data files on platforms without access to the source tree at runtime
+if (ANDROID OR YUP_PLATFORM_IOS)
     yup_add_embedded_binary_resources (
         "${target_name}_binary_data"
         OUT_DIR BinaryData

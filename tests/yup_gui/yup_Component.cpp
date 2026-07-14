@@ -189,6 +189,26 @@ public:
     {
         return comp.internalItemsDropped (data, windowPosition);
     }
+
+    static void triggerItemDragEnter (Component& comp,
+                                      const Point<float>& windowPosition,
+                                      const DragAndDropData& data)
+    {
+        comp.internalItemDragEnter (data, windowPosition);
+    }
+
+    static void triggerItemDragMove (Component& comp,
+                                     const Point<float>& windowPosition,
+                                     const DragAndDropData& data)
+    {
+        comp.internalItemDragMove (data, windowPosition);
+    }
+
+    static void triggerItemDragExit (Component& comp,
+                                     const DragAndDropData& data)
+    {
+        comp.internalItemDragExit (data);
+    }
 };
 
 } // namespace yup
@@ -1593,6 +1613,106 @@ TEST_F (ComponentMockTest, EnhancedVirtualMethodCallbacks)
     mockComponent->setBounds (10.0f, 20.0f, 500.0f, 600.0f);
 }
 
+TEST_F (ComponentMockTest, VisibilityChangedFiresOnlyWhenShowingChanges)
+{
+    // Default component is not visible
+    EXPECT_FALSE (mockComponent->isVisible());
+    EXPECT_FALSE (mockComponent->isShowing());
+
+    // Attach to a visible parent — setVisible fires visibilityChanged because parent is showing.
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    parent->setVisible (true);
+
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->addAndMakeVisible (*mockComponent);
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_TRUE (mockComponent->isShowing());
+
+    // Hide parent — visibilityChanged fires on the parent, and on every visible child
+    // whose showing state flips because the ancestor was hidden.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (false);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());  // Own flag untouched
+    EXPECT_FALSE (mockComponent->isShowing()); // Ancestor chain now hidden
+
+    // Show parent again — child must be told it is now really showing.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (true);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_TRUE (mockComponent->isShowing());
+}
+
+TEST_F (ComponentMockTest, AddAndMakeVisibleUnderHiddenParentDoesNotFireVisibilityChanged)
+{
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    // parent starts invisible (default).  Mock is invisible (default).
+
+    // addAndMakeVisible calls setVisible(true), but because the parent is not showing,
+    // visibilityChanged must NOT be called — the child is not actually showing yet.
+    // (NiceMock silently ignores the unexpected visibilityChanged call, so we expect none.)
+    parent->addAndMakeVisible (*mockComponent);
+
+    EXPECT_TRUE (mockComponent->isVisible());
+    EXPECT_FALSE (mockComponent->isShowing());
+
+    // Later, when the parent becomes visible, the child must receive visibilityChanged.
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*mockComponent, visibilityChanged());
+    parent->setVisible (true);
+}
+
+TEST_F (ComponentMockTest, VisibilityChangePropagatesThroughDeepHierarchy)
+{
+    auto grandparent = std::make_unique<ComponentMock> ("gp");
+    auto parent = std::make_unique<ComponentMock> ("parent");
+    auto child = std::make_unique<ComponentMock> ("child");
+
+    grandparent->setVisible (true);
+    EXPECT_CALL (*parent, visibilityChanged());
+    grandparent->addAndMakeVisible (*parent);
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+
+    EXPECT_CALL (*child, visibilityChanged());
+    parent->addAndMakeVisible (*child);
+    ::testing::Mock::VerifyAndClearExpectations (child.get());
+
+    EXPECT_TRUE (child->isShowing());
+
+    // Hiding grandparent should fire on grandparent, parent, and child
+    EXPECT_CALL (*grandparent, visibilityChanged());
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*child, visibilityChanged());
+    grandparent->setVisible (false);
+
+    EXPECT_FALSE (child->isShowing());
+
+    // An invisible child of the hidden parent is NOT affected — it was already hidden.
+    auto invisibleChild = std::make_unique<ComponentMock> ("inv");
+    parent->addChildComponent (*invisibleChild); // isVisible stays false
+
+    // Making the parent visible only fires on parent (not the invisible child).
+    ::testing::Mock::VerifyAndClearExpectations (parent.get());
+    ::testing::Mock::VerifyAndClearExpectations (invisibleChild.get());
+
+    EXPECT_CALL (*grandparent, visibilityChanged());
+    EXPECT_CALL (*parent, visibilityChanged());
+    EXPECT_CALL (*child, visibilityChanged());
+    grandparent->setVisible (true);
+
+    ::testing::Mock::VerifyAndClearExpectations (invisibleChild.get());
+    EXPECT_FALSE (invisibleChild->isShowing());
+}
+
 TEST_F (ComponentMockTest, BailOutCheckerClass)
 {
     // Test BailOutChecker functionality
@@ -1950,12 +2070,40 @@ public:
         return handlesDrop;
     }
 
+    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
+    {
+        ++dragEnterCount;
+        lastDragEnterPosition = position;
+        lastDragEnterData = data;
+    }
+
+    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
+    {
+        ++dragMoveCount;
+        lastDragMovePosition = position;
+        lastDragMoveData = data;
+    }
+
+    void itemDragExit (const DragAndDropData& data) override
+    {
+        ++dragExitCount;
+        lastDragExitData = data;
+    }
+
     bool interested = false;
     bool handlesDrop = false;
     int interestQueryCount = 0;
     int dropCount = 0;
+    int dragEnterCount = 0;
+    int dragMoveCount = 0;
+    int dragExitCount = 0;
     Point<float> lastDropPosition;
     DragAndDropData lastDropData;
+    Point<float> lastDragEnterPosition;
+    DragAndDropData lastDragEnterData;
+    Point<float> lastDragMovePosition;
+    DragAndDropData lastDragMoveData;
+    DragAndDropData lastDragExitData;
 };
 
 } // namespace
@@ -1985,6 +2133,17 @@ protected:
     std::unique_ptr<DragDropComponent> parent;
     std::unique_ptr<DragDropComponent> child;
 };
+
+TEST_F (ComponentTest, DefaultDragAndDropCallbacksDoNotHandlePayload)
+{
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    EXPECT_FALSE (child->isInterestedInDrag (data));
+    EXPECT_FALSE (child->itemsDropped ({ 10.0f, 20.0f }, data));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragEnter (data, { 10.0f, 20.0f }));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragMove (data, { 15.0f, 25.0f }));
+    EXPECT_NO_FATAL_FAILURE (child->itemDragExit (data));
+}
 
 TEST_F (ComponentDragDropTest, InterestedTopmostHandlesDrop)
 {
@@ -2139,4 +2298,160 @@ TEST_F (ComponentDragDropTest, MixedPayloadDelivered)
     ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDropData.hasFiles());
     EXPECT_TRUE (child->lastDropData.hasText());
+}
+
+// =============================================================================
+
+TEST_F (ComponentDragDropTest, DragEnterCalledWhenInterested)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 1);
+    EXPECT_EQ (child->dragMoveCount, 0);
+    EXPECT_EQ (child->dragExitCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterPositionIsLocalToComponent)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    // Window position (85,85) maps to child-local (10,10)
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getX(), 10.0f);
+    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getY(), 10.0f);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 1);
+    EXPECT_EQ (parent->dragEnterCount, 1);
+    EXPECT_EQ (root->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterNotCalledWhenNotInterested)
+{
+    child->interested = false;
+    parent->interested = false;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (parent->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragMoveCalledForSameComponent)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragMoveCount, 1);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (child->dragExitCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragMoveBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragMoveCount, 1);
+    EXPECT_EQ (parent->dragMoveCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DragExitCalledWhenInterested)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_EQ (child->dragExitCount, 1);
+    EXPECT_EQ (child->dragEnterCount, 0);
+    EXPECT_EQ (child->dragMoveCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragExitBubblesToParentIfInterested)
+{
+    child->interested = true;
+    parent->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_EQ (child->dragExitCount, 1);
+    EXPECT_EQ (parent->dragExitCount, 1);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterRespectsDisabledComponent)
+{
+    child->interested = true;
+    child->setEnabled (false);
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, DragEnterRespectsHiddenComponent)
+{
+    child->interested = true;
+    child->setVisible (false);
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_EQ (child->dragEnterCount, 0);
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragEnter)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ File ("/tmp/a.txt") });
+
+    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDragEnterData.hasText());
+    EXPECT_EQ (child->lastDragEnterData.getText(), String ("hello"));
+    EXPECT_TRUE (child->lastDragEnterData.hasFiles());
+    EXPECT_EQ (child->lastDragEnterData.getFiles().size(), 1);
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragMove)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withText ("hello");
+
+    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    EXPECT_TRUE (child->lastDragMoveData.hasText());
+    EXPECT_EQ (child->lastDragMoveData.getText(), String ("hello"));
+}
+
+TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragExit)
+{
+    child->interested = true;
+
+    DragAndDropData data = DragAndDropData().withFiles ({ File ("/tmp/a.txt") });
+
+    ComponentTestHelper::triggerItemDragExit (*child, data);
+    EXPECT_TRUE (child->lastDragExitData.hasFiles());
+    EXPECT_EQ (child->lastDragExitData.getFiles().size(), 1);
 }

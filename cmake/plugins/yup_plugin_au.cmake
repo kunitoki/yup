@@ -54,6 +54,11 @@ function (_yup_fetch_apple_ausdk)
 
         set_target_properties (base-sdk-auv2 PROPERTIES
             POSITION_INDEPENDENT_CODE ON
+            C_VISIBILITY_PRESET hidden
+            CXX_VISIBILITY_PRESET hidden
+            OBJC_VISIBILITY_PRESET hidden
+            OBJCXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
             FOLDER "Thirdparty")
     endif()
 endfunction()

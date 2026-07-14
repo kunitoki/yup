@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class SDL2ComponentNative final
+class SDLComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
@@ -37,14 +37,14 @@ class SDL2ComponentNative final
 
 public:
     //==============================================================================
-    using Ptr = ReferenceCountedObjectPtr<SDL2ComponentNative>;
+    using Ptr = ReferenceCountedObjectPtr<SDLComponentNative>;
 
     //==============================================================================
-    SDL2ComponentNative (Component& component,
-                         const Options& options,
-                         void* parent);
+    SDLComponentNative (Component& component,
+                        const Options& options,
+                        void* parent);
 
-    ~SDL2ComponentNative() override;
+    ~SDLComponentNative() override;
 
     //==============================================================================
     void setTitle (const String& title) override;
@@ -133,6 +133,7 @@ public:
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);
     void handleItemsDropped (const Point<float>& position, const DragAndDropData& data);
+    void handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
@@ -149,7 +150,7 @@ public:
 
     //==============================================================================
     void handleEvent (SDL_Event* event);
-    static int eventDispatcher (void* userdata, SDL_Event* event);
+    static bool eventDispatcher (void* userdata, SDL_Event* event);
 
     //==============================================================================
     static std::atomic_flag isInitialised;
@@ -200,6 +201,7 @@ private:
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
+    WeakReference<Component> lastComponentUnderDrag;
     WeakReference<Component> currentTextInputComponent;
 
     HashMap<int, char> keyState;
