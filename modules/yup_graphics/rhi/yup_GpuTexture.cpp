@@ -53,6 +53,9 @@ GpuTexture::Ptr GpuTexture::fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas>
 
 rive::rcp<rive::gpu::Texture> GpuTexture::getOrAdoptGpuTexture() const
 {
+    if (sampledTexture != nullptr)
+        return sampledTexture;
+
     if (gpuTexture != nullptr)
         return gpuTexture;
 
