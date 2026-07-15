@@ -224,6 +224,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    float lastWindowUnitsPerPoint = 1.0f;
     bool internalBoundsChange = false;
     bool firstDisplay = true;
 

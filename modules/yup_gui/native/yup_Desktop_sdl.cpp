@@ -45,11 +45,19 @@ void Desktop::updateScreens()
         SDL_Rect usableBounds = bounds;
         SDL_GetDisplayUsableBounds (displayID, &usableBounds);
 
+        // Display geometry is reported in native units, convert it to logical points
+        // so it lives in the same coordinate space as the component bounds
+        const float unitsPerPoint = getDisplayUnitsPerPoint (displayID);
+
         auto screen = std::make_unique<Screen>();
         screen->name = String::fromUTF8 (SDL_GetDisplayName (displayID));
         screen->isPrimary = (displayID == primaryDisplay);
-        screen->virtualPosition = Point<int> (bounds.x, bounds.y);
-        screen->workArea = Rectangle<int> (usableBounds.x, usableBounds.y, usableBounds.w, usableBounds.h);
+        screen->virtualPosition = Point<int> (roundToInt (bounds.x / unitsPerPoint),
+                                              roundToInt (bounds.y / unitsPerPoint));
+        screen->workArea = Rectangle<int> (roundToInt (usableBounds.x / unitsPerPoint),
+                                           roundToInt (usableBounds.y / unitsPerPoint),
+                                           roundToInt (usableBounds.w / unitsPerPoint),
+                                           roundToInt (usableBounds.h / unitsPerPoint));
 
         const float contentScale = SDL_GetDisplayContentScale (displayID);
         screen->contentScaleX = contentScale > 0.0f ? contentScale : 1.0f;
@@ -107,12 +115,16 @@ Point<float> Desktop::getCurrentMouseLocation() const
 
     SDL_GetGlobalMouseState (&x, &y);
 
-    return { x, y };
+    const SDL_Point point { static_cast<int> (x), static_cast<int> (y) };
+    return Point<float> (x, y) / getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&point));
 }
 
 void Desktop::setCurrentMouseLocation (const Point<float>& location)
 {
-    SDL_WarpMouseGlobal (location.getX(), location.getY());
+    // Mixed dpi setups are approximated by the primary display scale here
+    const auto scale = getDisplayUnitsPerPoint (SDL_GetPrimaryDisplay());
+
+    SDL_WarpMouseGlobal (location.getX() * scale, location.getY() * scale);
 }
 
 } // namespace yup
