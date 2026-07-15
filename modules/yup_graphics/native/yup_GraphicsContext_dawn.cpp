@@ -193,18 +193,13 @@ public:
 
     Api getApi() const noexcept override { return Api::WebGPU; }
 
-    float dpiScale (void* window) const override
-    {
-        return GetDawnWindowBackingScaleFactor (window, m_options.retinaDisplay);
-    }
-
     Factory* factory() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderContext* renderContext() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         DawnProcTable backendProcs = dawn::native::GetProcs();
 

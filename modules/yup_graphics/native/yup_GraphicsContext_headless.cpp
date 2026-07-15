@@ -192,11 +192,6 @@ public:
 
     Api getApi() const noexcept override { return Api::Headless; }
 
-    float dpiScale (void*) const override
-    {
-        return 1.0f;
-    }
-
     rive::Factory* factory() override
     {
         return std::addressof (noOpFactory);
@@ -217,7 +212,7 @@ public:
         return std::make_unique<NoOpRenderer>();
     }
 
-    void onSizeChanged (void*, int, int, uint32_t) override
+    void onSizeChanged (void*, int, int, float, uint32_t) override
     {
     }
 

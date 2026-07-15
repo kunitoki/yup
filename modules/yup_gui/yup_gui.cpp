@@ -161,6 +161,9 @@
 #include "windowing/yup_DocumentWindow.cpp"
 #include "dialogs/yup_FileChooser.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
+
+//==============================================================================
+
 #include "themes/theme_v1/yup_ThemeVersion1.cpp"
 #include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
 
@@ -169,3 +172,5 @@
 #include "native/yup_WindowingUtilities_sdl.cpp"
 #include "native/yup_Windowing_sdl.h"
 #include "native/yup_Windowing_sdl.cpp"
+#include "native/yup_Desktop_sdl.cpp"
+#include "native/yup_Initialisation_sdl.cpp"

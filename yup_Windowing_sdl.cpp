@@ -24,6 +24,17 @@ namespace yup
 
 //==============================================================================
 
+static constexpr uint32 sdlDefaultSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+
+static String getSDLVersionString (int version)
+{
+    return String (SDL_VERSIONNUM_MAJOR (version)) + "."
+         + String (SDL_VERSIONNUM_MINOR (version)) + "."
+         + String (SDL_VERSIONNUM_MICRO (version));
+}
+
+//==============================================================================
+
 std::atomic_flag SDLComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 int SDLComponentNative::mouseCaptureRequestCount = 0;
 uint32_t SDLComponentNative::lastCapturedMouseButtonState = 0;
@@ -461,11 +472,11 @@ void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
 
     if (shouldBeFullScreen)
     {
-        lastScreenBounds = screenBounds;
-
 #if YUP_EMSCRIPTEN
         emscripten_request_fullscreen ("#canvas", false);
 #else
+        lastScreenBounds = screenBounds;
+
         SDL_SetWindowFullscreen (window, true); // SDL_SetWindowFullscreenMode
 #endif
     }
@@ -1568,7 +1579,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleContentScaleChanged();
+            handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_MOVED:
@@ -2064,6 +2075,370 @@ ComponentNative::Ptr ComponentNative::createFor (Component& component,
                                                  void* parent)
 {
     return ComponentNative::Ptr (ReferenceCountedObjectAdopt, new SDLComponentNative (component, options, parent));
+}
+
+//==============================================================================
+
+namespace
+{
+
+bool displayEventDispatcher (void* userdata, SDL_Event* event)
+{
+    auto desktop = static_cast<Desktop*> (userdata);
+
+    if (event->type >= SDL_EVENT_DISPLAY_FIRST && event->type <= SDL_EVENT_DISPLAY_LAST)
+    {
+        switch (event->type)
+        {
+            case SDL_EVENT_DISPLAY_ADDED:
+                desktop->handleScreenConnected (static_cast<int> (event->display.displayID));
+                break;
+
+            case SDL_EVENT_DISPLAY_REMOVED:
+                desktop->handleScreenDisconnected (static_cast<int> (event->display.displayID));
+                break;
+
+            case SDL_EVENT_DISPLAY_ORIENTATION:
+                desktop->handleScreenOrientationChanged (static_cast<int> (event->display.displayID));
+                break;
+
+#if ! YUP_EMSCRIPTEN
+            case SDL_EVENT_DISPLAY_MOVED:
+                desktop->handleScreenMoved (static_cast<int> (event->display.displayID));
+                break;
+#endif
+
+            default:
+                break;
+        }
+
+        return true;
+    }
+
+    switch (event->type)
+    {
+        case SDL_EVENT_MOUSE_MOTION:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                static_cast<MouseEvent::Buttons> (event->motion.state),
+                keyModifiers,
+                cursorPosition);
+
+            // Call drag handler if any mouse buttons are pressed, otherwise call move handler
+            if (event->motion.state != 0)
+                desktop->handleGlobalMouseDrag (mouseEvent);
+            else
+                desktop->handleGlobalMouseMove (mouseEvent);
+
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseDown (mouseEvent);
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseUp (mouseEvent);
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_WHEEL:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+            auto mouseWheelData = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
+
+            MouseEvent mouseEvent (
+                MouseEvent::noButtons,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseWheel (mouseEvent, mouseWheelData);
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    return true;
+}
+
+} // namespace
+
+//==============================================================================
+
+void Desktop::updateScreens()
+{
+    int numScreens = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays (&numScreens);
+    if (displays == nullptr)
+        return;
+
+    screens.clear();
+    const SDL_DisplayID primaryDisplay = SDL_GetPrimaryDisplay();
+
+    for (int i = 0; i < numScreens; ++i)
+    {
+        const SDL_DisplayID displayID = displays[i];
+
+        SDL_Rect bounds;
+        if (! SDL_GetDisplayBounds (displayID, &bounds))
+            continue;
+
+        SDL_Rect usableBounds = bounds;
+        SDL_GetDisplayUsableBounds (displayID, &usableBounds);
+
+        auto screen = std::make_unique<Screen>();
+        screen->name = String::fromUTF8 (SDL_GetDisplayName (displayID));
+        screen->isPrimary = (displayID == primaryDisplay);
+        screen->virtualPosition = Point<int> (bounds.x, bounds.y);
+        screen->workArea = Rectangle<int> (usableBounds.x, usableBounds.y, usableBounds.w, usableBounds.h);
+
+        const float contentScale = SDL_GetDisplayContentScale (displayID);
+        screen->contentScaleX = contentScale > 0.0f ? contentScale : 1.0f;
+        screen->contentScaleY = screen->contentScaleX;
+
+        screens.add (screen.release());
+    }
+
+    SDL_free (displays);
+}
+
+void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_DEFAULT) },
+            { MouseCursor::Text, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_TEXT) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_PROGRESS) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_POINTER) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NOT_ALLOWED) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_EW_RESIZE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NS_RESIZE) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NWSE_RESIZE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NESW_RESIZE) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_MOVE) }
+        };
+    }();
+
+    currentMouseCursor = cursorToSet;
+
+    if (cursorToSet.getType() == MouseCursor::None)
+    {
+        SDL_HideCursor();
+    }
+    else
+    {
+        auto it = cursors.find (cursorToSet.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor();
+    }
+}
+
+Point<float> Desktop::getCurrentMouseLocation() const
+{
+    float x = 0.0f, y = 0.0f;
+
+    SDL_GetGlobalMouseState (&x, &y);
+
+    return { x, y };
+}
+
+void Desktop::setCurrentMouseLocation (const Point<float>& location)
+{
+    SDL_WarpMouseGlobal (location.getX(), location.getY());
+}
+
+//==============================================================================
+
+YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: initialising windowing");
+
+    const int compiledVersion = SDL_VERSION;
+    const int linkedVersion = SDL_GetVersion();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: compiled version=" << getSDLVersionString (compiledVersion) << ", linked version=" << getSDLVersionString (linkedVersion));
+
+    // Do not install signal handlers
+    SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: disabled SDL signal handlers");
+
+    // Initialise SDL
+    SDL_SetMainReady();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: main marked ready");
+
+    const auto alreadyInitialised = SDL_WasInit (sdlDefaultSubsystems);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: requested subsystems=" << String::toHexString (static_cast<int> (sdlDefaultSubsystems)) << ", already initialised=" << String::toHexString (static_cast<int> (alreadyInitialised)));
+
+    if ((alreadyInitialised & sdlDefaultSubsystems) != sdlDefaultSubsystems)
+    {
+        if (! SDL_InitSubSystem (sdlDefaultSubsystems))
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: error initialising SDL: " << SDL_GetError());
+
+            jassertfalse;
+            YUPApplicationBase::quit();
+
+            return;
+        }
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems initialised");
+    }
+    else
+    {
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems were already initialised");
+    }
+
+    // Update available displays
+    Desktop::getInstance()->updateScreens();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: updated screens");
+
+    SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered display event watch");
+
+    // Set the default theme now in all platforms except ios
+#if ! YUP_IOS
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
+#endif
+
+    // Inject the event loop
+    MessageManager::getInstance()->registerEventLoopCallback ([]
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+
+        constexpr double timeoutInterval = 1.0 / 60.0; // TODO
+        auto timeoutDetector = TimeoutDetector (timeoutInterval);
+
+        SDL_Event event;
+        while (SDL_PollEvent (&event))
+        {
+            if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                return;
+
+            if (timeoutDetector.hasTimedOut())
+                break;
+        }
+
+#if ! YUP_WASM
+        if (! timeoutDetector.hasTimedOut())
+            Thread::sleep (1);
+#endif
+    });
+
+    // Set the default theme on ios
+#if YUP_IOS
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
+    }
+#endif
+
+    SDLComponentNative::isInitialised.test_and_set();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: windowing initialised");
+}
+
+YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: shutting down windowing");
+
+    SDLComponentNative::isInitialised.clear();
+
+    // Shutdown desktop
+    if (auto desktop = Desktop::getInstanceWithoutCreating())
+    {
+        SDL_RemoveEventWatch (displayEventDispatcher, desktop);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered display event watch");
+
+        desktop->deleteInstance();
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: deleted desktop instance");
+    }
+
+    auto messageManager = MessageManager::getInstanceWithoutCreating();
+
+    // Unregister theme
+    if (messageManager == nullptr)
+    {
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
+    else
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered default theme");
+
+    // Unregister event loop
+    if (messageManager != nullptr)
+    {
+        messageManager->registerEventLoopCallback (nullptr);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered event loop callback");
+    }
+
+    // Quit only the subsystems YUP initialised.
+    SDL_QuitSubSystem (sdlDefaultSubsystems);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems quit");
+
+#if YUP_STANDALONE_APPLICATION
+    std::atexit (&SDL_Quit);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
+#endif
+}
+
+//==============================================================================
+std::atomic_int ScopedYupInitialiser_Windowing::numScopedInitInstances = 0;
+
+ScopedYupInitialiser_Windowing::ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (1) == 0)
+        initialiseYup_Windowing();
+}
+
+ScopedYupInitialiser_Windowing::~ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (-1) == 1)
+        shutdownYup_Windowing();
 }
 
 } // namespace yup
