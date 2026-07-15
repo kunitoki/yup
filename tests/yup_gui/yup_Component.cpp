@@ -69,6 +69,8 @@ public:
 
     void setBounds (const Rectangle<int>&) override {}
 
+    Rectangle<int> getSafeAreaBounds() const override { return {}; }
+
     void setFullScreen (bool) override {}
 
     bool isFullScreen() const override { return false; }
@@ -208,6 +210,11 @@ public:
                                      const DragAndDropData& data)
     {
         comp.internalItemDragExit (data);
+    }
+
+    static void triggerSafeAreaChanged (Component& comp)
+    {
+        comp.internalSafeAreaChanged();
     }
 };
 
@@ -615,6 +622,21 @@ TEST_F (ComponentTest, BoundsMethods)
     EXPECT_FLOAT_EQ (bounds.getY(), 80.0f);
     EXPECT_FLOAT_EQ (bounds.getWidth(), 200.0f);
     EXPECT_FLOAT_EQ (bounds.getHeight(), 140.0f);
+}
+
+TEST_F (ComponentTest, SafeAreaBoundsWithoutParentMatchesLocalBounds)
+{
+    EXPECT_EQ (root->getSafeAreaBounds(), root->getLocalBounds());
+}
+
+TEST_F (ComponentTest, SafeAreaBoundsOfNestedChildIsClippedToLocalBounds)
+{
+    // parent is fully inside root, so its safe area matches its local bounds
+    EXPECT_EQ (parent->getSafeAreaBounds(), parent->getLocalBounds());
+
+    // move child so it extends past the parent's bottom-right corner
+    child->setBounds (150.0f, 100.0f, 100.0f, 75.0f);
+    EXPECT_EQ (child->getSafeAreaBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f));
 }
 
 TEST_F (ComponentTest, CornerAndCenterMethods)
@@ -1965,6 +1987,16 @@ TEST_F (ComponentMockTest, MetricMethods)
     Identifier nonExistentId ("nonExistentMetric");
     auto notFoundMetric = mockComponent->findMetric (nonExistentId);
     EXPECT_FALSE (notFoundMetric.has_value());
+}
+
+TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
+{
+    auto child = std::make_unique<ComponentMock> ("child");
+    mockComponent->addChildComponent (*child);
+
+    EXPECT_CALL (*mockComponent, safeAreaChanged());
+    EXPECT_CALL (*child, safeAreaChanged());
+    ComponentTestHelper::triggerSafeAreaChanged (*mockComponent);
 }
 
 TEST_F (ComponentMockTest, MetricParentFallback)

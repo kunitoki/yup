@@ -399,6 +399,28 @@ public:
      */
     Rectangle<float> getScreenBounds() const;
 
+    /**
+        Get the area of the component that is safe for interactive content.
+
+        On mobile devices the window may extend under display cutouts (notch), the
+        status bar or rounded corners: this returns the portion of the component that
+        is guaranteed to be fully visible and touchable. On desktop platforms this
+        usually matches the local bounds.
+
+        @return The safe area bounds, in local component coordinates.
+     */
+    Rectangle<float> getSafeAreaBounds() const;
+
+    /**
+        Called when the safe area of the component changes.
+
+        This can happen on mobile devices when the device is rotated, or when system
+        bars are shown or hidden.
+
+        @see getSafeAreaBounds
+     */
+    virtual void safeAreaChanged();
+
     //==============================================================================
 
     /**
@@ -1365,6 +1387,7 @@ private:
     void internalFocusChanged (bool gotFocus);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
+    void internalSafeAreaChanged();
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
     void internalVisibilityChanged();

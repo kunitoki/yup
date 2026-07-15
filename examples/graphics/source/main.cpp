@@ -217,7 +217,7 @@ public:
         constexpr auto listBoxWidth = 200;
         constexpr auto listBoxHeight = 40;
 
-        auto bounds = getLocalBounds().reduced (margin);
+        auto bounds = getSafeAreaBounds().reduced (margin);
         auto width = bounds.getWidth();
         auto height = bounds.getHeight();
 
@@ -366,9 +366,7 @@ struct Application : yup::YUPApplication
 
             window = std::make_unique<CustomWindow>();
 
-#if YUP_IOS
-            window->centreWithSize ({ 320, 480 });
-#elif YUP_ANDROID
+#if YUP_MOBILE
             window->centreWithSize ({ 720, 1280 });
 #else
             window->centreWithSize ({ 1024, 768 });

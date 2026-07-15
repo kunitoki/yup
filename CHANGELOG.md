@@ -213,6 +213,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Improved slider components (knob, linear, range) and button components ([#70](https://github.com/kunitoki/yup/pull/70))
 - Unified drag-and-drop support in `Component`: `isInterestedInDrag()` / `itemsDropped()` virtuals with a fluent `DragAndDropData` payload (files and text on SDL, URIs reserved for future backends); drops dispatch to the topmost interested component and bubble up to parents
 - Added unit coverage for `SystemClipboard` data formats and `Component` drag-and-drop callbacks
+- Safe area support: `Component::getSafeAreaBounds()` and `safeAreaChanged()` virtual (backed by `ComponentNative::getSafeAreaBounds()`), so content can avoid display cutouts and system bars on mobile devices
 
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))

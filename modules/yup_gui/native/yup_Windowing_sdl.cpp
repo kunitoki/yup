@@ -450,6 +450,16 @@ Rectangle<int> SDLComponentNative::getBounds() const
 
 //==============================================================================
 
+Rectangle<int> SDLComponentNative::getSafeAreaBounds() const
+{
+    if (SDL_Rect safeArea; window != nullptr && SDL_GetWindowSafeArea (window, &safeArea))
+        return { safeArea.x, safeArea.y, safeArea.w, safeArea.h };
+
+    return { 0, 0, getSize() };
+}
+
+//==============================================================================
+
 void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
 {
     if (window == nullptr)
@@ -843,7 +853,7 @@ void SDLComponentNative::renderContext()
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
-        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
+        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 
@@ -1470,6 +1480,17 @@ void SDLComponentNative::handleDisplayChanged()
     component.internalDisplayChanged();
 }
 
+void SDLComponentNative::handleSafeAreaChanged()
+{
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << getSafeAreaBounds().toString());
+
+    component.internalSafeAreaChanged();
+
+    repaint();
+}
+
 void SDLComponentNative::handleUserTriedToCloseWindow()
 {
     YUP_PROFILE_INTERNAL_TRACE();
@@ -1626,6 +1647,11 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
             handleContentScaleChanged();
+            break;
+
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
+            handleSafeAreaChanged();
             break;
 
         default:

@@ -1661,6 +1661,26 @@ void Component::internalContentScaleChanged (float dpiScale)
 
 //==============================================================================
 
+void Component::internalSafeAreaChanged()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    safeAreaChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalSafeAreaChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
 void Component::internalUserTriedToCloseWindow()
 {
     userTriedToCloseWindow();
@@ -1746,6 +1766,23 @@ Rectangle<float> Component::getScreenBounds() const
 {
     return localToScreen (getLocalBounds());
 }
+
+//==============================================================================
+
+Rectangle<float> Component::getSafeAreaBounds() const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getSafeAreaBounds().to<float>();
+
+    if (parentComponent == nullptr)
+        return getLocalBounds();
+
+    return parentComponent->getSafeAreaBounds()
+        .translated (-getPosition())
+        .intersection (getLocalBounds());
+}
+
+void Component::safeAreaChanged() {}
 
 //==============================================================================
 

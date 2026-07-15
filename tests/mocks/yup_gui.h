@@ -103,5 +103,6 @@ public:
 
     // Display / transform
     MOCK_METHOD (void, contentScaleChanged, (float), (override));
+    MOCK_METHOD (void, safeAreaChanged, (), (override));
     MOCK_METHOD (void, transformChanged, (), (override));
 };
