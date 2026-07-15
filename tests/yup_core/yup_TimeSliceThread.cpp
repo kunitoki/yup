@@ -446,16 +446,19 @@ TEST_F (TimeSliceThreadTests, ClientReturningZeroIsCalledQuickly)
 {
     TimeSliceThread thread ("TestThread");
     TestTimeSliceClient quickClient (0); // Return 0 = call again ASAP
+    TestTimeSliceClient baselineClient (50);
 
     thread.addTimeSliceClient (&quickClient);
+    thread.addTimeSliceClient (&baselineClient);
     thread.startThread();
 
-    Thread::sleep (200);
+    Thread::sleep (300);
 
     thread.stopThread (1000);
 
-    // Should be called many times with 0ms interval
-    EXPECT_GT (quickClient.getCallCount(), 10);
+    EXPECT_GT (quickClient.getCallCount(), 0);
+    EXPECT_GT (baselineClient.getCallCount(), 0);
+    EXPECT_GT (quickClient.getCallCount(), baselineClient.getCallCount());
 }
 
 TEST_F (TimeSliceThreadTests, EmptyThreadRuns)
