@@ -1500,17 +1500,29 @@ void SDLComponentNative::handleExposed()
 
 void SDLComponentNative::handleContentScaleChanged()
 {
+    if (internalBoundsChange)
+        return;
+
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleContentScaleChanged dpiScale=" << getScaleDpi());
 
-    // When the window units per point ratio changes (Windows/X11 dpi change), resize
-    // the native window so the component keeps its logical size. This is a no-op on
-    // platforms where SDL window coordinates are already logical points.
-    if (const auto scale = getWindowUnitsPerPoint (window); scale != lastWindowUnitsPerPoint)
+    if (parentWindow == nullptr && getWindowUnitsPerPoint (window) != lastWindowUnitsPerPoint)
     {
-        lastWindowUnitsPerPoint = scale;
-        setSize (screenBounds.getSize());
+        MessageManager::callAsync ([self = Ptr (this)]
+        {
+            if (self->window == nullptr)
+                return;
+
+            const auto scale = getWindowUnitsPerPoint (self->window);
+            if (scale == self->lastWindowUnitsPerPoint)
+                return;
+
+            self->lastWindowUnitsPerPoint = scale;
+
+            auto preventBoundsChange = ScopedValueSetter<bool> (self->internalBoundsChange, true);
+            self->setSize (self->screenBounds.getSize());
+        });
     }
 
     component.internalContentScaleChanged (getScaleDpi());

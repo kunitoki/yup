@@ -230,20 +230,12 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
     application itself. These helpers return how many native window units make up one
     YUP logical point: 1.0 whenever SDL already works in points, the display scale
     otherwise.
+
+    The ratio is derived from the display content scale only: mixing the cached window
+    display scale with the live pixel density reports transient mismatched values while
+    a window is moving between screens of different scale, from inside native window
+    notifications.
 */
-
-float getWindowUnitsPerPoint (SDL_Window* window) noexcept
-{
-    if (window == nullptr)
-        return 1.0f;
-
-    const auto displayScale = SDL_GetWindowDisplayScale (window);
-    const auto pixelDensity = SDL_GetWindowPixelDensity (window);
-    if (displayScale <= 0.0f || pixelDensity <= 0.0f)
-        return 1.0f;
-
-    return displayScale / pixelDensity;
-}
 
 float getDisplayUnitsPerPoint (SDL_DisplayID displayID) noexcept
 {
@@ -254,6 +246,14 @@ float getDisplayUnitsPerPoint (SDL_DisplayID displayID) noexcept
 
     const auto contentScale = SDL_GetDisplayContentScale (displayID);
     return contentScale > 0.0f ? contentScale : 1.0f;
+}
+
+float getWindowUnitsPerPoint (SDL_Window* window) noexcept
+{
+    if (window == nullptr)
+        return 1.0f;
+
+    return getDisplayUnitsPerPoint (SDL_GetDisplayForWindow (window));
 }
 
 //==============================================================================
