@@ -1461,7 +1461,8 @@ void SDLComponentNative::handleContentScaleChanged()
 
     component.internalContentScaleChanged (getScaleDpi());
 
-    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
+    const auto currentSize = getSize();
+    handleResized (currentSize.getWidth(), currentSize.getHeight());
 }
 
 void SDLComponentNative::handleDisplayChanged()
@@ -1560,8 +1561,19 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             component.internalUserTriedToCloseWindow();
             break;
 
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
+            handleContentScaleChanged();
+            break;
+
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
+            handleSafeAreaChanged();
+            break;
+
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
+            //handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1623,7 +1635,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_EVENT_WINDOW_EXPOSED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_EXPOSED");
+            // YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_EXPOSED");
             repaint();
             break;
 
@@ -1635,16 +1647,6 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_FOCUS_LOST");
             handleFocusChanged (false);
-            break;
-
-        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
-            handleContentScaleChanged();
-            break;
-
-        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
-            handleSafeAreaChanged();
             break;
 
         default:

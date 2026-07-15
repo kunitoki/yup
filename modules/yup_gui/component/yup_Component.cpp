@@ -1624,18 +1624,28 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
+    const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    sendResized();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendResized();
+    }
 }
 
 //==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
+    const auto newBounds = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    sendMoved();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendMoved();
+    }
 }
 
 //==============================================================================
@@ -1656,7 +1666,12 @@ void Component::internalDisplayChanged() {}
 
 void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged (dpiScale);
+    if (contentScale != dpiScale)
+    {
+        contentScale = dpiScale;
+
+        contentScaleChanged (dpiScale);
+    }
 }
 
 //==============================================================================

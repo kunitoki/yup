@@ -1423,6 +1423,7 @@ private:
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    float contentScale = 1.0f;
     uint8 opacity = 255;
 
     struct Options
