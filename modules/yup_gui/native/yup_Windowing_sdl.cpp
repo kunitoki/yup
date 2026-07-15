@@ -646,7 +646,11 @@ const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
 
 float SDLComponentNative::getScaleDpi() const
 {
-    return context != nullptr ? context->dpiScale (getNativeHandle()) : 1.0f;
+    if (window == nullptr || (windowFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY) == 0)
+        return 1.0f;
+
+    const auto scale = SDL_GetWindowDisplayScale (window);
+    return scale > 0.0f ? scale : 1.0f;
 }
 
 float SDLComponentNative::getCurrentFrameRate() const
@@ -1548,11 +1552,12 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
+            handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleResized (windowEvent.data1, windowEvent.data2);
+            repaint();
             break;
 
         case SDL_EVENT_WINDOW_MOVED:
@@ -2176,6 +2181,7 @@ void Desktop::updateScreens()
         return;
 
     const SDL_DisplayID primaryDisplay = SDL_GetPrimaryDisplay();
+    screens.clear();
 
     for (int i = 0; i < numScreens; ++i)
     {
