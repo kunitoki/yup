@@ -86,15 +86,6 @@ public:
     virtual Api getApi() const noexcept = 0;
 
     //==============================================================================
-    /** Returns the DPI scale associated with a native handle.
-
-        @param nativeHandle A platform-specific handle to the native window or screen.
-
-        @return The DPI scale factor.
-    */
-    virtual float dpiScale (void* nativeHandle) const = 0;
-
-    //==============================================================================
     /** Provides access to the associated factory for resource creation.
 
         @return Pointer to a rive::Factory object.
@@ -144,9 +135,10 @@ public:
         @param nativeHandle A platform-specific handle to the native window or screen.
         @param width The new width of the surface.
         @param height The new height of the surface.
+        @param dpiScale The scale factor for high-DPI displays.
         @param sampleCount The number of samples per pixel, for anti-aliasing.
     */
-    virtual void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) = 0;
+    virtual void onSizeChanged (void* nativeHandle, int width, int height, float dpiScale, uint32_t sampleCount) = 0;
 
     //==============================================================================
     /** Begins a rendering frame.

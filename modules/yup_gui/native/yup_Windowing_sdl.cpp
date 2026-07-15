@@ -847,7 +847,7 @@ void SDLComponentNative::renderContext()
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
-        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
+        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getDpiScale(), 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 

@@ -143,17 +143,6 @@ public:
 #endif
     }
 
-    float dpiScale (void*) const override
-    {
-#if RIVE_DESKTOP_GL && __APPLE__
-        return 2;
-#elif RIVE_WEBGL && YUP_EMSCRIPTEN
-        return (float) emscripten_get_device_pixel_ratio();
-#else
-        return 1;
-#endif
-    }
-
     rive::Factory* factory() override
     {
         return m_renderContext.get();
@@ -174,7 +163,7 @@ public:
         return m_oreContext.get();
     }
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         m_width = width;
         m_height = height;

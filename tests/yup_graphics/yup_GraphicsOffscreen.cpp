@@ -72,9 +72,9 @@ public:
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return realContext->makeRenderer (width, height); }
 
-    void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* nativeHandle, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
-        realContext->onSizeChanged (nativeHandle, width, height, sampleCount);
+        realContext->onSizeChanged (nativeHandle, width, height, dpiScale, sampleCount);
     }
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { realContext->begin (frameDesc); }

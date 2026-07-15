@@ -55,7 +55,7 @@ public:
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return real->makeRenderer (width, height); }
 
-    void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) override { real->onSizeChanged (nativeHandle, width, height, sampleCount); }
+    void onSizeChanged (void* nativeHandle, int width, int height, float dpiScale, uint32_t sampleCount) override { real->onSizeChanged (nativeHandle, width, height, dpiScale, sampleCount); }
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& desc) override { real->begin (desc); }
 

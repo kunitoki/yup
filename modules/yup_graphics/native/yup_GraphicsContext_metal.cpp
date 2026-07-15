@@ -143,18 +143,6 @@ public:
 
     Api getApi() const noexcept override { return Api::Metal; }
 
-    float dpiScale (void* window) const override
-    {
-#if YUP_IOS
-        UIWindow* uiWindow = (__bridge UIWindow*) window;
-        UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
-        return screen.nativeScale;
-#else
-        NSWindow* nsWindow = (__bridge NSWindow*) window;
-        return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
-#endif
-    }
-
     //==============================================================================
 
     rive::Factory* factory() override { return m_renderContext.get(); }
@@ -167,7 +155,7 @@ public:
 
     //==============================================================================
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
 #if YUP_MAC
         NSWindow* nsWindow = (__bridge NSWindow*) window;
@@ -198,7 +186,7 @@ public:
 #endif
         }
 
-        m_swapchain.contentsScale = dpiScale (window);
+        m_swapchain.contentsScale = dpiScale;
         m_swapchain.drawableSize = CGSizeMake (width, height);
 
         auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
