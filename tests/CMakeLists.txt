@@ -128,6 +128,9 @@ yup_standalone_app (
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ${target_console}
+    INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
+    MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
+    STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
     DEFINITIONS
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
