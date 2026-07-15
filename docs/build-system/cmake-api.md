@@ -305,6 +305,7 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `INITIAL_MEMORY` | integer | `65536000` | Initial WASM heap size in bytes (`-sINITIAL_MEMORY`). |
+| `MAXIMUM_MEMORY` | integer | *(unset)* | Maximum WASM heap size in bytes (`-sMAXIMUM_MEMORY`). Only applied when set; use with `ALLOW_MEMORY_GROWTH` to cap unbounded growth. |
 | `PTHREAD_POOL_SIZE` | integer | `8` | Size of the pthread pool (`-sPTHREAD_POOL_SIZE`). |
 | `STACK_SIZE` | integer | `2097152` | Stack size in bytes (`-sSTACK_SIZE`). |
 | `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
