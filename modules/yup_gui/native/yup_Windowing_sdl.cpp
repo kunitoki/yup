@@ -645,13 +645,11 @@ const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
 
 float SDLComponentNative::getScaleDpi() const
 {
-    if (window != nullptr)
-    {
-        const auto dpiScale = SDL_GetWindowDisplayScale (window);
-        return dpiScale > 0.0 ? static_cast<float> (dpiScale) : 1.0f;
-    }
+    if (window == nullptr || (windowFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY) == 0)
+        return 1.0f;
 
-    return 1.0f;
+    const auto scale = SDL_GetWindowDisplayScale (window);
+    return scale > 0.0f ? scale : 1.0f;
 }
 
 float SDLComponentNative::getCurrentFrameRate() const
