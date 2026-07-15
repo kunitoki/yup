@@ -2201,6 +2201,7 @@ void Desktop::updateScreens()
     if (displays == nullptr)
         return;
 
+    screens.clear();
     const SDL_DisplayID primaryDisplay = SDL_GetPrimaryDisplay();
 
     for (int i = 0; i < numScreens; ++i)
