@@ -201,11 +201,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created YUP GraphicsContext");
 
     // Resize after callbacks are in place
-    setBounds (
-        { screenBounds.getX(),
-          screenBounds.getY(),
-          jmax (1, screenBounds.getWidth()),
-          jmax (1, screenBounds.getHeight()) });
+    setSize ({ jmax (1, screenBounds.getWidth()), jmax (1, screenBounds.getHeight()) });
 
     // Check mouse capture
     if (shouldCaptureMouse && isVisible())
@@ -346,7 +342,10 @@ void SDLComponentNative::setSize (const Size<int>& newSize)
     if (auto currentSize = getSize(); currentSize != newSize)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize " << currentSize.toString() << " -> " << newSize.toString());
-        SDL_SetWindowSize (window, jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
+
+        const auto pixelW = toScreenCoords (newSize.getWidth());
+        const auto pixelH = toScreenCoords (newSize.getHeight());
+        SDL_SetWindowSize (window, jmax (1, pixelW), jmax (1, pixelH));
     }
 }
 
@@ -357,7 +356,7 @@ Size<int> SDLComponentNative::getSize() const
     if (window != nullptr)
         SDL_GetWindowSize (window, &width, &height);
 
-    return { width, height };
+    return { toLogicalCoords (width), toLogicalCoords (height) };
 }
 
 void SDLComponentNative::setPosition (const Point<int>& newPosition)
@@ -399,44 +398,47 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
         return;
     }
 
-    auto adjustedBounds = newBounds;
-    int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
-
 #if YUP_EMSCRIPTEN && RIVE_WEBGL
-    //const double devicePixelRatio = emscripten_get_device_pixel_ratio();
-    //SDL_SetWindowSize (window,
-    //                   jmax (0, (int) (newBounds.getWidth() * devicePixelRatio)),
-    //                   jmax (0, (int) (newBounds.getHeight() * devicePixelRatio)));
+    const auto pixelW = toScreenCoords (newBounds.getWidth());
+    const auto pixelH = toScreenCoords (newBounds.getHeight());
 
     SDL_SetWindowSize (window,
-                       jmax (0, newBounds.getWidth()),
-                       jmax (0, newBounds.getHeight()));
+                       jmax (0, pixelW),
+                       jmax (0, pixelH));
 
     emscripten_set_element_css_size ("#canvas",
                                      jmax (0, newBounds.getWidth()),
                                      jmax (0, newBounds.getHeight()));
 
 #else
-    if (! isFullScreen() && isDecorated())
-        SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
+    // Convert logical size to screen pixel size for SDL (position is logical, not scaled)
+    const auto pixelW = toScreenCoords (newBounds.getWidth());
+    const auto pixelH = toScreenCoords (newBounds.getHeight());
 
-    adjustedBounds.translate (leftMargin, topMargin);
-    adjustedBounds.setSize ({ jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
-                              jmax (1, adjustedBounds.getHeight() - topMargin - bottomMargin) });
-
-    if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
+    if (auto currentSize = getSize(); currentSize != newBounds.getSize())
     {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds size " << currentSize.toString() << " -> " << adjustedBounds.getSize().toString() << ", requested=" << newBounds.toString() << ", margins=" << leftMargin << "," << topMargin << "," << rightMargin << "," << bottomMargin);
-        SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds size " << currentSize.toString() << " -> " << newBounds.getSize().toString() << ", requested=" << newBounds.toString());
+        SDL_SetWindowSize (window, pixelW, pixelH);
+    }
+
+    if (auto currentPosition = getPosition(); currentPosition != newBounds.getPosition())
+    {
+        // SDL_SetWindowPosition places the outer window frame. The client area
+        // is offset inside the frame by the decoration borders. Subtract the
+        // borders so the client area lands at the requested logical position.
+        int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
+
+        if (! isFullScreen() && isDecorated())
+            SDL_GetWindowBordersSize (window, &topMargin, &leftMargin, &bottomMargin, &rightMargin);
+
+        const auto windowX = newBounds.getX() - toLogicalCoords (leftMargin);
+        const auto windowY = newBounds.getY() - toLogicalCoords (topMargin);
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds position " << currentPosition.toString() << " -> " << newBounds.getPosition().toString() << ", requested=" << newBounds.toString() << ", borders=" << leftMargin << "," << topMargin << "," << rightMargin << "," << bottomMargin);
+        SDL_SetWindowPosition (window, windowX, windowY);
     }
 
 #endif
-
-    if (auto currentPosition = getPosition(); currentPosition != adjustedBounds.getPosition())
-    {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds position " << currentPosition.toString() << " -> " << adjustedBounds.getPosition().toString() << ", requested=" << newBounds.toString());
-        SDL_SetWindowPosition (window, adjustedBounds.getX(), adjustedBounds.getY());
-    }
 
     screenBounds = newBounds;
 
@@ -476,7 +478,7 @@ void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
         emscripten_exit_fullscreen();
 #else
         SDL_RestoreWindow (window);
-        SDL_SetWindowSize (window, component.getWidth(), component.getHeight());
+        SDL_SetWindowSize (window, toScreenCoords (component.getWidth()), toScreenCoords (component.getHeight()));
         SDL_SetWindowPosition (window, component.getX(), component.getY());
 
         setBounds (lastScreenBounds);
@@ -653,6 +655,42 @@ float SDLComponentNative::getScaleDpi() const
     return scale > 0.0f ? scale : 1.0f;
 }
 
+float SDLComponentNative::getScaleForCoords() const noexcept
+{
+    if ((windowFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY) == 0 || window == nullptr)
+        return 1.0f;
+
+    const auto scale = SDL_GetWindowDisplayScale (window);
+    return scale > 0.0f ? scale : 1.0f;
+}
+
+int SDLComponentNative::toScreenCoords (int logical) const noexcept
+{
+    const auto scale = getScaleForCoords();
+    if (scale == 1.0f)
+        return logical;
+
+    return static_cast<int> (static_cast<float> (logical) * scale);
+}
+
+int SDLComponentNative::toLogicalCoords (int screen) const noexcept
+{
+    const auto scale = getScaleForCoords();
+    if (scale == 1.0f)
+        return screen;
+
+    return static_cast<int> (static_cast<float> (screen) / scale);
+}
+
+float SDLComponentNative::toLogicalCoordsF (float screen) const noexcept
+{
+    const auto scale = getScaleForCoords();
+    if (scale == 1.0f)
+        return screen;
+
+    return screen / scale;
+}
+
 float SDLComponentNative::getCurrentFrameRate() const
 {
     return currentFrameRate.load (std::memory_order_relaxed);
@@ -671,7 +709,7 @@ Point<float> SDLComponentNative::getCursorPosition() const
 
     SDL_GetMouseState (&x, &y);
 
-    return { x, y };
+    return { toLogicalCoordsF (x), toLogicalCoordsF (y) };
 }
 
 //==============================================================================
@@ -803,14 +841,7 @@ void SDLComponentNative::timerCallback()
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr) // WIN ONLY: currentMouseButtons != MouseEvent::noButtons
     {
-        int windowX = 0, windowY = 0;
-        SDL_GetWindowPosition (window, &windowX, &windowY);
-
-        float mouseX = 0.0f, mouseY = 0.0f;
-        SDL_GetGlobalMouseState (&mouseX, &mouseY);
-
-        const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
-                                                   mouseY - static_cast<float> (windowY) };
+        const auto cursorPosition = getCursorPosition();
 
         if (lastMouseMovePosition != cursorPosition)
             handleMouseMoveOrDrag (cursorPosition);
@@ -847,7 +878,7 @@ void SDLComponentNative::renderContext()
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
-        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getDpiScale(), 0);
+        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 
@@ -1462,7 +1493,8 @@ void SDLComponentNative::handleContentScaleChanged()
 
     component.internalContentScaleChanged (getScaleDpi());
 
-    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
+    const auto newSize = getSize();
+    handleResized (newSize.getWidth(), newSize.getHeight());
 }
 
 void SDLComponentNative::handleDisplayChanged()
@@ -1552,7 +1584,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleResized (windowEvent.data1, windowEvent.data2);
+            handleResized (toLogicalCoords (windowEvent.data1), toLogicalCoords (windowEvent.data2));
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1570,7 +1602,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_ENTER");
             float x = 0.0f, y = 0.0f;
             SDL_GetMouseState (&x, &y);
-            handleMouseEnter ({ x, y });
+            handleMouseEnter ({ toLogicalCoordsF (x), toLogicalCoordsF (y) });
             break;
         }
 
@@ -1579,7 +1611,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_LEAVE");
             float x = 0.0f, y = 0.0f;
             SDL_GetMouseState (&x, &y);
-            handleMouseLeave ({ x, y });
+            handleMouseLeave ({ toLogicalCoordsF (x), toLogicalCoordsF (y) });
             break;
         }
 
@@ -1669,7 +1701,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 #if YUP_MOBILE || YUP_EMSCRIPTEN
         case SDL_EVENT_MOUSE_MOTION:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
+            auto cursorPosition = Point<float> { toLogicalCoordsF (static_cast<float> (event->motion.x)), toLogicalCoordsF (static_cast<float> (event->motion.y)) };
 
             if (event->motion.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag (cursorPosition);
@@ -1682,7 +1714,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_DOWN " << event->button.x << " " << event->button.y);
 
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            auto cursorPosition = Point<float> { toLogicalCoordsF (static_cast<float> (event->button.x)), toLogicalCoordsF (static_cast<float> (event->button.y)) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
@@ -1694,7 +1726,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_UP " << event->button.x << " " << event->button.y);
 
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            auto cursorPosition = Point<float> { toLogicalCoordsF (static_cast<float> (event->button.x)), toLogicalCoordsF (static_cast<float> (event->button.y)) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));

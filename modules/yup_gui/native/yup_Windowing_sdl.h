@@ -94,6 +94,12 @@ public:
     float getDesiredFrameRate() const override;
 
     //==============================================================================
+    float getScaleForCoords() const noexcept;
+    int toScreenCoords (int logical) const noexcept;
+    int toLogicalCoords (int screen) const noexcept;
+    float toLogicalCoordsF (float screen) const noexcept;
+
+    //==============================================================================
     void setOpacity (float opacity) override;
     float getOpacity() const override;
 

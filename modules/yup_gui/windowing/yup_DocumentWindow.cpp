@@ -48,12 +48,23 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
     if (auto screen = desktop->getScreenContainingMouseCursor())
     {
-        auto bounds = screen->workArea.centeredRectangleWithSize (size);
-        // TODO - take into account the frame and taskbar
+        // Center using pixel window dimensions so the math works correctly
+        // even if SDL reports the work area in screen pixels (e.g. RDP).
+        const auto dpiScale = screen->contentScaleX;
+        const auto pixelW = static_cast<int> (size.getWidth() * dpiScale);
+        const auto pixelH = static_cast<int> (size.getHeight() * dpiScale);
+        auto bounds = screen->workArea.centeredRectangleWithSize (Size<int> (pixelW, pixelH));
+
+        // Keep position from the pixel-space centering, but
+        // use the original logical size for the window.
+        bounds.setSize (size);
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "DocumentWindow: centreWithSize workArea=" << screen->workArea.toString() << " size=" << size.toString() << " contentScale=" << dpiScale << " -> bounds=" << bounds.toString());
         setBounds (bounds.to<float>());
     }
     else
     {
+        YUP_MODULE_DBG (GUI_WINDOWING, "DocumentWindow: centreWithSize no screen found, setting size only");
         setSize (size.to<float>());
     }
 }
