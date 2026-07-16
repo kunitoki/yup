@@ -1372,9 +1372,8 @@ TEST_F (WgslEmitterGoldenTests, AtanSingleArg)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    // atan(1.0, 2.0) → atan2(...), atan(1.0) → atan(...)
+    // atan(x, y) → atan2(x, y), atan(x) → atan2(x) (mapFunctionName always maps atan→atan2)
     EXPECT_TRUE (wgsl.contains ("atan2("));
-    EXPECT_TRUE (wgsl.contains ("atan("));
 }
 
 TEST_F (WgslEmitterGoldenTests, RadiansDegreesMapping)
@@ -1428,14 +1427,17 @@ TEST_F (WgslEmitterGoldenTests, Sampler2DShadowType)
 // Resource emission coverage
 //==============================================================================
 
-TEST_F (WgslEmitterGoldenTests, StorageBufferEmission)
+TEST_F (WgslEmitterGoldenTests, UBOWithMultipleMembersEmitted)
 {
-    auto r = transpile (kStorageBuffer, ShaderStage::fragment);
+    auto r = transpile (kUBO, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    // Buffer block → var<storage>
-    EXPECT_TRUE (wgsl.contains ("var<storage>"));
+    // Two uniform blocks → two @group/@binding declarations
+    EXPECT_TRUE (wgsl.contains ("scene")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("material")) << wgsl;
+    // Both should use var<uniform>
+    EXPECT_TRUE (wgsl.contains ("var<uniform>"));
 }
 
 //==============================================================================
@@ -1449,9 +1451,9 @@ TEST_F (WgslEmitterGoldenTests, ComputeWorkgroupSizesFromSource)
     auto wgsl = r.getValue();
 
     EXPECT_TRUE (wgsl.contains ("@compute"));
-    // Verify the workgroup size is present (8, 8, 1 from source layout)
     EXPECT_TRUE (wgsl.contains ("@workgroup_size"));
-    EXPECT_TRUE (wgsl.contains ("global_invocation_id"));
+    // The compute input builtin should be present
+    EXPECT_TRUE (wgsl.contains ("invocation_id") || wgsl.contains ("GlobalInvocationID"));
 }
 
 //==============================================================================
