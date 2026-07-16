@@ -267,7 +267,7 @@ void SDLComponentNative::setTitle (const String& title)
 
 String SDLComponentNative::getTitle() const
 {
-#if ! (YUP_EMSCRIPTEN && RIVE_WEBGL)
+#if ! (YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU))
     if (window == nullptr)
         return {};
 
@@ -402,7 +402,7 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
     auto adjustedBounds = newBounds;
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
-#if YUP_EMSCRIPTEN && RIVE_WEBGL
+#if YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)
     //const double devicePixelRatio = emscripten_get_device_pixel_ratio();
     //SDL_SetWindowSize (window,
     //                   jmax (0, (int) (newBounds.getWidth() * devicePixelRatio)),

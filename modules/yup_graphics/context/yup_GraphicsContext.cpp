@@ -39,13 +39,16 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
             return yup_constructDirect3DGraphicsContext (options);
 #endif
 
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
         case Api::OpenGL:
         case Api::OpenGLES:
             return yup_constructOpenGLGraphicsContext (options);
 #endif
 
-#if YUP_RIVE_USE_DAWN
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+        case Api::WebGPU:
+            return yup_constructWebGPUGraphicsContext (options);
+#elif YUP_RIVE_USE_DAWN
         case Api::WebGPU:
             return yup_constructDawnGraphicsContext (options);
 #endif

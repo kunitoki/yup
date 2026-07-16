@@ -374,7 +374,11 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 
 #elif YUP_ANDROID || YUP_WASM
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+    desiredApi = forceContextApi.value_or (GraphicsContext::WebGPU);
+#else
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);
+#endif
 
 #else
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);

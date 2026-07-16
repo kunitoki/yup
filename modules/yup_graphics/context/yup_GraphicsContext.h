@@ -45,7 +45,7 @@ public:
         OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
-        WebGPU    ///< Specifies the use of WebGPU, relying on dawn where not supported natively.
+        WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
     };
 
     /** Configuration options for creating a graphics context. */

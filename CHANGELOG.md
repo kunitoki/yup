@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Graphics
 
+- Added a native WebGPU `GraphicsContext` backend for Emscripten (`RIVE_WEBGPU=1` + `-sUSE_WEBGPU=1`), rendering Rive content through the browser's WebGPU API without Dawn
+
 #### Rive Runtime Bump
 
 - Rive runtime bumped from v0.1.62 to v0.1.155
