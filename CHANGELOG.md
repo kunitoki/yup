@@ -63,6 +63,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fetched third-party dependencies (SDL3, Perfetto, plugin SDKs) are now cloned shallowly (`--depth 1`) and skip network update checks on reconfigure, speeding up fresh configures and reconfigures. Shallow cloning is automatically disabled when a `GIT_TAG` is a commit hash.
 - Android: full 16 KB page size compatibility — generated Gradle projects bumped to AGP 8.5.2 / Gradle 8.7 (uncompressed native libraries are zip-aligned to 16 KB), `jniLibs` packaging made explicitly non-legacy, and `ndkVersion` pinned to r27c (overridable via `NDK_VERSION`), which ships a 16 KB-aligned `libc++_shared.so`. CI NDK updated to r27c accordingly. Application shared libraries were already linked with `-Wl,-z,max-page-size=16384`.
 
+### Testing
+
+- `Component` now befriends a single `ComponentTestHelper<T>` class template instead of accumulating one friend class per test suite; unit tests specialize it (e.g. `ComponentTestHelper<Component>`, `ComponentTestHelper<ComponentEffect>`) to reach private state.
+
 ### Bug Fixes
 
 - iOS applications now use the `UIScene` lifecycle, removing UIKit's legacy lifecycle warning and ensuring SDL windows are created for the connected scene.

@@ -1337,6 +1337,42 @@ void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, 
 
 //==============================================================================
 
+bool SDLComponentNative::hasNativeKeyboardFocus() const
+{
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+}
+
+//==============================================================================
+
+void SDLComponentNative::handleMinimized()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMinimized");
+    PopupMenu::dismissAllPopups();
+
+    stopRendering();
+}
+
+void SDLComponentNative::handleMaximized()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMaximized");
+
+    repaint();
+}
+
+void SDLComponentNative::handleRestored()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleRestored");
+
+    repaint();
+}
+
+void SDLComponentNative::handleExposed()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleExposed");
+
+    repaint();
+}
+
 void SDLComponentNative::handleMoved (int xpos, int ypos)
 {
     YUP_PROFILE_INTERNAL_TRACE();
@@ -1407,6 +1443,61 @@ void SDLComponentNative::handleResized (int width, int height)
     repaint();
 }
 
+void SDLComponentNative::handleContentScaleChanged()
+{
+    if (internalBoundsChange)
+        return;
+
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleContentScaleChanged dpiScale=" << getScaleDpi());
+
+    if (parentWindow == nullptr && getWindowUnitsPerPoint (window) != lastWindowUnitsPerPoint)
+    {
+        MessageManager::callAsync ([self = Ptr (this)]
+        {
+            if (self->window == nullptr)
+                return;
+
+            const auto scale = getWindowUnitsPerPoint (self->window);
+            if (scale == self->lastWindowUnitsPerPoint)
+                return;
+
+            self->lastWindowUnitsPerPoint = scale;
+
+            auto preventBoundsChange = ScopedValueSetter<bool> (self->internalBoundsChange, true);
+            self->setSize (self->screenBounds.getSize());
+        });
+    }
+
+    component.internalContentScaleChanged (getScaleDpi());
+
+    const auto currentSize = getSize();
+    handleResized (currentSize.getWidth(), currentSize.getHeight());
+}
+
+void SDLComponentNative::handleDisplayChanged()
+{
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleDisplayChanged");
+
+    component.internalDisplayChanged();
+}
+
+void SDLComponentNative::handleSafeAreaChanged()
+{
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << getSafeAreaBounds().toString());
+
+    component.internalSafeAreaChanged();
+
+    component.sendResized();
+
+    repaint();
+}
+
 void SDLComponentNative::handleFocusChanged (bool gotFocus)
 {
     YUP_PROFILE_INTERNAL_TRACE();
@@ -1465,90 +1556,6 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
 
         triggerPopupDismissalCheck();
     }
-}
-
-bool SDLComponentNative::hasNativeKeyboardFocus() const
-{
-    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) != 0;
-}
-
-void SDLComponentNative::handleMinimized()
-{
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMinimized");
-    PopupMenu::dismissAllPopups();
-
-    stopRendering();
-}
-
-void SDLComponentNative::handleMaximized()
-{
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMaximized");
-    repaint();
-}
-
-void SDLComponentNative::handleRestored()
-{
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleRestored");
-    repaint();
-}
-
-void SDLComponentNative::handleExposed()
-{
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleExposed");
-    repaint();
-}
-
-void SDLComponentNative::handleContentScaleChanged()
-{
-    if (internalBoundsChange)
-        return;
-
-    YUP_PROFILE_INTERNAL_TRACE();
-
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleContentScaleChanged dpiScale=" << getScaleDpi());
-
-    if (parentWindow == nullptr && getWindowUnitsPerPoint (window) != lastWindowUnitsPerPoint)
-    {
-        MessageManager::callAsync ([self = Ptr (this)]
-        {
-            if (self->window == nullptr)
-                return;
-
-            const auto scale = getWindowUnitsPerPoint (self->window);
-            if (scale == self->lastWindowUnitsPerPoint)
-                return;
-
-            self->lastWindowUnitsPerPoint = scale;
-
-            auto preventBoundsChange = ScopedValueSetter<bool> (self->internalBoundsChange, true);
-            self->setSize (self->screenBounds.getSize());
-        });
-    }
-
-    component.internalContentScaleChanged (getScaleDpi());
-
-    const auto currentSize = getSize();
-    handleResized (currentSize.getWidth(), currentSize.getHeight());
-}
-
-void SDLComponentNative::handleDisplayChanged()
-{
-    YUP_PROFILE_INTERNAL_TRACE();
-
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleDisplayChanged");
-
-    component.internalDisplayChanged();
-}
-
-void SDLComponentNative::handleSafeAreaChanged()
-{
-    YUP_PROFILE_INTERNAL_TRACE();
-
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << getSafeAreaBounds().toString());
-
-    component.internalSafeAreaChanged();
-
-    repaint();
 }
 
 void SDLComponentNative::handleUserTriedToCloseWindow()

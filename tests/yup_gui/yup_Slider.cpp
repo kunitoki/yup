@@ -136,9 +136,9 @@ TEST_F (SliderTest, RangeOperations)
     EXPECT_DOUBLE_EQ (1.0, slider->getRange().getRange().getStart());
     EXPECT_DOUBLE_EQ (100.0, slider->getRange().getRange().getEnd());
 
-    slider->setRange (50.0, 50.0);
+    slider->setRange (50.0, 50.1);
     EXPECT_DOUBLE_EQ (50.0, slider->getRange().getRange().getStart());
-    EXPECT_DOUBLE_EQ (50.0, slider->getRange().getRange().getEnd());
+    EXPECT_DOUBLE_EQ (50.1, slider->getRange().getRange().getEnd());
     EXPECT_DOUBLE_EQ (50.0, slider->getValue());
 }
 

@@ -641,6 +641,8 @@ public:
 class ComponentPaintProfilingFixture : public ::testing::Test
 {
 protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
     void SetUp() override
     {
         GraphicsContext::Options opts;
@@ -672,7 +674,7 @@ TEST_F (ComponentPaintProfilingFixture, RecordsSampleAfterPaint)
     PaintProfiler::getInstance().enableComponent (comp);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+    ComponentHelper::triggerPaint (comp, g, comp.getBounds());
 
     EXPECT_EQ (1, PaintProfiler::getInstance().getStatsForComponent (comp)->getSampleCount());
 }
@@ -687,7 +689,7 @@ TEST_F (ComponentPaintProfilingFixture, NoSampleWhenProfilerDisabled)
     PaintProfiler::getInstance().enableComponent (comp);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+    ComponentHelper::triggerPaint (comp, g, comp.getBounds());
 
     EXPECT_EQ (0, PaintProfiler::getInstance().getStatsForComponent (comp)->getSampleCount());
 }
@@ -701,7 +703,7 @@ TEST_F (ComponentPaintProfilingFixture, NoSampleWhenComponentPaintProfilingDisab
     PaintProfiler::getInstance().enableComponent (comp);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+    ComponentHelper::triggerPaint (comp, g, comp.getBounds());
 
     EXPECT_EQ (0, PaintProfiler::getInstance().getStatsForComponent (comp)->getSampleCount());
 }
@@ -713,7 +715,7 @@ TEST_F (ComponentPaintProfilingFixture, NoStatsWhenComponentProfilingNotEnabled)
     comp.setVisible (true);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+    ComponentHelper::triggerPaint (comp, g, comp.getBounds());
 
     EXPECT_EQ (nullptr, PaintProfiler::getInstance().getStatsForComponent (comp));
 }
@@ -726,7 +728,7 @@ TEST_F (ComponentPaintProfilingFixture, SampleHasNonNegativeTotalTime)
     PaintProfiler::getInstance().enableComponent (comp);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+    ComponentHelper::triggerPaint (comp, g, comp.getBounds());
 
     auto* stats = PaintProfiler::getInstance().getStatsForComponent (comp);
     ASSERT_EQ (1, stats->getSampleCount());
@@ -748,7 +750,7 @@ TEST_F (ComponentPaintProfilingFixture, SelfPaintSkippedWhenOpaqueChildCoversAre
     parent.addChildComponent (child);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (parent, g, parent.getBounds());
+    ComponentHelper::triggerPaint (parent, g, parent.getBounds());
 
     auto* stats = PaintProfiler::getInstance().getStatsForComponent (parent);
     ASSERT_EQ (1, stats->getSampleCount());
@@ -769,7 +771,7 @@ TEST_F (ComponentPaintProfilingFixture, ChildTimeContributesToParentChildrenMicr
     parent.addChildComponent (child);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (parent, g, parent.getBounds());
+    ComponentHelper::triggerPaint (parent, g, parent.getBounds());
 
     auto* parentStats = PaintProfiler::getInstance().getStatsForComponent (parent);
     ASSERT_EQ (1, parentStats->getSampleCount());
@@ -790,7 +792,7 @@ TEST_F (ComponentPaintProfilingFixture, UnprofiledChildTimeContributesToProfiled
     parent.addChildComponent (child);
 
     Graphics g (*context, *renderer, 1.0f);
-    ComponentTestHelper::triggerPaint (parent, g, parent.getBounds());
+    ComponentHelper::triggerPaint (parent, g, parent.getBounds());
 
     auto* parentStats = PaintProfiler::getInstance().getStatsForComponent (parent);
     ASSERT_EQ (1, parentStats->getSampleCount());
@@ -810,7 +812,7 @@ TEST_F (ComponentPaintProfilingFixture, MultiplePaintsAccumulateSamples)
     for (int i = 0; i < paintCount; ++i)
     {
         Graphics g (*context, *renderer, 1.0f);
-        ComponentTestHelper::triggerPaint (comp, g, comp.getBounds());
+        ComponentHelper::triggerPaint (comp, g, comp.getBounds());
     }
 
     EXPECT_EQ (paintCount, PaintProfiler::getInstance().getStatsForComponent (comp)->getSampleCount());

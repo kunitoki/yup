@@ -32,7 +32,7 @@ endif()
 
 set (yup_languages C CXX)
 if (YUP_PLATFORM_APPLE)
-    list (APPEND yup_languages OBJC OBJCXX)
+    list (APPEND yup_languages OBJCXX)
 endif()
 
 project (yup VERSION ${yup_version} LANGUAGES ${yup_languages})

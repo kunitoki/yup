@@ -397,11 +397,11 @@ Rectangle<float> Component::getLocalBounds() const
 Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
 {
     auto bounds = boundsInParent;
-    if (options.onDesktop)
+    if (options.onDesktop || options.paintAsOffscreenRoot)
         return bounds.withZeroPosition();
 
     auto parent = getParentComponent();
-    while (parent != nullptr && ! parent->options.onDesktop)
+    while (parent != nullptr && ! parent->options.onDesktop && ! parent->options.paintAsOffscreenRoot)
     {
         bounds.translate (parent->getPosition());
         parent = parent->getParentComponent();
@@ -559,6 +559,8 @@ void Component::repaint (float x, float y, float width, float height)
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
+
+    cachedTextureCanvas = nullptr;
 
     if (rect.isEmpty() || ! isShowing())
         return;
@@ -1204,6 +1206,80 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
 
 //==============================================================================
 
+//==============================================================================
+
+void Component::setComponentEffect (ComponentEffect::Ptr effect)
+{
+    componentEffect = std::move (effect);
+    repaint();
+}
+
+ComponentEffect::Ptr Component::getComponentEffect() const
+{
+    return componentEffect;
+}
+
+void Component::setCachedToTexture (bool shouldCache)
+{
+    if (options.cachedToTexture == shouldCache)
+        return;
+
+    options.cachedToTexture = shouldCache;
+    cachedTextureCanvas = nullptr;
+    repaint();
+}
+
+bool Component::isCachedToTexture() const
+{
+    return options.cachedToTexture;
+}
+
+GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return nullptr;
+
+    auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
+    if (canvas == nullptr)
+        return nullptr;
+
+    if (! includeEffects || componentEffect == nullptr)
+        return canvas;
+
+    auto texture = canvas->asTexture();
+
+    auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+    if (effectCanvas == nullptr)
+        return canvas;
+
+    auto& g = effectCanvas->beginDraw();
+    auto localBounds = getLocalBounds();
+    g.setDrawingArea (localBounds);
+    componentEffect->apply (g, texture, localBounds);
+
+    return effectCanvas;
+}
+
+Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return {};
+
+    return canvas->asImage();
+}
+
+GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return nullptr;
+
+    return canvas->asTexture();
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
@@ -1251,6 +1327,121 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 //==============================================================================
 
+void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous)
+{
+    for (auto child : children)
+        child->internalPaint (g, clipArea, renderContinuous);
+
+    paintOverChildren (g);
+}
+
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous)
+{
+    const auto w = static_cast<int> (getWidth());
+    const auto h = static_cast<int> (getHeight());
+
+    auto canvas = GpuCanvas::create (ctx, w, h);
+    if (canvas == nullptr)
+        return nullptr;
+
+    auto& offscreenG = canvas->beginDraw();
+
+    options.paintAsOffscreenRoot = true;
+
+    auto localBounds = getLocalBounds();
+    paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
+
+    options.paintAsOffscreenRoot = false;
+
+    canvas->commit();
+    return canvas;
+}
+
+//==============================================================================
+
+void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
+{
+    options.isRepainting = true;
+
+    {
+        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+
+        ComponentPaintMetrics metrics;
+        int64 totalStartTicks = 0;
+        int64 selfStartTicks = 0;
+
+        if (shouldMeasurePaint)
+        {
+            totalStartTicks = Time::getHighResolutionTicks();
+            metrics.repaintArea = drawingArea;
+            metrics.componentBounds = drawingArea;
+            metrics.renderContinuous = renderContinuous;
+        }
+
+        const auto globalState = g.saveState();
+
+        g.setOpacity (opacity);
+        g.setDrawingArea (drawingArea);
+        if (! options.unclippedRendering)
+            g.setClipPath (clipArea);
+        g.setTransform (transform);
+
+        bool canSkipPaint = false;
+        if (! options.unclippedRendering && ! isTransformed())
+            canSkipPaint = hasOpaqueChildCoveringArea (clipArea);
+
+        if (! canSkipPaint)
+        {
+            const auto paintState = g.saveState();
+
+            if (shouldMeasurePaint)
+            {
+                selfStartTicks = Time::getHighResolutionTicks();
+                paint (g);
+                metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
+            }
+            else
+            {
+                paint (g);
+            }
+        }
+        else
+        {
+            if (shouldMeasurePaint)
+                metrics.selfPaintSkipped = true;
+        }
+
+        if (shouldMeasurePaint)
+        {
+            const int64 childrenStartTicks = Time::getHighResolutionTicks();
+
+            for (auto child : children)
+                child->internalPaint (g, clipArea, renderContinuous);
+
+            metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
+
+            selfStartTicks = Time::getHighResolutionTicks();
+
+            paintOverChildren (g);
+
+            const int64 selfEndTicks = Time::getHighResolutionTicks();
+
+            metrics.selfTicks += selfEndTicks - selfStartTicks;
+            metrics.totalTicks = selfEndTicks - totalStartTicks;
+
+            componentListeners.call (&ComponentListener::componentPaintCompleted, *this, metrics);
+        }
+        else
+        {
+            paintChildrenAndOverChildren (g, clipArea, renderContinuous);
+        }
+    }
+
+    options.isRepainting = false;
+}
+
+//==============================================================================
+
 void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
 {
     if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
@@ -1271,89 +1462,77 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (opacity <= 0.0f)
         return;
 
-    options.isRepainting = true;
-
+    // Effect path: render full subtree offscreen, apply effect, composite
+    if (componentEffect != nullptr)
     {
-        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous);
+        if (canvas == nullptr)
+            return;
 
-        ComponentPaintMetrics metrics;
-        int64 totalStartTicks = 0;
-        int64 selfStartTicks = 0;
+        auto texture = canvas->asTexture();
 
-        if (shouldMeasurePaint)
         {
-            totalStartTicks = Time::getHighResolutionTicks();
-            metrics.repaintArea = repaintArea;
-            metrics.componentBounds = bounds.to<float>();
-            metrics.renderContinuous = renderContinuous;
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
+
+            componentEffect->apply (g, texture, getLocalBounds());
         }
 
-        const auto globalState = g.saveState();
+        if (options.cachedToTexture)
+            cachedTextureCanvas = canvas;
 
-        g.setOpacity (opacity);
-        g.setDrawingArea (bounds);
-        if (! options.unclippedRendering)
-            g.setClipPath (boundsToRedraw);
-
-        g.setTransform (transform);
-
-        bool canSkipPaint = false;
-        if (! options.unclippedRendering && ! isTransformed())
-            canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
-
-        if (! canSkipPaint)
-        {
-            const auto paintState = g.saveState();
-
-            if (shouldMeasurePaint)
-            {
-                selfStartTicks = Time::getHighResolutionTicks();
-
-                paint (g);
-
-                metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
-            }
-            else
-            {
-                paint (g);
-            }
-        }
-        else
-        {
-            if (shouldMeasurePaint)
-                metrics.selfPaintSkipped = true;
-        }
-
-        if (shouldMeasurePaint)
-        {
-            const int64 childrenStartTicks = Time::getHighResolutionTicks();
-
-            for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-            metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
-
-            selfStartTicks = Time::getHighResolutionTicks();
-
-            paintOverChildren (g);
-
-            const int64 selfEndTicks = Time::getHighResolutionTicks();
-
-            metrics.selfTicks += selfEndTicks - selfStartTicks;
-            metrics.totalTicks = selfEndTicks - totalStartTicks;
-
-            componentListeners.call (&ComponentListener::componentPaintCompleted, *this, metrics);
-        }
-        else
-        {
-            for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-            paintOverChildren (g);
-        }
+        return;
     }
 
-    options.isRepainting = false;
+    // Cache path: cache own paint(), children paint on top
+    if (options.cachedToTexture)
+    {
+        if (cachedTextureCanvas == nullptr)
+        {
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(),
+                                             static_cast<int> (getWidth()),
+                                             static_cast<int> (getHeight()));
+            if (canvas != nullptr)
+            {
+                auto& offscreenG = canvas->beginDraw();
+                auto localBounds = getLocalBounds();
+                offscreenG.setOpacity (opacity);
+                offscreenG.setDrawingArea (localBounds);
+                offscreenG.setTransform (transform);
+                paint (offscreenG);
+                canvas->commit();
+                cachedTextureCanvas = canvas;
+            }
+        }
+
+        options.isRepainting = true;
+
+        {
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
+
+            if (cachedTextureCanvas != nullptr)
+                g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());
+            else
+                paint (g);
+        }
+
+        options.isRepainting = false;
+
+        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
+        return;
+    }
+
+    // Normal paint path
+    paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     g.setFillColor (debugColor);

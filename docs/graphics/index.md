@@ -49,7 +49,7 @@ YUP uses American English: it is `Color` (not `Colour`) and `center` (not `centr
 
 - [UI](../ui/index.md) - `Component` painting and windowing that drive the
   graphics context.
-- [Profiling component paint](../ui/profiling-component-paint.md) - measuring
+- [Component paint profiling](../ui/component-profiling.md) - measuring
   paint cost.
 
 ```{toctree}

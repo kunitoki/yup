@@ -24,6 +24,14 @@ namespace yup
 
 //==============================================================================
 
+#ifndef DOXYGEN
+/** @internal Test-only accessor, specialized by unit tests to reach private Component state. */
+template <class T>
+class ComponentTestHelper;
+#endif
+
+//==============================================================================
+
 /**
     The Component class is the base class for all GUI components.
 
@@ -1308,6 +1316,68 @@ public:
     std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
+    /** Sets a component effect that is applied after the component and its children are rendered.
+
+        The component subtree is first rendered to an offscreen GPU texture, then the effect's
+        apply() method is called to composite the result back onto the main Graphics context.
+        Pass nullptr to remove the effect.
+
+        @param effect The effect to apply, or nullptr to remove.
+        @see ComponentEffect
+     */
+    void setComponentEffect (ComponentEffect::Ptr effect);
+
+    /** Returns the current component effect, or nullptr if none is set. */
+    ComponentEffect::Ptr getComponentEffect() const;
+
+    //==============================================================================
+    /** Enables or disables cached-to-texture rendering for this component and its subtree.
+
+        When enabled, the component subtree is rendered once into an offscreen GPU texture that
+        is reused across subsequent frames. The cache is automatically invalidated when the component
+        is repainted, resized, or its children change.
+
+        This improves performance for complex components whose content changes infrequently.
+
+        @param shouldCache Whether to enable cached-to-texture rendering.
+     */
+    void setCachedToTexture (bool shouldCache);
+
+    /** Returns true if cached-to-texture rendering is enabled. */
+    bool isCachedToTexture() const;
+
+    //==============================================================================
+    /** Creates a CPU-side Image containing a snapshot of this component's current
+        appearance, including all visible children.
+
+        The component tree is rendered offscreen, then the GPU pixels are read back to
+        CPU memory. The returned Image has both GPU texture and CPU pixel data populated.
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot. When false, the raw subtree
+                              rendering is captured.
+        @return An Image containing the rendered snapshot, or an empty Image on failure.
+        @see snapshotToTexture
+     */
+    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true);
+
+    /** Creates a GPU texture snapshot of this component's current appearance,
+        including all visible children.
+
+        Like snapshotToImage but returns a GPU texture without reading pixels back to
+        CPU memory. This is faster when the snapshot is only needed for on-screen
+        compositing (e.g. via Graphics::drawTexture).
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot.
+        @return A GpuTexture containing the rendered snapshot, or nullptr on failure.
+        @see snapshotToImage
+     */
+    GpuTexture::Ptr snapshotToTexture (GraphicsContext& ctx, bool includeEffects = true);
+
+    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {
@@ -1402,11 +1472,17 @@ private:
     void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
+    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous);
+    void paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous);
+    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
 
     friend class ComponentNative;
-    friend class ComponentTestHelper;
     friend class SDLComponentNative;
     friend class WeakReference<Component>;
+
+    template <class T>
+    friend class ComponentTestHelper;
 
     using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
@@ -1423,6 +1499,8 @@ private:
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    ComponentEffect::Ptr componentEffect;
+    GpuCanvas::Ptr cachedTextureCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
 
@@ -1441,6 +1519,8 @@ private:
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
+        bool cachedToTexture : 1;
+        bool paintAsOffscreenRoot : 1;
     };
 
     union
