@@ -172,6 +172,10 @@
           "d3d": [
             "make",
             "fxc"
+          ],
+          "wgsl": [
+            "make",
+            "naga"
           ]
         },
         "targets": [
@@ -185,7 +189,8 @@
           "rive_renderer_appletvsimulator_metallib",
           "spirv",
           "spirv-binary",
-          "d3d"
+          "d3d",
+          "wgsl"
         ],
         "optional_targets": [
           "d3d"
