@@ -671,6 +671,38 @@ void main()
 }
 )glsl";
 
+constexpr const char* kSamplerTypeVariants = R"glsl(
+#version 450
+layout(binding = 0) uniform sampler3D volTex;
+layout(binding = 1) uniform samplerCube cubeTex;
+layout(binding = 2) uniform sampler2DArray arrTex;
+layout(binding = 3) uniform isampler3D ivolTex;
+layout(binding = 4) uniform isamplerCube icubeTex;
+layout(binding = 5) uniform isampler2DArray iarrTex;
+layout(binding = 6) uniform usampler3D uvolTex;
+layout(binding = 7) uniform usamplerCube ucubeTex;
+layout(binding = 8) uniform usampler2DArray uarrTex;
+void main()
+{
+}
+)glsl";
+
+constexpr const char* kMatrixTypes = R"glsl(
+#version 450
+void main()
+{
+    mat2 m2 = mat2(1.0);
+    mat3 m3 = mat3(1.0);
+    mat4 m4 = mat4(1.0);
+    mat2x3 m23 = mat2x3(1.0);
+    mat3x2 m32 = mat3x2(1.0);
+    mat2x4 m24 = mat2x4(1.0);
+    mat4x2 m42 = mat4x2(1.0);
+    mat3x4 m34 = mat3x4(1.0);
+    mat4x3 m43 = mat4x3(1.0);
+}
+)glsl";
+
 } // namespace
 
 //==============================================================================
@@ -2133,6 +2165,43 @@ TEST_F (WgslEmitterGoldenTests, IntegerVectorTypes)
     EXPECT_TRUE (wgsl.contains ("vec2<u32>"));
     EXPECT_TRUE (wgsl.contains ("vec3<u32>"));
     EXPECT_TRUE (wgsl.contains ("vec4<u32>"));
+}
+
+TEST_F (WgslEmitterGoldenTests, MatrixTypes)
+{
+    auto r = transpile (kMatrixTypes, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("mat2x2<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat3x3<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat4x4<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat2x3<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat3x2<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat2x4<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat4x2<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat3x4<f32>"));
+    EXPECT_TRUE (wgsl.contains ("mat4x3<f32>"));
+}
+
+TEST_F (WgslEmitterGoldenTests, SamplerTypeVariants)
+{
+    auto r = transpile (kSamplerTypeVariants, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // Combined sampler type mappings
+    EXPECT_TRUE (wgsl.contains ("texture_3d<f32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_cube<f32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_2d_array<f32>"));
+    // Integer sampler types
+    EXPECT_TRUE (wgsl.contains ("texture_3d<i32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_cube<i32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_2d_array<i32>"));
+    // Unsigned sampler types
+    EXPECT_TRUE (wgsl.contains ("texture_3d<u32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_cube<u32>"));
+    EXPECT_TRUE (wgsl.contains ("texture_2d_array<u32>"));
 }
 
 TEST_F (WgslEmitterGoldenTests, UnaryPlusAndBitwiseNot)
