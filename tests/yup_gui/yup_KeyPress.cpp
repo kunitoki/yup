@@ -280,9 +280,9 @@ TEST (KeyPressTests, TextCharacterForNonPrintableKeys)
 
 TEST (KeyPressTests, TextCharacterUnicode)
 {
-    KeyPress press (KeyPress::textAKey, KeyModifiers(), U'ع');
+    KeyPress press (KeyPress::textAKey, KeyModifiers(), U'\x00e9');
 
-    EXPECT_EQ (U'ع', press.getTextCharacter());
+    EXPECT_EQ (U'\x00e9', press.getTextCharacter());
 }
 
 TEST (KeyPressTests, ModifiersCombinations)

@@ -860,7 +860,7 @@ TEST_F (PopupMenuTest, IsItemShowingSubmenu)
 
     auto sub = PopupMenu::create();
     sub->addItem ("Sub 1", 10);
-    menu->addSubMenu ("More", *sub, 2);
+    menu->addSubMenu ("More", *sub, true);
 
     EXPECT_FALSE (menu->isItemShowingSubmenu (0));
     EXPECT_FALSE (menu->isItemShowingSubmenu (1));
