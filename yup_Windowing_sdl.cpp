@@ -24,6 +24,17 @@ namespace yup
 
 //==============================================================================
 
+static constexpr uint32 sdlDefaultSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
+
+static String getSDLVersionString (int version)
+{
+    return String (SDL_VERSIONNUM_MAJOR (version)) + "."
+         + String (SDL_VERSIONNUM_MINOR (version)) + "."
+         + String (SDL_VERSIONNUM_MICRO (version));
+}
+
+//==============================================================================
+
 std::atomic_flag SDLComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 int SDLComponentNative::mouseCaptureRequestCount = 0;
 uint32_t SDLComponentNative::lastCapturedMouseButtonState = 0;
@@ -256,7 +267,7 @@ void SDLComponentNative::setTitle (const String& title)
 
 String SDLComponentNative::getTitle() const
 {
-#if ! (YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU))
+#if ! (YUP_EMSCRIPTEN && RIVE_WEBGL)
     if (window == nullptr)
         return {};
 
@@ -312,19 +323,12 @@ void SDLComponentNative::toFront()
 
 Size<int> SDLComponentNative::getContentSize() const
 {
-    // The drawable size must match the real window surface: deriving it from the
-    // logical size multiplied by a scale factor would drift from the actual pixel
-    // size on platforms where SDL window coordinates are physical pixels.
-    if (window != nullptr)
-    {
-        int width = 0, height = 0;
-        SDL_GetWindowSizeInPixels (window, &width, &height);
+    const auto dpiScale = getScaleDpi();
 
-        if (width > 0 && height > 0)
-            return { width, height };
-    }
+    const auto width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    const auto height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
-    return { jmax (1, screenBounds.getWidth()), jmax (1, screenBounds.getHeight()) };
+    return { width, height };
 }
 
 //==============================================================================
@@ -332,18 +336,17 @@ Size<int> SDLComponentNative::getContentSize() const
 void SDLComponentNative::setSize (const Size<int>& newSize)
 {
     if (window == nullptr)
+    {
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize skipped: window is null, size=" << newSize.toString());
         return;
+    }
 
     screenBounds = screenBounds.withSize (newSize);
 
     if (auto currentSize = getSize(); currentSize != newSize)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setSize " << currentSize.toString() << " -> " << newSize.toString());
-
-        const auto scale = getWindowUnitsPerPoint (window);
-        SDL_SetWindowSize (window,
-                           jmax (1, roundToInt (newSize.getWidth() * scale)),
-                           jmax (1, roundToInt (newSize.getHeight() * scale)));
+        SDL_SetWindowSize (window, jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
     }
 }
 
@@ -354,8 +357,7 @@ Size<int> SDLComponentNative::getSize() const
     if (window != nullptr)
         SDL_GetWindowSize (window, &width, &height);
 
-    const auto scale = getWindowUnitsPerPoint (window);
-    return { roundToInt (width / scale), roundToInt (height / scale) };
+    return { width, height };
 }
 
 void SDLComponentNative::setPosition (const Point<int>& newPosition)
@@ -371,11 +373,7 @@ void SDLComponentNative::setPosition (const Point<int>& newPosition)
     if (auto currentPosition = getPosition(); currentPosition != newPosition)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setPosition " << currentPosition.toString() << " -> " << newPosition.toString());
-
-        const auto scale = getWindowUnitsPerPoint (window);
-        SDL_SetWindowPosition (window,
-                               roundToInt (newPosition.getX() * scale),
-                               roundToInt (newPosition.getY() * scale));
+        SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
     }
 }
 
@@ -386,8 +384,7 @@ Point<int> SDLComponentNative::getPosition() const
     if (window != nullptr)
         SDL_GetWindowPosition (window, &x, &y);
 
-    const auto scale = getWindowUnitsPerPoint (window);
-    return { roundToInt (x / scale), roundToInt (y / scale) };
+    return { x, y };
 }
 
 void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
@@ -405,7 +402,7 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
     auto adjustedBounds = newBounds;
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
-#if YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)
+#if YUP_EMSCRIPTEN && RIVE_WEBGL
     //const double devicePixelRatio = emscripten_get_device_pixel_ratio();
     //SDL_SetWindowSize (window,
     //                   jmax (0, (int) (newBounds.getWidth() * devicePixelRatio)),
@@ -420,18 +417,8 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
                                      jmax (0, newBounds.getHeight()));
 
 #else
-    const auto scale = getWindowUnitsPerPoint (window);
-
     if (! isFullScreen() && isDecorated())
-    {
-        // Window borders are reported in native window units
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
-
-        leftMargin = roundToInt (leftMargin / scale);
-        topMargin = roundToInt (topMargin / scale);
-        rightMargin = roundToInt (rightMargin / scale);
-        bottomMargin = roundToInt (bottomMargin / scale);
-    }
 
     adjustedBounds.translate (leftMargin, topMargin);
     adjustedBounds.setSize ({ jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
@@ -440,9 +427,7 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds size " << currentSize.toString() << " -> " << adjustedBounds.getSize().toString() << ", requested=" << newBounds.toString() << ", margins=" << leftMargin << "," << topMargin << "," << rightMargin << "," << bottomMargin);
-        SDL_SetWindowSize (window,
-                           roundToInt (adjustedBounds.getWidth() * scale),
-                           roundToInt (adjustedBounds.getHeight() * scale));
+        SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
     }
 
 #endif
@@ -450,11 +435,7 @@ void SDLComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (auto currentPosition = getPosition(); currentPosition != adjustedBounds.getPosition())
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: setBounds position " << currentPosition.toString() << " -> " << adjustedBounds.getPosition().toString() << ", requested=" << newBounds.toString());
-
-        const auto positionScale = getWindowUnitsPerPoint (window);
-        SDL_SetWindowPosition (window,
-                               roundToInt (adjustedBounds.getX() * positionScale),
-                               roundToInt (adjustedBounds.getY() * positionScale));
+        SDL_SetWindowPosition (window, adjustedBounds.getX(), adjustedBounds.getY());
     }
 
     screenBounds = newBounds;
@@ -472,13 +453,7 @@ Rectangle<int> SDLComponentNative::getBounds() const
 Rectangle<int> SDLComponentNative::getSafeAreaBounds() const
 {
     if (SDL_Rect safeArea; window != nullptr && SDL_GetWindowSafeArea (window, &safeArea))
-    {
-        const auto scale = getWindowUnitsPerPoint (window);
-        return { roundToInt (safeArea.x / scale),
-                 roundToInt (safeArea.y / scale),
-                 roundToInt (safeArea.w / scale),
-                 roundToInt (safeArea.h / scale) };
-    }
+        return { safeArea.x, safeArea.y, safeArea.w, safeArea.h };
 
     return { 0, 0, getSize() };
 }
@@ -497,11 +472,11 @@ void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
 
     if (shouldBeFullScreen)
     {
-        lastScreenBounds = screenBounds;
-
 #if YUP_EMSCRIPTEN
         emscripten_request_fullscreen ("#canvas", false);
 #else
+        lastScreenBounds = screenBounds;
+
         SDL_SetWindowFullscreen (window, true); // SDL_SetWindowFullscreenMode
 #endif
     }
@@ -511,14 +486,8 @@ void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
         emscripten_exit_fullscreen();
 #else
         SDL_RestoreWindow (window);
-
-        const auto scale = getWindowUnitsPerPoint (window);
-        SDL_SetWindowSize (window,
-                           roundToInt (component.getWidth() * scale),
-                           roundToInt (component.getHeight() * scale));
-        SDL_SetWindowPosition (window,
-                               roundToInt (component.getX() * scale),
-                               roundToInt (component.getY() * scale));
+        SDL_SetWindowSize (window, component.getWidth(), component.getHeight());
+        SDL_SetWindowPosition (window, component.getX(), component.getY());
 
         setBounds (lastScreenBounds);
 #endif
@@ -687,11 +656,13 @@ const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
 
 float SDLComponentNative::getScaleDpi() const
 {
-    if (window == nullptr || (windowFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY) == 0)
-        return 1.0f;
+    if (window != nullptr)
+    {
+        const auto dpiScale = SDL_GetWindowDisplayScale (window);
+        return dpiScale > 0.0 ? static_cast<float> (dpiScale) : 1.0f;
+    }
 
-    const auto scale = SDL_GetWindowDisplayScale (window);
-    return scale > 0.0f ? scale : 1.0f;
+    return 1.0f;
 }
 
 float SDLComponentNative::getCurrentFrameRate() const
@@ -712,7 +683,7 @@ Point<float> SDLComponentNative::getCursorPosition() const
 
     SDL_GetMouseState (&x, &y);
 
-    return Point<float> (x, y) / getWindowUnitsPerPoint (window);
+    return { x, y };
 }
 
 //==============================================================================
@@ -766,14 +737,12 @@ void SDLComponentNative::updateTextInputRect (Component& component)
     if (target == nullptr)
         return;
 
-    const auto scale = getWindowUnitsPerPoint (window);
-
     SDL_Rect sdlRect;
     auto textRect = target->getTextInputRect();
-    sdlRect.x = roundToInt (textRect.getX() * scale);
-    sdlRect.y = roundToInt (textRect.getY() * scale);
-    sdlRect.w = roundToInt (textRect.getWidth() * scale);
-    sdlRect.h = roundToInt (textRect.getHeight() * scale);
+    sdlRect.x = static_cast<int> (textRect.getX());
+    sdlRect.y = static_cast<int> (textRect.getY());
+    sdlRect.w = static_cast<int> (textRect.getWidth());
+    sdlRect.h = static_cast<int> (textRect.getHeight());
     SDL_SetTextInputArea (window, &sdlRect, 0);
 }
 
@@ -820,13 +789,13 @@ void SDLComponentNative::run()
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
             while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
-                std::this_thread::sleep_for (std::chrono::microseconds (25));
+                std::this_thread::sleep_for (std::chrono::microseconds (1000));
 
             while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-                std::this_thread::sleep_for (std::chrono::microseconds (10));
+                std::this_thread::sleep_for (std::chrono::microseconds (500));
 
             while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                std::this_thread::sleep_for (std::chrono::microseconds (1));
+                std::this_thread::sleep_for (std::chrono::microseconds (10));
         }
     }
 }
@@ -853,8 +822,7 @@ void SDLComponentNative::timerCallback()
         SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
         const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
-                                                   mouseY - static_cast<float> (windowY) }
-                                  / getWindowUnitsPerPoint (window);
+                                                   mouseY - static_cast<float> (windowY) };
 
         if (lastMouseMovePosition != cursorPosition)
             handleMouseMoveOrDrag (cursorPosition);
@@ -1500,35 +1468,13 @@ void SDLComponentNative::handleExposed()
 
 void SDLComponentNative::handleContentScaleChanged()
 {
-    if (internalBoundsChange)
-        return;
-
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleContentScaleChanged dpiScale=" << getScaleDpi());
 
-    if (parentWindow == nullptr && getWindowUnitsPerPoint (window) != lastWindowUnitsPerPoint)
-    {
-        MessageManager::callAsync ([self = Ptr (this)]
-        {
-            if (self->window == nullptr)
-                return;
-
-            const auto scale = getWindowUnitsPerPoint (self->window);
-            if (scale == self->lastWindowUnitsPerPoint)
-                return;
-
-            self->lastWindowUnitsPerPoint = scale;
-
-            auto preventBoundsChange = ScopedValueSetter<bool> (self->internalBoundsChange, true);
-            self->setSize (self->screenBounds.getSize());
-        });
-    }
-
     component.internalContentScaleChanged (getScaleDpi());
 
-    const auto currentSize = getSize();
-    handleResized (currentSize.getWidth(), currentSize.getHeight());
+    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
 }
 
 void SDLComponentNative::handleDisplayChanged()
@@ -1627,48 +1573,37 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             component.internalUserTriedToCloseWindow();
             break;
 
-        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
-            handleContentScaleChanged();
-            break;
-
-        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED");
-            handleContentScaleChanged();
-            break;
-
-        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
-            handleSafeAreaChanged();
-            break;
-
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            //handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleContentScaleChanged();
+            handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_MOVED:
-        {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
-            const auto scale = getWindowUnitsPerPoint (window);
-            handleMoved (roundToInt (windowEvent.data1 / scale), roundToInt (windowEvent.data2 / scale));
+            handleMoved (windowEvent.data1, windowEvent.data2);
+            break;
+
+        case SDL_EVENT_WINDOW_MOUSE_ENTER:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_ENTER");
+            float x = 0.0f, y = 0.0f;
+            SDL_GetMouseState (&x, &y);
+            handleMouseEnter ({ x, y });
             break;
         }
 
-        case SDL_EVENT_WINDOW_MOUSE_ENTER:
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_ENTER");
-            handleMouseEnter (getCursorPosition());
-            break;
-
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_LEAVE");
-            handleMouseLeave (getCursorPosition());
+            float x = 0.0f, y = 0.0f;
+            SDL_GetMouseState (&x, &y);
+            handleMouseLeave ({ x, y });
             break;
+        }
 
         case SDL_EVENT_WINDOW_SHOWN:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SHOWN");
@@ -1701,7 +1636,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_EVENT_WINDOW_EXPOSED:
-            // YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_EXPOSED");
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_EXPOSED");
             repaint();
             break;
 
@@ -1713,6 +1648,16 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_FOCUS_LOST");
             handleFocusChanged (false);
+            break;
+
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
+            handleContentScaleChanged();
+            break;
+
+        case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
+            handleSafeAreaChanged();
             break;
 
         default:
@@ -1751,8 +1696,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 #if YUP_MOBILE || YUP_EMSCRIPTEN
         case SDL_EVENT_MOUSE_MOTION:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) }
-                                / getWindowUnitsPerPoint (window);
+            auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
 
             if (event->motion.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag (cursorPosition);
@@ -1765,8 +1709,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_DOWN " << event->button.x << " " << event->button.y);
 
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
-                                / getWindowUnitsPerPoint (window);
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
@@ -1778,8 +1721,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_BUTTON_UP " << event->button.x << " " << event->button.y);
 
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
-                                / getWindowUnitsPerPoint (window);
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
@@ -1908,7 +1850,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
                                 .withFiles (pendingDroppedFiles)
                                 .withText (pendingDroppedText);
 
-                handleItemsDragPosition (Point<float> (event->drop.x, event->drop.y) / getWindowUnitsPerPoint (window), data);
+                handleItemsDragPosition ({ event->drop.x, event->drop.y }, data);
             }
 
             break;
@@ -2035,14 +1977,12 @@ bool SDLComponentNative::anyNativeWindowContains (Point<float> screenPosition)
     {
         ignoreUnused (userdata);
 
-        auto* sdlNativeComponent = dynamic_cast<SDLComponentNative*> (nativeComponent);
-        if (sdlNativeComponent == nullptr || ! sdlNativeComponent->isVisible())
-            continue;
-
-        // Global mouse coordinates are in native window units, bounds are in points
-        const auto scaledPosition = screenPosition / getWindowUnitsPerPoint (sdlNativeComponent->window);
-        if (sdlNativeComponent->getBounds().to<float>().contains (scaledPosition))
+        if (nativeComponent != nullptr
+            && nativeComponent->isVisible()
+            && nativeComponent->getBounds().to<float>().contains (screenPosition))
+        {
             return true;
+        }
     }
 
     return false;
@@ -2135,6 +2075,370 @@ ComponentNative::Ptr ComponentNative::createFor (Component& component,
                                                  void* parent)
 {
     return ComponentNative::Ptr (ReferenceCountedObjectAdopt, new SDLComponentNative (component, options, parent));
+}
+
+//==============================================================================
+
+namespace
+{
+
+bool displayEventDispatcher (void* userdata, SDL_Event* event)
+{
+    auto desktop = static_cast<Desktop*> (userdata);
+
+    if (event->type >= SDL_EVENT_DISPLAY_FIRST && event->type <= SDL_EVENT_DISPLAY_LAST)
+    {
+        switch (event->type)
+        {
+            case SDL_EVENT_DISPLAY_ADDED:
+                desktop->handleScreenConnected (static_cast<int> (event->display.displayID));
+                break;
+
+            case SDL_EVENT_DISPLAY_REMOVED:
+                desktop->handleScreenDisconnected (static_cast<int> (event->display.displayID));
+                break;
+
+            case SDL_EVENT_DISPLAY_ORIENTATION:
+                desktop->handleScreenOrientationChanged (static_cast<int> (event->display.displayID));
+                break;
+
+#if ! YUP_EMSCRIPTEN
+            case SDL_EVENT_DISPLAY_MOVED:
+                desktop->handleScreenMoved (static_cast<int> (event->display.displayID));
+                break;
+#endif
+
+            default:
+                break;
+        }
+
+        return true;
+    }
+
+    switch (event->type)
+    {
+        case SDL_EVENT_MOUSE_MOTION:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                static_cast<MouseEvent::Buttons> (event->motion.state),
+                keyModifiers,
+                cursorPosition);
+
+            // Call drag handler if any mouse buttons are pressed, otherwise call move handler
+            if (event->motion.state != 0)
+                desktop->handleGlobalMouseDrag (mouseEvent);
+            else
+                desktop->handleGlobalMouseMove (mouseEvent);
+
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseDown (mouseEvent);
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseUp (mouseEvent);
+            break;
+        }
+
+        case SDL_EVENT_MOUSE_WHEEL:
+        {
+            float x = 0.0f, y = 0.0f;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { x, y };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+            auto mouseWheelData = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
+
+            MouseEvent mouseEvent (
+                MouseEvent::noButtons,
+                keyModifiers,
+                cursorPosition);
+
+            desktop->handleGlobalMouseWheel (mouseEvent, mouseWheelData);
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    return true;
+}
+
+} // namespace
+
+//==============================================================================
+
+void Desktop::updateScreens()
+{
+    int numScreens = 0;
+    SDL_DisplayID* displays = SDL_GetDisplays (&numScreens);
+    if (displays == nullptr)
+        return;
+
+    screens.clear();
+    const SDL_DisplayID primaryDisplay = SDL_GetPrimaryDisplay();
+
+    for (int i = 0; i < numScreens; ++i)
+    {
+        const SDL_DisplayID displayID = displays[i];
+
+        SDL_Rect bounds;
+        if (! SDL_GetDisplayBounds (displayID, &bounds))
+            continue;
+
+        SDL_Rect usableBounds = bounds;
+        SDL_GetDisplayUsableBounds (displayID, &usableBounds);
+
+        auto screen = std::make_unique<Screen>();
+        screen->name = String::fromUTF8 (SDL_GetDisplayName (displayID));
+        screen->isPrimary = (displayID == primaryDisplay);
+        screen->virtualPosition = Point<int> (bounds.x, bounds.y);
+        screen->workArea = Rectangle<int> (usableBounds.x, usableBounds.y, usableBounds.w, usableBounds.h);
+
+        const float contentScale = SDL_GetDisplayContentScale (displayID);
+        screen->contentScaleX = contentScale > 0.0f ? contentScale : 1.0f;
+        screen->contentScaleY = screen->contentScaleX;
+
+        screens.add (screen.release());
+    }
+
+    SDL_free (displays);
+}
+
+void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_DEFAULT) },
+            { MouseCursor::Text, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_TEXT) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_PROGRESS) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_POINTER) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NOT_ALLOWED) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_EW_RESIZE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NS_RESIZE) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NWSE_RESIZE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NESW_RESIZE) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_MOVE) }
+        };
+    }();
+
+    currentMouseCursor = cursorToSet;
+
+    if (cursorToSet.getType() == MouseCursor::None)
+    {
+        SDL_HideCursor();
+    }
+    else
+    {
+        auto it = cursors.find (cursorToSet.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor();
+    }
+}
+
+Point<float> Desktop::getCurrentMouseLocation() const
+{
+    float x = 0.0f, y = 0.0f;
+
+    SDL_GetGlobalMouseState (&x, &y);
+
+    return { x, y };
+}
+
+void Desktop::setCurrentMouseLocation (const Point<float>& location)
+{
+    SDL_WarpMouseGlobal (location.getX(), location.getY());
+}
+
+//==============================================================================
+
+YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: initialising windowing");
+
+    const int compiledVersion = SDL_VERSION;
+    const int linkedVersion = SDL_GetVersion();
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: compiled version=" << getSDLVersionString (compiledVersion) << ", linked version=" << getSDLVersionString (linkedVersion));
+
+    // Do not install signal handlers
+    SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: disabled SDL signal handlers");
+
+    // Initialise SDL
+    SDL_SetMainReady();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: main marked ready");
+
+    const auto alreadyInitialised = SDL_WasInit (sdlDefaultSubsystems);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: requested subsystems=" << String::toHexString (static_cast<int> (sdlDefaultSubsystems)) << ", already initialised=" << String::toHexString (static_cast<int> (alreadyInitialised)));
+
+    if ((alreadyInitialised & sdlDefaultSubsystems) != sdlDefaultSubsystems)
+    {
+        if (! SDL_InitSubSystem (sdlDefaultSubsystems))
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: error initialising SDL: " << SDL_GetError());
+
+            jassertfalse;
+            YUPApplicationBase::quit();
+
+            return;
+        }
+
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems initialised");
+    }
+    else
+    {
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems were already initialised");
+    }
+
+    // Update available displays
+    Desktop::getInstance()->updateScreens();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: updated screens");
+
+    SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered display event watch");
+
+    // Set the default theme now in all platforms except ios
+#if ! YUP_IOS
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
+#endif
+
+    // Inject the event loop
+    MessageManager::getInstance()->registerEventLoopCallback ([]
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+
+        constexpr double timeoutInterval = 1.0 / 60.0; // TODO
+        auto timeoutDetector = TimeoutDetector (timeoutInterval);
+
+        SDL_Event event;
+        while (SDL_PollEvent (&event))
+        {
+            if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                return;
+
+            if (timeoutDetector.hasTimedOut())
+                break;
+        }
+
+#if ! YUP_WASM
+        if (! timeoutDetector.hasTimedOut())
+            Thread::sleep (1);
+#endif
+    });
+
+    // Set the default theme on ios
+#if YUP_IOS
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered default theme");
+    }
+#endif
+
+    SDLComponentNative::isInitialised.test_and_set();
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: windowing initialised");
+}
+
+YUP_API void YUP_CALLTYPE shutdownYup_Windowing()
+{
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: shutting down windowing");
+
+    SDLComponentNative::isInitialised.clear();
+
+    // Shutdown desktop
+    if (auto desktop = Desktop::getInstanceWithoutCreating())
+    {
+        SDL_RemoveEventWatch (displayEventDispatcher, desktop);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered display event watch");
+
+        desktop->deleteInstance();
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: deleted desktop instance");
+    }
+
+    auto messageManager = MessageManager::getInstanceWithoutCreating();
+
+    // Unregister theme
+    if (messageManager == nullptr)
+    {
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
+    else
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
+
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered default theme");
+
+    // Unregister event loop
+    if (messageManager != nullptr)
+    {
+        messageManager->registerEventLoopCallback (nullptr);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered event loop callback");
+    }
+
+    // Quit only the subsystems YUP initialised.
+    SDL_QuitSubSystem (sdlDefaultSubsystems);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: subsystems quit");
+
+#if YUP_STANDALONE_APPLICATION
+    std::atexit (&SDL_Quit);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered SDL_Quit at exit");
+#endif
+}
+
+//==============================================================================
+std::atomic_int ScopedYupInitialiser_Windowing::numScopedInitInstances = 0;
+
+ScopedYupInitialiser_Windowing::ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (1) == 0)
+        initialiseYup_Windowing();
+}
+
+ScopedYupInitialiser_Windowing::~ScopedYupInitialiser_Windowing()
+{
+    if (numScopedInitInstances.fetch_add (-1) == 1)
+        shutdownYup_Windowing();
 }
 
 } // namespace yup

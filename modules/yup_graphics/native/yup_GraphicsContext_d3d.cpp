@@ -53,8 +53,6 @@ public:
 
     Api getApi() const noexcept override { return Api::Direct3D; }
 
-    float dpiScale (void*) const override { return 1.0f; }
-
     rive::Factory* factory() override { return m_renderContext.get(); }
 
     rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
@@ -63,7 +61,7 @@ public:
 
     rive::ore::Context* gpuContext() const noexcept override { return m_oreContext.get(); }
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         if (! m_isHeadless)
         {

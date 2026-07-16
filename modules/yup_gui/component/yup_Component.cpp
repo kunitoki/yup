@@ -1624,18 +1624,28 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
+    const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    sendResized();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendResized();
+    }
 }
 
 //==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
+    const auto newBounds = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    sendMoved();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendMoved();
+    }
 }
 
 //==============================================================================
@@ -1656,7 +1666,32 @@ void Component::internalDisplayChanged() {}
 
 void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged (dpiScale);
+    if (contentScale != dpiScale)
+    {
+        contentScale = dpiScale;
+
+        contentScaleChanged (dpiScale);
+    }
+}
+
+//==============================================================================
+
+void Component::internalSafeAreaChanged()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    safeAreaChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalSafeAreaChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 //==============================================================================
@@ -1746,6 +1781,23 @@ Rectangle<float> Component::getScreenBounds() const
 {
     return localToScreen (getLocalBounds());
 }
+
+//==============================================================================
+
+Rectangle<float> Component::getSafeAreaBounds() const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getSafeAreaBounds().to<float>();
+
+    if (parentComponent == nullptr)
+        return getLocalBounds();
+
+    return parentComponent->getSafeAreaBounds()
+        .translated (-getPosition())
+        .intersection (getLocalBounds());
+}
+
+void Component::safeAreaChanged() {}
 
 //==============================================================================
 
