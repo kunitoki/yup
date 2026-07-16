@@ -69,6 +69,9 @@ public:
     void setBounds (const Rectangle<int>& newBounds) override;
 
     //==============================================================================
+    Rectangle<int> getSafeAreaBounds() const override;
+
+    //==============================================================================
     void setFullScreen (bool shouldBeFullScreen) override;
     bool isFullScreen() const override;
 
@@ -143,6 +146,7 @@ public:
     void handleExposed();
     void handleContentScaleChanged();
     void handleDisplayChanged();
+    void handleSafeAreaChanged();
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
@@ -220,6 +224,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    float lastWindowUnitsPerPoint = 1.0f;
     bool internalBoundsChange = false;
     bool firstDisplay = true;
 

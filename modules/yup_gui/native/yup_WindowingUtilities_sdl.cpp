@@ -224,6 +224,39 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
 // clang-format on
 
 //==============================================================================
+/*  SDL window coordinates are logical points on macOS, iOS, Android, Wayland and
+    Emscripten (a pixel density > 1.0 covers the high dpi scaling there), but they are
+    physical pixels on Windows and X11, where the display scale must be applied by the
+    application itself. These helpers return how many native window units make up one
+    YUP logical point: 1.0 whenever SDL already works in points, the display scale
+    otherwise.
+
+    The ratio is derived from the display content scale only: mixing the cached window
+    display scale with the live pixel density reports transient mismatched values while
+    a window is moving between screens of different scale, from inside native window
+    notifications.
+*/
+
+float getDisplayUnitsPerPoint (SDL_DisplayID displayID) noexcept
+{
+    // Wayland exposes display geometry in logical points already, while its content
+    // scale reports the compositor scale factor.
+    if (const auto* driver = SDL_GetCurrentVideoDriver(); driver != nullptr && SDL_strcmp (driver, "wayland") == 0)
+        return 1.0f;
+
+    const auto contentScale = SDL_GetDisplayContentScale (displayID);
+    return contentScale > 0.0f ? contentScale : 1.0f;
+}
+
+float getWindowUnitsPerPoint (SDL_Window* window) noexcept
+{
+    if (window == nullptr)
+        return 1.0f;
+
+    return getDisplayUnitsPerPoint (SDL_GetDisplayForWindow (window));
+}
+
+//==============================================================================
 
 bool isMouseOutsideWindow (SDL_Window* window)
 {
