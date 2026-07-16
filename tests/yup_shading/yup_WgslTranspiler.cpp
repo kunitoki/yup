@@ -2241,16 +2241,16 @@ TEST_F (WgslTranspilerIntegrationTests, TranspileToSPIRVFailsForWGSL)
 
 TEST_F (WgslTranspilerIntegrationTests, ShaderStageToString)
 {
-    EXPECT_EQ (toString (ShaderStage::vertex), "vertex");
-    EXPECT_EQ (toString (ShaderStage::fragment), "fragment");
-    EXPECT_EQ (toString (ShaderStage::compute), "compute");
+    EXPECT_EQ (toString (ShaderStage::vertex), String ("vertex"));
+    EXPECT_EQ (toString (ShaderStage::fragment), String ("fragment"));
+    EXPECT_EQ (toString (ShaderStage::compute), String ("compute"));
 }
 
 TEST_F (WgslTranspilerIntegrationTests, ShaderLanguageToString)
 {
-    EXPECT_EQ (toString (ShaderLanguage::glsl), "glsl");
-    EXPECT_EQ (toString (ShaderLanguage::wgsl), "wgsl");
-    EXPECT_EQ (toString (ShaderLanguage::msl), "msl");
+    EXPECT_EQ (toString (ShaderLanguage::glsl), String ("glsl"));
+    EXPECT_EQ (toString (ShaderLanguage::wgsl), String ("wgsl"));
+    EXPECT_EQ (toString (ShaderLanguage::msl), String ("msl"));
 }
 
 //==============================================================================
