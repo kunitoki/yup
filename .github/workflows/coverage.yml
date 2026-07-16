@@ -23,6 +23,7 @@ on:
       - "!**/native/*_opengl.*"
       - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - "**"
@@ -48,6 +49,7 @@ on:
       - "!**/native/*_opengl.*"
       - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - main
@@ -115,6 +117,8 @@ jobs:
           "*/native/*_wasm.*" \
           "*/native/*_windows.*" \
           "*/native/*_sdl.*" \
+          "*/native/*_dawn*.*" \
+          "*/native/*_webgpu.*" \
           "*/native/*_opengl.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info

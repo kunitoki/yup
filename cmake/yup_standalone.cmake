@@ -204,29 +204,44 @@ function (yup_standalone_app)
             -pthread
             -Wno-pthreads-mem-growth
             -sWASM=1
+            #-sASYNCIFY=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
-            -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE}
-            -sSTACK_SIZE=${YUP_ARG_STACK_SIZE}
             -sSHARED_MEMORY=1
             -sALLOW_MEMORY_GROWTH=1
-            -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
-            $<$<BOOL:${YUP_ARG_MAXIMUM_MEMORY}>:-sMAXIMUM_MEMORY=${YUP_ARG_MAXIMUM_MEMORY}>
             -sASSERTIONS=1
-            # -sGL_ASSERTIONS=1
-            # -sGL_DEBUG=1
+            -sEXIT_RUNTIME=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sSTACK_OVERFLOW_CHECK=2
+            -sSTACK_SIZE=${YUP_ARG_STACK_SIZE}
+            -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
+            $<$<BOOL:${YUP_ARG_MAXIMUM_MEMORY}>:-sMAXIMUM_MEMORY=${YUP_ARG_MAXIMUM_MEMORY}>
+            -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE}
             -sFORCE_FILESYSTEM=1
-            -sEXIT_RUNTIME=1
             -sNODERAWFS=0
             -sWASMFS=1
             -sFETCH=1
-            #-sASYNCIFY=1
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file=${YUP_ARG_CUSTOM_SHELL})
+
+        if (YUP_ENABLE_EMSCRIPTEN_GL_DEBUGGING)
+            list (APPEND additional_link_options
+                -sGL_ASSERTIONS=1
+                -sGL_DEBUG=1)
+        endif()
+
+        if (YUP_ENABLE_EMSCRIPTEN_WEBGPU)
+            list (APPEND additional_definitions
+                RIVE_WEBGPU=2)
+
+            list (APPEND additional_options
+                --use-port=emdawnwebgpu)
+
+            list (APPEND additional_link_options
+                --use-port=emdawnwebgpu)
+        endif()
 
         foreach (preload_file IN ITEMS ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options "--preload-file=${preload_file}")

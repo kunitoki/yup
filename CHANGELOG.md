@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Graphics
 
-- Added a native WebGPU `GraphicsContext` backend for Emscripten (`RIVE_WEBGPU=1` + `-sUSE_WEBGPU=1`), rendering Rive content through the browser's WebGPU API without Dawn
+- Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `YUP_ENABLE_WEBGPU` CMake option), rendering Rive content through the browser's WebGPU API without Dawn
 
 #### Rive Runtime Bump
 

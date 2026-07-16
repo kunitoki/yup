@@ -24,22 +24,29 @@
 
    Native WebGPU GraphicsContext backend for Emscripten.
 
-   Renders Rive content through the browser's native WebGPU API using
-   emscripten's built-in bindings, without Dawn or wagyu.
+   Renders Rive content through the browser's native WebGPU API using the
+   Emdawnwebgpu port (Dawn's implementation of webgpu.h for Emscripten), without
+   a native Dawn or wagyu build.
 
    Requirements:
-   - Build with `-sUSE_WEBGPU=1` (legacy emscripten WebGPU bindings) and define
-     `RIVE_WEBGPU=1` so rive's `RenderContextWebGPUImpl` compiles.
+   - Build with `--use-port=emdawnwebgpu` (passed at BOTH compile and link time)
+     and define `RIVE_WEBGPU=2` so rive's `RenderContextWebGPUImpl` compiles
+     against the Dawn-style webgpu.h. The legacy `-sUSE_WEBGPU=1` bindings
+     (`RIVE_WEBGPU=1`) were removed from Emscripten and are no longer supported.
+     The `YUP_ENABLE_WEBGPU` CMake option wires these flags in globally.
    - The device must be pre-initialized in JavaScript before `main()` runs and
      exposed as `Module.preinitializedWebGPUDevice`; the yup `shell.html` does
      this via a `preRun` run-dependency. Custom shells must replicate it.
 
+   Rendering model:
+   - Rive renders into a persistent offscreen texture (stable across frames) so
+     dirty-rect / partial-update frames accumulate correctly. Each frame the
+     full offscreen image is copied into the browser surface's current texture,
+     which is NOT preserved across frames (WebGPU rotates surface textures, so
+     the acquired texture would otherwise contain stale/uninitialized content
+     and produce flicker or black overpaint on undrawn areas).
+
    Known limitations:
-   - Onscreen advanced blend modes that require a destination copy of the
-     swapchain are degraded: emscripten's legacy swapchain only exposes a
-     `TextureView` (no `Texture` handle), so `setTargetTextureView(view, {})`
-     leaves the onscreen `RenderTargetWebGPU` without a copyable target texture.
-     Offscreen canvases have full texture access and are unaffected.
    - `readOffscreenPixels()` is unsupported: browser buffer mapping is
      async-only and ASYNCIFY is disabled, so there is no way to block for the
      GPU-to-CPU copy. It returns false.
@@ -55,7 +62,7 @@
 
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
-#include <emscripten/html5_webgpu.h>
+#include <webgpu/webgpu.h>
 #include <webgpu/webgpu_cpp.h>
 
 #include <cstdio>
@@ -102,11 +109,6 @@ public:
 
     Api getApi() const noexcept override { return Api::WebGPU; }
 
-    float dpiScale (void*) const override
-    {
-        return (float) emscripten_get_device_pixel_ratio();
-    }
-
     //==============================================================================
 
     rive::Factory* factory() override { return m_renderContext.get(); }
@@ -126,14 +128,17 @@ public:
 
     //==============================================================================
 
-    void onSizeChanged (void*, int width, int height, uint32_t) override
+    void onSizeChanged (void*, int width, int height, float dpiScale, uint32_t) override
     {
         if (m_renderContext == nullptr || width <= 0 || height <= 0)
             return;
 
+        m_width = width;
+        m_height = height;
+
         if (m_surface == nullptr)
         {
-            wgpu::SurfaceDescriptorFromCanvasHTMLSelector canvasDesc = {};
+            wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector canvasDesc = {};
             canvasDesc.selector = "#canvas";
 
             wgpu::SurfaceDescriptor surfaceDesc = {};
@@ -143,14 +148,29 @@ public:
             m_surface = instance.CreateSurface (&surfaceDesc);
         }
 
-        wgpu::SwapChainDescriptor swapDesc = {};
-        swapDesc.usage = wgpu::TextureUsage::RenderAttachment;
-        swapDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-        swapDesc.width = (uint32_t) width;
-        swapDesc.height = (uint32_t) height;
-        swapDesc.presentMode = wgpu::PresentMode::Fifo; // only mode emscripten supports
+        wgpu::SurfaceConfiguration config = {};
+        config.device = m_device;
+        config.format = wgpu::TextureFormat::BGRA8Unorm;
+        config.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst;
+        config.width = (uint32_t) width;
+        config.height = (uint32_t) height;
+        config.alphaMode = wgpu::CompositeAlphaMode::Auto;
+        config.presentMode = wgpu::PresentMode::Fifo; // only mode the browser guarantees
 
-        m_swapchain = m_device.CreateSwapChain (m_surface, &swapDesc);
+        m_surface.Configure (&config);
+
+        // Persistent offscreen render target. Rive renders here (accumulating
+        // dirty-rect partial updates); the full image is copied to the surface
+        // each frame. CopySrc feeds both that copy and rive's advanced-blend
+        // destination copies.
+        wgpu::TextureDescriptor textureDesc = {};
+        textureDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+        textureDesc.dimension = wgpu::TextureDimension::e2D;
+        textureDesc.size = { (uint32_t) width, (uint32_t) height, 1 };
+        textureDesc.format = wgpu::TextureFormat::BGRA8Unorm;
+
+        m_offscreenTexture = m_device.CreateTexture (&textureDesc);
+        m_offscreenTextureView = m_offscreenTexture.CreateView();
 
         m_renderTarget = m_renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()
                              ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, (uint32_t) width, (uint32_t) height);
@@ -160,25 +180,46 @@ public:
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        if (m_swapchain == nullptr || m_renderTarget == nullptr)
+        if (m_offscreenTextureView == nullptr || m_renderTarget == nullptr)
             return;
 
-        // The legacy emscripten swapchain only exposes a TextureView, so there is
-        // no companion Texture handle for advanced-blend dst copies (documented).
-        m_renderTarget->setTargetTextureView (m_swapchain.GetCurrentTextureView(), {});
+        m_renderTarget->setTargetTextureView (m_offscreenTextureView, m_offscreenTexture);
 
         m_renderContext->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
-        if (m_renderTarget == nullptr)
+        if (m_renderTarget == nullptr || m_offscreenTexture == nullptr || m_surface == nullptr)
+            return;
+
+        wgpu::SurfaceTexture surfaceTexture = {};
+        m_surface.GetCurrentTexture (&surfaceTexture);
+        if (surfaceTexture.texture == nullptr)
             return;
 
         wgpu::CommandEncoder encoder = m_device.CreateCommandEncoder();
 
+        // Rive records its render passes into the persistent offscreen texture.
         m_renderContext->flush ({ .renderTarget = m_renderTarget.get(),
                                   .externalCommandBuffer = encoder.Get() });
+
+        // Copy the full accumulated offscreen image into the non-preserved
+        // surface texture, then submit both in one command buffer.
+        wgpu::TexelCopyTextureInfo copySource = {};
+        copySource.texture = m_offscreenTexture;
+        copySource.aspect = wgpu::TextureAspect::All;
+
+        wgpu::TexelCopyTextureInfo copyDestination = {};
+        copyDestination.texture = surfaceTexture.texture;
+        copyDestination.aspect = wgpu::TextureAspect::All;
+
+        wgpu::Extent3D copySize = {};
+        copySize.width = (uint32_t) m_width;
+        copySize.height = (uint32_t) m_height;
+        copySize.depthOrArrayLayers = 1;
+
+        encoder.CopyTextureToTexture (&copySource, &copyDestination, &copySize);
 
         wgpu::CommandBuffer commands = encoder.Finish();
         m_queue.Submit (1, &commands);
@@ -334,7 +375,10 @@ private:
     wgpu::Device m_device;
     wgpu::Queue m_queue;
     wgpu::Surface m_surface;
-    wgpu::SwapChain m_swapchain;
+    wgpu::Texture m_offscreenTexture;
+    wgpu::TextureView m_offscreenTextureView;
+    int m_width = 0;
+    int m_height = 0;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
     std::unique_ptr<rive::ore::Context> m_oreContext;
