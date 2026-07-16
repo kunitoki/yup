@@ -212,6 +212,21 @@ public:
         comp.internalItemDragExit (data);
     }
 
+    static void triggerInternalResized (Component& comp, int width, int height)
+    {
+        comp.internalResized (width, height);
+    }
+
+    static void triggerInternalMoved (Component& comp, int xpos, int ypos)
+    {
+        comp.internalMoved (xpos, ypos);
+    }
+
+    static void triggerInternalContentScaleChanged (Component& comp, float dpiScale)
+    {
+        comp.internalContentScaleChanged (dpiScale);
+    }
+
     static void triggerSafeAreaChanged (Component& comp)
     {
         comp.internalSafeAreaChanged();
@@ -1845,6 +1860,121 @@ TEST_F (ComponentMockTest, AdditionalVirtualMethodTests)
     // Test displayChanged
     EXPECT_CALL (*mockComponent, displayChanged());
     mockComponent->displayChanged();
+}
+
+//==============================================================================
+// Tests for internalResized, internalMoved, internalContentScaleChanged
+//==============================================================================
+
+TEST_F (ComponentMockTest, InternalResizedUpdatesBounds)
+{
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 640, 480);
+
+    EXPECT_FLOAT_EQ (mockComponent->getWidth(), 640.0f);
+    EXPECT_FLOAT_EQ (mockComponent->getHeight(), 480.0f);
+}
+
+TEST_F (ComponentMockTest, InternalResizedCallsResizedVirtual)
+{
+    EXPECT_CALL (*mockComponent, resized());
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 200, 150);
+}
+
+TEST_F (ComponentMockTest, InternalResizedCallsResizedOnlyWhenBoundsChange)
+{
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 100, 200);
+
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    // Same size should not trigger resized again
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 100, 200);
+    // NiceMock: no expectation = resized not called, no warning
+}
+
+TEST_F (ComponentMockTest, InternalResizedDoesNotCallMoved)
+{
+    EXPECT_CALL (*mockComponent, moved()).Times (0);
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 300, 400);
+}
+
+TEST_F (ComponentMockTest, InternalResizedNotifiesComponentListener)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+
+    ComponentTestHelper::triggerInternalResized (*mockComponent, 150, 250);
+
+    EXPECT_EQ (1, listener.resizedCount);
+    EXPECT_EQ (0, listener.movedCount);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastResizedComponent);
+}
+
+TEST_F (ComponentMockTest, InternalMovedUpdatesBounds)
+{
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 42, 84);
+
+    EXPECT_FLOAT_EQ (mockComponent->getX(), 42.0f);
+    EXPECT_FLOAT_EQ (mockComponent->getY(), 84.0f);
+}
+
+TEST_F (ComponentMockTest, InternalMovedCallsMovedVirtual)
+{
+    EXPECT_CALL (*mockComponent, moved());
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 10, 20);
+}
+
+TEST_F (ComponentMockTest, InternalMovedCallsMovedOnlyWhenBoundsChange)
+{
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 30, 60);
+
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    // Same position should not trigger moved again
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 30, 60);
+    // NiceMock: no expectation = moved not called, no warning
+}
+
+TEST_F (ComponentMockTest, InternalMovedDoesNotCallResized)
+{
+    EXPECT_CALL (*mockComponent, resized()).Times (0);
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 50, 100);
+}
+
+TEST_F (ComponentMockTest, InternalMovedNotifiesComponentListener)
+{
+    RecordingComponentListener listener;
+    mockComponent->addComponentListener (&listener);
+
+    ComponentTestHelper::triggerInternalMoved (*mockComponent, 75, 125);
+
+    EXPECT_EQ (1, listener.movedCount);
+    EXPECT_EQ (0, listener.resizedCount);
+    EXPECT_EQ (static_cast<Component*> (mockComponent.get()), listener.lastMovedComponent);
+}
+
+TEST_F (ComponentMockTest, InternalContentScaleChangedCallsVirtual)
+{
+    EXPECT_CALL (*mockComponent, contentScaleChanged (1.5f));
+    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 1.5f);
+}
+
+TEST_F (ComponentMockTest, InternalContentScaleChangedCallsVirtualOnlyWhenScaleChanges)
+{
+    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
+
+    ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
+
+    // Same scale should not trigger again
+    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
+    // NiceMock: no expectation = contentScaleChanged not called, no warning
+}
+
+TEST_F (ComponentMockTest, InternalContentScaleChangedDoesNotCallMovedOrResized)
+{
+    EXPECT_CALL (*mockComponent, moved()).Times (0);
+    EXPECT_CALL (*mockComponent, resized()).Times (0);
+
+    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 1.0f);
 }
 
 //==============================================================================
