@@ -736,6 +736,362 @@ TEST_F (WgslParserTests, HandlesSemicolonsAtTopLevel)
 }
 
 //==============================================================================
+// AST unit tests — make* factories, copyExpr, ArraySpecifier
+//==============================================================================
+
+class WgslAstUnitTests : public ::testing::Test
+{
+};
+
+TEST_F (WgslAstUnitTests, MakeCompoundStatement)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    auto stmt = Statement::makeCompound (loc, {});
+    EXPECT_TRUE (stmt.is<StmtCompound>());
+    EXPECT_EQ (stmt.loc.line, 1);
+}
+
+TEST_F (WgslAstUnitTests, MakeExprStatement)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr e;
+    e.loc = loc;
+    e.value = ExprIntConst { loc, 42 };
+    auto stmt = Statement::makeExpr (loc, std::move (e));
+    EXPECT_TRUE (stmt.is<StmtExpr>());
+    auto& se = stmt.as<StmtExpr>();
+    ASSERT_NE (se.expr, nullptr);
+    EXPECT_TRUE (se.expr->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, MakeReturnStatement)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    auto val = std::make_unique<Expr>();
+    val->loc = loc;
+    val->value = ExprIntConst { loc, 42 };
+    auto stmt = Statement::makeReturn (loc, std::move (val));
+    EXPECT_TRUE (stmt.is<StmtJump>());
+    auto& j = stmt.as<StmtJump>();
+    EXPECT_EQ (j.kind, JumpKind::returnJump);
+    ASSERT_NE (j.returnValue, nullptr);
+    EXPECT_TRUE (j.returnValue->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, MakeEmptyStatement)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    auto stmt = Statement::makeEmpty (loc);
+    EXPECT_TRUE (stmt.is<StmtCompound>());
+    auto& comp = stmt.as<StmtCompound>();
+    EXPECT_TRUE (comp.statements.empty());
+}
+
+TEST_F (WgslAstUnitTests, TypeSpecifierMake)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    auto ts = TypeSpecifier::make (loc, TypeKind::floatType);
+    EXPECT_EQ (ts.kind, TypeKind::floatType);
+    EXPECT_EQ (ts.loc.line, 1);
+}
+
+TEST_F (WgslAstUnitTests, TypeSpecifierMakeNamed)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    auto ts = TypeSpecifier::makeNamed (loc, "MyStruct");
+    EXPECT_EQ (ts.kind, TypeKind::namedStruct);
+    EXPECT_EQ (ts.structName, "MyStruct");
+}
+
+TEST_F (WgslAstUnitTests, ArraySpecifierCopyAssignment)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    ArraySpecifier as;
+    as.loc = loc;
+    as.isUnsized = false;
+    Expr sizeExpr;
+    sizeExpr.loc = loc;
+    sizeExpr.value = ExprIntConst { loc, 10 };
+    as.sizeExpr = std::make_unique<Expr> (copyExpr (sizeExpr));
+
+    // Copy via assignment
+    ArraySpecifier as2;
+    as2 = as;
+
+    EXPECT_FALSE (as2.isUnsized);
+    ASSERT_NE (as2.sizeExpr, nullptr);
+    EXPECT_TRUE (as2.sizeExpr->is<ExprIntConst>());
+    EXPECT_EQ (as2.sizeExpr->as<ExprIntConst>().value, 10);
+
+    // Self-assignment
+    as2 = as2;
+    EXPECT_FALSE (as2.isUnsized);
+}
+
+TEST_F (WgslAstUnitTests, CopyExprVariable)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr e;
+    e.loc = loc;
+    e.value = ExprVariable { loc, "foo" };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprVariable>());
+    EXPECT_EQ (copy.as<ExprVariable>().name, "foo");
+}
+
+TEST_F (WgslAstUnitTests, CopyExprUnary)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr operand;
+    operand.loc = loc;
+    operand.value = ExprVariable { loc, "x" };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprUnary { loc, UnaryOp::minus, std::make_unique<Expr> (std::move (operand)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprUnary>());
+    auto& un = copy.as<ExprUnary>();
+    EXPECT_EQ (un.op, UnaryOp::minus);
+    ASSERT_NE (un.operand, nullptr);
+    EXPECT_TRUE (un.operand->is<ExprVariable>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprBinary)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr left, right;
+    left.loc = loc;
+    left.value = ExprVariable { loc, "a" };
+    right.loc = loc;
+    right.value = ExprIntConst { loc, 1 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprBinary { loc, BinaryOp::add, std::make_unique<Expr> (std::move (left)), std::make_unique<Expr> (std::move (right)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprBinary>());
+    auto& bin = copy.as<ExprBinary>();
+    EXPECT_EQ (bin.op, BinaryOp::add);
+    ASSERT_NE (bin.left, nullptr);
+    EXPECT_TRUE (bin.left->is<ExprVariable>());
+    ASSERT_NE (bin.right, nullptr);
+    EXPECT_TRUE (bin.right->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprTernary)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr cond, tBranch, fBranch;
+    cond.loc = loc;
+    cond.value = ExprBoolConst { loc, true };
+    tBranch.loc = loc;
+    tBranch.value = ExprIntConst { loc, 1 };
+    fBranch.loc = loc;
+    fBranch.value = ExprIntConst { loc, 0 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprTernary { loc,
+                            std::make_unique<Expr> (std::move (cond)),
+                            std::make_unique<Expr> (std::move (tBranch)),
+                            std::make_unique<Expr> (std::move (fBranch)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprTernary>());
+    auto& tern = copy.as<ExprTernary>();
+    ASSERT_NE (tern.condition, nullptr);
+    EXPECT_TRUE (tern.condition->is<ExprBoolConst>());
+    ASSERT_NE (tern.trueBranch, nullptr);
+    ASSERT_NE (tern.falseBranch, nullptr);
+}
+
+TEST_F (WgslAstUnitTests, CopyExprAssignment)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr lhs, rhs;
+    lhs.loc = loc;
+    lhs.value = ExprVariable { loc, "x" };
+    rhs.loc = loc;
+    rhs.value = ExprIntConst { loc, 5 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprAssignment { loc, AssignmentOp::assign, std::make_unique<Expr> (std::move (lhs)), std::make_unique<Expr> (std::move (rhs)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprAssignment>());
+    auto& assign = copy.as<ExprAssignment>();
+    EXPECT_EQ (assign.op, AssignmentOp::assign);
+    ASSERT_NE (assign.lhs, nullptr);
+    ASSERT_NE (assign.rhs, nullptr);
+    EXPECT_TRUE (assign.rhs->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprBracket)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr base, idx;
+    base.loc = loc;
+    base.value = ExprVariable { loc, "arr" };
+    idx.loc = loc;
+    idx.value = ExprIntConst { loc, 0 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprBracket { loc,
+                            std::make_unique<Expr> (std::move (base)),
+                            std::make_unique<Expr> (std::move (idx)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprBracket>());
+    auto& br = copy.as<ExprBracket>();
+    ASSERT_NE (br.base, nullptr);
+    EXPECT_TRUE (br.base->is<ExprVariable>());
+    ASSERT_NE (br.index, nullptr);
+    EXPECT_TRUE (br.index->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprFunCall)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr callee, arg;
+    callee.loc = loc;
+    callee.value = ExprVariable { loc, "foo" };
+    arg.loc = loc;
+    arg.value = ExprFloatConst { loc, 1.0f };
+
+    Expr e;
+    e.loc = loc;
+    ExprFunCall call;
+    call.loc = loc;
+    call.callee = std::make_unique<Expr> (std::move (callee));
+    call.args.push_back (std::move (arg));
+    e.value = std::move (call);
+
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprFunCall>());
+    auto& fc = copy.as<ExprFunCall>();
+    ASSERT_NE (fc.callee, nullptr);
+    EXPECT_TRUE (fc.callee->is<ExprVariable>());
+    EXPECT_EQ (fc.args.size(), 1u);
+    EXPECT_TRUE (fc.args[0].is<ExprFloatConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprDot)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr base;
+    base.loc = loc;
+    base.value = ExprVariable { loc, "obj" };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprDot { loc, std::make_unique<Expr> (std::move (base)), "member" };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprDot>());
+    auto& dot = copy.as<ExprDot>();
+    EXPECT_EQ (dot.member, "member");
+    ASSERT_NE (dot.base, nullptr);
+    EXPECT_TRUE (dot.base->is<ExprVariable>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprComma)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr left, right;
+    left.loc = loc;
+    left.value = ExprIntConst { loc, 1 };
+    right.loc = loc;
+    right.value = ExprIntConst { loc, 2 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprComma { loc,
+                          std::make_unique<Expr> (std::move (left)),
+                          std::make_unique<Expr> (std::move (right)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprComma>());
+    auto& com = copy.as<ExprComma>();
+    ASSERT_NE (com.left, nullptr);
+    ASSERT_NE (com.right, nullptr);
+    EXPECT_TRUE (com.left->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprTypeConstructor)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr arg;
+    arg.loc = loc;
+    arg.value = ExprFloatConst { loc, 0.0f };
+
+    Expr e;
+    e.loc = loc;
+    ExprTypeConstructor ctor;
+    ctor.loc = loc;
+    ctor.type = TypeSpecifier::make (loc, TypeKind::vec2);
+    ctor.args.push_back (std::move (arg));
+    e.value = std::move (ctor);
+
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprTypeConstructor>());
+    auto& tc = copy.as<ExprTypeConstructor>();
+    EXPECT_EQ (tc.type.kind, TypeKind::vec2);
+    EXPECT_EQ (tc.args.size(), 1u);
+    EXPECT_TRUE (tc.args[0].is<ExprFloatConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyExprParen)
+{
+    using namespace yup::wgsl;
+
+    SourceLocation loc { 1, 1 };
+    Expr inner;
+    inner.loc = loc;
+    inner.value = ExprIntConst { loc, 42 };
+
+    Expr e;
+    e.loc = loc;
+    e.value = ExprParen { loc, std::make_unique<Expr> (std::move (inner)) };
+    auto copy = copyExpr (e);
+    EXPECT_TRUE (copy.is<ExprParen>());
+    auto& p = copy.as<ExprParen>();
+    ASSERT_NE (p.expr, nullptr);
+    EXPECT_TRUE (p.expr->is<ExprIntConst>());
+}
+
+//==============================================================================
 // Lowering Tests — diagnostics, binding assignment (Tasks 2.1–2.7)
 //==============================================================================
 
@@ -1895,6 +2251,60 @@ TEST_F (WgslTranspilerIntegrationTests, ShaderLanguageToString)
     EXPECT_EQ (toString (ShaderLanguage::glsl), "glsl");
     EXPECT_EQ (toString (ShaderLanguage::wgsl), "wgsl");
     EXPECT_EQ (toString (ShaderLanguage::msl), "msl");
+}
+
+//==============================================================================
+// preprocessGlsl coverage tests — define, include paths, parse/preprocess failures
+//==============================================================================
+
+TEST_F (WgslTranspilerIntegrationTests, PreprocessWithDefineValue)
+{
+    TranspileOptions opts;
+    opts.defines.set ("MY_VAL", "42.0");
+
+    auto r = transpiler->transpile (kEmptyVertex, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::wgsl, opts);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    EXPECT_TRUE (r.getValue().contains ("@vertex"));
+}
+
+TEST_F (WgslTranspilerIntegrationTests, PreprocessWithDefineNoValue)
+{
+    TranspileOptions opts;
+    opts.defines.set ("ENABLED", ""); // value is empty → "#define ENABLED\n"
+
+    auto r = transpiler->transpile (kEmptyVertex, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::wgsl, opts);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    EXPECT_TRUE (r.getValue().contains ("@vertex"));
+}
+
+TEST_F (WgslTranspilerIntegrationTests, PreprocessWithIncludePaths)
+{
+    TranspileOptions opts;
+    opts.includePaths.push_back ("/nonexistent/include/path");
+
+    auto r = transpiler->transpile (kEmptyVertex, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::wgsl, opts);
+    // May succeed (path not actually used) or fail depending on glslang behavior
+    // The key is that includer.pushExternalDirectory() is exercised
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+}
+
+TEST_F (WgslTranspilerIntegrationTests, PreprocessFailsOnInvalidGLSL)
+{
+    auto r = transpiler->transpile ("not valid glsl at all;", ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::wgsl);
+    EXPECT_TRUE (r.failed()) << "Expected parse failure for invalid GLSL";
+}
+
+TEST_F (WgslTranspilerIntegrationTests, PreprocessFailsOnMissingInclude)
+{
+    const char* src = R"glsl(
+#version 450
+#include <nonexistent_header_xyz.glsl>
+void main()
+{
+}
+)glsl";
+    auto r = transpiler->transpile (src, ShaderStage::vertex, ShaderLanguage::glsl, ShaderLanguage::wgsl);
+    EXPECT_TRUE (r.failed()) << "Expected failure from missing #include";
 }
 
 //==============================================================================
