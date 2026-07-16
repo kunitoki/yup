@@ -26,6 +26,10 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 - **Native and web targets:** Windows, macOS, Linux, Wasm, Android, and iOS are part of the regular CI surface.
 - **CMake-first workflow:** Use YUP as a standalone repository or bring it into your own app/plugin project with `FetchContent`.
 
+## Documentation
+
+Start with browing the [documentation](https://yup.readthedocs.io/).
+
 ## Try It
 
 - Explore the example apps: [graphics](./examples/graphics), [audio graph](./examples/audiograph), [plugin](./examples/plugin), [console](./examples/console).
@@ -402,11 +406,6 @@ if (NOT YUP_TARGET_ANDROID)
 endif()
 ```
 
-
-## Documentation
-Start with the guides in this repository:
-
-- [Documentation home](./docs/index.md)
 
 ## Contributing
 YUP is looking for collaborators who want to help shape a permissively licensed C++ app, graphics, audio, and plugin framework. Useful contributions include:
