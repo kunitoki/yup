@@ -179,7 +179,7 @@ by the build system whenever that library or module is present in the target's
 `MODULES` list. If the dependency is absent, the guarded code is silently
 excluded.
 
-Soft dependencies have no `dependencies:` entry — they never force a library to
+Soft dependencies have no `dependencies:` entry - they never force a library to
 be linked and never create dependency cycles. They are purely opportunistic: add
 the optional library to your CMake target and the feature turns on. They are
 declared for clarity and tooling via the `optionalDeps:` field.

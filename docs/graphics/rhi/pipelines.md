@@ -30,7 +30,7 @@ binding-map sidecar from the bundled reflection data. It works **without** the
 shader transpiler compiled in.
 
 For WebGPU, WGSL variants are generated from GLSL source via a direct GLSL→WGSL
-transpiler that bypasses SPIR-V for code generation — no SPIRV-Cross WGSL backend
+transpiler that bypasses SPIR-V for code generation - no SPIRV-Cross WGSL backend
 required. The bundled reflection data still derives from SPIR-V so binding
 assignment stays consistent across all targets.
 

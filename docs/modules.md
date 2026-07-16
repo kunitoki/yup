@@ -15,11 +15,11 @@ bundled third-party libraries (`zlib`, `rive`, `rive_renderer`, `libclipper2`,
 
 Modules have two kinds of dependency:
 
-- **Required (hard) dependencies** — declared in the module's
+- **Required (hard) dependencies** - declared in the module's
   [`dependencies:`](build-system/module-format.md) line and always linked. These
   are the solid arrows in the diagrams below (third-party ones drawn with a
   dashed outline).
-- **Optional (soft) dependencies** — code guarded by
+- **Optional (soft) dependencies** - code guarded by
   `#if YUP_MODULE_AVAILABLE_<name>`. The feature is compiled in **only when that
   module/library is also present in the build**, and is silently skipped
   otherwise. There is no hard link, so optional deps never create dependency
@@ -65,7 +65,7 @@ flowchart LR
 
 Vectorized math primitives across SSE, AVX, FMA, NEON, and Apple's Accelerate
 framework, wrapping the `xsimd` library behind a YUP-friendly API. Used wherever
-tight numeric loops matter — DSP, audio, and graphics. Optionally provides
+tight numeric loops matter - DSP, audio, and graphics. Optionally provides
 interop adapters for `eigen_library` when present.
 
 ```mermaid
@@ -194,8 +194,8 @@ flowchart LR
 
 ### yup_audio_gui
 
-Audio-specific GUI components — waveforms, meters, spectrum analyzers, and
-audio-graph editor views — bridging the UI and audio stacks.
+Audio-specific GUI components - waveforms, meters, spectrum analyzers, and
+audio-graph editor views - bridging the UI and audio stacks.
 
 ```mermaid
 flowchart LR
@@ -282,8 +282,8 @@ flowchart LR
 
 ### yup_audio_processors
 
-The `AudioProcessor` model — the unit of audio processing that plugins and the
-audio graph are built from — plus parameter handling.
+The `AudioProcessor` model - the unit of audio processing that plugins and the
+audio graph are built from - plus parameter handling.
 
 ```mermaid
 flowchart LR

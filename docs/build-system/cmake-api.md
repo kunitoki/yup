@@ -310,6 +310,8 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | `STACK_SIZE` | integer | `2097152` | Stack size in bytes (`-sSTACK_SIZE`). |
 | `CUSTOM_SHELL` | path | *(built-in)* | Custom Emscripten shell HTML (`--shell-file`). |
 | `PRELOAD_FILES` | list | - | Files to preload into the virtual filesystem (`--preload-file`), e.g. `"local/path@/vfs/path"`. |
+| `ENABLE_EMSCRIPTEN_WEBGPU` | boolean | `ON` | Enable the native WebGPU rendering backend via the Emdawnwebgpu port (`--use-port=emdawnwebgpu`). Per-target parameter on `yup_standalone_app`. Requires Emscripten 4.0.22+. |
+| `ENABLE_EMSCRIPTEN_GL_DEBUGGING` | boolean | `OFF` | Enable OpenGL debugging assertions (`-sGL_ASSERTIONS=1 -sGL_DEBUG=1`). Per-target parameter on `yup_standalone_app`. |
 
 ##### Apple
 

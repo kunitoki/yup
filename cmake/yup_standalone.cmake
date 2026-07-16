@@ -26,17 +26,19 @@ function (yup_standalone_app)
         # Globals
         TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_WHEEL TARGET_CXX_STANDARD
         # Emscripten
-        INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL)
+        INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING)
     set (multi_value_args
         # Globals
         DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS
         # Emscripten
-        PRELOAD_FILES)
+        PRELOAD_FILES EMSCRIPTEN_LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
+    _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU OFF)
+    _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING OFF)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
@@ -226,13 +228,13 @@ function (yup_standalone_app)
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file=${YUP_ARG_CUSTOM_SHELL})
 
-        if (YUP_ENABLE_EMSCRIPTEN_GL_DEBUGGING)
+        if (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING)
             list (APPEND additional_link_options
                 -sGL_ASSERTIONS=1
                 -sGL_DEBUG=1)
         endif()
 
-        if (YUP_ENABLE_EMSCRIPTEN_WEBGPU)
+        if (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU)
             list (APPEND additional_definitions
                 RIVE_WEBGPU=2)
 

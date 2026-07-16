@@ -3,7 +3,7 @@
 `DataTree` is a hierarchical data structure where each node has a **type**
 (an [`Identifier`](../core/strings-and-text.md#identifier)) and holds both
 **properties** (name → [`var`](../core/data-interchange.md#var) pairs) and
-ordered **child nodes**. It is reference-counted and cheap to copy — copies share
+ordered **child nodes**. It is reference-counted and cheap to copy - copies share
 the same underlying data, so passing a `DataTree` around gives every holder a
 view of the same tree.
 
@@ -24,7 +24,7 @@ DataTree settings ("AppSettings");   // node type = "AppSettings"
 DataTree invalid;                     // default-constructed = invalid
 ```
 
-A default-constructed `DataTree` is **invalid** — a safe placeholder returned by
+A default-constructed `DataTree` is **invalid** - a safe placeholder returned by
 lookups that find nothing. Always check `isValid()` (or the `explicit operator
 bool`) before using a result:
 
@@ -49,7 +49,7 @@ int  count = settings.getNumProperties();
 Identifier name = settings.getPropertyName (0);   // by index
 ```
 
-Writing properties requires a transaction — see [Transactions](transactions.md):
+Writing properties requires a transaction - see [Transactions](transactions.md):
 
 ```cpp
 {
@@ -121,8 +121,8 @@ settings.findDescendants (allSettings, [] (const DataTree& node)
 });
 ```
 
-For richer, composable queries — filtering by property, navigation axes,
-ordering, extraction — use the [DataTreeQuery](query.md) engine.
+For richer, composable queries - filtering by property, navigation axes,
+ordering, extraction - use the [DataTreeQuery](query.md) engine.
 
 ## Change notifications
 
@@ -161,6 +161,6 @@ For typed, cached, auto-refreshing access to a single property, prefer a
 
 ## See also
 
-- [Transactions](transactions.md) — how to mutate a tree.
+- [Transactions](transactions.md) - how to mutate a tree.
 - [Querying](query.md) · [Schema & validation](schema.md)
 - [Core: `var` & data interchange](../core/data-interchange.md)

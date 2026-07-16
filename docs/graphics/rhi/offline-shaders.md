@@ -14,7 +14,7 @@ A `.ysl` bundle stores one variant per `(stage × target language)`: WGSL, GLSL,
 ESSL, HLSL, and MSL, plus the SPIR-V and the mandatory binding-map reflection.
 `compileFromBundle` picks the variant matching the active graphics API.
 
-WGSL variants are produced via a direct GLSL→WGSL transpiler — no SPIRV-Cross WGSL
+WGSL variants are produced via a direct GLSL→WGSL transpiler - no SPIRV-Cross WGSL
 backend is needed. Reflection data still originates from SPIR-V so binding numbers
 match across all targets.
 ```

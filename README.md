@@ -21,7 +21,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 ## Why YUP?
 
 - **Permissive by default:** ISC-licensed project code, with dependencies chosen for liberal licensing or public-domain availability.
-- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL, and in-progress Vulkan/WebGPU support.
+- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL/WebGPU, and in-progress Vulkan support.
 - **Audio-first application stack:** Audio devices, MIDI, formats, DSP, audio graph components, plugin hosting, and plugin client wrappers live in the same framework.
 - **Native and web targets:** Windows, macOS, Linux, Wasm, Android, and iOS are part of the regular CI surface.
 - **CMake-first workflow:** Use YUP as a standalone repository or bring it into your own app/plugin project with `FetchContent`.
@@ -195,6 +195,10 @@ sudo apt-get update && sudo apt-get install -y \
 
 ### Wasm
 Emscripten SDK (at least version 4.0.22).
+
+To use the **WebGPU** backend on Wasm, the Emdawnwebgpu port is required (enabled
+by default via the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`).
+No additional setup is needed — Emscripten fetches the port automatically during the build.
 
 
 ### Android
