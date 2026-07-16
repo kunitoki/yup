@@ -22,3 +22,4 @@
 #include "yup_shading/yup_ShaderCache.cpp"
 #include "yup_shading/yup_ShaderTranspiler.cpp"
 #include "yup_shading/yup_ShaderBundle.cpp"
+#include "yup_shading/yup_WgslTranspiler.cpp"

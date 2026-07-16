@@ -38,6 +38,15 @@
 #include <glslang/upstream/StandAlone/DirStackFileIncluder.h>
 #include <spirv_cross/spirv_cross.h>
 
+#include "wgsl/yup_GlslAst.h"
+#include "wgsl/yup_GlslParser.h"
+#include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslEmitter.h"
+#include "wgsl/yup_GlslParser.cpp"
+#include "wgsl/yup_WgslLowering.cpp"
+#include "wgsl/yup_WgslEmitter.cpp"
+
+#include "shading/yup_WgslTranspiler.cpp"
 #include "shading/yup_ShaderTranspiler.cpp"
 #include "shading/yup_ShaderCache.cpp"
 #include "shading/yup_ShaderBundleCompiler.cpp"

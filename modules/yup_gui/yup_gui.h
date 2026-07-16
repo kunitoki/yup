@@ -90,7 +90,7 @@
     Enable logging of windowing events like movement, resizes, mouse interactions.
 */
 #ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
-#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 1
 #endif
 
 //==============================================================================

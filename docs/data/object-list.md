@@ -98,7 +98,7 @@ protected:
 
 ## Using the list
 
-The list mirrors the tree — you mutate the **tree**, and the objects follow via
+The list mirrors the tree - you mutate the **tree**, and the objects follow via
 their `objects` member:
 
 ```cpp
@@ -141,10 +141,10 @@ jassert (components.objects.size() == 0);
 ```{important}
 Always call `rebuildObjects()` once after construction and `freeObjects()` in
 your subclass destructor. Objects are owned by the list; do not delete them
-directly — remove the corresponding child instead.
+directly - remove the corresponding child instead.
 ```
 
 ## See also
 
 - [DataTree](datatree.md) · [Transactions](transactions.md)
-- [CachedValue](cached-value.md) — keeps each object's state in sync.
+- [CachedValue](cached-value.md) - keeps each object's state in sync.

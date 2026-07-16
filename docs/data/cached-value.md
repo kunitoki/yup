@@ -2,7 +2,7 @@
 
 `CachedValue<T>` gives fast, **typed** access to a single [`DataTree`](datatree.md)
 property. It reads through a local cache (so repeated reads are cheap) and
-automatically refreshes when the underlying property changes — it is itself a
+automatically refreshes when the underlying property changes - it is itself a
 `DataTree` listener. Writing through it starts a transaction for you.
 
 ## Basic usage
@@ -54,7 +54,7 @@ is silently ignored.
 ## Reactive updates
 
 Because a `CachedValue` listens to its tree, external edits are reflected
-automatically — no manual refresh needed:
+automatically - no manual refresh needed:
 
 ```cpp
 AppComponent component (settingsTree);
@@ -71,7 +71,7 @@ String current = component.theme.get();   // "dark"
 ## Thread-safe access
 
 `AtomicCachedValue<T>` has the same interface but performs atomic reads/writes,
-making it safe to read from one thread while another mutates the tree — useful
+making it safe to read from one thread while another mutates the tree - useful
 for values shared between the UI and audio threads.
 
 ```cpp
@@ -101,6 +101,6 @@ objects, combine either with a [DataTreeObjectList](object-list.md).
 
 ## See also
 
-- [DataTree](datatree.md) — properties and change notifications.
-- [Object lists](object-list.md) — objects that expose `CachedValue` members.
-- [Core: multithreading](../multithreading/index.md) — thread-safety context.
+- [DataTree](datatree.md) - properties and change notifications.
+- [Object lists](object-list.md) - objects that expose `CachedValue` members.
+- [Core: multithreading](../multithreading/index.md) - thread-safety context.

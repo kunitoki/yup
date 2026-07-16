@@ -21,7 +21,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 ## Why YUP?
 
 - **Permissive by default:** ISC-licensed project code, with dependencies chosen for liberal licensing or public-domain availability.
-- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL, and in-progress Vulkan/WebGPU support.
+- **Modern vector rendering:** GPU-backed rendering through the Rive renderer, with Metal, Direct3D, OpenGL, WebGL/WebGPU, and in-progress Vulkan support.
 - **Audio-first application stack:** Audio devices, MIDI, formats, DSP, audio graph components, plugin hosting, and plugin client wrappers live in the same framework.
 - **Native and web targets:** Windows, macOS, Linux, Wasm, Android, and iOS are part of the regular CI surface.
 - **CMake-first workflow:** Use YUP as a standalone repository or bring it into your own app/plugin project with `FetchContent`.
@@ -118,37 +118,37 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **Vulkan**               | :construction:     |                    | :construction:     |                    | :construction:            |                       |
-| **WebGPU**               | :construction:     | :construction:     | :construction:     | :construction:     | :construction:            | :construction:        |
+| **WebGPU**               |                    |                    |                    | :white_check_mark: |                           | :construction:        |
 
 
 ## Supported Audio Backends
-|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
-| **CoreAudio**            |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
-| **ASIO**                 | :white_check_mark: |                    |                    |                    |                           |                       |
-| **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
-| **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
-| **JACK**                 | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
-| **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
-| **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
-| **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
+|                  | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
+|------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
+| **CoreAudio**    |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **ASIO**         | :white_check_mark: |                    |                    |                    |                           |                       |
+| **DirectSound**  | :white_check_mark: |                    |                    |                    |                           |                       |
+| **WASAPI**       | :white_check_mark: |                    |                    |                    |                           |                       |
+| **ALSA**         |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**         | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
+| **Oboe**         |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **OpenSL**       |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **AudioWorklet** |                    |                    |                    | :white_check_mark: |                           |                       |
 
 
 ## Supported Plugin Formats
-|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :white_check_mark: | :white_check_mark: |                    |                    |                           | :construction:        | :construction:        |
-| **macOS**                | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        | :construction:        | :construction:        |
-| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       | :construction:        |
+|             | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|-------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows** | :white_check_mark: | :white_check_mark: |                    |                    |                           | :construction:        | :construction:        |
+| **macOS**   | :white_check_mark: | :white_check_mark: |                    | :white_check_mark: | :white_check_mark:        | :construction:        | :construction:        |
+| **Linux**   | :construction:     | :construction:     |                    |                    |                           |                       | :construction:        |
 
 
 ## Supported Plugin Hosting Formats
-|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :white_check_mark: | :white_check_mark: |                    |                    |                           |                       |                       |
-| **macOS**                | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        |                       |                       |
-| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+|             | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|-------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows** | :white_check_mark: | :white_check_mark: |                    |                    |                           |                       |                       |
+| **macOS**   | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        |                       |                       |
+| **Linux**   | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
 ## Supported Sound Formats
@@ -195,6 +195,10 @@ sudo apt-get update && sudo apt-get install -y \
 
 ### Wasm
 Emscripten SDK (at least version 4.0.22).
+
+To use the **WebGPU** backend on Wasm, the Emdawnwebgpu port is required (enabled
+by default via the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`).
+No additional setup is needed — Emscripten fetches the port automatically during the build.
 
 
 ### Android

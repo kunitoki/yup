@@ -481,9 +481,23 @@ std::unique_ptr<ContextWGPU> ContextWGPU::Make(wgpu::Device device,
 
 void ContextWGPU::beginFrame(const FrameDescriptor& desc)
 {
-    assert(desc.externalCommandBuffer != nullptr);
-    m_wgpuCommandEncoder = std::move(
-        *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));
+    if (desc.externalCommandBuffer != nullptr)
+    {
+        // External-encoder mode: record into the host's encoder; the host
+        // owns Finish()/Submit().
+        m_wgpuCommandEncoder = std::move(
+            *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));
+        m_ownsCommandEncoder = false;
+    }
+    else
+    {
+        // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame
+        // model): create our own encoder; endFrame() finishes and submits it,
+        // preserving the one-submit-per-frame-serial contract that
+        // BufferWGPU::acquireFreshBacking() relies on.
+        m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();
+        m_ownsCommandEncoder = true;
+    }
     ++m_frameSerial;
 }
 
@@ -493,8 +507,15 @@ void ContextWGPU::endFrame()
 {
     assert(m_wgpuCommandEncoder != nullptr);
 
-    // Host owns Finish()/Submit() and the frame fence; just drop our
-    // reference to the shared encoder.
+    if (m_ownsCommandEncoder)
+    {
+        wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();
+        m_wgpuQueue.Submit(1, &commands);
+        m_ownsCommandEncoder = false;
+    }
+
+    // In external-encoder mode the host owns Finish()/Submit() and the frame
+    // fence; in both modes just drop our reference to the encoder.
     m_wgpuCommandEncoder = nullptr;
 }
 

@@ -987,6 +987,146 @@ static void fillHLSLBackendSlots (const std::string& hlslSource, ShaderReflectio
     fillVec (ref.shaderRecordBuffers);
 }
 
+//==============================================================================
+// WGSL backend slot filler: copies SPIR-V binding numbers into backendSlot fields.
+// The WGSL emitter assigns @group/@binding to match glslang's SPIR-V assignment
+// 1:1, so backendSlot = binding and backendSlotSecondary stays ~0u except for
+// sampled images where the split sampler gets its own binding computed by the
+// same allocator used in WgslLowering.
+//==============================================================================
+
+static void fillWGSLBackendSlots (spirv_cross::Compiler& compiler, ShaderReflection& ref)
+{
+    auto fillVec = [] (std::vector<ShaderReflection::ResourceBinding>& bindings)
+    {
+        for (auto& b : bindings)
+            b.backendSlot = b.binding;
+    };
+
+    fillVec (ref.uniformBuffers);
+    fillVec (ref.storageBuffers);
+    fillVec (ref.stageInputs);
+    fillVec (ref.stageOutputs);
+    fillVec (ref.subpassInputs);
+    fillVec (ref.storageImages);
+    fillVec (ref.sampledImages);
+    fillVec (ref.atomicCounters);
+    fillVec (ref.accelerationStructures);
+    fillVec (ref.glPlainUniforms);
+    fillVec (ref.tensors);
+    fillVec (ref.pushConstantBuffers);
+    fillVec (ref.shaderRecordBuffers);
+    fillVec (ref.separateImages);
+
+    // For separate samplers in WGSL, allocator assigns the next free binding
+    // in the same group after all textures. We compute a simple sequential
+    // allocation matching the WgslLowering allocator: textures in ascending
+    // binding order get companion samplers at a deterministic offset.
+    std::map<uint32_t, uint32_t> groupNextSamplerBinding;
+
+    for (auto& img : ref.sampledImages)
+    {
+        uint32_t g = img.set;
+        if (groupNextSamplerBinding[g] == 0)
+            groupNextSamplerBinding[g] = img.binding + 1;
+        else
+            groupNextSamplerBinding[g] = groupNextSamplerBinding[g];
+    }
+
+    for (auto& samp : ref.separateSamplers)
+    {
+        uint32_t g = samp.set;
+        samp.backendSlot = samp.binding;
+
+        // Find matching image and assign companion sampler binding
+        for (auto& img : ref.sampledImages)
+        {
+            if (img.set == g)
+            {
+                img.backendSlotSecondary = groupNextSamplerBinding[g]++;
+                break;
+            }
+        }
+
+        samp.backendSlotSecondary = samp.backendSlot;
+    }
+}
+
+//==============================================================================
+// Helper: preprocess GLSL with glslang and return the expanded source.
+// Used by the WGSL transpiler path which needs preprocessed source for the
+// GlslParser (which has no preprocessor of its own).
+//==============================================================================
+
+static ResultValue<String> preprocessGlsl (const String& source,
+                                           ShaderStage stage,
+                                           ShaderLanguage sourceLang,
+                                           const TranspileOptions& options)
+{
+    const auto glslStage = toGlslangStage (stage);
+
+    glslang::TShader shader (glslStage);
+    shader.setEnvInput (toGlslangSource (sourceLang), glslStage, glslang::EShClientVulkan, 100);
+
+    auto sourceUtf8 = source.toStdString();
+    const char* srcPtr = sourceUtf8.c_str();
+    const int srcLen = static_cast<int> (sourceUtf8.length());
+    shader.setStringsWithLengths (&srcPtr, &srcLen, 1);
+
+    if (options.entryPoint.isNotEmpty())
+        shader.setSourceEntryPoint (options.entryPoint.toRawUTF8());
+
+    // Inject defines as a preamble
+    String preamble;
+    HashMap<String, String>::Iterator i (options.defines);
+    while (i.next())
+    {
+        if (i.getValue().isNotEmpty())
+            preamble << "#define " << i.getKey() << " " << i.getValue() << "\n";
+        else
+            preamble << "#define " << i.getKey() << "\n";
+    }
+
+    if (preamble.isNotEmpty())
+        shader.setPreamble (preamble.toRawUTF8());
+
+    TBuiltInResource resources = getDefaultResources();
+
+    EShMessages messages = static_cast<EShMessages> (EShMsgDefault | EShMsgSpvRules);
+
+    if (sourceLang != ShaderLanguage::essl)
+        messages = static_cast<EShMessages> (messages | EShMsgVulkanRules);
+
+    int defaultVersion = (sourceLang == ShaderLanguage::essl) ? 300 : 100;
+
+    DirStackFileIncluder includer;
+    for (const auto& path : options.includePaths)
+        includer.pushExternalDirectory (path.toStdString());
+
+    if (! shader.parse (&resources, defaultVersion, false, messages, includer))
+    {
+        String infoLog = shader.getInfoLog();
+        String debugLog = shader.getInfoDebugLog();
+
+        if (infoLog.isEmpty() && debugLog.isNotEmpty())
+            return makeResultValueFail (debugLog);
+
+        return makeResultValueFail (infoLog);
+    }
+
+    // Run the preprocessor to get expanded source
+    std::string preprocessedStr;
+    if (! shader.preprocess (&resources, defaultVersion, ENoProfile, false, false, messages, &preprocessedStr, includer))
+    {
+        String infoLog = shader.getInfoLog();
+        if (infoLog.isEmpty())
+            infoLog = "Preprocessing failed";
+        return makeResultValueFail (infoLog);
+    }
+
+    return makeResultValueOk (String (preprocessedStr));
+}
+
 } // namespace
 
 //==============================================================================
@@ -1241,6 +1381,33 @@ ResultValue<String> ShaderTranspiler::transpile (const String& source,
                                                  ShaderLanguage targetLang,
                                                  const TranspileOptions& options)
 {
+    // WGSL target: use the GLSL→WGSL direct transpiler (bypasses SPIR-V entirely
+    // for code generation, since spirv_cross has no WGSL backend and none of the
+    // other approaches (tint/naga integration) are v1).
+    if (targetLang == ShaderLanguage::wgsl)
+    {
+        // Accept only GLSL/ESSL source
+        if (sourceLang != ShaderLanguage::glsl && sourceLang != ShaderLanguage::essl)
+            return makeResultValueFail ("WGSL output is only supported from GLSL/ESSL source");
+
+        // Run glslang preprocessing (defines, includes, #if) + validation
+        auto preprocessed = preprocessGlsl (source, stage, sourceLang, options);
+        if (preprocessed.failed())
+            return makeResultValueFail (preprocessed.getErrorMessage());
+
+        // Run the direct GLSL→WGSL transpiler
+        WgslTranspileOptions wgslOpts;
+        wgslOpts.entryPoint = options.entryPoint;
+
+        if (options.entryPoint.isNotEmpty())
+            wgslOpts.outputEntryPoint = options.entryPoint;
+
+        wgslOpts.defaultGroup = 0;
+
+        return WgslTranspiler::transpile (preprocessed.getValue(), stage, wgslOpts);
+    }
+
+    // All other targets: SPIR-V path
     auto spirvResult = compileToSPIRV (source, stage, sourceLang, options);
 
     if (spirvResult.failed())
@@ -1390,6 +1557,19 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 
                 auto ref = extractReflection (compiler);
                 fillHLSLBackendSlots (hlslSource, ref);
+
+                return makeResultValueOk (std::move (ref));
+            }
+
+            case ShaderLanguage::wgsl:
+            {
+                auto compiler = createSpirvCompiler (words, wordCount);
+
+                // WGSL reflection uses SPIR-V for validation/reflection only;
+                // backendSlot = binding (the WGSL emitter assigns @group/@binding
+                // to match glslang's SPIR-V assignment 1:1).
+                auto ref = extractReflection (*compiler);
+                fillWGSLBackendSlots (*compiler, ref);
 
                 return makeResultValueOk (std::move (ref));
             }

@@ -104,8 +104,8 @@ text content, building, and serialization.
 ## Serialization
 
 The `var`/JSON/XML types above are the *data* layer. To map your own C++ types
-to and from archives (binary or `var`/JSON) with a single per-type description —
-`SerialisationTraits`, `BinaryArchive`, and `ToVar`/`FromVar` — see the dedicated
+to and from archives (binary or `var`/JSON) with a single per-type description -
+`SerialisationTraits`, `BinaryArchive`, and `ToVar`/`FromVar` - see the dedicated
 [Serialization](serialisation.md) page.
 
 ```{seealso}

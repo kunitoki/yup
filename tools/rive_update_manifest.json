@@ -117,6 +117,92 @@
           ]
         }
       ],
+      "patches": [
+        {
+          "path": "include/rive/renderer/ore/ore_context_wgpu.hpp",
+          "note": "ContextWGPU owned-encoder mode: add m_ownsCommandEncoder flag",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    uint64_t m_frameSerial = 0;"
+            ],
+            "to": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    bool m_ownsCommandEncoder = false;",
+              "    uint64_t m_frameSerial = 0;"
+            ]
+          }
+        },
+        {
+          "path": "source/ore/wgpu/ore_context_wgpu.cpp",
+          "note": "ContextWGPU owned-encoder mode: create/submit own encoder when beginFrame has no external one (fixes GpuFrame on Emscripten WebGPU)",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    assert(desc.externalCommandBuffer != nullptr);",
+              "    m_wgpuCommandEncoder = std::move(",
+              "        *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    // Host owns Finish()/Submit() and the frame fence; just drop our",
+              "    // reference to the shared encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ],
+            "to": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    if (desc.externalCommandBuffer != nullptr)",
+              "    {",
+              "        // External-encoder mode: record into the host's encoder; the host",
+              "        // owns Finish()/Submit().",
+              "        m_wgpuCommandEncoder = std::move(",
+              "            *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "    else",
+              "    {",
+              "        // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame",
+              "        // model): create our own encoder; endFrame() finishes and submits it,",
+              "        // preserving the one-submit-per-frame-serial contract that",
+              "        // BufferWGPU::acquireFreshBacking() relies on.",
+              "        m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();",
+              "        m_ownsCommandEncoder = true;",
+              "    }",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    if (m_ownsCommandEncoder)",
+              "    {",
+              "        wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();",
+              "        m_wgpuQueue.Submit(1, &commands);",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "",
+              "    // In external-encoder mode the host owns Finish()/Submit() and the frame",
+              "    // fence; in both modes just drop our reference to the encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ]
+          }
+        }
+      ],
       "shader_generation": {
         "source_dir": "renderer/src/shaders",
         "output_dir": "out/generated",
@@ -172,6 +258,10 @@
           "d3d": [
             "make",
             "fxc"
+          ],
+          "wgsl": [
+            "make",
+            "naga"
           ]
         },
         "targets": [
@@ -185,7 +275,8 @@
           "rive_renderer_appletvsimulator_metallib",
           "spirv",
           "spirv-binary",
-          "d3d"
+          "d3d",
+          "wgsl"
         ],
         "optional_targets": [
           "d3d"

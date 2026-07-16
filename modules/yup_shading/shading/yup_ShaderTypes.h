@@ -49,6 +49,49 @@ enum class ShaderStage
 };
 
 //==============================================================================
+/** Returns a human-readable string for a ShaderLanguage. */
+[[nodiscard]] constexpr const char* toString (ShaderLanguage lang)
+{
+    switch (lang)
+    {
+        case ShaderLanguage::glsl:
+            return "glsl";
+        case ShaderLanguage::essl:
+            return "essl";
+        case ShaderLanguage::hlsl:
+            return "hlsl";
+        case ShaderLanguage::msl:
+            return "msl";
+        case ShaderLanguage::spirv:
+            return "spirv";
+        case ShaderLanguage::wgsl:
+            return "wgsl";
+    }
+    return "unknown";
+}
+
+/** Returns a human-readable string for a ShaderStage. */
+[[nodiscard]] constexpr const char* toString (ShaderStage stage)
+{
+    switch (stage)
+    {
+        case ShaderStage::vertex:
+            return "vertex";
+        case ShaderStage::fragment:
+            return "fragment";
+        case ShaderStage::compute:
+            return "compute";
+        case ShaderStage::geometry:
+            return "geometry";
+        case ShaderStage::tessControl:
+            return "tessControl";
+        case ShaderStage::tessEval:
+            return "tessEval";
+    }
+    return "unknown";
+}
+
+//==============================================================================
 /**
     Complete shader reflection data extracted from a compiled shader.
 

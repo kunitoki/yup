@@ -93,6 +93,7 @@ private:
     wgpu::Device m_wgpuDevice;
     wgpu::Queue m_wgpuQueue;
     wgpu::CommandEncoder m_wgpuCommandEncoder;
+    bool m_ownsCommandEncoder = false;
     uint64_t m_frameSerial = 0;
 };
 

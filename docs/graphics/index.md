@@ -1,7 +1,7 @@
 # Graphics
 
 The graphics stack renders 2D vector content and GPU-accelerated scenes across
-Metal, Direct3D, OpenGL / OpenGL ES, WebGL, and (in progress) Vulkan / WebGPU.
+Metal, Direct3D, OpenGL / OpenGL ES, WebGL and WebGPU (WASM / Emscripten), and Vulkan (in progress).
 It is built on the open source [Rive](https://rive.app/) renderer.
 
 **Modules covered:** `yup_graphics`, `yup_shading`, `yup_animation`.

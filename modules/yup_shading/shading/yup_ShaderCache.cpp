@@ -71,6 +71,11 @@ ResultValue<String> ShaderCache::getOrTranspile (const String& cacheKey,
                                                  ShaderLanguage targetLang,
                                                  const TranspileOptions& options)
 {
+    // WGSL target bypasses SPIR-V for code generation (no SPIR-V→WGSL backend).
+    // Route through transpile() which handles the WGSL path internally.
+    if (targetLang == ShaderLanguage::wgsl)
+        return transpiler->transpile (source, stage, sourceLang, targetLang, options);
+
     auto spirvResult = getOrCompile (cacheKey, source, stage, sourceLang, options);
 
     if (spirvResult.failed())

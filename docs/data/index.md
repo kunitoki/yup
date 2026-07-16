@@ -1,24 +1,24 @@
 # Data
 
 Structured, observable, transactional data models. The `yup_data_model` module
-is built around **DataTree** — a hierarchical, schema-validatable, undoable data
+is built around **DataTree** - a hierarchical, schema-validatable, undoable data
 structure ideal for application state, documents, and configuration.
 
 **Module covered:** `yup_data_model`.
 
 ## In this area
 
-- [DataTree](datatree.md) — the core hierarchical node type: properties, child
+- [DataTree](datatree.md) - the core hierarchical node type: properties, child
   nodes, navigation, iteration, and change listeners.
-- [Transactions](transactions.md) — the atomic mutation model, undo/redo, and
+- [Transactions](transactions.md) - the atomic mutation model, undo/redo, and
   child management.
-- [Querying (DataTreeQuery)](query.md) — a fluent + XPath-like query engine for
+- [Querying (DataTreeQuery)](query.md) - a fluent + XPath-like query engine for
   finding, filtering, and extracting data from a tree.
-- [Schema & validation](schema.md) — `DataTreeSchema` for JSON-Schema-based
+- [Schema & validation](schema.md) - `DataTreeSchema` for JSON-Schema-based
   structure, defaults, and validated transactions.
-- [CachedValue](cached-value.md) — fast, reactive typed access to properties
+- [CachedValue](cached-value.md) - fast, reactive typed access to properties
   (plus the thread-safe `AtomicCachedValue`).
-- [Object lists](object-list.md) — `DataTreeObjectList` for keeping C++ objects
+- [Object lists](object-list.md) - `DataTreeObjectList` for keeping C++ objects
   in sync with tree children.
 
 ## At a glance

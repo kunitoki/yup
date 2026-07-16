@@ -46,7 +46,7 @@ Uuid parsed ("550e8400e29b41d4a716446655440000");
 ## ConsoleApplication
 
 `ConsoleApplication` builds command-line tools with sub-commands, help, and
-version output — the same scaffolding the YUP command-line examples use.
+version output - the same scaffolding the YUP command-line examples use.
 
 ```cpp
 int main (int argc, char* argv[])
@@ -70,7 +70,7 @@ arguments (`getValueForOption`, `containsOption`, …).
 
 ```{seealso}
 For GUI applications, use `YUPApplication` and `START_YUP_APPLICATION` from
-`yup_events`/`yup_gui` instead — see [Getting Started](../getting-started/index.md).
+`yup_events`/`yup_gui` instead - see [Getting Started](../getting-started/index.md).
 ```
 
 ## RuntimePermissions
@@ -114,11 +114,11 @@ macros).
 
 ## Other utilities
 
-- **`ScopeGuard`** — run a lambda on scope exit (RAII cleanup without a custom
+- **`ScopeGuard`** - run a lambda on scope exit (RAII cleanup without a custom
   class).
 - **`Uuid`**, **`WindowsRegistry`** (Windows-only registry access).
-- **`FlagSet`** / **`EnumHelpers`** — type-safe bitmask flags over enums.
-- **`Functional`** / **`MetaProgramming`** — small function and template helpers.
+- **`FlagSet`** / **`EnumHelpers`** - type-safe bitmask flags over enums.
+- **`Functional`** / **`MetaProgramming`** - small function and template helpers.
 
 ```cpp
 auto guard = ScopeGuard { [&] { cleanup(); } };   // runs at scope exit
@@ -126,6 +126,6 @@ auto guard = ScopeGuard { [&] { cleanup(); } };   // runs at scope exit
 
 ## See also
 
-- [Results & error handling](results-and-errors.md) — `Result` and assertions.
-- [Getting Started](../getting-started/index.md) — GUI application entry points.
-- [Build System](../build-system/index.md) — platform build configuration.
+- [Results & error handling](results-and-errors.md) - `Result` and assertions.
+- [Getting Started](../getting-started/index.md) - GUI application entry points.
+- [Build System](../build-system/index.md) - platform build configuration.

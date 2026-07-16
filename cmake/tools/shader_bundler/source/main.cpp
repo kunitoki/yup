@@ -330,7 +330,7 @@ static int runCompileMode (const ArgumentList& args)
     }
 
     if (targetLanguages.empty())
-        targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl };
+        targetLanguages = { ShaderLanguage::glsl, ShaderLanguage::essl, ShaderLanguage::hlsl, ShaderLanguage::msl, ShaderLanguage::spirv, ShaderLanguage::wgsl };
 
     // -- Shared transpile options
     TranspileOptions options;
