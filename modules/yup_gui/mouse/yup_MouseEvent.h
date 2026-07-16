@@ -81,6 +81,23 @@ public:
     MouseEvent (Buttons newButtons, KeyModifiers newModifiers, const Point<float>& newPosition, Component* sourceComponent) noexcept;
 
     //==============================================================================
+    /** Creates a MouseEvent object with full state.
+
+        @param newButtons             The buttons that are currently held down
+        @param newModifiers           The key modifiers that are currently active
+        @param newPosition            The mouse position, relative to the component that receives the event
+        @param lastMouseDownPosition  The position where the last mouse down event occurred
+        @param lastMouseDownTime      The time of the last mouse down event
+        @param sourceComponent        The component that the mouse event applies to
+    */
+    MouseEvent (Buttons newButtons,
+                KeyModifiers newModifiers,
+                const Point<float>& newPosition,
+                const Point<float>& lastMouseDownPosition,
+                yup::Time lastMouseDownTime,
+                Component* sourceComponent) noexcept;
+
+    //==============================================================================
     /** Copy constructor and assignment operators. */
     MouseEvent (const MouseEvent& other) noexcept = default;
     MouseEvent (MouseEvent&& other) noexcept = default;
@@ -256,13 +273,6 @@ public:
     bool operator!= (const MouseEvent& other) const noexcept;
 
 private:
-    MouseEvent (Buttons newButtons,
-                KeyModifiers newModifiers,
-                const Point<float>& newPosition,
-                const Point<float>& lastMouseDownPosition,
-                yup::Time lastMouseDownTime,
-                Component* sourceComponent) noexcept;
-
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;

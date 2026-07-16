@@ -508,6 +508,157 @@ TEST_F (TextEditorTests, MoveCaretDownUsesWrappedVisualLines)
     EXPECT_LT (editor->getCaretPosition(), editor->getText().length());
 }
 
+TEST_F (TextEditorTests, MoveCaretUpInMultiLine)
+{
+    editor->setMultiLine (true);
+    editor->setText ("First\nSecond");
+
+    editor->setCaretPosition (7);
+    int before = editor->getCaretPosition();
+    editor->moveCaretUp();
+    int after = editor->getCaretPosition();
+
+    EXPECT_LE (after, before);
+}
+
+TEST_F (TextEditorTests, MoveCaretUpExtendingSelectionFromBelow)
+{
+    editor->setMultiLine (true);
+    editor->setText ("First\nSecond");
+
+    editor->setCaretPosition (7);
+    editor->moveCaretUp (true);
+
+    EXPECT_GT (editor->getCaretPosition(), 0);
+}
+
+TEST_F (TextEditorTests, FontSizeDefaultsToEmpty)
+{
+    EXPECT_FALSE (editor->getFontSize().has_value());
+}
+
+TEST_F (TextEditorTests, SetFontSizeUpdate)
+{
+    editor->setFontSize (16.0f);
+    ASSERT_TRUE (editor->getFontSize().has_value());
+    EXPECT_FLOAT_EQ (16.0f, editor->getFontSize().value());
+}
+
+TEST_F (TextEditorTests, ResetFontSizeClearsValue)
+{
+    editor->setFontSize (16.0f);
+    ASSERT_TRUE (editor->getFontSize().has_value());
+
+    editor->resetFontSize();
+    EXPECT_FALSE (editor->getFontSize().has_value());
+}
+
+TEST_F (TextEditorTests, GetTextBoundsReturnsNonEmpty)
+{
+    editor->setText ("Hello World");
+    editor->setBounds (0, 0, 200, 50);
+
+    const auto bounds = editor->getTextBounds();
+    EXPECT_FALSE (bounds.isEmpty());
+}
+
+TEST_F (TextEditorTests, GetScrollOffsetDefaultIsZero)
+{
+    const auto scroll = editor->getScrollOffset();
+    EXPECT_FLOAT_EQ (0.0f, scroll.getX());
+    EXPECT_FLOAT_EQ (0.0f, scroll.getY());
+}
+
+TEST_F (TextEditorTests, GetSelectedTextAreasOnEmptySelection)
+{
+    editor->setText ("Hello World");
+    editor->setCaretPosition (5);
+
+    const auto areas = editor->getSelectedTextAreas();
+    EXPECT_TRUE (areas.empty());
+}
+
+TEST_F (TextEditorTests, GetSelectedTextAreasWithSelection)
+{
+    editor->setText ("Hello World");
+    editor->setSelection (Range<int> (0, 5));
+
+    const auto areas = editor->getSelectedTextAreas();
+    EXPECT_FALSE (areas.empty());
+}
+
+TEST_F (TextEditorTests, CopyWithoutSelectionDoesNotCrash)
+{
+    editor->setText ("Hello World");
+    editor->setCaretPosition (5);
+
+    EXPECT_NO_THROW (editor->copy());
+}
+
+TEST_F (TextEditorTests, CopyWithSelectionDoesNotCrash)
+{
+    editor->setText ("Hello World");
+    editor->setSelection (Range<int> (0, 5));
+
+    EXPECT_NO_THROW (editor->copy());
+}
+
+TEST_F (TextEditorTests, CutWithoutSelectionDoesNotCrash)
+{
+    editor->setText ("Hello World");
+    editor->setCaretPosition (5);
+
+    EXPECT_NO_THROW (editor->cut());
+}
+
+TEST_F (TextEditorTests, CutWithSelectionRemovesText)
+{
+    editor->setText ("Hello World");
+    editor->setSelection (Range<int> (0, 6));
+
+    editor->cut();
+
+    EXPECT_EQ (String ("World"), editor->getText());
+}
+
+TEST_F (TextEditorTests, PasteDoesNotCrash)
+{
+    editor->setText ("Hello");
+    editor->setCaretPosition (5);
+
+    EXPECT_NO_THROW (editor->paste());
+}
+
+TEST_F (TextEditorTests, PasteReplacesSelection)
+{
+    editor->setText ("Hello World");
+    editor->setSelection (Range<int> (6, 11));
+
+    SystemClipboard::copyTextToClipboard ("Everyone");
+    editor->paste();
+
+    EXPECT_EQ (String ("Hello Everyone"), editor->getText());
+}
+
+TEST_F (TextEditorTests, PasteWithNoSelectionInsertsAtCaret)
+{
+    editor->setText ("Hello World");
+    editor->setCaretPosition (6);
+
+    SystemClipboard::copyTextToClipboard ("Beautiful ");
+    editor->paste();
+
+    EXPECT_EQ (String ("Hello Beautiful World"), editor->getText());
+}
+
+TEST_F (TextEditorTests, MoveCaretUpInSingleLineDoesNotThrow)
+{
+    editor->setText ("Hello World");
+    editor->setCaretPosition (5);
+
+    EXPECT_NO_THROW (editor->moveCaretUp());
+}
+
 /* TODO: moveCaretToWordEnd/moveCaretToWordStart is private
 TEST_F (TextEditorTests, DoubleClickSelectsWord)
 {

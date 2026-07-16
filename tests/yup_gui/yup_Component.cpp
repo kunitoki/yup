@@ -1000,6 +1000,167 @@ TEST_F (ComponentTest, MouseCursorMethods)
 
 // =============================================================================
 
+TEST_F (ComponentTest, SetBottomLeft)
+{
+    child->setBottomLeft (Point<float> (200.0f, 150.0f));
+
+    EXPECT_FLOAT_EQ (200.0f, child->getX());
+    EXPECT_FLOAT_EQ (150.0f - 75.0f, child->getY());
+}
+
+TEST_F (ComponentTest, SetTopRight)
+{
+    child->setTopRight (Point<float> (200.0f, 50.0f));
+
+    EXPECT_FLOAT_EQ (200.0f - 100.0f, child->getX());
+    EXPECT_FLOAT_EQ (50.0f, child->getY());
+}
+
+TEST_F (ComponentTest, SetBottomRight)
+{
+    child->setBottomRight (Point<float> (200.0f, 150.0f));
+
+    EXPECT_FLOAT_EQ (200.0f - 100.0f, child->getX());
+    EXPECT_FLOAT_EQ (150.0f - 75.0f, child->getY());
+}
+
+TEST_F (ComponentTest, SetCenterX)
+{
+    parent->setSize (400.0f, 300.0f);
+    child->setSize (100.0f, 75.0f);
+
+    child->setCenterX (200.0f);
+
+    EXPECT_FLOAT_EQ (150.0f, child->getX());
+}
+
+TEST_F (ComponentTest, SetCenterY)
+{
+    parent->setSize (400.0f, 300.0f);
+    child->setSize (100.0f, 75.0f);
+
+    child->setCenterY (150.0f);
+
+    EXPECT_FLOAT_EQ (112.5f, child->getY());
+}
+
+TEST_F (ComponentTest, GetScreenBounds)
+{
+    auto bounds = child->getScreenBounds();
+
+    EXPECT_FLOAT_EQ (100.0f, bounds.getWidth());
+    EXPECT_FLOAT_EQ (75.0f, bounds.getHeight());
+}
+
+TEST_F (ComponentTest, GetBoundsRelativeToTopLevel)
+{
+    auto bounds = child->getBoundsRelativeToTopLevelComponent();
+
+    EXPECT_FLOAT_EQ (75.0f, bounds.getX());
+    EXPECT_FLOAT_EQ (75.0f, bounds.getY());
+    EXPECT_FLOAT_EQ (100.0f, bounds.getWidth());
+    EXPECT_FLOAT_EQ (75.0f, bounds.getHeight());
+}
+
+TEST_F (ComponentTest, GetLocalArea)
+{
+    auto sibling = std::make_unique<Component> ("sibling");
+    sibling->setBounds (200.0f, 100.0f, 50.0f, 50.0f);
+    root->addChildComponent (*sibling);
+
+    auto area = child->getLocalArea (sibling.get(), sibling->getLocalBounds());
+
+    EXPECT_FLOAT_EQ (125.0f, area.getX());
+    EXPECT_FLOAT_EQ (25.0f, area.getY());
+    EXPECT_FLOAT_EQ (50.0f, area.getWidth());
+    EXPECT_FLOAT_EQ (50.0f, area.getHeight());
+}
+
+TEST_F (ComponentTest, RaiseBy)
+{
+    auto child1 = std::make_unique<Component> ("child1");
+    auto child2 = std::make_unique<Component> ("child2");
+    auto child3 = std::make_unique<Component> ("child3");
+
+    parent->addChildComponent (*child1);
+    parent->addChildComponent (*child2);
+    parent->addChildComponent (*child3);
+
+    // Before: child(0), child1(1), child2(2), child3(3)
+    child1->raiseBy (2);
+
+    // After raising child1 by 2: child(0), child2(1), child3(2), child1(3)
+    EXPECT_EQ (child.get(), parent->getChildComponent (0));
+    EXPECT_EQ (child2.get(), parent->getChildComponent (1));
+    EXPECT_EQ (child3.get(), parent->getChildComponent (2));
+    EXPECT_EQ (child1.get(), parent->getChildComponent (3));
+}
+
+TEST_F (ComponentTest, LowerBy)
+{
+    auto child1 = std::make_unique<Component> ("child1");
+    auto child2 = std::make_unique<Component> ("child2");
+    auto child3 = std::make_unique<Component> ("child3");
+
+    parent->addChildComponent (*child1);
+    parent->addChildComponent (*child2);
+    parent->addChildComponent (*child3);
+
+    // Before: child(0), child1(1), child2(2), child3(3)
+    child3->lowerBy (2);
+
+    // After lowering child3 by 2: child(0), child3(1), child1(2), child2(3)
+    EXPECT_EQ (child.get(), parent->getChildComponent (0));
+    EXPECT_EQ (child3.get(), parent->getChildComponent (1));
+    EXPECT_EQ (child1.get(), parent->getChildComponent (2));
+    EXPECT_EQ (child2.get(), parent->getChildComponent (3));
+}
+
+TEST_F (ComponentTest, RemoveChildComponentByIndex)
+{
+    auto child1 = std::make_unique<Component> ("child1");
+    parent->addChildComponent (*child1);
+
+    EXPECT_EQ (2u, parent->getNumChildComponents());
+
+    parent->removeChildComponent (1);
+
+    EXPECT_EQ (1u, parent->getNumChildComponents());
+    EXPECT_EQ (child.get(), parent->getChildComponent (0));
+}
+
+TEST_F (ComponentTest, AddAndMakeVisibleWithIndex)
+{
+    child->setBounds (25, 25, 100, 75);
+
+    parent->removeChildComponent (*child);
+
+    parent->addAndMakeVisible (child.get(), 0);
+
+    EXPECT_TRUE (child->isVisible());
+    EXPECT_EQ (child.get(), parent->getChildComponent (0));
+}
+
+TEST_F (ComponentTest, GetParentComponentConstOverload)
+{
+    const Component* constChild = child.get();
+    const Component* constParent = constChild->getParentComponent();
+
+    EXPECT_EQ (parent.get(), constParent);
+}
+
+TEST_F (ComponentTest, FocusGainedDoesNotCrash)
+{
+    EXPECT_NO_THROW (child->focusGained());
+}
+
+TEST_F (ComponentTest, FocusLostDoesNotCrash)
+{
+    EXPECT_NO_THROW (child->focusLost());
+}
+
+// =============================================================================
+
 TEST_F (ComponentTest, OpaqueMethods)
 {
     root->setVisible (true);

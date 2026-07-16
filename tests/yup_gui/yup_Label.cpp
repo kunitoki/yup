@@ -342,3 +342,28 @@ TEST_F (LabelTest, TextWithNumbers)
     label->setText (numbersOnly, dontSendNotification);
     EXPECT_EQ (numbersOnly, label->getText());
 }
+
+TEST_F (LabelTest, JustificationCanBeSetAndGet)
+{
+    label->setJustification (Justification::center);
+    EXPECT_EQ (Justification::center, label->getJustification());
+
+    label->setJustification (Justification::topLeft);
+    EXPECT_EQ (Justification::topLeft, label->getJustification());
+
+    label->setJustification (Justification::bottomRight);
+    EXPECT_EQ (Justification::bottomRight, label->getJustification());
+}
+
+TEST_F (LabelTest, SetJustificationDoesNotAffectOtherProperties)
+{
+    const String text = "Test Text";
+    label->setText (text);
+    const float stroke = 1.5f;
+    label->setStrokeWidth (stroke);
+
+    label->setJustification (Justification::topLeft);
+
+    EXPECT_EQ (text, label->getText());
+    EXPECT_EQ (stroke, label->getStrokeWidth());
+}
