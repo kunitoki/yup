@@ -118,37 +118,37 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **Vulkan**               | :construction:     |                    | :construction:     |                    | :construction:            |                       |
-| **WebGPU**               | :construction:     | :construction:     | :construction:     | :construction:     | :construction:            | :construction:        |
+| **WebGPU**               |                    |                    |                    | :white_check_mark: |                           | :construction:        |
 
 
 ## Supported Audio Backends
-|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
-| **CoreAudio**            |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
-| **ASIO**                 | :white_check_mark: |                    |                    |                    |                           |                       |
-| **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
-| **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
-| **JACK**                 | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
-| **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
-| **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
-| **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
+|                  | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
+|------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
+| **CoreAudio**    |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **ASIO**         | :white_check_mark: |                    |                    |                    |                           |                       |
+| **DirectSound**  | :white_check_mark: |                    |                    |                    |                           |                       |
+| **WASAPI**       | :white_check_mark: |                    |                    |                    |                           |                       |
+| **ALSA**         |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**         | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
+| **Oboe**         |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **OpenSL**       |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **AudioWorklet** |                    |                    |                    | :white_check_mark: |                           |                       |
 
 
 ## Supported Plugin Formats
-|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :white_check_mark: | :white_check_mark: |                    |                    |                           | :construction:        | :construction:        |
-| **macOS**                | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        | :construction:        | :construction:        |
-| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       | :construction:        |
+|             | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|-------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows** | :white_check_mark: | :white_check_mark: |                    |                    |                           | :construction:        | :construction:        |
+| **macOS**   | :white_check_mark: | :white_check_mark: |                    | :white_check_mark: | :white_check_mark:        | :construction:        | :construction:        |
+| **Linux**   | :construction:     | :construction:     |                    |                    |                           |                       | :construction:        |
 
 
 ## Supported Plugin Hosting Formats
-|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
-|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
-| **Windows**              | :white_check_mark: | :white_check_mark: |                    |                    |                           |                       |                       |
-| **macOS**                | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        |                       |                       |
-| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+|             | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|-------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows** | :white_check_mark: | :white_check_mark: |                    |                    |                           |                       |                       |
+| **macOS**   | :white_check_mark: | :white_check_mark: |                    | :construction:     | :white_check_mark:        |                       |                       |
+| **Linux**   | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
 ## Supported Sound Formats

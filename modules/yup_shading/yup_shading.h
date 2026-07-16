@@ -45,6 +45,15 @@
 
 #include <yup_core/yup_core.h>
 
+#include <array>
+#include <cstdint>
+#include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <variant>
+#include <vector>
+
 //==============================================================================
 #if ! YUP_ENABLE_SHADER_TRANSPILER
 #if YUP_MODULE_AVAILABLE_glslang && YUP_MODULE_AVAILABLE_spirv_cross
@@ -61,6 +70,11 @@
 #include "shading/yup_ShaderBundle.h"
 
 #if YUP_ENABLE_SHADER_TRANSPILER
+#include "wgsl/yup_GlslAst.h"
+#include "wgsl/yup_GlslParser.h"
+#include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslEmitter.h"
+#include "shading/yup_WgslTranspiler.h"
 #include "shading/yup_ShaderTranspiler.h"
 #include "shading/yup_ShaderCache.h"
 #include "shading/yup_ShaderBundleCompiler.h"

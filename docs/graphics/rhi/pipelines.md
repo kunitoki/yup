@@ -29,6 +29,11 @@ HLSL, OpenGL(ES) → GLSL/ESSL, WebGPU → WGSL) and derives the mandatory
 binding-map sidecar from the bundled reflection data. It works **without** the
 shader transpiler compiled in.
 
+For WebGPU, WGSL variants are generated from GLSL source via a direct GLSL→WGSL
+transpiler that bypasses SPIR-V for code generation — no SPIRV-Cross WGSL backend
+required. The bundled reflection data still derives from SPIR-V so binding
+assignment stays consistent across all targets.
+
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (
     GraphicsContext&          ctx,
@@ -49,7 +54,8 @@ else
 `compileFromGlsl()` transpiles GLSL 450 to the backend-native language, derives
 the binding-map sidecar via reflection, and compiles. It is only available when
 `YUP_ENABLE_SHADER_TRANSPILER == 1`. This is convenient for live-editing shaders
-at runtime.
+at runtime. All backend targets are supported, including WGSL via the built-in
+GLSL→WGSL direct transpiler.
 
 ```cpp
 #if YUP_ENABLE_SHADER_TRANSPILER
