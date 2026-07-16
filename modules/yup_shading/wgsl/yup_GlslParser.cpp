@@ -2643,10 +2643,10 @@ private:
         Token idTok = expect (TokenType::identifier);
         entry.id = layoutIdFromString (idTok.text);
 
-        // Optional = value
+        // Optional = value (use parseAssignment to avoid comma operator consuming layout separators)
         if (match (TokenType::assign))
         {
-            auto val = parseExpression();
+            auto val = parseAssignment();
             if (val)
                 entry.value = std::make_unique<Expr> (std::move (val).getValue());
         }

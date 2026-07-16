@@ -1281,9 +1281,11 @@ TEST_F (WgslLoweringTests, ComputeHasWorkgroupSize)
 {
     auto r = lower (kSimpleCompute, ShaderStage::compute);
     ASSERT_TRUE (r.wasOk());
-    // Default workgroup size from options is 1,1,1 unless overridden by local_size_x/y/z
+    // Workgroup size extracted from layout(local_size_x = 8, ...) in source
     auto ep = r.getReference().entryPoint;
-    EXPECT_EQ (ep.workgroupSizeX, 1u); // from options default
+    EXPECT_EQ (ep.workgroupSizeX, 8u);
+    EXPECT_EQ (ep.workgroupSizeY, 8u);
+    EXPECT_EQ (ep.workgroupSizeZ, 1u);
 }
 
 TEST_F (WgslLoweringTests, BindingAssignmentForSampler)
