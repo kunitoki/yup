@@ -103,7 +103,7 @@ Group several transactions into one undoable step by calling
 When you have a [`DataTreeSchema`](schema.md), use `beginValidatedTransaction()`
 to reject invalid edits. Each operation returns a
 [`Result`](../core/results-and-errors.md), and the transaction only commits if
-all operations succeeded — see [Schema & validation](schema.md#validated-transactions).
+all operations succeeded - see [Schema & validation](schema.md#validated-transactions).
 
 ```cpp
 auto tx = settings.beginValidatedTransaction (schema);
@@ -115,6 +115,6 @@ if (r.failed())
 
 ## See also
 
-- [DataTree](datatree.md) — the structure being mutated.
-- [Schema & validation](schema.md) — validated transactions.
+- [DataTree](datatree.md) - the structure being mutated.
+- [Schema & validation](schema.md) - validated transactions.
 - [Core: results & error handling](../core/results-and-errors.md)

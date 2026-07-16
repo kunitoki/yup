@@ -50,8 +50,8 @@ if (web.connect (nullptr))
 
 For custom protocols, use the low-level socket types:
 
-- **`StreamingSocket`** — a TCP connection (connect/listen/read/write).
-- **`DatagramSocket`** — UDP send/receive, including multicast.
+- **`StreamingSocket`** - a TCP connection (connect/listen/read/write).
+- **`DatagramSocket`** - UDP send/receive, including multicast.
 
 ```cpp
 StreamingSocket socket;
@@ -66,8 +66,8 @@ if (socket.connect ("example.com", 80))
 
 ## Addresses
 
-- **`IPAddress`** — an IPv4 or IPv6 address with parsing and enumeration.
-- **`MACAddress`** — a hardware address, with adapter enumeration.
+- **`IPAddress`** - an IPv4 or IPv6 address with parsing and enumeration.
+- **`MACAddress`** - a hardware address, with adapter enumeration.
 
 ```cpp
 IPAddress local = IPAddress::local();                 // loopback
@@ -78,7 +78,7 @@ String    text  = local.toString();
 ## NamedPipe
 
 `NamedPipe` provides bidirectional inter-process communication over an OS named
-pipe — a lightweight alternative to sockets for local IPC.
+pipe - a lightweight alternative to sockets for local IPC.
 
 ```cpp
 NamedPipe pipe;
@@ -97,5 +97,5 @@ with external programs.
 
 ## See also
 
-- [Files & streams](files-and-streams.md) — the stream types network I/O uses.
-- [Data interchange](data-interchange.md) — parse JSON/XML responses.
+- [Files & streams](files-and-streams.md) - the stream types network I/O uses.
+- [Data interchange](data-interchange.md) - parse JSON/XML responses.

@@ -94,12 +94,20 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #elif YUP_LINUX || YUP_WASM || YUP_ANDROID
 
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+
+#include "native/yup_GraphicsContext_webgpu.cpp"
+#else
+
 #if YUP_EMSCRIPTEN && RIVE_WEBGL
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #endif
 
 #include "native/yup_GraphicsContext_opengl.cpp"
+#endif
 
 #endif
 

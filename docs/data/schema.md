@@ -125,7 +125,7 @@ See [Transactions](transactions.md) for the non-validated transaction API.
 
 ## Validating an existing tree
 
-Validate a whole subtree at once — useful after loading data from disk or the
+Validate a whole subtree at once - useful after loading data from disk or the
 network:
 
 ```cpp
@@ -142,4 +142,4 @@ value)` and `validateChildAddition (parentType, childType)`.
 ## See also
 
 - [DataTree](datatree.md) · [Transactions](transactions.md)
-- [Core: serialization](../core/serialisation.md) — persist validated trees.
+- [Core: serialization](../core/serialisation.md) - persist validated trees.

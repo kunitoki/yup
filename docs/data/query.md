@@ -1,6 +1,6 @@
 # Querying (DataTreeQuery)
 
-`DataTreeQuery` is a query engine for [`DataTree`](datatree.md) hierarchies —
+`DataTreeQuery` is a query engine for [`DataTree`](datatree.md) hierarchies -
 think of it as SQL/XPath for your tree. It offers two interchangeable styles:
 
 - a **fluent API** (method chaining, full IDE autocompletion), and
@@ -255,7 +255,7 @@ bool empty  = result.empty();
 
 ## Error handling
 
-The engine is forgiving — malformed XPath and empty selections yield empty
+The engine is forgiving - malformed XPath and empty selections yield empty
 results rather than throwing, so defensive checks are simple:
 
 ```cpp
@@ -269,5 +269,5 @@ missing.
 
 ## See also
 
-- [DataTree](datatree.md) — the structure being queried.
-- [Schema & validation](schema.md) — enforce structure so queries can assume it.
+- [DataTree](datatree.md) - the structure being queried.
+- [Schema & validation](schema.md) - enforce structure so queries can assume it.

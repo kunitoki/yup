@@ -28,9 +28,16 @@
 #endif
 
 #if RIVE_WEBGPU
-#include "source/webgpu/em_js_handle.cpp"
 #include "source/webgpu/render_context_webgpu_impl.cpp"
-//#include "source/webgpu/render_context_webgpu_vulkan.cpp"
+
+#include "source/ore/wgpu/ore_bind_group_wgpu.cpp"
+#include "source/ore/wgpu/ore_buffer_wgpu.cpp"
+#include "source/ore/wgpu/ore_context_wgpu.cpp"
+#include "source/ore/wgpu/ore_pipeline_wgpu.cpp"
+#include "source/ore/wgpu/ore_render_pass_wgpu.cpp"
+#include "source/ore/wgpu/ore_sampler_wgpu.cpp"
+#include "source/ore/wgpu/ore_shader_module_wgpu.cpp"
+#include "source/ore/wgpu/ore_texture_wgpu.cpp"
 
 #elif RIVE_WEBGL
 #include "source/gl/gl_state.cpp"

@@ -83,7 +83,7 @@ XmlElement* byName      = root->getChildByName ("item");
 XmlElement* byAttr      = root->getChildByAttribute ("id", "main");
 ```
 
-Iterate children with the range-based `getChildIterator()` (skips nothing —
+Iterate children with the range-based `getChildIterator()` (skips nothing -
 including text nodes), or walk the linked list manually with
 `getNextElement()`:
 
@@ -159,10 +159,10 @@ config.writeTo (File ("config.xml"));
 ```
 
 `TextFormat` fields include `addDefaultHeader`, `lineWrapLength`, and
-`newLineChars` (set to `nullptr` for a single line — what `singleLine()` does).
+`newLineChars` (set to `nullptr` for a single line - what `singleLine()` does).
 
 ## See also
 
-- [Data interchange](data-interchange.md) — `var`, JSON, and the data layer.
-- [Files & streams](files-and-streams.md) — parsing from and writing to streams.
-- [Serialization](serialisation.md) — describe and persist your own C++ types.
+- [Data interchange](data-interchange.md) - `var`, JSON, and the data layer.
+- [Files & streams](files-and-streams.md) - parsing from and writing to streams.
+- [Serialization](serialisation.md) - describe and persist your own C++ types.

@@ -107,6 +107,8 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "com.mycompany"
     TARGET_CXX_STANDARD 20
     INITIAL_MEMORY 268435456  # 256MB initial memory (Emscripten only)
+    ENABLE_EMSCRIPTEN_WEBGPU ON # WebGPU backend via Emdawnwebgpu port (Emscripten only, ON by default)
+    ENABLE_EMSCRIPTEN_GL_DEBUGGING OFF # OpenGL debug diagnostics (Emscripten only)
     MODULES
         yup_audio_devices
         yup_gui

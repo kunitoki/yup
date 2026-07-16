@@ -3,7 +3,7 @@
 YUP's serialization framework maps C++ types to and from archives with a single
 description per type. Describe a type once and it can be written to a compact
 **binary archive**, converted to/from a `var` (and therefore JSON), or embedded
-inside a larger serializable object — no hand-written read/write code per field.
+inside a larger serializable object - no hand-written read/write code per field.
 
 ```{note}
 The API uses the British spelling `Serialisation` (inherited from the JUCE
@@ -48,7 +48,7 @@ struct Settings
 ```{important}
 The archive's `operator()` is called with the members to serialize. Use
 [`named(...)`](#named-values) so field names survive in named formats (JSON). The
-**same** `serialise` function is used for both reading and writing — the archive
+**same** `serialise` function is used for both reading and writing - the archive
 knows the direction.
 ```
 
@@ -91,7 +91,7 @@ void load (Archive& archive)
 }
 ```
 
-`archive.getVersion()` returns an `std::optional<int>` — the detected version of
+`archive.getVersion()` returns an `std::optional<int>` - the detected version of
 the object being read (`nullopt` when no version info is present).
 
 ## Helpers
@@ -100,7 +100,7 @@ the object being read (`nullopt` when no version info is present).
 
 `named (name, value)` wraps a reference with a field name. In named formats
 (JSON/`var`) the name becomes the object key; binary archives strip names. Use
-named pairs consistently — mixing named and unnamed items in one archive is an
+named pairs consistently - mixing named and unnamed items in one archive is an
 error.
 
 ```cpp
@@ -128,7 +128,7 @@ static void load (Archive& archive, T& container)
 
 ## Built-in support
 
-Primitive types — arithmetic types, enums, `String`, and `var` — are serialized
+Primitive types - arithmetic types, enums, `String`, and `var` - are serialized
 directly. The framework also ships `SerialisationTraits` specializations for
 common standard and YUP containers, so they work out of the box as members:
 
@@ -173,7 +173,7 @@ archive (a, b, c);               // equivalent to three separate calls
 ```
 
 ```{note}
-`BinaryArchive` versioning is handled at the file-format level, not per item —
+`BinaryArchive` versioning is handled at the file-format level, not per item -
 `getVersion()` on the binary archives returns `nullopt`. When you need embedded
 per-type versions, use the `var`/JSON path below, which records a `__version__`
 property.
@@ -229,6 +229,6 @@ struct yup::VariantConverter<MyType> : yup::StrictVariantConverter<MyType> {};
 
 ## See also
 
-- [Data interchange](data-interchange.md) — `var`, `DynamicObject`, JSON, XML.
-- [Files & streams](files-and-streams.md) — the streams archives read/write.
-- [Data area](../data/index.md) — higher-level observable document models.
+- [Data interchange](data-interchange.md) - `var`, `DynamicObject`, JSON, XML.
+- [Files & streams](files-and-streams.md) - the streams archives read/write.
+- [Data area](../data/index.md) - higher-level observable document models.
