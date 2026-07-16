@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Build System
 
+- justfile recipes now use per-platform build directories (`build/mac`, `build/ios`, `build/android`, `build/emscripten`, `build/ninja`, `build/win`), so switching platforms no longer requires `just clean` and preserves downloaded FetchContent dependencies per platform. The `just build` recipe gains a `PLATFORM` parameter (default `mac`).
 - `yup_standalone_app` gains a `MAXIMUM_MEMORY` Emscripten argument (`-sMAXIMUM_MEMORY`); when set it caps the heap that `ALLOW_MEMORY_GROWTH` may reach.
 - `yup_tests` wasm build: raised `INITIAL_MEMORY` to 256 MB, added `MAXIMUM_MEMORY` cap of 1 GB, and reduced `STACK_SIZE` to 1 MB to give the heap room for concurrent pthread stress tests; fixes `RuntimeError: memory access out of bounds` in CI.
 - Fetched third-party dependencies (SDL3, Perfetto, plugin SDKs) are now cloned shallowly (`--depth 1`) and skip network update checks on reconfigure, speeding up fresh configures and reconfigures. Shallow cloning is automatically disabled when a `GIT_TAG` is a commit hash.
