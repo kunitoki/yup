@@ -33,6 +33,8 @@ MemoryBlock makeMemoryBlock (const char* data, size_t size)
     return MemoryBlock (data, size);
 }
 
+} // namespace
+
 class SystemClipboardTests : public ::testing::Test
 {
 protected:
@@ -46,8 +48,6 @@ protected:
         EXPECT_TRUE (SystemClipboard::clearClipboardData());
     }
 };
-
-} // namespace
 
 TEST (ClipboardDataTests, DefaultConstructionCreatesEmptyData)
 {
