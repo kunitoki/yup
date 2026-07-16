@@ -600,6 +600,77 @@ void main()
 }
 )glsl";
 
+constexpr const char* kComputeAllBuiltins = R"glsl(
+#version 450
+layout(local_size_x = 8, local_size_y = 4, local_size_z = 1) in;
+void main()
+{
+    uint gi = gl_GlobalInvocationID.x;
+    uint li = gl_LocalInvocationIndex;
+    uint wi = gl_WorkGroupID.x;
+    uint nw = gl_NumWorkGroups.x;
+}
+)glsl";
+
+constexpr const char* kIntegerVectors = R"glsl(
+#version 450
+void main()
+{
+    ivec2 i2 = ivec2(0, 1);
+    ivec3 i3 = ivec3(1, 2, 3);
+    ivec4 i4 = ivec4(0);
+    uvec2 u2 = uvec2(0u, 1u);
+    uvec3 u3 = uvec3(1u);
+    uvec4 u4 = uvec4(0u);
+}
+)glsl";
+
+constexpr const char* kUnaryPlusBitwiseNot = R"glsl(
+#version 450
+void main()
+{
+    float p = +1.0;
+    int n = ~0;
+}
+)glsl";
+
+constexpr const char* kBitwiseOps = R"glsl(
+#version 450
+void main()
+{
+    int a = 0xFF;
+    int b = 0x0F;
+    int r1 = a & b;
+    int r2 = a | b;
+    int r3 = a ^ b;
+    int r4 = a << 2;
+    int r5 = a >> 2;
+}
+)glsl";
+
+constexpr const char* kCompoundAssignmentOps = R"glsl(
+#version 450
+void main()
+{
+    int x = 10;
+    x %= 3;
+    x <<= 1;
+    x >>= 1;
+    x &= 0xFF;
+    x ^= 0x0F;
+    x |= 0xF0;
+}
+)glsl";
+
+constexpr const char* kCommaOperator = R"glsl(
+#version 450
+void main()
+{
+    int x;
+    int y = (x = 1, x + 2);
+}
+)glsl";
+
 } // namespace
 
 //==============================================================================
@@ -2044,6 +2115,94 @@ TEST_F (WgslEmitterGoldenTests, LogicalOperators)
 
     EXPECT_TRUE (wgsl.contains ("&&") || wgsl.contains ("&&")); // WGSL uses &&
     EXPECT_TRUE (wgsl.contains ("!"));
+}
+
+//==============================================================================
+// wgslTypeName, binaryOpSymbol, assignOpSymbol coverage
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, IntegerVectorTypes)
+{
+    auto r = transpile (kIntegerVectors, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("vec2<i32>"));
+    EXPECT_TRUE (wgsl.contains ("vec3<i32>"));
+    EXPECT_TRUE (wgsl.contains ("vec4<i32>"));
+    EXPECT_TRUE (wgsl.contains ("vec2<u32>"));
+    EXPECT_TRUE (wgsl.contains ("vec3<u32>"));
+    EXPECT_TRUE (wgsl.contains ("vec4<u32>"));
+}
+
+TEST_F (WgslEmitterGoldenTests, UnaryPlusAndBitwiseNot)
+{
+    auto r = transpile (kUnaryPlusBitwiseNot, ShaderStage::vertex);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // Unary plus (+) and bitwise not (~) should be preserved
+    EXPECT_TRUE (wgsl.contains ("+"));
+    EXPECT_TRUE (wgsl.contains ("~"));
+}
+
+TEST_F (WgslEmitterGoldenTests, BitwiseOperators)
+{
+    auto r = transpile (kBitwiseOps, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // Bitwise operators should be preserved
+    EXPECT_TRUE (wgsl.contains ("&"));
+    EXPECT_TRUE (wgsl.contains ("|"));
+    EXPECT_TRUE (wgsl.contains ("^"));
+    EXPECT_TRUE (wgsl.contains ("<<"));
+    EXPECT_TRUE (wgsl.contains (">>"));
+}
+
+TEST_F (WgslEmitterGoldenTests, CompoundAssignmentOps)
+{
+    auto r = transpile (kCompoundAssignmentOps, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // All compound assignment operators
+    EXPECT_TRUE (wgsl.contains ("%="));
+    EXPECT_TRUE (wgsl.contains ("<<="));
+    EXPECT_TRUE (wgsl.contains (">>="));
+    EXPECT_TRUE (wgsl.contains ("&="));
+    EXPECT_TRUE (wgsl.contains ("^="));
+    EXPECT_TRUE (wgsl.contains ("|="));
+}
+
+TEST_F (WgslEmitterGoldenTests, EmitExprComma)
+{
+    auto r = transpile (kCommaOperator, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    // Comma operator may be lowered or emitted; just verify success
+    EXPECT_NE (r.getValue().length(), 0u);
+}
+
+//==============================================================================
+// Compute entry-point coverage
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, ComputeEntryPointAllBuiltins)
+{
+    auto r = transpile (kComputeAllBuiltins, ShaderStage::compute);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("@compute"));
+    EXPECT_TRUE (wgsl.contains ("@workgroup_size(8, 4, 1)"));
+    // Compute builtins in entry-point signature
+    EXPECT_TRUE (wgsl.contains ("@builtin(global_invocation_id)"));
+    EXPECT_TRUE (wgsl.contains ("@builtin(local_invocation_index)"));
+    EXPECT_TRUE (wgsl.contains ("@builtin(workgroup_id)"));
+    EXPECT_TRUE (wgsl.contains ("@builtin(num_workgroups)"));
+    // computeInputType: vec3<u32> for most, u32 for local_invocation_index
+    EXPECT_TRUE (wgsl.contains ("vec3<u32>"));
+    EXPECT_TRUE (wgsl.contains (": u32")); // local_invocation_index → u32
 }
 
 //==============================================================================
