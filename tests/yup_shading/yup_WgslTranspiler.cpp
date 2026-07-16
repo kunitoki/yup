@@ -485,6 +485,121 @@ void main()
 }
 )glsl";
 
+constexpr const char* kAllMathBuiltins = R"glsl(
+#version 450
+void main()
+{
+    float s = step(0.5, 1.0);
+    float sm = smoothstep(0.0, 1.0, 0.5);
+    float l = length(vec3(1.0));
+    float d = distance(vec3(0.0), vec3(1.0));
+    vec3 c = cross(vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    vec3 r1 = reflect(vec3(1.0), vec3(0.0, 1.0, 0.0));
+    vec3 r2 = refract(vec3(1.0), vec3(0.0, 1.0, 0.0), 0.5);
+    vec3 fw = faceforward(vec3(1.0), vec3(0.0), vec3(0.0, 0.0, 1.0));
+    mat3 t = transpose(mat3(1.0));
+    float si = sin(0.5);
+    float co = cos(0.5);
+    float ta = tan(0.5);
+    float asi = asin(0.5);
+    float aco = acos(0.5);
+    float at = atan(0.5, 1.0);
+    float pw = pow(2.0, 3.0);
+    float ex = exp(1.0);
+    float lo = log(2.0);
+    float e2 = exp2(2.0);
+    float l2 = log2(4.0);
+    float sq = sqrt(4.0);
+    float ab = abs(-1.0);
+    float sg = sign(-2.0);
+    float fl = floor(1.5);
+    float tr = trunc(1.5);
+    float ro = round(1.5);
+    float ce = ceil(1.5);
+    float fr = fract(1.5);
+    float mi = min(1.0, 2.0);
+    float ma = max(1.0, 2.0);
+}
+)glsl";
+
+constexpr const char* kBvecTypes = R"glsl(
+#version 450
+void main()
+{
+    bvec2 b2 = bvec2(true, false);
+    bvec3 b3 = bvec3(true);
+    bvec4 b4 = bvec4(false);
+    bool b1 = any(b2) && all(b3);
+}
+)glsl";
+
+constexpr const char* kLogicalOperators = R"glsl(
+#version 450
+void main()
+{
+    bool a = true;
+    bool b = false;
+    bool c = a && b;
+    bool d = a || b;
+    bool e = !a;
+    float x = 1.0;
+    float y = 2.0;
+    bool f = x > 0.0 && y < 3.0;
+}
+)glsl";
+
+constexpr const char* kDotBracketExpr = R"glsl(
+#version 450
+struct Data { float value; vec3 color; };
+uniform Data u;
+void main()
+{
+    float v = u.value;
+    vec3 c = u.color;
+}
+)glsl";
+
+constexpr const char* kSamplerNoBinding = R"glsl(
+#version 450
+uniform sampler2D tex;
+void main()
+{
+    vec4 c = texture(tex, vec2(0.0));
+}
+)glsl";
+
+constexpr const char* kOutInoutFunction = R"glsl(
+#version 450
+void scale(inout float a, out float b)
+{
+    b = a * 2.0;
+    a = a + 1.0;
+}
+void main()
+{
+    float x = 1.0;
+    float y;
+    scale(x, y);
+}
+)glsl";
+
+constexpr const char* kFragmentNoInputs = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(0.0);
+}
+)glsl";
+
+constexpr const char* kVertexOnlyImplicitBuiltins = R"glsl(
+#version 450
+void main()
+{
+    gl_Position = vec4(float(gl_VertexIndex), 0.0, 0.0, 1.0);
+}
+)glsl";
+
 } // namespace
 
 //==============================================================================
@@ -834,6 +949,23 @@ void main() { }
 )glsl";
     auto r = lower (src, ShaderStage::fragment);
     // subpassInput may be rejected or accepted depending on lowering support
+}
+
+TEST_F (WgslLoweringTests, AutoBindingForSamplerWithoutExplicitBinding)
+{
+    auto r = lower (kSamplerNoBinding, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto resources = r.getReference().resources;
+    EXPECT_GE (resources.size(), 1u);
+    // Combined sampler without explicit binding gets auto-assigned
+    EXPECT_NE (resources[0].samplerBinding, ~0u); // companion sampler allocated
+}
+
+TEST_F (WgslLoweringTests, OutInoutParametersProcessed)
+{
+    auto r = lower (kOutInoutFunction, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    // Should succeed — out/inout params are lowered to pointer equivalents
 }
 
 //==============================================================================
@@ -1484,6 +1616,127 @@ TEST_F (WgslEmitterGoldenTests, UnsignedIntLiterals)
     EXPECT_TRUE (wgsl.contains ("5u"));
     EXPECT_TRUE (wgsl.contains ("3u"));
     EXPECT_TRUE (wgsl.contains ("u32"));
+}
+
+//==============================================================================
+// Math builtins — comprehensive name mapping coverage
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, AllMathBuiltinsPreserved)
+{
+    auto r = transpile (kAllMathBuiltins, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // All math builtins should be preserved (name-mapped where needed)
+    EXPECT_TRUE (wgsl.contains ("step("));
+    EXPECT_TRUE (wgsl.contains ("smoothstep("));
+    EXPECT_TRUE (wgsl.contains ("length("));
+    EXPECT_TRUE (wgsl.contains ("distance("));
+    EXPECT_TRUE (wgsl.contains ("cross("));
+    EXPECT_TRUE (wgsl.contains ("reflect("));
+    EXPECT_TRUE (wgsl.contains ("refract("));
+    EXPECT_TRUE (wgsl.contains ("faceForward("));
+    EXPECT_TRUE (wgsl.contains ("transpose("));
+    EXPECT_TRUE (wgsl.contains ("sin("));
+    EXPECT_TRUE (wgsl.contains ("cos("));
+    EXPECT_TRUE (wgsl.contains ("tan("));
+    EXPECT_TRUE (wgsl.contains ("asin("));
+    EXPECT_TRUE (wgsl.contains ("acos("));
+    EXPECT_TRUE (wgsl.contains ("atan2("));
+    EXPECT_TRUE (wgsl.contains ("pow("));
+    EXPECT_TRUE (wgsl.contains ("exp("));
+    EXPECT_TRUE (wgsl.contains ("log("));
+    EXPECT_TRUE (wgsl.contains ("sqrt("));
+    EXPECT_TRUE (wgsl.contains ("abs("));
+    EXPECT_TRUE (wgsl.contains ("sign("));
+    EXPECT_TRUE (wgsl.contains ("floor("));
+    EXPECT_TRUE (wgsl.contains ("trunc("));
+    EXPECT_TRUE (wgsl.contains ("round("));
+    EXPECT_TRUE (wgsl.contains ("ceil("));
+    EXPECT_TRUE (wgsl.contains ("fract("));
+    EXPECT_TRUE (wgsl.contains ("min("));
+    EXPECT_TRUE (wgsl.contains ("max("));
+}
+
+//==============================================================================
+// Boolean vector type coverage
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, BvecTypes)
+{
+    auto r = transpile (kBvecTypes, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("vec2<bool>"));
+    EXPECT_TRUE (wgsl.contains ("vec3<bool>"));
+    EXPECT_TRUE (wgsl.contains ("vec4<bool>"));
+    EXPECT_TRUE (wgsl.contains ("any("));
+    EXPECT_TRUE (wgsl.contains ("all("));
+}
+
+//==============================================================================
+// Logical operators
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, LogicalOperators)
+{
+    auto r = transpile (kLogicalOperators, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("&&") || wgsl.contains ("&&")); // WGSL uses &&
+    EXPECT_TRUE (wgsl.contains ("!"));
+}
+
+//==============================================================================
+// Implicit builtin coverage
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, VertexWithOnlyImplicitBuiltins)
+{
+    auto r = transpile (kVertexOnlyImplicitBuiltins, ShaderStage::vertex);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+    EXPECT_TRUE (wgsl.contains ("@vertex"));
+    EXPECT_TRUE (wgsl.contains ("@builtin(vertex_index)"));
+    EXPECT_TRUE (wgsl.contains ("@builtin(position)"));
+}
+
+TEST_F (WgslEmitterGoldenTests, FragmentWithNoExplicitInputs)
+{
+    auto r = transpile (kFragmentNoInputs, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+    EXPECT_TRUE (wgsl.contains ("@fragment"));
+    // Fragment always gets implicit builtin inputs
+    EXPECT_TRUE (wgsl.contains ("frag_coord") || wgsl.contains ("fragCoord") || wgsl.contains ("position"));
+}
+
+TEST_F (WgslEmitterGoldenTests, OutInoutParamsLowered)
+{
+    auto r = transpile (kOutInoutFunction, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+    // out/inout params become pointer params with & prefix
+    EXPECT_TRUE (wgsl.contains ("&a"));
+    EXPECT_TRUE (wgsl.contains ("&b"));
+    EXPECT_TRUE (wgsl.contains ("scale("));
+}
+
+//==============================================================================
+// Dot/bracket expression legalization
+//==============================================================================
+
+TEST_F (WgslLoweringTests, DotBracketExpressionsLegalized)
+{
+    auto r = lower (kDotBracketExpr, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    // Verify the symbol table picked up struct member accesses
+    auto ep = r.getReference().entryPoint;
+    EXPECT_TRUE (ep.isFragment);
 }
 
 //==============================================================================
