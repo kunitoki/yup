@@ -1221,3 +1221,25 @@ TEST_F (ListBoxTests, SetSelectedRowsWithNotification)
     EXPECT_EQ (1, callbackCount);
     EXPECT_EQ (3, listBox->getNumSelectedRows());
 }
+
+TEST_F (ListBoxTests, MouseUpDoesNotCrash)
+{
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (50, 50));
+    EXPECT_NO_THROW (listBox->mouseUp (event));
+}
+
+TEST_F (ListBoxTests, MouseMoveDoesNotCrash)
+{
+    MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (50, 50));
+    EXPECT_NO_THROW (listBox->mouseMove (event));
+}
+
+TEST_F (ListBoxTests, RefreshComponentForRowDefaultReturnsExisting)
+{
+    int rows = 5;
+    TestListBoxModel model (rows);
+    listBox->setModel (&model);
+
+    auto* refreshed = model.refreshComponentForRow (0, nullptr);
+    EXPECT_EQ (nullptr, refreshed);
+}

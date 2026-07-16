@@ -106,3 +106,13 @@ public:
     MOCK_METHOD (void, safeAreaChanged, (), (override));
     MOCK_METHOD (void, transformChanged, (), (override));
 };
+
+// ==============================================================================
+// Mock yup::ComponentStyle
+// ==============================================================================
+
+class MockComponentStyle : public yup::ComponentStyle
+{
+public:
+    MOCK_METHOD (void, paint, (yup::Graphics&, const yup::ApplicationTheme&, const yup::Component&), (override));
+};

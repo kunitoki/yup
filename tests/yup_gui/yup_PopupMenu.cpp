@@ -837,3 +837,79 @@ TEST_F (PopupMenuTest, ScrollingWithCustomComponents)
     // Menu should still be functional after scrolling with custom components
     EXPECT_TRUE (menu->isVisible());
 }
+
+TEST_F (PopupMenuTest, IsBeingShownReturnsCorrectState)
+{
+    auto menu = PopupMenu::create();
+    EXPECT_FALSE (menu->isBeingShown());
+
+    parentComponent->setVisible (true);
+
+    menu->addItem ("Item 1", 1);
+    menu->show();
+    EXPECT_TRUE (menu->isBeingShown());
+
+    menu->dismissAllPopups();
+    EXPECT_FALSE (menu->isBeingShown());
+}
+
+TEST_F (PopupMenuTest, IsItemShowingSubmenu)
+{
+    auto menu = PopupMenu::create();
+    menu->addItem ("Item 1", 1);
+
+    auto sub = PopupMenu::create();
+    sub->addItem ("Sub 1", 10);
+    menu->addSubMenu ("More", *sub, true);
+
+    EXPECT_FALSE (menu->isItemShowingSubmenu (0));
+    EXPECT_FALSE (menu->isItemShowingSubmenu (1));
+
+    menu->show();
+    EXPECT_FALSE (menu->isItemShowingSubmenu (0));
+}
+
+TEST_F (PopupMenuTest, NeedsScrolling)
+{
+    auto menu = PopupMenu::create();
+    EXPECT_FALSE (menu->needsScrolling());
+
+    for (int i = 1; i <= 100; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+    EXPECT_TRUE (menu->needsScrolling());
+
+    auto empty = PopupMenu::create();
+    EXPECT_FALSE (empty->needsScrolling());
+}
+
+TEST_F (PopupMenuTest, GetScrollUpIndicatorBounds)
+{
+    auto menu = PopupMenu::create();
+    for (int i = 1; i <= 100; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
+    const auto upBounds = menu->getScrollUpIndicatorBounds();
+    EXPECT_FALSE (upBounds.isEmpty());
+}
+
+TEST_F (PopupMenuTest, OptionsWithFocusComponent)
+{
+    auto menu = PopupMenu::create (PopupMenu::Options().withFocusComponent (parentComponent.get()));
+    menu->addItem ("Item 1", 1);
+
+    EXPECT_NO_THROW (menu->show());
+    EXPECT_TRUE (menu->isVisible());
+}
+
+TEST_F (PopupMenuTest, StyleIdentifiersContainAllStyleIds)
+{
+    auto id = PopupMenu::Style::menuItemBackgroundActiveSubmenu;
+    EXPECT_FALSE (id.isNull());
+    EXPECT_NE (id, PopupMenu::Style::menuItemBackground);
+    EXPECT_NE (id, PopupMenu::Style::menuItemBackgroundHighlighted);
+    EXPECT_NE (id, PopupMenu::Style::menuItemText);
+    EXPECT_NE (id, PopupMenu::Style::menuItemTextDisabled);
+}

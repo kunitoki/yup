@@ -538,3 +538,52 @@ TEST_F (ProgressBarTests, ConcurrentReadAndWrite)
 
     EXPECT_TRUE (true);
 }
+
+// =============================================================================
+
+class ProgressBarSubclassTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        progressBar = std::make_unique<TestProgressBar> ("testProgressBar");
+    }
+
+    void TearDown() override
+    {
+        progressBar.reset();
+    }
+
+    class TestProgressBar : public ProgressBar
+    {
+    public:
+        TestProgressBar (StringRef componentID)
+            : ProgressBar (componentID)
+        {
+        }
+
+        void progressChanged() override
+        {
+            progressChangedCallCount++;
+            lastProgress = getProgress();
+        }
+
+        int progressChangedCallCount = 0;
+        double lastProgress = 0.0;
+    };
+
+    std::unique_ptr<TestProgressBar> progressBar;
+};
+
+TEST_F (ProgressBarSubclassTests, ProgressChangedCanBeOverridden)
+{
+    progressBar->progressChanged();
+    EXPECT_EQ (1, progressBar->progressChangedCallCount);
+}
+
+TEST_F (ProgressBarSubclassTests, ProgressChangedGetsCurrentProgress)
+{
+    progressBar->progressChanged();
+    EXPECT_EQ (1, progressBar->progressChangedCallCount);
+    EXPECT_DOUBLE_EQ (0.0, progressBar->lastProgress);
+}
