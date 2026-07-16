@@ -924,6 +924,7 @@ private:
             lexer.advance();
             Declaration decl;
             decl.loc = l;
+            decl.qualifier = std::make_unique<TypeQualifier> (std::move (qualifier).value());
             return makeResultValueOk (ExternalDeclaration { std::move (decl) });
         }
 
@@ -1511,9 +1512,38 @@ private:
     // Expressions - full GLSL precedence ladder
     //==========================================================================
 
+    // Comma → Assignment (',' Assignment)*
+    ResultValue<Expr> parseComma()
+    {
+        SourceLocation l = loc();
+        auto left = parseAssignment();
+        if (! left)
+            return left;
+
+        while (match (TokenType::comma))
+        {
+            auto right = parseAssignment();
+            if (! right)
+                return makeResultValueFail (right.getErrorMessage());
+
+            ExprComma comma;
+            comma.loc = l;
+            comma.left = std::make_unique<Expr> (std::move (left).getValue());
+            comma.right = std::make_unique<Expr> (std::move (right).getValue());
+
+            Expr e;
+            e.loc = l;
+            e.value = std::move (comma);
+
+            left = makeResultValueOk (std::move (e));
+        }
+
+        return left;
+    }
+
     ResultValue<Expr> parseExpression()
     {
-        return parseAssignment();
+        return parseComma();
     }
 
     // Assignment → unary (AssignmentOp unary)?

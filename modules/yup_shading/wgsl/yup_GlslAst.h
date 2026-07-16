@@ -476,6 +476,7 @@ struct Declaration
     SourceLocation loc;
     std::unique_ptr<InitDeclaratorList> initDeclaratorList; // null for non-decl stmts
     std::unique_ptr<StructSpecifier> structSpecifier;       // null if not a struct decl
+    std::unique_ptr<TypeQualifier> qualifier;               // standalone qualifier decl (e.g. layout(local_size_x=8) in;)
 };
 
 //==============================================================================

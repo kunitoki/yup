@@ -408,8 +408,14 @@ public:
                 break;
         }
 
+        // Extract workgroup sizes from explicit layout declaration
+        extractWorkgroupSizesFromLayout (result);
+
         // Collect stage IO info
         collectStageIO (result);
+
+        // Collect compute builtins from function body usage
+        collectComputeBuiltinsFromUsage (result);
 
         return makeResultValueOk (std::move (result));
     }
@@ -801,6 +807,250 @@ private:
                 ++it;
             }
         }
+    }
+
+    //==========================================================================
+    // Extract workgroup sizes from standalone layout(local_size_x/y/z) in;
+    //==========================================================================
+
+    void extractWorkgroupSizesFromLayout (LoweredProgram& result)
+    {
+        for (auto& decl : result.ast.declarations)
+        {
+            if (! std::holds_alternative<Declaration> (decl))
+                continue;
+
+            auto& d = std::get<Declaration> (decl);
+            if (! d.qualifier || ! d.qualifier->layout)
+                continue;
+
+            for (auto& entry : d.qualifier->layout->entries)
+            {
+                if (entry.id == LayoutQualifierId::localSizeX && entry.value && entry.value->is<ExprIntConst>())
+                    result.entryPoint.workgroupSizeX = static_cast<uint32_t> (entry.value->as<ExprIntConst>().value);
+                else if (entry.id == LayoutQualifierId::localSizeY && entry.value && entry.value->is<ExprIntConst>())
+                    result.entryPoint.workgroupSizeY = static_cast<uint32_t> (entry.value->as<ExprIntConst>().value);
+                else if (entry.id == LayoutQualifierId::localSizeZ && entry.value && entry.value->is<ExprIntConst>())
+                    result.entryPoint.workgroupSizeZ = static_cast<uint32_t> (entry.value->as<ExprIntConst>().value);
+            }
+        }
+    }
+
+    //==========================================================================
+    // Collect compute builtins from function body variable usage
+    //==========================================================================
+
+    void collectComputeBuiltinsFromUsage (LoweredProgram& result)
+    {
+        if (! result.entryPoint.isCompute)
+            return;
+
+        for (auto& decl : result.ast.declarations)
+        {
+            if (! std::holds_alternative<FunctionDefinition> (decl))
+                continue;
+
+            auto& fd = std::get<FunctionDefinition> (decl);
+            if (fd.body)
+                collectBuiltinRefsFromStmt (*fd.body, result);
+        }
+    }
+
+    void collectBuiltinRefsFromStmt (Statement& stmt, LoweredProgram& result)
+    {
+        if (stmt.is<StmtSelection>())
+        {
+            auto& sel = stmt.as<StmtSelection>();
+            if (sel.condition)
+                collectBuiltinRefsFromExpr (*sel.condition, result);
+            if (sel.thenBranch)
+                collectBuiltinRefsFromStmt (*sel.thenBranch, result);
+            if (sel.elseBranch)
+                collectBuiltinRefsFromStmt (*sel.elseBranch, result);
+        }
+        else if (stmt.is<StmtSwitch>())
+        {
+            auto& sw = stmt.as<StmtSwitch>();
+            if (sw.selector)
+                collectBuiltinRefsFromExpr (*sw.selector, result);
+            for (auto& s : sw.body)
+                collectBuiltinRefsFromStmt (s, result);
+        }
+        else if (stmt.is<StmtWhile>())
+        {
+            auto& w = stmt.as<StmtWhile>();
+            if (w.condition)
+                collectBuiltinRefsFromExpr (*w.condition, result);
+            if (w.body)
+                collectBuiltinRefsFromStmt (*w.body, result);
+        }
+        else if (stmt.is<StmtDoWhile>())
+        {
+            auto& dw = stmt.as<StmtDoWhile>();
+            if (dw.condition)
+                collectBuiltinRefsFromExpr (*dw.condition, result);
+            if (dw.body)
+                collectBuiltinRefsFromStmt (*dw.body, result);
+        }
+        else if (stmt.is<StmtFor>())
+        {
+            auto& f = stmt.as<StmtFor>();
+            if (f.init)
+                collectBuiltinRefsFromStmt (*f.init, result);
+            if (f.condition)
+                collectBuiltinRefsFromExpr (*f.condition, result);
+            if (f.update)
+                collectBuiltinRefsFromExpr (*f.update, result);
+            if (f.body)
+                collectBuiltinRefsFromStmt (*f.body, result);
+        }
+        else if (stmt.is<StmtJump>())
+        {
+            auto& j = stmt.as<StmtJump>();
+            if (j.returnValue)
+                collectBuiltinRefsFromExpr (*j.returnValue, result);
+        }
+        else if (stmt.is<StmtExpr>())
+        {
+            auto& se = stmt.as<StmtExpr>();
+            if (se.expr)
+                collectBuiltinRefsFromExpr (*se.expr, result);
+        }
+        else if (stmt.is<StmtCompound>())
+        {
+            auto& sc = stmt.as<StmtCompound>();
+            for (auto& s : sc.statements)
+                collectBuiltinRefsFromStmt (s, result);
+        }
+        else if (stmt.is<StmtDeclaration>())
+        {
+            auto& sd = stmt.as<StmtDeclaration>();
+            if (sd.declaration.initDeclaratorList)
+            {
+                auto& il = *sd.declaration.initDeclaratorList;
+                for (auto& dec : il.declarations)
+                {
+                    if (dec.initializer && dec.initializer->expr)
+                        collectBuiltinRefsFromExpr (*dec.initializer->expr, result);
+                }
+            }
+        }
+    }
+
+    void collectBuiltinRefsFromExpr (Expr& expr, LoweredProgram& result)
+    {
+        if (expr.is<ExprVariable>())
+        {
+            addComputeBuiltinIfUsed (expr.as<ExprVariable>().name, result);
+        }
+        else if (expr.is<ExprDot>())
+        {
+            auto& dot = expr.as<ExprDot>();
+            if (dot.base && dot.base->is<ExprVariable>())
+                addComputeBuiltinIfUsed (dot.base->as<ExprVariable>().name, result);
+            if (dot.base)
+                collectBuiltinRefsFromExpr (*dot.base, result);
+        }
+        else if (expr.is<ExprTernary>())
+        {
+            auto& tern = expr.as<ExprTernary>();
+            if (tern.condition)
+                collectBuiltinRefsFromExpr (*tern.condition, result);
+            if (tern.trueBranch)
+                collectBuiltinRefsFromExpr (*tern.trueBranch, result);
+            if (tern.falseBranch)
+                collectBuiltinRefsFromExpr (*tern.falseBranch, result);
+        }
+        else if (expr.is<ExprBinary>())
+        {
+            auto& bin = expr.as<ExprBinary>();
+            if (bin.left)
+                collectBuiltinRefsFromExpr (*bin.left, result);
+            if (bin.right)
+                collectBuiltinRefsFromExpr (*bin.right, result);
+        }
+        else if (expr.is<ExprUnary>())
+        {
+            auto& un = expr.as<ExprUnary>();
+            if (un.operand)
+                collectBuiltinRefsFromExpr (*un.operand, result);
+        }
+        else if (expr.is<ExprFunCall>())
+        {
+            auto& fc = expr.as<ExprFunCall>();
+            if (fc.callee)
+                collectBuiltinRefsFromExpr (*fc.callee, result);
+            for (auto& arg : fc.args)
+                collectBuiltinRefsFromExpr (arg, result);
+        }
+        else if (expr.is<ExprAssignment>())
+        {
+            auto& assign = expr.as<ExprAssignment>();
+            if (assign.lhs)
+                collectBuiltinRefsFromExpr (*assign.lhs, result);
+            if (assign.rhs)
+                collectBuiltinRefsFromExpr (*assign.rhs, result);
+        }
+        else if (expr.is<ExprBracket>())
+        {
+            auto& br = expr.as<ExprBracket>();
+            if (br.base)
+                collectBuiltinRefsFromExpr (*br.base, result);
+            if (br.index)
+                collectBuiltinRefsFromExpr (*br.index, result);
+        }
+        else if (expr.is<ExprTypeConstructor>())
+        {
+            auto& tc = expr.as<ExprTypeConstructor>();
+            for (auto& arg : tc.args)
+                collectBuiltinRefsFromExpr (arg, result);
+        }
+        else if (expr.is<ExprParen>())
+        {
+            auto& p = expr.as<ExprParen>();
+            if (p.expr)
+                collectBuiltinRefsFromExpr (*p.expr, result);
+        }
+        else if (expr.is<ExprComma>())
+        {
+            auto& com = expr.as<ExprComma>();
+            if (com.left)
+                collectBuiltinRefsFromExpr (*com.left, result);
+            if (com.right)
+                collectBuiltinRefsFromExpr (*com.right, result);
+        }
+    }
+
+    void addComputeBuiltinIfUsed (const std::string& name, LoweredProgram& result)
+    {
+        std::string builtinName;
+
+        if (name == "gl_GlobalInvocationID")
+            builtinName = "global_invocation_id";
+        else if (name == "gl_LocalInvocationID")
+            builtinName = "local_invocation_id";
+        else if (name == "gl_LocalInvocationIndex")
+            builtinName = "local_invocation_index";
+        else if (name == "gl_WorkGroupID")
+            builtinName = "workgroup_id";
+        else if (name == "gl_NumWorkGroups")
+            builtinName = "num_workgroups";
+        else
+            return;
+
+        // Check if already present
+        for (auto& io : result.entryPoint.inputs)
+        {
+            if (io.builtinName == builtinName)
+                return;
+        }
+
+        LoweredProgram::InputOutputInfo io;
+        io.name = name;
+        io.isBuiltin = true;
+        io.builtinName = builtinName;
+        io.wgslType = TypeSpecifier::make ({ 0, 0 }, TypeKind::uintType);
+        result.entryPoint.inputs.push_back (io);
     }
 
     //==========================================================================
