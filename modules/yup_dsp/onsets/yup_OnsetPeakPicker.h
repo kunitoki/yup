@@ -36,7 +36,7 @@ namespace yup
     Sebastian Böck, Florian Krebs and Markus Schedl
     Proceedings of ISMIR, 2012.
 
-    This class is algorithm-agnostic — it operates on any float activation
+    This class is algorithm-agnostic - it operates on any float activation
     array regardless of which ODF produced it.
 
     @see SuperFluxODF, ComplexFluxODF, OnsetDetector

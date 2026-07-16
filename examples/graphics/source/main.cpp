@@ -33,7 +33,7 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
-#if YUP_ANDROID
+#if YUP_MOBILE
 #include <BinaryData.h>
 #endif
 
@@ -62,26 +62,28 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/AudioFileDemo.h"
+#include "examples/ClipboardDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
+#include "examples/Images.h"
 #include "examples/LayoutFonts.h"
+#include "examples/LottieDemo.h"
+#include "examples/OffscreenRenderDemo.h"
 #include "examples/OpaqueDemo.h"
+#include "examples/PaintProfilerDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/ScrollBarDemo.h"
 #include "examples/SliderDemo.h"
 #include "examples/SpectrumAnalyzer.h"
+#include "examples/SpinningCubeDemo.h"
 #include "examples/Svg.h"
 #include "examples/TextEditor.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
-#include "examples/Images.h"
-#include "examples/PaintProfilerDemo.h"
-#include "examples/OffscreenRenderDemo.h"
-#include "examples/LottieDemo.h"
 #if YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
@@ -157,29 +159,31 @@ public:
 
         // Setup examples
         int counter = 0;
+        registerDemo<ArtboardDemo> ("Artboard", counter++);
         registerDemo<AudioExample> ("Audio", counter++);
         registerDemo<AudioFileDemo> ("Audio File", counter++);
+        registerDemo<ClipboardDemo> ("Clipboard", counter++);
         registerDemo<ColorLabDemo> ("Color Lab", counter++);
         registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
         registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
         registerDemo<FileChooserDemo> ("File Chooser", counter++);
         registerDemo<FilterDemo> ("Filter Demo", counter++);
+        registerDemo<ImagesDemo> ("Images", counter++);
         registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
+        registerDemo<LottieDemo> ("Lottie", counter++);
+        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
         registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
+        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
         registerDemo<PathsExample> ("Paths", counter++);
         registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
         registerDemo<ScrollBarDemo> ("ScrollBar", counter++);
         registerDemo<SliderDemo> ("Sliders", counter++);
         registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
+        registerDemo<SpinningCubeDemo> ("Spinning Cube", counter++);
+        registerDemo<SvgDemo> ("SVG", counter++);
         registerDemo<TextEditorDemo> ("Text Editor", counter++);
         registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
         registerDemo<WidgetsDemo> ("Widgets", counter++);
-        registerDemo<ArtboardDemo> ("Artboard", counter++);
-        registerDemo<SvgDemo> ("SVG", counter++);
-        registerDemo<ImagesDemo> ("Images", counter++);
-        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
-        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
-        registerDemo<LottieDemo> ("Lottie", counter++);
 #if YUP_MODULE_AVAILABLE_yup_python
         registerDemo<PythonDemo> ("Python", counter++);
 #endif
@@ -213,7 +217,7 @@ public:
         constexpr auto listBoxWidth = 200;
         constexpr auto listBoxHeight = 40;
 
-        auto bounds = getLocalBounds().reduced (margin);
+        auto bounds = getSafeAreaBounds().reduced (margin);
         auto width = bounds.getWidth();
         auto height = bounds.getHeight();
 
@@ -362,11 +366,8 @@ struct Application : yup::YUPApplication
 
             window = std::make_unique<CustomWindow>();
 
-#if YUP_IOS
-            window->centreWithSize ({ 320, 480 });
-#elif YUP_ANDROID
-            window->centreWithSize ({ 1080, 2400 });
-            // window->setFullScreen(true);
+#if YUP_MOBILE
+            window->centreWithSize ({ 720, 1280 });
 #else
             window->centreWithSize ({ 1024, 768 });
 #endif

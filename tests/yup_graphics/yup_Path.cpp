@@ -117,6 +117,133 @@ TEST (PathTests, AddRoundedRectangle)
     EXPECT_FALSE (p.getBounds().isEmpty());
 }
 
+TEST (PathTests, AddRoundedRectangleBoundsMatchRectangle)
+{
+    Path p;
+    p.addRoundedRectangle (10.0f, 20.0f, 100.0f, 60.0f, 8.0f);
+
+    // The straight edges still reach the full extent, so the bounds equal the
+    // original rectangle even though the corners are inset.
+    expectRectNear (p.getBounds(), Rectangle<float> (10.0f, 20.0f, 100.0f, 60.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleSegmentStructure)
+{
+    Path p;
+    p.addRoundedRectangle (0.0f, 0.0f, 40.0f, 30.0f, 5.0f);
+
+    std::vector<Path::Verb> verbs;
+    for (const auto& segment : p)
+        verbs.push_back (segment.verb);
+
+    // moveTo + 4 edges (lineTo) + 4 corners (cubicTo).
+    ASSERT_EQ (verbs.size(), static_cast<size_t> (9));
+    EXPECT_EQ (verbs[0], Path::Verb::MoveTo);
+
+    int lineCount = 0, cubicCount = 0;
+    for (size_t i = 1; i < verbs.size(); ++i)
+    {
+        if (verbs[i] == Path::Verb::LineTo)
+            ++lineCount;
+        else if (verbs[i] == Path::Verb::CubicTo)
+            ++cubicCount;
+    }
+
+    EXPECT_EQ (lineCount, 4);
+    EXPECT_EQ (cubicCount, 4);
+}
+
+TEST (PathTests, AddRoundedRectangleStartsPastTopLeftCorner)
+{
+    Path p;
+    p.addRoundedRectangle (10.0f, 20.0f, 100.0f, 60.0f, 8.0f);
+
+    // The contour starts at the end of the top-left corner arc: (x + radius, y).
+    auto first = *p.begin();
+    EXPECT_EQ (first.verb, Path::Verb::MoveTo);
+    expectPointNear (first.point, Point<float> (18.0f, 20.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleZeroRadiusMatchesRectangle)
+{
+    Path rounded;
+    rounded.addRoundedRectangle (0.0f, 0.0f, 10.0f, 20.0f, 0.0f);
+
+    Path plain;
+    plain.addRectangle (0.0f, 0.0f, 10.0f, 20.0f);
+
+    expectRectNear (rounded.getBounds(), plain.getBounds());
+
+    // With a zero radius the first point collapses onto the rectangle origin.
+    expectPointNear ((*rounded.begin()).point, Point<float> (0.0f, 0.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleClampsRadiusToHalfSmallestDimension)
+{
+    // Request a radius far larger than the rectangle; it must clamp to half the
+    // smallest dimension so the corners meet without overshooting.
+    Path p;
+    p.addRoundedRectangle (0.0f, 0.0f, 10.0f, 40.0f, 1000.0f);
+
+    // Half of the smallest side (width 10) is 5, so the arc begins at x + 5.
+    expectPointNear ((*p.begin()).point, Point<float> (5.0f, 0.0f));
+    expectRectNear (p.getBounds(), Rectangle<float> (0.0f, 0.0f, 10.0f, 40.0f));
+}
+
+TEST (PathTests, AddRoundedRectanglePerCornerRadii)
+{
+    Path p;
+    p.addRoundedRectangle (0.0f, 0.0f, 50.0f, 50.0f, 2.0f, 4.0f, 6.0f, 8.0f);
+
+    // The top-left radius controls the start point.
+    expectPointNear ((*p.begin()).point, Point<float> (2.0f, 0.0f));
+    expectRectNear (p.getBounds(), Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleRectangleOverloadsMatchFloatOverloads)
+{
+    const Rectangle<float> r (5.0f, 7.0f, 30.0f, 40.0f);
+
+    Path fromFloats;
+    fromFloats.addRoundedRectangle (5.0f, 7.0f, 30.0f, 40.0f, 6.0f);
+
+    Path fromRect;
+    fromRect.addRoundedRectangle (r, 6.0f);
+
+    EXPECT_EQ (fromFloats.size(), fromRect.size());
+    expectRectNear (fromFloats.getBounds(), fromRect.getBounds());
+
+    Path fromFloatsPerCorner;
+    fromFloatsPerCorner.addRoundedRectangle (5.0f, 7.0f, 30.0f, 40.0f, 1.0f, 2.0f, 3.0f, 4.0f);
+
+    Path fromRectPerCorner;
+    fromRectPerCorner.addRoundedRectangle (r, 1.0f, 2.0f, 3.0f, 4.0f);
+
+    EXPECT_EQ (fromFloatsPerCorner.size(), fromRectPerCorner.size());
+    expectRectNear (fromFloatsPerCorner.getBounds(), fromRectPerCorner.getBounds());
+}
+
+TEST (PathTests, AddRoundedRectangleFullyRoundedSquareIsCircular)
+{
+    // A square with a radius equal to half its side is effectively a circle:
+    // its bounds still cover the square and the contour starts at the midpoint
+    // of the top edge.
+    Path p;
+    p.addRoundedRectangle (0.0f, 0.0f, 20.0f, 20.0f, 10.0f);
+
+    expectPointNear ((*p.begin()).point, Point<float> (10.0f, 0.0f));
+    expectRectNear (p.getBounds(), Rectangle<float> (0.0f, 0.0f, 20.0f, 20.0f));
+}
+
+TEST (PathTests, AddRoundedRectangleNegativeSizeIsClampedToZero)
+{
+    Path p;
+    p.addRoundedRectangle (5.0f, 5.0f, -10.0f, -20.0f, 3.0f);
+
+    // Negative sizes clamp to zero, producing a degenerate (empty) rectangle.
+    EXPECT_TRUE (p.getBounds().isEmpty());
+}
+
 TEST (PathTests, AddEllipse)
 {
     Path p;

@@ -26,7 +26,7 @@ namespace yup
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
     This class serves as a base for implementing specific graphics context functionalities, such as rendering and resource management,
-    across different graphics APIs like OpenGL, Direct3D, Metal, and Dawn. It offers a standardized interface for operations
+    across different graphics APIs like OpenGL, OpenGLES, Direct3D, Metal, and WebGPU. It offers a standardized interface for operations
     common to all graphics APIs.
 */
 class YUP_API GraphicsContext
@@ -41,10 +41,11 @@ public:
     enum Api
     {
         Headless, ///< Specifies the use of a headless context for rendering.
-        OpenGL,   ///< Specifies the use of OpenGL for rendering.
+        OpenGL,   ///< Specifies the use of desktop OpenGL for rendering.
+        OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
-        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
+        WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
     };
 
     /** Configuration options for creating a graphics context. */
@@ -59,6 +60,7 @@ public:
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
+        bool enableOreContext = true;               ///< Enables the ore GPU context for GpuPipeline shader operations.
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 
@@ -77,13 +79,11 @@ public:
     GraphicsContext& operator= (GraphicsContext&& other) noexcept = default;
 
     //==============================================================================
-    /** Returns the DPI scale associated with a native handle.
+    /** Returns the graphics API used by this context.
 
-        @param nativeHandle A platform-specific handle to the native window or screen.
-
-        @return The DPI scale factor.
+        @return The Api enum value identifying the active rendering backend.
     */
-    virtual float dpiScale (void* nativeHandle) const = 0;
+    virtual Api getApi() const noexcept = 0;
 
     //==============================================================================
     /** Provides access to the associated factory for resource creation.
@@ -104,6 +104,22 @@ public:
     */
     virtual rive::gpu::RenderTarget* renderTarget() = 0;
 
+    /** Returns the ore GPU context, or nullptr when enableOreContext was false or ore is
+        unavailable on this backend.
+
+        This is the single backend bridge used by the RHI layer (GpuPipeline,
+        GpuFrame, GpuRenderPass, GpuBuffer). User code should prefer the ore-free
+        isGpuAvailable() capability probe instead.
+    */
+    virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
+
+    /** Returns true if a GPU (ore) context is available for RHI operations.
+
+        Equivalent to gpuContext() != nullptr but without referencing any ore
+        type, so user code and examples can probe GPU capability ore-free.
+    */
+    bool isGpuAvailable() const noexcept { return gpuContext() != nullptr; }
+
     /** Creates a renderer suitable for the specified dimensions.
 
         @param width The width of the render area.
@@ -119,9 +135,10 @@ public:
         @param nativeHandle A platform-specific handle to the native window or screen.
         @param width The new width of the surface.
         @param height The new height of the surface.
+        @param dpiScale The scale factor for high-DPI displays.
         @param sampleCount The number of samples per pixel, for anti-aliasing.
     */
-    virtual void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) = 0;
+    virtual void onSizeChanged (void* nativeHandle, int width, int height, float dpiScale, uint32_t sampleCount) = 0;
 
     //==============================================================================
     /** Begins a rendering frame.
@@ -140,45 +157,63 @@ public:
     virtual void tick() {}
 
     //==============================================================================
-    /** Opaque platform-specific GPU resources for a fixed-size offscreen render.
-        Created by createOffscreenTarget(); passed to beginOffscreen/endOffscreen and readOffscreenPixels. */
-    class YUP_API OffscreenTarget
-    {
-    public:
-        virtual ~OffscreenTarget() = default;
-
-        /** Returns the width of this offscreen target in pixels. */
-        virtual int getWidth() const noexcept = 0;
-
-        /** Returns the height of this offscreen target in pixels. */
-        virtual int getHeight() const noexcept = 0;
-
-        /** Returns the underlying Rive render target. */
-        virtual rive::gpu::RenderTarget* getRenderTarget() noexcept = 0;
-
-        /** Returns the Rive render context used by this offscreen target, if any. */
-        virtual rive::gpu::RenderContext* getRenderContext() noexcept { return nullptr; }
-
-        /** Returns the underlying Rive render canvas, if this target is backed by one. */
-        virtual rive::rcp<rive::gpu::RenderCanvas> refRenderCanvas() noexcept { return nullptr; }
-
-        /** Returns the rendered result as a sampled Rive GPU texture suitable for use in drawImage.
-            Must be called after endOffscreen(). Returns nullptr on failure. */
-        virtual rive::rcp<rive::gpu::Texture> adoptAsTexture() = 0;
-    };
-
     /** Creates platform-specific GPU offscreen resources for the given dimensions.
-        Returns nullptr on failure. Must NOT be called between begin() and end(). */
+
+        Supported GPU backends may create targets while another offscreen target
+        is rendering. Backends reserve a render context only while its target
+        has an active frame, allowing sequential targets to share idle contexts.
+        A target must outlive its corresponding beginOffscreen()/endOffscreen()
+        pair and the GraphicsContext must outlive every target it creates.
+
+        @param width The width of the offscreen target in pixels.
+        @param height The height of the offscreen target in pixels.
+
+        @return A unique pointer to an OffscreenTarget object, or nullptr on failure.
+    */
     virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
 
-    /** Begins a standalone GPU frame targeting the given offscreen surface. */
+    /** Creates platform-specific GPU offscreen resources backed by a dedicated render context.
+
+        Unlike createOffscreenTarget(), the returned RenderableTarget reserves a
+        backend-owned RenderContext, which is required to drive a 2D Graphics frame
+        (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
+        surfaces to avoid allocating a dedicated context.
+
+        @param width The width of the offscreen target in pixels.
+        @param height The height of the offscreen target in pixels.
+
+        @return A unique pointer to a RenderableTarget object, or nullptr on failure.
+    */
+    virtual std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) = 0;
+
+    /** Begins a GPU frame targeting the given offscreen surface.
+
+        A target may have only one active frame. Nested frames are supported when
+        they use distinct OffscreenTarget instances.
+
+        @param target The OffscreenTarget to render into.
+        @param frameDesc The frame descriptor that contains frame-specific data.
+    */
     virtual void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) = 0;
 
-    /** Flushes GPU commands into the offscreen target. */
+    /** Flushes GPU commands into the offscreen target.
+    
+        Must be called after beginOffscreen() and before endOffscreen().
+
+        @param target The OffscreenTarget to flush commands into.
+    */
     virtual void endOffscreen (OffscreenTarget& target) = 0;
 
     /** Reads RGBA pixels from the completed offscreen frame into CPU memory.
-        Must be called after endOffscreen(). Rows are top-to-bottom. Returns false on failure. */
+
+        Must be called after endOffscreen(). Rows are top-to-bottom.
+    
+        @param target The OffscreenTarget to read pixels from.
+        @param dst Pointer to the destination buffer where pixel data will be stored.
+        @param dstSize The size of the destination buffer in bytes.
+
+        @return True if the pixel read operation was successful, false otherwise.
+    */
     virtual bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) = 0;
 
     //==============================================================================

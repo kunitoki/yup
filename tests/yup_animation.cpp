@@ -21,6 +21,7 @@
 
 #include "yup_animation/yup_AnimationEasing.cpp"
 #include "yup_animation/yup_AnimationProperty.cpp"
+#include "yup_animation/yup_AnimationRenderResources.cpp"
 #include "yup_animation/yup_AnimationTransform.cpp"
 #include "yup_animation/yup_LottieRoundtrip.cpp"
 #include "yup_animation/yup_LottieExpressionEvaluator.cpp"

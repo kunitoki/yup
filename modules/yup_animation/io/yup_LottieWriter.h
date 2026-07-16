@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 /** Serialises an AnimationComposition back to Lottie JSON format.
 
-    Uses yup::JSON and yup::var internally — no external JSON dependency.
+    Uses yup::JSON and yup::var internally - no external JSON dependency.
     Output is always Lottie JSON (`.json`); ZIP packaging is not supported.
 */
 class YUP_API LottieWriter
@@ -37,12 +37,15 @@ public:
                                         bool prettyPrint = true);
 
     /** Writes the composition to a file. Returns Result::ok() on success. */
-    static Result toFile (const AnimationComposition& comp,
-                          const File& destination,
-                          bool prettyPrint = true);
+    [[nodiscard]] static Result toFile (const AnimationComposition& comp,
+                                        const File& destination,
+                                        bool prettyPrint = true);
 
 private:
     //==============================================================================
+    template <typename T>
+    static var serializeProperty (const AnimationProperty<T>& prop, std::function<var (const T&)> serializer);
+
     static var serializeComposition (const AnimationComposition& comp);
     static var serializeLayers (const std::vector<AnimationLayer::Ptr>& layers);
     static var serializeLayer (const AnimationLayer& layer);
@@ -57,19 +60,13 @@ private:
     static var serializeTrim (const AnimationTrim& trim);
     static var serializeRepeater (const AnimationRepeater& repeater);
     static var serializeRoundedCorner (const AnimationRoundedCorner& rc);
+    static var serializeMergePaths (const AnimationMergePaths& mm);
     static var serializeTransform (const AnimationTransform& t);
     static var serializeMasks (const std::vector<AnimationMask::Ptr>& masks);
     static var serializeMask (const AnimationMask& mask);
     static var serializeAssets (const HashMap<String, AnimationAsset::Ptr>& assets);
     static var serializeMarkers (const std::vector<AnimationMarker>& markers);
-
-    template <typename T>
-    static var serializeProperty (const AnimationProperty<T>& prop,
-                                  std::function<var (const T&)> serializer);
-
     static var serializeEasing (const AnimationEasing& easing);
-
-    // Value serialisers
     static var serializeColor (const Color& c);
     static var serializePoint (const Point<float>& p);
     static var serializeSize (const Size<float>& s);

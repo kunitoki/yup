@@ -313,7 +313,7 @@ function (_yup_audio_plugin_create_lv2)
 
     target_link_libraries (${target_name}_lv2_ttl_generator PRIVATE
         ${target_name}_shared
-        sdl2::sdl2
+        sdl::sdl
         ${additional_libraries}
         ${target_modules})
 
@@ -400,11 +400,20 @@ function (_yup_audio_plugin_create_lv2)
         COMMENT "Assembling LV2 bundle for ${target_name}"
         VERBATIM)
 
-    yup_validate_pluginval (${target_name}_lv2_plugin "${lv2_bundle_dir}")
-
     if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD)
         yup_audio_plugin_copy_bundle (${target_name} lv2
             LV2_BUNDLE_DIR  "${lv2_bundle_dir}"
             LV2_BUNDLE_NAME "${lv2_bundle_name}")
+    endif()
+
+    if (YUP_ARG_PLUGIN_COPY_AFTER_BUILD AND YUP_PLATFORM_MAC)
+        # The bundle is installed into a system LV2 directory that the LV2 world
+        # scans. Validating the build-dir copy would be discarded by lilv as a
+        # duplicate URI (the installed copy wins), so validate the installed
+        # bundle directly - this is also what hosts actually load.
+        yup_validate_pluginval (${target_name}_lv2_plugin
+            "$ENV{HOME}/Library/Audio/Plug-Ins/LV2/${target_name}_lv2_plugin.lv2")
+    else()
+        yup_validate_pluginval (${target_name}_lv2_plugin "${lv2_bundle_dir}")
     endif()
 endfunction()

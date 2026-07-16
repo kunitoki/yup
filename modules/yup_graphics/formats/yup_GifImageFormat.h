@@ -70,7 +70,7 @@ public:
 
     /** Decodes a frame directly into an existing Image, avoiding allocation when possible.
         If dest has the correct width, height, and PixelFormat::RGBA, decodes directly
-        into dest's raw pixel buffer — zero allocation.
+        into dest's raw pixel buffer - zero allocation.
         @param frameIndex  Zero-based frame index.
         @param dest        Image to decode into (may be reallocated).
         @returns true on success.
@@ -145,7 +145,7 @@ public:
     */
     GifImageFormatWriter (OutputStream* stream, PixelFormat fmt);
 
-    /** Destructor — flushes any open animation state. */
+    /** Destructor - flushes any open animation state. */
     ~GifImageFormatWriter() override;
 
     //==============================================================================
@@ -155,7 +155,7 @@ public:
     bool writeImage (const Image& image) override;
 
     //==============================================================================
-    /** Returns true — GIF supports animated output. */
+    /** Returns true - GIF supports animated output. */
     bool supportsAnimation() const override { return true; }
 
     /** Begins an animated GIF sequence.
@@ -248,7 +248,7 @@ public:
     /** Returns true because GIF uses LZW compression. */
     bool isCompressed() const override { return true; }
 
-    /** Returns {} — GIF palette quantization is fixed (no quality options). */
+    /** Returns {} - GIF palette quantization is fixed (no quality options). */
     StringArray getQualityOptions() const override { return {}; }
 
 private:

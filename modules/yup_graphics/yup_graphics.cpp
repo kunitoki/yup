@@ -32,8 +32,16 @@
 
 //==============================================================================
 
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/renderer/rive_renderer.hpp>
+#include <rive/renderer/rive_render_image.hpp>
 #include <rive/text/font_hb.hpp>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
+#include <rive/renderer/ore/ore_bind_group_layout.hpp>
+#include <rive/renderer/ore/ore_pipeline.hpp>
+#include <rive/renderer/ore/ore_bind_group.hpp>
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
@@ -86,12 +94,20 @@
 
 #elif YUP_LINUX || YUP_WASM || YUP_ANDROID
 
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+
+#include "native/yup_GraphicsContext_webgpu.cpp"
+#else
+
 #if YUP_EMSCRIPTEN && RIVE_WEBGL
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #endif
 
 #include "native/yup_GraphicsContext_opengl.cpp"
+#endif
 
 #endif
 
@@ -117,9 +133,10 @@
 //==============================================================================
 
 #include "native/yup_GraphicsContext_headless.cpp"
-#include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
+#include "context/yup_GraphicsContext.cpp"
+#include "rhi/yup_GpuTexture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
@@ -136,6 +153,14 @@
 #include "svg/yup_SVGCssParser.cpp"
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
+#include "rhi/yup_ShaderBindingMap.cpp"
+#include "rhi/yup_GpuBuffer.cpp"
+#include "rhi/yup_GpuPipeline.cpp"
+#include "rhi/yup_GpuFrame.cpp"
+#include "rhi/yup_GpuRenderPass.cpp"
+#include "rhi/yup_GpuTarget.cpp"
+#include "rhi/yup_GpuCanvas.cpp"
+#include "rhi/yup_GpuPipelineCache.cpp"
 
 //==============================================================================
 #if YUP_IMAGE_FORMAT_BMP
@@ -163,10 +188,4 @@
 
 #if YUP_IMAGE_FORMAT_GIF
 #include "formats/yup_GifImageFormat.cpp"
-#endif
-
-//==============================================================================
-#if YUP_ENABLE_SHADER_COMPILER
-#include "shading/yup_ShaderTranspiler.cpp"
-#include "shading/yup_ShaderCache.cpp"
 #endif

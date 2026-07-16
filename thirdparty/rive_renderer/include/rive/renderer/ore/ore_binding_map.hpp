@@ -238,7 +238,7 @@ public:
     // shipped runtime binary has none of this — no std::sort, no
     // serialization, no state flag.
     // ----------------------------------------------------------------
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
     // Serialize to the on-disk RSTB sidecar format. Consumed by the
     // RSTB emit path in scripting_workspace; mirrored by fromBlob
     // which is always available at runtime.
@@ -274,7 +274,7 @@ private:
     // on the hot runtime path.
     const Entry* findEntry(uint32_t group, uint32_t binding) const
     {
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
         assert(m_finalized && "BindingMap::lookup before finalize");
 #endif
         auto it = std::lower_bound(
@@ -293,7 +293,7 @@ private:
     }
 
     std::vector<Entry> m_entries;
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
     bool m_finalized = false;
 #endif
 };

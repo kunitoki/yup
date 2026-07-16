@@ -617,7 +617,7 @@ struct VST3Module
 };
 
 //==============================================================================
-// Minimal IComponentHandler stub — required by IAudioProcessor::initialize().
+// Minimal IComponentHandler stub - required by IAudioProcessor::initialize().
 class HostComponentHandler : public Vst::IComponentHandler
 {
 public:

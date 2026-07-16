@@ -789,7 +789,9 @@
 #include "source/lua/renderer/lua_gpu.cpp"
 #include "source/lua/renderer/lua_gradient.cpp"
 #include "source/lua/renderer/lua_image.cpp"
+#define empty yup_rive_lua_mesh_empty
 #include "source/lua/renderer/lua_mesh.cpp"
+#undef empty
 #include "source/lua/renderer/lua_paint.cpp"
 #include "source/lua/renderer/lua_path.cpp"
 #include "source/lua/renderer/lua_renderer.cpp"

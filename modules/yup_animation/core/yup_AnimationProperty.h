@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-/** Lerp helper — specialize for types that need custom interpolation. */
+/** Lerp helper - specialize for types that need custom interpolation. */
 template <typename T>
 struct AnimationLerp
 {
@@ -114,6 +114,13 @@ public:
     using Keyframe = AnimationKeyframe<T>;
     using KeyframeList = std::vector<Keyframe>;
 
+    /** Post-keyframe looping behaviour, driven by AfterEffects loopOut() expressions. */
+    enum class LoopMode
+    {
+        none, ///< Hold the final keyframe value (default).
+        cycle ///< Repeat the whole keyframe range endlessly (loopOut('cycle')).
+    };
+
     //==============================================================================
     /** Constructs a static property with a default-constructed value. */
     AnimationProperty() = default;
@@ -172,6 +179,18 @@ public:
         if (frameNo <= keyframes_.front().frame)
             return keyframes_.front().value;
 
+        // Apply loopOut('cycle') by wrapping frames past the last keyframe back
+        // into the keyframe range, so the animation repeats indefinitely.
+        if (loopMode_ == LoopMode::cycle
+            && keyframes_.size() >= 2
+            && frameNo > keyframes_.back().frame)
+        {
+            const float first = keyframes_.front().frame;
+            const float period = keyframes_.back().frame - first;
+            if (period > 1e-6f)
+                frameNo = first + std::fmod (frameNo - first, period);
+        }
+
         if (frameNo >= keyframes_.back().frame)
             return keyframes_.back().endValue.value_or (keyframes_.back().value);
 
@@ -203,7 +222,7 @@ public:
     }
 
     //==============================================================================
-    /** Fluent setter — sets a static value, clearing any keyframes. */
+    /** Fluent setter - sets a static value, clearing any keyframes. */
     AnimationProperty& withStaticValue (T value)
     {
         staticVal = std::move (value);
@@ -267,8 +286,19 @@ public:
     [[nodiscard]] static Builder animated() { return Builder {}; }
 
     //==============================================================================
+    /** Sets the post-keyframe loop behaviour (from loopOut() expressions). */
+    AnimationProperty& setLoopMode (LoopMode mode) noexcept
+    {
+        loopMode_ = mode;
+        return *this;
+    }
+
+    /** Returns the post-keyframe loop behaviour. */
+    [[nodiscard]] LoopMode getLoopMode() const noexcept { return loopMode_; }
+
+    //==============================================================================
     /** Returns true when any keyframe is active in the frame range [prevFrame, curFrame).
-        Useful for dirty-tracking — skip re-evaluation when nothing changed.
+        Useful for dirty-tracking - skip re-evaluation when nothing changed.
     */
     [[nodiscard]] bool changed (float prevFrame, float curFrame) const noexcept
     {
@@ -297,6 +327,7 @@ private:
     T staticVal {};
     KeyframeList keyframes_;
     bool animated_ = false;
+    LoopMode loopMode_ = LoopMode::none;
 };
 
 //==============================================================================

@@ -19,6 +19,8 @@
   ==============================================================================
 */
 
+#include "mocks/yup_events.h"
+
 #include "yup_events/yup_Timer.cpp"
 #include "yup_events/yup_MessageManager.cpp"
 #include "yup_events/yup_InterprocessConnection.cpp"

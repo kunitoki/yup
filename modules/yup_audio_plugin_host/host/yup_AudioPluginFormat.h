@@ -52,7 +52,7 @@ public:
 
         The scanner uses these extensions to filter filesystem entries before calling
         scanFile(). Return an empty array for registry-based formats (e.g. AUv2) that
-        do not perform file-system scanning — the scanner will call scanFile() with an
+        do not perform file-system scanning - the scanner will call scanFile() with an
         invalid File instead.
 
         Platform-specific extensions (e.g. ".dll" on Windows, ".so" on Linux) should
@@ -72,7 +72,7 @@ public:
         - CLAP macOS:   /Library/Audio/Plug-Ins/CLAP, ~/Library/Audio/Plug-Ins/CLAP
         - CLAP Windows: %CommonProgramFiles%\CLAP, %APPDATA%\CLAP
         - CLAP Linux:   /usr/lib/clap, ~/.clap
-        - AUv2:         Returns empty — AUv2 discovery uses AudioComponent registry.
+        - AUv2:         Returns empty - AUv2 discovery uses AudioComponent registry.
     */
     virtual FileSearchPath getDefaultSearchPaths() const = 0;
 

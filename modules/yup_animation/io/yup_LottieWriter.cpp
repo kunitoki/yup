@@ -89,6 +89,7 @@ var LottieWriter::serializeLayer (const AnimationLayer& layer)
     obj->setProperty ("sr", var ((double) layer.timeStretch));
     obj->setProperty ("ddd", var (0));
     obj->setProperty ("hd", var (layer.hidden));
+    obj->setProperty ("ao", var (layer.autoOrient));
     obj->setProperty ("bm", var (static_cast<int> (layer.blendMode)));
     obj->setProperty ("tt", var (static_cast<int> (layer.matteType)));
 
@@ -216,6 +217,11 @@ var LottieWriter::serializeChildItem (const AnimationGroup::ChildItem& item)
         case AnimationGroup::ChildKind::RoundedCorner:
             if (item.roundedCorner != nullptr)
                 return serializeRoundedCorner (*item.roundedCorner);
+            break;
+
+        case AnimationGroup::ChildKind::MergePaths:
+            if (item.mergePaths != nullptr)
+                return serializeMergePaths (*item.mergePaths);
             break;
     }
 
@@ -467,6 +473,16 @@ var LottieWriter::serializeRoundedCorner (const AnimationRoundedCorner& rc)
     obj->setProperty ("nm", var (rc.name));
     obj->setProperty ("hd", var (rc.hidden));
     obj->setProperty ("r", serializeProperty<float> (rc.radius, serializeFloat));
+    return var (obj);
+}
+
+var LottieWriter::serializeMergePaths (const AnimationMergePaths& mm)
+{
+    DynamicObject* obj = new DynamicObject();
+    obj->setProperty ("ty", var ("mm"));
+    obj->setProperty ("nm", var (mm.name));
+    obj->setProperty ("hd", var (mm.hidden));
+    obj->setProperty ("mm", var (static_cast<int> (mm.mode)));
     return var (obj);
 }
 

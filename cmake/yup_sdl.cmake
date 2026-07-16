@@ -106,16 +106,16 @@ endfunction()
 #==============================================================================
 
 function (_yup_sdl_configure_private_static_target target_name force_include_options output_target)
-    if (NOT TARGET SDL2-static)
-        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: SDL2-static target is not available.")
+    if (NOT TARGET sdl::sdl)
+        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: sdl::sdl target is not available.")
     endif()
 
-    _yup_sdl_get_target_property (sdl_sources SDL2-static SOURCES)
+    _yup_sdl_get_target_property (sdl_sources sdl::sdl SOURCES)
     if (NOT sdl_sources)
-        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: SDL2-static has no source files.")
+        _yup_message (FATAL_ERROR "Cannot configure private SDL symbols for ${target_name}: sdl::sdl has no source files.")
     endif()
 
-    set (private_sdl_target "${target_name}_sdl2")
+    set (private_sdl_target "${target_name}_sdl")
     add_library (${private_sdl_target} STATIC ${sdl_sources})
 
     if (APPLE)
@@ -137,12 +137,12 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
         add_dependencies (${private_sdl_target} sdl_headers_copy)
     endif()
 
-    _yup_sdl_get_target_property (sdl_include_dirs SDL2-static INCLUDE_DIRECTORIES)
+    _yup_sdl_get_target_property (sdl_include_dirs sdl::sdl INCLUDE_DIRECTORIES)
     if (sdl_include_dirs)
         target_include_directories (${private_sdl_target} PRIVATE ${sdl_include_dirs})
     endif()
 
-    _yup_sdl_get_target_property (sdl_source_dir SDL2-static SOURCE_DIR)
+    _yup_sdl_get_target_property (sdl_source_dir sdl::sdl SOURCE_DIR)
     if (sdl_source_dir)
         _yup_sdl_collect_private_include_dirs (sdl_private_include_dirs "${sdl_source_dir}")
         if (sdl_private_include_dirs)
@@ -152,71 +152,71 @@ function (_yup_sdl_configure_private_static_target target_name force_include_opt
 
     _yup_sdl_apply_build_options (${private_sdl_target})
 
-    _yup_sdl_get_target_property (sdl_interface_include_dirs SDL2-static INTERFACE_INCLUDE_DIRECTORIES)
+    _yup_sdl_get_target_property (sdl_interface_include_dirs sdl::sdl INTERFACE_INCLUDE_DIRECTORIES)
     if (sdl_interface_include_dirs)
         target_include_directories (${private_sdl_target} INTERFACE ${sdl_interface_include_dirs})
     endif()
 
-    _yup_sdl_get_target_property (sdl_compile_definitions SDL2-static COMPILE_DEFINITIONS)
+    _yup_sdl_get_target_property (sdl_compile_definitions sdl::sdl COMPILE_DEFINITIONS)
     if (sdl_compile_definitions)
         target_compile_definitions (${private_sdl_target} PRIVATE ${sdl_compile_definitions})
     endif()
 
-    _yup_sdl_get_target_property (sdl_interface_compile_definitions SDL2-static INTERFACE_COMPILE_DEFINITIONS)
+    _yup_sdl_get_target_property (sdl_interface_compile_definitions sdl::sdl INTERFACE_COMPILE_DEFINITIONS)
     if (sdl_interface_compile_definitions)
         target_compile_definitions (${private_sdl_target} INTERFACE ${sdl_interface_compile_definitions})
     endif()
 
-    _yup_sdl_get_target_property (sdl_compile_options SDL2-static COMPILE_OPTIONS)
+    _yup_sdl_get_target_property (sdl_compile_options sdl::sdl COMPILE_OPTIONS)
     target_compile_options (${private_sdl_target} PRIVATE
         ${sdl_compile_options}
         ${force_include_options})
 
-    _yup_sdl_get_target_property (sdl_interface_compile_options SDL2-static INTERFACE_COMPILE_OPTIONS)
+    _yup_sdl_get_target_property (sdl_interface_compile_options sdl::sdl INTERFACE_COMPILE_OPTIONS)
     if (sdl_interface_compile_options)
         target_compile_options (${private_sdl_target} INTERFACE ${sdl_interface_compile_options})
     endif()
 
-    _yup_sdl_get_target_property (sdl_link_libraries SDL2-static LINK_LIBRARIES)
+    _yup_sdl_get_target_property (sdl_link_libraries sdl::sdl LINK_LIBRARIES)
     if (sdl_link_libraries)
         target_link_libraries (${private_sdl_target} PRIVATE ${sdl_link_libraries})
     endif()
 
-    _yup_sdl_get_target_property (sdl_interface_link_libraries SDL2-static INTERFACE_LINK_LIBRARIES)
+    _yup_sdl_get_target_property (sdl_interface_link_libraries sdl::sdl INTERFACE_LINK_LIBRARIES)
     if (sdl_interface_link_libraries)
         target_link_libraries (${private_sdl_target} INTERFACE ${sdl_interface_link_libraries})
     endif()
 
-    _yup_sdl_get_target_property (sdl_link_options SDL2-static LINK_OPTIONS)
+    _yup_sdl_get_target_property (sdl_link_options sdl::sdl LINK_OPTIONS)
     if (sdl_link_options)
         target_link_options (${private_sdl_target} PRIVATE ${sdl_link_options})
     endif()
 
-    _yup_sdl_get_target_property (sdl_interface_link_options SDL2-static INTERFACE_LINK_OPTIONS)
+    _yup_sdl_get_target_property (sdl_interface_link_options sdl::sdl INTERFACE_LINK_OPTIONS)
     if (sdl_interface_link_options)
         target_link_options (${private_sdl_target} INTERFACE ${sdl_interface_link_options})
     endif()
 
-    _yup_sdl_get_target_property (sdl_position_independent_code SDL2-static POSITION_INDEPENDENT_CODE)
+    _yup_sdl_get_target_property (sdl_position_independent_code sdl::sdl POSITION_INDEPENDENT_CODE)
     if (sdl_position_independent_code)
         set_target_properties (${private_sdl_target} PROPERTIES
             POSITION_INDEPENDENT_CODE "${sdl_position_independent_code}")
     endif()
 
-    _yup_sdl_get_target_property (sdl_debug_postfix SDL2-static DEBUG_POSTFIX)
+    _yup_sdl_get_target_property (sdl_debug_postfix sdl::sdl DEBUG_POSTFIX)
     if (sdl_debug_postfix)
         set_target_properties (${private_sdl_target} PROPERTIES
             DEBUG_POSTFIX "${sdl_debug_postfix}")
     endif()
 
     set_target_properties (${private_sdl_target} PROPERTIES
-        OUTPUT_NAME "${target_name}_SDL2-static"
+        OUTPUT_NAME "${target_name}_sdl-static"
         FOLDER "Thirdparty")
 
-    set_property (TARGET ${private_sdl_target} APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL SDL2_SHARED)
-    set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL2_SHARED FALSE)
+    set_property (TARGET ${private_sdl_target} APPEND PROPERTY COMPATIBLE_INTERFACE_BOOL SDL3_SHARED)
+    set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL3_SHARED FALSE)
     set_property (TARGET ${private_sdl_target} APPEND PROPERTY COMPATIBLE_INTERFACE_STRING "SDL_VERSION")
-    set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL_VERSION "SDL2")
+    set_property (TARGET ${private_sdl_target} PROPERTY INTERFACE_SDL_VERSION "SDL3")
 
     set (${output_target} "${private_sdl_target}" PARENT_SCOPE)
 endfunction()

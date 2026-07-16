@@ -349,7 +349,7 @@ void SpectrogramComponent::scrollSpectrogram()
 
 void SpectrogramComponent::writeMagnitudeRow()
 {
-    auto& bitmap = spectrogramImage.getBitmapData();
+    auto& bitmap = spectrogramImage.getPixelData();
     const int width = spectrogramImage.getWidth();
 
     for (int x = 0; x < width; ++x)

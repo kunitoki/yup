@@ -19,6 +19,10 @@
   ==============================================================================
 */
 
+#include "mocks/rive_gpu.h"
+#include "mocks/rive_ore.h"
+#include "mocks/yup_graphics.h"
+
 #include "yup_graphics/yup_AffineTransform.cpp"
 #include "yup_graphics/yup_Color.cpp"
 #include "yup_graphics/yup_ColorGradient.cpp"
@@ -27,6 +31,10 @@
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"
 #include "yup_graphics/yup_GraphicsOffscreen.cpp"
+#include "yup_graphics/yup_GpuCanvas.cpp"
+#include "yup_graphics/yup_GpuTarget.cpp"
+#include "yup_graphics/yup_GpuPipeline.cpp"
+#include "yup_graphics/yup_GpuPipelineMocked.cpp"
 #include "yup_graphics/yup_Image.cpp"
 #include "yup_graphics/yup_ImageFormatManager.cpp"
 #include "yup_graphics/yup_ImageFormatReader.cpp"
@@ -38,8 +46,6 @@
 #include "yup_graphics/yup_Point.cpp"
 #include "yup_graphics/yup_Rectangle.cpp"
 #include "yup_graphics/yup_RectangleList.cpp"
-#include "yup_graphics/yup_ShaderCache.cpp"
-#include "yup_graphics/yup_ShaderTranspiler.cpp"
 #include "yup_graphics/yup_Size.cpp"
 #include "yup_graphics/yup_StrokeType.cpp"
 #include "yup_graphics/yup_StyledText.cpp"

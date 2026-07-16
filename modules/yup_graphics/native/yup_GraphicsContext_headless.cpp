@@ -190,10 +190,7 @@ class NoOpGraphicsContext : public GraphicsContext
 public:
     NoOpGraphicsContext() = default;
 
-    float dpiScale (void*) const override
-    {
-        return 1.0f;
-    }
+    Api getApi() const noexcept override { return Api::Headless; }
 
     rive::Factory* factory() override
     {
@@ -215,7 +212,7 @@ public:
         return std::make_unique<NoOpRenderer>();
     }
 
-    void onSizeChanged (void*, int, int, uint32_t) override
+    void onSizeChanged (void*, int, int, float, uint32_t) override
     {
     }
 
@@ -228,6 +225,11 @@ public:
     }
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override
+    {
+        return nullptr;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override
     {
         return nullptr;
     }

@@ -25,7 +25,7 @@ namespace yup
 /**
     An AudioProcessor that wraps a loaded third-party plugin.
 
-    Concrete subclasses are created by AudioPluginFormat::loadPlugin() — callers
+    Concrete subclasses are created by AudioPluginFormat::loadPlugin() - callers
     never instantiate this directly. Interact with the plugin through the
     AudioProcessor interface; format-specific behaviour stays in the subclass.
 

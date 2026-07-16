@@ -45,7 +45,8 @@ public:
         Stroke,
         Trim,
         Repeater,
-        RoundedCorner
+        RoundedCorner,
+        MergePaths
     };
 
     struct ChildItem
@@ -58,6 +59,7 @@ public:
         AnimationTrim::Ptr trim;
         AnimationRepeater::Ptr repeater;
         AnimationRoundedCorner::Ptr roundedCorner;
+        AnimationMergePaths::Ptr mergePaths;
     };
 
     //==============================================================================
@@ -71,6 +73,9 @@ public:
 
     /** Children in Lottie draw order (index 0 = bottom). */
     std::vector<ChildItem> children;
+
+    /** True if any children are trim, repeater, or rounded-corner modifiers. */
+    bool hasAnyModifier = false;
 
     //==============================================================================
     /** Adds a shape child and returns a raw (non-owning) pointer to it. */
@@ -103,6 +108,9 @@ public:
 
     /** Adds an AnimationRoundedCorner modifier and returns a raw pointer. */
     AnimationRoundedCorner* addRoundedCorner();
+
+    /** Adds an AnimationMergePaths modifier and returns a raw pointer. */
+    AnimationMergePaths* addMergePaths();
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationGroup)
 };

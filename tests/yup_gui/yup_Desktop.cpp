@@ -23,17 +23,25 @@
 
 #include <gtest/gtest.h>
 
+#include "../mocks/yup_gui.h"
+
 using namespace yup;
+using ::testing::_;
+using ::testing::NiceMock;
 
 namespace
 {
 
 //==============================================================================
-class MockMouseListener : public MouseListener
+// DesktopMouseListener – a test double with call-count tracking and the ability
+// to add/remove other listeners or self during event dispatch. This is more
+// than a simple mock; it's a test fixture class for Desktop listener mechanics.
+//==============================================================================
+class DesktopMouseListener : public MouseListener
 {
 public:
-    MockMouseListener() = default;
-    ~MockMouseListener() override = default;
+    DesktopMouseListener() = default;
+    ~DesktopMouseListener() override = default;
 
     void mouseDown (const MouseEvent& event) override
     {
@@ -165,11 +173,13 @@ public:
 };
 
 //==============================================================================
-class MockComponent : public Component
+// Trivial concrete Component for Desktop tests.
+//==============================================================================
+class DesktopSimpleComponent : public Component
 {
 public:
-    MockComponent() = default;
-    ~MockComponent() override = default;
+    DesktopSimpleComponent() = default;
+    ~DesktopSimpleComponent() override = default;
 };
 
 } // namespace
@@ -192,9 +202,9 @@ protected:
     }
 
     Desktop* desktop = nullptr;
-    MockMouseListener listener1;
-    MockMouseListener listener2;
-    MockMouseListener listener3;
+    DesktopMouseListener listener1;
+    DesktopMouseListener listener2;
+    DesktopMouseListener listener3;
 };
 
 //==============================================================================
@@ -283,7 +293,7 @@ TEST_F (DesktopTest, GetScreenContainingRectangleReturnsScreenOrPrimary)
 
 TEST_F (DesktopTest, GetScreenContainingComponentReturnsScreenOrPrimary)
 {
-    MockComponent component;
+    DesktopSimpleComponent component;
     component.setBounds (0, 0, 100, 100);
 
     auto screen = desktop->getScreenContaining (&component);

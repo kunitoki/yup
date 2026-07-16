@@ -292,7 +292,7 @@ public:
     }
 
     //==========================================================================
-    // AAX_CEffectParameters — Initialization
+    // AAX_CEffectParameters - Initialization
     //==========================================================================
 
     AAX_Result Uninitialize() override
@@ -331,7 +331,7 @@ public:
     }
 
     //==========================================================================
-    // AAX_CEffectParameters — Parameters
+    // AAX_CEffectParameters - Parameters
     //==========================================================================
 
     AAX_Result UpdateParameterNormalizedValue (AAX_CParamID paramID, double value, AAX_EUpdateSource source) override
@@ -444,7 +444,7 @@ public:
     }
 
     //==========================================================================
-    // AAX_CEffectParameters — State reset
+    // AAX_CEffectParameters - State reset
     //==========================================================================
 
     AAX_Result ResetFieldData (AAX_CFieldIndex fieldIndex, void* data, uint32_t dataSize) const override
@@ -488,7 +488,7 @@ public:
     }
 
     //==========================================================================
-    // AAX_CEffectParameters — Chunks
+    // AAX_CEffectParameters - Chunks
     //==========================================================================
 
     AAX_Result GetNumberOfChunks (int32_t* numChunks) const override
@@ -592,7 +592,7 @@ public:
     }
 
     //==========================================================================
-    // AAX_CEffectParameters — Notifications
+    // AAX_CEffectParameters - Notifications
     //==========================================================================
 
     AAX_Result NotificationReceived (AAX_CTypeID notificationType, const void* notificationData, uint32_t notificationDataSize) override

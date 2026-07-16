@@ -399,6 +399,28 @@ public:
      */
     Rectangle<float> getScreenBounds() const;
 
+    /**
+        Get the area of the component that is safe for interactive content.
+
+        On mobile devices the window may extend under display cutouts (notch), the
+        status bar or rounded corners: this returns the portion of the component that
+        is guaranteed to be fully visible and touchable. On desktop platforms this
+        usually matches the local bounds.
+
+        @return The safe area bounds, in local component coordinates.
+     */
+    Rectangle<float> getSafeAreaBounds() const;
+
+    /**
+        Called when the safe area of the component changes.
+
+        This can happen on mobile devices when the device is rotated, or when system
+        bars are shown or hidden.
+
+        @see getSafeAreaBounds
+     */
+    virtual void safeAreaChanged();
+
     //==============================================================================
 
     /**
@@ -1098,6 +1120,76 @@ public:
 
     //==============================================================================
     /**
+        Called to determine whether the component is interested in a drag-and-drop payload.
+
+        This acts as the opt-in gate for drag-and-drop handling. It defaults to returning false,
+        so a component must override this and return true to receive itemsDropped, itemDragEnter,
+        itemDragMove, and itemDragExit calls.
+
+        @param data The payload that would be dropped.
+
+        @return true if the component wants to handle the payload.
+
+        @see itemsDropped, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool isInterestedInDrag (const DragAndDropData& data);
+
+    /**
+        Called when a drag-and-drop payload is dropped onto the component.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events. If the component does not handle
+        the drop it should return false, allowing the payload to bubble up to parents.
+
+        @param position The drop position, in component-local coordinates.
+        @param data     The dropped payload.
+
+        @return true if the component handled the drop.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool itemsDropped (const Point<float>& position, const DragAndDropData& data);
+
+    //==============================================================================
+    /**
+        Called when a drag-and-drop payload enters the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragMove, itemDragExit
+     */
+    virtual void itemDragEnter (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload moves within the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragExit
+     */
+    virtual void itemDragMove (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload exits the component's area.
+
+        This is only called if isInterestedInDrag returned true.
+
+        @param data The drag-and-drop payload.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove
+     */
+    virtual void itemDragExit (const DragAndDropData& data);
+
+    //==============================================================================
+    /**
         Add a mouse listener to the component.
 
         @param listener The mouse listener to add.
@@ -1283,6 +1375,10 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    bool internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragExit (const DragAndDropData& data);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
@@ -1291,8 +1387,10 @@ private:
     void internalFocusChanged (bool gotFocus);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
+    void internalSafeAreaChanged();
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalVisibilityChanged();
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
@@ -1307,7 +1405,7 @@ private:
 
     friend class ComponentNative;
     friend class ComponentTestHelper;
-    friend class SDL2ComponentNative;
+    friend class SDLComponentNative;
     friend class WeakReference<Component>;
 
     using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
@@ -1325,6 +1423,7 @@ private:
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    float contentScale = 1.0f;
     uint8 opacity = 255;
 
     struct Options

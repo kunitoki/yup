@@ -63,6 +63,7 @@ AnimationTrim* AnimationGroup::addTrim()
     item.kind = ChildKind::Trim;
     item.trim = t;
     children.push_back (std::move (item));
+    hasAnyModifier = true;
     return raw;
 }
 
@@ -74,6 +75,7 @@ AnimationRepeater* AnimationGroup::addRepeater()
     item.kind = ChildKind::Repeater;
     item.repeater = r;
     children.push_back (std::move (item));
+    hasAnyModifier = true;
     return raw;
 }
 
@@ -85,6 +87,19 @@ AnimationRoundedCorner* AnimationGroup::addRoundedCorner()
     item.kind = ChildKind::RoundedCorner;
     item.roundedCorner = rc;
     children.push_back (std::move (item));
+    hasAnyModifier = true;
+    return raw;
+}
+
+AnimationMergePaths* AnimationGroup::addMergePaths()
+{
+    auto mp = new AnimationMergePaths();
+    AnimationMergePaths* raw = mp;
+    ChildItem item;
+    item.kind = ChildKind::MergePaths;
+    item.mergePaths = mp;
+    children.push_back (std::move (item));
+    hasAnyModifier = true;
     return raw;
 }
 

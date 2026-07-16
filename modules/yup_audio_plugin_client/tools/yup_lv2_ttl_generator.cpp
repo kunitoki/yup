@@ -181,7 +181,7 @@ static bool writePluginTTL (const Options& opts, yup::AudioProcessor& processor)
         f << "\n";
     }
 
-    // Port list — order matches NonAudioPort enum:
+    // Port list - order matches NonAudioPort enum:
     //   audio in [0..numInputs), audio out [numInputs..+numOutputs),
     //   seqInput, seqOutput, latencyOutput, freeWheelingInput, enabledInput.
     int portIdx = 0;

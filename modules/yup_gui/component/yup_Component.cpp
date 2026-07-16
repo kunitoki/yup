@@ -94,6 +94,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (options.isVisible == shouldBeVisible)
         return;
 
+    const bool wasShowing = isShowing();
+
     options.isVisible = shouldBeVisible;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -104,7 +106,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    visibilityChanged();
+    if (wasShowing != isShowing())
+        internalVisibilityChanged();
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -771,6 +774,14 @@ void Component::addChildComponent (Component* component, int index)
 
         auto bailOutChecker = BailOutChecker (this);
 
+        if (getNativeComponent() != nullptr)
+        {
+            component->internalAttachedToNative();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         component->internalHierarchyChanged();
 
         if (bailOutChecker.shouldBailOut())
@@ -818,6 +829,14 @@ void Component::removeChildComponent (int index)
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
+
+    if (getNativeComponent() != nullptr)
+    {
+        component->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     component->internalHierarchyChanged();
 
@@ -1054,6 +1073,16 @@ void Component::mouseUp (const MouseEvent& event) {}
 void Component::mouseDoubleClick (const MouseEvent& event) {}
 
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
+
+bool Component::isInterestedInDrag (const DragAndDropData& data) { return false; }
+
+bool Component::itemsDropped (const Point<float>& position, const DragAndDropData& data) { return false; }
+
+void Component::itemDragEnter (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragMove (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragExit (const DragAndDropData& data) {}
 
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
@@ -1494,6 +1523,75 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
 //==============================================================================
 
+bool Component::internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    // Convert the window (root) position into this component's local coordinates,
+    // mirroring MouseEvent::withRelativePositionTo.
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+        {
+            if (current->itemsDropped (localPosition, data))
+                return true;
+        }
+
+        // Ascend to the parent: the parent-local position adds back this component's offset.
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+void Component::internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragEnter (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragMove (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragExit (const DragAndDropData& data)
+{
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragExit (data);
+    }
+}
+
+//==============================================================================
+
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     if (! isVisible() || ! isEnabled())
@@ -1526,18 +1624,28 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
+    const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    sendResized();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendResized();
+    }
 }
 
 //==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
+    const auto newBounds = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    sendMoved();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendMoved();
+    }
 }
 
 //==============================================================================
@@ -1558,7 +1666,32 @@ void Component::internalDisplayChanged() {}
 
 void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged (dpiScale);
+    if (contentScale != dpiScale)
+    {
+        contentScale = dpiScale;
+
+        contentScaleChanged (dpiScale);
+    }
+}
+
+//==============================================================================
+
+void Component::internalSafeAreaChanged()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    safeAreaChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalSafeAreaChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 //==============================================================================
@@ -1608,6 +1741,28 @@ void Component::internalDetachedFromNative()
 
 //==============================================================================
 
+void Component::internalVisibilityChanged()
+{
+    visibilityChanged();
+
+    auto bailOutChecker = BailOutChecker (this);
+
+    for (int index = children.size(); --index >= 0;)
+    {
+        auto child = children.getUnchecked (index);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (child->isVisible())
+            child->internalVisibilityChanged();
+
+        index = jmin (index, children.size());
+    }
+}
+
+//==============================================================================
+
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
@@ -1626,6 +1781,23 @@ Rectangle<float> Component::getScreenBounds() const
 {
     return localToScreen (getLocalBounds());
 }
+
+//==============================================================================
+
+Rectangle<float> Component::getSafeAreaBounds() const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getSafeAreaBounds().to<float>();
+
+    if (parentComponent == nullptr)
+        return getLocalBounds();
+
+    return parentComponent->getSafeAreaBounds()
+        .translated (-getPosition())
+        .intersection (getLocalBounds());
+}
+
+void Component::safeAreaChanged() {}
 
 //==============================================================================
 

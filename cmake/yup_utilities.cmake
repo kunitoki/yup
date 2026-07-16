@@ -232,6 +232,27 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_target_list_contains target_list target_name output_variable)
+    foreach (target IN LISTS target_list)
+        if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")
+            set (${output_variable} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        if (TARGET "${target}")
+            get_target_property (aliased_target "${target}" ALIASED_TARGET)
+            if ("${aliased_target}" STREQUAL "${target_name}")
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_resolve_variable_paths input_list output_list)
     set (resolved_list "")
 
@@ -241,6 +262,37 @@ function (_yup_resolve_variable_paths input_list output_list)
     endforeach()
 
     set (${output_list} "${resolved_list}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_definitions_enable definitions definition_name output_variable)
+    set (enabled OFF)
+
+    foreach (definition IN LISTS definitions)
+        string (REGEX REPLACE "^-D" "" normalized_definition "${definition}")
+
+        if (normalized_definition MATCHES "^${definition_name}($|=)")
+            set (enabled ON)
+
+            if (normalized_definition MATCHES "^${definition_name}=")
+                string (REGEX REPLACE "^${definition_name}=(.*)$" "\\1" definition_value "${normalized_definition}")
+                string (STRIP "${definition_value}" definition_value)
+                string (REGEX REPLACE "^\"(.*)\"$" "\\1" definition_value "${definition_value}")
+                string (REGEX REPLACE "^'(.*)'$" "\\1" definition_value "${definition_value}")
+                string (TOUPPER "${definition_value}" definition_value)
+
+                if ("${definition_value}" STREQUAL "0"
+                    OR "${definition_value}" STREQUAL "OFF"
+                    OR "${definition_value}" STREQUAL "FALSE"
+                    OR "${definition_value}" STREQUAL "NO")
+                    set (enabled OFF)
+                endif()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} "${enabled}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
@@ -311,8 +363,10 @@ function (_yup_setup_coverage_flags target_name)
             --coverage
             -fprofile-arcs
             -fprofile-update=atomic
-            -ftest-coverage
-            -fno-elide-constructors)
+            -ftest-coverage)
+
+        target_compile_options (${target_name} INTERFACE
+            "$<$<COMPILE_LANGUAGE:CXX>:-fno-elide-constructors>")
 
         target_link_options (${target_name} INTERFACE --coverage)
 

@@ -33,7 +33,10 @@
     license:              ISC
 
     dependencies:         yup_events yup_data_model yup_graphics rive
+    optionalDeps:         yup_audio_gui
     appleFrameworks:      Metal
+    iosFrameworks:        CoreMotion
+    iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
 
@@ -87,7 +90,7 @@
     Enable logging of windowing events like movement, resizes, mouse interactions.
 */
 #ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
-#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 1
 #endif
 
 //==============================================================================
@@ -135,6 +138,7 @@
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
+#include "component/yup_DragAndDropData.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"

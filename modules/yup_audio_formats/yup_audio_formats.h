@@ -33,6 +33,7 @@
     license:              ISC
 
     dependencies:         yup_audio_basics yup_simd
+    optionalDeps:         dr_libs flac_library hmp3_library libogg libvorbis opus_library
     appleFrameworks:      AudioToolbox CoreAudio CoreFoundation
 
   END_YUP_MODULE_DECLARATION

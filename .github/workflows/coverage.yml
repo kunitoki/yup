@@ -21,8 +21,9 @@ on:
       - "!**/native/*_mac.*"
       - "!**/native/*_metal.*"
       - "!**/native/*_opengl.*"
-      - "!**/native/*_sdl2.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - "**"
@@ -46,8 +47,9 @@ on:
       - "!**/native/*_mac.*"
       - "!**/native/*_metal.*"
       - "!**/native/*_opengl.*"
-      - "!**/native/*_sdl2.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - main
@@ -61,7 +63,8 @@ env:
   INSTALL_DEPS: >-
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
-    libxrandr-dev libxrender-dev libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev lcov
+    libxrandr-dev libxrender-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev
+    libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev lcov
   IGNORE_ERRORS: "mismatch,gcov,source,negative,unused,empty,format,corrupt"
 
 jobs:
@@ -91,7 +94,7 @@ jobs:
       run: cmake --build . --target coverage_clean
     - name: Run C++ Tests
       working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: ./yup_tests --gtest_output=xml:test_results.xml
+      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_output=xml:test_results.xml
     - name: Generate C++ Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |
@@ -111,9 +114,12 @@ jobs:
           "*/native/*_emscripten.*" \
           "*/native/*_ios.*" \
           "*/native/*_mac.*" \
-          "*/native/*_sdl2.*" \
           "*/native/*_wasm.*" \
           "*/native/*_windows.*" \
+          "*/native/*_sdl.*" \
+          "*/native/*_dawn*.*" \
+          "*/native/*_webgpu.*" \
+          "*/native/*_opengl.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
     - name: Upload Coverage to Codecov
@@ -125,13 +131,13 @@ jobs:
         fail_ci_if_error: false
         verbose: true
     - name: Upload Test Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: test-results
         path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
     - name: Upload Coverage Reports
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: coverage-reports

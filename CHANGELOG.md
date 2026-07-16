@@ -8,22 +8,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+### Breaking changes
+
+- macOS: OpenGL rendering backend removed in favor of Metal only
+- `LottieReader::parseFile()`, `parseData()`, `parseStream()`, and `parseFromZip()` now return `ResultValue<AnimationComposition::Ptr>` and no longer take a trailing `String* outError` out-parameter; check `wasOk()`/`failed()` and read the message via `getErrorMessage()`.
+- `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
+
 ### Graphics
+
+- Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn
+- Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the ore WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
 
 #### Rive Runtime Bump
 
 - Rive runtime bumped from v0.1.62 to v0.1.155
 
-#### Shader Compiler (#126)
+#### RHI (#129 and #130)
 
-- New glslang (`thirdparty/glslang`) and SPIRV-Cross integration (`thirdparty/spirv_cross`) for shader reflection and cross-compilation (GLSL, HLSL, MSL, WGSL)
+- GraphicsContext ore integration (`Options::enableOreContext = true`): activates the backend-native ore context. New ore-free `GraphicsContext::isGpuAvailable()` capability probe; `gpuContext()` is retained but documented `@internal` as the single backend bridge.
+- New `GpuTexture` class (`rhi/yup_GpuTexture.h`): opaque reference-counted GPU texture wrapping `rive::gpu::Texture` or `rive::gpu::RenderCanvas`. Obtained from `GpuCanvas::asTexture()` or constructed internally by `Image::fromTexture()`.
+- New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
+- New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
 
-#### macOS
+### Shading
 
-- OpenGL rendering backend disabled on macOS in favor of Metal
+- New GLSL→WGSL direct transpiler in `yup_shading`: parses preprocessed GLSL 4.50, lowers GLSL constructs to WGSL equivalents, and emits WGSL 1.0 source. Supports vertex/fragment/compute stages with full builtin mapping, combined sampler splitting, entry-point IO wrapping, and binding assignment matching glslang's SPIR-V assignment 1:1. Does not require SPIR-V or spirv_cross for code generation. Integrated into `ShaderTranspiler`, `ShaderCache`, and `ShaderBundleCompiler`. WGSL variants are supported in YSLB bundles via the `shader_bundler` tool and `yup_add_shader_bundle()` CMake helper.
+- New `GpuPipeline` class (`rhi/yup_GpuPipeline.h`): an immutable compiled render pipeline (vertex + fragment shaders plus fixed pipeline state). `compile(ctx, vs, fs, GpuPipelineOptions)`, `compileFromBundle(ctx, ShaderBundle, GpuPipelineOptions)`, and (when `YUP_ENABLE_SHADER_TRANSPILER = 1`) `compileFromGlsl(ctx, vertexGlsl, fragmentGlsl, GpuPipelineOptions)` all return `ResultValue<GpuPipeline::Ptr>`. Pipelines carry all the backend-agnostic mirror enums/structs (`GpuVertexFormat`, `GpuPipelineOptions`, `GpuColorTarget`, `GpuDepthStencilState`, …).
+- New `GpuFrame` class (`rhi/yup_GpuFrame.h`): move-only RAII GPU frame scope (`GpuFrame::begin(ctx)` → `submit()` → `waitForGPU()`). Owns the transient GPU resource pools (uniform buffers, texture views, samplers) created while encoding its passes.
+- New `GpuRenderPass` class (`rhi/yup_GpuRenderPass.h`): move-only transient render-pass encoder targeting a `GpuCanvas`. Holds the mutable binding state (`setPipeline`, `setTexture`, `setUniformBuffer`, `setVertexBuffer`, `setIndexBuffer`) and encodes draws (`draw`, `drawIndexed`, `finish`).
+- New `GpuPipelineCache` class (`rhi/yup_GpuPipelineCache.h`): thread-safe compile-or-fetch cache for `GpuPipeline` keyed by a deterministic SHA1 of the selected native shader sources, entry points, pipeline options, and graphics API. LRU eviction with a configurable entry limit, mirroring `ShaderCache`.
+- New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native ore buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
+- `Image::fromTexture(GpuTexture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
+- `Graphics::drawTexture(GpuTexture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side ImagePixelData allocation.
+
+#### Shader Compiler (#126 and #130)
+
+- New glslang (`thirdparty/glslang`), SPIRV-Cross (`thirdparty/spirv_cross`) and SPIRV-Tools (`thirdparty/spirv_tools`) for shader reflection and cross-compilation (GLSL, ESSL, HLSL, MSL).
+- New `yup_shading` module for cross platform shader handling.
+- New `ShaderBundle` class (`shading/yup_ShaderBundle.h`): RIFF binary format (`.ysl`) that stores original source, per-stage SPIR-V, all transpiled variants (GLSL/ESSL/HLSL/MSL), and full `ShaderReflection` data. Persists to / loads from `OutputStream`, `File`, and `MemoryBlock` via `saveToStream` / `loadFromStream` and friends. Lookup by stage + language via `findShader()`.
+- New `ShaderBundleCompiler` class (`shading/yup_ShaderBundleCompiler.h`): drives `ShaderTranspiler` to compile + transpile multiple stage/language combinations in one call and returns a fully-populated `ShaderBundle`. Accepts a `ShaderBundleCompileRequest` with per-stage `ShaderBundleEntry` items (stage, target languages, `TranspileOptions`).
+- New `BinaryOutputArchive` / `BinaryInputArchive` pair (`yup_core/serialisation/yup_BinaryArchive.h`): binary stream archives that plug into the `SerialisationTraits` system; used internally by `ShaderBundle` to serialise `ShaderReflection` data into `REFL` RIFF chunks.
+- New standalone `yup_shader_bundler` console tool (`cmake/tools/shader_bundler`): takes a `.vert` and `.frag` GLSL (v450 Vulkan dialect) pair on disk and produces a single `.ysl` bundle containing transpiled variants for all target languages (GLSL/ESSL/HLSL/MSL).
+- New `yup_add_shader_bundle()` CMake helper (`cmake/yup_shader_bundler.cmake`): builds the `yup_shader_bundler` tool for the host once (cached in the global property `YUP_SHADER_BUNDLER_EXECUTABLE`), runs it at configure time to generate the `.ysl`, and embeds it into a linkable object library via `yup_add_embedded_binary_resources`. Works even when the outer build is cross-compiling, since the tool is built in its own host binary tree without forwarding the cross toolchain. Accepts an `OPTIONS` argument that forwards arbitrary extra flags verbatim to `yup_shader_bundler` (e.g. `--spirv-opt`, `--target-langs`, `-DNAME=VALUE`, `-I<dir>`).
+
+### Examples
+
+- `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
+
+### Build System
+
+- justfile recipes now use per-platform build directories (`build/mac`, `build/ios`, `build/android`, `build/emscripten`, `build/ninja`, `build/win`), so switching platforms no longer requires `just clean` and preserves downloaded FetchContent dependencies per platform. The `just build` recipe gains a `PLATFORM` parameter (default `mac`).
+- `yup_standalone_app` gains a `MAXIMUM_MEMORY` Emscripten argument (`-sMAXIMUM_MEMORY`); when set it caps the heap that `ALLOW_MEMORY_GROWTH` may reach.
+- `yup_tests` wasm build: raised `INITIAL_MEMORY` to 256 MB, added `MAXIMUM_MEMORY` cap of 1 GB, and reduced `STACK_SIZE` to 1 MB to give the heap room for concurrent pthread stress tests; fixes `RuntimeError: memory access out of bounds` in CI.
+- Fetched third-party dependencies (SDL3, Perfetto, plugin SDKs) are now cloned shallowly (`--depth 1`) and skip network update checks on reconfigure, speeding up fresh configures and reconfigures. Shallow cloning is automatically disabled when a `GIT_TAG` is a commit hash.
+- Android: full 16 KB page size compatibility — generated Gradle projects bumped to AGP 8.5.2 / Gradle 8.7 (uncompressed native libraries are zip-aligned to 16 KB), `jniLibs` packaging made explicitly non-legacy, and `ndkVersion` pinned to r27c (overridable via `NDK_VERSION`), which ships a 16 KB-aligned `libc++_shared.so`. CI NDK updated to r27c accordingly. Application shared libraries were already linked with `-Wl,-z,max-page-size=16384`.
 
 ### Bug Fixes
 
+- iOS applications now use the `UIScene` lifecycle, removing UIKit's legacy lifecycle warning and ensuring SDL windows are created for the connected scene.
+- Offscreen GPU rendering now supports recursive targets on Metal, OpenGL/GLES, and D3D11. Render contexts are reserved only while a target frame is active, so Lottie alpha/luma mattes, isolated-opacity layers, and cached precomps retain GPU compositing when rendered into an `Image` or `GpuCanvas` without allocating a context per sequential target. Repeated Lottie matte and precomp renders now reuse their canvases rather than allocating GPU textures each frame. Metal child targets allocate only their Rive render-canvas output texture; the CPU readback staging texture is created only when pixels are requested.
+- Lottie: track mattes (alpha, alpha-inverted, luma, luma-inverted) now composite the matte source's *rendered alpha* — including its fill opacity, gradients, and anti-aliased edges — instead of hard-clipping the target to the source silhouette. The matte source and target are rendered into offscreen GPU buffers (sized to the fitted on-screen resolution) and multiplied by a fullscreen matte-composite shader. A partially transparent matte source now shows through correctly (e.g. `matte_two_item_with_lowerlayer.json`, whose 65%-opacity source blends the white matted ellipse to pink over the red layer beneath). Falls back to the previous geometric-clip behaviour when no GPU is available (e.g. headless rendering).
+- Lottie: `EllipseShape` paths now start at the top (12 o'clock) and follow the shape direction (clockwise for `d == 1`, counter-clockwise for `d == 3`), matching Lottie's convention. Previously they started at the right (3 o'clock) going counter-clockwise, which placed trimmed arcs at the wrong position (e.g. the expanding rings in `world_locations.json` were cut short on the right).
+- `Path::withRoundedCorners()` left one corner sharp on closed subpaths whose geometry ended with an explicit segment back to the start vertex (as produced by Lottie bezier `toPath()`). The duplicated start/end point formed a zero-length edge that made that corner degenerate. The trailing duplicate is now dropped, and corners are rounded with a cubic arc (circle kappa) instead of a single quadratic through the vertex, so a square with a full Round Corners modifier becomes a proper circle (e.g. the morphing loader shape in `loader.json`).
+- Lottie: trailing top-level modifiers (trim, repeater, rounded-corner) in a shape layer now apply to every preceding top-level group in the run, not just the last one, so a single trim animates all shapes it should (e.g. the knife in `it's_lunch_time!.json`, and the segmented strokes in `imprint.json` / `fingerprint_success.json`). Trailing paints similarly reach all preceding paint-less groups.
+- Lottie: animated properties driven by an AfterEffects `loopOut('cycle')` expression (`AnimationProperty<T>::LoopMode`) now repeat their keyframe range instead of freezing on the final value once playback passes the last keyframe. Fixes pulsing markers vanishing after their first cycle (e.g. the orange location circles in `world_locations.json`).
+- Lottie: precomposition layers are now rasterized to an offscreen texture sized to the on-screen device resolution instead of the fixed composition size, so precomps no longer look blurry when the animation is scaled up (e.g. `tractor.json`).
+- Lottie: layers with partial (animated) opacity are isolated into a transparency layer for correct compositing; this offscreen buffer is now sized to the fitted on-screen resolution instead of the composition size, so small compositions no longer look blurry when scaled up (e.g. `spin,_lil_loader_v2.json`, a 90x90 composition whose fading "stick" layers were rasterized at 90px and upscaled).
+- Lottie: Merge Paths (`mm`) is now supported (`AnimationMergePaths`). Boolean modes (Add/Union, Subtract, Intersect, Exclude) combine the preceding path geometry with the matching boolean operation, while the plain "Merge" mode concatenates paths and lets the fill winding rule form counters (holes). Nested paint-less groups only feed their geometry to the parent group's fills/strokes when a Merge Paths modifier is present; otherwise nested groups stay self-contained so paint-less construction guides are not accidentally filled (fixes stray star/cross shapes and per-frame overhead in `pumped_up.json` and `mughead.json`). Fixes shapes built from merged sub-paths rendering only partially (e.g. the red windmill sails in `windmill.json`) without filling in letter counters (e.g. the holes in "O"/"A" in `goal.json`).
+- Lottie: the AfterEffects inertial-bounce ("overshoot") position expression (`amp`/`freq`/`decay`) is now approximated via `AnimationTransform` `InertialBounceParams`, producing the decaying oscillation past the last position keyframe. Fixes elements that dropped in without the expected bounce (e.g. `windmill.json`).
+- Lottie / `AnimationRenderer::renderComposition`: content that extends beyond the composition viewport (e.g. shapes with coordinates outside the `w`/`h` bounds, as in `jolly_walker.json`) now clips to the fitted composition rectangle instead of the full target bounds, so it no longer spills into the letterbox / pillarbox area when the target rectangle is not the composition's aspect ratio.
+- `AnimationTransform::positionAt()` spatial bezier motion paths were nearly straight instead of curved: the second control point used the *next* keyframe's incoming tangent (`k1.tangentIn`) rather than the current segment's own tangent (`k0.tangentIn`). In Lottie both `to` and `ti` belong to the keyframe starting the segment, so a circular motion path (e.g. a shape orbiting on a bezier arc) collapsed toward linear interpolation.
+- OpenGL / WebGL: the main frame's rive flush went silently blank (draws degenerate, screen frozen on the last good frame) whenever a `GpuCanvas` committed mid-frame. `endOffscreen()`'s `unbindGLInternalResources()` wipes the shared GL texture units, but the main render context's internal textures (tessellation/gradient/feather/atlas) were only rebound at `begin()` — before `paint()` — so any offscreen 2D flush during paint left the main flush sampling incomplete textures (no GL error; GLES returns zeros). The GL backend now calls `invalidateGLState()` on the flushing context immediately before every `flush()` (main frame and offscreen), making each flush self-contained regardless of how many rive/ore contexts interleave on the one real GL context. Fixes `SpinningCubeDemo` on WASM/WebGL2 appearing frozen (with sporadic 5-15 s updates) and the page turning sluggish while the app still reported ~57 FPS.
+- `Graphics::drawTexture` / `drawImage` / transparency layers rendered nothing (transparent) whenever the rive frame ran in atomic interlock mode — always the case on the iOS simulator, and on any platform when raster ordering is disabled. The composite was implemented as a path draw with an image paint, which atomic-mode shaders cannot sample; `Graphics::renderTexture` now routes through `rive::Renderer::drawImage`, which falls back to a dedicated image-rect draw in atomic mode. Fixes invisible Lottie precomps/mattes, `GpuCanvas` composites, and the SpinningCube demo output on the iOS simulator.
+- OpenGL / WebGL: `GpuCanvas` textures drawn with `Graphics::drawTexture` (Lottie precomp caches and matte composites) rendered vertically flipped, because the GL canvas source texture is stored bottom-up. `GpuTexture::getOrAdoptGpuTexture()` now prefers the Y-flipped sampled mirror — kept fresh at each canvas flush — matching what `GpuRenderPass` already did for sampled inputs. No change on Metal/D3D, where the mirror is null.
+- SDL3 windowing: mouse move/drag was broken on touch platforms (iOS, Android). Motion was synthesized only by polling `SDL_GetGlobalMouseState`, which has no backend implementation there and falls back to window-relative coordinates, so subtracting the window position shifted every move. Touch platforms now consume the touch-synthesized `SDL_EVENT_MOUSE_MOTION` events directly; desktop keeps the global-cursor poll (needed for embedded plugin editors).
+- SDL3 windowing: mouse drag events were lost inside embedded plugin editors (notably on macOS, where the host owns the native application so SDL never receives Cocoa mouse focus and suppresses drag motion). Dragging is now synthesized by polling the global cursor while a button is held, on the message thread, for all platforms.
 - UBSAN and ASAN fixes throughout the codebase
 
 ---
@@ -160,11 +219,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComponentNative::getGraphicsContext()` virtual method allowing components to access the GPU context for offscreen operations ([#119](https://github.com/kunitoki/yup/pull/119))
 - `MouseListener` weak-referenceable interface for all mouse events; `Component::addMouseListener()` / `removeMouseListener()` ([#30](https://github.com/kunitoki/yup/pull/30))
 - Improved slider components (knob, linear, range) and button components ([#70](https://github.com/kunitoki/yup/pull/70))
+- Unified drag-and-drop support in `Component`: `isInterestedInDrag()` / `itemsDropped()` virtuals with a fluent `DragAndDropData` payload (files and text on SDL, URIs reserved for future backends); drops dispatch to the topmost interested component and bubble up to parents
+- Added unit coverage for `SystemClipboard` data formats and `Component` drag-and-drop callbacks
+- Safe area support: `Component::getSafeAreaBounds()` and `safeAreaChanged()` virtual (backed by `ComponentNative::getSafeAreaBounds()`), so content can avoid display cutouts and system bars on mobile devices
+- High dpi support on Windows and Linux X11: window bounds, screen geometry and input coordinates are now logical points everywhere (converted at the SDL boundary), so windows and content scale with the display scale like on macOS; live display scale changes resize the native window keeping the logical size
 
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))
 - Improved fonts: better layouting, variable font axis manipulation, embedded fallback font ([#55](https://github.com/kunitoki/yup/pull/55))
-- Clipboard support ([#55](https://github.com/kunitoki/yup/pull/55))
+- Clipboard support: text, MIME-typed data with lazy callbacks, and primary selection ([#55](https://github.com/kunitoki/yup/pull/55))
 
 #### Audio GUI (`yup_audio_gui`)
 - New `yup_audio_gui` module ([#70](https://github.com/kunitoki/yup/pull/70))
@@ -201,6 +264,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `yup_python`: Python bindings (from popsicle) ([#65](https://github.com/kunitoki/yup/pull/65))
 
 #### `yup_core` Additions
+- `constructAt()` / `destroyAt()` / `voidify()` in `memory/yup_Memory.h`: portable replacements for `std::construct_at` / `std::destroy_at`, used by `TypeErasedObject`
+- `TypeErasedObject` now supports class template argument deduction (deduction guide sizes storage to the stored value) and move construction / assignment from a smaller-sized `TypeErasedObject`
 - `SqliteDatabase` with `Statement` and `Transaction` ([#94](https://github.com/kunitoki/yup/pull/94))
 - Perfetto profiling: `YUP_ENABLE_PROFILING`, `Profiler` singleton, `YUP_PROFILE_START` / `YUP_PROFILE_STOP` macros ([#20](https://github.com/kunitoki/yup/pull/20))
 - `Watchdog` file watching utility ([#50](https://github.com/kunitoki/yup/pull/50))

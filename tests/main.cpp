@@ -160,8 +160,15 @@ private:
         std::string failureDetails;
     };
 
+    struct TestTiming
+    {
+        std::string name;
+        std::chrono::milliseconds duration;
+    };
+
     std::chrono::steady_clock::time_point programStart;
     std::vector<FailedTest> failedTests;
+    std::vector<TestTiming> testTimings;
     int totalTests = 0;
     int passedTests = 0;
     yup::File originalXmlOutputPath;
@@ -344,6 +351,19 @@ private:
         }
 
         std::cout << "\n========================================\n";
+        std::cout << "SLOWEST TESTS (top 5):\n";
+
+        std::sort (testTimings.begin(), testTimings.end(), [] (const TestTiming& a, const TestTiming& b)
+        {
+            return a.duration > b.duration;
+        });
+
+        const size_t topCount = std::min (testTimings.size(), size_t (5));
+        for (size_t i = 0; i < topCount; ++i)
+            std::cout << "  " << (i + 1) << ". " << testTimings[i].name
+                      << " (" << testTimings[i].duration.count() << " ms)\n";
+
+        std::cout << "\n========================================\n";
         std::cout << "RESULT: "
                   << (failedTests.empty() ? "ALL PASSED" : "SOME FAILED")
                   << " (" << passedTests << "/" << totalTests << " tests) in "
@@ -439,6 +459,8 @@ private:
             line << (std::string (info.test_suite_name()) + "." + info.name());
 
             bool testPassed = ! info.result()->Failed();
+
+            owner.testTimings.push_back (TestTiming { line.str(), std::chrono::milliseconds (elapsedMs) });
 
             if (testPassed)
             {

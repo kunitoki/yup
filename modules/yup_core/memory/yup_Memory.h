@@ -124,6 +124,69 @@ constexpr size_t getMaxAlignmentBytes() noexcept
 }
 
 //==============================================================================
+/** Converts a pointer to `void*` so that it can be passed to placement-new.
+
+    This simply casts the pointer, relying on the implicit conversion from `T*` to `void*`.
+    It exists for compatibility with code that expects a `voidify` helper for placement-new
+    expressions where passing the raw pointer directly may trigger linter warnings.
+
+    @tparam T The pointee type.
+    @param ptr A pointer to be converted. May be null.
+    @return The same pointer, converted to `void*`.
+*/
+template <typename T>
+inline void* voidify(T& ptr) noexcept
+{
+    return const_cast<void*>(reinterpret_cast<const volatile void*>(std::addressof(ptr)));
+}
+
+//==============================================================================
+/** Constructs an object of type `T` in previously-allocated storage.
+
+    This is a portable replacement for `std::construct_at` (C++20). It handles both
+    scalar and array types, using placement-new for scalars and default-initialization
+    for arrays.
+
+    @tparam T   The type of object to construct.
+    @tparam Args The types of constructor arguments.
+    @param location Pointer to the storage where the object should be constructed.
+    @param args     Constructor arguments forwarded to the constructor of `T`.
+    @return `location`, pointing to the now-constructed object.
+*/
+template <typename T, typename... Args>
+constexpr T* constructAt(T* location, Args&&... args)
+{
+    if constexpr (std::is_array_v<T>)
+        return ::new (voidify(*location)) T[1]();
+    else
+        return ::new (voidify(*location)) T(std::forward<Args>(args)...);
+}
+
+//==============================================================================
+/** Destroys an object previously constructed via `constructAt` without freeing storage.
+
+    This is a portable replacement for `std::destroy_at` (C++17). It calls the
+    destructor of the object pointed to by `location` but does not deallocate
+    the underlying memory. For array types each element is destroyed in turn.
+
+    @tparam T The type of object to destroy.
+    @param location Pointer to the object to be destroyed. Must not be null.
+*/
+template <typename T>
+constexpr void destroyAt(T* location)
+{
+    if constexpr (std::is_array_v<T>)
+    {
+        for (auto& element : *location)
+            destroyAt(std::addressof(element));
+    }
+    else
+    {
+        location->~T();
+    }
+}
+
+//==============================================================================
 /** A handy function to read un-aligned memory without a performance penalty or bus-error. */
 template <typename Type>
 inline Type readUnaligned(const void* srcPtr) noexcept
@@ -252,20 +315,12 @@ extern YUP_API void yupDLL_free(void*);
 #endif
 
 //==============================================================================
-/** (Deprecated) This was a Windows-specific way of checking for object leaks - now please
-    use the YUP_LEAK_DETECTOR instead.
-*/
-#ifndef yup_UseDebuggingNewOperator
-#define yup_UseDebuggingNewOperator
-#endif
-
-/** Converts an owning raw pointer into a unique_ptr, deriving the
-    type of the unique_ptr automatically.
+/** Converts an owning raw pointer into a unique_ptr, deriving the type of the unique_ptr automatically.
 
     This should only be used with pointers to single objects.
-    Do NOT pass a pointer to an array to this function, as the
-    destructor of the unique_ptr will incorrectly call `delete`
-    instead of `delete[]` on the pointer.
+
+    Do NOT pass a pointer to an array to this function, as the destructor of the unique_ptr will incorrectly
+    call `delete` instead of `delete[]` on the pointer.
 */
 template <typename T>
 std::unique_ptr<T> rawToUniquePtr(T* ptr)

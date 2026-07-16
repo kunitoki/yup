@@ -35,6 +35,7 @@ class LottieExpressionEvaluator
 {
 public:
     //==============================================================================
+    /** Represents a layer in the composition context. */
     struct LayerContext
     {
         String name;
@@ -42,6 +43,7 @@ public:
         AnimationTransform* transform = nullptr;
     };
 
+    /** Represents the composition context for evaluating expressions. */
     struct CompositionContext
     {
         Size<float> size;
@@ -50,6 +52,7 @@ public:
     };
 
     //==============================================================================
+    /** Represents a shape layer's top-level content group. */
     struct EvalResult
     {
         enum class Kind
@@ -60,7 +63,7 @@ public:
             ShapeContentRef   ///< content("G").content("P").path or content("G").transform.rotation
         };
 
-        Kind kind = Kind::Unknown;
+        Kind kind = Kind::Unknown; ///< The kind of evaluation result
 
         var value; ///< Computed frame-0 value (set for StaticValue and as a snapshot for ref kinds)
 
@@ -76,40 +79,65 @@ public:
     };
 
     //==============================================================================
+    /** Constructs a new LottieExpressionEvaluator. */
     LottieExpressionEvaluator();
 
     /** Registers thisComp with the given composition data.
-        Must be called before evaluating layer transform expressions. */
+
+        @param ctx The composition context to use for evaluating expressions. 
+
+        Must be called before evaluating layer transform expressions.
+    */
     void setupCompositionContext (const CompositionContext& ctx);
 
     /** Registers content() pointing into a ShapeLayer's top-level groups.
-        Call before evaluating expressions inside parseShapeContents. */
+
+        @param layer The shape layer to use for evaluating expressions.
+
+        Call before evaluating expressions inside parseShapeContents.
+    */
     void setupShapeContext (const ShapeLayer& layer);
 
     /** Registers content() pointing into an AnimationGroup's child groups.
-        Call before evaluating expressions inside parseGroupItems. */
+
+        @param group The animation group to use for evaluating expressions.
+
+        Call before evaluating expressions inside parseGroupItems.
+    */
     void setupGroupContext (const AnimationGroup& group);
 
-    /** Evaluates an AE expression string.
-        Returns Kind::Unknown for empty input or evaluation failures. */
+    /** Evaluates an AfterEffects expression string.
+
+        @param expression The expression string to evaluate.
+
+        @returns An EvalResult describing the result of the evaluation, or 
+                 Kind::Unknown if the expression is empty or evaluation failed.
+    */
     [[nodiscard]] EvalResult evaluate (const String& expression);
 
     //==============================================================================
-    // Internal state setters used by proxy objects during evaluation.
+    /** @internal */
     void setLastLayerName (const String& s) { lastLayerName_ = s; }
 
+    /** @internal */
     void setLastLayerId (int id) { lastLayerId_ = id; }
 
+    /** @internal */
     void setLastContentGroup (const String& s) { lastContentGroup_ = s; }
 
+    /** @internal */
     void setLastContentItem (const String& s) { lastContentItem_ = s; }
 
+    /** @internal */
     void setLastProperty (const String& s) { lastProperty_ = s; }
 
+    /** @internal */
     String getLastContentGroup() const { return lastContentGroup_; }
 
+    /** @internal */
     String getLastContentItem() const { return lastContentItem_; }
 
+    /** @internal */
     String& getLastPropertyRef() { return lastProperty_; }
 
 private:
