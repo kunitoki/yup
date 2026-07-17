@@ -11,8 +11,8 @@ rendering** (indexed or non-indexed) with vertex buffers, culling, and
 depth/stencil state.
 
 ```{note}
-Compiling a pipeline requires a `GraphicsContext` with `enableOreContext = true`
-(the default). Check `ctx.isGpuAvailable()` first.
+Compiling a pipeline requires GPU context in `GraphicsContext` to exist.
+Check `ctx.isGpuAvailable()` first.
 ```
 
 ## Compiling a pipeline
@@ -102,7 +102,7 @@ struct GpuShaderSource
 
 ### Binding maps
 
-`GpuPipeline` (and the underlying `ore` layer) require a pre-compiled **RSTB
+`GpuPipeline` (and the underlying GPU layer) require a pre-compiled **RSTB
 binding-map sidecar** for every shader stage. `compile()` will assert and fail
 if it is missing. The higher-level `compileFromBundle()` and `compileFromGlsl()`
 entry points produce this sidecar for you.
@@ -116,15 +116,15 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
 ```
 
 The blob maps uniform buffers, separate images (textures), separate samplers,
-and read/write storage buffers to their `ore` resource kinds, carrying the
+and read/write storage buffers to their GPU resource kinds, carrying the
 reflected native backend slot for the stage.
 
 ### The GL fixup blob
 
 OpenGL / OpenGL ES (GLES 3.00 / WebGL2) cannot express UBO block bindings or
-sampler texture units via `layout(binding=)` qualifiers, so the `ore` GL backend
-assigns them by name after linking. Supply the name→slot table via
-`GpuShaderSource::glFixup`, produced by:
+sampler texture units via `layout(binding=)` qualifiers, so the Rive' GPU
+specific GL backend assigns them by name after linking. Supply the name→slot
+table via `GpuShaderSource::glFixup`, produced by:
 
 ```cpp
 std::vector<uint8_t> makeGLFixupBlob (const ShaderReflection& reflection);

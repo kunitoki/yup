@@ -66,11 +66,11 @@ JSON.
 ```cpp
 // A node with all defaults applied.
 DataTree settings = schema->createNode ("AppSettings");
-// -> version="1.2.3", theme="light", fontSize=12
+// → version="1.2.3", theme="light", fontSize=12
 
 // A valid child of a given parent type.
 DataTree server = schema->createChildNode ("AppSettings", "ServerConfig");
-// -> port=8080, hostname="localhost"
+// → port=8080, hostname="localhost"
 ```
 
 ## Inspecting the schema

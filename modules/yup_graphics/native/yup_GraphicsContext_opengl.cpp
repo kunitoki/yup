@@ -101,8 +101,7 @@ public:
             return;
         }
 
-        if (options.enableOreContext)
-            m_oreContext = rive::ore::ContextGL::Make();
+        m_oreContext = rive::ore::ContextGL::Make();
 
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
         printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));

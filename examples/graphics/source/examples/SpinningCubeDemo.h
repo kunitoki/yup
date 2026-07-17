@@ -589,8 +589,7 @@ void main() {
 
         if (! capturedContext->isGpuAvailable())
         {
-            statusLabel->setText ("ore context unavailable - rebuild with enableOreContext=true.",
-                                  yup::dontSendNotification);
+            statusLabel->setText ("GPU context unavailable", yup::dontSendNotification);
             return;
         }
 

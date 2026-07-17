@@ -73,12 +73,13 @@ public:
     //==============================================================================
     /** Creates a GpuCanvas of the given pixel dimensions.
 
-        Returns nullptr if the GraphicsContext cannot allocate offscreen GPU resources
-        (e.g. headless context with no GPU).
-
         @param ctx      The graphics context that owns the GPU device.
         @param width    Width in pixels (must be > 0).
         @param height   Height in pixels (must be > 0).
+
+        @returns A reference-counted pointer to a GpuCanvas, or nullptr on failure.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
     static GpuCanvas::Ptr create (GraphicsContext& ctx, int width, int height);
 

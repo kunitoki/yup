@@ -23,15 +23,15 @@ namespace yup
 {
 
 //==============================================================================
-/** Builds an ore RSTB binding-map blob from shader reflection data.
+/** Builds a GPU RSTB binding-map blob from shader reflection data.
 
-    GpuPipeline (and the underlying ore layer) require a pre-compiled RSTB
+    GpuPipeline (and the underlying GPU layer) require a pre-compiled RSTB
     binding-map sidecar for every shader stage. This helper converts a
     ShaderReflection (produced by ShaderTranspiler / ShaderBundle) into the
     binary blob format expected by GpuShaderSource::bindingMap.
 
     Uniform buffers, separate images (textures), separate samplers, and
-    read/write storage buffers are all mapped to their corresponding ore
+    read/write storage buffers are all mapped to their corresponding GPU
     ResourceKind, carrying the reflected native backend slot for the given
     stage.
 
@@ -47,12 +47,12 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
                                                ShaderStage stage);
 
 //==============================================================================
-/** Builds an ore GL program-link fixup blob from shader reflection data.
+/** Builds a GPU program-link fixup blob from shader reflection data.
 
     OpenGL / OpenGL ES (GLES 3.00 / WebGL2) cannot express UBO block bindings or
-    sampler texture units via @c layout(binding=) qualifiers, so the ore GL
+    sampler texture units via @c layout(binding=) qualifiers, so the GL
     backend fixes them up by name after linking (@c glUniformBlockBinding /
-    @c glUniform1i). This helper serialises the required name→slot table for a
+    @c glUniform1i). This helper serialises the required name -> slot table for a
     single stage into the blob format consumed by @c ShaderModuleDesc::glFixupBytes.
 
     Uniform buffers contribute their block name + binding point; combined

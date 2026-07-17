@@ -46,9 +46,8 @@ public:
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
         , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, m_renderContextOptions))
+        , m_oreContext (rive::ore::ContextD3D11::Make (m_gpu.Get(), m_gpuContext.Get()))
     {
-        if (m_options.enableOreContext)
-            m_oreContext = rive::ore::ContextD3D11::Make (m_gpu.Get(), m_gpuContext.Get());
     }
 
     Api getApi() const noexcept override { return Api::Direct3D; }

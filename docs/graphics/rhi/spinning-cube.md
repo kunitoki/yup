@@ -22,12 +22,12 @@ The complete, runnable source lives in the graphics example under
 
 ## 1. Probe for GPU support
 
-Everything below requires an `ore` GPU context. Bail out early if it is missing:
+Everything below requires a GPU context. Bail out early if it is missing:
 
 ```cpp
 if (! ctx.isGpuAvailable())
 {
-    statusLabel->setText ("GPU unavailable", dontSendNotification);
+    statusLabel->setText ("GPU context unavailable", dontSendNotification);
     return;
 }
 ```

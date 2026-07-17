@@ -23,7 +23,7 @@ auto vbo = GpuBuffer::create (ctx, GpuBufferType::vertex, vertices, sizeof verti
 auto ibo = GpuBuffer::create (ctx, GpuBufferType::index,  indices,  sizeof indices);
 
 if (vbo == nullptr || ibo == nullptr)
-    return; // ore unavailable or allocation failed
+    return; // GPOU context unavailable or allocation failed
 
 pass.setVertexBuffer (0, vbo);
 pass.setIndexBuffer (GpuIndexFormat::uint16, ibo);
@@ -35,11 +35,6 @@ pass.drawIndexed ((uint32_t) std::size (indices));
 | `getType()`         | The buffer usage type.                             |
 | `getSizeInBytes()`  | Size of the buffer in bytes.                       |
 | `isValid()`         | True if the buffer holds a valid GPU resource.     |
-
-```{note}
-`create()` requires `enableOreContext = true` and returns `nullptr` on failure
-(ore unavailable or allocation failed). Always null-check the result.
-```
 
 ## `GpuTexture`
 

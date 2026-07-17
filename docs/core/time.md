@@ -61,7 +61,7 @@ high-resolution millisecond timer.
 
 ```{seealso}
 For frame-level GPU/paint profiling, see
-[Profiling component paint](../ui/profiling-component-paint.md). For real-time
+[Component paint profiling](../ui/component-profiling.md). For real-time
 timers on a dedicated thread, see `HighResolutionTimer` in the
 [Multithreading](../multithreading/index.md) area.
 ```
