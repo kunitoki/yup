@@ -101,8 +101,7 @@ public:
             return;
         }
 
-        if (m_options.enableOreContext)
-            m_oreContext = m_renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeOreContext();
+        m_oreContext = m_renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeOreContext();
     }
 
     //==============================================================================

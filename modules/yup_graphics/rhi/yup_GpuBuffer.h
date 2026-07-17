@@ -44,9 +44,6 @@ enum class GpuBufferType : uint8_t
     Buffers are immutable by default: the data provided at creation time is
     uploaded once and cannot be updated afterwards.
 
-    Requires the GraphicsContext to have been created with
-    Options::enableOreContext = true.
-
     @see GpuRenderPass, GraphicsContext::Options
 */
 class YUP_API GpuBuffer : public ReferenceCountedObject
@@ -55,6 +52,24 @@ public:
     using Ptr = ReferenceCountedObjectPtr<GpuBuffer>;
 
     //==============================================================================
+    /** Creates a GPU buffer and uploads the given data.
+
+        @param ctx        A GraphicsContext where GPU context is available.
+        @param type       The intended usage of the buffer.
+        @param data       Pointer to the source data to upload (must be non-null).
+        @param byteSize   Number of bytes to upload (must be greater than zero).
+
+        @returns A valid GpuBuffer, or nullptr on failure (ore unavailable or allocation failed).
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
+    */
+    static GpuBuffer::Ptr create (GraphicsContext& ctx,
+                                  GpuBufferType type,
+                                  const void* data,
+                                  size_t byteSize);
+
+    //==============================================================================
+    /** Destructor. */
     ~GpuBuffer();
 
     //==============================================================================
@@ -66,21 +81,6 @@ public:
 
     /** Returns true if this buffer holds a valid GPU resource. */
     bool isValid() const noexcept;
-
-    //==============================================================================
-    /** Creates a GPU buffer and uploads the given data.
-
-        @param ctx        A GraphicsContext created with enableOreContext = true.
-        @param type       The intended usage of the buffer.
-        @param data       Pointer to the source data to upload (must be non-null).
-        @param byteSize   Number of bytes to upload (must be greater than zero).
-
-        @returns A valid GpuBuffer, or nullptr on failure (ore unavailable or allocation failed).
-    */
-    static GpuBuffer::Ptr create (GraphicsContext& ctx,
-                                  GpuBufferType type,
-                                  const void* data,
-                                  size_t byteSize);
 
 private:
     friend class GpuRenderPass;

@@ -488,7 +488,8 @@ TEST_F (ComponentEffectTest, ChildrenStillPaintWhenParentIsCached)
 #if YUP_MAC
 
 /** Minimal component that fills itself with a solid colour, avoiding the
-    default Component::paint() jassert. */
+    default Component::paint() jassert. Unclipped so tests work with a raw
+    makeRenderer() that lacks a full render-target frame. */
 class FillComponent : public Component
 {
 public:
@@ -504,32 +505,59 @@ public:
 class ComponentEffectGpuTest : public ::testing::Test
 {
 protected:
-    void SetUp() override
+    using ComponentHelper = yup::ComponentTestHelper<yup::ComponentEffect>;
+
+    std::unique_ptr<FillComponent> makeComp (StringRef id, float w, float h)
+    {
+        auto comp = std::make_unique<FillComponent> (id);
+        comp->setBounds (0, 0, w, h);
+        comp->enableRenderingUnclipped (true);
+        return comp;
+    }
+
+    void triggerPaintOnCanvas (Component& comp, int w, int h)
+    {
+        auto canvas = GpuCanvas::create (*gpuContext, w, h);
+        ASSERT_NE (canvas, nullptr);
+        auto& g = canvas->beginDraw();
+        ComponentHelper::triggerPaint (comp, g, comp.getLocalBounds(), false);
+        canvas->commit();
+    }
+
+    static void SetUpTestSuite()
     {
         gpuContext = GraphicsContext::createContext (GraphicsContext::Metal, {});
         if (gpuContext == nullptr)
-            GTEST_SKIP() << "No Metal GPU context available (headless CI)";
+            return;
 
         auto probe = GpuCanvas::create (*gpuContext, 64, 64);
         if (probe == nullptr)
-        {
             gpuContext.reset();
-            GTEST_SKIP() << "GpuCanvas creation failed (Metal context may need a window/surface)";
-        }
     }
 
-    std::unique_ptr<GraphicsContext> gpuContext;
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
 };
+
+std::unique_ptr<GraphicsContext> ComponentEffectGpuTest::gpuContext;
 
 TEST_F (ComponentEffectGpuTest, SnapshotRendersToImage)
 {
     if (! gpuContext)
         return;
+    auto comp = makeComp ("test", 128, 128);
 
-    FillComponent comp ("test");
-    comp.setBounds (0, 0, 128, 128);
-
-    auto image = comp.snapshotToImage (*gpuContext);
+    auto image = comp->snapshotToImage (*gpuContext);
     EXPECT_TRUE (image.isValid());
     EXPECT_EQ (image.getWidth(), 128);
     EXPECT_EQ (image.getHeight(), 128);
@@ -543,16 +571,13 @@ TEST_F (ComponentEffectGpuTest, SnapshotWithEffectsAppliesEffect)
 {
     if (! gpuContext)
         return;
-
-    FillComponent comp ("test");
-    comp.setBounds (0, 0, 128, 128);
+    auto comp = makeComp ("test", 128, 128);
 
     auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
-    comp.setComponentEffect (effect);
+    comp->setComponentEffect (effect);
 
-    auto image = comp.snapshotToImage (*gpuContext, true);
+    auto image = comp->snapshotToImage (*gpuContext, true);
     EXPECT_TRUE (image.isValid());
-    // apply() should be called once when effect is active
     EXPECT_EQ (effect->applyCount, 1);
 }
 
@@ -560,15 +585,241 @@ TEST_F (ComponentEffectGpuTest, SnapshotExcludingEffectsSkipsEffect)
 {
     if (! gpuContext)
         return;
-
-    FillComponent comp ("test");
-    comp.setBounds (0, 0, 128, 128);
+    auto comp = makeComp ("test", 128, 128);
 
     auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
-    comp.setComponentEffect (effect);
+    comp->setComponentEffect (effect);
 
-    auto image = comp.snapshotToImage (*gpuContext, false);
+    auto image = comp->snapshotToImage (*gpuContext, false);
     EXPECT_TRUE (image.isValid());
     EXPECT_EQ (effect->applyCount, 0);
 }
+
+// =============================================================================
+// Snapshot to texture (GPU-only, no CPU readback)
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, SnapshotToTextureReturnsValidTexture)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 200, 150);
+
+    auto tex = comp->snapshotToTexture (*gpuContext);
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (tex->isValid());
+    EXPECT_EQ (tex->getWidth(), 200);
+    EXPECT_EQ (tex->getHeight(), 150);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotToTextureWithEffects)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 128, 128);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    comp->setComponentEffect (effect);
+
+    auto tex = comp->snapshotToTexture (*gpuContext, true);
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (tex->isValid());
+    EXPECT_EQ (effect->applyCount, 1);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotToTextureExcludingEffects)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 128, 128);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    comp->setComponentEffect (effect);
+
+    auto tex = comp->snapshotToTexture (*gpuContext, false);
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (tex->isValid());
+    EXPECT_EQ (effect->applyCount, 0);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotToTextureAndImageProduceSameDimensions)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 256, 128);
+
+    auto tex = comp->snapshotToTexture (*gpuContext);
+    auto img = comp->snapshotToImage (*gpuContext);
+
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (img.isValid());
+    EXPECT_EQ (tex->getWidth(), img.getWidth());
+    EXPECT_EQ (tex->getHeight(), img.getHeight());
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotZeroSizedComponentReturnsNullTexture)
+{
+    if (! gpuContext)
+        return;
+    FillComponent comp ("test");
+
+    auto tex = comp.snapshotToTexture (*gpuContext);
+    EXPECT_EQ (tex, nullptr);
+}
+
+// =============================================================================
+// Cache + Paint
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, CachedComponentCreatesCanvasOnFirstPaint)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 256, 256);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp), nullptr);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+
+    auto cached = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (cached, nullptr);
+    auto tex = cached->asTexture();
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (tex->isValid());
+}
+
+TEST_F (ComponentEffectGpuTest, CachedComponentReusesTextureOnSubsequentPaints)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 256, 256);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    EXPECT_EQ (firstCanvas.get(), ComponentHelper::getCachedTextureCanvas (*comp).get());
+}
+
+TEST_F (ComponentEffectGpuTest, RepaintInvalidatesAndRecreatesCache)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 256, 256);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
+
+    comp->repaint();
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp), nullptr);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (secondCanvas, nullptr);
+    EXPECT_NE (firstCanvas.get(), secondCanvas.get());
+}
+
+TEST_F (ComponentEffectGpuTest, DisablingCacheClearsStoredCanvas)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 256, 256);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 256, 256);
+    EXPECT_NE (ComponentHelper::getCachedTextureCanvas (*comp), nullptr);
+
+    comp->setCachedToTexture (false);
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp), nullptr);
+}
+
+// =============================================================================
+// Cache + Snapshot
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, SnapshotOfCachedComponentStillCapturesSubtree)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 200, 200);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 200, 200);
+
+    auto tex = comp->snapshotToTexture (*gpuContext);
+    ASSERT_NE (tex, nullptr);
+    EXPECT_EQ (tex->getWidth(), 200);
+    EXPECT_EQ (tex->getHeight(), 200);
+
+    auto img = comp->snapshotToImage (*gpuContext);
+    EXPECT_TRUE (img.isValid());
+    EXPECT_EQ (img.getWidth(), 200);
+    EXPECT_EQ (img.getHeight(), 200);
+}
+
+TEST_F (ComponentEffectGpuTest, SnapshotDoesNotAffectPaintCache)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 200, 200);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 200, 200);
+    auto cachedBefore = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (cachedBefore, nullptr);
+
+    // Snapshot should NOT invalidate the paint cache
+    auto img = comp->snapshotToImage (*gpuContext);
+    EXPECT_TRUE (img.isValid());
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp).get(), cachedBefore.get());
+
+    auto tex = comp->snapshotToTexture (*gpuContext);
+    ASSERT_NE (tex, nullptr);
+    EXPECT_EQ (ComponentHelper::getCachedTextureCanvas (*comp).get(), cachedBefore.get());
+}
+
+// =============================================================================
+// Effect + Cache
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, EffectPlusCacheRendersEffectEveryFrame)
+{
+    if (! gpuContext)
+        return;
+    auto comp = makeComp ("test", 128, 128);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 128, 128);
+    int applyCountAfterFirst = effect->applyCount;
+    EXPECT_GE (applyCountAfterFirst, 1);
+
+    auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
+
+    // Effect path always re-renders the full subtree (so cached canvas
+    // is recreated), because a child repaint doesn't invalidate the
+    // parent's cache. Effect must track live child content.
+    triggerPaintOnCanvas (*comp, 128, 128);
+    EXPECT_GT (effect->applyCount, applyCountAfterFirst);
+
+    auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (secondCanvas, nullptr);
+    EXPECT_NE (firstCanvas.get(), secondCanvas.get());
+}
+
 #endif // YUP_MAC

@@ -185,12 +185,12 @@ The same type description powers conversion to and from `var` (and therefore
 [JSON](data-interchange.md#json)), via `ToVar` and `FromVar`.
 
 ```cpp
-// Type -> var (-> JSON)
+// Type → var (→ JSON)
 std::optional<var> v = ToVar::convert (settings);
 if (v.has_value())
     String json = JSON::toString (*v);
 
-// var (from JSON) -> type
+// var (from JSON) → type
 var parsed = JSON::parse (jsonText);
 std::optional<Settings> restored = FromVar::convert<Settings> (parsed);
 ```

@@ -1236,7 +1236,7 @@ bool Component::isCachedToTexture() const
 
 GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects)
 {
-    if (getWidth() <= 0 || getHeight() <= 0)
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
     auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
@@ -1337,6 +1337,9 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float
 
 GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous)
 {
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return nullptr;
+
     const auto w = static_cast<int> (getWidth());
     const auto h = static_cast<int> (getHeight());
 
@@ -1444,7 +1447,7 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 
 void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
 {
-    if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
+    if (! isVisible() || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
 
     auto bounds = getBoundsRelativeToTopLevelComponent();

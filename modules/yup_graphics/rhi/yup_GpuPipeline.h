@@ -334,8 +334,7 @@ class GraphicsContext;
     encoding live on GpuRenderPass. Compile a pipeline once (or fetch it from a
     GpuPipelineCache) and reuse it across frames and render passes.
 
-    Requires the GraphicsContext to have been created with
-    Options::enableOreContext = true.
+    @warning Requires the GraphicsContext with a GPU context available on this backend.
 
     @see GpuRenderPass, GpuFrame, GpuCanvas, GpuPipelineCache, GpuPipelineOptions
 */
@@ -354,7 +353,14 @@ public:
         GpuShaderSource::bindingMap. On failure the returned ResultValue holds a
         human-readable description of the failure.
 
-        Requires ctx.isGpuAvailable() (enableOreContext = true).
+        @param ctx              A GraphicsContext with GPU context available.
+        @param vertexShader     Vertex shader source and binding-map sidecar.
+        @param fragmentShader   Fragment shader source and binding-map sidecar.
+        @param pipelineOptions  Pipeline configuration.
+
+        @returns A compiled pipeline, or a failure with a human-readable description.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
     static ResultValue<GpuPipeline::Ptr> compile (GraphicsContext& ctx,
                                                   const GpuShaderSource& vertexShader,
@@ -370,11 +376,13 @@ public:
         and compiles the pipeline. This is the recommended way to consume shaders
         loaded from .ysl files, and works without the shader transpiler.
 
-        @param ctx              A GraphicsContext with enableOreContext = true.
+        @param ctx              A GraphicsContext with GPU context available.
         @param bundle           Bundle containing the vertex and fragment stages.
         @param pipelineOptions  Pipeline configuration.
 
         @returns A compiled pipeline, or a failure with a human-readable description.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
 
         @see ShaderBundle
     */
@@ -390,12 +398,15 @@ public:
         and compiles the pipeline. Only available when the shader transpiler is
         compiled in (YUP_ENABLE_SHADER_TRANSPILER = 1).
 
-        @param ctx              A GraphicsContext with enableOreContext = true.
+        @param ctx              A GraphicsContext with GPU context available.
         @param vertexGlsl       GLSL 450 vertex shader source.
         @param fragmentGlsl     GLSL 450 fragment shader source.
         @param pipelineOptions  Pipeline configuration.
 
         @returns A compiled pipeline, or a failure with a human-readable description.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
+
     */
     static ResultValue<GpuPipeline::Ptr> compileFromGlsl (GraphicsContext& ctx,
                                                           const String& vertexGlsl,

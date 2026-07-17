@@ -42,7 +42,7 @@ out/*
 
 # Ides/Agents
 __pycache__/
-.gitnexus/
+.juggler/
 .vscode/
 .idea/
 .vs/
