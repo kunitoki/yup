@@ -348,8 +348,6 @@ public:
             if (component != nullptr)
                 component->setBounds (bounds);
         }
-
-        YUP_DBG ("Window resized: " << width << "x" << height);
     }
 
     void paint (yup::Graphics& g) override
