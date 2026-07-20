@@ -110,6 +110,7 @@ yup_standalone_app (
         libwebp
         libjpeg
         libgif
+        libtiff
         glslang
         spirv_cross
         spirv_tools

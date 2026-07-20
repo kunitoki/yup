@@ -107,7 +107,7 @@ public:
     /** Creates a MockOffscreenTarget pre-configured with a TestGpuTexture for adoptAsTexture. */
     static std::unique_ptr<MockOffscreenTarget> withGpuTexture (int w, int h)
     {
-        auto t = std::make_unique<MockOffscreenTarget> (w, h);
+        auto t = std::make_unique<::testing::NiceMock<MockOffscreenTarget>> (w, h);
         ON_CALL (*t, getRenderCanvasProxy()).WillByDefault (::testing::ReturnNull());
         ON_CALL (*t, adoptAsTextureProxy())
             .WillByDefault (::testing::Return (rive::make_rcp<TestGpuTexture> (w, h)));

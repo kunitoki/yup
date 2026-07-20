@@ -125,10 +125,10 @@ TEST (PngImageFormatTests, ReaderHasAccessibleMetadataValues)
     ASSERT_TRUE (writer.writeImage (generateTestImage (8, 8, PixelFormat::RGBA)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    PngImageFormatReader reader (inStream);
+    PngImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 // ======================================================================
@@ -689,6 +689,38 @@ TEST (PngImageFormatTests, GrayscaleBlackAndWhiteRoundtrip)
     auto result = reader.readImage();
 
     EXPECT_TRUE (imagesAreEqual (original, result, 0));
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (PngImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (PngImageFormatTests, SelectiveRegistrationPngOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::png);
+
+    auto pngFile = File::createTempFile (".png");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (pngFile, PixelFormat::RGBA), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    pngFile.deleteFile();
+    bmpFile.deleteFile();
 }
 
 #endif // YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG

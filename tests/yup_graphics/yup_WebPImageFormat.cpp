@@ -627,10 +627,10 @@ TEST (WebPImageFormatTests, ReaderDpiDefaultsToZero)
     ASSERT_TRUE (writer.writeImage (generateSolidImage (8, 8, PixelFormat::RGB)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    WebPImageFormatReader reader (inStream);
+    WebPImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 TEST (WebPImageFormatTests, WriterFlushReturnsTrue)
@@ -722,6 +722,38 @@ TEST (WebPImageFormatTests, LossyVsLosslessSizeDifference)
 
     EXPECT_GT (losslessStream->getDataSize(), 0u);
     EXPECT_GT (lossyStream->getDataSize(), 0u);
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (WebPImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 0);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (WebPImageFormatTests, SelectiveRegistrationWebpOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::webp);
+
+    auto webpFile = File::createTempFile (".webp");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (webpFile, PixelFormat::RGBA), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    webpFile.deleteFile();
+    bmpFile.deleteFile();
 }
 
 #endif // YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP

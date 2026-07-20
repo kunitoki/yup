@@ -45,6 +45,8 @@ offscreen render-to-texture pipelines.
   shader sources, binding maps, and the pipeline cache.
 - [Offline shader compilation](offline-shaders.md) - build `.ysl` shader bundles
   ahead of time with `yup_add_shader_bundle` and the `yup_shader_bundler` tool.
+- [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
+  specification (FourCCs, chunk layout, reflection blob, versioning).
 - [Buffers & textures](buffers-and-textures.md) - `GpuBuffer` and `GpuTexture`.
 - [Offscreen targets & canvases](targets.md) - `GpuTarget`, `GpuCanvas`, and CPU
   readback.
@@ -59,6 +61,7 @@ concepts
 frames-and-passes
 pipelines
 offline-shaders
+shader-bundle-format
 buffers-and-textures
 targets
 spinning-cube

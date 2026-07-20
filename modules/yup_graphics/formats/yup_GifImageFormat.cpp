@@ -125,9 +125,12 @@ uint32_t mapGifPixel (int index, const ColorMapObject* colorMap, bool hasTranspa
 // GifImageFormatReader
 //==============================================================================
 
-GifImageFormatReader::GifImageFormatReader (InputStream* stream)
-    : ImageFormatReader (stream, "GIF Image")
+GifImageFormatReader::GifImageFormatReader (InputStream* stream, const ImageFormat::Options& options)
+    : ImageFormatReader (stream, "GIF Image", options)
 {
+    if (options.parseMetadata || options.parseRawChunks)
+        metadata = ImageMetadata::create();
+
     // Load entire stream into memory
     uint8_t chunk[4096];
     long bytesRead;
@@ -171,6 +174,40 @@ GifImageFormatReader::GifImageFormatReader (InputStream* stream)
     }
 
     loopCount = parseLoopCount (gifFile.get());
+
+    // Extract metadata
+    if (getOptions().parseMetadata || getOptions().parseRawChunks)
+    {
+        // Iterate over all images to find extension blocks
+        for (int fi = 0; fi < count; ++fi)
+        {
+            const auto& saved = gifFile->SavedImages[fi];
+
+            for (int ei = 0; ei < saved.ExtensionBlockCount; ++ei)
+            {
+                const auto& ext = saved.ExtensionBlocks[ei];
+
+                if (ext.Function == 0xFE && getOptions().parseMetadata)
+                {
+                    // COMMENT extension
+                    String comment = String::createStringFromData (
+                        reinterpret_cast<const char*> (ext.Bytes),
+                        static_cast<int> (ext.ByteCount));
+                    metadata->textEntries.set ("Comment", comment);
+                }
+                else if (ext.Function == 0xFF && getOptions().parseRawChunks)
+                {
+                    // Application extension - check for XMP
+                    if (ext.ByteCount >= 11
+                        && std::memcmp (ext.Bytes, "XMP Data", 8) == 0
+                        && std::memcmp (ext.Bytes + 8, "XMP", 3) == 0)
+                    {
+                        metadata->rawChunks["gif/xmp"] = MemoryBlock (ext.Bytes + 11, ext.ByteCount - 11);
+                    }
+                }
+            }
+        }
+    }
 
     // Initialise canvas to screen background
     if (width > 0 && height > 0)
@@ -563,7 +600,7 @@ const String& GifImageFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> GifImageFormat::getFileExtensions (Mode /*mode*/) const
+StringArray GifImageFormat::getFileExtensions (Mode /*mode*/) const
 {
     return { ".gif" };
 }
@@ -576,9 +613,9 @@ bool GifImageFormat::canHandleStream (InputStream& stream, Mode /*mode*/) const
     return (std::memcmp (sig, "GIF87a", 6) == 0 || std::memcmp (sig, "GIF89a", 6) == 0);
 }
 
-std::unique_ptr<ImageFormatReader> GifImageFormat::createReaderFor (InputStream* sourceStream)
+std::unique_ptr<ImageFormatReader> GifImageFormat::createReaderFor (InputStream* sourceStream, const ImageFormat::Options& options)
 {
-    return std::make_unique<GifImageFormatReader> (sourceStream);
+    return std::make_unique<GifImageFormatReader> (sourceStream, options);
 }
 
 std::unique_ptr<ImageFormatWriter> GifImageFormat::createWriterFor (OutputStream* destStream,

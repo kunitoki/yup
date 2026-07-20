@@ -571,8 +571,7 @@ TEST (PpmImageFormatTests, ReaderDpiDefaultsToZero)
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
     PpmImageFormatReader reader (inStream);
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_EQ (reader.metadata, nullptr); // PPM does not support metadata
 }
 
 TEST (PpmImageFormatTests, WriterFlushReturnsTrue)
@@ -597,4 +596,36 @@ TEST (PpmImageFormatTests, WriterReturnsCorrectFormatName)
 {
     PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
     EXPECT_EQ (writer.getFormatName(), String ("PPM/PGM/PBM Image"));
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (PpmImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (PpmImageFormatTests, SelectiveRegistrationPpmOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::ppm);
+
+    auto ppmFile = File::createTempFile (".ppm");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (ppmFile, PixelFormat::RGB), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    ppmFile.deleteFile();
+    bmpFile.deleteFile();
 }

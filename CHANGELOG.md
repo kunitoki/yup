@@ -30,6 +30,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
 - New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
 
+#### Image Formats
+
+- Added TIFF read/write support (`TiffImageFormat`) via libtiff: RGB, RGBA, Grayscale at 8/16-bit; multi-page reading; DPI and EXIF/ICC/XMP metadata extraction.
+- Added TGA read/write support (`TgaImageFormat`): uncompressed and RLE-compressed truecolor and grayscale variants; RGB and RGBA output with alpha channel preservation.
+- Added animated WebP encoding and decoding support to `WebPImageFormatWriter` and `WebPImageFormatReader`: per-frame metadata (canvas dimensions, frame count, loop count, per-frame delays, dispose/blend modes) and frame decompression with manual compositing.
+- Added animated PNG (APNG) encoding and decoding support to `PngImageFormatWriter` and `PngImageFormatReader`: manual chunk-level parsing of `acTL`/`fcTL`/`fdAT` chunks for animation metadata, per-frame libpng decoding via synthetic minimal PNG construction, and canvas compositing supporting all three APNG disposal operations (none, background, previous) and both blend operations (source, over).
+- `ImageFormat::Options` struct controls metadata extraction: `.withMetadata(true)` enables text metadata and DPI; `.withRawChunks(true)` enables raw binary chunks (EXIF, ICC, XMP). When both are false (the default), `ImageMetadata` is not allocated — true zero overhead.
+- Introduced a ref-counted `ImageMetadata` object (`ImageMetadata::Ptr`) attached to `Image` and `ImageFormatReader::metadata`. DPI, text entries, and raw binary chunks are all accessed through the metadata object only when requested via `Options`.
+- Lossless roundtrip tests for all formats (BMP, PNG, WebP, TGA, TIFF, PPM, GIF) now verify pixel-perfect fidelity after write→read; animated roundtrip tests for GIF, WebP, and PNG verify per-frame pixel integrity.
+
+
 ### Shading
 
 - New GLSL→WGSL direct transpiler in `yup_shading`: parses preprocessed GLSL 4.50, lowers GLSL constructs to WGSL equivalents, and emits WGSL 1.0 source. Supports vertex/fragment/compute stages with full builtin mapping, combined sampler splitting, entry-point IO wrapping, and binding assignment matching glslang's SPIR-V assignment 1:1. Does not require SPIR-V or spirv_cross for code generation. Integrated into `ShaderTranspiler`, `ShaderCache`, and `ShaderBundleCompiler`. WGSL variants are supported in YSLB bundles via the `shader_bundler` tool and `yup_add_shader_bundle()` CMake helper.

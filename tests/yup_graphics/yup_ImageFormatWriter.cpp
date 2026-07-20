@@ -221,7 +221,7 @@ TEST (ImageFormatWriterTests, PpmWriterDoesNotSupportAnimation)
 TEST (ImageFormatWriterTests, PngWriterDoesNotSupportAnimation)
 {
     PngImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
-    EXPECT_FALSE (writer.supportsAnimation());
+    EXPECT_TRUE (writer.supportsAnimation());
 }
 #endif
 
@@ -237,6 +237,6 @@ TEST (ImageFormatWriterTests, JpegWriterDoesNotSupportAnimation)
 TEST (ImageFormatWriterTests, WebPWriterDoesNotSupportAnimation)
 {
     WebPImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
-    EXPECT_FALSE (writer.supportsAnimation());
+    EXPECT_TRUE (writer.supportsAnimation());
 }
 #endif

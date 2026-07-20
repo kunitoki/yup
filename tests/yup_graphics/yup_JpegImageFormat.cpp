@@ -529,10 +529,10 @@ TEST (JpegImageFormatTests, ReaderDpiDefaultsToZero)
     ASSERT_TRUE (writer.writeImage (generateSolidImage (8, 8, PixelFormat::RGB)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    JpegImageFormatReader reader (inStream);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 TEST (JpegImageFormatTests, WriterFlushReturnsTrue)
@@ -557,6 +557,66 @@ TEST (JpegImageFormatTests, WriterReturnsCorrectFormatName)
 {
     JpegImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB, 0);
     EXPECT_EQ (writer.getFormatName(), String ("JPEG Image"));
+}
+
+// ======================================================================
+// Quality level sweep tests
+// ======================================================================
+
+TEST (JpegImageFormatTests, VariousQualityLevelsProduceValidImages)
+{
+    Image original (16, 16, PixelFormat::RGB);
+    original.fill (0xFF4488CCu);
+
+    for (int qi = 0; qi <= 3; ++qi)
+    {
+        auto* rawStream = new MemoryOutputStream();
+        JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, qi);
+        ASSERT_TRUE (writer.writeImage (original));
+
+        auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+        JpegImageFormatReader reader (inStream);
+        auto result = reader.readImage();
+
+        ASSERT_TRUE (result.isValid())
+            << "Failed at quality index " << qi;
+        EXPECT_EQ (result.getWidth(), original.getWidth());
+        EXPECT_EQ (result.getHeight(), original.getHeight());
+        EXPECT_TRUE (imagesAreEqual (original, result, 4))
+            << "Quality index " << qi << " deviates too much";
+    }
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (JpegImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (JpegImageFormatTests, SelectiveRegistrationJpegOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::jpeg);
+
+    auto jpgFile = File::createTempFile (".jpg");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (jpgFile, PixelFormat::RGB), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    jpgFile.deleteFile();
+    bmpFile.deleteFile();
 }
 
 #endif // YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG

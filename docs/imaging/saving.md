@@ -25,8 +25,8 @@ embed metadata, and pick a quality level for compressed formats:
 ```cpp
 std::unique_ptr<ImageFormatWriter> createWriterFor (
     const File&            file,
-    PixelFormat            pixelFormat       = PixelFormat::RGBA,
-    const StringPairArray& metadataValues    = {},
+    PixelFormat            pixelFormat        = PixelFormat::RGBA,
+    const StringPairArray& metadataValues     = {},
     int                    qualityOptionIndex = 0);
 ```
 
@@ -54,8 +54,8 @@ Compressed formats expose named quality levels. Query them from the
 `ImageFormat` and pass the chosen index to `createWriterFor`:
 
 ```cpp
-// getQualityOptions() returns labels like {"Low", "Medium", "High"};
-// isCompressed() is false for BMP/PPM and true for PNG/WebP/JPEG.
+getQualityOptions() // returns labels like {"Low", "Medium", "High"}
+isCompressed()      // is false for BMP/PPM and true for PNG/WebP/JPEG
 ```
 
 `qualityOptionIndex` is ignored by lossless/uncompressed formats.
@@ -85,13 +85,14 @@ if (auto writer = pngFormat.createWriterFor (outStream.release(),
 
 The writer takes ownership of the destination stream.
 
-## Animated GIF output
+## Animated output
 
-Only the GIF writer supports animation (`supportsAnimation()` returns true).
-Bracket the frames between `beginAnimation()` and `endAnimation()`:
+GIF, WebP, and PNG (APNG) writers support animation (`supportsAnimation()`
+returns true). Bracket the frames between `beginAnimation()` and
+`endAnimation()`:
 
 ```cpp
-if (auto writer = formats.createWriterFor (File ("/path/anim.gif")))
+if (auto writer = formats.createWriterFor (File ("/path/anim.webp")))
 {
     if (writer->supportsAnimation())
     {
@@ -105,10 +106,10 @@ if (auto writer = formats.createWriterFor (File ("/path/anim.gif")))
 }
 ```
 
-Each `writeFrame` quantizes the frame to a 256-color palette and appends a
-Graphic Control Extension with the given delay. `loopCount` follows the reader
-convention: `0` = infinite, `1` = play once, `N` = play N times. Calling the
-animation methods on a non-animation writer asserts and returns `false`.
+Each `writeFrame` encodes the frame with the given display duration in
+milliseconds. `loopCount` follows the reader convention: `0` = infinite,
+`1` = play once, `N` = play N times. Calling the animation methods on a
+non-animation writer asserts and returns `false`.
 
 ## See also
 
