@@ -1,9 +1,6 @@
 codecov:
   require_ci_to_pass: yes
 
-github_checks:
-  annotations: true
-
 coverage:
   precision: 2
   round: down
@@ -13,53 +10,20 @@ coverage:
     project:
       default:
         informational: true
-        target: 70%
-        threshold: 5%
         base: auto
+        target: 80%
+        threshold: 5%
         flags:
-          - yup_animation
-          - yup_audio_basics
-          - yup_audio_devices
-          - yup_audio_formats
-          - yup_audio_graph
-          - yup_audio_gui
-          - yup_audio_plugin_client
-          - yup_audio_plugin_host
-          - yup_audio_processors
-          - yup_core
-          - yup_data_model
-          - yup_dsp
-          - yup_events
-          - yup_graphics
-          - yup_gui
-          - yup_python
-          - yup_shading
-          - yup_simd
+          - cpp
     patch:
       default:
         informational: true
-        target: 70%
+        base: auto
+        target: 80%
         threshold: 5%
 
 flags:
-  yup_animation:             { paths: [modules/yup_animation/], carryforward: true }
-  yup_audio_basics:          { paths: [modules/yup_audio_basics/], carryforward: true }
-  yup_audio_devices:         { paths: [modules/yup_audio_devices/], carryforward: true }
-  yup_audio_formats:         { paths: [modules/yup_audio_formats/], carryforward: true }
-  yup_audio_graph:           { paths: [modules/yup_audio_graph/], carryforward: true }
-  yup_audio_gui:             { paths: [modules/yup_audio_gui/], carryforward: true }
-  yup_audio_plugin_client:   { paths: [modules/yup_audio_plugin_client/], carryforward: true }
-  yup_audio_plugin_host:     { paths: [modules/yup_audio_plugin_host/], carryforward: true }
-  yup_audio_processors:      { paths: [modules/yup_audio_processors/], carryforward: true }
-  yup_core:                  { paths: [modules/yup_core/], carryforward: true }
-  yup_data_model:            { paths: [modules/yup_data_model/], carryforward: true }
-  yup_dsp:                   { paths: [modules/yup_dsp/], carryforward: true }
-  yup_events:                { paths: [modules/yup_events/], carryforward: true }
-  yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
-  yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }
-  yup_python:                { paths: [modules/yup_python/], carryforward: true }
-  yup_shading:               { paths: [modules/yup_shading/], carryforward: true }
-  yup_simd:                  { paths: [modules/yup_simd/], carryforward: true }
+  cpp: { paths: [modules/], carryforward: true }
 
 ignore:
   - "thirdparty/**/*"
