@@ -2,7 +2,7 @@ codecov:
   require_ci_to_pass: yes
 
 github_checks:
-  annotations: false
+  annotations: true
 
 coverage:
   precision: 2
