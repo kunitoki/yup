@@ -15,7 +15,7 @@ coverage:
         informational: true
         target: 70%
         threshold: 5%
-        flag_coverage_not_uploaded_behavior: exclude
+        base: auto
         flags:
           - yup_animation
           - yup_audio_basics
