@@ -50,6 +50,9 @@ public:
     /** Creates a cache that uses the given context for miss compilations.
 
         The context must outlive this cache.
+
+        @warning Requires contextToUse.isGpuAvailable() (GPU context available on this backend).
+
     */
     explicit GpuPipelineCache (GraphicsContext& contextToUse);
 
@@ -60,32 +63,58 @@ public:
     /** Looks up a cached pipeline, or compiles one if not found.
 
         The cache key is derived automatically from the bundle and options.
+
+        @param bundle           Bundle containing the vertex and fragment stages.
+        @param pipelineOptions  Pipeline configuration.
+
+        @returns A compiled pipeline, or a failure with a human-readable description.
     */
     ResultValue<GpuPipeline::Ptr> getOrCompile (const ShaderBundle& bundle,
                                                 const GpuPipelineOptions& options = {});
 
-    /** Looks up a cached pipeline by explicit key, or compiles one if not found. */
+    /** Looks up a cached pipeline by explicit key, or compiles one if not found.
+    
+        @param cacheKey         Explicit cache key to use for lookup and storage.
+        @param bundle           Bundle containing the vertex and fragment stages.
+        @param pipelineOptions  Pipeline configuration.
+
+        @returns A compiled pipeline, or a failure with a human-readable description.
+    */
     ResultValue<GpuPipeline::Ptr> getOrCompile (const String& cacheKey,
                                                 const ShaderBundle& bundle,
                                                 const GpuPipelineOptions& options = {});
 
     //==============================================================================
-    /** Store a pipeline directly into the cache under the given key. */
+    /** Store a pipeline directly into the cache under the given key.
+    
+        @param key      The cache key to store the pipeline under.
+        @param pipeline The GpuPipeline to store.
+    */
     void store (const String& key, GpuPipeline::Ptr pipeline);
 
-    /** Returns true if the cache contains an entry for the given key. */
+    /** Returns true if the cache contains an entry for the given key.
+    
+        @param key The cache key to look up.
+    */
     bool contains (const String& key) const;
 
-    /** Remove a single entry from the cache. */
+    /** Remove a single entry from the cache.
+    
+        @param key The cache key to remove.
+    */
     void remove (const String& key);
 
     /** Remove all entries from the cache. */
     void clear();
 
+    //==============================================================================
     /** Returns the number of currently cached entries. */
     size_t getNumEntries() const;
 
-    /** Sets the maximum number of entries before eviction. 0 = unlimited. */
+    /** Sets the maximum number of entries before eviction. 0 = unlimited.
+    
+        @param maxEntriesToUse The maximum number of entries to keep in the cache.
+    */
     void setMaxEntries (size_t maxEntriesToUse);
 
     /** Returns the maximum number of entries. */
@@ -97,6 +126,12 @@ public:
         Uses SHA1 internally. The key includes the selected native vertex and
         fragment sources for the given API, both entry-point names, the pipeline
         options serialised by value, and the graphics API.
+
+        @param bundle           Bundle containing the vertex and fragment stages.
+        @param options          Pipeline configuration.
+        @param api              The graphics API to select the native shader sources.
+
+        @returns A deterministic cache key string.
     */
     static String generateCacheKey (const ShaderBundle& bundle,
                                     const GpuPipelineOptions& options,

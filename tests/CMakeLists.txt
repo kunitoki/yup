@@ -169,6 +169,9 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
 set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
+target_compile_options (${target_name} PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-subobject-linkage>)
+
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")

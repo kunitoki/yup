@@ -162,8 +162,8 @@ public:
 namespace yup
 {
 
-// Friend of Component, defined here for test access.
-class ComponentTestHelper
+template <>
+class ComponentTestHelper<Component>
 {
 public:
     static void attachMockNative (Component& component)
@@ -240,6 +240,8 @@ public:
 class ComponentTest : public ::testing::Test
 {
 protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
     void SetUp() override
     {
         // Create a hierarchy: root -> parent -> child
@@ -1250,6 +1252,8 @@ TEST_F (ComponentTest, OpaqueStateWithMultipleChildren)
 class ComponentMockTest : public ::testing::Test
 {
 protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
     void SetUp() override
     {
         oldTheme = ApplicationTheme::getGlobalTheme();
@@ -2029,7 +2033,7 @@ TEST_F (ComponentMockTest, AdditionalVirtualMethodTests)
 
 TEST_F (ComponentMockTest, InternalResizedUpdatesBounds)
 {
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 640, 480);
+    ComponentHelper::triggerInternalResized (*mockComponent, 640, 480);
 
     EXPECT_FLOAT_EQ (mockComponent->getWidth(), 640.0f);
     EXPECT_FLOAT_EQ (mockComponent->getHeight(), 480.0f);
@@ -2038,24 +2042,24 @@ TEST_F (ComponentMockTest, InternalResizedUpdatesBounds)
 TEST_F (ComponentMockTest, InternalResizedCallsResizedVirtual)
 {
     EXPECT_CALL (*mockComponent, resized());
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 200, 150);
+    ComponentHelper::triggerInternalResized (*mockComponent, 200, 150);
 }
 
 TEST_F (ComponentMockTest, InternalResizedCallsResizedOnlyWhenBoundsChange)
 {
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 100, 200);
+    ComponentHelper::triggerInternalResized (*mockComponent, 100, 200);
 
     ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
 
     // Same size should not trigger resized again
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 100, 200);
+    ComponentHelper::triggerInternalResized (*mockComponent, 100, 200);
     // NiceMock: no expectation = resized not called, no warning
 }
 
 TEST_F (ComponentMockTest, InternalResizedDoesNotCallMoved)
 {
     EXPECT_CALL (*mockComponent, moved()).Times (0);
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 300, 400);
+    ComponentHelper::triggerInternalResized (*mockComponent, 300, 400);
 }
 
 TEST_F (ComponentMockTest, InternalResizedNotifiesComponentListener)
@@ -2063,7 +2067,7 @@ TEST_F (ComponentMockTest, InternalResizedNotifiesComponentListener)
     RecordingComponentListener listener;
     mockComponent->addComponentListener (&listener);
 
-    ComponentTestHelper::triggerInternalResized (*mockComponent, 150, 250);
+    ComponentHelper::triggerInternalResized (*mockComponent, 150, 250);
 
     EXPECT_EQ (1, listener.resizedCount);
     EXPECT_EQ (0, listener.movedCount);
@@ -2072,7 +2076,7 @@ TEST_F (ComponentMockTest, InternalResizedNotifiesComponentListener)
 
 TEST_F (ComponentMockTest, InternalMovedUpdatesBounds)
 {
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 42, 84);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 42, 84);
 
     EXPECT_FLOAT_EQ (mockComponent->getX(), 42.0f);
     EXPECT_FLOAT_EQ (mockComponent->getY(), 84.0f);
@@ -2081,24 +2085,24 @@ TEST_F (ComponentMockTest, InternalMovedUpdatesBounds)
 TEST_F (ComponentMockTest, InternalMovedCallsMovedVirtual)
 {
     EXPECT_CALL (*mockComponent, moved());
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 10, 20);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 10, 20);
 }
 
 TEST_F (ComponentMockTest, InternalMovedCallsMovedOnlyWhenBoundsChange)
 {
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 30, 60);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 30, 60);
 
     ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
 
     // Same position should not trigger moved again
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 30, 60);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 30, 60);
     // NiceMock: no expectation = moved not called, no warning
 }
 
 TEST_F (ComponentMockTest, InternalMovedDoesNotCallResized)
 {
     EXPECT_CALL (*mockComponent, resized()).Times (0);
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 50, 100);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 50, 100);
 }
 
 TEST_F (ComponentMockTest, InternalMovedNotifiesComponentListener)
@@ -2106,7 +2110,7 @@ TEST_F (ComponentMockTest, InternalMovedNotifiesComponentListener)
     RecordingComponentListener listener;
     mockComponent->addComponentListener (&listener);
 
-    ComponentTestHelper::triggerInternalMoved (*mockComponent, 75, 125);
+    ComponentHelper::triggerInternalMoved (*mockComponent, 75, 125);
 
     EXPECT_EQ (1, listener.movedCount);
     EXPECT_EQ (0, listener.resizedCount);
@@ -2116,17 +2120,17 @@ TEST_F (ComponentMockTest, InternalMovedNotifiesComponentListener)
 TEST_F (ComponentMockTest, InternalContentScaleChangedCallsVirtual)
 {
     EXPECT_CALL (*mockComponent, contentScaleChanged (1.5f));
-    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 1.5f);
+    ComponentHelper::triggerInternalContentScaleChanged (*mockComponent, 1.5f);
 }
 
 TEST_F (ComponentMockTest, InternalContentScaleChangedCallsVirtualOnlyWhenScaleChanges)
 {
-    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
+    ComponentHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
 
     ::testing::Mock::VerifyAndClearExpectations (mockComponent.get());
 
     // Same scale should not trigger again
-    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
+    ComponentHelper::triggerInternalContentScaleChanged (*mockComponent, 2.0f);
     // NiceMock: no expectation = contentScaleChanged not called, no warning
 }
 
@@ -2135,7 +2139,7 @@ TEST_F (ComponentMockTest, InternalContentScaleChangedDoesNotCallMovedOrResized)
     EXPECT_CALL (*mockComponent, moved()).Times (0);
     EXPECT_CALL (*mockComponent, resized()).Times (0);
 
-    ComponentTestHelper::triggerInternalContentScaleChanged (*mockComponent, 1.0f);
+    ComponentHelper::triggerInternalContentScaleChanged (*mockComponent, 1.0f);
 }
 
 //==============================================================================
@@ -2144,12 +2148,12 @@ TEST_F (ComponentMockTest, InternalContentScaleChangedDoesNotCallMovedOrResized)
 TEST_F (ComponentMockTest, AddChildToNativeParentTriggersAttachedToNative)
 {
     auto parent = std::make_unique<ComponentMock> ("parent");
-    ComponentTestHelper::attachMockNative (*parent);
+    ComponentHelper::attachMockNative (*parent);
 
     EXPECT_CALL (*mockComponent, attachedToNative());
     parent->addChildComponent (*mockComponent);
 
-    ComponentTestHelper::detachMockNative (*parent);
+    ComponentHelper::detachMockNative (*parent);
 }
 
 TEST_F (ComponentMockTest, AddChildToNonNativeParentDoesNotTriggerAttachedToNative)
@@ -2163,13 +2167,13 @@ TEST_F (ComponentMockTest, AddChildToNonNativeParentDoesNotTriggerAttachedToNati
 TEST_F (ComponentMockTest, RemoveChildFromNativeParentTriggersDetachedFromNative)
 {
     auto parent = std::make_unique<ComponentMock> ("parent");
-    ComponentTestHelper::attachMockNative (*parent);
+    ComponentHelper::attachMockNative (*parent);
     parent->addChildComponent (*mockComponent);
 
     EXPECT_CALL (*mockComponent, detachedFromNative());
     parent->removeChildComponent (mockComponent.get());
 
-    ComponentTestHelper::detachMockNative (*parent);
+    ComponentHelper::detachMockNative (*parent);
 }
 
 TEST_F (ComponentMockTest, RemoveChildFromNonNativeParentDoesNotTriggerDetachedFromNative)
@@ -2188,13 +2192,13 @@ TEST_F (ComponentMockTest, DeepChildGetsAttachedToNativeThroughAncestorChain)
     auto child = std::make_unique<ComponentMock> ("child");
     auto grandchild = std::make_unique<ComponentMock> ("grandchild");
 
-    ComponentTestHelper::attachMockNative (*root);
+    ComponentHelper::attachMockNative (*root);
     root->addChildComponent (*child);
 
     EXPECT_CALL (*grandchild, attachedToNative());
     child->addChildComponent (*grandchild);
 
-    ComponentTestHelper::detachMockNative (*root);
+    ComponentHelper::detachMockNative (*root);
 }
 
 TEST_F (ComponentMockTest, KeyboardEventVirtualMethods)
@@ -2287,7 +2291,7 @@ TEST_F (ComponentMockTest, SafeAreaChangedPropagatesToChildren)
 
     EXPECT_CALL (*mockComponent, safeAreaChanged());
     EXPECT_CALL (*child, safeAreaChanged());
-    ComponentTestHelper::triggerSafeAreaChanged (*mockComponent);
+    ComponentHelper::triggerSafeAreaChanged (*mockComponent);
 }
 
 TEST_F (ComponentMockTest, MetricParentFallback)
@@ -2434,6 +2438,8 @@ public:
 class ComponentDragDropTest : public ::testing::Test
 {
 protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
     void SetUp() override
     {
         root = std::make_unique<DragDropComponent> ("root");
@@ -2476,7 +2482,7 @@ TEST_F (ComponentDragDropTest, InterestedTopmostHandlesDrop)
     DragAndDropData data = DragAndDropData().withText ("hello");
 
     // Window position (85,85) is inside child (child screen origin = 75,75).
-    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 1);
     EXPECT_EQ (parent->dropCount, 0);
     EXPECT_EQ (root->dropCount, 0);
@@ -2491,7 +2497,7 @@ TEST_F (ComponentDragDropTest, InterestedButReturnsFalseBubblesToParent)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 1);
     EXPECT_EQ (parent->dropCount, 1);
     EXPECT_EQ (root->dropCount, 0);
@@ -2506,7 +2512,7 @@ TEST_F (ComponentDragDropTest, UninterestedComponentSkippedEvenIfItOverridesDrop
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 0);
     EXPECT_EQ (parent->dropCount, 1);
 }
@@ -2520,7 +2526,7 @@ TEST_F (ComponentDragDropTest, DropPositionIsComponentLocal)
 
     // Window (85,85). Child screen origin = root(0,0)+parent(50,50)+child(25,25) = (75,75).
     // Local position = (10,10).
-    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_FLOAT_EQ (child->lastDropPosition.getX(), 10.0f);
     EXPECT_FLOAT_EQ (child->lastDropPosition.getY(), 10.0f);
 }
@@ -2535,7 +2541,7 @@ TEST_F (ComponentDragDropTest, DropPositionRecomputedPerAncestor)
     DragAndDropData data = DragAndDropData().withText ("hello");
 
     // Window (85,85). Parent screen origin = (50,50). Parent-local = (35,35).
-    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_FLOAT_EQ (parent->lastDropPosition.getX(), 35.0f);
     EXPECT_FLOAT_EQ (parent->lastDropPosition.getY(), 35.0f);
 }
@@ -2550,7 +2556,7 @@ TEST_F (ComponentDragDropTest, InvisibleComponentSkipped)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 0);
     EXPECT_EQ (parent->dropCount, 1);
 }
@@ -2565,7 +2571,7 @@ TEST_F (ComponentDragDropTest, DisabledComponentSkipped)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    EXPECT_TRUE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 0);
     EXPECT_EQ (parent->dropCount, 1);
 }
@@ -2574,7 +2580,7 @@ TEST_F (ComponentDragDropTest, NobodyHandlesReturnsFalse)
 {
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    EXPECT_FALSE (ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
+    EXPECT_FALSE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
     EXPECT_EQ (child->dropCount, 0);
     EXPECT_EQ (parent->dropCount, 0);
     EXPECT_EQ (root->dropCount, 0);
@@ -2590,7 +2596,7 @@ TEST_F (ComponentDragDropTest, FilesOnlyPayloadDelivered)
     files.add (File ("/tmp/two.txt"));
     DragAndDropData data = DragAndDropData().withFiles (files);
 
-    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDropData.hasFiles());
     EXPECT_FALSE (child->lastDropData.hasText());
     EXPECT_EQ (child->lastDropData.getFiles().size(), 2);
@@ -2603,7 +2609,7 @@ TEST_F (ComponentDragDropTest, TextOnlyPayloadDelivered)
 
     DragAndDropData data = DragAndDropData().withText ("dropped");
 
-    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_FALSE (child->lastDropData.hasFiles());
     EXPECT_TRUE (child->lastDropData.hasText());
     EXPECT_EQ (child->lastDropData.getText(), String ("dropped"));
@@ -2618,7 +2624,7 @@ TEST_F (ComponentDragDropTest, MixedPayloadDelivered)
     files.add (File ("/tmp/one.txt"));
     DragAndDropData data = DragAndDropData().withFiles (files).withText ("dropped");
 
-    ComponentTestHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDropData.hasFiles());
     EXPECT_TRUE (child->lastDropData.hasText());
 }
@@ -2631,7 +2637,7 @@ TEST_F (ComponentDragDropTest, DragEnterCalledWhenInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragEnterCount, 1);
     EXPECT_EQ (child->dragMoveCount, 0);
     EXPECT_EQ (child->dragExitCount, 0);
@@ -2644,7 +2650,7 @@ TEST_F (ComponentDragDropTest, DragEnterPositionIsLocalToComponent)
     DragAndDropData data = DragAndDropData().withText ("hello");
 
     // Window position (85,85) maps to child-local (10,10)
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getX(), 10.0f);
     EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getY(), 10.0f);
 }
@@ -2656,7 +2662,7 @@ TEST_F (ComponentDragDropTest, DragEnterBubblesToParentIfInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragEnterCount, 1);
     EXPECT_EQ (parent->dragEnterCount, 1);
     EXPECT_EQ (root->dragEnterCount, 0);
@@ -2669,7 +2675,7 @@ TEST_F (ComponentDragDropTest, DragEnterNotCalledWhenNotInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragEnterCount, 0);
     EXPECT_EQ (parent->dragEnterCount, 0);
 }
@@ -2680,7 +2686,7 @@ TEST_F (ComponentDragDropTest, DragMoveCalledForSameComponent)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragMoveCount, 1);
     EXPECT_EQ (child->dragEnterCount, 0);
     EXPECT_EQ (child->dragExitCount, 0);
@@ -2693,7 +2699,7 @@ TEST_F (ComponentDragDropTest, DragMoveBubblesToParentIfInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragMoveCount, 1);
     EXPECT_EQ (parent->dragMoveCount, 1);
 }
@@ -2704,7 +2710,7 @@ TEST_F (ComponentDragDropTest, DragExitCalledWhenInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragExit (*child, data);
+    ComponentHelper::triggerItemDragExit (*child, data);
     EXPECT_EQ (child->dragExitCount, 1);
     EXPECT_EQ (child->dragEnterCount, 0);
     EXPECT_EQ (child->dragMoveCount, 0);
@@ -2717,7 +2723,7 @@ TEST_F (ComponentDragDropTest, DragExitBubblesToParentIfInterested)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragExit (*child, data);
+    ComponentHelper::triggerItemDragExit (*child, data);
     EXPECT_EQ (child->dragExitCount, 1);
     EXPECT_EQ (parent->dragExitCount, 1);
 }
@@ -2729,7 +2735,7 @@ TEST_F (ComponentDragDropTest, DragEnterRespectsDisabledComponent)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragEnterCount, 0);
 }
 
@@ -2740,7 +2746,7 @@ TEST_F (ComponentDragDropTest, DragEnterRespectsHiddenComponent)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_EQ (child->dragEnterCount, 0);
 }
 
@@ -2750,7 +2756,7 @@ TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragEnter)
 
     DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ File ("/tmp/a.txt") });
 
-    ComponentTestHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDragEnterData.hasText());
     EXPECT_EQ (child->lastDragEnterData.getText(), String ("hello"));
     EXPECT_TRUE (child->lastDragEnterData.hasFiles());
@@ -2763,7 +2769,7 @@ TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragMove)
 
     DragAndDropData data = DragAndDropData().withText ("hello");
 
-    ComponentTestHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
+    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
     EXPECT_TRUE (child->lastDragMoveData.hasText());
     EXPECT_EQ (child->lastDragMoveData.getText(), String ("hello"));
 }
@@ -2774,7 +2780,7 @@ TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragExit)
 
     DragAndDropData data = DragAndDropData().withFiles ({ File ("/tmp/a.txt") });
 
-    ComponentTestHelper::triggerItemDragExit (*child, data);
+    ComponentHelper::triggerItemDragExit (*child, data);
     EXPECT_TRUE (child->lastDragExitData.hasFiles());
     EXPECT_EQ (child->lastDragExitData.getFiles().size(), 1);
 }

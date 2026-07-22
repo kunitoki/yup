@@ -46,9 +46,6 @@ class GraphicsContext;
         frame.submit();
     @endcode
 
-    Requires the GraphicsContext to have been created with
-    Options::enableOreContext = true.
-
     @see GpuCanvas, GpuRenderPass, GpuPipeline
 */
 class YUP_API GpuFrame
@@ -57,8 +54,14 @@ public:
     //==============================================================================
     /** Begins a GPU frame on the given context.
 
-        Returns an invalid frame (isValid() == false) if the context has no ore
-        GPU context (enableOreContext = false or ore unavailable on this backend).
+        Returns an invalid frame (isValid() == false) if the context has no
+        GPU context available on this backend.
+
+        @param ctx  A GraphicsContext with GPU context available.
+
+        @returns A valid GpuFrame on success, or an invalid frame on failure.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
     static GpuFrame begin (GraphicsContext& ctx);
 

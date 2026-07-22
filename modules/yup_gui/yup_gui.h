@@ -90,7 +90,7 @@
     Enable logging of windowing events like movement, resizes, mouse interactions.
 */
 #ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
-#define YUP_ENABLE_GUI_WINDOWING_LOGGING 1
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
 #endif
 
 //==============================================================================
@@ -135,6 +135,7 @@
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
+#include "effects/yup_ComponentEffect.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"

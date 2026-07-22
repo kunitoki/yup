@@ -3,7 +3,7 @@
 ## `GpuFrame`
 
 `GpuFrame` is a move-only, stack-allocated RAII scope for a single frame's GPU
-work. It wraps the `ore` begin → submit → wait lifecycle and owns the transient
+work. It wraps the GPU context begin → submit → wait lifecycle and owns the transient
 GPU resources (uniform buffers, texture views, samplers) created while encoding
 its passes.
 
@@ -16,7 +16,7 @@ Begin a frame, encode one or more render passes into it, then submit:
 ```cpp
 auto frame = GpuFrame::begin (ctx);
 if (! frame.isValid())
-    return; // No ore GPU context (enableOreContext = false or unavailable).
+    return; // No GPU context.
 
 // ... encode passes into `frame` ...
 
@@ -27,7 +27,7 @@ frame.submit();
 
 | Method            | Description                                                              |
 | ----------------- | ------------------------------------------------------------------------ |
-| `isValid()`       | True if the frame holds a valid `ore` GPU context.                       |
+| `isValid()`       | True if the frame holds a valid GPU context.                             |
 | `submit()`        | Submits all passes recorded since `begin()`. Idempotent; does not block. |
 | `waitForGPU()`    | Blocks until submitted work completes and releases transient resources.  |
 
@@ -41,7 +41,7 @@ pass first (explicitly, or by letting it leave scope).
 
 ## `GpuRenderPass`
 
-A `GpuRenderPass` records draw commands into one `ore` render pass that outputs
+A `GpuRenderPass` records draw commands into one GPU render pass that outputs
 to a target's backing texture. Obtain one from a target's `beginRenderPass()`:
 
 ```cpp

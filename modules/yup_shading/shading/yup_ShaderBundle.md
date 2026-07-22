@@ -29,7 +29,7 @@ A FourCC is a 32-bit tag built from four ASCII characters, packed
 **least-significant-byte first** so the bytes appear in reading order on disk:
 
 ```
-makeFourCC('R','I','F','F')  ->  bytes: 52 49 46 46  ('R' 'I' 'F' 'F')
+makeFourCC('R','I','F','F')  →  bytes: 52 49 46 46  ('R' 'I' 'F' 'F')
 ```
 
 ### Chunk layout

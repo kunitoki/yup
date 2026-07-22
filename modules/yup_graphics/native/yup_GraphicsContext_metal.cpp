@@ -89,9 +89,7 @@ public:
             m_renderContextOptions.disableFramebufferReads = true;
 
         m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, m_renderContextOptions);
-
-        if (m_fiddleOptions.enableOreContext)
-            m_oreContext = rive::ore::ContextMetal::Make (m_gpu, m_queue);
+        m_oreContext = rive::ore::ContextMetal::Make (m_gpu, m_queue);
 
         NSError* error = nil;
 

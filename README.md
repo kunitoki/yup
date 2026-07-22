@@ -29,7 +29,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 
 ## Documentation
 
-Start with browing the [documentation](https://yup.readthedocs.io/).
+Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 ## Try It
 

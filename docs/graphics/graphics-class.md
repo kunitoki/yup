@@ -197,13 +197,13 @@ step down to the [RHI](rhi/index.md). `GpuCanvas` in particular bridges 2D
 It is created via a static factory with an `Api` and `Options`:
 
 ```cpp
-GraphicsContext::Options options;              // enableOreContext = true by default
+GraphicsContext::Options options;
 auto context = GraphicsContext::createContext (GraphicsContext::Metal, options);
 ```
 
 Supported `Api` values: `Headless`, `OpenGL`, `OpenGLES`, `Direct3D`, `Metal`,
 `WebGPU`. Key `Options` include `retinaDisplay`, `allowHeadlessRendering`,
-`enableReadPixels`, and `enableOreContext` (the RHI GPU context).
+`enableReadPixels`.
 
 The context owns backend resources and exposes capability probes such as
 `getApi()`, `dpiScale(handle)`, and `isGpuAvailable()`. In a typical

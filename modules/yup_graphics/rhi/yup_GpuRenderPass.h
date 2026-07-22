@@ -32,8 +32,10 @@ class GpuFrame;
 /** Per-render-pass options controlling attachment load behaviour. */
 struct GpuRenderOptions
 {
+    /** Default constructor. */
     constexpr GpuRenderOptions() = default;
 
+    /** Constructs a GpuRenderOptions with the given clear flag and clear color. */
     constexpr GpuRenderOptions (bool clear, Color clearColor)
         : clear (clear)
         , clearColor (clearColor)
@@ -91,13 +93,20 @@ public:
     bool isValid() const noexcept;
 
     //==============================================================================
-    /** Sets the compiled pipeline used by subsequent draws. */
+    /** Sets the compiled pipeline used by subsequent draws.
+    
+        @param pipeline  The GpuPipeline to use.
+    */
     void setPipeline (GpuPipeline& pipeline);
 
     /** Binds a texture to the given (group, binding) slot.
 
         The texture may come from GpuCanvas::asTexture() or Image::getGpuTexture().
         If the same slot is set more than once the later call wins.
+
+        @param group    The uniform group index (0..N).
+        @param binding  The uniform binding index (0..N).
+        @param texture  The GpuTexture to bind.
     */
     void setTexture (int group, int binding, GpuTexture::Ptr texture);
 
@@ -105,13 +114,30 @@ public:
 
         The data is copied immediately; the caller need not keep it alive.
         If the same slot is set more than once the later call wins.
+
+        @param group     The uniform group index (0..N).
+        @param binding   The uniform binding index (0..N).
+        @param data      Pointer to the source data to upload (must be non-null).
+        @param byteSize  Number of bytes to upload (must be greater than zero).
     */
     void setUniformBuffer (int group, int binding, const void* data, size_t byteSize);
 
-    /** Binds a vertex buffer to the given slot for custom geometry rendering. */
+    /** Binds a vertex buffer to the given slot for custom geometry rendering.
+    
+        The buffer must hold at least as many vertices as will be drawn.
+
+        @param slot    The vertex buffer slot to bind to (0..N).
+        @param buffer  The GpuBuffer holding the vertex data.
+    */
     void setVertexBuffer (int slot, GpuBuffer::Ptr buffer);
 
-    /** Binds an index buffer for indexed geometry rendering (used by drawIndexed()). */
+    /** Binds an index buffer for indexed geometry rendering (used by drawIndexed()).
+    
+        The buffer must hold at least as many indices as will be drawn.
+
+        @param format  The index format (16-bit or 32-bit).
+        @param buffer  The GpuBuffer holding the index data.
+    */
     void setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer);
 
     //==============================================================================
@@ -120,7 +146,9 @@ public:
         For fullscreen passes that generate vertices from the vertex index, pass
         vertexCount = 3 with no vertex buffers bound.
 
-        @return true on success; false if invalid.
+        @param vertexCount  Number of vertices to draw. The vertex buffers must hold at least this many vertices.
+
+        @returns true on success; false if invalid.
     */
     bool draw (uint32_t vertexCount);
 
@@ -129,16 +157,18 @@ public:
         Binds the vertex buffers and index buffer set via setVertexBuffer() /
         setIndexBuffer().
 
-        @return true on success; false if invalid or no index buffer is bound.
+        @param indexCount  Number of indices to draw. The index buffer must hold at least this many indices.
+
+        @returns true on success; false if invalid or no index buffer is bound.
     */
     bool drawIndexed (uint32_t indexCount);
 
     //==============================================================================
-    /** Encodes all recorded draws and closes the ore render pass.
+    /** Encodes all recorded draws and closes the render pass.
 
         Idempotent: a second call is a no-op and returns false.
 
-        @return true on success; false if invalid or already finished.
+        @returns true on success; false if invalid or already finished.
     */
     bool finish();
 

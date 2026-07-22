@@ -105,7 +105,7 @@ their `objects` member:
 DataTree uiRoot ("UIRoot");
 UIComponentList components (uiRoot);
 
-// Add a child -> an object is created automatically.
+// Add a child → an object is created automatically.
 {
     auto tx = uiRoot.beginTransaction();
 
@@ -123,14 +123,14 @@ jassert (components.objects.size() == 1);
 UIComponent* obj = components.objects[0];
 jassert (obj->getName() == "SubmitButton");
 
-// Modify via the tree -> the object's CachedValue reflects it.
+// Modify via the tree → the object's CachedValue reflects it.
 {
     auto tx = uiRoot.getChild (0).beginTransaction();
     tx.setProperty ("x", 200.0f);
 }
 jassert (obj->getX() == 200.0f);
 
-// Remove the child -> the object is destroyed automatically.
+// Remove the child → the object is destroyed automatically.
 {
     auto tx = uiRoot.beginTransaction();
     tx.removeChild (0);

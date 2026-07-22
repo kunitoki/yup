@@ -76,6 +76,10 @@ public:
         @param ctx      The graphics context that owns the GPU device.
         @param width    Width in pixels (must be > 0).
         @param height   Height in pixels (must be > 0).
+
+        @returns A GpuTarget, or nullptr on failure.
+
+        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
     static GpuTarget::Ptr create (GraphicsContext& ctx, int width, int height);
 
@@ -104,6 +108,8 @@ public:
     /** Returns a GPU-texture view of the rendered result.
 
         The GpuTexture holds a reference to the underlying GPU resource.
+
+        @returns A GpuTexture, or nullptr on failure.
     */
     GpuTexture::Ptr asTexture();
 
@@ -113,6 +119,8 @@ public:
         and then calls readPixels() to fill the CPU-side ImagePixelData. Returns an
         empty Image on failure. For GPU-only compositing without CPU readback, prefer
         using asTexture() and Graphics::drawTexture.
+
+        @returns An Image, or an empty Image on failure.
     */
     Image asImage();
 
@@ -136,12 +144,8 @@ private:
 
     GpuTarget() = default;
 
-    /** Creates a GpuTarget that owns an already-created renderable target. Used by
-        GpuCanvas, which builds on a dedicated-context RenderableTarget for 2D drawing. */
     static GpuTarget::Ptr createFromTarget (GraphicsContext& ctx, std::unique_ptr<RenderableTarget> target);
 
-    /** Returns the backing renderable target for the 2D drawing path, or nullptr when
-        this target was created as a render-pass-only GpuTarget. */
     RenderableTarget* getRenderableTarget() const noexcept { return renderableTarget; }
 
     GraphicsContext* ctx = nullptr;

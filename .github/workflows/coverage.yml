@@ -123,13 +123,13 @@ jobs:
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
     - name: Upload Coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ${{ runner.workspace }}/build/coverage/coverage_final.info
+        files: ${{ runner.workspace }}/build/coverage/coverage_final.info
         name: overall-coverage
         fail_ci_if_error: false
-        verbose: true
+        verbose: false
     - name: Upload Test Results
       uses: actions/upload-artifact@v7
       if: always()

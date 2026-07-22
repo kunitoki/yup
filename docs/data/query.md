@@ -153,7 +153,7 @@ auto info = DataTreeQuery::from (appRoot)
 ### Aggregation & conditionals
 
 ```cpp
-// Group by a computed key -> map<var, std::vector<DataTree>>
+// Group by a computed key → map<var, std::vector<DataTree>>
 auto byState = DataTreeQuery::from (appRoot)
     .descendants ("Button")
     .groupBy ([] (const DataTree& b)

@@ -1,46 +1,32 @@
 # Concepts & Lifecycle
 
-## The `ore` bridge
+## The GPU bridge
 
 Every RHI type is a thin, portable wrapper over a single backend bridge: Rive's
-`ore` GPU context. The `GraphicsContext` owns that context and exposes it to the
-RHI layer. You never touch `ore` types directly - the RHI hides them behind
+GPU context. The `GraphicsContext` owns that context and exposes it to the
+RHI layer. You never touch GPU types directly - the RHI hides them behind
 YUP-native handles (`GpuPipeline`, `GpuFrame`, `GpuRenderPass`, `GpuBuffer`,
 `GpuTexture`).
 
 Because the RHI targets one common abstraction, the same code path runs on every
 backend: Metal, Direct3D, OpenGL / OpenGL ES (including WebGL2), and WebGPU.
 
-## Enabling the GPU context
-
-The RHI requires a `GraphicsContext` created with the `ore` GPU context enabled.
-This is on by default:
-
-```cpp
-GraphicsContext::Options options;
-options.enableOreContext = true; // default
-```
-
-If the context was created with `enableOreContext = false`, or the backend has
-no GPU (a headless context), the RHI is unavailable.
-
 ## Probing capability
 
-Always check GPU availability before creating RHI resources. Use the ore-free
-capability probe on the context:
+Always check GPU availability before creating RHI resources:
 
 ```cpp
 if (! ctx.isGpuAvailable())
-    return; // No GPU / ore context - fall back or bail out.
+    return; // No GPU context - fall back or bail out.
 ```
 
 `isGpuAvailable()` is equivalent to querying the internal GPU context but does
-not reference any `ore` type, so user code stays backend-clean.
+not reference any GPU type, so user code stays backend-clean.
 
 RHI factory functions honor this contract:
 
 - `GpuPipeline::compile(...)` requires `isGpuAvailable()`.
-- `GpuBuffer::create(...)` returns `nullptr` if `ore` is unavailable.
+- `GpuBuffer::create(...)` returns `nullptr` if GPU context is unavailable.
 - `GpuTarget::create(...)` / `GpuCanvas::create(...)` return `nullptr` if
   offscreen GPU resources cannot be allocated.
 

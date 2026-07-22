@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Graphics
 
 - Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn
-- Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the ore WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
+- Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
 
 #### Rive Runtime Bump
 
@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 #### RHI (#129 and #130)
 
-- GraphicsContext ore integration (`Options::enableOreContext = true`): activates the backend-native ore context. New ore-free `GraphicsContext::isGpuAvailable()` capability probe; `gpuContext()` is retained but documented `@internal` as the single backend bridge.
+- GraphicsContext GPU context integration. New `GraphicsContext::isGpuAvailable()` capability probe; `gpuContext()` is retained but documented `@internal` as the single backend bridge.
 - New `GpuTexture` class (`rhi/yup_GpuTexture.h`): opaque reference-counted GPU texture wrapping `rive::gpu::Texture` or `rive::gpu::RenderCanvas`. Obtained from `GpuCanvas::asTexture()` or constructed internally by `Image::fromTexture()`.
 - New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
 - New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
@@ -37,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuFrame` class (`rhi/yup_GpuFrame.h`): move-only RAII GPU frame scope (`GpuFrame::begin(ctx)` → `submit()` → `waitForGPU()`). Owns the transient GPU resource pools (uniform buffers, texture views, samplers) created while encoding its passes.
 - New `GpuRenderPass` class (`rhi/yup_GpuRenderPass.h`): move-only transient render-pass encoder targeting a `GpuCanvas`. Holds the mutable binding state (`setPipeline`, `setTexture`, `setUniformBuffer`, `setVertexBuffer`, `setIndexBuffer`) and encodes draws (`draw`, `drawIndexed`, `finish`).
 - New `GpuPipelineCache` class (`rhi/yup_GpuPipelineCache.h`): thread-safe compile-or-fetch cache for `GpuPipeline` keyed by a deterministic SHA1 of the selected native shader sources, entry points, pipeline options, and graphics API. LRU eviction with a configurable entry limit, mirroring `ShaderCache`.
-- New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native ore buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
+- New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native GPU buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
 - `Image::fromTexture(GpuTexture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
 - `Graphics::drawTexture(GpuTexture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side ImagePixelData allocation.
 
@@ -62,6 +62,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `yup_tests` wasm build: raised `INITIAL_MEMORY` to 256 MB, added `MAXIMUM_MEMORY` cap of 1 GB, and reduced `STACK_SIZE` to 1 MB to give the heap room for concurrent pthread stress tests; fixes `RuntimeError: memory access out of bounds` in CI.
 - Fetched third-party dependencies (SDL3, Perfetto, plugin SDKs) are now cloned shallowly (`--depth 1`) and skip network update checks on reconfigure, speeding up fresh configures and reconfigures. Shallow cloning is automatically disabled when a `GIT_TAG` is a commit hash.
 - Android: full 16 KB page size compatibility — generated Gradle projects bumped to AGP 8.5.2 / Gradle 8.7 (uncompressed native libraries are zip-aligned to 16 KB), `jniLibs` packaging made explicitly non-legacy, and `ndkVersion` pinned to r27c (overridable via `NDK_VERSION`), which ships a 16 KB-aligned `libc++_shared.so`. CI NDK updated to r27c accordingly. Application shared libraries were already linked with `-Wl,-z,max-page-size=16384`.
+
+### Testing
+
+- `Component` now befriends a single `ComponentTestHelper<T>` class template instead of accumulating one friend class per test suite; unit tests specialize it (e.g. `ComponentTestHelper<Component>`, `ComponentTestHelper<ComponentEffect>`) to reach private state.
 
 ### Bug Fixes
 

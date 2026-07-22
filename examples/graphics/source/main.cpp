@@ -31,6 +31,8 @@
 #endif
 
 #include <memory>
+#include <functional>
+#include <vector>
 #include <cmath> // For sine wave generation
 
 #if YUP_MOBILE
@@ -64,6 +66,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/AudioFileDemo.h"
 #include "examples/ClipboardDemo.h"
 #include "examples/ColorLab.h"
+#include "examples/ComponentEffectsDemo.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
@@ -158,34 +161,122 @@ public:
         }
 
         // Setup examples
-        int counter = 0;
-        registerDemo<ArtboardDemo> ("Artboard", counter++);
-        registerDemo<AudioExample> ("Audio", counter++);
-        registerDemo<AudioFileDemo> ("Audio File", counter++);
-        registerDemo<ClipboardDemo> ("Clipboard", counter++);
-        registerDemo<ColorLabDemo> ("Color Lab", counter++);
-        registerDemo<ConvolutionDemo> ("Convolution Demo", counter++);
-        registerDemo<CrossoverDemo> ("Crossover Demo", counter++);
-        registerDemo<FileChooserDemo> ("File Chooser", counter++);
-        registerDemo<FilterDemo> ("Filter Demo", counter++);
-        registerDemo<ImagesDemo> ("Images", counter++);
-        registerDemo<LayoutFontsExample> ("Layout Fonts", counter++);
-        registerDemo<LottieDemo> ("Lottie", counter++);
-        registerDemo<OffscreenRenderDemo> ("Offscreen Render", counter++);
-        registerDemo<OpaqueDemo> ("Opaque Demo", counter++);
-        registerDemo<PaintProfilerDemo> ("Paint Profiler", counter++);
-        registerDemo<PathsExample> ("Paths", counter++);
-        registerDemo<PopupMenuDemo> ("Popup Menu", counter++);
-        registerDemo<ScrollBarDemo> ("ScrollBar", counter++);
-        registerDemo<SliderDemo> ("Sliders", counter++);
-        registerDemo<SpectrumAnalyzerDemo> ("FFT Analyzer", counter++);
-        registerDemo<SpinningCubeDemo> ("Spinning Cube", counter++);
-        registerDemo<SvgDemo> ("SVG", counter++);
-        registerDemo<TextEditorDemo> ("Text Editor", counter++);
-        registerDemo<VariableFontsExample> ("Variable Fonts", counter++);
-        registerDemo<WidgetsDemo> ("Widgets", counter++);
+        auto addDemo = [&] (yup::StringRef name, auto factory)
+        {
+            demoNames.add (name);
+            demoFactories.push_back (std::move (factory));
+            components.add (nullptr);
+        };
+
+        addDemo ("Artboard", []
+        {
+            return std::make_unique<ArtboardDemo>();
+        });
+        addDemo ("Audio", []
+        {
+            return std::make_unique<AudioExample>();
+        });
+        addDemo ("Audio File", []
+        {
+            return std::make_unique<AudioFileDemo>();
+        });
+        addDemo ("Clipboard", []
+        {
+            return std::make_unique<ClipboardDemo>();
+        });
+        addDemo ("Color Lab", []
+        {
+            return std::make_unique<ColorLabDemo>();
+        });
+        addDemo ("Component Effects", []
+        {
+            return std::make_unique<ComponentEffectsDemo>();
+        });
+        addDemo ("Convolution Demo", []
+        {
+            return std::make_unique<ConvolutionDemo>();
+        });
+        addDemo ("Crossover Demo", []
+        {
+            return std::make_unique<CrossoverDemo>();
+        });
+        addDemo ("File Chooser", []
+        {
+            return std::make_unique<FileChooserDemo>();
+        });
+        addDemo ("Filter Demo", []
+        {
+            return std::make_unique<FilterDemo>();
+        });
+        addDemo ("Images", []
+        {
+            return std::make_unique<ImagesDemo>();
+        });
+        addDemo ("Layout Fonts", []
+        {
+            return std::make_unique<LayoutFontsExample>();
+        });
+        addDemo ("Lottie", []
+        {
+            return std::make_unique<LottieDemo>();
+        });
+        addDemo ("Offscreen Render", []
+        {
+            return std::make_unique<OffscreenRenderDemo>();
+        });
+        addDemo ("Opaque Demo", []
+        {
+            return std::make_unique<OpaqueDemo>();
+        });
+        addDemo ("Paint Profiler", []
+        {
+            return std::make_unique<PaintProfilerDemo>();
+        });
+        addDemo ("Paths", []
+        {
+            return std::make_unique<PathsExample>();
+        });
+        addDemo ("Popup Menu", []
+        {
+            return std::make_unique<PopupMenuDemo>();
+        });
+        addDemo ("ScrollBar", []
+        {
+            return std::make_unique<ScrollBarDemo>();
+        });
+        addDemo ("Sliders", []
+        {
+            return std::make_unique<SliderDemo>();
+        });
+        addDemo ("FFT Analyzer", []
+        {
+            return std::make_unique<SpectrumAnalyzerDemo>();
+        });
+        addDemo ("Spinning Cube", []
+        {
+            return std::make_unique<SpinningCubeDemo>();
+        });
+        addDemo ("SVG", []
+        {
+            return std::make_unique<SvgDemo>();
+        });
+        addDemo ("Text Editor", []
+        {
+            return std::make_unique<TextEditorDemo>();
+        });
+        addDemo ("Variable Fonts", []
+        {
+            return std::make_unique<VariableFontsExample>();
+        });
+        addDemo ("Widgets", []
+        {
+            return std::make_unique<WidgetsDemo>();
+        });
 #if YUP_MODULE_AVAILABLE_yup_python
-        registerDemo<PythonDemo> ("Python", counter++);
+        addDemo ("Python", []
+        {
+            return std::make_unique<PythonDemo>();
+        });
 #endif
 
         // Create the ListBox with the demo names
@@ -252,8 +343,11 @@ public:
         }
 
         // Demo components take the remaining space
-        for (auto& component : components)
-            component->setBounds (bounds);
+        for (auto* component : components)
+        {
+            if (component != nullptr)
+                component->setBounds (bounds);
+        }
     }
 
     void paint (yup::Graphics& g) override
@@ -295,25 +389,23 @@ public:
 
     void selectComponent (int index)
     {
-        for (auto& component : components)
-            component->setVisible (false);
+        for (auto* component : components)
+        {
+            if (component != nullptr)
+                component->setVisible (false);
+        }
 
+        if (components[index] == nullptr)
+        {
+            components.set (index, demoFactories[index]().release());
+            addChildComponent (components[index]);
+        }
+
+        resized(); // Ensure the newly created component is sized correctly
         components[index]->setVisible (true);
     }
 
 private:
-    template <class Demo>
-    void registerDemo (const yup::String& name, int counter)
-    {
-        demoNames.add (name);
-
-        auto demo = std::make_unique<Demo>();
-        auto& demoInstance = *demo.get();
-
-        components.add (std::move (demo));
-        addChildComponent (components.getLast());
-    }
-
     void updateWindowTitle()
     {
         yup::String title;
@@ -332,6 +424,7 @@ private:
     }
 
     yup::Array<yup::String> demoNames;
+    std::vector<std::function<std::unique_ptr<yup::Component>()>> demoFactories;
     std::unique_ptr<DemoListModel> listModel;
     std::unique_ptr<yup::ListBox> listBox;
     yup::OwnedArray<yup::Component> components;
