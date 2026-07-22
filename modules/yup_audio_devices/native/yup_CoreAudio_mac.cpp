@@ -2482,6 +2482,12 @@ struct CoreAudioClasses
 
             const PropertyAddress devicesAddress { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
             AudioObjectAddPropertyListener (kAudioObjectSystemObject, devicesAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultInputAddress { kAudioHardwarePropertyDefaultInputDevice };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, defaultInputAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultOutputAddress { kAudioHardwarePropertyDefaultOutputDevice };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, defaultOutputAddress.get(), hardwareListenerProc, this);
         }
 
         ~CoreAudioIODeviceType() override
@@ -2490,6 +2496,12 @@ struct CoreAudioClasses
 
             const PropertyAddress devicesAddress { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
             AudioObjectRemovePropertyListener (kAudioObjectSystemObject, devicesAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultInputAddress { kAudioHardwarePropertyDefaultInputDevice };
+            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, defaultInputAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultOutputAddress { kAudioHardwarePropertyDefaultOutputDevice };
+            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, defaultOutputAddress.get(), hardwareListenerProc, this);
         }
 
         //==============================================================================
