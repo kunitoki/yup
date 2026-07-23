@@ -1845,3 +1845,96 @@ TEST (TgaImageFormatTests, DecodeRleColorMappedType9)
     EXPECT_EQ (image.getPixel (2, 1) & 0x00FFFFFFu, 0x000000FFu);
     EXPECT_EQ (image.getPixel (3, 1) & 0x00FFFFFFu, 0x000000FFu);
 }
+
+// ----------------------------------------------------------------------
+// Grayscale TGA (type 3 and type 11) read tests
+// ----------------------------------------------------------------------
+
+TEST (TgaImageFormatTests, DecodeType3UncompressedGrayscale)
+{
+    // Type 3, 2×2, 8-bit grayscale
+    auto header = makeTgaHeader (3, 2, 2, 8, 0x20);
+
+    // Pixels: row0 = [10, 200], row1 = [50, 100]
+    std::vector<uint8> pixels = { 10, 200, 50, 100 };
+
+    auto stream = makeTgaData (header, pixels);
+    auto image = decodeRawTga (stream);
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 2);
+    EXPECT_EQ (image.getHeight(), 2);
+
+    EXPECT_EQ (image.getPixel (0, 0), 0xFF0A0A0Au);
+    EXPECT_EQ (image.getPixel (1, 0), 0xFFC8C8C8u);
+    EXPECT_EQ (image.getPixel (0, 1), 0xFF323232u);
+    EXPECT_EQ (image.getPixel (1, 1), 0xFF646464u);
+}
+
+TEST (TgaImageFormatTests, DecodeType11RleGrayscale)
+{
+    // Type 11, 4×2, 8-bit RLE grayscale
+    auto header = makeTgaHeader (11, 4, 2, 8, 0x20);
+
+    // RLE: Row 0 = run(4×128), Row 1 = run(2×64) + run(2×192)
+    std::vector<uint8> rleData = {
+        0x80 | 3, 128, // run of 4 × gray 128
+        0x80 | 1,
+        64, // run of 2 × gray 64
+        0x80 | 1,
+        192 // run of 2 × gray 192
+    };
+
+    std::vector<uint8> fullData (header);
+    fullData.insert (fullData.end(), rleData.begin(), rleData.end());
+
+    MemoryInputStream stream (fullData.data(), fullData.size(), false);
+    auto image = decodeRawTga (fullData);
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 4);
+    EXPECT_EQ (image.getHeight(), 2);
+
+    // Row 0: all gray 128
+    for (int x = 0; x < 4; ++x)
+        EXPECT_EQ (image.getPixel (x, 0), 0xFF808080u);
+
+    // Row 1: first 2 gray 64, last 2 gray 192
+    EXPECT_EQ (image.getPixel (0, 1), 0xFF404040u);
+    EXPECT_EQ (image.getPixel (1, 1), 0xFF404040u);
+    EXPECT_EQ (image.getPixel (2, 1), 0xFFC0C0C0u);
+    EXPECT_EQ (image.getPixel (3, 1), 0xFFC0C0C0u);
+}
+
+// ----------------------------------------------------------------------
+// 16-bit true-color TGA read test
+// ----------------------------------------------------------------------
+
+TEST (TgaImageFormatTests, DecodeType2Uncompressed16BitRgb555)
+{
+    // Type 2, 2×1, 16-bit RGB555
+    auto header = makeTgaHeader (2, 2, 1, 16, 0x20);
+
+    // Pixel 0: R=31, G=31, B=31 (white) → LE: 0xFF, 0x7F
+    // Pixel 1: R=31, G=0, B=0 (red) → LE: 0x00, 0x7C
+    std::vector<uint8> pixels = { 0xFF, 0x7F, 0x00, 0x7C };
+
+    auto stream = makeTgaData (header, pixels);
+    auto image = decodeRawTga (stream);
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 2);
+    EXPECT_EQ (image.getHeight(), 1);
+
+    // White (R=31→248, G=31→248, B=31→248)
+    const uint32 p0 = image.getPixel (0, 0);
+    EXPECT_GE ((p0 >> 16) & 0xFF, 245u);
+    EXPECT_GE ((p0 >> 8) & 0xFF, 245u);
+    EXPECT_GE (p0 & 0xFF, 245u);
+
+    // Red (R=31→248, G=0→0, B=0→0)
+    const uint32 p1 = image.getPixel (1, 0);
+    EXPECT_GE ((p1 >> 16) & 0xFF, 245u);
+    EXPECT_LE ((p1 >> 8) & 0xFF, 10u);
+    EXPECT_LE (p1 & 0xFF, 10u);
+}

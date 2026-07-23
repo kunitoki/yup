@@ -619,4 +619,142 @@ TEST (JpegImageFormatTests, SelectiveRegistrationJpegOnly)
     bmpFile.deleteFile();
 }
 
+// ======================================================================
+// Metadata parsing tests
+// ======================================================================
+
+TEST (JpegImageFormatTests, ParseMetadataReadsDpi)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    meta->dpiX = 300.0;
+    meta->dpiY = 300.0;
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_NEAR (reader.metadata->dpiX, 300.0, 5.0);
+    EXPECT_NEAR (reader.metadata->dpiY, 300.0, 5.0);
+}
+
+TEST (JpegImageFormatTests, ParseMetadataReadsComment)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    meta->textEntries.set ("Comment", "JPEG test comment");
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_EQ (reader.metadata->textEntries.getValue ("Comment", {}), String ("JPEG test comment"));
+}
+
+TEST (JpegImageFormatTests, ParseRawChunksExtractsExifWhenPresent)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    const uint8 rawExif[] = {
+        'M', 'M', 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    meta->setRawChunk ("jpeg/exif", MemoryBlock (rawExif, sizeof (rawExif)));
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_TRUE (reader.metadata->hasRawChunk ("jpeg/exif"));
+}
+
+TEST (JpegImageFormatTests, ParseRawChunksExtractsCommentWhenPresent)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    meta->textEntries.set ("Comment", "Raw chunk comment");
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_TRUE (reader.metadata->hasRawChunk ("jpeg/comment"));
+}
+
+TEST (JpegImageFormatTests, ParseRawChunksExtractsIccWhenPresent)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    // The reader stores the full APP2 marker data including "ICC_PROFILE\0" prefix,
+    // so the raw chunk must include it for roundtrip.
+    const uint8 iccData[] = { 'I', 'C', 'C', '_', 'P', 'R', 'O', 'F', 'I', 'L', 'E', '\0', 0xDE, 0xAD, 0xBE, 0xEF };
+    meta->setRawChunk ("jpeg/icc", MemoryBlock (iccData, sizeof (iccData)));
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_TRUE (reader.metadata->hasRawChunk ("jpeg/icc"));
+}
+
+TEST (JpegImageFormatTests, MetadataExtractsExifOrientation)
+{
+    Image img (4, 4, PixelFormat::RGB);
+    img.fill (0xFFCC8844u);
+
+    // Build a JPEG with EXIF containing orientation=6
+    const uint8 rawExif[] = {
+        'M', 'M', 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+
+    auto meta = ImageMetadata::create();
+    meta->setRawChunk ("jpeg/exif", MemoryBlock (rawExif, sizeof (rawExif)));
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    JpegImageFormatWriter writer (rawStream, PixelFormat::RGB, 0);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    // Need parseRawChunks to store EXIF data; getOrientation reads from raw chunks
+    JpegImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_EQ (reader.metadata->getOrientation(), 6);
+}
+
 #endif // YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG
