@@ -34,19 +34,6 @@ from pathlib import Path
 
 DEFAULT_REPO = "kunitoki/yup"
 
-DEFAULT_TARGETS = [
-    "yup_GpuPipeline.cpp",
-    "yup_GpuRenderPass.cpp",
-    "yup_GpuCanvas.cpp",
-    "yup_GpuBuffer.cpp",
-    "yup_GpuTexture.cpp",
-    "yup_Image.cpp",
-    "yup_TypeErasedObject.h",
-    "yup_Graphics.cpp",
-    "yup_GpuPipelineCache.cpp",
-    "yup_GpuFrame.cpp",
-]
-
 
 def get_github_token() -> str:
     """Return the GitHub token from environment variables."""
@@ -183,14 +170,45 @@ def download_file(url: str, dest: Path, token: str) -> None:
         sys.exit(1)
 
 
+def get_pr_changed_files(pr_number: int, repo: str, token: str) -> set[str]:
+    """Return the set of file paths changed in a PR.
+
+    Paths are relative to the repository root (e.g.
+    ``modules/yup_graphics/graphics/yup_GpuPipeline.cpp``).
+    """
+    files: set[str] = set()
+    page = 1
+
+    while True:
+        url = (
+            f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files?per_page=100&page={page}"
+        )
+        data = github_api_request(url, token)
+
+        if not isinstance(data, list):
+            break
+
+        for entry in data:
+            filename = entry.get("filename", "")
+            if filename:
+                files.add(filename)
+
+        if len(data) < 100:
+            break
+        page += 1
+
+    return files
+
+
 def resolve_coverage_from_pr(
     pr_number: int,
     repo: str,
     workflow_name: str,
-) -> Path:
+) -> tuple[Path, set[str]]:
     """Fetch the coverage artifact from a GitHub Actions PR run.
 
-    Returns the path to the extracted ``coverage_final.info`` file.
+    Returns a ``(coverage_path, changed_files)`` tuple where *changed_files*
+    is the set of file paths modified in the PR.
     """
     token = get_github_token()
 
@@ -292,7 +310,14 @@ def resolve_coverage_from_pr(
 
     coverage_path = info_files[0]
     print(f"Using coverage file: {coverage_path}")
-    return coverage_path
+
+    # ------------------------------------------------------------------
+    # 6. Get the list of files changed in the PR
+    # ------------------------------------------------------------------
+    changed_files = get_pr_changed_files(pr_number, repo, token)
+    print(f"PR #{pr_number} changed {len(changed_files)} file(s)")
+
+    return coverage_path, changed_files
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -326,7 +351,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Report every source file found in the coverage file.",
+        help="Report every source file found in the coverage file. "
+        "With --pr this bypasses both the PR-changed-files and targets filters.",
     )
     parser.add_argument(
         "--repo",
@@ -372,22 +398,47 @@ def parse_lcov_records(content: str) -> list[tuple[str, list[tuple[int, int]]]]:
     return records
 
 
-def should_report(source_file: str, targets: list[str], report_all: bool) -> bool:
-    return report_all or any(target in source_file for target in targets)
+def should_report(
+    source_file: str,
+    targets: list[str],
+    report_all: bool,
+    changed_files: set[str] | None = None,
+) -> bool:
+    """Return True if *source_file* should appear in the coverage report."""
+    if report_all:
+        return True
+
+    if changed_files is not None:
+        # Only report files that were changed in the PR.
+        # SF paths in LCOV are absolute; PR file paths are repo-relative.
+        # Match by checking if any PR path is a suffix of the SF path.
+        if not any(source_file.endswith(f"/{f}") or source_file.endswith(f"\\{f}") for f in changed_files):
+            return False
+
+    if targets:
+        return any(target in source_file for target in targets)
+
+    # No targets filter active — show everything that passed earlier checks.
+    return True
 
 
 def display_name(source_file: str, targets: list[str], report_all: bool) -> str:
-    if report_all:
+    if report_all or len(targets) == 0:
         return source_file
 
-    return next(target for target in targets if target in source_file)
+    return next((target for target in targets if target in source_file), source_file)
 
 
-def print_uncovered_lines(coverage_file: Path, targets: list[str], report_all: bool) -> None:
+def print_uncovered_lines(
+    coverage_file: Path,
+    targets: list[str],
+    report_all: bool,
+    changed_files: set[str] | None = None,
+) -> None:
     content = coverage_file.read_text(encoding="utf-8")
 
     for source_file, coverage_lines in parse_lcov_records(content):
-        if not should_report(source_file, targets, report_all):
+        if not should_report(source_file, targets, report_all, changed_files):
             continue
 
         hit = [line_number for line_number, count in coverage_lines if count > 0]
@@ -404,14 +455,19 @@ def print_uncovered_lines(coverage_file: Path, targets: list[str], report_all: b
 
 def main() -> None:
     args = parse_arguments()
-    targets = args.targets if args.targets else DEFAULT_TARGETS
+    changed_files: set[str] | None = None
 
     if args.pr is not None:
-        coverage_file = resolve_coverage_from_pr(args.pr, args.repo, args.workflow)
+        coverage_file, changed_files = resolve_coverage_from_pr(
+            args.pr, args.repo, args.workflow
+        )
     else:
         coverage_file = args.coverage_file
+        changed_files = None
 
-    print_uncovered_lines(coverage_file, targets, args.all)
+    targets = args.targets
+
+    print_uncovered_lines(coverage_file, targets, args.all, changed_files)
 
 
 if __name__ == "__main__":
