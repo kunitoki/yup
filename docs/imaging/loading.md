@@ -22,6 +22,15 @@ else
 }
 ```
 
+Pass `ImageFormat::Options` as a second argument to extract metadata:
+
+```cpp
+auto opts = ImageFormat::Options()
+               .withMetadata (true)
+               .withRawChunks (true);
+auto result = Image::loadFromData (encodedBytes, opts);
+```
+
 ## The ImageFormatManager
 
 `ImageFormatManager` is the registry that maps files and streams to the right
@@ -54,10 +63,12 @@ PPM/PGM/PBM have no dependency and are always available.
 | ----------- | ----------------- | -------------- |
 | BMP         | `bmp`             | *(built in)*   |
 | PPM/PGM/PBM | `ppm`             | *(built in)*   |
+| TGA         | `tga`             | *(built in)*   |
 | PNG         | `png`             | `libpng`       |
 | JPEG        | `jpeg`            | `libjpeg`      |
 | WebP        | `webp`            | `libwebp`      |
 | GIF         | `gif`             | `libgif`       |
+| TIFF        | `tiff`            | `libtiff`      |
 
 ```cmake
 yup_standalone_app(
@@ -96,7 +107,7 @@ Ownership of the stream is **always** consumed by the call - on success the
 reader owns it; on failure it is deleted:
 
 ```cpp
-auto stream = someFile.createInputStream();  // std::unique_ptr<InputStream>
+std::unique_ptr<InputStream> stream = someFile.createInputStream();
 if (auto reader = formats.createReaderFor (stream.release()))
 {
     Image image = reader->readImage();
@@ -112,20 +123,45 @@ are plain public fields on `ImageFormatReader`:
 int    w   = reader->width;
 int    h   = reader->height;
 auto   fmt = reader->pixelFormat;
-double dx  = reader->dpiX;    // 0.0 if not present
-double dy  = reader->dpiY;
+```
 
-// Arbitrary key/value metadata from the file.
-// Standard keys: "dpiX", "dpiY", "colorSpace", "title", "software", "comment".
-String title = reader->metadataValues.getValue ("title", {});
+By default metadata extraction is **disabled** — the `metadata` field is
+`nullptr`. To opt in, pass `ImageFormat::Options` when creating the reader:
+
+```cpp
+// Request text metadata and DPI
+auto reader = formats.createReaderFor (stream.release(),
+                                       ImageFormat::Options().withMetadata (true));
+
+if (auto metadata = reader->metadata)
+{
+    double dx = metadata->dpiX;   // 0.0 if not present
+    double dy = metadata->dpiY;
+
+    // Arbitrary key/value pairs from the file
+    // Standard keys: "Title", "Software", "Comment", "dpiX", "dpiY"
+    String title = metadata->textEntries.getValue ("Title", {});
+
+    // Raw binary chunks (EXIF, ICC profile, XMP packet)
+    if (auto* exif = metadata->getRawChunk ("jpeg/exif"))
+        processExif (exif->getData(), exif->getSize());
+}
+```
+
+For `Image::loadFromData()`, pass options as the second argument:
+
+```cpp
+auto result = Image::loadFromData (bytes,
+                                   ImageFormat::Options().withRawChunks (true));
 ```
 
 `getFormatName()` returns the human-readable format label (e.g. `"PNG Image"`).
 
 ## Animated images
 
-Animated formats such as GIF expose multiple frames. Non-animated readers report
-a single frame, so the same code works for both:
+Formats that support animation — GIF, WebP, and PNG (APNG) — expose multiple
+frames through the same reader API. Non-animated readers report a single frame,
+so the same code works for both:
 
 ```cpp
 if (auto reader = formats.createReaderFor (File ("/path/anim.gif")))

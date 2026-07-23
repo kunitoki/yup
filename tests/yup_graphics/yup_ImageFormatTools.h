@@ -118,19 +118,28 @@ inline bool imagesAreEqualRGBA (const Image& a, const Image& b, int tolerance = 
 /** Returns the tests/data/images/ directory. */
 inline File getTestDataImagesDirectory()
 {
-    return File (__FILE__)
-        .getParentDirectory()
-        .getParentDirectory()
-        .getChildFile ("data")
-        .getChildFile ("images");
-}
+    // Try source-relative path first (works on desktop builds)
+    auto dir = File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory()
+                   .getChildFile ("data")
+                   .getChildFile ("images");
 
-/** Returns the tests/ directory. */
-inline File getTestDirectory()
-{
-    return File (__FILE__)
-        .getParentDirectory()
-        .getParentDirectory();
+    if (dir.exists())
+        return dir;
+
+    dir = File::getCurrentWorkingDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getChildFile ("tests")
+              .getChildFile ("data")
+              .getChildFile ("images");
+
+    if (dir.exists())
+        return dir;
+
+    return File ("/data/images");
 }
 
 /** Ensures a test image exists on disk in tests/data/images/ by generating it if missing.
@@ -148,36 +157,56 @@ inline File ensureTestImage (const String& filename, int w, int h, PixelFormat f
     Image img (w, h, fmt);
     img.fill (argb);
 
-    auto* fos = file.createOutputStream().release();
+    auto fos = file.createOutputStream();
     if (fos == nullptr)
         return file;
 
     auto ext = file.getFileExtension().toLowerCase();
-
     bool ok = false;
 
-    if (ext == ".bmp")
-        ok = BmpImageFormatWriter (fos, fmt).writeImage (img);
+    if (ext == "")
+    {
+    }
+
+#if YUP_IMAGE_FORMAT_BMP
+    else if (ext == ".bmp")
+        ok = BmpImageFormatWriter (fos.release(), fmt).writeImage (img);
+#endif
+
+#if YUP_IMAGE_FORMAT_PPM
     else if (ext == ".ppm" || ext == ".pgm")
-        ok = PpmImageFormatWriter (fos, fmt).writeImage (img);
+        ok = PpmImageFormatWriter (fos.release(), fmt).writeImage (img);
+#endif
+
+#if YUP_IMAGE_FORMAT_TGA
+    else if (ext == ".tga")
+        ok = TgaImageFormatWriter (fos.release(), fmt, false).writeImage (img);
+#endif
+
 #if YUP_IMAGE_FORMAT_PNG
     else if (ext == ".png")
-        ok = PngImageFormatWriter (fos, fmt).writeImage (img);
+        ok = PngImageFormatWriter (fos.release(), fmt).writeImage (img);
 #endif
+
 #if YUP_IMAGE_FORMAT_JPEG
     else if (ext == ".jpg" || ext == ".jpeg")
-        ok = JpegImageFormatWriter (fos, fmt, 0).writeImage (img);
+        ok = JpegImageFormatWriter (fos.release(), fmt, 0).writeImage (img);
 #endif
+
 #if YUP_IMAGE_FORMAT_WEBP
     else if (ext == ".webp")
-        ok = WebPImageFormatWriter (fos, fmt, 0).writeImage (img);
+        ok = WebPImageFormatWriter (fos.release(), fmt, 0).writeImage (img);
 #endif
+
 #if YUP_IMAGE_FORMAT_GIF
     else if (ext == ".gif")
-        ok = GifImageFormatWriter (fos, fmt).writeImage (img);
+        ok = GifImageFormatWriter (fos.release(), fmt).writeImage (img);
 #endif
-    else
-        delete fos;
+
+#if YUP_IMAGE_FORMAT_TIFF
+    else if (ext == ".tiff" || ext == ".tif")
+        ok = TiffImageFormatWriter (fos.release(), fmt).writeImage (img);
+#endif
 
     ignoreUnused (ok);
 
@@ -213,6 +242,13 @@ inline bool writeImageToFile (const Image& image, const File& file, int qualityI
     if (ext == ".gif")
         return GifImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
 #endif
+    if (ext == ".tga")
+        return TgaImageFormatWriter (fos, image.getPixelFormat(), false).writeImage (image);
+
+#if YUP_IMAGE_FORMAT_TIFF
+    if (ext == ".tiff" || ext == ".tif")
+        return TiffImageFormatWriter (fos, image.getPixelFormat()).writeImage (image);
+#endif
 
     delete fos;
     return false;
@@ -233,4 +269,20 @@ inline Image readImageFromFile (const File& file)
         return {};
 
     return reader->readImage();
+}
+
+//==============================================================================
+/** Writes an image via a format writer to a memory block.
+    Correctly handles the ownership transfer of the output stream.
+*/
+template <typename Writer, typename... Args>
+inline MemoryBlock writeImageToBlock (const Image& img, Args&&... writerArgs)
+{
+    auto mos = std::make_unique<MemoryOutputStream>();
+    auto* rawMos = mos.get();
+    {
+        Writer writer (mos.release(), img.getPixelFormat(), std::forward<Args> (writerArgs)...);
+        writer.writeImage (img);
+        return rawMos->getMemoryBlock();
+    }
 }

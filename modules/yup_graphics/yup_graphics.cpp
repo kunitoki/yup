@@ -141,7 +141,9 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
+#include "imaging/yup_ImagePixelData.cpp"
 #include "imaging/yup_Image.cpp"
+#include "imaging/yup_ImageMetadata.cpp"
 #include "imaging/yup_ImageFormat.cpp"
 #include "imaging/yup_ImageFormatReader.cpp"
 #include "imaging/yup_ImageFormatWriter.cpp"
@@ -171,6 +173,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "formats/yup_PpmImageFormat.cpp"
 #endif
 
+#if YUP_IMAGE_FORMAT_TGA
+#include "formats/yup_TgaImageFormat.cpp"
+#endif
+
 #if YUP_IMAGE_FORMAT_PNG
 #include <libpng/libpng.h>
 #include "formats/yup_PngImageFormat.cpp"
@@ -188,4 +194,9 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #if YUP_IMAGE_FORMAT_GIF
 #include "formats/yup_GifImageFormat.cpp"
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+#include <libtiff/libtiff.h>
+#include "formats/yup_TiffImageFormat.cpp"
 #endif

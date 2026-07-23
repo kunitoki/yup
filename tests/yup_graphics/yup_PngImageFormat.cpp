@@ -125,10 +125,10 @@ TEST (PngImageFormatTests, ReaderHasAccessibleMetadataValues)
     ASSERT_TRUE (writer.writeImage (generateTestImage (8, 8, PixelFormat::RGBA)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    PngImageFormatReader reader (inStream);
+    PngImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 // ======================================================================
@@ -689,6 +689,82 @@ TEST (PngImageFormatTests, GrayscaleBlackAndWhiteRoundtrip)
     auto result = reader.readImage();
 
     EXPECT_TRUE (imagesAreEqual (original, result, 0));
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (PngImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (PngImageFormatTests, SelectiveRegistrationPngOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::png);
+
+    auto pngFile = File::createTempFile (".png");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (pngFile, PixelFormat::RGBA), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    pngFile.deleteFile();
+    bmpFile.deleteFile();
+}
+
+// ======================================================================
+// Metadata raw chunks parsing tests
+// ======================================================================
+
+TEST (PngImageFormatTests, ParseRawChunksCreatesMetadata)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (4, 4, PixelFormat::RGBA)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    PngImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    // Metadata is created when parseRawChunks is enabled, even if no ancillary
+    // chunks are present (IHDR/IDAT/IEND are critical and excluded from raw storage)
+    ASSERT_NE (reader.metadata, nullptr);
+}
+
+TEST (PngImageFormatTests, ParseMetadataExtractsTextChunks)
+{
+    Image img (4, 4, PixelFormat::RGBA);
+    img.fill (0xFFCC8844u);
+
+    auto meta = ImageMetadata::create();
+    meta->textEntries.set ("Title", "Test PNG");
+    meta->textEntries.set ("Author", "YUP");
+    meta->dpiX = 96.0;
+    meta->dpiY = 96.0;
+    img.setMetadata (meta);
+
+    auto* rawStream = new MemoryOutputStream();
+    PngImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+    ASSERT_TRUE (writer.writeImage (img));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    PngImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    EXPECT_NEAR (reader.metadata->dpiX, 96.0, 2.0);
+    EXPECT_NEAR (reader.metadata->dpiY, 96.0, 2.0);
+    EXPECT_EQ (reader.metadata->textEntries.getValue ("Title", {}), String ("Test PNG"));
+    EXPECT_EQ (reader.metadata->textEntries.getValue ("Author", {}), String ("YUP"));
 }
 
 #endif // YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG

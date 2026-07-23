@@ -504,10 +504,10 @@ TEST (BmpImageFormatTests, ReaderDpiDefaultsToZero)
     ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    BmpImageFormatReader reader (inStream);
+    BmpImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_NEAR (reader.dpiX, 72.009, 0.001);
-    EXPECT_NEAR (reader.dpiY, 72.009, 0.001);
+    EXPECT_NEAR (reader.metadata->dpiX, 72.009, 0.001);
+    EXPECT_NEAR (reader.metadata->dpiY, 72.009, 0.001);
 }
 
 TEST (BmpImageFormatTests, WriterFlushReturnsTrue)
@@ -1030,4 +1030,23 @@ TEST (BmpImageFormatTests, WriteImageReturnsFalseForInvalidImage)
 
     Image invalid;
     EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (BmpImageFormatTests, SelectiveRegistrationBmpOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::bmp);
+
+    auto bmpFile = File::createTempFile (".bmp");
+    auto pngFile = File::createTempFile (".png");
+
+    EXPECT_NE (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+    EXPECT_EQ (manager.createWriterFor (pngFile, PixelFormat::RGB), nullptr);
+
+    bmpFile.deleteFile();
+    pngFile.deleteFile();
 }

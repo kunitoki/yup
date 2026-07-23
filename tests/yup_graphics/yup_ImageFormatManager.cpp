@@ -555,3 +555,31 @@ TEST (ImageFormatManagerTests, PpmReaderHasCorrectFormatName)
 
     EXPECT_EQ (reader.getFormatName(), String ("PPM/PGM/PBM Image"));
 }
+
+// ======================================================================
+// getFormatFileExtensions tests
+// ======================================================================
+
+TEST (ImageFormatManagerTests, GetFormatFileExtensionsReturnsAllExtensions)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto exts = manager.getFormatFileExtensions();
+    EXPECT_GT (exts.size(), 0);
+    EXPECT_TRUE (exts.contains (".bmp"));
+    EXPECT_TRUE (exts.contains (".ppm"));
+}
+
+// ======================================================================
+// createWriterFor file: writer fallback when canHandleFile fails
+// ======================================================================
+
+TEST (ImageFormatManagerTests, CreateWriterForFileForNonexistentDirReturnsNull)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto writer = manager.createWriterFor (File ("/nonexistent/path/image.bmp"));
+    EXPECT_EQ (writer, nullptr);
+}

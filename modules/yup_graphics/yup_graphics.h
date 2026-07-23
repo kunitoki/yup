@@ -90,6 +90,16 @@ class Context;
 #define YUP_IMAGE_FORMAT_PPM 1
 #endif
 
+/**
+    Config: YUP_IMAGE_FORMAT_TGA
+
+    Enable TGA (Truevision TARGA) image format support (read and write).
+    This format has no external dependency.
+*/
+#ifndef YUP_IMAGE_FORMAT_TGA
+#define YUP_IMAGE_FORMAT_TGA 1
+#endif
+
 /** Config: YUP_IMAGE_FORMAT_PNG
 
     Enable PNG image format support.
@@ -131,6 +141,17 @@ class Context;
 #endif
 #endif
 
+/** Config: YUP_IMAGE_FORMAT_TIFF
+
+    Enable TIFF image format support (read and write, including multi-page TIFF).
+    Requires libtiff (YUP_MODULE_AVAILABLE_libtiff).
+*/
+#ifndef YUP_IMAGE_FORMAT_TIFF
+#if YUP_MODULE_AVAILABLE_libtiff
+#define YUP_IMAGE_FORMAT_TIFF 1
+#endif
+#endif
+
 //==============================================================================
 
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
@@ -153,6 +174,11 @@ class Context;
 #define YUP_IMAGE_FORMAT_GIF 0
 #endif
 
+#if YUP_IMAGE_FORMAT_TIFF && ! YUP_MODULE_AVAILABLE_libtiff
+#undef YUP_IMAGE_FORMAT_TIFF
+#define YUP_IMAGE_FORMAT_TIFF 0
+#endif
+
 //==============================================================================
 
 #include "layout/yup_Justification.h"
@@ -168,8 +194,10 @@ class Context;
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
 #include "rhi/yup_GpuTexture.h"
-#include "imaging/yup_Image.h"
+#include "imaging/yup_ImagePixelData.h"
+#include "imaging/yup_ImageMetadata.h"
 #include "imaging/yup_ImageFormat.h"
+#include "imaging/yup_Image.h"
 #include "imaging/yup_ImageFormatReader.h"
 #include "imaging/yup_ImageFormatWriter.h"
 #include "imaging/yup_ImageFormatManager.h"
@@ -215,6 +243,10 @@ class Context;
 #include "formats/yup_PpmImageFormat.h"
 #endif
 
+#if YUP_IMAGE_FORMAT_TGA
+#include "formats/yup_TgaImageFormat.h"
+#endif
+
 #if YUP_IMAGE_FORMAT_PNG
 #include "formats/yup_PngImageFormat.h"
 #endif
@@ -230,4 +262,8 @@ class Context;
 #if YUP_IMAGE_FORMAT_GIF
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+#include "formats/yup_TiffImageFormat.h"
 #endif

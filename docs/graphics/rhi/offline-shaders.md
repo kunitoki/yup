@@ -218,6 +218,8 @@ yup_add_shader_bundle(my_shaders
 ## See also
 
 - [Pipelines & shaders](pipelines.md) - compiling and configuring pipelines.
+- [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
+  specification for `.ysl` files.
 - [`yup_add_embedded_binary_resources`](../../build-system/cmake-api.md#yup_add_embedded_binary_resources) -
   the embedding primitive `yup_add_shader_bundle` builds on.
 - [Walkthrough: the spinning cube](spinning-cube.md) - an end-to-end example.

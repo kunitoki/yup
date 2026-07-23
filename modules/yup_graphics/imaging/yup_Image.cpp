@@ -23,51 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-void ImagePixelData::setPixelColor (int x, int y, Color color)
-{
-    setPixel (x, y, color.getARGB());
-}
-
-Color ImagePixelData::getPixelColor (int x, int y) const
-{
-    return Color (getPixel (x, y));
-}
-
-void ImagePixelData::fillColor (Color color)
-{
-    fill (color.getARGB());
-}
-
-//==============================================================================
-
-std::vector<uint8> ImagePixelData::toRGBA (bool premultiplyAlpha) const
-{
-    const auto numPixels = static_cast<int> (static_cast<size_t> (width) * static_cast<size_t> (height));
-    std::vector<uint8> result (static_cast<size_t> (numPixels) * 4);
-
-    const auto* src = pixelBuffer.get();
-
-    switch (format)
-    {
-        case PixelFormat::Grayscale:
-            ColorVectorOperations::convertGrayscaleToRGBA (src, result.data(), numPixels);
-            break;
-
-        case PixelFormat::RGB:
-            ColorVectorOperations::convertRGBToRGBA (src, result.data(), numPixels);
-            break;
-
-        case PixelFormat::RGBA:
-            std::memcpy (result.data(), src, result.size());
-            if (premultiplyAlpha)
-                ColorVectorOperations::premultiplyRGBA (result.data(), numPixels);
-            break;
-    }
-
-    return result;
-}
-
-//==============================================================================
 Image::Image (int w, int h, PixelFormat fmt)
     : pixelData (new ImagePixelData (w, h, fmt))
 {
@@ -75,12 +30,14 @@ Image::Image (int w, int h, PixelFormat fmt)
 
 Image::Image (const Image& other)
     : pixelData (other.pixelData)
+    , metadata (other.metadata)
 {
 }
 
 Image::Image (Image&& other) noexcept
     : pixelData (std::exchange (other.pixelData, {}))
     , gpuTexture (std::exchange (other.gpuTexture, {}))
+    , metadata (std::exchange (other.metadata, {}))
 {
 }
 
@@ -90,6 +47,7 @@ Image& Image::operator= (const Image& other)
     {
         pixelData = other.pixelData;
         gpuTexture = nullptr;
+        metadata = other.metadata;
     }
 
     return *this;
@@ -101,6 +59,7 @@ Image& Image::operator= (Image&& other) noexcept
     {
         pixelData = std::exchange (other.pixelData, {});
         gpuTexture = std::exchange (other.gpuTexture, {});
+        metadata = std::exchange (other.metadata, {});
     }
 
     return *this;
@@ -227,6 +186,7 @@ Image Image::duplicate() const
             pixelData->getRawData());
     }
 
+    result.metadata = metadata;
     return result;
 }
 
@@ -244,14 +204,15 @@ Image Image::fromTexture (GpuTexture::Ptr tex)
 
 //==============================================================================
 
-ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
+ResultValue<Image> Image::loadFromData (Span<const uint8> imageData,
+                                        const ImageFormat::Options& options)
 {
     auto stream = std::make_unique<MemoryInputStream> (imageData.data(), imageData.size(), false);
 
     ImageFormatManager manager;
     manager.registerDefaultFormats();
 
-    auto reader = manager.createReaderFor (stream.release());
+    auto reader = manager.createReaderFor (stream.release(), options);
     if (reader == nullptr || reader->width <= 0 || reader->height <= 0)
         return makeResultValueFail ("Unable to decode image");
 
@@ -259,6 +220,7 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
     if (! image.isValid())
         return makeResultValueFail ("Unable to decode image");
 
+    image.metadata = reader->metadata;
     return makeResultValueOk (image);
 }
 
