@@ -26,13 +26,10 @@ namespace
 {
 
 //==============================================================================
-
 rive::StrokeJoin toStrokeJoin (StrokeJoin join) noexcept
 {
     return static_cast<rive::StrokeJoin> (join);
 }
-
-//==============================================================================
 
 rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 {
@@ -40,7 +37,6 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 }
 
 //==============================================================================
-
 rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 {
     switch (blendMode)
@@ -99,7 +95,6 @@ rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 }
 
 //==============================================================================
-
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output)
 {
     input.addTo (output);
@@ -119,7 +114,6 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 }
 
 //==============================================================================
-
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
     const auto& colorStops = gradient.getStops();
@@ -193,7 +187,8 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
-rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target) noexcept
+//==============================================================================
+rive::Factory* getOffscreenFactory (GraphicsContext& context, RenderableTarget* target) noexcept
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -202,7 +197,7 @@ rive::Factory* getOffscreenFactory (GraphicsContext& context, const std::unique_
     return context.factory();
 }
 
-std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, const std::unique_ptr<GraphicsContext::OffscreenTarget>& target, int width, int height)
+std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, RenderableTarget* target, int width, int height)
 {
     if (target != nullptr)
         if (auto* renderContext = target->getRenderContext())
@@ -256,14 +251,15 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
 }
 
 Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
-    : Graphics (context, context.createOffscreenTarget (image.getWidth(), image.getHeight()), clearColor)
+    : Graphics (context, context.createRenderableTarget (image.getWidth(), image.getHeight()), clearColor)
 {
     offscreenTargetImage = std::addressof (image);
 }
 
-Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor) noexcept
+Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor) noexcept
     : context (context)
-    , offscreenTarget (std::move (target))
+    , ownedOffscreenTarget (std::move (target))
+    , offscreenTarget (ownedOffscreenTarget.get())
     , factory (*getOffscreenFactory (context, offscreenTarget))
     , ownedRenderer (makeOffscreenRenderer (context,
                                             offscreenTarget,
@@ -275,7 +271,7 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::O
     renderOptions.emplace_back();
     currentRenderOptions().scale = 1.0f;
 
-    if (! offscreenTarget)
+    if (offscreenTarget == nullptr)
         return;
 
     rive::gpu::RenderContext::FrameDescriptor frameDesc;
@@ -289,6 +285,34 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::O
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
 
+Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor) noexcept
+    : context (context)
+    , offscreenTarget (std::addressof (target))
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context, offscreenTarget, target.getWidth(), target.getHeight()))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+{
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
+
+    rive::gpu::RenderContext::FrameDescriptor frameDesc;
+    frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
+    frameDesc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
+    frameDesc.loadAction = rive::gpu::LoadAction::clear;
+    frameDesc.clearColor = clearColor;
+
+    context.beginOffscreen (*offscreenTarget, frameDesc);
+
+    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
+}
+
+Graphics::~Graphics()
+{
+    if (offscreenTarget != nullptr && ! committed)
+        context.endOffscreen (*offscreenTarget);
+}
+
 //==============================================================================
 
 bool Graphics::isOffscreen() const noexcept
@@ -298,20 +322,20 @@ bool Graphics::isOffscreen() const noexcept
 
 bool Graphics::commitToImage()
 {
-    if (! offscreenTargetImage || ! commitOffscreenTarget())
+    if (offscreenTargetImage == nullptr || ! commitOffscreenTarget())
         return false;
 
-    if (auto canvas = offscreenTarget->refRenderCanvas())
-        offscreenTargetImage->adoptRenderCanvas (std::move (canvas));
+    if (auto canvas = offscreenTarget->getRenderCanvas())
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
     else if (auto tex = offscreenTarget->adoptAsTexture())
-        offscreenTargetImage->adoptTexture (std::move (tex));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
 
     return true;
 }
 
 bool Graphics::commitOffscreenTarget()
 {
-    if (! offscreenTarget || committed)
+    if (offscreenTarget == nullptr || committed)
         return false;
 
     context.endOffscreen (*offscreenTarget);
@@ -322,7 +346,7 @@ bool Graphics::commitOffscreenTarget()
 
 bool Graphics::readPixelsToImage()
 {
-    if (! offscreenTarget || ! offscreenTargetImage)
+    if (offscreenTarget == nullptr || offscreenTargetImage == nullptr)
         return false;
 
     if (! committed)
@@ -426,7 +450,7 @@ Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<floa
     if (width <= 0 || height <= 0)
         return;
 
-    auto target = parent.getGraphicsContext().createOffscreenTarget (width, height);
+    auto target = parent.getGraphicsContext().createRenderableTarget (width, height);
     if (target == nullptr)
         return;
 
@@ -466,7 +490,7 @@ bool Graphics::TransparencyLayer::commit()
 
     auto texture = [&]() -> rive::rcp<rive::gpu::Texture>
     {
-        if (auto canvas = graphics->offscreenTarget->refRenderCanvas())
+        if (auto canvas = graphics->offscreenTarget->getRenderCanvas())
             return canvas->renderImage()->refTexture();
 
         return graphics->offscreenTarget->adoptAsTexture();
@@ -904,6 +928,15 @@ void Graphics::drawImage (const Image& image, const Rectangle<float>& targetArea
     renderTexture (image.getTexture(), targetArea);
 }
 
+void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea)
+{
+    if (texture == nullptr)
+        return;
+
+    // Graphics is a friend of GpuTexture - may access private getOrAdoptGpuTexture()
+    renderTexture (texture->getOrAdoptGpuTexture(), targetArea);
+}
+
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)
 {
     auto renderContext = context.renderContext();
@@ -913,31 +946,28 @@ bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Recta
     if (targetArea.isEmpty())
         return false;
 
+    const auto textureWidth = static_cast<float> (texture->width());
+    const auto textureHeight = static_cast<float> (texture->height());
+    if (textureWidth <= 0.0f || textureHeight <= 0.0f)
+        return false;
+
     const auto& options = currentRenderOptions();
-    const auto blendMode = toBlendMode (options.blendMode);
 
-    static const auto unitRectPath = []
-    {
-        auto unitRectPath = rive::make_rcp<rive::RiveRenderPath>();
-        unitRectPath->line ({ 1, 0 });
-        unitRectPath->line ({ 1, 1 });
-        unitRectPath->line ({ 0, 1 });
-        unitRectPath->close();
-        return unitRectPath;
-    }();
+    // Draw through the renderer's image path instead of a path with an image
+    // paint: frames in atomic interlock mode (e.g. iOS simulator, or when
+    // raster ordering is disabled) do not support image paints on paths, and
+    // drawImage() falls back to a dedicated image-rect draw there.
+    auto renderImage = rive::make_rcp<rive::RiveRenderImage> (std::move (texture));
 
-    rive::RiveRenderPaint paint;
-    paint.image (std::move (texture), 1.0f);
-    paint.blendMode (blendMode);
-
-    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth(), targetArea.getHeight())
+    // drawImage() maps the image to the rect [0, 0, width, height].
+    const auto imageTransform = AffineTransform::scaling (targetArea.getWidth() / textureWidth,
+                                                          targetArea.getHeight() / textureHeight)
                                     .translated (targetArea.getX(), targetArea.getY())
                                     .followedBy (options.getTransform());
 
     renderer.save();
     renderer.transform (imageTransform.toMat2D());
-    renderer.modulateOpacity (options.opacity);
-    renderer.drawPath (unitRectPath.get(), std::addressof (paint));
+    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), toBlendMode (options.blendMode), options.opacity);
     renderer.restore();
 
     return true;

@@ -23,40 +23,62 @@
 #define @YupPluginPrefix@_YUP_SDL_SYMBOLS_PATCH_H
 
 // SDL is linked statically into plugin bundles, so its Objective-C runtime
-// classes must be private to the plugin image.
-#define Cocoa_WindowListener @YupPluginPrefix@_YupPlugin_Cocoa_WindowListener
-#define METAL_RenderData @YupPluginPrefix@_YupPlugin_METAL_RenderData
-#define METAL_TextureData @YupPluginPrefix@_YupPlugin_METAL_TextureData
+// classes must be private to the plugin image, otherwise multiple plugins (or
+// a plugin and its host) that each embed their own copy of SDL3 would register
+// duplicate classes in the shared Objective-C runtime.
+//
+// The class names below are taken from the SDL3 sources (release-3.x). Only
+// SDL-owned classes are renamed here; categories declared on system classes
+// (NSApplication, NSWindow, UITouch, ...) must be left untouched.
+
+// macOS / Cocoa
+#define Cocoa_PasteboardDataProvider @YupPluginPrefix@_YupPlugin_Cocoa_PasteboardDataProvider
+#define SDL3Cocoa_WindowListener @YupPluginPrefix@_YupPlugin_SDL3Cocoa_WindowListener
+#define SDL3Application @YupPluginPrefix@_YupPlugin_SDL3Application
+#define SDL3AppDelegate @YupPluginPrefix@_YupPlugin_SDL3AppDelegate
+#define SDL3MessageBoxPresenter @YupPluginPrefix@_YupPlugin_SDL3MessageBoxPresenter
+#define SDL3OpenGLContext @YupPluginPrefix@_YupPlugin_SDL3OpenGLContext
+#define SDL3TranslatorResponder @YupPluginPrefix@_YupPlugin_SDL3TranslatorResponder
+#define SDL3View @YupPluginPrefix@_YupPlugin_SDL3View
+#define SDL3Window @YupPluginPrefix@_YupPlugin_SDL3Window
+#define SDL3_cocoametalview @YupPluginPrefix@_YupPlugin_SDL3_cocoametalview
+#define SDL_CocoaVideoData @YupPluginPrefix@_YupPlugin_SDL_CocoaVideoData
+#define SDL_CocoaWindowData @YupPluginPrefix@_YupPlugin_SDL_CocoaWindowData
+
+// Metal renderer
+#define SDL3METAL_PaletteData @YupPluginPrefix@_YupPlugin_SDL3METAL_PaletteData
+#define SDL3METAL_RenderData @YupPluginPrefix@_YupPlugin_SDL3METAL_RenderData
+#define SDL3METAL_TextureData @YupPluginPrefix@_YupPlugin_SDL3METAL_TextureData
+
+// iOS / UIKit
 #define SDLEAGLContext @YupPluginPrefix@_YupPlugin_SDLEAGLContext
-#define SDLOpenGLContext @YupPluginPrefix@_YupPlugin_SDLOpenGLContext
-#define SDLApplication @YupPluginPrefix@_YupPlugin_SDLApplication
-#define SDLAppDelegate @YupPluginPrefix@_YupPlugin_SDLAppDelegate
 #define SDLInterruptionListener @YupPluginPrefix@_YupPlugin_SDLInterruptionListener
+#define SDLIosMainCallbacksDisplayLink @YupPluginPrefix@_YupPlugin_SDLIosMainCallbacksDisplayLink
 #define SDLLaunchScreenController @YupPluginPrefix@_YupPlugin_SDLLaunchScreenController
 #define SDLLaunchStoryboardViewController @YupPluginPrefix@_YupPlugin_SDLLaunchStoryboardViewController
-#define SDLMessageBoxPresenter @YupPluginPrefix@_YupPlugin_SDLMessageBoxPresenter
-#define SDLTranslatorResponder @YupPluginPrefix@_YupPlugin_SDLTranslatorResponder
-#define SDLView @YupPluginPrefix@_YupPlugin_SDLView
-#define SDLWindow @YupPluginPrefix@_YupPlugin_SDLWindow
-#define SDL_CocoaClosure @YupPluginPrefix@_YupPlugin_SDL_CocoaClosure
-#define SDL_DisplayData @YupPluginPrefix@_YupPlugin_SDL_DisplayData
-#define SDL_DisplayModeData @YupPluginPrefix@_YupPlugin_SDL_DisplayModeData
-#define SDL_DisplayWatch @YupPluginPrefix@_YupPlugin_SDL_DisplayWatch
-#define SDL_LifecycleObserver @YupPluginPrefix@_YupPlugin_SDL_LifecycleObserver
-#define SDL_RumbleContext @YupPluginPrefix@_YupPlugin_SDL_RumbleContext
-#define SDL_RumbleMotor @YupPluginPrefix@_YupPlugin_SDL_RumbleMotor
-#define SDL_ShapeData @YupPluginPrefix@_YupPlugin_SDL_ShapeData
-#define SDL_VideoData @YupPluginPrefix@_YupPlugin_SDL_VideoData
-#define SDL_WindowData @YupPluginPrefix@_YupPlugin_SDL_WindowData
-#define SDL_cocoametalview @YupPluginPrefix@_YupPlugin_SDL_cocoametalview
+#define SDLUIKitDelegate @YupPluginPrefix@_YupPlugin_SDLUIKitDelegate
+#define SDLUIKitSceneDelegate @YupPluginPrefix@_YupPlugin_SDLUIKitSceneDelegate
+#define SDLUITextField @YupPluginPrefix@_YupPlugin_SDLUITextField
+#define SDL_UIKitDisplayData @YupPluginPrefix@_YupPlugin_SDL_UIKitDisplayData
+#define SDL_UIKitDisplayModeData @YupPluginPrefix@_YupPlugin_SDL_UIKitDisplayModeData
+#define SDL_UIKitVideoData @YupPluginPrefix@_YupPlugin_SDL_UIKitVideoData
+#define SDL_UIKitWindowData @YupPluginPrefix@_YupPlugin_SDL_UIKitWindowData
 #define SDL_uikitmetalview @YupPluginPrefix@_YupPlugin_SDL_uikitmetalview
 #define SDL_uikitopenglview @YupPluginPrefix@_YupPlugin_SDL_uikitopenglview
 #define SDL_uikitview @YupPluginPrefix@_YupPlugin_SDL_uikitview
 #define SDL_uikitviewcontroller @YupPluginPrefix@_YupPlugin_SDL_uikitviewcontroller
-#define SDL_uikitwindow @YupPluginPrefix@_YupPlugin_SDL_uikitwindow
-#define SDLUIKitDelegate @YupPluginPrefix@_YupPlugin_SDLUIKitDelegate
-#define SDLUITextField @YupPluginPrefix@_YupPlugin_SDLUITextField
 
+// Shared (macOS + iOS)
+#define SDL_DisplayWatch @YupPluginPrefix@_YupPlugin_SDL_DisplayWatch
+#define SDL_LifecycleObserver @YupPluginPrefix@_YupPlugin_SDL_LifecycleObserver
+#define SDL3_RumbleContext @YupPluginPrefix@_YupPlugin_SDL3_RumbleContext
+#define SDL3_RumbleMotor @YupPluginPrefix@_YupPlugin_SDL3_RumbleMotor
+
+// Camera
+#define SDLCaptureVideoDataOutputSampleBufferDelegate @YupPluginPrefix@_YupPlugin_SDLCaptureVideoDataOutputSampleBufferDelegate
+#define SDLPrivateCameraData @YupPluginPrefix@_YupPlugin_SDLPrivateCameraData
+
+// HIDAPI (Bluetooth LE)
 #define HIDBLEDevice @YupPluginPrefix@_YupPlugin_HIDBLEDevice
 #define HIDBLEManager @YupPluginPrefix@_YupPlugin_HIDBLEManager
 

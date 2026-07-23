@@ -33,6 +33,7 @@
     license:            ISC
 
     dependencies:       yup_audio_basics yup_data_model yup_dsp
+    optionalDeps:       yup_gui
 
   END_YUP_MODULE_DECLARATION
 

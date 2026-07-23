@@ -10,103 +10,53 @@ coverage:
     project:
       default:
         informational: true
-        target: 70%
+        target: 80%
         threshold: 5%
         base: auto
         flags:
-          - yup_core
-          - yup_events
+          - yup_animation
           - yup_audio_basics
           - yup_audio_devices
+          - yup_audio_formats
+          - yup_audio_graph
+          - yup_audio_gui
+          - yup_audio_plugin_client
+          - yup_audio_plugin_host
           - yup_audio_processors
+          - yup_core
+          - yup_data_model
+          - yup_dsp
+          - yup_events
           - yup_graphics
           - yup_gui
+          - yup_python
+          - yup_shading
+          - yup_simd
     patch:
       default:
         informational: true
-        target: 70%
+        target: 80%
         threshold: 5%
 
-component_management:
-  default_rules:
-    statuses:
-      - type: project
-        target: auto
-        branches:
-          - "!main"
-
-  individual_components:
-    - component_id: yup_core
-      name: "YUP Core"
-      description: "Core functionality of the YUP framework."
-      paths:
-        - modules/yup_core/**
-
-    - component_id: yup_events
-      name: "YUP Events"
-      description: "Event handling system for the YUP framework."
-      paths:
-        - modules/yup_events/**
-
-    - component_id: yup_audio_basics
-      name: "YUP Audio Basics"
-      description: "Basic audio functionalities in the YUP framework."
-      paths:
-        - modules/yup_audio_basics/**
-
-    - component_id: yup_audio_devices
-      name: "YUP Audio Devices"
-      description: "Audio device management in the YUP framework."
-      paths:
-        - modules/yup_audio_devices/**
-
-    - component_id: yup_audio_processors
-      name: "YUP Audio Processors"
-      description: "Audio processing capabilities in the YUP framework."
-      paths:
-        - modules/yup_audio_processors/**
-
-    - component_id: yup_graphics
-      name: "YUP Graphics"
-      description: "Graphics rendering and management in the YUP framework."
-      paths:
-        - modules/yup_graphics/**
-
-    - component_id: yup_gui
-      name: "YUP GUI"
-      description: "Graphical User Interface components of the YUP framework."
-      paths:
-        - modules/yup_gui/**
-
 flags:
-  yup_core:
-    paths:
-      - modules/yup_core/
-    carryforward: true
-  yup_events:
-    paths:
-      - modules/yup_events/
-    carryforward: true
-  yup_audio_basics:
-    paths:
-      - modules/yup_audio_basics/
-    carryforward: true
-  yup_audio_devices:
-    paths:
-      - modules/yup_audio_devices/
-    carryforward: true
-  yup_audio_processors:
-    paths:
-      - modules/yup_audio_processors/
-    carryforward: true
-  yup_graphics:
-    paths:
-      - modules/yup_graphics/
-    carryforward: true
-  yup_gui:
-    paths:
-      - modules/yup_gui/
-    carryforward: true
+  yup_animation:             { paths: [modules/yup_animation/], carryforward: true }
+  yup_audio_basics:          { paths: [modules/yup_audio_basics/], carryforward: true }
+  yup_audio_devices:         { paths: [modules/yup_audio_devices/], carryforward: true }
+  yup_audio_formats:         { paths: [modules/yup_audio_formats/], carryforward: true }
+  yup_audio_graph:           { paths: [modules/yup_audio_graph/], carryforward: true }
+  yup_audio_gui:             { paths: [modules/yup_audio_gui/], carryforward: true }
+  yup_audio_plugin_client:   { paths: [modules/yup_audio_plugin_client/], carryforward: true }
+  yup_audio_plugin_host:     { paths: [modules/yup_audio_plugin_host/], carryforward: true }
+  yup_audio_processors:      { paths: [modules/yup_audio_processors/], carryforward: true }
+  yup_core:                  { paths: [modules/yup_core/], carryforward: true }
+  yup_data_model:            { paths: [modules/yup_data_model/], carryforward: true }
+  yup_dsp:                   { paths: [modules/yup_dsp/], carryforward: true }
+  yup_events:                { paths: [modules/yup_events/], carryforward: true }
+  yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
+  yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }
+  yup_python:                { paths: [modules/yup_python/], carryforward: true }
+  yup_shading:               { paths: [modules/yup_shading/], carryforward: true }
+  yup_simd:                  { paths: [modules/yup_simd/], carryforward: true }
 
 ignore:
   - "thirdparty/**/*"
@@ -115,10 +65,9 @@ ignore:
   - "tools/**/*"
   - "cmake/**/*"
   - "docs/**/*"
-  - "standalone/**/*"
   - "modules/*/native/**/*"
 
 comment:
-  layout: "header, reach, components, diff, flags, files, footer"
+  layout: "header, reach, diff, flags, components, files, footer"
   behavior: default
   require_changes: false

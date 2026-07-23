@@ -721,7 +721,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
             }
         }
 
-        // CLAP events arrive sorted — no sort needed; apply final values for backward compat
+        // CLAP events arrive sorted - no sort needed; apply final values for backward compat
         applyParameterChangesToProcessor (audioProcessor, wrapper->hostParameterChangeBuffer);
 
         AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);

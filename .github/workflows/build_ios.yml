@@ -38,10 +38,10 @@ jobs:
       run: |
         cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
           -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - name: Build SDL2
+    - name: Build SDL
       run: |
-        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL2-static
-        cmake --build ${{ runner.workspace }}/build --config Release --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v5

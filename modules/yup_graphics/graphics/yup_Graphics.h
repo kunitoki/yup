@@ -24,6 +24,8 @@ namespace yup
 
 //==============================================================================
 class GraphicsContext;
+class GpuCanvas;
+class GpuTexture;
 
 //==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
@@ -141,7 +143,21 @@ public:
     Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
 
     /** Constructs a Graphics object for rendering into an Image on the GPU. */
-    Graphics (GraphicsContext& context, std::unique_ptr<GraphicsContext::OffscreenTarget> target, uint32_t clearColor = 0) noexcept;
+    Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor = 0) noexcept;
+
+    /** Constructs a Graphics object rendering into an externally-owned renderable target.
+
+        The target is not owned by this Graphics and must outlive it. Begins the
+        offscreen GPU frame immediately. Used by GpuCanvas, which owns the target.
+
+        @param context      Reference to the GraphicsContext to use for offscreen rendering.
+        @param target       Reference to the externally-owned renderable target.
+        @param clearColor   ARGB clear color applied at the start of the offscreen frame.
+    */
+    Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor = 0) noexcept;
+
+    /** Finalizes an uncommitted offscreen frame without retaining its result. */
+    ~Graphics();
 
     //==============================================================================
     /** Saves the current state of the Graphics object.
@@ -546,6 +562,17 @@ public:
     */
     void drawImage (const Image& image, const Rectangle<float>& targetArea);
 
+    /** Draws a GPU texture directly into a target rectangle, without materialising an Image.
+
+        This avoids the CPU-side ImagePixelData allocation that Image::fromTexture() requires.
+        Obtain a GpuTexture::Ptr from GpuCanvas::asTexture() or keep one alive from a
+        previous GpuCanvas render.
+
+        @param texture    The texture to draw. Must be valid (non-null).
+        @param targetArea The destination rectangle in the current coordinate space.
+    */
+    void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
+
     //==============================================================================
     /** Draws an attributed text.
 
@@ -584,6 +611,9 @@ public:
     //==============================================================================
     /** Returns true if this Graphics renders to an offscreen Image target. */
     bool isOffscreen() const noexcept;
+
+    /** Flushes the offscreen GPU frame. */
+    bool commitOffscreenTarget();
 
     /** Flushes the offscreen GPU frame and sets the rendered GPU texture on the target Image.
 
@@ -732,7 +762,6 @@ private:
     const RenderOptions& currentRenderOptions() const;
 
     void restoreState();
-    bool commitOffscreenTarget();
 
     void clipPath (rive::RawPath& path);
 
@@ -744,7 +773,8 @@ private:
 
     GraphicsContext& context;
 
-    std::unique_ptr<GraphicsContext::OffscreenTarget> offscreenTarget;
+    std::unique_ptr<RenderableTarget> ownedOffscreenTarget;
+    RenderableTarget* offscreenTarget = nullptr;
 
     rive::Factory& factory;
     std::unique_ptr<rive::Renderer> ownedRenderer;

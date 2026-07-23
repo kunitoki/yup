@@ -64,8 +64,8 @@ static uint8 getLuminanceFromARGB (uint32 argb)
 // JpegImageFormatReader
 //==============================================================================
 
-JpegImageFormatReader::JpegImageFormatReader (InputStream* stream)
-    : ImageFormatReader (stream, "JPEG Image")
+JpegImageFormatReader::JpegImageFormatReader (InputStream* stream, const ImageFormat::Options& options)
+    : ImageFormatReader (stream, "JPEG Image", options)
 {
     uint8 chunk[4096];
     long bytesRead = 0;
@@ -88,6 +88,15 @@ JpegImageFormatReader::JpegImageFormatReader (InputStream* stream)
     }
 
     jpeg_create_decompress (&info);
+
+    // Request marker saving for metadata extraction
+    if (getOptions().parseRawChunks || getOptions().parseMetadata)
+    {
+        jpeg_save_markers (&info, JPEG_COM, 0xFFFF);
+        for (int i = 0; i < 16; ++i)
+            jpeg_save_markers (&info, JPEG_APP0 + i, 0xFFFF);
+    }
+
     jpeg_mem_src (&info, fileData.data(), static_cast<unsigned long> (fileData.size()));
     jpeg_read_header (&info, TRUE);
 
@@ -95,21 +104,67 @@ JpegImageFormatReader::JpegImageFormatReader (InputStream* stream)
     height = static_cast<int> (info.image_height);
     pixelFormat = (info.num_components == 1) ? PixelFormat::Grayscale : PixelFormat::RGB;
 
-    if (info.density_unit == 1)
+    if (getOptions().parseMetadata || getOptions().parseRawChunks)
+        metadata = ImageMetadata::create();
+
+    if (getOptions().parseMetadata)
     {
-        dpiX = info.X_density;
-        dpiY = info.Y_density;
-    }
-    else if (info.density_unit == 2)
-    {
-        dpiX = info.X_density * 2.54;
-        dpiY = info.Y_density * 2.54;
+        if (info.density_unit == 1)
+        {
+            metadata->dpiX = info.X_density;
+            metadata->dpiY = info.Y_density;
+        }
+        else if (info.density_unit == 2)
+        {
+            metadata->dpiX = info.X_density * 2.54;
+            metadata->dpiY = info.Y_density * 2.54;
+        }
+
+        if (metadata->dpiX > 0.0)
+            metadata->textEntries.set ("dpiX", String (metadata->dpiX));
+        if (metadata->dpiY > 0.0)
+            metadata->textEntries.set ("dpiY", String (metadata->dpiY));
     }
 
-    if (dpiX > 0.0)
-        metadataValues.set ("dpiX", String (dpiX));
-    if (dpiY > 0.0)
-        metadataValues.set ("dpiY", String (dpiY));
+    // Extract markers for metadata
+    if (getOptions().parseRawChunks || getOptions().parseMetadata)
+    {
+        for (auto* marker = info.marker_list; marker != nullptr; marker = marker->next)
+        {
+            const auto* data = marker->data;
+            auto dataLength = marker->data_length;
+
+            if (marker->marker == JPEG_COM)
+            {
+                if (getOptions().parseRawChunks)
+                    metadata->rawChunks["jpeg/comment"] = MemoryBlock (data, dataLength);
+                if (getOptions().parseMetadata)
+                    metadata->textEntries.set ("Comment", String::createStringFromData (reinterpret_cast<const char*> (data), static_cast<int> (dataLength)));
+            }
+            else if (marker->marker == JPEG_APP0 + 1 && dataLength > 6
+                     && std::memcmp (data, "Exif\0\0", 6) == 0)
+            {
+                if (getOptions().parseRawChunks)
+                    metadata->rawChunks["jpeg/exif"] = MemoryBlock (data + 6, dataLength - 6);
+            }
+            else if (marker->marker == JPEG_APP0 + 1 && dataLength > 29
+                     && std::memcmp (data, "http://ns.adobe.com/xap/", 29) == 0)
+            {
+                if (getOptions().parseRawChunks)
+                    metadata->rawChunks["jpeg/xmp"] = MemoryBlock (data, dataLength);
+            }
+            else if (marker->marker == JPEG_APP0 + 2 && dataLength > 12
+                     && std::memcmp (data, "ICC_PROFILE\0", 12) == 0)
+            {
+                if (getOptions().parseRawChunks)
+                    metadata->rawChunks["jpeg/icc"] = MemoryBlock (data, dataLength);
+            }
+            else if (marker->marker == JPEG_APP0 && getOptions().parseRawChunks)
+            {
+                metadata->rawChunks["jpeg/jfif"] = MemoryBlock (data, dataLength);
+            }
+        }
+    }
 
     jpeg_destroy_decompress (&info);
 }
@@ -234,7 +289,50 @@ bool JpegImageFormatWriter::writeImage (const Image& image)
 
     jpeg_set_defaults (&info);
     jpeg_set_quality (&info, getQualityValue (qualityIndex), TRUE);
+
+    // Write DPI from metadata
+    if (auto meta = image.getMetadata())
+    {
+        if (meta->dpiX > 0.0)
+        {
+            info.density_unit = 1; // dots per inch
+            info.X_density = static_cast<UINT16> (meta->dpiX + 0.5);
+            info.Y_density = static_cast<UINT16> (meta->dpiY + 0.5);
+        }
+    }
+
     jpeg_start_compress (&info, TRUE);
+
+    // Write metadata markers
+    if (auto meta = image.getMetadata())
+    {
+        auto writeMarker = [&] (int marker, const void* data, unsigned int length)
+        {
+            jpeg_write_marker (&info, marker, static_cast<const JOCTET*> (data), length);
+        };
+
+        // EXIF (APP1)
+        if (auto* exif = meta->getRawChunk ("jpeg/exif"))
+        {
+            // Prepend "Exif\0\0" header
+            std::vector<uint8> exifData (6 + exif->getSize());
+            std::memcpy (exifData.data(), "Exif\0\0", 6);
+            std::memcpy (exifData.data() + 6, exif->getData(), exif->getSize());
+            writeMarker (JPEG_APP0 + 1, exifData.data(), static_cast<unsigned int> (exifData.size()));
+        }
+
+        // XMP (APP1)
+        if (auto* xmp = meta->getRawChunk ("jpeg/xmp"))
+            writeMarker (JPEG_APP0 + 1, xmp->getData(), static_cast<unsigned int> (xmp->getSize()));
+
+        // ICC (APP2)
+        if (auto* icc = meta->getRawChunk ("jpeg/icc"))
+            writeMarker (JPEG_APP0 + 2, icc->getData(), static_cast<unsigned int> (icc->getSize()));
+
+        // Comment
+        if (auto comment = meta->textEntries.getValue ("Comment", {}); comment.isNotEmpty())
+            writeMarker (JPEG_COM, comment.toRawUTF8(), static_cast<unsigned int> (comment.getNumBytesAsUTF8()));
+    }
 
     while (info.next_scanline < info.image_height)
     {
@@ -284,7 +382,7 @@ const String& JpegImageFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> JpegImageFormat::getFileExtensions (Mode /*mode*/) const
+StringArray JpegImageFormat::getFileExtensions (Mode /*mode*/) const
 {
     return { ".jpg", ".jpeg", ".jpe" };
 }
@@ -303,9 +401,9 @@ StringArray JpegImageFormat::getQualityOptions() const
     return { "Quality 95", "Quality 85", "Quality 75", "Quality 60" };
 }
 
-std::unique_ptr<ImageFormatReader> JpegImageFormat::createReaderFor (InputStream* sourceStream)
+std::unique_ptr<ImageFormatReader> JpegImageFormat::createReaderFor (InputStream* sourceStream, const ImageFormat::Options& options)
 {
-    return std::make_unique<JpegImageFormatReader> (sourceStream);
+    return std::make_unique<JpegImageFormatReader> (sourceStream, options);
 }
 
 std::unique_ptr<ImageFormatWriter> JpegImageFormat::createWriterFor (OutputStream* destStream,

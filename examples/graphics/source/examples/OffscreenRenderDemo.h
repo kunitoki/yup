@@ -77,7 +77,7 @@ public:
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
         bounds.removeFromTop (75.0f); // leave room for buttons and status label
 
-        if (offscreenImage.isValid() && offscreenImage.getTexture() != nullptr)
+        if (offscreenImage.isValid() && offscreenImage.getGpuTexture() != nullptr)
         {
             // GPU-direct path: the image holds a GPU texture; drawImage samples it without CPU upload.
             const auto imgW = static_cast<float> (offscreenImage.getWidth());

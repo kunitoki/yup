@@ -286,6 +286,17 @@ public:
     virtual void setBounds (const Rectangle<int>& newBounds) = 0;
 
     //==============================================================================
+    /** Gets the area of the window that is safe for interactive content.
+
+        On mobile devices this excludes areas covered by display cutouts (notch), the
+        status bar or rounded corners. On desktop platforms this usually matches the
+        full window bounds.
+
+        @return The safe area bounds, in window coordinates.
+    */
+    virtual Rectangle<int> getSafeAreaBounds() const = 0;
+
+    //==============================================================================
     /** Sets whether the window should be in fullscreen mode.
 
         @param shouldBeFullScreen True to make the window fullscreen, false to exit fullscreen.

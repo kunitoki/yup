@@ -28,6 +28,13 @@ ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& f
 {
 }
 
+ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_, const ImageFormat::Options& opts)
+    : input (sourceStream)
+    , formatName (formatName_)
+    , options (opts)
+{
+}
+
 Image ImageFormatReader::readFrame (int frameIndex)
 {
     if (frameIndex == 0)

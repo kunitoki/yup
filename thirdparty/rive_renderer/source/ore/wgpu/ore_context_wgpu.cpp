@@ -3,12 +3,14 @@
  */
 
 #include "rive/renderer/ore/ore_context_wgpu.hpp"
-#include "rive/renderer/ore/ore_buffer.hpp"
-#include "rive/renderer/ore/ore_texture.hpp"
-#include "rive/renderer/ore/ore_sampler.hpp"
-#include "rive/renderer/ore/ore_shader_module.hpp"
-#include "rive/renderer/ore/ore_pipeline.hpp"
-#include "rive/renderer/ore/ore_render_pass.hpp"
+#include "ore_buffer_wgpu.hpp"
+#include "ore_texture_wgpu.hpp"
+#include "ore_bind_group_wgpu.hpp"
+#include "ore_bind_group_layout_wgpu.hpp"
+#include "ore_sampler_wgpu.hpp"
+#include "ore_shader_module_wgpu.hpp"
+#include "ore_pipeline_wgpu.hpp"
+#include "ore_render_pass_wgpu.hpp"
 #include "rive/renderer/render_canvas.hpp"
 #include "rive/renderer/webgpu/render_context_webgpu_impl.hpp"
 #include "rive/rive_types.hpp"
@@ -384,20 +386,6 @@ static wgpu::VertexFormat oreVertexFormatToWGPU(VertexFormat fmt)
             return wgpu::VertexFormat::Float16x4;
         case VertexFormat::uint32:
             return wgpu::VertexFormat::Uint32;
-        case VertexFormat::uint32x2:
-            return wgpu::VertexFormat::Uint32x2;
-        case VertexFormat::uint32x3:
-            return wgpu::VertexFormat::Uint32x3;
-        case VertexFormat::uint32x4:
-            return wgpu::VertexFormat::Uint32x4;
-        case VertexFormat::sint32:
-            return wgpu::VertexFormat::Sint32;
-        case VertexFormat::sint32x2:
-            return wgpu::VertexFormat::Sint32x2;
-        case VertexFormat::sint32x3:
-            return wgpu::VertexFormat::Sint32x3;
-        case VertexFormat::sint32x4:
-            return wgpu::VertexFormat::Sint32x4;
     }
     RIVE_UNREACHABLE();
 }
@@ -411,23 +399,7 @@ static wgpu::VertexStepMode oreStepModeToWGPU(VertexStepMode mode)
 // ============================================================================
 // Shader compilation helpers
 // ============================================================================
-
-#ifdef RIVE_DAWN
-static wgpu::ShaderModule compileDawnWGSLShader(wgpu::Device device,
-                                                const char* source,
-                                                uint32_t codeSize)
-{
-    WGPUShaderSourceWGSL wgslDesc = WGPU_SHADER_SOURCE_WGSL_INIT;
-    wgslDesc.code.data = source;
-    wgslDesc.code.length = codeSize > 0 ? codeSize : WGPU_STRLEN;
-
-    WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-    descriptor.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgslDesc);
-
-    return wgpu::ShaderModule::Acquire(
-        wgpuDeviceCreateShaderModule(device.Get(), &descriptor));
-}
-#else
+#ifdef RIVE_WAGYU
 static wgpu::ShaderModule compileWagyuShader(wgpu::Device device,
                                              const char* source,
                                              uint32_t codeSize,
@@ -441,6 +413,21 @@ static wgpu::ShaderModule compileWagyuShader(wgpu::Device device,
 
     WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
     descriptor.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wagyuDesc);
+
+    return wgpu::ShaderModule::Acquire(
+        wgpuDeviceCreateShaderModule(device.Get(), &descriptor));
+}
+#else
+static wgpu::ShaderModule compileWGSLShader(wgpu::Device device,
+                                            const char* source,
+                                            uint32_t codeSize)
+{
+    WGPUShaderSourceWGSL wgslDesc = WGPU_SHADER_SOURCE_WGSL_INIT;
+    wgslDesc.code.data = source;
+    wgslDesc.code.length = codeSize > 0 ? codeSize : WGPU_STRLEN;
+
+    WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
+    descriptor.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgslDesc);
 
     return wgpu::ShaderModule::Acquire(
         wgpuDeviceCreateShaderModule(device.Get(), &descriptor));
@@ -492,26 +479,26 @@ std::unique_ptr<ContextWGPU> ContextWGPU::Make(wgpu::Device device,
     return ctx;
 }
 
-void ContextWGPU::beginFrame()
+void ContextWGPU::beginFrame(const FrameDescriptor& desc)
 {
-    // Release deferred BindGroups from last frame. By beginFrame() the
-    // caller has waited for the previous frame's GPU work to complete.
-    m_deferredBindGroups.clear();
-    m_wgpuExternalEncoder = false;
-
-    wgpu::CommandEncoderDescriptor encoderDesc{};
-    m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder(&encoderDesc);
-}
-
-void ContextWGPU::beginFrame(wgpu::CommandEncoder externalEncoder)
-{
-    assert(externalEncoder != nullptr);
-    // Same drain contract as owned-encoder mode: by the time we're called
-    // again for a new frame the host must have submitted/awaited the prior
-    // frame's work, so any BindGroups deferred at that point are GPU-idle.
-    m_deferredBindGroups.clear();
-    m_wgpuCommandEncoder = std::move(externalEncoder);
-    m_wgpuExternalEncoder = true;
+    if (desc.externalCommandBuffer != nullptr)
+    {
+        // External-encoder mode: record into the host's encoder; the host
+        // owns Finish()/Submit().
+        m_wgpuCommandEncoder = std::move(
+            *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));
+        m_ownsCommandEncoder = false;
+    }
+    else
+    {
+        // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame
+        // model): create our own encoder; endFrame() finishes and submits it,
+        // preserving the one-submit-per-frame-serial contract that
+        // BufferWGPU::acquireFreshBacking() relies on.
+        m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();
+        m_ownsCommandEncoder = true;
+    }
+    ++m_frameSerial;
 }
 
 void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.
@@ -519,16 +506,16 @@ void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.
 void ContextWGPU::endFrame()
 {
     assert(m_wgpuCommandEncoder != nullptr);
-    if (m_wgpuExternalEncoder)
+
+    if (m_ownsCommandEncoder)
     {
-        // Host owns Finish()/Submit() and the frame fence; just drop our
-        // reference to the shared encoder.
-        m_wgpuCommandEncoder = nullptr;
-        m_wgpuExternalEncoder = false;
-        return;
+        wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();
+        m_wgpuQueue.Submit(1, &commands);
+        m_ownsCommandEncoder = false;
     }
-    wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();
-    m_wgpuQueue.Submit(1, &commands);
+
+    // In external-encoder mode the host owns Finish()/Submit() and the frame
+    // fence; in both modes just drop our reference to the encoder.
     m_wgpuCommandEncoder = nullptr;
 }
 
@@ -538,8 +525,10 @@ void ContextWGPU::endFrame()
 
 rcp<Buffer> ContextWGPU::makeBuffer(const BufferDesc& desc)
 {
-    auto buffer = rcp<Buffer>(new Buffer(desc.size, desc.usage));
+    auto buffer = rcp<BufferWGPU>(new BufferWGPU(desc.size, desc.usage));
     buffer->m_wgpuQueue = m_wgpuQueue; // addref'd copy for WriteBuffer
+    buffer->m_wgpuDevice = m_wgpuDevice;
+    buffer->m_ctx = this;
 
     wgpu::BufferUsage usage = wgpu::BufferUsage::CopyDst;
     switch (desc.usage)
@@ -553,7 +542,11 @@ rcp<Buffer> ContextWGPU::makeBuffer(const BufferDesc& desc)
         case BufferUsage::uniform:
             usage |= wgpu::BufferUsage::Uniform;
             break;
+        case BufferUsage::upload:
+            usage |= wgpu::BufferUsage::MapWrite | wgpu::BufferUsage::CopySrc;
+            break;
     }
+    buffer->m_wgpuUsage = usage;
 
     wgpu::BufferDescriptor wDesc{};
     wDesc.label = desc.label;
@@ -561,11 +554,21 @@ rcp<Buffer> ContextWGPU::makeBuffer(const BufferDesc& desc)
     wDesc.usage = usage;
     wDesc.mappedAtCreation = false;
 
-    buffer->m_wgpuBuffer = m_wgpuDevice.CreateBuffer(&wDesc);
+    wgpu::Buffer wbuf = m_wgpuDevice.CreateBuffer(&wDesc);
+    if (wbuf == nullptr)
+        return nullptr; // Allocation failed.
+    buffer->m_pool.push_back({std::move(wbuf), 0});
 
+    // A buffer created with initial data seeds its CPU shadow now so a later
+    // partial update that orphans rewrites the fresh backing with real
+    // contents, not zeros. A buffer with no initial data allocates the shadow
+    // lazily on first update, so a never-updated buffer carries no extra host
+    // memory.
     if (desc.data != nullptr)
     {
-        m_wgpuQueue.WriteBuffer(buffer->m_wgpuBuffer, 0, desc.data, desc.size);
+        m_wgpuQueue.WriteBuffer(buffer->current(), 0, desc.data, desc.size);
+        const auto* bytes = static_cast<const uint8_t*>(desc.data);
+        buffer->m_shadow.assign(bytes, bytes + desc.size);
     }
 
     return buffer;
@@ -577,7 +580,7 @@ rcp<Buffer> ContextWGPU::makeBuffer(const BufferDesc& desc)
 
 rcp<Texture> ContextWGPU::makeTexture(const TextureDesc& desc)
 {
-    auto texture = rcp<Texture>(new Texture(desc));
+    auto texture = rcp<TextureWGPU>(new TextureWGPU(desc));
     texture->m_wgpuQueue = m_wgpuQueue;
 
     wgpu::TextureUsage usage =
@@ -605,11 +608,11 @@ rcp<Texture> ContextWGPU::makeTexture(const TextureDesc& desc)
 
 rcp<TextureView> ContextWGPU::makeTextureView(const TextureViewDesc& desc)
 {
-    Texture* tex = desc.texture;
+    auto tex = lite_rtti_cast<TextureWGPU*>(desc.texture);
     if (!tex)
         return nullptr;
 
-    auto view = rcp<TextureView>(new TextureView(ref_rcp(tex), desc));
+    auto view = rcp<TextureViewWGPU>(new TextureViewWGPU(ref_rcp(tex), desc));
 
     wgpu::TextureViewDescriptor wDesc{};
     wDesc.dimension = oreViewDimToWGPU(desc.dimension);
@@ -631,7 +634,7 @@ rcp<TextureView> ContextWGPU::makeTextureView(const TextureViewDesc& desc)
 
 rcp<Sampler> ContextWGPU::makeSampler(const SamplerDesc& desc)
 {
-    auto sampler = rcp<Sampler>(new Sampler());
+    auto sampler = rcp<SamplerWGPU>(new SamplerWGPU());
 
     wgpu::SamplerDescriptor wDesc{};
     wDesc.label = desc.label;
@@ -661,21 +664,14 @@ rcp<Sampler> ContextWGPU::makeSampler(const SamplerDesc& desc)
 
 rcp<ShaderModule> ContextWGPU::makeShaderModule(const ShaderModuleDesc& desc)
 {
-    auto module = rcp<ShaderModule>(new ShaderModule());
+    auto module = rcp<ShaderModuleWGPU>(new ShaderModuleWGPU());
 
     const char* source = static_cast<const char*>(desc.code);
     uint32_t codeSize = desc.codeSize > 0
                             ? desc.codeSize
                             : static_cast<uint32_t>(strlen(source));
 
-#ifdef RIVE_DAWN
-    assert(desc.language == ShaderLanguage::wgsl &&
-           "Dawn ore backend only supports WGSL shaders");
-    module->m_wgpuShaderModule =
-        compileDawnWGSLShader(m_wgpuDevice, source, codeSize);
-    assert(module->m_wgpuShaderModule != nullptr &&
-           "Ore Dawn WGSL shader compilation failed");
-#else
+#ifdef RIVE_WAGYU
     WGPUWagyuShaderLanguage language;
     if (desc.language == ShaderLanguage::wgsl)
     {
@@ -695,6 +691,13 @@ rcp<ShaderModule> ContextWGPU::makeShaderModule(const ShaderModuleDesc& desc)
 
     assert(module->m_wgpuShaderModule != nullptr &&
            "Ore WGPU wagyu shader compilation failed");
+#else
+    assert(desc.language == ShaderLanguage::wgsl &&
+           "Dawn/emdawn ore backend only supports WGSL shaders");
+    module->m_wgpuShaderModule =
+        compileWGSLShader(m_wgpuDevice, source, codeSize);
+    assert(module->m_wgpuShaderModule != nullptr &&
+           "Ore Dawn WGSL shader compilation failed");
 #endif
 
     module->applyBindingMapFromDesc(desc);
@@ -708,7 +711,7 @@ rcp<ShaderModule> ContextWGPU::makeShaderModule(const ShaderModuleDesc& desc)
 rcp<Pipeline> ContextWGPU::makePipeline(const PipelineDesc& desc,
                                         std::string* outError)
 {
-    auto pipeline = rcp<Pipeline>(new Pipeline(desc));
+    auto pipeline = rcp<PipelineWGPU>(new PipelineWGPU(desc));
 
     // --- Vertex state ---
     // Flatten attribute arrays per buffer slot.
@@ -743,7 +746,9 @@ rcp<Pipeline> ContextWGPU::makePipeline(const PipelineDesc& desc,
     }
 
     wgpu::VertexState vertexState{};
-    vertexState.module = desc.vertexModule->m_wgpuShaderModule;
+    auto vertexModule = lite_rtti_cast<ShaderModuleWGPU*>(desc.vertexModule);
+    assert(vertexModule != nullptr);
+    vertexState.module = vertexModule->m_wgpuShaderModule;
     vertexState.entryPoint = desc.vertexEntryPoint;
     vertexState.bufferCount = desc.vertexBufferCount;
     vertexState.buffers = wBuffers;
@@ -852,7 +857,10 @@ rcp<Pipeline> ContextWGPU::makePipeline(const PipelineDesc& desc,
     wgpu::FragmentState fragmentState{};
     if (desc.fragmentModule != nullptr)
     {
-        fragmentState.module = desc.fragmentModule->m_wgpuShaderModule;
+        auto fragmentModule =
+            lite_rtti_cast<ShaderModuleWGPU*>(desc.fragmentModule);
+        assert(fragmentModule != nullptr);
+        fragmentState.module = fragmentModule->m_wgpuShaderModule;
         fragmentState.entryPoint = desc.fragmentEntryPoint;
         fragmentState.targetCount = desc.colorCount;
         fragmentState.targets = colorTargets;
@@ -886,8 +894,12 @@ rcp<Pipeline> ContextWGPU::makePipeline(const PipelineDesc& desc,
     for (uint32_t g = 0; g < desc.bindGroupLayoutCount && g < kWGPUMaxGroups;
          ++g)
     {
-        if (desc.bindGroupLayouts[g] != nullptr)
-            rawBGLs[g] = desc.bindGroupLayouts[g]->m_wgpuBGL;
+        if (auto bindGroupLayouts =
+                lite_rtti_cast<BindGroupLayoutWGPU*>(desc.bindGroupLayouts[g]);
+            bindGroupLayouts != nullptr)
+        {
+            rawBGLs[g] = bindGroupLayouts->m_wgpuBGL;
+        }
     }
     wgpu::PipelineLayoutDescriptor plDesc{};
     plDesc.label = desc.label ? desc.label : "";
@@ -932,7 +944,7 @@ rcp<BindGroupLayout> ContextWGPU::makeBindGroupLayout(
                      kMaxBindGroups);
         return nullptr;
     }
-    auto layout = rcp<BindGroupLayout>(new BindGroupLayout());
+    auto layout = rcp<BindGroupLayoutWGPU>(new BindGroupLayoutWGPU());
     layout->m_context = this;
     layout->m_groupIndex = desc.groupIndex;
     layout->m_entries.reserve(desc.entryCount);
@@ -961,7 +973,8 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return nullptr;
     }
-    BindGroupLayout* layout = desc.layout;
+    auto layout = lite_rtti_cast<BindGroupLayoutWGPU*>(desc.layout);
+    assert(layout != nullptr);
     if (layout->groupIndex() >= kMaxBindGroups)
     {
         setLastError("makeBindGroup: layout->groupIndex %u out of range [0, "
@@ -971,7 +984,7 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         return nullptr;
     }
 
-    auto bg = rcp<BindGroup>(new BindGroup());
+    auto bg = rcp<BindGroupWGPU>(new BindGroupWGPU());
     bg->m_context = this;
     bg->m_layoutRef = ref_rcp(layout);
 
@@ -1014,23 +1027,24 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         return true;
     };
 
-    uint32_t totalCapacity =
-        desc.uboCount + desc.textureCount + desc.samplerCount;
-    std::vector<wgpu::BindGroupEntry> entries(totalCapacity);
-    uint32_t idx = 0;
+    // Capture a replayable recipe instead of building the bind group inline,
+    // so it can be rebuilt against a UBO's fresh backing after an orphan.
+    bg->m_wgpuBGL = layout->m_wgpuBGL;
+    bg->m_label = desc.label ? desc.label : "";
 
     for (uint32_t i = 0; i < desc.uboCount; ++i)
     {
         const auto& ubo = desc.ubos[i];
         if (!checkLayout(ubo.slot, BindingKind::uniformBuffer))
             continue;
-        wgpu::BindGroupEntry& e = entries[idx++];
-        e = {};
-        e.binding = ubo.slot;
-        e.buffer = ubo.buffer->m_wgpuBuffer;
-        e.offset = ubo.offset;
-        e.size = (ubo.size > 0) ? ubo.size : ubo.buffer->size();
-        bg->m_retainedBuffers.push_back(ref_rcp(ubo.buffer));
+        auto buffer = lite_rtti_cast<BufferWGPU*>(ubo.buffer);
+        assert(buffer != nullptr);
+        bg->m_uboEntries.push_back(
+            {buffer,
+             ubo.slot,
+             ubo.offset,
+             (ubo.size > 0) ? ubo.size : buffer->size()});
+        bg->m_retainedBuffers.push_back(ref_rcp(buffer));
     }
 
     for (uint32_t i = 0; i < desc.textureCount; ++i)
@@ -1038,11 +1052,10 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         const auto& tex = desc.textures[i];
         if (!checkLayout(tex.slot, BindingKind::sampledTexture))
             continue;
-        wgpu::BindGroupEntry& e = entries[idx++];
-        e = {};
-        e.binding = tex.slot;
-        e.textureView = tex.view->m_wgpuTextureView;
-        bg->m_retainedViews.push_back(ref_rcp(tex.view));
+        auto view = lite_rtti_cast<TextureViewWGPU*>(tex.view);
+        assert(view != nullptr);
+        bg->m_texEntries.push_back({tex.slot, view->m_wgpuTextureView});
+        bg->m_retainedViews.push_back(ref_rcp(view));
     }
 
     for (uint32_t i = 0; i < desc.samplerCount; ++i)
@@ -1050,21 +1063,14 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
         const auto& samp = desc.samplers[i];
         if (!checkLayout(samp.slot, BindingKind::sampler))
             continue;
-        wgpu::BindGroupEntry& e = entries[idx++];
-        e = {};
-        e.binding = samp.slot;
-        e.sampler = samp.sampler->m_wgpuSampler;
-        bg->m_retainedSamplers.push_back(ref_rcp(samp.sampler));
+        auto sampler = lite_rtti_cast<SamplerWGPU*>(samp.sampler);
+        assert(sampler != nullptr);
+        bg->m_sampEntries.push_back({samp.slot, sampler->m_wgpuSampler});
+        bg->m_retainedSamplers.push_back(ref_rcp(sampler));
     }
 
-    wgpu::BindGroupDescriptor bgDesc{};
-    bgDesc.label = desc.label;
-    bgDesc.layout = layout->m_wgpuBGL;
-    bgDesc.entryCount = idx;
-    bgDesc.entries = (idx > 0) ? entries.data() : nullptr;
-
-    bg->m_wgpuBindGroup = m_wgpuDevice.CreateBindGroup(&bgDesc);
-    if (bg->m_wgpuBindGroup == nullptr)
+    // Build the initial bind group against the current backings.
+    if (bg->resolveBindGroup() == nullptr)
         return nullptr;
 
     return bg;
@@ -1074,18 +1080,19 @@ rcp<BindGroup> ContextWGPU::makeBindGroup(const BindGroupDesc& desc)
 // beginRenderPass
 // ============================================================================
 
-RenderPass ContextWGPU::beginRenderPass(const RenderPassDesc& desc,
-                                        std::string* outError)
+std::unique_ptr<RenderPass> ContextWGPU::beginRenderPass(
+    const RenderPassDesc& desc,
+    std::string* outError)
 {
     finishActiveRenderPass();
 
     assert(m_wgpuCommandEncoder != nullptr &&
            "beginFrame must be called before beginRenderPass");
 
-    RenderPass pass;
-    pass.m_context = this;
-    pass.m_wgpuContext = this;
-    pass.populateAttachmentMetadata(desc);
+    std::unique_ptr<RenderPassWGPU> pass = std::make_unique<RenderPassWGPU>();
+    pass->m_context = this;
+    pass->m_wgpuContext = this;
+    pass->populateAttachmentMetadata(desc);
 
     // Color attachments.
     wgpu::RenderPassColorAttachment colorAttachments[4];
@@ -1093,9 +1100,15 @@ RenderPass ContextWGPU::beginRenderPass(const RenderPassDesc& desc,
     {
         const auto& ca = desc.colorAttachments[i];
         wgpu::RenderPassColorAttachment& wca = colorAttachments[i];
-        wca.view = ca.view ? ca.view->m_wgpuTextureView : nullptr;
-        wca.resolveTarget =
-            ca.resolveTarget ? ca.resolveTarget->m_wgpuTextureView : nullptr;
+        if (auto view = lite_rtti_cast<TextureViewWGPU*>(ca.view))
+        {
+            wca.view = view->m_wgpuTextureView;
+        }
+        if (auto resolveTarget =
+                lite_rtti_cast<TextureViewWGPU*>(ca.resolveTarget))
+        {
+            wca.resolveTarget = resolveTarget->m_wgpuTextureView;
+        }
         wca.loadOp = (ca.loadOp == LoadOp::clear) ? wgpu::LoadOp::Clear
                                                   : wgpu::LoadOp::Load;
         wca.storeOp = (ca.storeOp == StoreOp::store) ? wgpu::StoreOp::Store
@@ -1112,7 +1125,9 @@ RenderPass ContextWGPU::beginRenderPass(const RenderPassDesc& desc,
     if (desc.depthStencil.view)
     {
         const auto& ds = desc.depthStencil;
-        depthStencilAttachment.view = ds.view->m_wgpuTextureView;
+        auto view = lite_rtti_cast<TextureViewWGPU*>(ds.view);
+        assert(view != nullptr);
+        depthStencilAttachment.view = view->m_wgpuTextureView;
         depthStencilAttachment.depthLoadOp = (ds.depthLoadOp == LoadOp::clear)
                                                  ? wgpu::LoadOp::Clear
                                                  : wgpu::LoadOp::Load;
@@ -1149,7 +1164,7 @@ RenderPass ContextWGPU::beginRenderPass(const RenderPassDesc& desc,
     passDesc.colorAttachments = colorAttachments;
     passDesc.depthStencilAttachment = pDepthStencil;
 
-    pass.m_wgpuPassEncoder = m_wgpuCommandEncoder.BeginRenderPass(&passDesc);
+    pass->m_wgpuPassEncoder = m_wgpuCommandEncoder.BeginRenderPass(&passDesc);
 
     return pass;
 }
@@ -1195,7 +1210,7 @@ rcp<TextureView> ContextWGPU::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     texDesc.sampleCount = 1;
 
     // Borrow the WebGPU texture — the RenderCanvas owns it.
-    auto texture = rcp<Texture>(new Texture(texDesc));
+    auto texture = rcp<TextureWGPU>(new TextureWGPU(texDesc));
     texture->m_wgpuTexture = wgpuTarget->targetTexture();
 
     TextureViewDesc viewDesc{};
@@ -1206,7 +1221,8 @@ rcp<TextureView> ContextWGPU::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     viewDesc.baseLayer = 0;
     viewDesc.layerCount = 1;
 
-    auto view = rcp<TextureView>(new TextureView(std::move(texture), viewDesc));
+    auto view =
+        rcp<TextureViewWGPU>(new TextureViewWGPU(std::move(texture), viewDesc));
     view->m_wgpuTextureView = wgpuTarget->targetTextureView();
 
     return view;
@@ -1227,7 +1243,8 @@ rcp<TextureView> ContextWGPU::wrapRiveTexture(gpu::Texture* gpuTex,
     // Acquire takes ownership (will release on destruction). Since we're
     // borrowing, AddRef/Reference first so the original owner's ref is
     // preserved. Use the same version guard as the rest of the codebase.
-#if (defined(RIVE_WEBGPU) && RIVE_WEBGPU > 1) || defined(RIVE_DAWN)
+#if (defined(RIVE_WEBGPU) && RIVE_WEBGPU > 1) ||                               \
+    (defined(RIVE_DAWN) && !defined(RIVE_WAGYU))
     wgpuTextureAddRef(rawTex);
 #else
     wgpuTextureReference(rawTex);
@@ -1243,7 +1260,7 @@ rcp<TextureView> ContextWGPU::wrapRiveTexture(gpu::Texture* gpuTex,
     texDesc.numMipmaps = 1;
     texDesc.sampleCount = 1;
 
-    auto texture = rcp<Texture>(new Texture(texDesc));
+    auto texture = rcp<TextureWGPU>(new TextureWGPU(texDesc));
     texture->m_wgpuTexture = wgpuTex; // Borrow.
 
     TextureViewDesc viewDesc{};
@@ -1254,7 +1271,8 @@ rcp<TextureView> ContextWGPU::wrapRiveTexture(gpu::Texture* gpuTex,
     viewDesc.baseLayer = 0;
     viewDesc.layerCount = 1;
 
-    auto view = rcp<TextureView>(new TextureView(std::move(texture), viewDesc));
+    auto view =
+        rcp<TextureViewWGPU>(new TextureViewWGPU(std::move(texture), viewDesc));
     // Create a wgpu::TextureView for sampling.
     wgpu::TextureViewDescriptor tvd{};
     tvd.format = wgpu::TextureFormat::RGBA8Unorm;

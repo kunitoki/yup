@@ -7,7 +7,7 @@
 #include "rive/renderer/ore/ore_context.hpp"
 
 #include <webgpu/webgpu_cpp.h>
-#ifndef RIVE_DAWN
+#ifdef RIVE_WAGYU
 #include <webgpu/webgpu_wagyu.h>
 #endif
 
@@ -36,10 +36,11 @@ public:
                                std::string* outError = nullptr) override;
     rcp<BindGroup> makeBindGroup(const BindGroupDesc& desc) override;
 
-    RenderPass beginRenderPass(const RenderPassDesc& desc,
-                               std::string* outError = nullptr) override;
+    std::unique_ptr<RenderPass> beginRenderPass(
+        const RenderPassDesc& desc,
+        std::string* outError = nullptr) override;
 
-    void beginFrame() override;
+    void beginFrame(const FrameDescriptor&) override;
     void endFrame() override;
     void waitForGPU() override;
 
@@ -47,6 +48,8 @@ public:
     rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                      uint32_t width,
                                      uint32_t height) override;
+
+    ShaderTarget shaderTarget() const override { return ShaderTarget::wgsl; }
 
     // External-encoder mode: Ore records into the host's wgpu::CommandEncoder
     // (already created by the caller) instead of owning its own. The host
@@ -65,15 +68,21 @@ public:
     // Use this to select between GLES and Vulkan GLSL shader source.
     bool isGLES() const { return m_wgpuBackend == WGPUBackend::OpenGLES; }
 
+    // Monotonic frame serial for buffer versioning. A backing bound this frame
+    // is not reused until a later frame, when its WriteBuffer is ordered after
+    // this frame's submit. The host does not thread frame numbers to the wgpu
+    // backend, so the context owns the serial.
+    uint64_t currentFrameSerial() const { return m_frameSerial; }
+
     ContextWGPU(const ContextWGPU&) = delete;
     ContextWGPU& operator=(const ContextWGPU&) = delete;
 
 private:
-    friend class RenderPass;
-    friend class BindGroup;
-    friend class Texture;
+    friend class RenderPassWGPU;
+    friend class BindGroupWGPU;
+    friend class TextureWGPU;
 
-    ContextWGPU() = default;
+    ContextWGPU() : Context(nullptr) {}
 
     enum class WGPUBackend
     {
@@ -84,9 +93,8 @@ private:
     wgpu::Device m_wgpuDevice;
     wgpu::Queue m_wgpuQueue;
     wgpu::CommandEncoder m_wgpuCommandEncoder;
-    // True while the current frame is recording into a host-provided encoder.
-    // endFrame() skips Finish()/Submit() when set.
-    bool m_wgpuExternalEncoder = false;
+    bool m_ownsCommandEncoder = false;
+    uint64_t m_frameSerial = 0;
 };
 
 } // namespace rive::ore

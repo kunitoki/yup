@@ -40,6 +40,7 @@ class ScrollPhysics;
 class ViewModelRuntime;
 class BindableArtboard;
 class ScriptingVM;
+class ScriptedInterpolator;
 
 ///
 /// Tracks the success/failure result when importing a Rive file.
@@ -80,7 +81,9 @@ public:
     /// Major version number supported by the runtime.
     static const int majorVersion = 7;
     /// Minor version number supported by the runtime.
-    static const int minorVersion = 0;
+    /// 7.2: images in a layout apply their fit as a separate scale, leaving
+    /// the user-facing scaleX/scaleY free to be edited/animated on top.
+    static const int minorVersion = 2;
     /// deterministicMode sets a static seed for randomization and uses
     /// timestamps for scrolling.
     static bool deterministicMode;
@@ -98,6 +101,9 @@ public:
     /// @param result is an optional status result.
     /// @param assetLoader is an optional helper to load assets which
     /// cannot be found in-band.
+    /// @param vm is an optional ScriptingVM that should be made per file. This
+    /// is the environment that any script instances in the file will be
+    /// created in.
     /// @returns a pointer to the file, or null on failure.
     static rcp<File> import(Span<const uint8_t> data,
                             Factory* factory,
@@ -267,6 +273,7 @@ private:
     std::vector<DataConverter*> m_DataConverters;
 
     std::vector<KeyFrameInterpolator*> m_keyframeInterpolators;
+    std::vector<ScriptedInterpolator*> m_scriptedInterpolators;
     std::vector<ScrollPhysics*> m_scrollPhysics;
 
     /// List of artboards in the file. Each artboard encapsulates a set of

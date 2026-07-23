@@ -51,6 +51,7 @@
     license:            ISC
 
     dependencies:       zlib
+    optionalDeps:       sqlite3_library yup_events
     macFrameworks:      Cocoa Foundation IOKit Security
     iosFrameworks:      Foundation UIKit
     iosSimFrameworks:   Foundation UIKit
@@ -144,7 +145,11 @@
     If you disable this then https/ssl support will not be available on Linux.
 */
 #ifndef YUP_USE_CURL
+#if __has_include(<curl/curl.h>)
 #define YUP_USE_CURL 1
+#else
+#define YUP_USE_CURL 0
+#endif
 #endif
 
 /** Config: YUP_LOAD_CURL_SYMBOLS_LAZILY
@@ -286,6 +291,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "maths/yup_NormalisableRange.h"
 #include "maths/yup_StatisticsAccumulator.h"
 #include "containers/yup_ElementComparator.h"
+#include "containers/yup_TypeErasedObject.h"
 #include "containers/yup_ArrayAllocationBase.h"
 #include "containers/yup_ArrayBase.h"
 #include "containers/yup_Array.h"
@@ -345,6 +351,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "logging/yup_FileLogger.h"
 #include "javascript/yup_JSONUtils.h"
 #include "serialisation/yup_Serialisation.h"
+#include "serialisation/yup_BinaryArchive.h"
 #include "javascript/yup_JSONSerialisation.h"
 #include "javascript/yup_Javascript.h"
 #include "maths/yup_BigInteger.h"

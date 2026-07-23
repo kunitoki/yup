@@ -33,7 +33,10 @@
     license:              ISC
 
     dependencies:         yup_events yup_data_model yup_graphics rive
+    optionalDeps:         yup_audio_gui
     appleFrameworks:      Metal
+    iosFrameworks:        CoreMotion
+    iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
 
@@ -132,9 +135,11 @@
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
+#include "effects/yup_ComponentEffect.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
+#include "component/yup_DragAndDropData.h"
 #include "component/yup_Component.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"

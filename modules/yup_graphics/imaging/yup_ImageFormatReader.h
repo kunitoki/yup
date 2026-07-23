@@ -45,6 +45,9 @@ public:
     /** Returns the descriptive name of the format this reader handles. */
     const String& getFormatName() const noexcept { return formatName; }
 
+    /** Returns the options this reader was constructed with. */
+    const ImageFormat::Options& getOptions() const noexcept { return options; }
+
     /** Decodes and returns the complete image from the input stream.
         @returns The decoded Image, or an invalid Image on failure.
     */
@@ -65,7 +68,7 @@ public:
         when dimensions and pixel format match (zero allocation on reuse).
 
         If dest already has the correct width, height, and PixelFormat::RGBA,
-        the implementation writes directly into dest's raw data — no allocation.
+        the implementation writes directly into dest's raw data - no allocation.
         If dest has wrong dimensions or format, it is reallocated first.
 
         The default implementation calls readFrame(frameIndex) and moves the result
@@ -115,26 +118,23 @@ public:
     /** The pixel format of the decoded image. */
     PixelFormat pixelFormat = PixelFormat::RGBA;
 
-    /** Horizontal DPI extracted from the image file (0.0 if not present). */
-    double dpiX = 0.0;
-
-    /** Vertical DPI extracted from the image file (0.0 if not present). */
-    double dpiY = 0.0;
-
-    /** Metadata key-value pairs extracted from the image file.
-        Standard keys: "dpiX", "dpiY", "colorSpace", "title", "software", "comment".
-    */
-    StringPairArray metadataValues;
-
     /** The input stream, for use by subclasses. */
     std::unique_ptr<InputStream> input;
+
+    /** Metadata extracted from the image file (nullptr if no metadata was requested or found). */
+    ImageMetadata::Ptr metadata;
 
 protected:
     /** Creates an ImageFormatReader and takes ownership of the source stream. */
     ImageFormatReader (InputStream* sourceStream, const String& formatName);
 
+    /** Creates an ImageFormatReader with options. */
+    ImageFormatReader (InputStream* sourceStream, const String& formatName, const ImageFormat::Options& opts);
+
 private:
     String formatName;
+
+    ImageFormat::Options options;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ImageFormatReader)
 };

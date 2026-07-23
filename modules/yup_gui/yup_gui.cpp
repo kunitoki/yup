@@ -49,9 +49,12 @@
 
 //==============================================================================
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
-#include <SDL2/SDL_main.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_system.h>
+#include <SDL3/SDL_video.h>
+#define SDL_MAIN_HANDLED
+#include <SDL3/SDL_main.h>
 
 //==============================================================================
 
@@ -137,6 +140,7 @@
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
+#include "component/yup_DragAndDropData.cpp"
 #include "component/yup_Component.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"
@@ -157,11 +161,16 @@
 #include "windowing/yup_DocumentWindow.cpp"
 #include "dialogs/yup_FileChooser.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
+
+//==============================================================================
+
 #include "themes/theme_v1/yup_ThemeVersion1.cpp"
 #include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
 
 //==============================================================================
 
-#include "native/yup_WindowingUtilities_sdl2.cpp"
-#include "native/yup_Windowing_sdl2.h"
-#include "native/yup_Windowing_sdl2.cpp"
+#include "native/yup_WindowingUtilities_sdl.cpp"
+#include "native/yup_Windowing_sdl.h"
+#include "native/yup_Windowing_sdl.cpp"
+#include "native/yup_Desktop_sdl.cpp"
+#include "native/yup_Initialisation_sdl.cpp"

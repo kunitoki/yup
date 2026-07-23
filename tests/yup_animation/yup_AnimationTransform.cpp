@@ -148,6 +148,50 @@ TEST_F (AnimationTransformTests, SpatialPositionUsesExplicitEndValue)
     EXPECT_NEAR (t.positionAt (10.0f).getX(), 100.0f, 0.001f);
 }
 
+TEST_F (AnimationTransformTests, SpatialPositionFollowsCircularArc)
+{
+    // Quarter circle of radius 100 centred at the origin: top (0,-100) -> right (100,0).
+    // Both spatial tangents (ti/to) belong to the segment's starting keyframe.
+    constexpr float radius = 100.0f;
+    constexpr float handle = 55.2284749f; // radius * 4/3 * tan(pi/8)
+
+    AnimationTransform t;
+    t.spatialKeyframes.push_back ({ 0.0f,
+                                    Point<float> (0.0f, -radius),
+                                    Point<float> (radius, 0.0f),
+                                    Point<float> (0.0f, -handle), // tangentIn
+                                    Point<float> (handle, 0.0f),  // tangentOut
+                                    AnimationEasing::linear() });
+    t.spatialKeyframes.push_back ({ 30.0f,
+                                    Point<float> (radius, 0.0f),
+                                    std::nullopt,
+                                    Point<float> {},
+                                    Point<float> {},
+                                    AnimationEasing::linear() });
+
+    // Every point along the motion path must stay on the circle (distance == radius).
+    for (float frame : { 5.0f, 10.0f, 15.0f, 20.0f, 25.0f })
+    {
+        const auto p = t.positionAt (frame);
+        const float dist = std::sqrt (p.getX() * p.getX() + p.getY() * p.getY());
+        EXPECT_NEAR (dist, radius, 0.5f);
+    }
+}
+
+TEST_F (AnimationTransformTests, AutoOrientAlignsWithMotionPath)
+{
+    AnimationTransform t;
+    t.autoOrient = true;
+    t.position = Vec2Property::Builder {}
+                     .keyframe (0.0f, Point<float> (0.0f, 0.0f), AnimationEasing::linear())
+                     .keyframe (10.0f, Point<float> (0.0f, 100.0f), AnimationEasing::linear())
+                     .build();
+
+    const auto transformed = Point<float> (1.0f, 0.0f).transformed (t.toAffineTransform (5.0f));
+    EXPECT_NEAR (transformed.getX(), 0.0f, 0.01f);
+    EXPECT_NEAR (transformed.getY(), 51.0f, 0.01f);
+}
+
 // =============================================================================
 // Rotation
 // =============================================================================

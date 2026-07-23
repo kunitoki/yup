@@ -95,6 +95,7 @@ private:
     float cx1 = 0.0f, cy1 = 0.0f;
     float cx2 = 1.0f, cy2 = 1.0f;
     bool holdFrame = false;
+    bool linearCached = true;
 
     static constexpr int kTableSize = 11;
     mutable float sampleTable[kTableSize] = {};

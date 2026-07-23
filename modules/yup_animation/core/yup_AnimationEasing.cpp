@@ -29,6 +29,9 @@ AnimationEasing::AnimationEasing (float x1, float y1, float x2, float y2) noexce
     , cx2 (x2)
     , cy2 (y2)
 {
+    linearCached = ! holdFrame
+                && std::abs (cx1 - cy1) < 1e-5f
+                && std::abs (cx2 - cy2) < 1e-5f;
 }
 
 //==============================================================================
@@ -40,7 +43,7 @@ float AnimationEasing::evaluate (float t) const noexcept
     if (t >= 1.0f)
         return 1.0f;
 
-    if (isLinear())
+    if (linearCached)
         return t;
 
     if (tableDirty)
@@ -74,6 +77,7 @@ AnimationEasing AnimationEasing::hold() noexcept
 {
     AnimationEasing e;
     e.holdFrame = true;
+    e.linearCached = false;
     return e;
 }
 
@@ -99,7 +103,7 @@ bool AnimationEasing::operator!= (const AnimationEasing& o) const noexcept
 }
 
 //==============================================================================
-// Private helpers — cubic bezier evaluation matching CSS/rlottie VInterpolator
+// Private helpers - cubic bezier evaluation matching CSS/rlottie VInterpolator
 
 float AnimationEasing::calcBezier (float t, float a1, float a2) noexcept
 {
@@ -125,17 +129,14 @@ void AnimationEasing::buildTable() const noexcept
 
 float AnimationEasing::getTForX (float x) const noexcept
 {
-    // Linear guess from sample table
+    // Direct index lookup instead of linear scan
     const float step = 1.0f / static_cast<float> (kTableSize - 1);
-    int guess = 0;
-    for (int i = 1; i < kTableSize; ++i)
-    {
-        if (sampleTable[i] >= x)
-        {
-            guess = i - 1;
-            break;
-        }
-    }
+    int guess = static_cast<int> (x * static_cast<float> (kTableSize - 1));
+    guess = jlimit (0, kTableSize - 2, guess);
+    while (guess > 0 && sampleTable[guess] > x)
+        --guess;
+    while (guess < kTableSize - 2 && sampleTable[guess + 1] < x)
+        ++guess;
 
     const float startT = static_cast<float> (guess) * step;
     const float dist = (x - sampleTable[guess]) / (sampleTable[guess + 1] - sampleTable[guess]);

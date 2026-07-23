@@ -60,7 +60,7 @@ static void skipWhitespaceAndComments (InputStream& stream)
         }
         else
         {
-            // Not whitespace / comment — push back by seeking one byte back.
+            // Not whitespace / comment - push back by seeking one byte back.
             stream.setPosition (stream.getPosition() - 1);
             return;
         }
@@ -92,7 +92,7 @@ static int readAsciiInt (InputStream& stream)
         }
         else
         {
-            // End of number — put the non-digit character back.
+            // End of number - put the non-digit character back.
             stream.setPosition (stream.getPosition() - 1);
             break;
         }
@@ -116,8 +116,8 @@ static uint8 normalise (int sample, int maxval)
 // PpmImageFormatReader
 //==============================================================================
 
-PpmImageFormatReader::PpmImageFormatReader (InputStream* stream)
-    : ImageFormatReader (stream, "PPM/PGM/PBM Image")
+PpmImageFormatReader::PpmImageFormatReader (InputStream* stream, const ImageFormat::Options& options)
+    : ImageFormatReader (stream, "PPM/PGM/PBM Image", options)
 {
     if (input == nullptr)
         return;
@@ -191,7 +191,7 @@ Image PpmImageFormatReader::readImage()
     switch (magic)
     {
         //----------------------------------------------------------------------
-        case 1: // ASCII bitmap — '0' = white (255), '1' = black (0)
+        case 1: // ASCII bitmap - '0' = white (255), '1' = black (0)
         {
             for (int y = 0; y < height; ++y)
             {
@@ -253,7 +253,7 @@ Image PpmImageFormatReader::readImage()
         }
 
         //----------------------------------------------------------------------
-        case 4: // Binary bitmap — each row is packed into ceil(width/8) bytes
+        case 4: // Binary bitmap - each row is packed into ceil(width/8) bytes
         {
             const int rowBytes = (width + 7) / 8;
 
@@ -442,7 +442,7 @@ const String& PpmImageFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> PpmImageFormat::getFileExtensions (Mode /*mode*/) const
+StringArray PpmImageFormat::getFileExtensions (Mode /*mode*/) const
 {
     return { ".ppm", ".pgm", ".pbm" };
 }
@@ -455,9 +455,9 @@ bool PpmImageFormat::canHandleStream (InputStream& stream, Mode /*mode*/) const
     return sig[0] == 'P' && sig[1] >= '1' && sig[1] <= '6';
 }
 
-std::unique_ptr<ImageFormatReader> PpmImageFormat::createReaderFor (InputStream* sourceStream)
+std::unique_ptr<ImageFormatReader> PpmImageFormat::createReaderFor (InputStream* sourceStream, const ImageFormat::Options& options)
 {
-    return std::make_unique<PpmImageFormatReader> (sourceStream);
+    return std::make_unique<PpmImageFormatReader> (sourceStream, options);
 }
 
 std::unique_ptr<ImageFormatWriter> PpmImageFormat::createWriterFor (OutputStream* destStream,

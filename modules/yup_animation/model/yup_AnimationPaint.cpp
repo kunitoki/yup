@@ -113,9 +113,11 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
                 return parseStopsFromFlatArray (k0.values, numColorPoints);
 
             const float t = (fn - k0.frame) / span;
+            const size_t commonSize = jmin (k0.values.size(), k1.values.size());
+
             std::vector<float> interpolated;
-            interpolated.resize (k0.values.size());
-            for (size_t i = 0; i < k0.values.size(); ++i)
+            interpolated.resize (commonSize);
+            for (size_t i = 0; i < commonSize; ++i)
                 interpolated[i] = k0.values[i] + (k1.values[i] - k0.values[i]) * t;
 
             return parseStopsFromFlatArray (interpolated, numColorPoints);
@@ -123,8 +125,10 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
 
         // Static stops
         std::vector<std::pair<float, Color>> stops;
+        stops.reserve (colorStops.size());
         for (const auto& cs : colorStops)
             stops.push_back ({ cs.position.getValueAt (fn), cs.color.getValueAt (fn) });
+
         return stops;
     };
 
@@ -133,7 +137,7 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
     if (stops.empty())
         return ColorGradient (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
 
-    // Radial gradient highlight (focal point) — adjusts the center point along the
+    // Radial gradient highlight (focal point) - adjusts the center point along the
     // start→end axis by highlightLength ratio, rotated by highlightAngle.
     Point<float> gradStart = start;
     if (gradientType == GradientType::Radial)
@@ -200,6 +204,48 @@ float StrokePaint::widthAt (float frameNo) const
 StrokeType StrokePaint::strokeTypeAt (float frameNo) const
 {
     return StrokeType (widthAt (frameNo), join, cap);
+}
+
+bool StrokePaint::isDashArrayStatic() const noexcept
+{
+    for (const auto& d : dashArray)
+        if (d.value.isAnimated())
+            return false;
+    return true;
+}
+
+StrokePaint::CachedDash StrokePaint::resolveDash (float frameNo) const
+{
+    if (isDashArrayStatic() && cachedDash.has_value())
+        return *cachedDash;
+
+    std::vector<float> dashValues;
+    for (const auto& d : dashArray)
+        dashValues.push_back (d.value.getValueAt (frameNo));
+
+    float dashOffset = 0.0f;
+    if (dashValues.size() > 1)
+    {
+        if ((dashValues.size() % 2) == 0)
+        {
+            dashOffset = dashValues.back();
+            const float lastDash = dashValues[dashValues.size() - 2];
+            dashValues.back() = lastDash;
+            dashValues.push_back (dashOffset);
+        }
+        else
+        {
+            dashOffset = dashValues.back();
+            dashValues.pop_back();
+        }
+    }
+
+    CachedDash result { dashValues, dashOffset };
+
+    if (isDashArrayStatic())
+        cachedDash = result;
+
+    return result;
 }
 
 } // namespace yup

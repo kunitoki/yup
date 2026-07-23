@@ -53,8 +53,9 @@ public:
         an invalid Image.
 
         @param stream  The source stream. This object takes ownership.
+        @param options Options controlling metadata extraction.
     */
-    explicit BmpImageFormatReader (InputStream* stream);
+    explicit BmpImageFormatReader (InputStream* stream, const ImageFormat::Options& options = {});
 
     //==============================================================================
     /** Decodes the full image from the input stream.
@@ -129,14 +130,15 @@ public:
     const String& getFormatName() const override;
 
     /** Returns {".bmp"} for both reading and writing. */
-    Array<String> getFileExtensions (Mode mode) const override;
+    StringArray getFileExtensions (Mode mode) const override;
 
     /** Returns true if the stream starts with the BMP magic bytes "BM". */
     bool canHandleStream (InputStream& stream, Mode mode) const override;
 
     //==============================================================================
     /** Creates a BmpImageFormatReader for the given stream. */
-    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream) override;
+    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream,
+                                                        const Options& options = {}) override;
 
     /** Creates a BmpImageFormatWriter for the given stream and pixel format. */
     std::unique_ptr<ImageFormatWriter> createWriterFor (OutputStream* destStream,

@@ -327,6 +327,8 @@ TEST (GifImageFormatTests, VariousSizesRoundtrip)
             << "Invalid result for " << w << "x" << h;
         EXPECT_EQ (result.getWidth(), w);
         EXPECT_EQ (result.getHeight(), h);
+        EXPECT_TRUE (imagesAreEqual (original, result, 8))
+            << "Pixel mismatch for " << w << "x" << h;
     }
 }
 
@@ -503,6 +505,11 @@ TEST (GifImageFormatTests, ThreeFrameAnimationRoundTripMetadata)
     EXPECT_EQ (reader.getFrameDelayMs (0), 100);
     EXPECT_EQ (reader.getFrameDelayMs (1), 200);
     EXPECT_EQ (reader.getFrameDelayMs (2), 300);
+
+    // Verify roundtrip pixels (GIF is palette-quantized, use generous tolerance)
+    for (int fi = 0; fi < 3; ++fi)
+        EXPECT_TRUE (imagesAreEqual (frames[static_cast<size_t> (fi)], reader.readFrame (fi), 64))
+            << "Frame " << fi << " pixel mismatch";
 }
 
 TEST (GifImageFormatTests, FrameDominantColorMatchesSourceWithinTolerance)
@@ -685,6 +692,9 @@ TEST (GifImageFormatTests, InfiniteLoopCountRoundTrips)
     auto* inStream = new MemoryInputStream (bytes.data(), bytes.size(), true);
     GifImageFormatReader reader (inStream);
     EXPECT_EQ (reader.getLoopCount(), 0);
+
+    // Verify roundtrip pixels
+    EXPECT_TRUE (imagesAreEqual (src, reader.readImage(), 64));
 }
 
 TEST (GifImageFormatTests, CustomLoopCountRoundTrips)
@@ -703,6 +713,10 @@ TEST (GifImageFormatTests, CustomLoopCountRoundTrips)
         GifImageFormatReader reader (inStream);
         EXPECT_EQ (reader.getLoopCount(), lc)
             << "Loop count mismatch for " << lc;
+
+        // Verify roundtrip pixels
+        EXPECT_TRUE (imagesAreEqual (src, reader.readImage(), 64))
+            << "Pixel mismatch for loopCount " << lc;
     }
 }
 
@@ -742,6 +756,10 @@ TEST (GifImageFormatTests, VariousFrameDelaysRoundtrip)
 
         EXPECT_LE (error, 10)
             << "Delay " << delay << "ms: got " << actualDelay << "ms (error " << error << "ms)";
+
+        // Verify roundtrip pixels
+        EXPECT_TRUE (imagesAreEqual (src, reader.readImage(), 64))
+            << "Pixel mismatch for delay " << delay;
     }
 }
 
@@ -885,6 +903,11 @@ TEST (GifImageFormatTests, LargeFrameCountAnimationRoundtrip)
         ASSERT_TRUE (decoded.isValid()) << "Frame " << i << " is invalid";
         EXPECT_EQ (reader.getFrameDelayMs (i), delays[static_cast<size_t> (i)]);
     }
+
+    // Spot-check pixel roundtrip on first and last frame
+    for (int fi : { 0, frameCount - 1 })
+        EXPECT_TRUE (imagesAreEqual (frames[static_cast<size_t> (fi)], reader.readFrame (fi), 8))
+            << "Frame " << fi << " pixel mismatch";
 }
 
 TEST (GifImageFormatTests, ZeroDelayFrameRoundtrip)
@@ -901,6 +924,9 @@ TEST (GifImageFormatTests, ZeroDelayFrameRoundtrip)
     EXPECT_FALSE (reader.isAnimated());
     EXPECT_EQ (reader.getFrameCount(), 1);
     EXPECT_EQ (reader.getFrameDelayMs (0), 0);
+
+    // Verify roundtrip pixels
+    EXPECT_TRUE (imagesAreEqual (src, reader.readImage(), 64));
 }
 
 // ======================================================================
@@ -994,6 +1020,10 @@ TEST (GifImageFormatTests, ManagerRoundtripAnimationViaFile)
         EXPECT_TRUE (reader->isAnimated());
         EXPECT_EQ (reader->getFrameCount(), 2);
         EXPECT_EQ (reader->getLoopCount(), 3);
+
+        // Verify roundtrip pixels
+        EXPECT_TRUE (imagesAreEqual (red, reader->readFrame (0), 64));
+        EXPECT_TRUE (imagesAreEqual (blue, reader->readFrame (1), 64));
     }
 
     tempFile.deleteFile();
@@ -1093,10 +1123,44 @@ TEST (GifImageFormatTests, ReaderDpiDefaultsToZero)
     ASSERT_FALSE (bytes.empty());
 
     auto* inStream = new MemoryInputStream (bytes.data(), bytes.size(), true);
-    GifImageFormatReader reader (inStream);
+    GifImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
+}
+
+// ======================================================================
+// Image::loadFromData tests
+// ======================================================================
+
+TEST (GifImageFormatTests, LoadFromDataRoundtrip)
+{
+    Image original (8, 8, PixelFormat::RGBA);
+    original.fill (0xFFCC8844u);
+
+    auto bytes = encodeToGif (original);
+    ASSERT_FALSE (bytes.empty());
+
+    auto result = Image::loadFromData (Span<const uint8> (bytes.data(), bytes.size()));
+    ASSERT_TRUE (result.wasOk());
+
+    const Image& decoded = result.getValue();
+    EXPECT_EQ (decoded.getWidth(), original.getWidth());
+    EXPECT_EQ (decoded.getHeight(), original.getHeight());
+    EXPECT_TRUE (imagesAreEqual (original, decoded, 8));
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (GifImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    GifImageFormatWriter writer (rawStream, PixelFormat::RGBA);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
 }
 
 #endif // YUP_MODULE_AVAILABLE_libgif && YUP_IMAGE_FORMAT_GIF

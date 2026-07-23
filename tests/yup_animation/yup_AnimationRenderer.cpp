@@ -1054,6 +1054,189 @@ constexpr const char* kEllipseAndPolystarJson = R"json({
     ]
 })json";
 
+constexpr const char* kMaskDifferenceJson = R"json({
+    "v": "5.5.2",
+    "nm": "MaskDifferenceTest",
+    "ip": 0,
+    "op": 10,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "MaskedLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "masksProperties": [
+                {
+                    "inv": false,
+                    "mode": "d",
+                    "pt": { "a": 0, "k": { "i": [[0,0],[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0],[0,0]], "v": [[10,10],[90,10],[90,90],[10,90]], "c": true } },
+                    "o": { "a": 0, "k": 100 }
+                }
+            ],
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [60, 60] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 1, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kShadowOnlyJson = R"json({
+    "v": "5.5.2",
+    "nm": "ShadowOnlyTest",
+    "ip": 0,
+    "op": 10,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "ShadowOnlyLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "ef": [
+                {
+                    "ty": 25,
+                    "nm": "Drop Shadow",
+                    "mn": "ADBE Drop Shadow",
+                    "en": 1,
+                    "ef": [
+                        { "ty": 2, "nm": "Shadow Color", "mn": "ADBE Drop Shadow-0001", "v": { "a": 0, "k": [0, 0, 0, 1] } },
+                        { "ty": 0, "nm": "Opacity",      "mn": "ADBE Drop Shadow-0002", "v": { "a": 0, "k": 50 } },
+                        { "ty": 0, "nm": "Direction",    "mn": "ADBE Drop Shadow-0003", "v": { "a": 0, "k": 135 } },
+                        { "ty": 0, "nm": "Distance",     "mn": "ADBE Drop Shadow-0004", "v": { "a": 0, "k": 6 } },
+                        { "ty": 0, "nm": "Softness",     "mn": "ADBE Drop Shadow-0005", "v": { "a": 0, "k": 0 } },
+                        { "ty": 7, "nm": "Shadow Only",  "mn": "ADBE Drop Shadow-0006", "v": { "a": 0, "k": 1 } }
+                    ]
+                }
+            ],
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [40, 40] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 0, 1, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+constexpr const char* kPrecompJson = R"json({
+    "v": "5.5.2",
+    "nm": "PrecompTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "precompAsset",
+            "nm": "Precomp",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 50,
+            "h": 50,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "NestedShape",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [25, 25] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "PrecompLayer",
+            "ind": 1,
+            "refId": "precompAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 50,
+            "h": 50,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
 constexpr const char* kFillEffectJson = R"json({
     "v": "5.5.2",
     "nm": "FillEffectTest",
@@ -1137,7 +1320,7 @@ TEST_F (AnimationRendererTests, RenderEmptyCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1150,7 +1333,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderSolidLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kSolidLayerJson);
+    auto comp = LottieReader::parseData (kSolidLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1163,7 +1346,7 @@ TEST_F (AnimationRendererTests, RenderSolidLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderNullLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kNullLayerJson);
+    auto comp = LottieReader::parseData (kNullLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1176,7 +1359,7 @@ TEST_F (AnimationRendererTests, RenderNullLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderHiddenLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kHiddenLayerJson);
+    auto comp = LottieReader::parseData (kHiddenLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_TRUE (comp->layers[0]->hidden);
@@ -1191,7 +1374,7 @@ TEST_F (AnimationRendererTests, RenderHiddenLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderMultiLayerCompositionDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMultiLayerJson);
+    auto comp = LottieReader::parseData (kMultiLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1205,7 +1388,7 @@ TEST_F (AnimationRendererTests, RenderMultiLayerCompositionDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderAtVariousFrameNumbersDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1221,9 +1404,9 @@ TEST_F (AnimationRendererTests, RenderAtVariousFrameNumbersDoesNotCrash)
     }
 }
 
-TEST_F (AnimationRendererTests, RenderWithKeepAspectRatioTrueAndFalseDoesNotCrash)
+TEST_F (AnimationRendererTests, RenderWithScaleToFitAndFillDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1232,17 +1415,17 @@ TEST_F (AnimationRendererTests, RenderWithKeepAspectRatioTrueAndFalseDoesNotCras
     const Rectangle<float> bounds (0, 0, 200, 100);
 
     EXPECT_NO_THROW ({
-        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, true);
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, Fitting::scaleToFit);
     });
 
     EXPECT_NO_THROW ({
-        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, false);
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, bounds, Fitting::fill);
     });
 }
 
 TEST_F (AnimationRendererTests, RenderIntoSmallBoundsDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (1, 1);
@@ -1255,7 +1438,7 @@ TEST_F (AnimationRendererTests, RenderIntoSmallBoundsDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderIntoLargeBoundsDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kShapeLayerJson);
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (1000, 1000);
@@ -1291,7 +1474,7 @@ TEST_F (AnimationRendererTests, RenderProgrammaticallyBuiltCompositionDoesNotCra
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithPartialOpacityDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kPartialOpacityShapeJson);
+    auto comp = LottieReader::parseData (kPartialOpacityShapeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
 
@@ -1309,7 +1492,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithPartialOpacityDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithDropShadowDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kDropShadowShapeJson);
+    auto comp = LottieReader::parseData (kDropShadowShapeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1326,7 +1509,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithDropShadowDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithFillEffectDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kFillEffectJson);
+    auto comp = LottieReader::parseData (kFillEffectJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1343,7 +1526,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithFillEffectDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithAddMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskAddJson);
+    auto comp = LottieReader::parseData (kMaskAddJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1356,7 +1539,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithAddMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithSubtractMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskSubtractJson);
+    auto comp = LottieReader::parseData (kMaskSubtractJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1369,7 +1552,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithSubtractMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithIntersectMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskIntersectJson);
+    auto comp = LottieReader::parseData (kMaskIntersectJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1382,7 +1565,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithIntersectMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithInvertedMaskDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kMaskInvertedJson);
+    auto comp = LottieReader::parseData (kMaskInvertedJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1399,7 +1582,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithInvertedMaskDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsSimultaneousDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kTrimPathsSimultaneousJson);
+    auto comp = LottieReader::parseData (kTrimPathsSimultaneousJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1412,7 +1595,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsSimultaneousDoesNot
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsIndividuallyDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kTrimPathsIndividuallyJson);
+    auto comp = LottieReader::parseData (kTrimPathsIndividuallyJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1429,7 +1612,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithTrimPathsIndividuallyDoesNot
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithRepeaterDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kRepeaterJson);
+    auto comp = LottieReader::parseData (kRepeaterJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1446,7 +1629,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithRepeaterDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderLayerWithAlphaMatteDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kAlphaMatteJson);
+    auto comp = LottieReader::parseData (kAlphaMatteJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1458,13 +1641,42 @@ TEST_F (AnimationRendererTests, RenderLayerWithAlphaMatteDoesNotCrash)
     });
 }
 
+TEST_F (AnimationRendererTests, RenderLayerWithPartialOpacityMatteSourceDoesNotCrash)
+{
+    // Matte source fill at 65% opacity: a correct alpha matte multiplies the
+    // target's alpha by the source's rendered alpha. On a headless context this
+    // exercises the geometric-clip fallback path.
+    auto comp = LottieReader::parseData (kAlphaMatteJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 2u);
+
+    for (const auto matteType : { AnimationLayer::MatteType::Alpha,
+                                  AnimationLayer::MatteType::AlphaInv,
+                                  AnimationLayer::MatteType::Luma,
+                                  AnimationLayer::MatteType::LumaInv })
+    {
+        for (const auto& layer : comp->layers)
+        {
+            if (layer != nullptr && layer->matteType != AnimationLayer::MatteType::None)
+                layer->matteType = matteType;
+        }
+
+        auto renderer = context->makeRenderer (100, 100);
+        Graphics g (*context, *renderer);
+
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+        });
+    }
+}
+
 // =============================================================================
 // Parent chain — child offset by rotated parent null
 // =============================================================================
 
 TEST_F (AnimationRendererTests, RenderLayerWithParentChainDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kParentChainJson);
+    auto comp = LottieReader::parseData (kParentChainJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 2u);
 
@@ -1482,7 +1694,7 @@ TEST_F (AnimationRendererTests, RenderLayerWithParentChainDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithDashStrokeDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kDashStrokeJson);
+    auto comp = LottieReader::parseData (kDashStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1499,7 +1711,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithDashStrokeDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderLayerNotYetVisibleAtFrameZeroDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kLayerOutOfRangeJson);
+    auto comp = LottieReader::parseData (kLayerOutOfRangeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
     ASSERT_EQ (comp->layers.size(), 1u);
     EXPECT_FLOAT_EQ (comp->layers[0]->inFrame, 20.0f);
@@ -1522,7 +1734,7 @@ TEST_F (AnimationRendererTests, RenderLayerNotYetVisibleAtFrameZeroDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientFillDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kGradientFillJson);
+    auto comp = LottieReader::parseData (kGradientFillJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1535,7 +1747,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientFillDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientStrokeDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kGradientStrokeJson);
+    auto comp = LottieReader::parseData (kGradientStrokeJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (100, 100);
@@ -1552,7 +1764,7 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithGradientStrokeDoesNotCrash)
 
 TEST_F (AnimationRendererTests, RenderShapeLayerWithEllipseAndPolystarDoesNotCrash)
 {
-    auto comp = LottieReader::parseData (kEllipseAndPolystarJson);
+    auto comp = LottieReader::parseData (kEllipseAndPolystarJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
 
     auto renderer = context->makeRenderer (200, 100);
@@ -1560,5 +1772,311 @@ TEST_F (AnimationRendererTests, RenderShapeLayerWithEllipseAndPolystarDoesNotCra
 
     EXPECT_NO_THROW ({
         AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 100));
+    });
+}
+
+// =============================================================================
+// Mask mode — difference (mode "d")
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderShapeLayerWithDifferenceMaskDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kMaskDifferenceJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+// =============================================================================
+// Drop shadow — shadowOnly = true
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderShapeLayerWithShadowOnlyDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShadowOnlyJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+// =============================================================================
+// Precomp layer
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderPrecompLayerDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_GE (comp->layers.size(), 1u);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderPrecompLayerAtVariousFramesDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    for (const float frame : { 0.0f, 10.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+// =============================================================================
+// All fitting modes — ensure calculateViewTransform handles every enum value
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderWithFittingNoneDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::none);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingFitWidthDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 100), Fitting::fitWidth);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingFitHeightDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 200);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 200), Fitting::fitHeight);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingScaleToFillDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 100), Fitting::scaleToFill);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingCenterCropDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 100), Fitting::centerCrop);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingCenterInsideDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 200), Fitting::centerInside);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingStretchWidthDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 100), Fitting::stretchWidth);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingStretchHeightDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 200);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 200), Fitting::stretchHeight);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithFittingTileDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::tile);
+    });
+}
+
+// =============================================================================
+// Justification flags
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderWithLeftJustificationDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::left);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithRightJustificationDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::right);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithTopJustificationDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::top);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithBottomJustificationDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::bottom);
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderWithCenterJustificationDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::center);
+    });
+}
+
+// =============================================================================
+// RenderComposition with render resources argument
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderWithRenderResourcesDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    AnimationRenderResources resources;
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100), Fitting::scaleToFit, Justification::center, &resources);
+    });
+}
+
+// =============================================================================
+// RenderComposition — non-default opacity
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderProgrammaticCompositionSmokeTest)
+{
+    auto comp = AnimationComposition::create ({ 200.0f, 200.0f }, 30.0f);
+    ASSERT_NE (comp, nullptr);
+
+    comp->addSolidLayer ("SolidLoop", Color (0xff00ff00), { 100.0f, 100.0f });
+    comp->addShapeLayer ("ShapeSecond");
+    comp->addNullLayer ("NullThird");
+
+    EXPECT_EQ (comp->layers.size(), 3u);
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 200));
+    });
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 15.0f, Rectangle<float> (0, 0, 200, 200));
     });
 }

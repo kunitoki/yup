@@ -52,7 +52,7 @@ extern "C" {
 // SharpYUV API version following the convention from semver.org
 #define SHARPYUV_VERSION_MAJOR 0
 #define SHARPYUV_VERSION_MINOR 4
-#define SHARPYUV_VERSION_PATCH 2
+#define SHARPYUV_VERSION_PATCH 0
 // Version as a uint32_t. The major number is the high 8 bits.
 // The minor number is the middle 8 bits. The patch number is the low 16 bits.
 #define SHARPYUV_MAKE_VERSION(MAJOR, MINOR, PATCH) \
@@ -66,17 +66,10 @@ extern "C" {
 SHARPYUV_EXTERN int SharpYuvGetVersion(void);
 
 // RGB to YUV conversion matrix, in 16 bit fixed point.
-// y_ = rgb_to_y[0] * r + rgb_to_y[1] * g + rgb_to_y[2] * b + rgb_to_y[3]
-// u_ = rgb_to_u[0] * r + rgb_to_u[1] * g + rgb_to_u[2] * b + rgb_to_u[3]
-// v_ = rgb_to_v[0] * r + rgb_to_v[1] * g + rgb_to_v[2] * b + rgb_to_v[3]
-// Then the values are divided by 1<<16 and rounded.
-// y = (y_ + (1 << 15)) >> 16
-// u = (u_ + (1 << 15)) >> 16
-// v = (v_ + (1 << 15)) >> 16
-//
-// Typically, the offset values rgb_to_y[3], rgb_to_u[3] and rgb_to_v[3] depend
-// on the input's bit depth, e.g., rgb_to_u[3] = 1 << (rgb_bit_depth - 1 + 16).
-// See also sharpyuv_csp.h to get a predefined matrix or generate a matrix.
+// y = rgb_to_y[0] * r + rgb_to_y[1] * g + rgb_to_y[2] * b + rgb_to_y[3]
+// u = rgb_to_u[0] * r + rgb_to_u[1] * g + rgb_to_u[2] * b + rgb_to_u[3]
+// v = rgb_to_v[0] * r + rgb_to_v[1] * g + rgb_to_v[2] * b + rgb_to_v[3]
+// Then y, u and v values are divided by 1<<16 and rounded.
 typedef struct {
   int rgb_to_y[4];
   int rgb_to_u[4];
@@ -116,29 +109,24 @@ typedef enum SharpYuvTransferFunctionType {
 // Assumes that the image will be upsampled using a bilinear filter. If nearest
 // neighbor is used instead, the upsampled image might look worse than with
 // standard downsampling.
-// r_ptr, g_ptr, b_ptr: pointers to the source r, g and b channels. Must point
+// r_ptr, g_ptr, b_ptr: pointers to the source r, g and b channels. Should point
 //     to uint8_t buffers if rgb_bit_depth is 8, or uint16_t buffers otherwise.
 // rgb_step: distance in bytes between two horizontally adjacent pixels on the
-//     r, g and b channels. If rgb_bit_depth is > 8, it must be a
-//     multiple of 2. Must not be zero.
+//     r, g and b channels. If rgb_bit_depth is > 8, it should be a
+//     multiple of 2.
 // rgb_stride: distance in bytes between two vertically adjacent pixels on the
-//     r, g, and b channels. If rgb_bit_depth is > 8, it must be a
-//     multiple of 2. abs(rgb_stride) must be at least width * abs(rgb_step).
+//     r, g, and b channels. If rgb_bit_depth is > 8, it should be a
+//     multiple of 2.
 // rgb_bit_depth: number of bits for each r/g/b value. One of: 8, 10, 12, 16.
-//     The input rgb buffer values should be in the range
-//     [0, (1 << rgb_bit_depth) - 1] and will be clamped to this range if not.
 //     Note: 16 bit input is truncated to 14 bits before conversion to yuv.
 // yuv_bit_depth: number of bits for each y/u/v value. One of: 8, 10, 12.
-// y_ptr, u_ptr, v_ptr: pointers to the destination y, u and v channels.  Must
+// y_ptr, u_ptr, v_ptr: pointers to the destination y, u and v channels.  Should
 //     point to uint8_t buffers if yuv_bit_depth is 8, or uint16_t buffers
 //     otherwise.
 // y_stride, u_stride, v_stride: distance in bytes between two vertically
-//     adjacent pixels on the y, u and v channels. Must be at least large enough
-//     to hold one row of pixels. If yuv_bit_depth is > 8, they must be
-//     multiples of 2.
+//     adjacent pixels on the y, u and v channels. If yuv_bit_depth > 8, they
+//     should be multiples of 2.
 // width, height: width and height of the image in pixels
-// yuv_matrix: RGB to YUV conversion matrix. The matrix values typically
-//     depend on the input's rgb_bit_depth.
 // This function calls SharpYuvConvertWithOptions with a default transfer
 // function of kSharpYuvTransferFunctionSrgb.
 SHARPYUV_EXTERN int SharpYuvConvert(const void* r_ptr, const void* g_ptr,

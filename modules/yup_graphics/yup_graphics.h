@@ -32,7 +32,8 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd rive rive_renderer libclipper2
+    dependencies:       yup_core yup_simd yup_shading rive rive_renderer libclipper2
+    optionalDeps:       libpng libjpeg libwebp libgif
     appleFrameworks:    Metal
     searchpaths:        native
 
@@ -46,17 +47,26 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_simd/yup_simd.h>
-
-#include <rive_renderer/rive_renderer.h>
+#include <yup_shading/yup_shading.h>
 
 //==============================================================================
 
-YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/factory.hpp>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
+#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+//==============================================================================
+
+namespace rive::ore
+{
+class Context;
+} // namespace rive::ore
 
 //==============================================================================
 
@@ -78,6 +88,16 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 */
 #ifndef YUP_IMAGE_FORMAT_PPM
 #define YUP_IMAGE_FORMAT_PPM 1
+#endif
+
+/**
+    Config: YUP_IMAGE_FORMAT_TGA
+
+    Enable TGA (Truevision TARGA) image format support (read and write).
+    This format has no external dependency.
+*/
+#ifndef YUP_IMAGE_FORMAT_TGA
+#define YUP_IMAGE_FORMAT_TGA 1
 #endif
 
 /** Config: YUP_IMAGE_FORMAT_PNG
@@ -121,6 +141,17 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 #endif
 
+/** Config: YUP_IMAGE_FORMAT_TIFF
+
+    Enable TIFF image format support (read and write, including multi-page TIFF).
+    Requires libtiff (YUP_MODULE_AVAILABLE_libtiff).
+*/
+#ifndef YUP_IMAGE_FORMAT_TIFF
+#if YUP_MODULE_AVAILABLE_libtiff
+#define YUP_IMAGE_FORMAT_TIFF 1
+#endif
+#endif
+
 //==============================================================================
 
 #if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
@@ -143,6 +174,11 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #define YUP_IMAGE_FORMAT_GIF 0
 #endif
 
+#if YUP_IMAGE_FORMAT_TIFF && ! YUP_MODULE_AVAILABLE_libtiff
+#undef YUP_IMAGE_FORMAT_TIFF
+#define YUP_IMAGE_FORMAT_TIFF 0
+#endif
+
 //==============================================================================
 
 #include "layout/yup_Justification.h"
@@ -157,8 +193,11 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
-#include "imaging/yup_Image.h"
+#include "rhi/yup_GpuTexture.h"
+#include "imaging/yup_ImagePixelData.h"
+#include "imaging/yup_ImageMetadata.h"
 #include "imaging/yup_ImageFormat.h"
+#include "imaging/yup_Image.h"
 #include "imaging/yup_ImageFormatReader.h"
 #include "imaging/yup_ImageFormatWriter.h"
 #include "imaging/yup_ImageFormatManager.h"
@@ -170,8 +209,18 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_StrokeType.h"
 #include "graphics/yup_FillType.h"
+#include "context/yup_OffscreenTarget.h"
+#include "context/yup_RenderableTarget.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
+#include "rhi/yup_ShaderBindingMap.h"
+#include "rhi/yup_GpuBuffer.h"
+#include "rhi/yup_GpuPipeline.h"
+#include "rhi/yup_GpuFrame.h"
+#include "rhi/yup_GpuRenderPass.h"
+#include "rhi/yup_GpuTarget.h"
+#include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_GpuPipelineCache.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"
@@ -194,6 +243,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "formats/yup_PpmImageFormat.h"
 #endif
 
+#if YUP_IMAGE_FORMAT_TGA
+#include "formats/yup_TgaImageFormat.h"
+#endif
+
 #if YUP_IMAGE_FORMAT_PNG
 #include "formats/yup_PngImageFormat.h"
 #endif
@@ -209,4 +262,8 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_IMAGE_FORMAT_GIF
 #include <libgif/libgif.h>
 #include "formats/yup_GifImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+#include "formats/yup_TiffImageFormat.h"
 #endif

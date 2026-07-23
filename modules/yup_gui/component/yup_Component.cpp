@@ -94,6 +94,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (options.isVisible == shouldBeVisible)
         return;
 
+    const bool wasShowing = isShowing();
+
     options.isVisible = shouldBeVisible;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -104,7 +106,8 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    visibilityChanged();
+    if (wasShowing != isShowing())
+        internalVisibilityChanged();
 
     if (bailOutChecker.shouldBailOut())
         return;
@@ -394,11 +397,11 @@ Rectangle<float> Component::getLocalBounds() const
 Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
 {
     auto bounds = boundsInParent;
-    if (options.onDesktop)
+    if (options.onDesktop || options.paintAsOffscreenRoot)
         return bounds.withZeroPosition();
 
     auto parent = getParentComponent();
-    while (parent != nullptr && ! parent->options.onDesktop)
+    while (parent != nullptr && ! parent->options.onDesktop && ! parent->options.paintAsOffscreenRoot)
     {
         bounds.translate (parent->getPosition());
         parent = parent->getParentComponent();
@@ -556,6 +559,8 @@ void Component::repaint (float x, float y, float width, float height)
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
+
+    cachedTextureCanvas = nullptr;
 
     if (rect.isEmpty() || ! isShowing())
         return;
@@ -771,6 +776,14 @@ void Component::addChildComponent (Component* component, int index)
 
         auto bailOutChecker = BailOutChecker (this);
 
+        if (getNativeComponent() != nullptr)
+        {
+            component->internalAttachedToNative();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
         component->internalHierarchyChanged();
 
         if (bailOutChecker.shouldBailOut())
@@ -818,6 +831,14 @@ void Component::removeChildComponent (int index)
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
+
+    if (getNativeComponent() != nullptr)
+    {
+        component->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 
     component->internalHierarchyChanged();
 
@@ -1055,6 +1076,16 @@ void Component::mouseDoubleClick (const MouseEvent& event) {}
 
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
+bool Component::isInterestedInDrag (const DragAndDropData& data) { return false; }
+
+bool Component::itemsDropped (const Point<float>& position, const DragAndDropData& data) { return false; }
+
+void Component::itemDragEnter (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragMove (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragExit (const DragAndDropData& data) {}
+
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
@@ -1175,6 +1206,80 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
 
 //==============================================================================
 
+//==============================================================================
+
+void Component::setComponentEffect (ComponentEffect::Ptr effect)
+{
+    componentEffect = std::move (effect);
+    repaint();
+}
+
+ComponentEffect::Ptr Component::getComponentEffect() const
+{
+    return componentEffect;
+}
+
+void Component::setCachedToTexture (bool shouldCache)
+{
+    if (options.cachedToTexture == shouldCache)
+        return;
+
+    options.cachedToTexture = shouldCache;
+    cachedTextureCanvas = nullptr;
+    repaint();
+}
+
+bool Component::isCachedToTexture() const
+{
+    return options.cachedToTexture;
+}
+
+GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects)
+{
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return nullptr;
+
+    auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
+    if (canvas == nullptr)
+        return nullptr;
+
+    if (! includeEffects || componentEffect == nullptr)
+        return canvas;
+
+    auto texture = canvas->asTexture();
+
+    auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+    if (effectCanvas == nullptr)
+        return canvas;
+
+    auto& g = effectCanvas->beginDraw();
+    auto localBounds = getLocalBounds();
+    g.setDrawingArea (localBounds);
+    componentEffect->apply (g, texture, localBounds);
+
+    return effectCanvas;
+}
+
+Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return {};
+
+    return canvas->asImage();
+}
+
+GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return nullptr;
+
+    return canvas->asTexture();
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
@@ -1222,26 +1327,43 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
+void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous)
 {
-    if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
-        return;
+    for (auto child : children)
+        child->internalPaint (g, clipArea, renderContinuous);
 
-    auto bounds = getBoundsRelativeToTopLevelComponent();
+    paintOverChildren (g);
+}
 
-    auto boundsToRedraw = bounds
-                              .intersection (repaintArea)
-                              .roundToInt()
-                              .to<float>();
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous)
+{
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return nullptr;
 
-    if (! renderContinuous && boundsToRedraw.isEmpty())
-        return;
+    const auto w = static_cast<int> (getWidth());
+    const auto h = static_cast<int> (getHeight());
 
-    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
-    const auto opacity = g.getOpacity() * selfOpacity;
-    if (opacity <= 0.0f)
-        return;
+    auto canvas = GpuCanvas::create (ctx, w, h);
+    if (canvas == nullptr)
+        return nullptr;
 
+    auto& offscreenG = canvas->beginDraw();
+
+    options.paintAsOffscreenRoot = true;
+
+    auto localBounds = getLocalBounds();
+    paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
+
+    options.paintAsOffscreenRoot = false;
+
+    canvas->commit();
+    return canvas;
+}
+
+//==============================================================================
+
+void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
+{
     options.isRepainting = true;
 
     {
@@ -1254,23 +1376,22 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         if (shouldMeasurePaint)
         {
             totalStartTicks = Time::getHighResolutionTicks();
-            metrics.repaintArea = repaintArea;
-            metrics.componentBounds = bounds.to<float>();
+            metrics.repaintArea = drawingArea;
+            metrics.componentBounds = drawingArea;
             metrics.renderContinuous = renderContinuous;
         }
 
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
-        g.setDrawingArea (bounds);
+        g.setDrawingArea (drawingArea);
         if (! options.unclippedRendering)
-            g.setClipPath (boundsToRedraw);
-
+            g.setClipPath (clipArea);
         g.setTransform (transform);
 
         bool canSkipPaint = false;
         if (! options.unclippedRendering && ! isTransformed())
-            canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
+            canSkipPaint = hasOpaqueChildCoveringArea (clipArea);
 
         if (! canSkipPaint)
         {
@@ -1279,9 +1400,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             if (shouldMeasurePaint)
             {
                 selfStartTicks = Time::getHighResolutionTicks();
-
                 paint (g);
-
                 metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
             }
             else
@@ -1300,7 +1419,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             const int64 childrenStartTicks = Time::getHighResolutionTicks();
 
             for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
+                child->internalPaint (g, clipArea, renderContinuous);
 
             metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
 
@@ -1317,14 +1436,106 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         }
         else
         {
-            for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-            paintOverChildren (g);
+            paintChildrenAndOverChildren (g, clipArea, renderContinuous);
         }
     }
 
     options.isRepainting = false;
+}
+
+//==============================================================================
+
+void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
+{
+    if (! isVisible() || getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return;
+
+    auto bounds = getBoundsRelativeToTopLevelComponent();
+
+    auto boundsToRedraw = bounds
+                              .intersection (repaintArea)
+                              .roundToInt()
+                              .to<float>();
+
+    if (! renderContinuous && boundsToRedraw.isEmpty())
+        return;
+
+    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto opacity = g.getOpacity() * selfOpacity;
+    if (opacity <= 0.0f)
+        return;
+
+    // Effect path: render full subtree offscreen, apply effect, composite
+    if (componentEffect != nullptr)
+    {
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous);
+        if (canvas == nullptr)
+            return;
+
+        auto texture = canvas->asTexture();
+
+        {
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
+
+            componentEffect->apply (g, texture, getLocalBounds());
+        }
+
+        if (options.cachedToTexture)
+            cachedTextureCanvas = canvas;
+
+        return;
+    }
+
+    // Cache path: cache own paint(), children paint on top
+    if (options.cachedToTexture)
+    {
+        if (cachedTextureCanvas == nullptr)
+        {
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(),
+                                             static_cast<int> (getWidth()),
+                                             static_cast<int> (getHeight()));
+            if (canvas != nullptr)
+            {
+                auto& offscreenG = canvas->beginDraw();
+                auto localBounds = getLocalBounds();
+                offscreenG.setOpacity (opacity);
+                offscreenG.setDrawingArea (localBounds);
+                offscreenG.setTransform (transform);
+                paint (offscreenG);
+                canvas->commit();
+                cachedTextureCanvas = canvas;
+            }
+        }
+
+        options.isRepainting = true;
+
+        {
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
+
+            if (cachedTextureCanvas != nullptr)
+                g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());
+            else
+                paint (g);
+        }
+
+        options.isRepainting = false;
+
+        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
+        return;
+    }
+
+    // Normal paint path
+    paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     g.setFillColor (debugColor);
@@ -1494,6 +1705,75 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
 
 //==============================================================================
 
+bool Component::internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    // Convert the window (root) position into this component's local coordinates,
+    // mirroring MouseEvent::withRelativePositionTo.
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+        {
+            if (current->itemsDropped (localPosition, data))
+                return true;
+        }
+
+        // Ascend to the parent: the parent-local position adds back this component's offset.
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+void Component::internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragEnter (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragMove (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragExit (const DragAndDropData& data)
+{
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragExit (data);
+    }
+}
+
+//==============================================================================
+
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     if (! isVisible() || ! isEnabled())
@@ -1526,18 +1806,28 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
+    const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    sendResized();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendResized();
+    }
 }
 
 //==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
+    const auto newBounds = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    sendMoved();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendMoved();
+    }
 }
 
 //==============================================================================
@@ -1558,7 +1848,32 @@ void Component::internalDisplayChanged() {}
 
 void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged (dpiScale);
+    if (contentScale != dpiScale)
+    {
+        contentScale = dpiScale;
+
+        contentScaleChanged (dpiScale);
+    }
+}
+
+//==============================================================================
+
+void Component::internalSafeAreaChanged()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    safeAreaChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalSafeAreaChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 //==============================================================================
@@ -1608,6 +1923,28 @@ void Component::internalDetachedFromNative()
 
 //==============================================================================
 
+void Component::internalVisibilityChanged()
+{
+    visibilityChanged();
+
+    auto bailOutChecker = BailOutChecker (this);
+
+    for (int index = children.size(); --index >= 0;)
+    {
+        auto child = children.getUnchecked (index);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (child->isVisible())
+            child->internalVisibilityChanged();
+
+        index = jmin (index, children.size());
+    }
+}
+
+//==============================================================================
+
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
@@ -1626,6 +1963,23 @@ Rectangle<float> Component::getScreenBounds() const
 {
     return localToScreen (getLocalBounds());
 }
+
+//==============================================================================
+
+Rectangle<float> Component::getSafeAreaBounds() const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getSafeAreaBounds().to<float>();
+
+    if (parentComponent == nullptr)
+        return getLocalBounds();
+
+    return parentComponent->getSafeAreaBounds()
+        .translated (-getPosition())
+        .intersection (getLocalBounds());
+}
+
+void Component::safeAreaChanged() {}
 
 //==============================================================================
 

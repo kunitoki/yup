@@ -51,6 +51,7 @@
     license:            ISC
 
     dependencies:       yup_core
+    optionalDeps:       yup_gui
 
   END_YUP_MODULE_DECLARATION
 

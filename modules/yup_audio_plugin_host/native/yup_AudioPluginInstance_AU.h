@@ -42,7 +42,7 @@ public:
     String getFormatName() const override;
     StringArray getFileExtensions() const override;
 
-    /** Returns an empty FileSearchPath — AU uses AudioComponent registry. */
+    /** Returns an empty FileSearchPath - AU uses AudioComponent registry. */
     FileSearchPath getDefaultSearchPaths() const override;
 
     /**

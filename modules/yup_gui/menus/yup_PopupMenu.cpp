@@ -98,7 +98,7 @@ void installGlobalMouseListener()
                 }
 
                 // Walk the component hierarchy from the event source.
-                // If any ancestor is a PopupMenu the click is inside a popup — don't dismiss.
+                // If any ancestor is a PopupMenu the click is inside a popup - don't dismiss.
                 auto* comp = event.getSourceComponent();
                 while (comp != nullptr)
                 {
@@ -955,7 +955,7 @@ void PopupMenu::mouseExit (const MouseEvent& event)
 {
     YUP_MODULE_DBG (GUI_POPUPMENU, "mouseExit: hasVisibleSubmenu=" << (hasVisibleSubmenu() ? 1 : 0) << " [popup=" << String::toHexString (reinterpret_cast<pointer_sized_uint> (this)) << "]");
 
-    // Don't clear the hover if we're showing a submenu — the mouse likely
+    // Don't clear the hover if we're showing a submenu - the mouse likely
     // "left" due to a submenu window appearing on top, not because the user
     // intentionally moved away. updateSubmenuVisibility keeps submenus open.
     if (hasVisibleSubmenu())

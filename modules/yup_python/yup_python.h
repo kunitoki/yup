@@ -31,6 +31,7 @@
   license:            ISC
 
   dependencies:       yup_core
+  optionalDeps:       yup_audio_basics yup_audio_devices yup_audio_processors yup_data_model yup_events yup_graphics yup_gui
   needsPython:        true
 
  END_YUP_MODULE_DECLARATION

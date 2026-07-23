@@ -659,7 +659,7 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
     // lastCodePointIndex() on empty orderedLines (which would be UB).
     const auto& unichars = styledTexts.unichars();
 
-    // Bug 2: caret is at end-of-text and the text ends with \n — the caret belongs on the
+    // Bug 2: caret is at end-of-text and the text ends with \n - the caret belongs on the
     // virtual new line created by the trailing newline, not at the end of the previous line.
     if (characterIndex == static_cast<int> (unichars.size()) && ! unichars.empty() && unichars.back() == '\n' && ! paragraphYOffsets.empty())
     {
@@ -692,7 +692,7 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
 
             if (paraIdx == targetParagraphIdx)
             {
-                // Bug 3: empty paragraph — numLinesInPara == 0 makes lastLineIdx wrong.
+                // Bug 3: empty paragraph - numLinesInPara == 0 makes lastLineIdx wrong.
                 // Use the stored Y offset directly instead of trying to index orderedLines.
                 if (numLinesInPara == 0)
                 {

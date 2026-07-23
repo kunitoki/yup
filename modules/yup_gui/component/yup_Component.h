@@ -24,6 +24,14 @@ namespace yup
 
 //==============================================================================
 
+#ifndef DOXYGEN
+/** @internal Test-only accessor, specialized by unit tests to reach private Component state. */
+template <class T>
+class ComponentTestHelper;
+#endif
+
+//==============================================================================
+
 /**
     The Component class is the base class for all GUI components.
 
@@ -398,6 +406,28 @@ public:
         @return The bounds of the component in screen coordinates.
      */
     Rectangle<float> getScreenBounds() const;
+
+    /**
+        Get the area of the component that is safe for interactive content.
+
+        On mobile devices the window may extend under display cutouts (notch), the
+        status bar or rounded corners: this returns the portion of the component that
+        is guaranteed to be fully visible and touchable. On desktop platforms this
+        usually matches the local bounds.
+
+        @return The safe area bounds, in local component coordinates.
+     */
+    Rectangle<float> getSafeAreaBounds() const;
+
+    /**
+        Called when the safe area of the component changes.
+
+        This can happen on mobile devices when the device is rotated, or when system
+        bars are shown or hidden.
+
+        @see getSafeAreaBounds
+     */
+    virtual void safeAreaChanged();
 
     //==============================================================================
 
@@ -1098,6 +1128,76 @@ public:
 
     //==============================================================================
     /**
+        Called to determine whether the component is interested in a drag-and-drop payload.
+
+        This acts as the opt-in gate for drag-and-drop handling. It defaults to returning false,
+        so a component must override this and return true to receive itemsDropped, itemDragEnter,
+        itemDragMove, and itemDragExit calls.
+
+        @param data The payload that would be dropped.
+
+        @return true if the component wants to handle the payload.
+
+        @see itemsDropped, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool isInterestedInDrag (const DragAndDropData& data);
+
+    /**
+        Called when a drag-and-drop payload is dropped onto the component.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events. If the component does not handle
+        the drop it should return false, allowing the payload to bubble up to parents.
+
+        @param position The drop position, in component-local coordinates.
+        @param data     The dropped payload.
+
+        @return true if the component handled the drop.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool itemsDropped (const Point<float>& position, const DragAndDropData& data);
+
+    //==============================================================================
+    /**
+        Called when a drag-and-drop payload enters the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragMove, itemDragExit
+     */
+    virtual void itemDragEnter (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload moves within the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragExit
+     */
+    virtual void itemDragMove (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload exits the component's area.
+
+        This is only called if isInterestedInDrag returned true.
+
+        @param data The drag-and-drop payload.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove
+     */
+    virtual void itemDragExit (const DragAndDropData& data);
+
+    //==============================================================================
+    /**
         Add a mouse listener to the component.
 
         @param listener The mouse listener to add.
@@ -1216,6 +1316,68 @@ public:
     std::optional<float> findMetric (const Identifier& metricId) const;
 
     //==============================================================================
+    /** Sets a component effect that is applied after the component and its children are rendered.
+
+        The component subtree is first rendered to an offscreen GPU texture, then the effect's
+        apply() method is called to composite the result back onto the main Graphics context.
+        Pass nullptr to remove the effect.
+
+        @param effect The effect to apply, or nullptr to remove.
+        @see ComponentEffect
+     */
+    void setComponentEffect (ComponentEffect::Ptr effect);
+
+    /** Returns the current component effect, or nullptr if none is set. */
+    ComponentEffect::Ptr getComponentEffect() const;
+
+    //==============================================================================
+    /** Enables or disables cached-to-texture rendering for this component and its subtree.
+
+        When enabled, the component subtree is rendered once into an offscreen GPU texture that
+        is reused across subsequent frames. The cache is automatically invalidated when the component
+        is repainted, resized, or its children change.
+
+        This improves performance for complex components whose content changes infrequently.
+
+        @param shouldCache Whether to enable cached-to-texture rendering.
+     */
+    void setCachedToTexture (bool shouldCache);
+
+    /** Returns true if cached-to-texture rendering is enabled. */
+    bool isCachedToTexture() const;
+
+    //==============================================================================
+    /** Creates a CPU-side Image containing a snapshot of this component's current
+        appearance, including all visible children.
+
+        The component tree is rendered offscreen, then the GPU pixels are read back to
+        CPU memory. The returned Image has both GPU texture and CPU pixel data populated.
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot. When false, the raw subtree
+                              rendering is captured.
+        @return An Image containing the rendered snapshot, or an empty Image on failure.
+        @see snapshotToTexture
+     */
+    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true);
+
+    /** Creates a GPU texture snapshot of this component's current appearance,
+        including all visible children.
+
+        Like snapshotToImage but returns a GPU texture without reading pixels back to
+        CPU memory. This is faster when the snapshot is only needed for on-screen
+        compositing (e.g. via Graphics::drawTexture).
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot.
+        @return A GpuTexture containing the rendered snapshot, or nullptr on failure.
+        @see snapshotToImage
+     */
+    GpuTexture::Ptr snapshotToTexture (GraphicsContext& ctx, bool includeEffects = true);
+
+    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {
@@ -1283,6 +1445,10 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    bool internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragExit (const DragAndDropData& data);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
@@ -1291,8 +1457,10 @@ private:
     void internalFocusChanged (bool gotFocus);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
+    void internalSafeAreaChanged();
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalVisibilityChanged();
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
@@ -1304,11 +1472,17 @@ private:
     void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
+    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous);
+    void paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous);
+    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
 
     friend class ComponentNative;
-    friend class ComponentTestHelper;
-    friend class SDL2ComponentNative;
+    friend class SDLComponentNative;
     friend class WeakReference<Component>;
+
+    template <class T>
+    friend class ComponentTestHelper;
 
     using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
@@ -1325,6 +1499,9 @@ private:
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    ComponentEffect::Ptr componentEffect;
+    GpuCanvas::Ptr cachedTextureCanvas;
+    float contentScale = 1.0f;
     uint8 opacity = 255;
 
     struct Options
@@ -1342,6 +1519,8 @@ private:
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;
+        bool cachedToTexture : 1;
+        bool paintAsOffscreenRoot : 1;
     };
 
     union

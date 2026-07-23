@@ -52,6 +52,17 @@ inline Array<var>* safeArray (const var& v)
     return v.getArray();
 }
 
+// A property "k" value is animated when it is an array of keyframe objects
+// (each carrying a "t" time). Some Lottie exporters omit the "a" animated flag,
+// so relying on "a" alone would treat such keyframe arrays as static values.
+inline bool isKeyframeArray (const var& k)
+{
+    if (const auto* arr = k.getArray())
+        return ! arr->isEmpty() && (*arr)[0].isObject() && ! (*arr)[0]["t"].isVoid();
+
+    return false;
+}
+
 AnimationGroup* findChildGroupByName (const AnimationGroup& group, const String& name)
 {
     for (const auto& child : group.children)
@@ -114,23 +125,17 @@ inline Color parseHexColor (const String& hex)
 } // namespace
 
 //==============================================================================
-LottieReader::LottieReader (const LottieLoadOptions& options, String* outError)
-    : options_ (options)
-    , errorOut_ (outError)
+LottieReader::LottieReader (const LottieLoadOptions& optionsToUse)
+    : options (optionsToUse)
 {
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseFile (const File& file,
-                                                   const LottieLoadOptions& options,
-                                                   String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseFile (const File& file,
+                                                                const LottieLoadOptions& options)
 {
     if (! file.existsAsFile())
-    {
-        if (outError != nullptr)
-            *outError = "File not found: " + file.getFullPathName();
-        return {};
-    }
+        return makeResultValueFail ("File not found: " + file.getFullPathName());
 
     LottieLoadOptions opts = options;
     if (opts.resourceDirectory == File())
@@ -138,46 +143,32 @@ AnimationComposition::Ptr LottieReader::parseFile (const File& file,
 
     auto stream = file.createInputStream();
     if (stream == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "Failed to open file: " + file.getFullPathName();
-        return {};
-    }
+        return makeResultValueFail ("Failed to open file: " + file.getFullPathName());
 
-    return parseStream (*stream, opts, outError);
+    return parseStream (*stream, opts);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseData (const String& jsonText,
-                                                   const LottieLoadOptions& options,
-                                                   String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseData (const String& jsonText,
+                                                                const LottieLoadOptions& options)
 {
     var root;
     const Result parseResult = JSON::parse (jsonText, root);
     if (parseResult.failed())
-    {
-        if (outError != nullptr)
-            *outError = "JSON parse error: " + parseResult.getErrorMessage();
-        return {};
-    }
+        return makeResultValueFail ("JSON parse error: " + parseResult.getErrorMessage());
 
-    LottieReader reader (options, outError);
+    LottieReader reader (options);
     return reader.parseRoot (root);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
-                                                     const LottieLoadOptions& options,
-                                                     String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseStream (InputStream& stream,
+                                                                  const LottieLoadOptions& options)
 {
     MemoryBlock data;
     const auto bytesRead = stream.readIntoMemoryBlock (data);
     if (bytesRead == 0 || data.isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "Empty or unreadable stream";
-        return {};
-    }
+        return makeResultValueFail ("Empty or unreadable stream");
 
     // .lottie ZIP archives start with "PK" magic bytes
     if (data.getSize() >= 2 && memcmp (data.getData(), "PK", 2) == 0)
@@ -187,31 +178,19 @@ AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
 
         const auto* manifestEntry = zip.getEntry ("manifest.json", true);
         if (manifestEntry == nullptr)
-        {
-            if (outError != nullptr)
-                *outError = "manifest.json not found in .lottie stream";
-            return {};
-        }
+            return makeResultValueFail ("manifest.json not found in .lottie stream");
 
         std::unique_ptr<InputStream> manifestStream (zip.createStreamForEntry (*manifestEntry));
         if (manifestStream == nullptr)
-            return {};
+            return makeResultValueFail ("Failed to open manifest.json in .lottie stream");
 
         var manifest;
         if (JSON::parse (manifestStream->readEntireStreamAsString(), manifest).failed())
-        {
-            if (outError != nullptr)
-                *outError = "Failed to parse manifest.json";
-            return {};
-        }
+            return makeResultValueFail ("Failed to parse manifest.json");
 
         const auto* anims = safeArray (manifest["animations"]);
         if (anims == nullptr || anims->isEmpty())
-        {
-            if (outError != nullptr)
-                *outError = "No animations found in manifest";
-            return {};
-        }
+            return makeResultValueFail ("No animations found in manifest");
 
         const auto& anim = (*anims)[0];
         const String animId = varString (anim["id"]);
@@ -221,20 +200,16 @@ AnimationComposition::Ptr LottieReader::parseStream (InputStream& stream,
 
         const auto* jsonEntry = zip.getEntry (jsonPath, true);
         if (jsonEntry == nullptr)
-        {
-            if (outError != nullptr)
-                *outError = "Animation JSON not found inside archive: " + jsonPath;
-            return {};
-        }
+            return makeResultValueFail ("Animation JSON not found inside archive: " + jsonPath);
 
         std::unique_ptr<InputStream> jsonStream (zip.createStreamForEntry (*jsonEntry));
         if (jsonStream == nullptr)
-            return {};
+            return makeResultValueFail ("Failed to open animation JSON inside archive: " + jsonPath);
 
-        return parseData (jsonStream->readEntireStreamAsString(), options, outError);
+        return parseData (jsonStream->readEntireStreamAsString(), options);
     }
 
-    return parseData (data.toString(), options, outError);
+    return parseData (data.toString(), options);
 }
 
 //==============================================================================
@@ -264,43 +239,30 @@ std::vector<String> LottieReader::listAnimationIds (const File& lottieZipFile)
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseFromZip (const File& lottieZipFile,
-                                                      const String& animationId,
-                                                      const LottieLoadOptions& options,
-                                                      String* outError)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseFromZip (const File& lottieZipFile,
+                                                                   const String& animationId,
+                                                                   const LottieLoadOptions& options)
 {
     ZipFile zip (lottieZipFile);
 
     // Read manifest
     const ZipFile::ZipEntry* manifestEntry = zip.getEntry ("manifest.json", true);
     if (manifestEntry == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "manifest.json not found in .lottie file";
-        return {};
-    }
+        return makeResultValueFail ("manifest.json not found in .lottie file");
 
     std::unique_ptr<InputStream> manifestStream (zip.createStreamForEntry (*manifestEntry));
     if (manifestStream == nullptr)
-        return {};
+        return makeResultValueFail ("Failed to open manifest.json in .lottie file");
 
     var manifest;
     if (JSON::parse (manifestStream->readEntireStreamAsString(), manifest).failed())
-    {
-        if (outError != nullptr)
-            *outError = "Failed to parse manifest.json";
-        return {};
-    }
+        return makeResultValueFail ("Failed to parse manifest.json");
 
     // Find the target animation path from the manifest
     String jsonPath;
     const auto* anims = safeArray (manifest["animations"]);
     if (anims == nullptr || anims->isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "No animations found in manifest";
-        return {};
-    }
+        return makeResultValueFail ("No animations found in manifest");
 
     for (const var& anim : *anims)
     {
@@ -315,29 +277,21 @@ AnimationComposition::Ptr LottieReader::parseFromZip (const File& lottieZipFile,
     }
 
     if (jsonPath.isEmpty())
-    {
-        if (outError != nullptr)
-            *outError = "Animation id not found in manifest: " + animationId;
-        return {};
-    }
+        return makeResultValueFail ("Animation id not found in manifest: " + animationId);
 
     const ZipFile::ZipEntry* jsonEntry = zip.getEntry (jsonPath, true);
     if (jsonEntry == nullptr)
-    {
-        if (outError != nullptr)
-            *outError = "Animation JSON not found inside archive: " + jsonPath;
-        return {};
-    }
+        return makeResultValueFail ("Animation JSON not found inside archive: " + jsonPath);
 
     std::unique_ptr<InputStream> jsonStream (zip.createStreamForEntry (*jsonEntry));
     if (jsonStream == nullptr)
-        return {};
+        return makeResultValueFail ("Failed to open animation JSON inside archive: " + jsonPath);
 
-    return parseData (jsonStream->readEntireStreamAsString(), options, outError);
+    return parseData (jsonStream->readEntireStreamAsString(), options);
 }
 
 //==============================================================================
-AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
+ResultValue<AnimationComposition::Ptr> LottieReader::parseRoot (const var& root)
 {
     auto comp = AnimationComposition::create (
         { varFloat (root["w"], 500.0f), varFloat (root["h"], 500.0f) },
@@ -347,6 +301,8 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     comp->version = varString (root["v"], "5.5.7");
     comp->startFrame = varFloat (root["ip"]);
     comp->endFrame = varFloat (root["op"], 60.0f);
+
+    frameRate_ = comp->frameRate > 0.0f ? comp->frameRate : 60.0f;
 
     parseAssets (root["assets"], *comp);
 
@@ -362,15 +318,13 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
     // Validate composition (gap 22)
     if (comp->version.isEmpty())
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: missing version";
-        return {};
+        errorMessage = "Invalid Lottie: missing version";
+        return makeResultValueFail (errorMessage);
     }
     if (comp->startFrame > comp->endFrame)
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: startFrame > endFrame";
-        return {};
+        errorMessage = "Invalid Lottie: startFrame > endFrame";
+        return makeResultValueFail (errorMessage);
     }
 
     if (const auto* markersArr = safeArray (root["markers"]))
@@ -385,7 +339,7 @@ AnimationComposition::Ptr LottieReader::parseRoot (const var& root)
         }
     }
 
-    return comp;
+    return makeResultValueOk (std::move (comp));
 }
 
 //==============================================================================
@@ -438,9 +392,9 @@ void LottieReader::parseAssets (const var& assetsVal, AnimationComposition& comp
                 }
             }
 
-            if (! asset->bitmap.has_value() && options_.imageResolver)
+            if (! asset->bitmap.has_value() && options.imageResolver)
             {
-                auto img = options_.imageResolver (asset->path, options_.resourceDirectory);
+                auto img = options.imageResolver (asset->path, options.resourceDirectory);
                 if (img.has_value())
                     asset->bitmap = std::move (img);
             }
@@ -712,7 +666,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
         il->assetRefId = varString (layerObj["refId"]);
         layer = il;
     }
-    else if (ty == 5) // Text — TODO: parsed as NullLayer (text rendering not yet supported)
+    else if (ty == 5) // Text - TODO: parsed as NullLayer (text rendering not yet supported)
     {
         layer = new NullLayer();
     }
@@ -726,13 +680,9 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
 
     // Self-parenting check
     if (layer->parentId >= 0 && layer->id == layer->parentId)
-    {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Invalid Lottie: layer references itself as parent";
         return {};
-    }
 
-    // Hidden layers — downgrade to Null to save resources (gap 23)
+    // Hidden layers - downgrade to Null to save resources (gap 23)
     if (layer->hidden)
     {
         layer = new NullLayer();
@@ -765,6 +715,7 @@ AnimationLayer::Ptr LottieReader::parseLayer (const var& layerObj)
     layer->matteType = static_cast<AnimationLayer::MatteType> (matteType);
     layer->isMatteSource = varInt (layerObj["td"]) != 0;
 
+    layer->transform.autoOrient = layer->autoOrient;
     parseTransform (layerObj["ks"], layer->transform, (bool) layerObj["ddd"]);
     parseMasks (layerObj["masksProperties"], *layer);
     parseEffects (layerObj["ef"], *layer);
@@ -791,6 +742,36 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
         return;
 
     AnimationGroup* implicitGroup = nullptr;
+    std::vector<AnimationGroup*> trailingGroups; // top-level groups eligible for modifier routing
+    bool lastWasPaintOrModifier = false;
+
+    const auto isModifier = [] (const String& ty)
+    {
+        return ty == "tm" || ty == "rp" || ty == "rd";
+    };
+
+    const auto isPaint = [] (const String& ty)
+    {
+        return ty == "fl" || ty == "st" || ty == "gs" || ty == "gf";
+    };
+
+    const auto groupHasOwnPaint = [] (const AnimationGroup& group)
+    {
+        for (const auto& child : group.children)
+        {
+            if (child.kind == AnimationGroup::ChildKind::Fill
+                || child.kind == AnimationGroup::ChildKind::Stroke)
+                return true;
+        }
+        return false;
+    };
+
+    const auto startNewRun = [&] (AnimationGroup* group)
+    {
+        trailingGroups.clear();
+        trailingGroups.push_back (group);
+        lastWasPaintOrModifier = false;
+    };
 
     for (const var& item : *arr)
     {
@@ -801,16 +782,75 @@ void LottieReader::parseShapeContents (const var& shapesVal, ShapeLayer& layer)
             auto* group = layer.addGroup (varString (item["nm"]));
             parseGroupItems (item["it"], *group);
             implicitGroup = nullptr;
+
+            if (lastWasPaintOrModifier)
+                startNewRun (group);
+            else
+                trailingGroups.push_back (group);
+
+            lastWasPaintOrModifier = false;
+        }
+        else if (isModifier (ty))
+        {
+            if (trailingGroups.empty())
+            {
+                // Stray modifier with no preceding group — isolate in implicit group.
+                if (implicitGroup == nullptr)
+                    implicitGroup = layer.addGroup();
+
+                parseSingleItem (item, *implicitGroup);
+            }
+            else
+            {
+                // Modifiers (trim, repeater, rounded-corner) must reach every
+                // preceding top-level group so they can operate on the group's
+                // accumulated shapes (e.g. `[gr, gr, tm]` in it's_lunch_time!).
+                for (auto* group : trailingGroups)
+                    parseSingleItem (item, *group);
+            }
+
+            lastWasPaintOrModifier = true;
+        }
+        else if (isPaint (ty) && ! trailingGroups.empty())
+        {
+            // Trailing paint (fill, stroke, gradient) applies to preceding
+            // paint-less groups only; groups with own paint are skipped.
+            bool applied = false;
+            for (auto* group : trailingGroups)
+            {
+                if (! groupHasOwnPaint (*group))
+                {
+                    parseSingleItem (item, *group);
+                    applied = true;
+                }
+            }
+
+            if (! applied)
+            {
+                // All preceding groups had their own paint — paint goes to a
+                // fresh implicit group (e.g. a standalone decorative stroke).
+                implicitGroup = layer.addGroup();
+                startNewRun (implicitGroup);
+                parseSingleItem (item, *implicitGroup);
+            }
+
+            lastWasPaintOrModifier = true;
         }
         else
         {
-            // Top-level shape items outside a group go into an implicit group.
-            // Start a new implicit group after real groups so trailing paints do
-            // not accidentally apply to the first named group.
+            // Standalone shape (or unclassified item). A shape following a
+            // paint/modifier starts a fresh implicit-group run.
+            if (lastWasPaintOrModifier)
+                implicitGroup = nullptr;
+
             if (implicitGroup == nullptr)
+            {
                 implicitGroup = layer.addGroup();
+                startNewRun (implicitGroup);
+            }
 
             parseSingleItem (item, *implicitGroup);
+            lastWasPaintOrModifier = false;
         }
     }
 
@@ -1157,10 +1197,12 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rd->hidden = (bool) itemObj["hd"];
         rd->radius = parseProperty<float> (itemObj["r"], extractFloat);
     }
-    else if (ty == "mm") // Merge Paths — not yet supported (gap 26)
+    else if (ty == "mm") // Merge Paths
     {
-        if (errorOut_ != nullptr)
-            *errorOut_ = "Merge Path (mm) is not supported yet";
+        auto* mm = group.addMergePaths();
+        mm->name = varString (itemObj["nm"]);
+        mm->hidden = (bool) itemObj["hd"];
+        mm->mode = static_cast<AnimationMergePaths::Mode> (varInt (itemObj["mm"], 1));
     }
 }
 
@@ -1191,7 +1233,7 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
 
         if (! isAnimated)
         {
-            // Static gradient — parse the flat array once
+            // Static gradient - parse the flat array once
             if (const auto* arr = safeArray (gk["k"]))
             {
                 std::vector<float> flat;
@@ -1203,9 +1245,11 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
         }
         else
         {
-            // Animated gradient — store all keyframes for runtime interpolation
+            // Animated gradient - store all keyframes for runtime interpolation
             if (const auto* kfs = safeArray (gk["k"]))
             {
+                std::vector<float> prevEndValues;
+
                 for (const var& kf : *kfs)
                 {
                     AnimationGradient::GradientKeyframe gkf;
@@ -1216,6 +1260,22 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
                         for (const var& v : *sArr)
                             gkf.values.push_back (varFloat (v));
                     }
+                    else
+                    {
+                        gkf.values = prevEndValues;
+                    }
+
+                    if (const auto* eArr = safeArray (kf["e"]))
+                    {
+                        prevEndValues.clear();
+                        for (const var& v : *eArr)
+                            prevEndValues.push_back (varFloat (v));
+                    }
+                    else
+                    {
+                        prevEndValues = gkf.values;
+                    }
+
                     gradient.animatedStops.push_back (std::move (gkf));
                 }
             }
@@ -1362,7 +1422,7 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
         const int animated = varInt (pObj["a"]);
         const var& k = pObj["k"];
 
-        if (animated == 0 || k.isVoid())
+        if ((animated == 0 && ! isKeyframeArray (k)) || k.isVoid())
         {
             if (k.isVoid())
                 t.position = AnimationProperty<Point<float>>::staticValue (extractPoint (pObj));
@@ -1378,7 +1438,7 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
 
                 if (hasSpatial)
                 {
-                    // Parse position with spatial tangents — store keyframes and tangents
+                    // Parse position with spatial tangents - store keyframes and tangents
                     typename AnimationProperty<Point<float>>::Builder builder;
                     bool hasPreviousValue = false;
                     Point<float> previousValue {};
@@ -1444,11 +1504,107 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
         }
     }
 
+    parsePositionBounce (pObj, t);
+
     t.scale = parseProperty<Size<float>> (ksObj["s"], extractSize);
 }
 
 //==============================================================================
+void LottieReader::parsePositionBounce (const var& positionObj, AnimationTransform& transform)
+{
+    const String expr = varString (positionObj["x"]);
+    if (expr.isEmpty())
+        return;
+
+    // Match the AfterEffects inertial-bounce ("overshoot") expression, which
+    // combines amp/freq/decay constants with a decaying sine driven by the
+    // incoming velocity at the last keyframe.
+    if (! (expr.contains ("amp") && expr.contains ("freq") && expr.contains ("decay")
+           && expr.containsIgnoreCase ("Math.sin") && expr.containsIgnoreCase ("Math.exp")))
+        return;
+
+    auto extractConstant = [&expr] (const String& name, float defaultValue) -> float
+    {
+        const int idx = expr.indexOf (name + " =");
+        if (idx < 0)
+            return defaultValue;
+
+        const int eq = expr.indexOf (idx, "=");
+        const int semi = expr.indexOf (eq, ";");
+        if (eq < 0 || semi < 0)
+            return defaultValue;
+
+        return expr.substring (eq + 1, semi).trim().getFloatValue();
+    };
+
+    InertialBounceParams params;
+    params.amplitude = extractConstant ("amp", 0.05f);
+    params.frequency = extractConstant ("freq", 2.0f);
+    params.decay = extractConstant ("decay", 2.0f);
+    params.timeMax = 2.0f;
+    params.frameRate = frameRate_;
+
+    if (! params.isActive())
+        return;
+
+    // Incoming velocity (pixels per second) at the last keyframe, derived from
+    // the final animated segment so the overshoot magnitude matches the motion.
+    Point<float> startValue {};
+    Point<float> endValue {};
+    float spanFrames = 0.0f;
+
+    if (transform.spatialKeyframes.size() >= 2)
+    {
+        const auto& last = transform.spatialKeyframes.back();
+        const auto& prev = transform.spatialKeyframes[transform.spatialKeyframes.size() - 2];
+        startValue = prev.value;
+        endValue = prev.endValue.value_or (last.value);
+        spanFrames = last.frame - prev.frame;
+    }
+    else if (transform.position.isAnimated() && transform.position.getKeyframes().size() >= 2)
+    {
+        const auto& kfs = transform.position.getKeyframes();
+        const auto& last = kfs.back();
+        const auto& prev = kfs[kfs.size() - 2];
+        startValue = prev.value;
+        endValue = prev.endValue.value_or (last.value);
+        spanFrames = last.frame - prev.frame;
+    }
+    else
+    {
+        return;
+    }
+
+    if (spanFrames <= 1e-5f)
+        return;
+
+    params.velocity = (endValue - startValue) * (frameRate_ / spanFrames);
+    transform.positionBounce = params;
+}
+
+//==============================================================================
 // Property parsing
+
+namespace
+{
+// Detects AfterEffects loopOut() expressions and configures the property to
+// repeat its keyframe range. Only the 'cycle' variant (the default) is applied;
+// other variants (pingpong / continue / offset) are left as a held final value.
+template <typename T>
+void applyLoopExpression (AnimationProperty<T>& property, const var& propObj)
+{
+    const String expr = varString (propObj["x"]);
+    if (! expr.containsIgnoreCase ("loopOut"))
+        return;
+
+    if (expr.containsIgnoreCase ("pingpong")
+        || expr.containsIgnoreCase ("continue")
+        || expr.containsIgnoreCase ("offset"))
+        return;
+
+    property.setLoopMode (AnimationProperty<T>::LoopMode::cycle);
+}
+} // namespace
 
 template <typename T>
 AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
@@ -1460,7 +1616,7 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
     const int animated = varInt (propObj["a"]);
     const var& k = propObj["k"];
 
-    if (animated == 0 || k.isVoid())
+    if ((animated == 0 && ! isKeyframeArray (k)) || k.isVoid())
     {
         // Static value
         if (k.isVoid())
@@ -1538,7 +1694,9 @@ AnimationProperty<T> LottieReader::parseProperty (const var& propObj,
         }
     }
 
-    return builder.build();
+    auto result = builder.build();
+    applyLoopExpression (result, propObj);
+    return result;
 }
 
 AnimationEasing LottieReader::parseEasing (const var& kfObj)

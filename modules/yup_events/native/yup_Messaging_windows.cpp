@@ -42,10 +42,6 @@ namespace yup
 
 extern HWND yup_messageWindowHandle;
 
-#if YUP_MODULE_AVAILABLE_yup_gui_extra
-LRESULT yup_offerEventToActiveXControl (::MSG&);
-#endif
-
 using SettingChangeCallbackFunc = void (*) (void);
 SettingChangeCallbackFunc settingChangeCallback = nullptr;
 
@@ -119,11 +115,6 @@ public:
 
         if (GetMessage (&m, nullptr, 0, 0) >= 0)
         {
-#if YUP_MODULE_AVAILABLE_yup_gui_extra
-            if (yup_offerEventToActiveXControl (m) != S_FALSE)
-                return true;
-#endif
-
             if (m.message == customMessageID && m.hwnd == yup_messageWindowHandle)
             {
                 dispatchMessages();

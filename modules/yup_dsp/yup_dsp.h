@@ -33,6 +33,7 @@
     license:              ISC
 
     dependencies:         yup_core yup_audio_basics yup_simd
+    optionalDeps:         bungee_library pffft_library
     appleFrameworks:      Accelerate
 
   END_YUP_MODULE_DECLARATION

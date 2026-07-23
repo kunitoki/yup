@@ -91,6 +91,11 @@ public:
     SizeProperty size { SizeProperty::staticValue ({ 100.0f, 100.0f }) };
 
     [[nodiscard]] Path buildPath (float frameNo) const override;
+
+private:
+    [[nodiscard]] bool isFullyStatic() const noexcept { return center.isStatic() && size.isStatic(); }
+
+    mutable std::optional<Path> cachedPath;
 };
 
 //==============================================================================
@@ -110,6 +115,11 @@ public:
     FloatProperty roundness { FloatProperty::staticValue (0.0f) };
 
     [[nodiscard]] Path buildPath (float frameNo) const override;
+
+private:
+    [[nodiscard]] bool isFullyStatic() const noexcept { return position.isStatic() && size.isStatic() && roundness.isStatic(); }
+
+    mutable std::optional<Path> cachedPath;
 };
 
 //==============================================================================
@@ -127,6 +137,11 @@ public:
     PathDataProperty pathData {};
 
     [[nodiscard]] Path buildPath (float frameNo) const override;
+
+private:
+    [[nodiscard]] bool isFullyStatic() const noexcept { return pathData.isStatic(); }
+
+    mutable std::optional<Path> cachedPath;
 };
 
 //==============================================================================
@@ -157,6 +172,20 @@ public:
     FloatProperty rotation { FloatProperty::staticValue (0.0f) };
 
     [[nodiscard]] Path buildPath (float frameNo) const override;
+
+private:
+    [[nodiscard]] bool isFullyStatic() const noexcept
+    {
+        return position.isStatic()
+            && points.isStatic()
+            && outerRadius.isStatic()
+            && innerRadius.isStatic()
+            && outerRoundness.isStatic()
+            && innerRoundness.isStatic()
+            && rotation.isStatic();
+    }
+
+    mutable std::optional<Path> cachedPath;
 };
 
 } // namespace yup

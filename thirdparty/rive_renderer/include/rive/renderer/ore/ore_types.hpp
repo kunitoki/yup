@@ -32,6 +32,7 @@ enum class BufferUsage : uint8_t
     vertex,
     index,
     uniform,
+    upload,
 };
 
 enum class ShaderLanguage : uint8_t
@@ -198,6 +199,9 @@ enum class IndexFormat : uint8_t
     uint32,
 };
 
+// 32-bit integer vector vertex formats (sint32, sint32x2..4, uint32x2..4) are
+// intentionally omitted: scripts don't expose them, and Unreal RHI only
+// supports scalar VET_UInt. Reintroduce per-backend if a real use case appears.
 enum class VertexFormat : uint8_t
 {
     float1,
@@ -217,13 +221,6 @@ enum class VertexFormat : uint8_t
     float16x2,
     float16x4,
     uint32,
-    uint32x2,
-    uint32x3,
-    uint32x4,
-    sint32,
-    sint32x2,
-    sint32x3,
-    sint32x4,
 };
 
 enum class VertexStepMode : uint8_t
@@ -713,7 +710,11 @@ struct BindGroupDesc
 
 struct Features
 {
+    // 32-bit float color render targets (rgba32float etc).
     bool colorBufferFloat = false;
+    // 16-bit float color render targets (rgba16float etc). Implied by
+    // colorBufferFloat, but on WebGL can be present without it.
+    bool colorBufferHalfFloat = false;
     bool perTargetBlend = false;
     bool perTargetWriteMask = false;
     bool textureViewSampling = false;

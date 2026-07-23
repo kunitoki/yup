@@ -19,6 +19,8 @@
   ==============================================================================
 */
 
+#include "mocks/yup_core.h"
+
 #include "yup_core/yup_AbstractFifo.cpp"
 #include "yup_core/yup_ArrayBase.cpp"
 #include "yup_core/yup_Atomic.cpp"

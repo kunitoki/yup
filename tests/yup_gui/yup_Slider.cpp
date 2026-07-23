@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -43,27 +43,25 @@ protected:
 };
 
 //==============================================================================
-/*
 TEST_F (SliderTest, DefaultInitialization)
 {
     EXPECT_DOUBLE_EQ (0.0, slider->getValue());
-    EXPECT_DOUBLE_EQ (0.0, slider->getMinimum());
-    EXPECT_DOUBLE_EQ (10.0, slider->getMaximum());
+    EXPECT_DOUBLE_EQ (0.0, slider->getMinValue());
+    EXPECT_DOUBLE_EQ (1.0, slider->getMaxValue());
     EXPECT_DOUBLE_EQ (0.0, slider->getInterval());
     EXPECT_DOUBLE_EQ (1.0, slider->getSkewFactor());
+    EXPECT_EQ (Slider::LinearVertical, slider->getSliderType());
+    EXPECT_DOUBLE_EQ (1.0, slider->getMouseDragSensitivity());
 }
-*/
 
+//==============================================================================
 TEST_F (SliderTest, ValueOperations)
 {
-    // Set range first before testing values
     slider->setRange (0.0, 10.0);
 
-    // Test setting and getting values
     slider->setValue (5.0);
     EXPECT_DOUBLE_EQ (5.0, slider->getValue());
 
-    // Test value clamping to range
     slider->setValue (15.0);
     EXPECT_DOUBLE_EQ (10.0, slider->getValue());
 
@@ -71,266 +69,381 @@ TEST_F (SliderTest, ValueOperations)
     EXPECT_DOUBLE_EQ (0.0, slider->getValue());
 }
 
-/*
-TEST_F (SliderTest, RangeOperations)
-{
-    // Test setting range
-    slider->setRange (1.0, 100.0);
-    EXPECT_DOUBLE_EQ (1.0, slider->getMinimum());
-    EXPECT_DOUBLE_EQ (100.0, slider->getMaximum());
-
-    // Test invalid range (min > max)
-    slider->setRange (100.0, 1.0);
-    EXPECT_DOUBLE_EQ (1.0, slider->getMinimum());
-    EXPECT_DOUBLE_EQ (100.0, slider->getMaximum());
-
-    // Test equal min and max
-    slider->setRange (50.0, 50.0);
-    EXPECT_DOUBLE_EQ (50.0, slider->getMinimum());
-    EXPECT_DOUBLE_EQ (50.0, slider->getMaximum());
-    EXPECT_DOUBLE_EQ (50.0, slider->getValue()); // Value should be set to the single valid value
-}
-
-TEST_F (SliderTest, IntervalOperations)
+TEST_F (SliderTest, SetValueWithNotificationCallback)
 {
     slider->setRange (0.0, 10.0);
 
-    // Test setting interval
-    slider->setInterval (0.5);
+    int callCount = 0;
+    double lastValue = 0.0;
+    slider->onValueChanged = [&] (double v)
+    {
+        ++callCount;
+        lastValue = v;
+    };
+
+    slider->setValue (5.0, sendNotification);
+    EXPECT_EQ (1, callCount);
+    EXPECT_DOUBLE_EQ (5.0, lastValue);
+}
+
+TEST_F (SliderTest, SetValueWithoutNotification)
+{
+    slider->setRange (0.0, 10.0);
+
+    int callCount = 0;
+    slider->onValueChanged = [&callCount] (double)
+    {
+        ++callCount;
+    };
+
+    slider->setValue (5.0, dontSendNotification);
+    EXPECT_EQ (0, callCount);
+}
+
+//==============================================================================
+TEST_F (SliderTest, ValueNormalisedOperations)
+{
+    slider->setRange (10.0, 50.0);
+
+    slider->setValueNormalised (0.0);
+    EXPECT_DOUBLE_EQ (10.0, slider->getValue());
+
+    slider->setValueNormalised (1.0);
+    EXPECT_DOUBLE_EQ (50.0, slider->getValue());
+
+    slider->setValueNormalised (0.5);
+    EXPECT_DOUBLE_EQ (30.0, slider->getValue());
+
+    slider->setValue (30.0);
+    EXPECT_NEAR (0.5, slider->getValueNormalised(), tolerance);
+}
+
+TEST_F (SliderTest, ValueNormalisedClamped)
+{
+    slider->setRange (0.0, 100.0);
+
+    slider->setValueNormalised (-0.5);
+    EXPECT_DOUBLE_EQ (0.0, slider->getValue());
+
+    slider->setValueNormalised (1.5);
+    EXPECT_DOUBLE_EQ (100.0, slider->getValue());
+}
+
+//==============================================================================
+TEST_F (SliderTest, RangeOperations)
+{
+    slider->setRange (1.0, 100.0);
+    EXPECT_DOUBLE_EQ (1.0, slider->getRange().getRange().getStart());
+    EXPECT_DOUBLE_EQ (100.0, slider->getRange().getRange().getEnd());
+
+    slider->setRange (50.0, 50.1);
+    EXPECT_DOUBLE_EQ (50.0, slider->getRange().getRange().getStart());
+    EXPECT_DOUBLE_EQ (50.1, slider->getRange().getRange().getEnd());
+    EXPECT_DOUBLE_EQ (50.0, slider->getValue());
+}
+
+TEST_F (SliderTest, RangeWithStepSize)
+{
+    slider->setRange (0.0, 10.0, 2.0);
+    EXPECT_DOUBLE_EQ (2.0, slider->getInterval());
+
+    slider->setRange (0.0, 100.0);
+    EXPECT_DOUBLE_EQ (0.0, slider->getInterval());
+}
+
+TEST_F (SliderTest, SetRangeWithNormalisableRange)
+{
+    NormalisableRange<double> range (1.0, 100.0, 0.5);
+
+    slider->setRange (range);
+    EXPECT_DOUBLE_EQ (1.0, slider->getRange().getRange().getStart());
+    EXPECT_DOUBLE_EQ (100.0, slider->getRange().getRange().getEnd());
+    EXPECT_DOUBLE_EQ (0.5, slider->getInterval());
+}
+
+//==============================================================================
+TEST_F (SliderTest, MinValueOperations)
+{
+    slider->setRange (0.0, 100.0);
+
+    slider->setMinValue (20.0);
+    EXPECT_DOUBLE_EQ (20.0, slider->getMinValue());
+
+    slider->setMinValue (50.0);
+    EXPECT_DOUBLE_EQ (50.0, slider->getMinValue());
+}
+
+TEST_F (SliderTest, MaxValueOperations)
+{
+    slider->setRange (0.0, 100.0);
+
+    slider->setMaxValue (80.0);
+    EXPECT_DOUBLE_EQ (80.0, slider->getMaxValue());
+}
+
+TEST_F (SliderTest, MinValueCallback)
+{
+    slider->setRange (0.0, 100.0);
+
+    int callCount = 0;
+    slider->onMinValueChanged = [&] (double)
+    {
+        ++callCount;
+    };
+
+    slider->setMinValue (20.0, sendNotification);
+    EXPECT_EQ (1, callCount);
+
+    slider->setMinValue (30.0, dontSendNotification);
+    EXPECT_EQ (1, callCount);
+}
+
+TEST_F (SliderTest, MaxValueCallback)
+{
+    slider->setRange (0.0, 100.0);
+
+    int callCount = 0;
+    slider->onMaxValueChanged = [&] (double)
+    {
+        ++callCount;
+    };
+
+    slider->setMaxValue (80.0, sendNotification);
+    EXPECT_EQ (1, callCount);
+
+    slider->setMaxValue (75.0, dontSendNotification);
+    EXPECT_EQ (1, callCount);
+}
+
+//==============================================================================
+TEST_F (SliderTest, DefaultValueOperations)
+{
+    slider->setRange (0.0, 100.0);
+
+    slider->setDefaultValue (42.0);
+    EXPECT_DOUBLE_EQ (42.0, slider->getDefaultValue());
+
+    slider->setDefaultValue (0.0);
+    EXPECT_DOUBLE_EQ (0.0, slider->getDefaultValue());
+}
+
+//==============================================================================
+TEST_F (SliderTest, IntervalOperationsWithStepRange)
+{
+    slider->setRange (0.0, 10.0, 0.5);
+
     EXPECT_DOUBLE_EQ (0.5, slider->getInterval());
 
-    // Test value snapping to interval
-    slider->setValue (3.7);
-    EXPECT_NEAR (3.5, slider->getValue(), tolerance); // Should snap to nearest 0.5
-
-    slider->setValue (4.8);
-    EXPECT_NEAR (5.0, slider->getValue(), tolerance); // Should snap to nearest 0.5
-
-    // Test zero interval (continuous)
-    slider->setInterval (0.0);
-    slider->setValue (3.7);
-    EXPECT_DOUBLE_EQ (3.7, slider->getValue()); // Should not snap
+    slider->setRange (0.0, 10.0, 0.01);
+    EXPECT_DOUBLE_EQ (0.01, slider->getInterval());
 }
-*/
 
+//==============================================================================
 TEST_F (SliderTest, SkewFactorOperations)
 {
     slider->setRange (1.0, 100.0);
 
-    // Test setting skew factor
     slider->setSkewFactor (2.0);
     EXPECT_DOUBLE_EQ (2.0, slider->getSkewFactor());
 
-    // Test linear skew (default)
     slider->setSkewFactor (1.0);
     EXPECT_DOUBLE_EQ (1.0, slider->getSkewFactor());
 
-    // The actual skewing behavior would be tested through the slider's
-    // internal position-to-value and value-to-position conversions
-
-    // Test logarithmic-like skew (< 1.0)
     slider->setSkewFactor (0.5);
     EXPECT_DOUBLE_EQ (0.5, slider->getSkewFactor());
 
-    // Test exponential-like skew (> 1.0)
     slider->setSkewFactor (3.0);
     EXPECT_DOUBLE_EQ (3.0, slider->getSkewFactor());
-
-    // Test invalid skew factor (should be > 0)
-#if ! YUP_DEBUG
-    //slider->setSkewFactor (0.0);
-    //EXPECT_GT (slider->getSkewFactor(), 0.0); // Should not be zero
-
-    //slider->setSkewFactor (-1.0);
-    //EXPECT_GT (slider->getSkewFactor(), 0.0); // Should not be negative
-#endif
 }
 
 TEST_F (SliderTest, SkewFactorFromMidpoint)
 {
     slider->setRange (1.0, 1000.0);
 
-    // Test setting skew from midpoint (useful for frequency controls)
     slider->setSkewFactorFromMidpoint (100.0);
-
-    // The skew factor should be calculated to make 100 appear at the midpoint
     double skewFactor = slider->getSkewFactor();
     EXPECT_GT (skewFactor, 0.0);
-    EXPECT_NE (1.0, skewFactor); // Should not be linear
-
-    // Test with midpoint at geometric center
-    slider->setRange (1.0, 100.0);
-    slider->setSkewFactorFromMidpoint (10.0); // sqrt(1 * 100) = 10
-
-    // Test edge cases
-#if ! YUP_DEBUG
-    //slider->setSkewFactorFromMidpoint (1.0); // Midpoint at minimum
-    //EXPECT_GT (slider->getSkewFactor(), 0.0);
-
-    //slider->setSkewFactorFromMidpoint (100.0); // Midpoint at maximum
-    //EXPECT_GT (slider->getSkewFactor(), 0.0);
-#endif
-}
-
-/*
-TEST_F (SliderTest, NormalizedValue)
-{
-    slider->setRange (10.0, 50.0);
-
-    // Test normalized value calculation
-    slider->setValue (10.0); // Minimum
-    EXPECT_NEAR (0.0, slider->getProportionalValue(), tolerance);
-
-    slider->setValue (50.0); // Maximum
-    EXPECT_NEAR (1.0, slider->getProportionalValue(), tolerance);
-
-    slider->setValue (30.0); // Middle
-    EXPECT_NEAR (0.5, slider->getProportionalValue(), tolerance);
-
-    // Test setting from normalized value
-    slider->setProportionalValue (0.25);
-    EXPECT_NEAR (20.0, slider->getValue(), tolerance);
-
-    slider->setProportionalValue (0.75);
-    EXPECT_NEAR (40.0, slider->getValue(), tolerance);
-}
-
-TEST_F (SliderTest, SkewFactorAffectsNormalizedValue)
-{
-    slider->setRange (1.0, 100.0);
-
-    // With linear skew (1.0)
-    slider->setSkewFactor (1.0);
-    slider->setValue (50.5); // Roughly middle value
-    double linearNormalized = slider->getProportionalValue();
-
-    // With exponential skew (> 1.0)
-    slider->setSkewFactor (2.0);
-    slider->setValue (50.5); // Same value
-    double exponentialNormalized = slider->getProportionalValue();
-
-    // The normalized values should be different due to skewing
-    EXPECT_NE (linearNormalized, exponentialNormalized);
-
-    // With logarithmic skew (< 1.0)
-    slider->setSkewFactor (0.5);
-    slider->setValue (50.5); // Same value
-    double logarithmicNormalized = slider->getProportionalValue();
-
-    // Should be different from both linear and exponential
-    EXPECT_NE (linearNormalized, logarithmicNormalized);
-    EXPECT_NE (exponentialNormalized, logarithmicNormalized);
-}
-
-TEST_F (SliderTest, TextFormattingOptions)
-{
-    // Test suffix
-    slider->setTextValueSuffix (" Hz");
-    EXPECT_EQ (" Hz", slider->getTextValueSuffix());
-
-    // Test text from value function
-    slider->setRange (0.0, 100.0);
-    slider->setValue (50.0);
-
-    String valueText = slider->getTextFromValue (50.0);
-    EXPECT_TRUE (valueText.contains ("50"));
-
-    // Test value from text function
-    double parsedValue = slider->getValueFromText ("75.5");
-    EXPECT_NEAR (75.5, parsedValue, tolerance);
-}
-
-TEST_F (SliderTest, BehaviorWithDifferentSkewFactors)
-{
-    slider->setRange (20.0, 20000.0); // Frequency-like range
-
-    // Test with different skew factors for frequency response
-    std::vector<double> skewFactors = { 0.3, 0.5, 1.0, 2.0, 3.0 };
-
-    for (double skew : skewFactors)
-    {
-        slider->setSkewFactor (skew);
-        EXPECT_DOUBLE_EQ (skew, slider->getSkewFactor());
-
-        // Test that extreme values still work
-        slider->setValue (20.0);
-        EXPECT_DOUBLE_EQ (20.0, slider->getValue());
-
-        slider->setValue (20000.0);
-        EXPECT_DOUBLE_EQ (20000.0, slider->getValue());
-
-        // Test normalized values at extremes
-        EXPECT_NEAR (0.0, slider->getProportionalValue(), tolerance);
-
-        slider->setValue (20.0);
-        EXPECT_NEAR (0.0, slider->getProportionalValue(), tolerance);
-    }
-}
-
-TEST_F (SliderTest, IntervalWithSkew)
-{
-    slider->setRange (1.0, 100.0);
-    slider->setInterval (1.0);   // Integer values only
-    slider->setSkewFactor (2.0); // Exponential skew
-
-    // Test that values still snap to intervals even with skew
-    slider->setValue (25.7);
-    double snappedValue = slider->getValue();
-    EXPECT_EQ (snappedValue, std::round (snappedValue)); // Should be integer
-
-    // Test edge case combinations
-    slider->setSkewFactor (0.5); // Logarithmic skew
-    slider->setValue (75.3);
-    snappedValue = slider->getValue();
-    EXPECT_EQ (snappedValue, std::round (snappedValue)); // Should still be integer
-}
-
-TEST_F (SliderTest, EdgeCases)
-{
-    // Test very small range
-    slider->setRange (0.001, 0.002);
-    slider->setValue (0.0015);
-    EXPECT_NEAR (0.0015, slider->getValue(), 1e-9);
-
-    // Test very large range
-    slider->setRange (-1000000.0, 1000000.0);
-    slider->setValue (500000.0);
-    EXPECT_DOUBLE_EQ (500000.0, slider->getValue());
-
-    // Test negative range
-    slider->setRange (-100.0, -10.0);
-    slider->setValue (-50.0);
-    EXPECT_DOUBLE_EQ (-50.0, slider->getValue());
-
-    // Test fractional interval
-    slider->setRange (0.0, 1.0);
-    slider->setInterval (0.01); // 1% steps
-    slider->setValue (0.567);
-    EXPECT_NEAR (0.57, slider->getValue(), tolerance); // Should snap to 0.57
+    EXPECT_NE (1.0, skewFactor);
 }
 
 TEST_F (SliderTest, SkewFactorConsistency)
 {
     slider->setRange (1.0, 1000.0);
-
-    // Test that skew factor produces consistent results
     slider->setSkewFactor (2.0);
 
-    // Set a normalized value, then get it back
-    slider->setProportionalValue (0.5);
+    slider->setValueNormalised (0.5);
     double midValue = slider->getValue();
-    double normalizedBack = slider->getProportionalValue();
+    double normalizedBack = slider->getValueNormalised();
 
     EXPECT_NEAR (0.5, normalizedBack, tolerance);
 
-    // Test roundtrip consistency for various values
-    std::vector<double> testValues = { 0.0, 0.25, 0.5, 0.75, 1.0 };
-
+    const std::array<double, 5> testValues = { 0.0, 0.25, 0.5, 0.75, 1.0 };
     for (double testNormalized : testValues)
     {
-        slider->setProportionalValue (testNormalized);
-        double actualNormalized = slider->getProportionalValue();
-        EXPECT_NEAR (testNormalized, actualNormalized, tolerance);
+        slider->setValueNormalised (testNormalized);
+        EXPECT_NEAR (testNormalized, slider->getValueNormalised(), tolerance);
     }
 }
-*/
+
+//==============================================================================
+TEST_F (SliderTest, NumDecimalPlacesToDisplay)
+{
+    slider->setNumDecimalPlacesToDisplay (3);
+    EXPECT_EQ (3, slider->getNumDecimalPlacesToDisplay());
+
+    slider->setNumDecimalPlacesToDisplay (0);
+    EXPECT_EQ (0, slider->getNumDecimalPlacesToDisplay());
+
+    slider->setNumDecimalPlacesToDisplay (-1);
+    EXPECT_EQ (-1, slider->getNumDecimalPlacesToDisplay());
+}
+
+//==============================================================================
+TEST_F (SliderTest, SliderTypeOperations)
+{
+    slider->setSliderType (Slider::Rotary);
+    EXPECT_EQ (Slider::Rotary, slider->getSliderType());
+
+    slider->setSliderType (Slider::LinearHorizontal);
+    EXPECT_EQ (Slider::LinearHorizontal, slider->getSliderType());
+
+    slider->setSliderType (Slider::IncDecButtons);
+    EXPECT_EQ (Slider::IncDecButtons, slider->getSliderType());
+
+    slider->setSliderType (Slider::TwoValueHorizontal);
+    EXPECT_EQ (Slider::TwoValueHorizontal, slider->getSliderType());
+}
+
+//==============================================================================
+TEST_F (SliderTest, TextBoxStyleOperations)
+{
+    slider->setTextBoxStyle (Slider::TextBoxLeft, true, 100, 25);
+    EXPECT_EQ (Slider::TextBoxLeft, slider->getTextBoxPosition());
+    EXPECT_TRUE (slider->isTextBoxReadOnly());
+
+    slider->setTextBoxStyle (Slider::TextBoxBelow, false);
+    EXPECT_EQ (Slider::TextBoxBelow, slider->getTextBoxPosition());
+    EXPECT_FALSE (slider->isTextBoxReadOnly());
+}
+
+TEST_F (SliderTest, TextBoxDefaultValues)
+{
+    EXPECT_EQ (Slider::NoTextBox, slider->getTextBoxPosition());
+    EXPECT_FALSE (slider->isTextBoxReadOnly());
+}
+
+//==============================================================================
+TEST_F (SliderTest, MouseDragSensitivity)
+{
+    slider->setMouseDragSensitivity (2.5);
+    EXPECT_DOUBLE_EQ (2.5, slider->getMouseDragSensitivity());
+
+    slider->setMouseDragSensitivity (0.1);
+    EXPECT_DOUBLE_EQ (0.1, slider->getMouseDragSensitivity());
+}
+
+//==============================================================================
+TEST_F (SliderTest, VelocityModeParameters)
+{
+    slider->setVelocityModeParameters (2.0, 0.5, 0.1);
+    EXPECT_NO_THROW (slider->setVelocityModeParameters (1.0, 1.0, 0.0));
+}
+
+//==============================================================================
+TEST_F (SliderTest, IsMouseOverDefaultFalse)
+{
+    EXPECT_FALSE (slider->isMouseOver());
+}
+
+TEST_F (SliderTest, IsCurrentlyBeingDraggedDefaultFalse)
+{
+    EXPECT_FALSE (slider->isCurrentlyBeingDragged());
+}
+
+//==============================================================================
+TEST_F (SliderTest, DragStartCallback)
+{
+    bool called = false;
+    slider->onDragStart = [&] (const MouseEvent&)
+    {
+        called = true;
+    };
+
+    EXPECT_FALSE (called);
+}
+
+TEST_F (SliderTest, DragEndCallback)
+{
+    bool called = false;
+    slider->onDragEnd = [&] (const MouseEvent&)
+    {
+        called = true;
+    };
+
+    EXPECT_FALSE (called);
+}
+
+//==============================================================================
+TEST_F (SliderTest, SetPopupDisplayEnabled)
+{
+    slider->setPopupDisplayEnabled (true);
+    EXPECT_NO_THROW (slider->setPopupDisplayEnabled (false));
+}
+
+TEST_F (SliderTest, SetPopupMenuEnabled)
+{
+    slider->setPopupMenuEnabled (true);
+    EXPECT_NO_THROW (slider->setPopupMenuEnabled (false));
+}
+
+//==============================================================================
+TEST_F (SliderTest, ConstructWithDifferentTypes)
+{
+    Slider horizontal (Slider::LinearHorizontal);
+    EXPECT_EQ (Slider::LinearHorizontal, horizontal.getSliderType());
+
+    Slider rotary (Slider::Rotary);
+    EXPECT_EQ (Slider::Rotary, rotary.getSliderType());
+
+    Slider incDec (Slider::IncDecButtons);
+    EXPECT_EQ (Slider::IncDecButtons, incDec.getSliderType());
+}
+
+TEST_F (SliderTest, ConstructWithComponentId)
+{
+    Slider sliderWithId (Slider::LinearHorizontal, "mySlider");
+    EXPECT_EQ (Slider::LinearHorizontal, sliderWithId.getSliderType());
+    EXPECT_EQ (String ("mySlider"), sliderWithId.getComponentID());
+}
+
+//==============================================================================
+TEST_F (SliderTest, EdgeCasesVerySmallRange)
+{
+    slider->setRange (0.001, 0.002);
+    slider->setValue (0.0015);
+    EXPECT_NEAR (0.0015, slider->getValue(), 1e-9);
+}
+
+TEST_F (SliderTest, EdgeCasesVeryLargeRange)
+{
+    slider->setRange (-1000000.0, 1000000.0);
+    slider->setValue (500000.0);
+    EXPECT_DOUBLE_EQ (500000.0, slider->getValue());
+}
+
+TEST_F (SliderTest, EdgeCasesNegativeRange)
+{
+    slider->setRange (-100.0, -10.0);
+    slider->setValue (-50.0);
+    EXPECT_DOUBLE_EQ (-50.0, slider->getValue());
+}
+
+TEST_F (SliderTest, EdgeCasesStepSnapping)
+{
+    slider->setRange (0.0, 1.0, 0.01);
+    slider->setValue (0.567);
+    EXPECT_NEAR (0.57, slider->getValue(), tolerance);
+
+    slider->setValue (0.561);
+    EXPECT_NEAR (0.56, slider->getValue(), tolerance);
+}

@@ -1006,3 +1006,126 @@ TEST_F (GraphicsTest, StrokeFittedText_StringWithJustificationDoesNotCrash)
         graphics->strokeFittedText ("World", Font().withHeight (16.0f), Rectangle<float> (10.0f, 10.0f, 120.0f, 40.0f), Justification::center);
     });
 }
+
+// =============================================================================
+// drawTexture — public API with GpuTexture::Ptr
+// =============================================================================
+
+TEST_F (GraphicsTest, DrawTexture_WithNullTextureIsNoOp)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        graphics->drawTexture (GpuTexture::Ptr {}, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f));
+    });
+}
+
+TEST_F (GraphicsTest, DrawTexture_WithDefaultConstructedPtrIsNoOp)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    GpuTexture::Ptr tex;
+    EXPECT_NO_THROW ({
+        graphics->drawTexture (tex, Rectangle<float> (10.0f, 10.0f, 100.0f, 100.0f));
+    });
+}
+
+// =============================================================================
+// isOffscreen — returns false for non-offscreen Graphics
+// =============================================================================
+
+TEST_F (GraphicsTest, IsOffscreen_ReturnsFalseForRendererBackedGraphics)
+{
+    EXPECT_FALSE (graphics->isOffscreen());
+}
+
+// =============================================================================
+// commitOffscreenTarget — fails on non-offscreen Graphics
+// =============================================================================
+
+TEST_F (GraphicsTest, CommitOffscreenTarget_FailsOnNonOffscreenGraphics)
+{
+    EXPECT_FALSE (graphics->commitOffscreenTarget());
+}
+
+// =============================================================================
+// getGraphicsContext / getFactory / getRenderer
+// =============================================================================
+
+TEST_F (GraphicsTest, GetGraphicsContext_ReturnsValidContext)
+{
+    auto& ctx = graphics->getGraphicsContext();
+    EXPECT_EQ (ctx.getApi(), GraphicsContext::Headless);
+}
+
+TEST_F (GraphicsTest, SetMiterLimit_DoesNotCrash)
+{
+    EXPECT_NO_THROW ({
+        graphics->setStrokeMiterLimit (0.0f);
+        graphics->setStrokeMiterLimit (10.0f);
+        graphics->setStrokeMiterLimit (100.0f);
+    });
+}
+
+// =============================================================================
+// SavedState move semantics
+// =============================================================================
+
+TEST_F (GraphicsTest, SavedState_MoveAssignmentDoesNotCrash)
+{
+    auto state1 = graphics->saveState();
+    auto state2 = graphics->saveState();
+    state2 = std::move (state1);
+    // state1.g is now nullptr, restore does nothing.
+}
+
+TEST_F (GraphicsTest, SavedState_MoveConstructorDoesNotCrash)
+{
+    auto state1 = graphics->saveState();
+    Graphics::SavedState state2 (std::move (state1));
+    // state1.g is now nullptr, restore on state1 does nothing.
+}
+
+// =============================================================================
+// drawImageAt — Point-based overload
+// =============================================================================
+
+TEST_F (GraphicsTest, DrawImageAt_WithValidImageDoesNotCrash)
+{
+    Image img (16, 16, PixelFormat::RGBA);
+    img.fill (0xFF0000FFu);
+
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    EXPECT_NO_THROW ({
+        graphics->drawImageAt (img, Point<float> (50.0f, 50.0f));
+    });
+}
+
+// =============================================================================
+// TransparencyLayer — move semantics
+// =============================================================================
+
+TEST_F (GraphicsTest, TransparencyLayer_MoveConstructorDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    auto layer1 = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f), 0.5f);
+    Graphics::TransparencyLayer layer2 (std::move (layer1));
+
+    if (layer2.isValid())
+        layer2.commit();
+}
+
+TEST_F (GraphicsTest, TransparencyLayer_MoveAssignmentDoesNotCrash)
+{
+    graphics->setDrawingArea (Rectangle<float> (0.0f, 0.0f, 200.0f, 200.0f));
+
+    auto layer1 = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 50.0f, 50.0f), 0.5f);
+    auto layer2 = graphics->beginTransparencyLayer (Rectangle<float> (50.0f, 50.0f, 100.0f, 100.0f), 1.0f);
+
+    layer2 = std::move (layer1);
+
+    if (layer2.isValid())
+        layer2.commit();
+}

@@ -62,7 +62,7 @@ inline uint32_t readU32LE(const uint8_t* p)
            (static_cast<uint32_t>(p[3]) << 24);
 }
 
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
 inline void writeU16LE(uint8_t* p, uint16_t v)
 {
     p[0] = static_cast<uint8_t>(v & 0xFF);
@@ -87,7 +87,7 @@ bool BindingMap::fromBlob(const uint8_t* data, size_t size, BindingMap* out)
     if (out == nullptr || data == nullptr)
         return false;
     out->m_entries.clear();
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
     out->m_finalized = false;
 #endif
 
@@ -134,7 +134,7 @@ bool BindingMap::fromBlob(const uint8_t* data, size_t size, BindingMap* out)
         out->m_entries.push_back(e);
         p += entrySize;
     }
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
     // Flip the finalized flag so tooling-build lookups satisfy their assert.
     // The blob is already sorted by construction; no std::sort call.
     out->m_finalized = true;
@@ -142,7 +142,7 @@ bool BindingMap::fromBlob(const uint8_t* data, size_t size, BindingMap* out)
     return true;
 }
 
-#ifdef WITH_RIVE_TOOLS
+#if 1 // WITH_RIVE_TOOLS
 
 std::vector<uint8_t> BindingMap::toBlob() const
 {

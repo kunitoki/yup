@@ -245,3 +245,158 @@ TEST_F (ApplicationThemeTest, SetMetricAcceptsZeroAndNegativeValues)
     ASSERT_TRUE (negative.has_value());
     EXPECT_FLOAT_EQ (negative.value(), -2.5f);
 }
+
+// =============================================================================
+
+TEST_F (ApplicationThemeTest, SetGlobalThemeRoundTrip)
+{
+    auto themePtr = ApplicationTheme::getGlobalTheme();
+    ASSERT_NE (nullptr, themePtr.get());
+
+    auto newTheme = new ApplicationTheme();
+    ApplicationTheme::setGlobalTheme (newTheme);
+
+    auto retrieved = ApplicationTheme::getGlobalTheme();
+    EXPECT_EQ (newTheme, retrieved.get());
+
+    ApplicationTheme::setGlobalTheme (themePtr.get());
+}
+
+TEST_F (ApplicationThemeTest, GetGlobalThemeReturnsNonNull)
+{
+    auto global = ApplicationTheme::getGlobalTheme();
+    EXPECT_NE (nullptr, global.get());
+}
+
+TEST_F (ApplicationThemeTest, SetDefaultFont)
+{
+    auto originalFont = theme->getDefaultFont();
+
+    Font newFont;
+    theme->setDefaultFont (newFont);
+
+    EXPECT_EQ (newFont, theme->getDefaultFont());
+}
+
+TEST_F (ApplicationThemeTest, GetDefaultFontReturnsValid)
+{
+    auto font = theme->getDefaultFont();
+    EXPECT_TRUE (font.getHeight() >= 0.0f);
+}
+
+TEST_F (ApplicationThemeTest, SetDefaultIconFont)
+{
+    auto originalFont = theme->getDefaultIconFont();
+
+    Font newFont;
+    theme->setDefaultIconFont (newFont);
+
+    EXPECT_EQ (newFont, theme->getDefaultIconFont());
+}
+
+TEST_F (ApplicationThemeTest, GetDefaultIconFontReturnsValid)
+{
+    auto font = theme->getDefaultIconFont();
+    EXPECT_TRUE (font.getHeight() >= 0.0f);
+}
+
+TEST_F (ApplicationThemeTest, FindMetricInstanceMethodReturnsRegisteredValue)
+{
+    Component c ("testComponent");
+
+    theme->setMetric (Identifier ("myMetric"), 15.0f);
+
+    auto result = theme->findMetric (c, Identifier ("myMetric"));
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (15.0f, result.value());
+}
+
+TEST_F (ApplicationThemeTest, FindMetricInstanceMethodReturnsNulloptForUnknown)
+{
+    Component c ("testComponent");
+
+    auto result = theme->findMetric (c, Identifier ("unknownMetric"));
+    EXPECT_FALSE (result.has_value());
+}
+
+TEST_F (ApplicationThemeTest, FindMetricInstanceMethodRespectsComponentOverride)
+{
+    Component c ("testComponent");
+
+    theme->setMetric (Identifier ("radius"), 10.0f);
+    c.setMetric (Identifier ("radius"), 25.0f);
+
+    auto result = theme->findMetric (c, Identifier ("radius"));
+    ASSERT_TRUE (result.has_value());
+    EXPECT_FLOAT_EQ (25.0f, result.value());
+}
+
+TEST_F (ApplicationThemeTest, SetComponentStyleRegistersStyle)
+{
+    ComponentStyle::Ptr style = new MockComponentStyle();
+    theme->setComponentStyle<ProgressBar> (style);
+
+    ProgressBar bar;
+    auto found = ApplicationTheme::findComponentStyle (bar);
+    EXPECT_EQ (style.get(), found.get());
+}
+
+#if ! YUP_DEBUG
+TEST_F (ApplicationThemeTest, FindComponentStyleReturnsNullWhenNotRegistered)
+{
+    Slider slider (Slider::LinearHorizontal);
+    auto found = ApplicationTheme::findComponentStyle (slider);
+    EXPECT_EQ (nullptr, found.get());
+}
+#endif
+
+TEST_F (ApplicationThemeTest, FindComponentStylePrefersComponentInstanceStyle)
+{
+    ComponentStyle::Ptr themeStyle = new MockComponentStyle();
+    theme->setComponentStyle<Label> (themeStyle);
+
+    Label label ("test");
+
+    auto found = ApplicationTheme::findComponentStyle (label);
+    EXPECT_EQ (themeStyle.get(), found.get());
+
+    ComponentStyle::Ptr instanceStyle = new MockComponentStyle();
+    label.setStyle (instanceStyle);
+
+    found = ApplicationTheme::findComponentStyle (label);
+    EXPECT_EQ (instanceStyle.get(), found.get());
+}
+
+TEST_F (ApplicationThemeTest, FindColorInstanceMethod)
+{
+    Component c ("testComponent");
+
+    const Color expected = Color::fromRGBA (10, 20, 30, 255);
+    theme->setColor (Identifier ("bg"), expected);
+
+    auto result = theme->findColor (c, Identifier ("bg"));
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), expected);
+}
+
+TEST_F (ApplicationThemeTest, FindColorInstanceMethodReturnsNulloptForUnknown)
+{
+    Component c ("testComponent");
+
+    auto result = theme->findColor (c, Identifier ("unknown"));
+    EXPECT_FALSE (result.has_value());
+}
+
+TEST_F (ApplicationThemeTest, FindColorInstanceMethodRespectsComponentOverride)
+{
+    Component c ("testComponent");
+
+    const Color themeColor = Color::fromRGBA (1, 2, 3, 255);
+    const Color compColor = Color::fromRGBA (4, 5, 6, 255);
+    theme->setColor (Identifier ("fg"), themeColor);
+    c.setColor (Identifier ("fg"), compColor);
+
+    auto result = theme->findColor (c, Identifier ("fg"));
+    ASSERT_TRUE (result.has_value());
+    EXPECT_EQ (result.value(), compColor);
+}

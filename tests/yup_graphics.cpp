@@ -19,6 +19,10 @@
   ==============================================================================
 */
 
+#include "mocks/rive_gpu.h"
+#include "mocks/rive_ore.h"
+#include "mocks/yup_graphics.h"
+
 #include "yup_graphics/yup_AffineTransform.cpp"
 #include "yup_graphics/yup_Color.cpp"
 #include "yup_graphics/yup_ColorGradient.cpp"
@@ -27,12 +31,19 @@
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"
 #include "yup_graphics/yup_GraphicsOffscreen.cpp"
+#include "yup_graphics/yup_GpuCanvas.cpp"
+#include "yup_graphics/yup_GpuTarget.cpp"
+#include "yup_graphics/yup_GpuPipeline.cpp"
+#include "yup_graphics/yup_GpuPipelineMocked.cpp"
 #include "yup_graphics/yup_Image.cpp"
 #include "yup_graphics/yup_ImageFormatManager.cpp"
 #include "yup_graphics/yup_ImageFormatReader.cpp"
 #include "yup_graphics/yup_ImageFormatWriter.cpp"
 #include "yup_graphics/yup_ImageFileIO.cpp"
 #include "yup_graphics/yup_ImageDataFiles.cpp"
+#include "yup_graphics/yup_ImageFormats.cpp"
+#include "yup_graphics/yup_ImageMetadata.cpp"
+#include "yup_graphics/yup_ImageFormatMetadata.cpp"
 #include "yup_graphics/yup_Line.cpp"
 #include "yup_graphics/yup_Path.cpp"
 #include "yup_graphics/yup_Point.cpp"
@@ -44,8 +55,15 @@
 #include "yup_graphics/yup_SVGDocument.cpp"
 #include "yup_graphics/yup_SVGParser.cpp"
 
+#if YUP_IMAGE_FORMAT_BMP
 #include "yup_graphics/yup_BmpImageFormat.cpp"
+#endif
+#if YUP_IMAGE_FORMAT_PPM
 #include "yup_graphics/yup_PpmImageFormat.cpp"
+#endif
+#if YUP_IMAGE_FORMAT_TGA
+#include "yup_graphics/yup_TgaImageFormat.cpp"
+#endif
 #if YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG
 #include "yup_graphics/yup_PngImageFormat.cpp"
 #endif
@@ -57,4 +75,7 @@
 #endif
 #if YUP_MODULE_AVAILABLE_libgif && YUP_IMAGE_FORMAT_GIF
 #include "yup_graphics/yup_GifImageFormat.cpp"
+#endif
+#if YUP_MODULE_AVAILABLE_libtiff && YUP_IMAGE_FORMAT_TIFF
+#include "yup_graphics/yup_TiffImageFormat.cpp"
 #endif

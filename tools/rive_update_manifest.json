@@ -117,6 +117,92 @@
           ]
         }
       ],
+      "patches": [
+        {
+          "path": "include/rive/renderer/ore/ore_context_wgpu.hpp",
+          "note": "ContextWGPU owned-encoder mode: add m_ownsCommandEncoder flag",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    uint64_t m_frameSerial = 0;"
+            ],
+            "to": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    bool m_ownsCommandEncoder = false;",
+              "    uint64_t m_frameSerial = 0;"
+            ]
+          }
+        },
+        {
+          "path": "source/ore/wgpu/ore_context_wgpu.cpp",
+          "note": "ContextWGPU owned-encoder mode: create/submit own encoder when beginFrame has no external one (fixes GpuFrame on Emscripten WebGPU)",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    assert(desc.externalCommandBuffer != nullptr);",
+              "    m_wgpuCommandEncoder = std::move(",
+              "        *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    // Host owns Finish()/Submit() and the frame fence; just drop our",
+              "    // reference to the shared encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ],
+            "to": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    if (desc.externalCommandBuffer != nullptr)",
+              "    {",
+              "        // External-encoder mode: record into the host's encoder; the host",
+              "        // owns Finish()/Submit().",
+              "        m_wgpuCommandEncoder = std::move(",
+              "            *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "    else",
+              "    {",
+              "        // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame",
+              "        // model): create our own encoder; endFrame() finishes and submits it,",
+              "        // preserving the one-submit-per-frame-serial contract that",
+              "        // BufferWGPU::acquireFreshBacking() relies on.",
+              "        m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();",
+              "        m_ownsCommandEncoder = true;",
+              "    }",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    if (m_ownsCommandEncoder)",
+              "    {",
+              "        wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();",
+              "        m_wgpuQueue.Submit(1, &commands);",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "",
+              "    // In external-encoder mode the host owns Finish()/Submit() and the frame",
+              "    // fence; in both modes just drop our reference to the encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ]
+          }
+        }
+      ],
       "shader_generation": {
         "source_dir": "renderer/src/shaders",
         "output_dir": "out/generated",
@@ -172,6 +258,10 @@
           "d3d": [
             "make",
             "fxc"
+          ],
+          "wgsl": [
+            "make",
+            "naga"
           ]
         },
         "targets": [
@@ -185,7 +275,8 @@
           "rive_renderer_appletvsimulator_metallib",
           "spirv",
           "spirv-binary",
-          "d3d"
+          "d3d",
+          "wgsl"
         ],
         "optional_targets": [
           "d3d"
@@ -280,6 +371,26 @@
             "**/*.mm"
           ]
         }
+      ],
+      "namespace_wraps": [
+        {
+          "path": "include/rive/decoders/bitmap_decoder.hpp",
+          "namespace": "rive",
+          "close_before": "\n#endif\n"
+        },
+        { "path": "source/bitmap_decoder.cpp", "namespace": "rive" },
+        { "path": "source/bitmap_decoder_thirdparty.cpp", "namespace": "rive" },
+        { "path": "source/decode_astc_texture.cpp", "namespace": "rive" },
+        { "path": "source/decode_bc_texture.cpp", "namespace": "rive" },
+        {
+          "path": "source/decode_etc_texture.cpp",
+          "namespace": "rive",
+          "start_after": "                                  int channels);\n"
+        },
+        { "path": "source/decode_jpeg.cpp", "namespace": "rive" },
+        { "path": "source/decode_png.cpp", "namespace": "rive" },
+        { "path": "source/decode_webp.cpp", "namespace": "rive" },
+        { "path": "source/texture_decoder.cpp", "namespace": "rive" }
       ]
     },
     {
@@ -465,6 +576,43 @@
               "#ifdef _WINDLL"
             ]
           }
+        },
+        {
+          "path": "upstream/yoga/Yoga.cpp",
+          "note": "patched YGConfigGetDefault to use a proper RAII wrapper with cleanup",
+          "already_contains": "struct YogaWrapperWithCleanup",
+          "replace": {
+            "from": [
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static YGConfigRef defaultConfig = YGConfigNew();",
+              "  return defaultConfig;",
+              "}"
+            ],
+            "to": [
+              "namespace {",
+              "struct YogaWrapperWithCleanup {",
+              "  YogaWrapperWithCleanup()",
+              "    : defaultConfig (YGConfigNew())",
+              "  {",
+              "  }",
+              "",
+              "  ~YogaWrapperWithCleanup() {",
+              "    if (defaultConfig != nullptr) {",
+              "      YGConfigFree (defaultConfig);",
+              "      defaultConfig = nullptr;",
+              "    }",
+              "  }",
+              "",
+              "  YGConfigRef defaultConfig = nullptr;",
+              "};",
+              "} // namespace",
+              "",
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static auto defaultWrapper = YogaWrapperWithCleanup();",
+              "  return defaultWrapper.defaultConfig;",
+              "}"
+            ]
+          }
         }
       ]
     },
@@ -498,6 +646,37 @@
             "pnglibconf.h"
           ]
         }
+      ],
+      "patches": [
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "convert anti-double-include guard to a standard include guard for unity builds",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": [
+              "#  define PNGPRIV_H",
+              "#else",
+              "#  error Duplicate inclusion of pngpriv.h; please check the libpng source files",
+              "#endif",
+              "",
+              "#if defined(PNG_H) || defined(PNGCONF_H) || defined(PNGLCONF_H)",
+              "#  error This file must not be included by applications; please include <png.h>",
+              "#endif"
+            ],
+            "to": [
+              "#  define PNGPRIV_H"
+            ]
+          }
+        },
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "add closing endif for PNGPRIV_H include guard",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": "#endif /* PNG_VERSION_INFO_ONLY */",
+            "to": "#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
+          }
+        }
       ]
     },
     {
@@ -513,6 +692,14 @@
         {
           "from": "src",
           "to": "upstream/src",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "sharpyuv",
+          "to": "upstream/src/sharpyuv",
           "include_globs": [
             "**/*.c",
             "**/*.h"
@@ -721,9 +908,14 @@
         "*.cpp"
       ],
       "exclude_globs": [
+        "decode_astc_texture.cpp",
+        "decode_bc_texture.cpp",
+        "decode_etc_texture.cpp",
         "decode_jpeg.cpp",
+        "decode_ktx2.cpp",
         "decode_png.cpp",
-        "decode_webp.cpp"
+        "decode_webp.cpp",
+        "texture_decoder.cpp"
       ]
     },
     {
@@ -764,7 +956,15 @@
       "validate_existing_includes": true
     },
     {
-      "path": "thirdparty/libwebp/libwebp.c",
+      "path": "thirdparty/libwebp/libwebp_decode.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp_encode.c",
       "validate_existing_includes": true,
       "search_roots": [
         "thirdparty/libwebp",

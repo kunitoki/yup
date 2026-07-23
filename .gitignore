@@ -42,7 +42,7 @@ out/*
 
 # Ides/Agents
 __pycache__/
-.gitnexus/
+.juggler/
 .vscode/
 .idea/
 .vs/
@@ -51,3 +51,4 @@ __pycache__/
 .pytest_cache/
 .cache/
 docs/superpowers/
+reasonix.toml

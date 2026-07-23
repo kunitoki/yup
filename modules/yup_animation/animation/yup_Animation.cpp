@@ -48,10 +48,10 @@ Animation Animation::loadFromFile (const File& file, const LoadOptions& opts)
     loaderOpts.resourceDirectory = opts.resourceDirectory;
 
     auto comp = LottieReader::parseFile (file, loaderOpts);
-    if (comp == nullptr)
+    if (comp.failed())
         return {};
 
-    return Animation (std::move (comp));
+    return Animation (comp.getReference());
 }
 
 Animation Animation::loadFromData (const String& jsonText, const LoadOptions& opts)
@@ -60,10 +60,10 @@ Animation Animation::loadFromData (const String& jsonText, const LoadOptions& op
     loaderOpts.resourceDirectory = opts.resourceDirectory;
 
     auto comp = LottieReader::parseData (jsonText, loaderOpts);
-    if (comp == nullptr)
+    if (comp.failed())
         return {};
 
-    return Animation (std::move (comp));
+    return Animation (comp.getReference());
 }
 
 Animation Animation::loadFromStream (InputStream& stream, const LoadOptions& opts)
@@ -72,10 +72,10 @@ Animation Animation::loadFromStream (InputStream& stream, const LoadOptions& opt
     loaderOpts.resourceDirectory = opts.resourceDirectory;
 
     auto comp = LottieReader::parseStream (stream, loaderOpts);
-    if (comp == nullptr)
+    if (comp.failed())
         return {};
 
-    return Animation (std::move (comp));
+    return Animation (comp.getReference());
 }
 
 Animation Animation::fromComposition (AnimationComposition::Ptr comp)
@@ -118,36 +118,42 @@ Size<float> Animation::size() const noexcept
 void Animation::renderFrame (Graphics& g,
                              float frameNo,
                              Rectangle<float> bounds,
-                             bool keepAspectRatio) const
+                             Fitting fitting,
+                             Justification justification,
+                             AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
-    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frameNo, bounds, fitting, justification, renderResources);
 }
 
 void Animation::renderAtTime (Graphics& g,
                               float timeInSeconds,
                               Rectangle<float> bounds,
-                              bool keepAspectRatio) const
+                              Fitting fitting,
+                              Justification justification,
+                              AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtTime (timeInSeconds);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification, renderResources);
 }
 
 void Animation::renderAtProgress (Graphics& g,
                                   float progress,
                                   Rectangle<float> bounds,
-                                  bool keepAspectRatio) const
+                                  Fitting fitting,
+                                  Justification justification,
+                                  AnimationRenderResources* renderResources) const
 {
     if (composition_ == nullptr)
         return;
 
     const float frame = composition_->frameAtProgress (progress);
-    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, keepAspectRatio);
+    AnimationRenderer::renderComposition (g, *composition_, frame, bounds, fitting, justification, renderResources);
 }
 
 //==============================================================================

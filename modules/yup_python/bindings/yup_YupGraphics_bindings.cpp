@@ -1228,41 +1228,28 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("SingleChannel", Image::PixelFormat::SingleChannel)
         .export_values();
 
-    py::class_<Image::BitmapData> classImageBitmapData (classImage, "BitmapData", py::buffer_protocol());
+#if 0
+    // Image::BitmapData was renamed to ImagePixelData and moved out of Image to namespace level.
+    // The new standalone ImagePixelData binding is below (classImagePixelData).
+    // This legacy buffer-protocol binding needs updating for the new ImagePixelData member layout.
 
-    py::enum_<Image::BitmapData::ReadWriteMode> (classImageBitmapData, "ReadWriteMode")
-        .value ("readOnly", Image::BitmapData::ReadWriteMode::readOnly)
-        .value ("writeOnly", Image::BitmapData::ReadWriteMode::writeOnly)
-        .value ("readWrite", Image::BitmapData::ReadWriteMode::readWrite)
-        .export_values();
+    py::class_<ImagePixelData> classImagePixelDataBuf (classImage, "ImagePixelData", py::buffer_protocol());
 
-    classImageBitmapData
-        .def (py::init<Image&, int, int, int, int, Image::BitmapData::ReadWriteMode>())
-        .def (py::init<const Image&, int, int, int, int>())
-        .def (py::init<const Image&, Image::BitmapData::ReadWriteMode>())
-        .def ("getLinePointer", [](const Image::BitmapData& self, int y)
-            { return py::memoryview::from_memory (self.getLinePointer(y), static_cast<Py_ssize_t> (self.size) - y * self.lineStride); })
-        .def ("getPixelPointer", [](const Image::BitmapData& self, int x, int y)
-            { return py::memoryview::from_memory (self.getPixelPointer(x, y), static_cast<Py_ssize_t> (self.size) - (y * self.lineStride + x * self.pixelStride)); })
-        .def ("getPixelColor", &Image::BitmapData::getPixelColor)
-        .def ("setPixelColor", &Image::BitmapData::setPixelColor)
-        .def ("getBounds", &Image::BitmapData::getBounds)
+    classImagePixelDataBuf
+        .def ("getPixelColor", &ImagePixelData::getPixelColor)
+        .def ("setPixelColor", &ImagePixelData::setPixelColor)
         .def_property ("data",
-            [](const Image::BitmapData& self)
-                { return py::memoryview::from_memory (self.data, static_cast<Py_ssize_t> (self.size)); },
-            [](Image::BitmapData& self, py::buffer data)
-                { auto info = data.request(); std::memcpy (self.data, info.ptr, static_cast<size_t> (std::min (info.size, static_cast<Py_ssize_t> (self.size)))); })
-        .def_readwrite ("size", &Image::BitmapData::size)
-        .def_readwrite ("pixelFormat", &Image::BitmapData::pixelFormat)
-        .def_readwrite ("lineStride", &Image::BitmapData::lineStride)
-        .def_readwrite ("pixelStride", &Image::BitmapData::pixelStride)
-        .def_readwrite ("width", &Image::BitmapData::width)
-        .def_readwrite ("height", &Image::BitmapData::height)
-        .def_buffer ([](Image::BitmapData& self)
+            [](const ImagePixelData& self)
+                { return py::memoryview::from_memory (self.pixelBuffer.get(), static_cast<Py_ssize_t> (self.totalSizeBytes)); },
+            [](ImagePixelData& self, py::buffer data)
+                { auto info = data.request(); std::memcpy (self.pixelBuffer.get(), info.ptr, static_cast<size_t> (std::min (info.size, static_cast<Py_ssize_t> (self.totalSizeBytes)))); })
+        .def_readwrite ("width", &ImagePixelData::width)
+        .def_readwrite ("height", &ImagePixelData::height)
+        .def_buffer ([](ImagePixelData& self)
         {
             return py::buffer_info
             (
-                self.data,
+                self.pixelBuffer.get(),
                 sizeof (unsigned char),
                 py::format_descriptor<unsigned char>::format(),
                 self.pixelStride,
@@ -1279,6 +1266,7 @@ void registerYupGraphicsBindings (py::module_& m)
             );
         });
     ;
+#endif
 
     classImage
         .def (py::init<>())
@@ -1325,7 +1313,7 @@ void registerYupGraphicsBindings (py::module_& m)
     //.def ("createLowLevelContext", &ImagePixelData::createLowLevelContext)
     //.def ("clone", &ImagePixelData::clone)
     //.def ("createType", &ImagePixelData::createType)
-    //.def ("initialiseBitmapData", &ImagePixelData::initialiseBitmapData)
+    //.def ("initialisePixelData", &ImagePixelData::initialisePixelData)
         .def ("getSharedCount", &ImagePixelData::getSharedCount)
         .def_readonly ("pixelFormat", &ImagePixelData::pixelFormat)
         .def_readonly ("width", &ImagePixelData::width)

@@ -21,7 +21,7 @@
 
 #pragma once
 
-#if YUP_MODULE_AVAILABLE_eigen
+#if YUP_MODULE_AVAILABLE_eigen_library
 
 namespace yup
 {

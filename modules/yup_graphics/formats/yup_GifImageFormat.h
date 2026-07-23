@@ -51,8 +51,9 @@ public:
         GIF logical screen dimensions. Takes ownership of the stream.
 
         @param stream  The source stream. This object takes ownership.
+        @param options Options controlling metadata extraction.
     */
-    explicit GifImageFormatReader (InputStream* stream);
+    explicit GifImageFormatReader (InputStream* stream, const ImageFormat::Options& options = {});
 
     //==============================================================================
     /** Decodes and returns frame 0 as a fully composited Image.
@@ -70,7 +71,7 @@ public:
 
     /** Decodes a frame directly into an existing Image, avoiding allocation when possible.
         If dest has the correct width, height, and PixelFormat::RGBA, decodes directly
-        into dest's raw pixel buffer — zero allocation.
+        into dest's raw pixel buffer - zero allocation.
         @param frameIndex  Zero-based frame index.
         @param dest        Image to decode into (may be reallocated).
         @returns true on success.
@@ -145,7 +146,7 @@ public:
     */
     GifImageFormatWriter (OutputStream* stream, PixelFormat fmt);
 
-    /** Destructor — flushes any open animation state. */
+    /** Destructor - flushes any open animation state. */
     ~GifImageFormatWriter() override;
 
     //==============================================================================
@@ -155,7 +156,7 @@ public:
     bool writeImage (const Image& image) override;
 
     //==============================================================================
-    /** Returns true — GIF supports animated output. */
+    /** Returns true - GIF supports animated output. */
     bool supportsAnimation() const override { return true; }
 
     /** Begins an animated GIF sequence.
@@ -226,14 +227,15 @@ public:
     const String& getFormatName() const override;
 
     /** Returns {".gif"} for both reading and writing. */
-    Array<String> getFileExtensions (Mode mode) const override;
+    StringArray getFileExtensions (Mode mode) const override;
 
     /** Returns true if the first 6 bytes of the stream equal "GIF87a" or "GIF89a". */
     bool canHandleStream (InputStream& stream, Mode mode) const override;
 
     //==============================================================================
     /** Creates a GifImageFormatReader for the given stream. */
-    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream) override;
+    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream,
+                                                        const Options& options = {}) override;
 
     /** Creates a GifImageFormatWriter for the given stream and pixel format. */
     std::unique_ptr<ImageFormatWriter> createWriterFor (OutputStream* destStream,
@@ -248,7 +250,7 @@ public:
     /** Returns true because GIF uses LZW compression. */
     bool isCompressed() const override { return true; }
 
-    /** Returns {} — GIF palette quantization is fixed (no quality options). */
+    /** Returns {} - GIF palette quantization is fixed (no quality options). */
     StringArray getQualityOptions() const override { return {}; }
 
 private:

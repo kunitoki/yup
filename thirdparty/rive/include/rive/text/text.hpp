@@ -79,6 +79,11 @@ struct TextBoundsInfo
     float totalHeight;
     int ellipsisLine;
     bool isEllipsisLineLast;
+    // Vertical trim removed from the top (ascent above the first line's cap- or
+    // x-height) and bottom (descent below the last line's baseline / natural
+    // descent). Both are zero when trim is disabled (TextTrimTop/Bottom::none).
+    float topTrim;
+    float bottomTrim;
 };
 
 enum class LineIter : uint8_t
@@ -184,6 +189,14 @@ public:
     TextSizing effectiveSizing() const;
     TextOverflow overflow() const { return (TextOverflow)overflowValue(); }
     TextOrigin textOrigin() const { return (TextOrigin)originValue(); }
+    TextTrimTop verticalTrimTop() const
+    {
+        return textTrimTop(verticalTrimValue());
+    }
+    TextTrimBottom verticalTrimBottom() const
+    {
+        return textTrimBottom(verticalTrimValue());
+    }
     TextWrap wrap() const { return (TextWrap)wrapValue(); }
     VerticalTextAlign verticalAlign() const
     {
@@ -262,8 +275,11 @@ protected:
     void widthChanged() override;
     void heightChanged() override;
     void paragraphSpacingChanged() override;
-    bool makeStyled(StyledText& styledText, bool withModifiers = true) const;
+    bool makeStyled(StyledText& styledText,
+                    bool withModifiers = true,
+                    float fontScale = 1.0f) const;
     void originValueChanged() override;
+    void verticalTrimValueChanged() override;
 
 private:
 #ifdef WITH_RIVE_TEXT
@@ -297,6 +313,10 @@ private:
         unordered_map<ColorGlyphCacheKey, rcp<RenderImage>, ColorGlyphCacheHash>
             m_emojiImageCache;
     TextBoundsInfo computeBoundsInfo();
+    // For TextOverflow::fitFontSize: binary-searches the largest integer font
+    // size that fits the bounds and returns it as a multiplier of the authored
+    // font size(s). Returns 1.0f when no fitting is needed/possible.
+    float fitFontScale();
     LineIter shouldDrawLine(float y, float totalHeight, const GlyphLine& line);
     void buildTextStylePaints();
     std::vector<TextValueRunListener*> m_valueRunListeners;

@@ -15,6 +15,7 @@ This document provides directive guidelines for AI assistants working on the YUP
 ## Code Generation Rules
 
 **NEVER EVER run bash commands to configure, compile or test the implementation, acknowledge that we should test and we'll run and report any issue.**
+**If you see changes in code you didn't notice before, it's not the linter, it's me changing it for a reason and you should acknowledge the changes, not revert them.**
 
 ## AI Decision Making Rules
 
@@ -314,8 +315,9 @@ Before suggesting code, verify:
 - [ ] Proper TDD and ensure tests cover new functionality
 - [ ] No memory leaks (prefer RAII/smart pointers)
 - [ ] Thread safety considerations if applicable
-- [ ] Documentation for public APIs or build system
-- [ ] Keep changes updated in @CHANGELOG.md
+- [ ] Consistent documentation for public APIs or public build system methods
+- [ ] Documentation in @docs/ is reviewed, added, updated or removed depending on the changes being done 
+- [ ] Changes are updated in @CHANGELOG.md, they should be brief
 
 ## Differences with JUCE
 

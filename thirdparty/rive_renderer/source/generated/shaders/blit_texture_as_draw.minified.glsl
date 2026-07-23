@@ -1,33 +1,33 @@
 h2
 #ifdef USE_FILTERING
-J0 d0(0,c,U0);
+J0 c0(0,c,U0);
 #endif
-Z1
+a2
 #ifdef VERTEX
-P3 Q3 B4 C4 A1(c0)B1 C1(TE,c0,G,v,S){c l2;l2.x=(v&1)==0?-1.:1.;l2.y=(v&2)==0?-1.:1.;
+R3 S3 A4 B4 A1(a0)B1 C1(WE,a0,G,v,T){c l2;l2.x=(v&1)==0?-1.:1.;l2.y=(v&2)==0?-1.:1.;
 #ifdef USE_FILTERING
-Y(U0,c);U0.x=l2.x*.5+.5;U0.y=l2.y*-.5+.5;l0(U0);
+Y(U0,c);U0.x=l2.x*.5+.5;U0.y=l2.y*-.5+.5;k0(U0);
 #endif
-g O=g(l2,0,1);D1(O);}
+g N=g(l2,0,1);D1(N);}
 #endif
 #ifdef FRAGMENT
-y3
+B3
 #ifdef SOURCE_TEXTURE_MSAA
-Ne(Y4,R3,ZB);
+Te(Z4,T3,BC);
 #else
-U2(Y4,R3,ZB);
+X2(Z4,T3,BC);
 #endif
-z3
+C3
 #ifdef USE_FILTERING
-Z4 S3(Oe)a5
+a5 U3(Ue)c5
 #endif
-V2(i,YD){i l8;
+Y2(i,DE){i l8;
 #ifdef USE_FILTERING
-B(U0,c);l8=Q6(ZB,Oe,U0,.0);
+B(U0,c);l8=Q6(BC,Ue,U0,.0);
 #elif defined(SOURCE_TEXTURE_MSAA)
-l8=(m8(ZB,0,U(floor(T.xy)))+m8(ZB,1,U(floor(T.xy)))+m8(ZB,2,U(floor(T.xy)))+m8(ZB,3,U(floor(T.xy))))*0.25;
+l8=(m8(BC,0,U(floor(S.xy)))+m8(BC,1,U(floor(S.xy)))+m8(BC,2,U(floor(S.xy)))+m8(BC,3,U(floor(S.xy))))*0.25;
 #else
-l8=F1(ZB,U(floor(T.xy)));
+l8=v1(BC,U(floor(S.xy)));
 #endif
-F2(l8);}
+G2(l8);}
 #endif

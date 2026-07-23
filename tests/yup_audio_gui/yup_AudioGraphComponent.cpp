@@ -215,6 +215,8 @@ public:
     int nodeMoveCount = 0;
 };
 
+} // namespace
+
 class AudioGraphComponentTests : public ::testing::Test
 {
 protected:
@@ -288,8 +290,6 @@ protected:
     std::shared_ptr<AudioGraphModel> model;
     std::unique_ptr<AudioGraphComponent> component;
 };
-
-} // namespace
 
 //==============================================================================
 // AudioGraphNodeView Tests

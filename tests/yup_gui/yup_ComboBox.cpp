@@ -446,3 +446,25 @@ TEST_F (ComboBoxTest, FunctionalCallbackWithIdSelection)
     EXPECT_EQ (kTestId3, selectedId);
     EXPECT_EQ (2, selectedIndex); // Should be index 2
 }
+
+TEST_F (ComboBoxTest, AddSeparatorIncreasesCount)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    const size_t countBefore = comboBox->getNumItems();
+
+    comboBox->addSeparator();
+    EXPECT_EQ (countBefore + 1, comboBox->getNumItems());
+}
+
+TEST_F (ComboBoxTest, AddSeparatorBetweenItems)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addSeparator();
+    comboBox->addItem (kTestText2, kTestId2);
+
+    EXPECT_EQ (3u, comboBox->getNumItems());
+    EXPECT_EQ (kTestText1, comboBox->getItemText (0));
+    EXPECT_EQ (kTestText2, comboBox->getItemText (2));
+    EXPECT_EQ (kTestId1, comboBox->getItemId (0));
+    EXPECT_EQ (kTestId2, comboBox->getItemId (2));
+}

@@ -67,6 +67,7 @@ set (target_modules
     yup_data_model
     yup_graphics
     yup_animation
+    yup_shading
     dr_libs
     pffft_library
     opus_library
@@ -77,7 +78,10 @@ set (target_modules
     libpng
     libwebp
     libjpeg
-    libgif)
+    libgif
+    libtiff
+    glslang
+    spirv_cross)
 
 set (target_gtest_modules
     GTest::gtest
@@ -126,6 +130,13 @@ yup_standalone_app (
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ${target_console}
+    INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
+    MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
+    STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
+    EMSCRIPTEN_LINK_OPTIONS
+        $<$<CONFIG:Debug>:-sERROR_ON_WASM_CHANGES_AFTER_LINK>
+        $<$<CONFIG:Debug>:-sWASM_BIGINT>
+        $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
@@ -163,6 +174,9 @@ target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
 set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+target_compile_options (${target_name} PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-subobject-linkage>)
 
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
