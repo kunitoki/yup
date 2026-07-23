@@ -571,8 +571,7 @@ TEST (PpmImageFormatTests, ReaderDpiDefaultsToZero)
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
     PpmImageFormatReader reader (inStream);
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_EQ (reader.metadata, nullptr); // PPM does not support metadata
 }
 
 TEST (PpmImageFormatTests, WriterFlushReturnsTrue)
@@ -597,4 +596,204 @@ TEST (PpmImageFormatTests, WriterReturnsCorrectFormatName)
 {
     PpmImageFormatWriter writer (new MemoryOutputStream(), PixelFormat::RGB);
     EXPECT_EQ (writer.getFormatName(), String ("PPM/PGM/PBM Image"));
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (PpmImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    PpmImageFormatWriter writer (rawStream, PixelFormat::RGB);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// ASCII format readImage tests (P1, P2, P3)
+// ======================================================================
+
+TEST (PpmImageFormatTests, ReadP1AsciiBitmapProducesCorrectPixels)
+{
+    // P1 ASCII bitmap: '1' = black, '0' = white
+    // 2x2 image: top row white,white; bottom row black,white
+    const char data[] = "P1\n2 2\n1 0 0 1\n";
+    auto* stream = new MemoryInputStream (data, sizeof (data) - 1, false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 2);
+    ASSERT_EQ (reader.height, 2);
+    ASSERT_EQ (reader.pixelFormat, PixelFormat::Grayscale);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    // '1' → black (0), '0' → white (255)
+    EXPECT_EQ (result.getPixel (0, 0), 0xFF000000u); // black
+    EXPECT_EQ (result.getPixel (1, 0), 0xFFFFFFFFu); // white
+    EXPECT_EQ (result.getPixel (0, 1), 0xFFFFFFFFu); // white
+    EXPECT_EQ (result.getPixel (1, 1), 0xFF000000u); // black
+}
+
+TEST (PpmImageFormatTests, ReadP2AsciiGrayscaleProducesCorrectPixels)
+{
+    // P2 ASCII grayscale: values from 0 to maxval
+    const char data[] = "P2\n2 2\n255\n0 128 255 64\n";
+    auto* stream = new MemoryInputStream (data, sizeof (data) - 1, false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 2);
+    ASSERT_EQ (reader.height, 2);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    EXPECT_EQ (result.getPixel (0, 0), 0xFF000000u);
+    EXPECT_EQ (result.getPixel (1, 0), 0xFF808080u);
+    EXPECT_EQ (result.getPixel (0, 1), 0xFFFFFFFFu);
+    EXPECT_EQ (result.getPixel (1, 1), 0xFF404040u);
+}
+
+TEST (PpmImageFormatTests, ReadP3AsciiRgbProducesCorrectPixels)
+{
+    // P3 ASCII RGB: R G B triplets
+    const char data[] = "P3\n2 2\n255\n255 0 0 0 255 0 0 0 255 128 128 128\n";
+    auto* stream = new MemoryInputStream (data, sizeof (data) - 1, false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 2);
+    ASSERT_EQ (reader.height, 2);
+    ASSERT_EQ (reader.pixelFormat, PixelFormat::RGB);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    EXPECT_EQ (result.getPixel (0, 0), 0xFFFF0000u); // red
+    EXPECT_EQ (result.getPixel (1, 0), 0xFF00FF00u); // green
+    EXPECT_EQ (result.getPixel (0, 1), 0xFF0000FFu); // blue
+    EXPECT_EQ (result.getPixel (1, 1), 0xFF808080u); // gray
+}
+
+// ======================================================================
+// Binary bitmap (P4) readImage test
+// ======================================================================
+
+TEST (PpmImageFormatTests, ReadP4BinaryBitmapProducesCorrectPixels)
+{
+    // P4 binary bitmap: each row packed into ceil(width/8) bytes, MSB first
+    // 8x2 image: row0 = alternating B/W, row1 = all black
+    // bit 1 = black, bit 0 = white
+    // 0b10101010 = 0xAA → W,B,W,B,W,B,W,B
+    // 0b11111111 = 0xFF → B,B,B,B,B,B,B,B
+    const uint8 rawData[] = {
+        'P', '4', '\n', '8', ' ', '2', '\n',
+        0xAA, // row 0: alternating
+        0xFF  // row 1: all black
+    };
+    auto* stream = new MemoryInputStream (rawData, sizeof (rawData), false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 8);
+    ASSERT_EQ (reader.height, 2);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    // Row 0: alternating white/black (bit 1=black, bit 0=white)
+    for (int x = 0; x < 8; ++x)
+    {
+        // 0xAA = 10101010 → MSB first → x=0 sees bit7=1=black, x=1 sees bit6=0=white...
+        const uint32 expected = (x % 2 == 0) ? 0xFF000000u : 0xFFFFFFFFu;
+        EXPECT_EQ (result.getPixel (x, 0), expected) << "at x=" << x;
+    }
+    // Row 1: all black
+    for (int x = 0; x < 8; ++x)
+        EXPECT_EQ (result.getPixel (x, 1), 0xFF000000u);
+}
+
+// ======================================================================
+// 16-bit readImage tests (P5, P6 with maxval > 255)
+// ======================================================================
+
+TEST (PpmImageFormatTests, ReadP5With16BitMaxvalProducesCorrectPixels)
+{
+    // P5 binary grayscale, 2x1, maxval=65535, two pixels: lo=0xFFFF, hi=0x7FFF
+    const uint8 rawData[] = {
+        'P', '5', '\n', '2', ' ', '1', '\n', '6', '5', '5', '3', '5', '\n', 0xFF, 0xFF, // pixel 0: 65535 → 255
+        0x7F,
+        0xFF // pixel 1: 32767 → ~127
+    };
+    auto* stream = new MemoryInputStream (rawData, sizeof (rawData), false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 2);
+    ASSERT_EQ (reader.height, 1);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    EXPECT_EQ (result.getPixel (0, 0), 0xFFFFFFFFu); // 65535 normalized → 255
+    const uint32 p1 = result.getPixel (1, 0);
+    const uint8 p1Gray = static_cast<uint8> (p1 & 0xFF);
+    EXPECT_NEAR (p1Gray, 127, 1); // 32767/65535*255 ≈ 127.5
+}
+
+TEST (PpmImageFormatTests, ReadP6With16BitMaxvalProducesCorrectPixels)
+{
+    // P6 binary RGB, 1x1, maxval=65535, one pixel: 65535, 0, 0 (red)
+    const uint8 rawData[] = {
+        'P', '6', '\n', '1', ' ', '1', '\n', '6', '5', '5', '3', '5', '\n', 0xFF, 0xFF, // R: 65535 → 255
+        0x00,
+        0x00, // G: 0 → 0
+        0x00,
+        0x00 // B: 0 → 0
+    };
+    auto* stream = new MemoryInputStream (rawData, sizeof (rawData), false);
+
+    PpmImageFormatReader reader (stream);
+    ASSERT_EQ (reader.width, 1);
+    ASSERT_EQ (reader.height, 1);
+
+    const Image result = reader.readImage();
+    ASSERT_TRUE (result.isValid());
+
+    EXPECT_EQ (result.getPixel (0, 0), 0xFFFF0000u); // red
+}
+
+// ======================================================================
+// Invalid maxval / header tests
+// ======================================================================
+
+TEST (PpmImageFormatTests, InvalidMaxvalReturnsInvalidImage)
+{
+    const char data[] = "P5\n2 2\n99999\n";
+    auto* stream = new MemoryInputStream (data, sizeof (data) - 1, false);
+
+    PpmImageFormatReader reader (stream);
+    EXPECT_EQ (reader.width, 0);
+    EXPECT_EQ (reader.height, 0);
+
+    auto result = reader.readImage();
+    EXPECT_FALSE (result.isValid());
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (PpmImageFormatTests, SelectiveRegistrationPpmOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::ppm);
+
+    auto ppmFile = File::createTempFile (".ppm");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (ppmFile, PixelFormat::RGB), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    ppmFile.deleteFile();
+    bmpFile.deleteFile();
 }

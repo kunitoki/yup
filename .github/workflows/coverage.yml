@@ -129,7 +129,7 @@ jobs:
         file: ${{ runner.workspace }}/build/coverage/coverage_final.info
         name: overall-coverage
         fail_ci_if_error: false
-        verbose: false
+        verbose: true
     - name: Upload Test Results
       uses: actions/upload-artifact@v7
       if: always()

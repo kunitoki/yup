@@ -34,6 +34,8 @@ enum class ImageFormatType
     jpeg = 1 << 3,
     webp = 1 << 4,
     gif = 1 << 5,
+    tga = 1 << 6,
+    tiff = 1 << 7,
     all = ~0
 };
 
@@ -74,6 +76,7 @@ public:
         The specific formats registered depend on compile-time configuration:
         - BMP is always registered (no external dependency)
         - PPM/PGM/PBM is always registered (no external dependency)
+        - TGA is always registered (no external dependency)
         - PNG requires libpng (YUP_IMAGE_FORMAT_PNG)
         - JPEG requires libjpeg-turbo (YUP_IMAGE_FORMAT_JPEG)
         - WebP requires libwebp (YUP_IMAGE_FORMAT_WEBP)
@@ -91,12 +94,24 @@ public:
     void registerFormat (std::unique_ptr<ImageFormat> format);
 
     //==============================================================================
+    /** Returns all file extensions for all currently registered formats.
+
+        Collects extensions from both reading and writing modes, deduplicating
+        so each extension appears only once.
+
+        @returns An Array of lowercase file extension strings (e.g. ".bmp", ".tga").
+    */
+    StringArray getFormatFileExtensions() const;
+
+    //==============================================================================
     /** Creates an appropriate reader for the given file, based on file extension.
 
-        @param file  The image file to create a reader for.
+        @param file     The image file to create a reader for.
+        @param options  Controls which metadata categories are extracted during decoding.
         @returns A valid reader, or nullptr if no registered format handles this file.
     */
-    std::unique_ptr<ImageFormatReader> createReaderFor (const File& file);
+    std::unique_ptr<ImageFormatReader> createReaderFor (const File& file,
+                                                        const ImageFormat::Options& options = {});
 
     /** Creates a reader for raw stream data, detecting the format by magic bytes.
 
@@ -108,12 +123,14 @@ public:
         the returned reader owns the stream; on failure (nullptr returned) the
         stream is deleted by this method.
 
-        @param stream  The input stream to detect and read. Ownership is always
-                       consumed by this method regardless of the return value.
+        @param stream   The input stream to detect and read. Ownership is always
+                        consumed by this method regardless of the return value.
+        @param options  Controls which metadata categories are extracted during decoding.
         @returns A valid reader on success, or nullptr if no registered format
                  recognises the stream header.
     */
-    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* stream);
+    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* stream,
+                                                        const ImageFormat::Options& options = {});
 
     //==============================================================================
     /** Creates an appropriate writer for the given file, based on file extension.

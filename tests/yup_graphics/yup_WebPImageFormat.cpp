@@ -627,10 +627,10 @@ TEST (WebPImageFormatTests, ReaderDpiDefaultsToZero)
     ASSERT_TRUE (writer.writeImage (generateSolidImage (8, 8, PixelFormat::RGB)));
 
     auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
-    WebPImageFormatReader reader (inStream);
+    WebPImageFormatReader reader (inStream, ImageFormat::Options().withMetadata (true));
 
-    EXPECT_EQ (reader.dpiX, 0.0);
-    EXPECT_EQ (reader.dpiY, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 TEST (WebPImageFormatTests, WriterFlushReturnsTrue)
@@ -722,6 +722,135 @@ TEST (WebPImageFormatTests, LossyVsLosslessSizeDifference)
 
     EXPECT_GT (losslessStream->getDataSize(), 0u);
     EXPECT_GT (lossyStream->getDataSize(), 0u);
+}
+
+// ======================================================================
+// Invalid image writeImage
+// ======================================================================
+
+TEST (WebPImageFormatTests, WriteImageReturnsFalseForInvalidImage)
+{
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 0);
+
+    Image invalid;
+    EXPECT_FALSE (writer.writeImage (invalid));
+}
+
+// ======================================================================
+// Selective registration tests
+// ======================================================================
+
+TEST (WebPImageFormatTests, SelectiveRegistrationWebpOnly)
+{
+    ImageFormatManager manager;
+    manager.registerDefaultFormats (ImageFormatType::webp);
+
+    auto webpFile = File::createTempFile (".webp");
+    auto bmpFile = File::createTempFile (".bmp");
+
+    EXPECT_NE (manager.createWriterFor (webpFile, PixelFormat::RGBA), nullptr);
+    EXPECT_EQ (manager.createWriterFor (bmpFile, PixelFormat::RGB), nullptr);
+
+    webpFile.deleteFile();
+    bmpFile.deleteFile();
+}
+
+// ======================================================================
+// WebP animation tests
+// ======================================================================
+
+TEST (WebPImageFormatTests, WriteAndReadAnimatedWebpRoundtrip)
+{
+    Image red (8, 8, PixelFormat::RGBA);
+    red.fill (0xFFFF0000u);
+    Image green (8, 8, PixelFormat::RGBA);
+    green.fill (0xFF00FF00u);
+    Image blue (8, 8, PixelFormat::RGBA);
+    blue.fill (0xFF0000FFu);
+
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 0);
+    ASSERT_TRUE (writer.beginAnimation (3));
+    ASSERT_TRUE (writer.writeFrame (red, 100));
+    ASSERT_TRUE (writer.writeFrame (green, 200));
+    ASSERT_TRUE (writer.writeFrame (blue, 300));
+    ASSERT_TRUE (writer.endAnimation());
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    WebPImageFormatReader reader (inStream);
+
+    ASSERT_TRUE (reader.isAnimated());
+    EXPECT_EQ (reader.getFrameCount(), 3);
+    EXPECT_EQ (reader.getLoopCount(), 3);
+
+    auto f0 = reader.readFrame (0);
+    auto f1 = reader.readFrame (1);
+    auto f2 = reader.readFrame (2);
+
+    ASSERT_TRUE (f0.isValid());
+    ASSERT_TRUE (f1.isValid());
+    ASSERT_TRUE (f2.isValid());
+
+    EXPECT_TRUE (imagesAreEqual (red, f0, 0));
+    EXPECT_TRUE (imagesAreEqual (green, f1, 0));
+    EXPECT_TRUE (imagesAreEqual (blue, f2, 0));
+}
+
+TEST (WebPImageFormatTests, AnimatedWebpFrameDelayAndSeek)
+{
+    Image r (4, 4, PixelFormat::RGBA);
+    r.fill (0xFFFF0000u);
+    Image g (4, 4, PixelFormat::RGBA);
+    g.fill (0xFF00FF00u);
+    Image b (4, 4, PixelFormat::RGBA);
+    b.fill (0xFF0000FFu);
+
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 0);
+    ASSERT_TRUE (writer.beginAnimation (0));
+    ASSERT_TRUE (writer.writeFrame (r, 50));
+    ASSERT_TRUE (writer.writeFrame (g, 150));
+    ASSERT_TRUE (writer.writeFrame (b, 250));
+    ASSERT_TRUE (writer.endAnimation());
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    WebPImageFormatReader reader (inStream);
+
+    EXPECT_EQ (reader.getFrameDelayMs (0), 50);
+    EXPECT_EQ (reader.getFrameDelayMs (1), 150);
+    EXPECT_EQ (reader.getFrameDelayMs (2), 250);
+    EXPECT_EQ (reader.getFrameDelayMs (3), 0); // out of bounds
+
+    // Seek to frame 2 (should composite frame 0, then 1, then 2)
+    auto f2 = reader.readFrame (2);
+    ASSERT_TRUE (f2.isValid());
+    EXPECT_TRUE (imagesAreEqual (b, f2, 0));
+
+    // Seek backwards to frame 0 (should reset and recomposite)
+    auto f0again = reader.readFrame (0);
+    ASSERT_TRUE (f0again.isValid());
+    EXPECT_TRUE (imagesAreEqual (r, f0again, 0));
+}
+
+// ======================================================================
+// WebP raw chunks parsing
+// ======================================================================
+
+TEST (WebPImageFormatTests, ParseRawChunksCreatesMetadata)
+{
+    auto* rawStream = new MemoryOutputStream();
+    WebPImageFormatWriter writer (rawStream, PixelFormat::RGBA, 0);
+    ASSERT_TRUE (writer.writeImage (generateTestImage (4, 4, PixelFormat::RGBA)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    WebPImageFormatReader reader (inStream, ImageFormat::Options().withRawChunks (true));
+
+    ASSERT_NE (reader.metadata, nullptr);
+    // The reader might have extracted EXIF/ICCP/XMP chunks if present
+    // At minimum, metadata should be created
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
+    EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
 
 #endif // YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP

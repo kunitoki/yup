@@ -53,8 +53,9 @@ public:
         width and height are left at zero and readImage() will return an invalid Image.
 
         @param stream  The source stream. This object takes ownership.
+        @param options Options controlling metadata extraction.
     */
-    explicit PpmImageFormatReader (InputStream* stream);
+    explicit PpmImageFormatReader (InputStream* stream, const ImageFormat::Options& options = {});
 
     //==============================================================================
     /** Decodes the full image from the input stream.
@@ -126,14 +127,15 @@ public:
     const String& getFormatName() const override;
 
     /** Returns {".ppm", ".pgm", ".pbm"} for both reading and writing. */
-    Array<String> getFileExtensions (Mode mode) const override;
+    StringArray getFileExtensions (Mode mode) const override;
 
     /** Returns true if the stream starts with a Netpbm magic token P1 through P6. */
     bool canHandleStream (InputStream& stream, Mode mode) const override;
 
     //==============================================================================
     /** Creates a PpmImageFormatReader for the given stream. */
-    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream) override;
+    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream,
+                                                        const Options& options = {}) override;
 
     /** Creates a PpmImageFormatWriter for the given stream and pixel format. */
     std::unique_ptr<ImageFormatWriter> createWriterFor (OutputStream* destStream,

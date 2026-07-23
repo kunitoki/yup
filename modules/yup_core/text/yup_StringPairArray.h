@@ -273,6 +273,12 @@ public:
     */
     inline int size() const noexcept { return keys.size(); }
 
+    /** Returns if the array is empty.
+        
+        @returns True if the array is empty, false otherwise.
+    */
+    inline bool isEmpty() const noexcept { return keys.isEmpty(); }
+
     //==============================================================================
     /** Iterator class for range-based for loop support.
         

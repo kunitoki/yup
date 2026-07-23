@@ -278,3 +278,33 @@ TEST (ImageFormatReaderTests, BmpReaderReadFrameZeroMatchesReadImage)
     EXPECT_EQ (fromReadImage.getWidth(), fromReadFrame.getWidth());
     EXPECT_EQ (fromReadImage.getHeight(), fromReadFrame.getHeight());
 }
+
+// ======================================================================
+// readFrame with non-zero index on non-animated format
+// ======================================================================
+
+TEST (ImageFormatReaderTests, ReadFrameNonZeroOnStaticImageReturnsEmpty)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    BmpImageFormatReader reader (inStream);
+
+    auto frame = reader.readFrame (5);
+    EXPECT_FALSE (frame.isValid());
+}
+
+TEST (ImageFormatReaderTests, ReadFrameNonZeroWithDestReturnsFalse)
+{
+    auto* rawStream = new MemoryOutputStream();
+    BmpImageFormatWriter writer (rawStream, PixelFormat::RGB);
+    ASSERT_TRUE (writer.writeImage (generateSolidImage (4, 4, PixelFormat::RGB)));
+
+    auto* inStream = new MemoryInputStream (rawStream->getData(), rawStream->getDataSize(), true);
+    BmpImageFormatReader reader (inStream);
+
+    Image dest;
+    EXPECT_FALSE (reader.readFrame (5, dest));
+}

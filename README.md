@@ -171,6 +171,17 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 | **iOS** (enc)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
 | **iOS** (dec)     | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |
 
+## Supported Image Formats
+|                   | **Read**           | **Write**          | **Read Animated**  | **Write Animated** | **Metadata R/W**   | **Dependent on module** |
+|-------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:-----------------------:|
+| **BMP**           | :white_check_mark: | :white_check_mark: |                    |                    |                    |                         |
+| **PPM**           | :white_check_mark: | :white_check_mark: |                    |                    |                    |                         |
+| **TGA**           | :white_check_mark: | :white_check_mark: |                    |                    | :white_check_mark: |                         |
+| **TIFF**          | :white_check_mark: | :white_check_mark: |                    |                    | :white_check_mark: | libtiff                 |
+| **JPG**           | :white_check_mark: | :white_check_mark: |                    |                    | :white_check_mark: | libjpeg                 |
+| **PNG**           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | libpng                  |
+| **GIF**           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    | libgif                  |
+| **WEBP**          | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | libwebp                 |
 
 ## Prerequisites
 Before building, make sure you have:

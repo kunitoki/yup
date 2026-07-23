@@ -77,7 +77,7 @@ The whole file is a single `RIFF` chunk whose form type is `YSLB`.
 
 ```
 +===========================================================================+
-|  RIFF  |  size  |  'YSLB'                                                  |
+|  RIFF  |  size  |  'YSLB'                                                 |
 +===========================================================================+
          |                                                                  |
          |   +--------+--------+------------------+                         |
@@ -179,13 +179,13 @@ entry point, transpiled source, optional original input source, and reflection.
 +--------------------------------------------------------------------------+
 ```
 
-| Field        | Type          | Meaning                                                |
-|--------------|---------------|--------------------------------------------------------|
-| `language`   | `int32`       | Target `ShaderLanguage` of this variant.               |
-| `entryPoint` | prefixed str  | Entry-point function name (e.g. `"main"`).             |
-| `source`     | prefixed str  | Transpiled source code in `language`.                  |
+| Field        | Type          | Meaning                                                                      |
+|--------------|---------------|------------------------------------------------------------------------------|
+| `language`   | `int32`       | Target `ShaderLanguage` of this variant.                                     |
+| `entryPoint` | prefixed str  | Entry-point function name (e.g. `"main"`).                                   |
+| `source`     | prefixed str  | Transpiled source code in `language`.                                        |
 | `ISRC`       | chunk         | Original Vulkan GLSL input source, raw UTF-8. Optional — omitted when empty. |
-| `REFL`       | chunk         | Serialised `ShaderReflection` (see below).             |
+| `REFL`       | chunk         | Serialised `ShaderReflection` (see below).                                   |
 
 ### `ISRC` — Original input source
 
@@ -237,28 +237,28 @@ independently of the RIFF envelope version.
 
 ## 6. FourCC Reference
 
-| FourCC | Constant          | Role                                          |
-|--------|-------------------|-----------------------------------------------|
-| `RIFF` | `kFourCC_RIFF`    | Outer RIFF container.                         |
-| `LIST` | `kFourCC_LIST`    | Generic list container.                       |
-| `YSLB` | `kFourCC_YSLB`    | Bundle form type (magic).                     |
-| `VERS` | `kFourCC_VERS`    | Format version chunk.                         |
-| `SHAD` | `kFourCC_SHAD`    | List type for the stage list.                 |
-| `SHDR` | `kFourCC_SHDR`    | Per-stage chunk.                              |
-| `SPVB` | `kFourCC_SPVB`    | SPIR-V binary chunk.                          |
-| `VARS` | `kFourCC_VARS`    | List type for the variant list.               |
-| `VART` | `kFourCC_VART`    | Per-variant chunk.                            |
+| FourCC | Constant          | Role                                                 |
+|--------|-------------------|------------------------------------------------------|
+| `RIFF` | `kFourCC_RIFF`    | Outer RIFF container.                                |
+| `LIST` | `kFourCC_LIST`    | Generic list container.                              |
+| `YSLB` | `kFourCC_YSLB`    | Bundle form type (magic).                            |
+| `VERS` | `kFourCC_VERS`    | Format version chunk.                                |
+| `SHAD` | `kFourCC_SHAD`    | List type for the stage list.                        |
+| `SHDR` | `kFourCC_SHDR`    | Per-stage chunk.                                     |
+| `SPVB` | `kFourCC_SPVB`    | SPIR-V binary chunk.                                 |
+| `VARS` | `kFourCC_VARS`    | List type for the variant list.                      |
+| `VART` | `kFourCC_VART`    | Per-variant chunk.                                   |
 | `ISRC` | `kFourCC_ISRC`    | Original input source chunk (per-variant, optional). |
-| `REFL` | `kFourCC_REFL`    | Reflection archive chunk.                     |
+| `REFL` | `kFourCC_REFL`    | Reflection archive chunk.                            |
 
 Current format version: **`2`** (`kCurrentVersion`).
 
 ### Version history
 
-| Version | Change                                                                 |
-|---------|------------------------------------------------------------------------|
+| Version | Change                                                                  |
+|---------|-------------------------------------------------------------------------|
 | 1       | Initial format. Top-level `SRCE` chunk held a single per-bundle source. |
-| 2       | Removed `SRCE`. Added per-variant `ISRC` sub-chunk inside `VART`.     |
+| 2       | Removed `SRCE`. Added per-variant `ISRC` sub-chunk inside `VART`.       |
 
 ---
 

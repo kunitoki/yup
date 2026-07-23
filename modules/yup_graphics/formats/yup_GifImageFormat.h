@@ -51,8 +51,9 @@ public:
         GIF logical screen dimensions. Takes ownership of the stream.
 
         @param stream  The source stream. This object takes ownership.
+        @param options Options controlling metadata extraction.
     */
-    explicit GifImageFormatReader (InputStream* stream);
+    explicit GifImageFormatReader (InputStream* stream, const ImageFormat::Options& options = {});
 
     //==============================================================================
     /** Decodes and returns frame 0 as a fully composited Image.
@@ -226,14 +227,15 @@ public:
     const String& getFormatName() const override;
 
     /** Returns {".gif"} for both reading and writing. */
-    Array<String> getFileExtensions (Mode mode) const override;
+    StringArray getFileExtensions (Mode mode) const override;
 
     /** Returns true if the first 6 bytes of the stream equal "GIF87a" or "GIF89a". */
     bool canHandleStream (InputStream& stream, Mode mode) const override;
 
     //==============================================================================
     /** Creates a GifImageFormatReader for the given stream. */
-    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream) override;
+    std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream,
+                                                        const Options& options = {}) override;
 
     /** Creates a GifImageFormatWriter for the given stream and pixel format. */
     std::unique_ptr<ImageFormatWriter> createWriterFor (OutputStream* destStream,

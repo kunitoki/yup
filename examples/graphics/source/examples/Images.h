@@ -178,9 +178,9 @@ public:
 
 private:
     //==============================================================================
-    static yup::String getImageFileFilter()
+    yup::String getImageFileFilter() const
     {
-        return "*.png;*.jpg;*.jpeg;*.jpe;*.bmp;*.gif;*.webp;*.ppm;*.pgm;*.pbm";
+        return formatManager.getFormatFileExtensions().joinIntoString (";");
     }
 
     void browseForImageToLoad()

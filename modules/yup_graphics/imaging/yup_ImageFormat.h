@@ -56,6 +56,45 @@ public:
     };
 
     //==============================================================================
+    /**
+        Controls which metadata categories are extracted during image decoding.
+
+        By default (both flags false), no metadata is collected — the reader only
+        decodes pixel data and DPI. Set one or both flags to opt in to specific
+        categories of metadata.
+
+        @see ImageMetadata, ImageFormatReader, Image::loadFromData
+    */
+    struct Options
+    {
+        Options()
+            : parseMetadata (false)
+            , parseRawChunks (false)
+        {
+        }
+
+        Options& withMetadata (bool parseMetadata)
+        {
+            this->parseMetadata = parseMetadata;
+            return *this;
+        }
+
+        Options& withRawChunks (bool parseRawChunks)
+        {
+            this->parseRawChunks = parseRawChunks;
+            return *this;
+        }
+
+        /** When true, text key-value pairs (title, author, comment, etc.) are extracted.
+            Populates ImageMetadata::textEntries. */
+        bool parseMetadata;
+
+        /** When true, raw binary chunks (EXIF, ICC profiles, XMP, custom chunks) are extracted.
+            Populates ImageMetadata::rawChunks. */
+        bool parseRawChunks;
+    };
+
+    //==============================================================================
     /** Destructor. */
     virtual ~ImageFormat() = default;
 
@@ -72,7 +111,7 @@ public:
         @returns An array of file extensions (including the dot) that this format can handle
                  in the specified mode (e.g., {".png"} for PNG format)
     */
-    virtual Array<String> getFileExtensions (Mode mode) const = 0;
+    virtual StringArray getFileExtensions (Mode mode) const = 0;
 
     /** Tests whether this format can handle the given file based on its extension.
 
@@ -107,10 +146,13 @@ public:
 
         @param sourceStream  The input stream containing image data to be read. The
                              ImageFormat takes ownership of this stream on success.
+        @param options       Controls which metadata categories are extracted during
+                             decoding. Defaults to no metadata extraction.
         @returns A unique pointer to an ImageFormatReader if successful, nullptr if
                  the stream cannot be parsed by this format
     */
-    virtual std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream) = 0;
+    virtual std::unique_ptr<ImageFormatReader> createReaderFor (InputStream* sourceStream,
+                                                                const Options& options = {}) = 0;
 
     /** Creates a writer object capable of encoding image data to the given stream.
 

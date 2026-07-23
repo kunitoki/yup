@@ -73,8 +73,8 @@ static void writeLE32 (OutputStream& s, uint32 v)
 // BmpImageFormatReader
 //==============================================================================
 
-BmpImageFormatReader::BmpImageFormatReader (InputStream* stream)
-    : ImageFormatReader (stream, "BMP Image")
+BmpImageFormatReader::BmpImageFormatReader (InputStream* stream, const ImageFormat::Options& options)
+    : ImageFormatReader (stream, "BMP Image", options)
 {
     if (input == nullptr)
         return;
@@ -150,12 +150,18 @@ BmpImageFormatReader::BmpImageFormatReader (InputStream* stream)
 
     pixelFormat = (bitCount == 32) ? PixelFormat::RGBA : PixelFormat::RGB;
 
-    // Convert pixels/meter to DPI (1 inch = 0.0254 metres).
-    if (xPelsPerMeter > 0)
-        dpiX = static_cast<double> (xPelsPerMeter) * 0.0254;
+    if (getOptions().parseMetadata || getOptions().parseRawChunks)
+        metadata = ImageMetadata::create();
 
-    if (yPelsPerMeter > 0)
-        dpiY = static_cast<double> (yPelsPerMeter) * 0.0254;
+    // Convert pixels/meter to DPI (1 inch = 0.0254 metres).
+    if (getOptions().parseMetadata)
+    {
+        if (xPelsPerMeter > 0)
+            metadata->dpiX = static_cast<double> (xPelsPerMeter) * 0.0254;
+
+        if (yPelsPerMeter > 0)
+            metadata->dpiY = static_cast<double> (yPelsPerMeter) * 0.0254;
+    }
 }
 
 Image BmpImageFormatReader::readImage()
@@ -559,7 +565,7 @@ const String& BmpImageFormat::getFormatName() const
     return formatName;
 }
 
-Array<String> BmpImageFormat::getFileExtensions (Mode /*mode*/) const
+StringArray BmpImageFormat::getFileExtensions (Mode /*mode*/) const
 {
     return { ".bmp" };
 }
@@ -572,9 +578,9 @@ bool BmpImageFormat::canHandleStream (InputStream& stream, Mode /*mode*/) const
     return sig[0] == 0x42 && sig[1] == 0x4D;
 }
 
-std::unique_ptr<ImageFormatReader> BmpImageFormat::createReaderFor (InputStream* sourceStream)
+std::unique_ptr<ImageFormatReader> BmpImageFormat::createReaderFor (InputStream* sourceStream, const ImageFormat::Options& options)
 {
-    return std::make_unique<BmpImageFormatReader> (sourceStream);
+    return std::make_unique<BmpImageFormatReader> (sourceStream, options);
 }
 
 std::unique_ptr<ImageFormatWriter> BmpImageFormat::createWriterFor (OutputStream* destStream,

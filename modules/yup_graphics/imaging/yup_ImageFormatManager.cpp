@@ -57,6 +57,16 @@ void ImageFormatManager::registerDefaultFormats (ImageFormatType types)
     if (hasBitValueSet (types, ImageFormatType::gif))
         registerFormat (std::make_unique<GifImageFormat>());
 #endif
+
+#if YUP_IMAGE_FORMAT_TGA
+    if (hasBitValueSet (types, ImageFormatType::tga))
+        registerFormat (std::make_unique<TgaImageFormat>());
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+    if (hasBitValueSet (types, ImageFormatType::tiff))
+        registerFormat (std::make_unique<TiffImageFormat>());
+#endif
 }
 
 void ImageFormatManager::registerFormat (std::unique_ptr<ImageFormat> format)
@@ -65,7 +75,8 @@ void ImageFormatManager::registerFormat (std::unique_ptr<ImageFormat> format)
         formats.push_back (std::move (format));
 }
 
-std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (const File& file)
+std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (const File& file,
+                                                                        const ImageFormat::Options& options)
 {
     auto stream = file.createInputStream();
     if (stream == nullptr)
@@ -78,7 +89,7 @@ std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (const Fi
 
         stream->setPosition (0);
 
-        if (auto reader = format->createReaderFor (stream.release()))
+        if (auto reader = format->createReaderFor (stream.release(), options))
             return reader;
         else
             stream = file.createInputStream();
@@ -87,7 +98,8 @@ std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (const Fi
     return nullptr;
 }
 
-std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (InputStream* stream)
+std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (InputStream* stream,
+                                                                        const ImageFormat::Options& options)
 {
     if (stream == nullptr)
         return nullptr;
@@ -97,7 +109,7 @@ std::unique_ptr<ImageFormatReader> ImageFormatManager::createReaderFor (InputStr
     for (auto& fmt : formats)
     {
         if (fmt->canHandleStream (*ownedStream, ImageFormat::forReading))
-            return fmt->createReaderFor (ownedStream.release());
+            return fmt->createReaderFor (ownedStream.release(), options);
     }
 
     return nullptr;
@@ -131,6 +143,22 @@ std::unique_ptr<ImageFormatWriter> ImageFormatManager::createWriterFor (const Fi
     }
 
     return nullptr;
+}
+
+StringArray ImageFormatManager::getFormatFileExtensions() const
+{
+    StringArray result;
+
+    for (const auto& format : formats)
+    {
+        for (auto mode : { ImageFormat::forReading, ImageFormat::forWriting })
+        {
+            for (const auto& ext : format->getFileExtensions (mode))
+                result.addIfNotAlreadyThere (ext);
+        }
+    }
+
+    return result;
 }
 
 } // namespace yup

@@ -78,6 +78,7 @@ set (target_modules
     libwebp
     libjpeg
     libgif
+    libtiff
     glslang
     spirv_cross)
 
@@ -131,6 +132,10 @@ yup_standalone_app (
     INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
     MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
     STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
+    EMSCRIPTEN_LINK_OPTIONS
+        $<$<CONFIG:Debug>:-sERROR_ON_WASM_CHANGES_AFTER_LINK>
+        $<$<CONFIG:Debug>:-sWASM_BIGINT>
+        $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
