@@ -1,9 +1,6 @@
 codecov:
   require_ci_to_pass: yes
 
-github_checks:
-  annotations: true
-
 coverage:
   precision: 2
   round: down
@@ -13,7 +10,7 @@ coverage:
     project:
       default:
         informational: true
-        target: 70%
+        target: 80%
         threshold: 5%
         base: auto
         flags:
@@ -38,7 +35,7 @@ coverage:
     patch:
       default:
         informational: true
-        target: 70%
+        target: 80%
         threshold: 5%
 
 flags:
@@ -71,6 +68,6 @@ ignore:
   - "modules/*/native/**/*"
 
 comment:
-  layout: "header, reach, diff, flags, files, footer"
+  layout: "header, reach, diff, flags, components, files, footer"
   behavior: default
   require_changes: false
