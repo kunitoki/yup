@@ -27,11 +27,11 @@
 
 //==============================================================================
 
-class AiDemo : public yup::Component
+class AIDemo : public yup::Component
 {
 public:
-    AiDemo()
-        : Component ("AiDemo")
+    AIDemo()
+        : Component ("AIDemo")
     {
         auto theme = yup::ApplicationTheme::getGlobalTheme();
         titleFont = theme->getDefaultFont();
@@ -147,7 +147,7 @@ public:
         selectProvider (SelectedProvider::OpenAIChat);
     }
 
-    ~AiDemo() override
+    ~AIDemo() override
     {
         if (requestThread != nullptr)
             requestThread->stopThread (-1);
@@ -311,7 +311,7 @@ private:
     class AiRequestThread final : public yup::Thread
     {
     public:
-        AiRequestThread (AiDemo& ownerToUse,
+        AiRequestThread (AIDemo& ownerToUse,
                          yup::LLMClient::Options optionsToUse,
                          yup::String promptToUse,
                          bool useToolsToUse)
@@ -383,7 +383,7 @@ private:
             });
         }
 
-        AiDemo& owner;
+        AIDemo& owner;
         yup::LLMClient::Options clientOptions;
         yup::String prompt;
         bool useTools;
