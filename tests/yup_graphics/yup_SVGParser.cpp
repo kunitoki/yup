@@ -38,7 +38,7 @@ auto makeHeadlessGraphics (int w = 64, int h = 64)
     };
 
     HeadlessGfx g;
-    g.ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    g.ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     g.renderer = g.ctx->makeRenderer (w, h);
     g.graphics = std::make_unique<Graphics> (*g.ctx, *g.renderer);
     return g;

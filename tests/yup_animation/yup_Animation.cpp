@@ -295,7 +295,7 @@ TEST_F (AnimationValidTests, GetCompositionReturnsNonNull)
 TEST (AnimationTests, RenderFrameOnInvalidAnimationDoesNotCrash)
 {
     Animation invalid;
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     Image canvas (32, 32, PixelFormat::RGBA);
@@ -307,7 +307,7 @@ TEST (AnimationTests, RenderFrameOnInvalidAnimationDoesNotCrash)
 TEST (AnimationTests, RenderAtTimeOnInvalidAnimationDoesNotCrash)
 {
     Animation invalid;
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     Image canvas (32, 32, PixelFormat::RGBA);
@@ -319,7 +319,7 @@ TEST (AnimationTests, RenderAtTimeOnInvalidAnimationDoesNotCrash)
 TEST (AnimationTests, RenderAtProgressOnInvalidAnimationDoesNotCrash)
 {
     Animation invalid;
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     Image canvas (32, 32, PixelFormat::RGBA);
@@ -337,7 +337,7 @@ class AnimationRenderTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
 
         anim = Animation::loadFromData (kAnimTestJson);

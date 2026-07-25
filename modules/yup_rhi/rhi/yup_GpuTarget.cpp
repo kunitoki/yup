@@ -22,28 +22,28 @@
 namespace yup
 {
 
-GpuTarget::Ptr GpuTarget::create (GraphicsContext& ctx, int width, int height)
+GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height)
 {
     if (width <= 0 || height <= 0)
         return nullptr;
 
-    auto target = ctx.createOffscreenTarget (width, height);
+    auto target = ctx->createOffscreenTarget (width, height);
     if (target == nullptr)
         return nullptr;
 
     GpuTarget::Ptr result = new GpuTarget();
-    result->ctx = &ctx;
+    result->ctx = ctx;
     result->offscreenTarget = std::move (target);
     return result;
 }
 
-GpuTarget::Ptr GpuTarget::createFromTarget (GraphicsContext& ctx, std::unique_ptr<RenderableTarget> target)
+GpuTarget::Ptr GpuTarget::createFromTarget (GpuDevice::Ptr ctx, std::unique_ptr<RenderableTarget> target)
 {
     if (target == nullptr)
         return nullptr;
 
     GpuTarget::Ptr result = new GpuTarget();
-    result->ctx = &ctx;
+    result->ctx = ctx;
     result->renderableTarget = target.get();
     result->offscreenTarget = std::move (target);
     return result;
@@ -88,19 +88,6 @@ GpuTexture::Ptr GpuTarget::asTexture()
     }
 
     return cachedTexture;
-}
-
-Image GpuTarget::asImage()
-{
-    auto img = Image::fromTexture (asTexture());
-
-    if (img.isValid())
-    {
-        auto span = img.getRawData();
-        readPixels (span.data(), span.size());
-    }
-
-    return img;
 }
 
 bool GpuTarget::readPixels (void* dst, size_t byteSize)

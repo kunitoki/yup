@@ -189,7 +189,7 @@ private:
     String windowTitle;
     uint32 windowFlags = 0;
 
-    GraphicsContext::Api currentGraphicsApi;
+    GpuPlatform currentGraphicsApi;
 
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;

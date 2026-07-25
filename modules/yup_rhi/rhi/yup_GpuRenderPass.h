@@ -29,28 +29,6 @@ class GpuCanvas;
 class GpuFrame;
 
 //==============================================================================
-/** Per-render-pass options controlling attachment load behaviour. */
-struct GpuRenderOptions
-{
-    /** Default constructor. */
-    constexpr GpuRenderOptions() = default;
-
-    /** Constructs a GpuRenderOptions with the given clear flag and clear color. */
-    constexpr GpuRenderOptions (bool clear, Color clearColor)
-        : clear (clear)
-        , clearColor (clearColor)
-    {
-    }
-
-    /** Whether to clear the target before drawing (LoadOp::clear). When false
-        the existing contents are loaded (LoadOp::load). */
-    bool clear = true;
-
-    /** Clear color used when @c clear is true. */
-    Color clearColor = Colors::transparentBlack;
-};
-
-//==============================================================================
 /** A transient render-pass encoder targeting a GpuCanvas.
 
     A GpuRenderPass records draw commands into a single ore render pass that
@@ -97,7 +75,7 @@ public:
     
         @param pipeline  The GpuPipeline to use.
     */
-    void setPipeline (GpuPipeline& pipeline);
+    void setPipeline (GpuPipeline::Ptr pipeline);
 
     /** Binds a texture to the given (group, binding) slot.
 

@@ -27,7 +27,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 TEST (ThemeVersion1Tests, CreateReturnsNonNullTheme)
@@ -80,7 +80,7 @@ TEST (ThemeVersion1Tests, ScrollBarColorsAreRegistered)
 
 TEST (ThemeVersion1Tests, PaintsCoreComponents)
 {
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 

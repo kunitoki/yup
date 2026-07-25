@@ -32,8 +32,8 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd yup_shading rive rive_renderer libclipper2
-    optionalDeps:       libpng libjpeg libwebp libgif
+    dependencies:       yup_core yup_simd yup_rhi yup_shading rive rive_renderer libclipper2
+    optionalDeps:       libpng libjpeg libwebp libgif libtiff
     appleFrameworks:    Metal
     searchpaths:        native
 
@@ -47,6 +47,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_simd/yup_simd.h>
+#include <yup_rhi/yup_rhi.h>
 #include <yup_shading/yup_shading.h>
 
 //==============================================================================
@@ -193,7 +194,6 @@ class Context;
 #include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
-#include "rhi/yup_GpuTexture.h"
 #include "imaging/yup_ImagePixelData.h"
 #include "imaging/yup_ImageMetadata.h"
 #include "imaging/yup_ImageFormat.h"
@@ -209,18 +209,9 @@ class Context;
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_StrokeType.h"
 #include "graphics/yup_FillType.h"
-#include "context/yup_OffscreenTarget.h"
-#include "context/yup_RenderableTarget.h"
 #include "context/yup_GraphicsContext.h"
 #include "graphics/yup_Graphics.h"
-#include "rhi/yup_ShaderBindingMap.h"
-#include "rhi/yup_GpuBuffer.h"
-#include "rhi/yup_GpuPipeline.h"
-#include "rhi/yup_GpuFrame.h"
-#include "rhi/yup_GpuRenderPass.h"
-#include "rhi/yup_GpuTarget.h"
 #include "rhi/yup_GpuCanvas.h"
-#include "rhi/yup_GpuPipelineCache.h"
 #include "svg/yup_SVGElement.h"
 #include "svg/yup_SVGGradient.h"
 #include "svg/yup_SVGClipPath.h"

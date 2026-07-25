@@ -69,12 +69,12 @@ bool GpuBuffer::isValid() const noexcept
 
 //==============================================================================
 
-GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,
+GpuBuffer::Ptr GpuBuffer::create (GpuDevice::Ptr ctx,
                                   GpuBufferType type,
                                   const void* data,
                                   size_t byteSize)
 {
-    auto* oreCtx = ctx.gpuContext();
+    auto* oreCtx = ctx->gpuContext();
     if (oreCtx == nullptr)
         return nullptr;
 
@@ -91,6 +91,7 @@ GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,
         case GpuBufferType::index:
             desc.usage = rive::ore::BufferUsage::index;
             break;
+        case GpuBufferType::storage:
         case GpuBufferType::uniform:
         default:
             desc.usage = rive::ore::BufferUsage::uniform;

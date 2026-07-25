@@ -27,17 +27,17 @@ namespace yup
 namespace
 {
 
-ShaderLanguage cacheShaderLanguageForApi (GraphicsContext::Api api)
+ShaderLanguage cacheShaderLanguageForApi (GpuPlatform api)
 {
     switch (api)
     {
-        case GraphicsContext::Metal:
+        case GpuPlatform::Metal:
             return ShaderLanguage::msl;
-        case GraphicsContext::Direct3D:
+        case GpuPlatform::Direct3D:
             return ShaderLanguage::hlsl;
-        case GraphicsContext::OpenGLES:
+        case GpuPlatform::OpenGLES:
             return ShaderLanguage::essl;
-        case GraphicsContext::WebGPU:
+        case GpuPlatform::WebGPU:
             return ShaderLanguage::wgsl;
         default:
             return ShaderLanguage::glsl;
@@ -102,8 +102,8 @@ void appendPipelineOptions (String& payload, const GpuPipelineOptions& o)
 
 //==============================================================================
 
-GpuPipelineCache::GpuPipelineCache (GraphicsContext& contextToUse)
-    : context (contextToUse)
+GpuPipelineCache::GpuPipelineCache (GpuDevice::Ptr contextToUse)
+    : context (std::move (contextToUse))
 {
 }
 
@@ -113,7 +113,7 @@ GpuPipelineCache::~GpuPipelineCache() = default;
 
 String GpuPipelineCache::generateCacheKey (const ShaderBundle& bundle,
                                            const GpuPipelineOptions& options,
-                                           GraphicsContext::Api api)
+                                           GpuPlatform api)
 {
     const auto targetLang = cacheShaderLanguageForApi (api);
 
@@ -144,7 +144,7 @@ String GpuPipelineCache::generateCacheKey (const ShaderBundle& bundle,
 ResultValue<GpuPipeline::Ptr> GpuPipelineCache::getOrCompile (const ShaderBundle& bundle,
                                                               const GpuPipelineOptions& options)
 {
-    const auto key = generateCacheKey (bundle, options, context.getApi());
+    const auto key = generateCacheKey (bundle, options, context->getPlatform());
     return getOrCompile (key, bundle, options);
 }
 

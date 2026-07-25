@@ -1,13 +1,16 @@
 # RHI - GPU Rendering Hardware Interface
 
-The **RHI** is YUP's backend-agnostic, low-level GPU layer. It sits below the 2D
-`Graphics` API and above Rive's GPU abstraction, giving you direct control
-over pipelines, render passes, buffers, and textures while remaining portable
-across Metal, Direct3D, OpenGL and OpenGL ES, WebGL2 and WebGPU, and Vulkan (in progress).
+The **RHI** is YUP's backend-agnostic, low-level GPU layer, provided by the
+`yup_rhi` module. It sits below the 2D `Graphics` API and above Rive's GPU
+abstraction, giving you direct control over pipelines, render passes, buffers,
+and textures while remaining portable across Metal, Direct3D, OpenGL / OpenGL ES,
+WebGL2, WebGPU, and Vulkan (in progress).
 
 Use the RHI when you need custom GPU work that the 2D `Graphics` API does not
 express - 3D geometry, post-process effects, compute-style fullscreen passes, or
-offscreen render-to-texture pipelines.
+offscreen render-to-texture pipelines. For GPU compute without any window or
+graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
+`GraphicsContext` or `yup_graphics` dependency needed.
 
 ## When to use the RHI
 
@@ -21,6 +24,8 @@ offscreen render-to-texture pipelines.
 
 ## Classes at a glance
 
+- **`GpuDevice`** - a reference-counted GPU device abstraction. Owns the native
+  device and command queue. Factories for all RHI resources start here.
 - **`GpuFrame`** - RAII scope for one frame's GPU work. Begin, encode passes,
   submit.
 - **`GpuRenderPass`** - records draw commands (pipeline, bindings, draws) into a

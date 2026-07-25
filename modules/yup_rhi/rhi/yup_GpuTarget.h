@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class GraphicsContext;
+class GpuDevice;
 class GpuTexture;
 class GpuFrame;
 class GpuRenderPass;
@@ -47,7 +47,7 @@ class Image;
     if (target != nullptr)
     {
         auto frame = yup::GpuFrame::begin (ctx);
-        auto pass = target->beginRenderPass (frame, { true, yup::Colors::transparentBlack });
+        auto pass = target->beginRenderPass (frame, { true, yup::GpuColor::transparentBlack() });
         pass.setPipeline (*pipeline);
         pass.draw (3);
         pass.finish();
@@ -70,7 +70,7 @@ public:
     //==============================================================================
     /** Creates a GpuTarget of the given pixel dimensions.
 
-        Returns nullptr if the GraphicsContext cannot allocate offscreen GPU resources
+        Returns nullptr if the GpuDevice cannot allocate offscreen GPU resources
         (e.g. headless context with no GPU).
 
         @param ctx      The graphics context that owns the GPU device.
@@ -81,7 +81,7 @@ public:
 
         @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
-    static GpuTarget::Ptr create (GraphicsContext& ctx, int width, int height);
+    static GpuTarget::Ptr create (GpuDevice::Ptr ctx, int width, int height);
 
     //==============================================================================
     /** Returns the width of this target in pixels. */
@@ -113,17 +113,6 @@ public:
     */
     GpuTexture::Ptr asTexture();
 
-    /** Returns an Image with both GPU texture and CPU pixel data populated.
-
-        Calls asTexture() to obtain the GPU resource, creates an Image wrapping it,
-        and then calls readPixels() to fill the CPU-side ImagePixelData. Returns an
-        empty Image on failure. For GPU-only compositing without CPU readback, prefer
-        using asTexture() and Graphics::drawTexture.
-
-        @returns An Image, or an empty Image on failure.
-    */
-    Image asImage();
-
     //==============================================================================
     /** Reads rendered pixels back to CPU memory.
 
@@ -144,11 +133,11 @@ private:
 
     GpuTarget() = default;
 
-    static GpuTarget::Ptr createFromTarget (GraphicsContext& ctx, std::unique_ptr<RenderableTarget> target);
+    static GpuTarget::Ptr createFromTarget (GpuDevice::Ptr ctx, std::unique_ptr<RenderableTarget> target);
 
     RenderableTarget* getRenderableTarget() const noexcept { return renderableTarget; }
 
-    GraphicsContext* ctx = nullptr;
+    GpuDevice::Ptr ctx;
     std::unique_ptr<OffscreenTarget> offscreenTarget;
     RenderableTarget* renderableTarget = nullptr;
     GpuTexture::Ptr cachedTexture;

@@ -181,6 +181,15 @@ public:
     */
     static Image fromTexture (GpuTexture::Ptr tex);
 
+    /** Creates an Image from a GpuTarget, reading back pixels into CPU memory.
+
+        Equivalent to fromTexture(target.asTexture()) followed by target.readPixels().
+        Returns an empty Image on failure.
+
+        @param target  A GPU render target whose contents will be read back.
+    */
+    static Image fromTarget (GpuTarget& target);
+
     //==============================================================================
     /** Creates a texture on the GPU for the image if it doesn't already exist.
 

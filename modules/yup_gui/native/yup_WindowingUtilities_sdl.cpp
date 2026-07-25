@@ -385,36 +385,36 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
 //==============================================================================
 
-GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext::Api>& forceContextApi)
+GpuPlatform getGraphicsContextApi (const std::optional<GpuPlatform>& forceContextApi)
 {
-    GraphicsContext::Api desiredApi;
+    GpuPlatform desiredApi;
 
 #if YUP_MAC || YUP_IOS
 #if YUP_RIVE_USE_METAL
-    desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
+    desiredApi = forceContextApi.value_or (GpuPlatform::Metal);
 #elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
 #endif
 
 #elif YUP_WINDOWS
 #if YUP_RIVE_USE_D3D
-    desiredApi = forceContextApi.value_or (GraphicsContext::Direct3D);
+    desiredApi = forceContextApi.value_or (GpuPlatform::Direct3D);
 #elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
 #endif
 
 #elif YUP_LINUX
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGL);
 
 #elif YUP_ANDROID || YUP_WASM
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
-    desiredApi = forceContextApi.value_or (GraphicsContext::WebGPU);
+    desiredApi = forceContextApi.value_or (GpuPlatform::WebGPU);
 #else
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);
+    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGLES);
 #endif
 
 #else
-    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGLES);
+    desiredApi = forceContextApi.value_or (GpuPlatform::OpenGLES);
 
 #endif
 
@@ -423,23 +423,23 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 
 //==============================================================================
 
-Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
+Uint32 setContextWindowHints (GpuPlatform desiredApi)
 {
-    if (desiredApi == GraphicsContext::Metal)
+    if (desiredApi == GpuPlatform::Metal)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "metal");
 
         return SDL_WINDOW_METAL;
     }
 
-    if (desiredApi == GraphicsContext::Direct3D)
+    if (desiredApi == GpuPlatform::Direct3D)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "direct3d11");
 
         return 0;
     }
 
-    if (desiredApi == GraphicsContext::OpenGLES)
+    if (desiredApi == GpuPlatform::OpenGLES)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles2");
 
@@ -457,7 +457,7 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         return SDL_WINDOW_OPENGL;
     }
 
-    if (desiredApi == GraphicsContext::OpenGL)
+    if (desiredApi == GpuPlatform::OpenGL)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
 

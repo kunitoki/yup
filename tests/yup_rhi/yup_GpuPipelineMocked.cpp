@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_graphics/yup_graphics.h>
+#include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
 using ::testing::_;
@@ -98,11 +98,11 @@ protected:
     void SetUp() override
     {
         mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreInjectedGraphicsContext> (mockOreCtx.get());
+        ctx = new OreInjectedGpuDevice (mockOreCtx.get());
     }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreInjectedGraphicsContext> ctx;
+    GpuDevice::Ptr ctx;
 };
 
 // --------------------------------------------------------------------------
@@ -132,7 +132,7 @@ TEST_F (GpuPipelineMockTests, CompileSucceedsWithValidShaders)
     auto vs = makeShaderSource ("// VS");
     auto fs = makeShaderSource ("// FS");
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs);
+    auto result = GpuPipeline::compile (ctx, vs, fs);
     ASSERT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }
@@ -145,7 +145,7 @@ TEST_F (GpuPipelineMockTests, CompileFailsWhenVertexModuleIsNull)
     auto vs = makeShaderSource ("// VS");
     auto fs = makeShaderSource ("// FS");
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs);
+    auto result = GpuPipeline::compile (ctx, vs, fs);
     EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
@@ -161,7 +161,7 @@ TEST_F (GpuPipelineMockTests, CompileFailsWhenFragmentModuleIsNull)
     auto vs = makeShaderSource ("// VS");
     auto fs = makeShaderSource ("// FS");
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs);
+    auto result = GpuPipeline::compile (ctx, vs, fs);
     EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
@@ -185,7 +185,7 @@ TEST_F (GpuPipelineMockTests, CompileFailsWhenPipelineCreationFails)
     auto vs = makeShaderSource ("// VS");
     auto fs = makeShaderSource ("// FS");
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs);
+    auto result = GpuPipeline::compile (ctx, vs, fs);
     EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
@@ -211,7 +211,7 @@ TEST_F (GpuPipelineMockTests, CompileValidatesEmptyVertexCode)
 
     auto fs = makeShaderSource ("// FS");
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs);
+    auto result = GpuPipeline::compile (ctx, vs, fs);
     EXPECT_TRUE (result.failed());
 }
 
@@ -259,7 +259,7 @@ TEST_F (GpuPipelineMockTests, CompileWithColorTargetAndDepthStencil)
     options.depthStencil.depthWriteEnabled = true;
     options.sampleCount = 4;
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs, options);
+    auto result = GpuPipeline::compile (ctx, vs, fs, options);
     ASSERT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }
@@ -289,7 +289,7 @@ TEST_F (GpuPipelineMockTests, CompileWithVertexBuffers)
     options.vertexBuffers = &layout;
     options.vertexBufferCount = 1;
 
-    auto result = GpuPipeline::compile (*ctx, vs, fs, options);
+    auto result = GpuPipeline::compile (ctx, vs, fs, options);
     ASSERT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }
@@ -341,7 +341,7 @@ TEST_F (GpuPipelineMockTests, CompileWithMultipleBindGroups)
     auto fs = makeShaderSource ("// FS");
 
     GpuPipelineOptions options;
-    auto result = GpuPipeline::compile (*ctx, vs, fs, options);
+    auto result = GpuPipeline::compile (ctx, vs, fs, options);
     ASSERT_TRUE (result.wasOk());
 }
 
@@ -355,11 +355,11 @@ protected:
     void SetUp() override
     {
         mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreInjectedGraphicsContext> (mockOreCtx.get());
+        ctx = new OreInjectedGpuDevice (mockOreCtx.get());
     }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreInjectedGraphicsContext> ctx;
+    GpuDevice::Ptr ctx;
 };
 
 TEST_F (GpuBufferMockTests, CreateSucceedsWithValidData)
@@ -370,7 +370,7 @@ TEST_F (GpuBufferMockTests, CreateSucceedsWithValidData)
         .WillOnce (Return (oreBuf));
 
     const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
-    auto buf = GpuBuffer::create (*ctx, GpuBufferType::vertex, data, sizeof (data));
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
     ASSERT_NE (buf, nullptr);
     EXPECT_EQ (buf->getType(), GpuBufferType::vertex);
     EXPECT_EQ (buf->getSizeInBytes(), sizeof (data));
@@ -385,7 +385,7 @@ TEST_F (GpuBufferMockTests, CreateSucceedsForIndexBuffer)
         .WillOnce (Return (oreBuf));
 
     const uint16_t data[] = { 0, 1, 2, 3 };
-    auto buf = GpuBuffer::create (*ctx, GpuBufferType::index, data, sizeof (data));
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::index, data, sizeof (data));
     ASSERT_NE (buf, nullptr);
     EXPECT_EQ (buf->getType(), GpuBufferType::index);
     EXPECT_TRUE (buf->isValid());
@@ -399,7 +399,7 @@ TEST_F (GpuBufferMockTests, CreateSucceedsForUniformBuffer)
         .WillOnce (Return (oreBuf));
 
     const int data[] = { 42 };
-    auto buf = GpuBuffer::create (*ctx, GpuBufferType::uniform, data, sizeof (data));
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::uniform, data, sizeof (data));
     ASSERT_NE (buf, nullptr);
     EXPECT_EQ (buf->getType(), GpuBufferType::uniform);
     EXPECT_TRUE (buf->isValid());
@@ -411,7 +411,7 @@ TEST_F (GpuBufferMockTests, CreateReturnsNullWhenMakeBufferFails)
         .WillOnce (ReturnNull());
 
     const float data[] = { 1.0f };
-    auto buf = GpuBuffer::create (*ctx, GpuBufferType::vertex, data, sizeof (data));
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
     EXPECT_EQ (buf, nullptr);
 }
 
@@ -425,18 +425,18 @@ protected:
     void SetUp() override
     {
         mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreInjectedGraphicsContext> (mockOreCtx.get());
+        ctx = new OreInjectedGpuDevice (mockOreCtx.get());
     }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreInjectedGraphicsContext> ctx;
+    GpuDevice::Ptr ctx;
 };
 
 TEST_F (GpuFrameMockTests, BeginCallsOreBeginFrame)
 {
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
 
-    auto frame = GpuFrame::begin (*ctx);
+    auto frame = GpuFrame::begin (ctx);
     EXPECT_TRUE (frame.isValid());
 }
 
@@ -446,7 +446,7 @@ TEST_F (GpuFrameMockTests, SubmitCallsOreEndFrame)
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
 
-    auto frame = GpuFrame::begin (*ctx);
+    auto frame = GpuFrame::begin (ctx);
     ASSERT_TRUE (frame.isValid());
     EXPECT_TRUE (frame.submit());
 }
@@ -456,7 +456,7 @@ TEST_F (GpuFrameMockTests, SubmitIsIdempotent)
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
 
-    auto frame = GpuFrame::begin (*ctx);
+    auto frame = GpuFrame::begin (ctx);
     ASSERT_TRUE (frame.isValid());
     EXPECT_TRUE (frame.submit());
     EXPECT_FALSE (frame.submit());
@@ -468,7 +468,7 @@ TEST_F (GpuFrameMockTests, WaitForGpuCallsOreWaitForGPU)
     EXPECT_CALL (*mockOreCtx, endFrame());
     EXPECT_CALL (*mockOreCtx, waitForGPU());
 
-    auto frame = GpuFrame::begin (*ctx);
+    auto frame = GpuFrame::begin (ctx);
     ASSERT_TRUE (frame.isValid());
     frame.submit();
     frame.waitForGPU();
@@ -480,7 +480,7 @@ TEST_F (GpuFrameMockTests, DestructorSubmitsIfNotSubmitted)
     EXPECT_CALL (*mockOreCtx, endFrame());
 
     {
-        auto frame = GpuFrame::begin (*ctx);
+        auto frame = GpuFrame::begin (ctx);
         ASSERT_TRUE (frame.isValid());
         // Not explicitly submitted — destructor does it.
     }
@@ -491,8 +491,8 @@ TEST_F (GpuFrameMockTests, MoveAssignmentSubmitsExisting)
     EXPECT_CALL (*mockOreCtx, beginFrame (_)).Times (2);
     EXPECT_CALL (*mockOreCtx, endFrame()).Times (2);
 
-    auto src = GpuFrame::begin (*ctx);
-    auto dst = GpuFrame::begin (*ctx);
+    auto src = GpuFrame::begin (ctx);
+    auto dst = GpuFrame::begin (ctx);
 
     dst = std::move (src);
 }
@@ -507,11 +507,11 @@ protected:
     void SetUp() override
     {
         mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreInjectedGraphicsContext> (mockOreCtx.get());
+        ctx = new OreInjectedGpuDevice (mockOreCtx.get());
     }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreInjectedGraphicsContext> ctx;
+    GpuDevice::Ptr ctx;
 };
 
 TEST_F (GpuPipelineBundleMockTests, CompileFromBundleSucceeds)
@@ -554,7 +554,7 @@ TEST_F (GpuPipelineBundleMockTests, CompileFromBundleSucceeds)
     fs.reflection.uniformBuffers.push_back (ub);
     bundle.addShader (fs);
 
-    auto result = GpuPipeline::compileFromBundle (*ctx, bundle);
+    auto result = GpuPipeline::compileFromBundle (ctx, bundle);
     ASSERT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }
@@ -570,7 +570,7 @@ TEST_F (GpuPipelineBundleMockTests, CompileFromBundleFailsWhenNoVertexShader)
     fs.source = "// fragment shader";
     bundle.addShader (fs);
 
-    auto result = GpuPipeline::compileFromBundle (*ctx, bundle);
+    auto result = GpuPipeline::compileFromBundle (ctx, bundle);
     EXPECT_TRUE (result.failed());
 }
 
@@ -585,77 +585,8 @@ TEST_F (GpuPipelineBundleMockTests, CompileFromBundleFailsWhenNoFragmentShader)
     vs.source = "// vertex shader";
     bundle.addShader (vs);
 
-    auto result = GpuPipeline::compileFromBundle (*ctx, bundle);
+    auto result = GpuPipeline::compileFromBundle (ctx, bundle);
     EXPECT_TRUE (result.failed());
-}
-
-// ==============================================================================
-// GpuCanvas / GpuTexture / GpuRenderPass — mock-based tests
-// ==============================================================================
-
-class GpuCanvasMockTests : public ::testing::Test
-{
-protected:
-    void SetUp() override
-    {
-        mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreAndTargetGraphicsContext> (mockOreCtx.get(),
-                                                             MockOffscreenTarget::withGpuTexture (64, 48));
-    }
-
-    std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreAndTargetGraphicsContext> ctx;
-};
-
-TEST_F (GpuCanvasMockTests, CreateReturnsValidCanvas)
-{
-    auto canvas = GpuCanvas::create (*ctx, 64, 48);
-    ASSERT_NE (canvas, nullptr);
-    EXPECT_EQ (canvas->getWidth(), 64);
-    EXPECT_EQ (canvas->getHeight(), 48);
-}
-
-TEST_F (GpuCanvasMockTests, CreateWithZeroWidthReturnsNull)
-{
-    EXPECT_EQ (GpuCanvas::create (*ctx, 0, 64), nullptr);
-}
-
-TEST_F (GpuCanvasMockTests, CreateWithZeroHeightReturnsNull)
-{
-    EXPECT_EQ (GpuCanvas::create (*ctx, 64, 0), nullptr);
-}
-
-TEST_F (GpuCanvasMockTests, AsTextureReturnsValidTexture)
-{
-    auto canvas = GpuCanvas::create (*ctx, 64, 48);
-    ASSERT_NE (canvas, nullptr);
-
-    // asTexture() works immediately when the canvas wraps a GPU texture,
-    // not only after 2D commit().
-    auto tex = canvas->asTexture();
-    ASSERT_NE (tex, nullptr);
-    EXPECT_EQ (tex->getWidth(), 64);
-    EXPECT_EQ (tex->getHeight(), 48);
-    EXPECT_TRUE (tex->isValid());
-    EXPECT_FALSE (tex->isRenderTarget()); // fromGpuTexture() sets renderTarget=false
-}
-
-TEST_F (GpuCanvasMockTests, CommitReturnsFalseWhenNoFrameOpen)
-{
-    auto canvas = GpuCanvas::create (*ctx, 64, 48);
-    ASSERT_NE (canvas, nullptr);
-
-    // No 2D frame was opened via getGraphics, so commit() returns false.
-    EXPECT_FALSE (canvas->commit());
-}
-
-TEST_F (GpuCanvasMockTests, ReadPixelsReturnsFalseBeforeCommit)
-{
-    auto canvas = GpuCanvas::create (*ctx, 64, 48);
-    ASSERT_NE (canvas, nullptr);
-
-    std::vector<uint8> buf (64 * 48 * 4, 0);
-    EXPECT_FALSE (canvas->readPixels (buf.data(), buf.size()));
 }
 
 // ==============================================================================
@@ -668,24 +599,24 @@ protected:
     void SetUp() override
     {
         mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
-        ctx = std::make_unique<OreAndTargetGraphicsContext> (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
-        headlessCtx = yup::GraphicsContext::createContext (yup::GraphicsContext::Headless, {});
+        ctx = new OreAndTargetGpuDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
+        headlessCtx = yup::GpuDevice::create (yup::GpuPlatform::Headless, {});
     }
 
     GpuFrame makeValidFrame()
     {
         EXPECT_CALL (*mockOreCtx, beginFrame (_));
-        return GpuFrame::begin (*ctx);
+        return GpuFrame::begin (ctx);
     }
 
     GpuFrame makeInvalidFrame()
     {
-        return GpuFrame::begin (*headlessCtx);
+        return GpuFrame::begin (headlessCtx);
     }
 
     std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
-    std::unique_ptr<OreAndTargetGraphicsContext> ctx;
-    std::unique_ptr<yup::GraphicsContext> headlessCtx;
+    GpuDevice::Ptr ctx;
+    yup::GpuDevice::Ptr headlessCtx;
 };
 
 TEST_F (GpuRenderPassMockTests, BeginRenderPassWithInvalidFrameReturnsInvalidPass)
@@ -733,7 +664,7 @@ TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassDoesNotCrash)
     EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
         .WillOnce (Return (pipeline));
 
-    auto compileResult = GpuPipeline::compile (*ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
     ASSERT_TRUE (compileResult.wasOk());
     auto* compiledPipeline = compileResult.getValue().get();
 
@@ -857,7 +788,7 @@ TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
     EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
         .WillOnce (Return (pipeline));
 
-    auto compileResult = GpuPipeline::compile (*ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
     ASSERT_TRUE (compileResult.wasOk());
     auto* compiledPipeline = compileResult.getValue().get();
 
@@ -917,7 +848,7 @@ TEST_F (GpuPipelineMockTests, CompileFromGlslSucceeds)
                                 "layout(location = 0) out vec4 fragColor;\n"
                                 "void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }\n";
 
-    auto result = GpuPipeline::compileFromGlsl (*ctx, vertexGlsl, fragmentGlsl);
+    auto result = GpuPipeline::compileFromGlsl (ctx, vertexGlsl, fragmentGlsl);
     EXPECT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }
@@ -948,7 +879,7 @@ TEST_F (GpuPipelineMockTests, CompileFromGlslWithOptions)
                       "layout(location = 0) out vec4 c;\n"
                       "void main() { c = vec4(1); }\n";
 
-    auto result = GpuPipeline::compileFromGlsl (*ctx, vs, fs, options);
+    auto result = GpuPipeline::compileFromGlsl (ctx, vs, fs, options);
     EXPECT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
 }

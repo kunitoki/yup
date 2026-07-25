@@ -120,17 +120,37 @@ flowchart LR
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
+### yup_rhi
+
+The low-level GPU abstraction layer: device management, compute and render
+pipelines, frames, render passes, buffers, textures, and offscreen targets.
+This is the foundation for GPU work that does not require a window or Rive
+vector rendering — use it directly for GPU compute (audio DSP, FFT) without
+pulling in the 2D graphics stack.
+
+```mermaid
+flowchart LR
+    yup_rhi:::self --> yup_core
+    yup_rhi --> yup_shading
+    yup_rhi --> rive_renderer:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ### yup_graphics
 
-The 2D drawing stack and the low-level GPU RHI, rendered through the Rive
-renderer. Covers the graphics context, primitives, paths, fonts, SVG, imaging,
-and GPU pipelines. Image-codec support is optional: link `libpng`, `libjpeg`,
-`libwebp`, and/or `libgif` to enable the corresponding [image formats](imaging/loading.md#available-formats).
+The 2D drawing stack and windowed rendering, layered on `yup_rhi` and the Rive
+renderer. Covers the `GraphicsContext` (window + swapchain), `Graphics` (2D
+drawing API), primitives, paths, fonts, SVG, imaging, and `GpuCanvas` (offscreen
+2D surfaces). Image-codec support is optional: link `libpng`, `libjpeg`,
+`libwebp`, `libgif`, and/or `libtiff` to enable the corresponding
+[image formats](imaging/loading.md#available-formats).
 
 ```mermaid
 flowchart LR
     yup_graphics:::self --> yup_core
     yup_graphics --> yup_simd
+    yup_graphics --> yup_rhi
     yup_graphics --> yup_shading
     yup_graphics --> rive:::ext
     yup_graphics --> rive_renderer:::ext
@@ -139,6 +159,7 @@ flowchart LR
     yup_graphics -. optional .-> libjpeg:::opt
     yup_graphics -. optional .-> libwebp:::opt
     yup_graphics -. optional .-> libgif:::opt
+    yup_graphics -. optional .-> libtiff:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -368,10 +389,13 @@ flowchart TD
     simd[yup_simd] --> core[yup_core]
     events[yup_events] --> core
     shading[yup_shading] --> core
+    rhi[yup_rhi] --> core
+    rhi --> shading
     python[yup_python] --> core
 
     graphics[yup_graphics] --> core
     graphics --> simd
+    graphics --> rhi
     graphics --> shading
 
     animation[yup_animation] --> core

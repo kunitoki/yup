@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class GraphicsContext;
+class GpuDevice;
 
 //==============================================================================
 /** A thread-safe cache for compiled GpuPipelines.
@@ -32,7 +32,7 @@ class GraphicsContext;
     pipeline options, and graphics API. When a subsequent request matches an
     existing cache key, the cached pipeline is returned without recompilation.
 
-    The cache references an externally-owned GraphicsContext, which must outlive
+    The cache references an externally-owned GpuDevice, which must outlive
     the cache. Eviction uses a configurable entry-count limit (LRU by access
     order).
 
@@ -49,12 +49,10 @@ public:
     //==============================================================================
     /** Creates a cache that uses the given context for miss compilations.
 
-        The context must outlive this cache.
-
-        @warning Requires contextToUse.isGpuAvailable() (GPU context available on this backend).
-
+        The cache keeps the context alive for its lifetime.
+        @warning Requires contextToUse->isGpuAvailable().
     */
-    explicit GpuPipelineCache (GraphicsContext& contextToUse);
+    explicit GpuPipelineCache (GpuDevice::Ptr contextToUse);
 
     /** Destructor. */
     ~GpuPipelineCache();
@@ -135,7 +133,7 @@ public:
     */
     static String generateCacheKey (const ShaderBundle& bundle,
                                     const GpuPipelineOptions& options,
-                                    GraphicsContext::Api api);
+                                    GpuPlatform api);
 
 private:
     struct Entry
@@ -146,7 +144,7 @@ private:
 
     void evictIfNeeded();
 
-    GraphicsContext& context;
+    GpuDevice::Ptr context;
     std::map<String, Entry> cache;
     size_t maxEntries = 256;
     uint64 accessCounter = 0;

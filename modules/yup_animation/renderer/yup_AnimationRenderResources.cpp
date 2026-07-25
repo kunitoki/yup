@@ -149,7 +149,7 @@ GpuPipeline::Ptr AnimationRenderResources::getMattePipeline (GraphicsContext& co
     options.colorTargets[0].format = GpuTextureFormat::rgba8unorm;
     options.colorTargets[0].blendEnabled = false;
 
-    auto result = GpuPipeline::compileFromGlsl (context,
+    auto result = GpuPipeline::compileFromGlsl (context.getGpuDevice(),
                                                 String::fromUTF8 (kMatteVertSource, (int) sizeof (kMatteVertSource) - 1),
                                                 String::fromUTF8 (kMatteFragSource, (int) sizeof (kMatteFragSource) - 1),
                                                 options);

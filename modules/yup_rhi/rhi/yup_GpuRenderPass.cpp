@@ -243,10 +243,10 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
     rpDesc.colorAttachments[0].view = outputView.get();
     rpDesc.colorAttachments[0].loadOp = options.clear ? rive::ore::LoadOp::clear : rive::ore::LoadOp::load;
     rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
-    rpDesc.colorAttachments[0].clearColor = { options.clearColor.getRedFloat(),
-                                              options.clearColor.getGreenFloat(),
-                                              options.clearColor.getBlueFloat(),
-                                              options.clearColor.getAlphaFloat() };
+    rpDesc.colorAttachments[0].clearColor = { options.clearColor.red,
+                                              options.clearColor.green,
+                                              options.clearColor.blue,
+                                              options.clearColor.alpha };
 
     auto renderPass = oreCtx->beginRenderPass (rpDesc);
     renderPass->setPipeline (orePipeline);
@@ -317,15 +317,15 @@ bool GpuRenderPass::isValid() const noexcept
 
 //==============================================================================
 
-void GpuRenderPass::setPipeline (GpuPipeline& pipeline)
+void GpuRenderPass::setPipeline (GpuPipeline::Ptr pipeline)
 {
     auto* i = getImpl();
     if (i == nullptr)
         return;
 
-    i->pipelineRef = &pipeline;
+    i->pipelineRef = pipeline;
 
-    if (auto* pipeImpl = pipeline.getImpl())
+    if (auto* pipeImpl = pipeline->getImpl())
     {
         i->orePipeline = pipeImpl->pipeline.get();
         i->oreLayouts = &pipeImpl->layouts;

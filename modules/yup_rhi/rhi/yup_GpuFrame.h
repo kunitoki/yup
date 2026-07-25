@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class GraphicsContext;
+class GpuDevice;
 
 //==============================================================================
 /** RAII scope for a single GPU frame.
@@ -57,13 +57,13 @@ public:
         Returns an invalid frame (isValid() == false) if the context has no
         GPU context available on this backend.
 
-        @param ctx  A GraphicsContext with GPU context available.
+        @param ctx  A GpuDevice with GPU context available.
 
         @returns A valid GpuFrame on success, or an invalid frame on failure.
 
         @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
-    static GpuFrame begin (GraphicsContext& ctx);
+    static GpuFrame begin (GpuDevice::Ptr ctx);
 
     //==============================================================================
     /** Move constructor. */

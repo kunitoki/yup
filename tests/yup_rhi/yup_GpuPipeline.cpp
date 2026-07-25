@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_graphics/yup_graphics.h>
+#include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
 
@@ -46,11 +46,11 @@ class GpuPipelineTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GpuDevice::create (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
     }
 
-    std::unique_ptr<GraphicsContext> context;
+    GpuDevice::Ptr context;
 };
 
 // ---------------------------------------------------------------------------
@@ -195,11 +195,11 @@ class GpuPipelineCacheTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GpuDevice::create (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
     }
 
-    std::unique_ptr<GraphicsContext> context;
+    GpuDevice::Ptr context;
 };
 
 TEST_F (GpuPipelineCacheTests, SameInputsProduceSameKey)
@@ -207,8 +207,8 @@ TEST_F (GpuPipelineCacheTests, SameInputsProduceSameKey)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto key1 = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Metal);
-    const auto key2 = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Metal);
+    const auto key1 = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::Metal);
+    const auto key2 = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::Metal);
     EXPECT_EQ (key1, key2);
 }
 
@@ -217,8 +217,8 @@ TEST_F (GpuPipelineCacheTests, DifferentApiProducesDifferentKey)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto keyMetal = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Metal);
-    const auto keyD3D = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Direct3D);
+    const auto keyMetal = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::Metal);
+    const auto keyD3D = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::Direct3D);
     EXPECT_NE (keyMetal, keyD3D);
 }
 
@@ -230,8 +230,8 @@ TEST_F (GpuPipelineCacheTests, DifferentOptionsProduceDifferentKey)
     GpuPipelineOptions b;
     b.cullMode = GpuCullMode::back;
 
-    const auto keyA = GpuPipelineCache::generateCacheKey (bundle, a, GraphicsContext::Metal);
-    const auto keyB = GpuPipelineCache::generateCacheKey (bundle, b, GraphicsContext::Metal);
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundle, a, GpuPlatform::Metal);
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundle, b, GpuPlatform::Metal);
     EXPECT_NE (keyA, keyB);
 }
 
@@ -286,7 +286,7 @@ TEST_F (GpuPipelineCacheTests, EmptyBundleGeneratesKeyWithNoneMarkers)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::Metal);
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::Metal);
     EXPECT_FALSE (key.isEmpty());
 }
 
@@ -295,8 +295,8 @@ TEST_F (GpuPipelineCacheTests, OpenGLES_ApisGenerateDifferentKeys)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto keyGL = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGL);
-    const auto keyGLES = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    const auto keyGL = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGL;
+    const auto keyGLES = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGLES);
     EXPECT_NE (keyGL, keyGLES);
 }
 
@@ -305,7 +305,7 @@ TEST_F (GpuPipelineCacheTests, WebGPU_GeneratesKey)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::WebGPU);
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::WebGPU);
     EXPECT_FALSE (key.isEmpty());
 }
 
@@ -330,7 +330,7 @@ TEST_F (GpuPipelineCacheTests, ESSL_FallbackUsesGlslWhenEsslMissing)
     GpuPipelineOptions options;
 
     // With ESSL API, the cache should fall back to GLSL since no ESSL variant exists.
-    const auto keyESSL = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    const auto keyESSL = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGLES);
     EXPECT_FALSE (keyESSL.isEmpty());
 }
 
@@ -361,7 +361,7 @@ TEST_F (GpuPipelineCacheTests, ESSL_FallbackUsesEsslWhenAvailable)
 
     GpuPipelineOptions options;
 
-    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GraphicsContext::OpenGLES);
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGLES);
     EXPECT_FALSE (key.isEmpty());
 }
 
@@ -385,8 +385,8 @@ TEST_F (GpuPipelineCacheTests, KeyChangesWhenShaderSourceDiffers)
 
     GpuPipelineOptions options;
 
-    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GraphicsContext::OpenGL);
-    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GraphicsContext::OpenGL);
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL;
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL;
     EXPECT_NE (keyA, keyB);
 }
 
@@ -410,8 +410,8 @@ TEST_F (GpuPipelineCacheTests, KeyChangesWhenEntryPointDiffers)
 
     GpuPipelineOptions options;
 
-    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GraphicsContext::OpenGL);
-    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GraphicsContext::OpenGL);
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL;
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL;
     EXPECT_NE (keyA, keyB);
 }
 
@@ -467,7 +467,7 @@ TEST_F (GpuPipelineCacheTests, GetOrCompileWithExplicitKeyStoresCompiledPipeline
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, context->getApi());
+    const auto key = GpuPipelineCache::generateCacheKey (bundle, options, context->getPlatform());
     auto result = cache.getOrCompile (key, bundle, options);
     // Headless compile fails, but we verify the path doesn't crash.
     EXPECT_TRUE (result.failed());
@@ -478,14 +478,14 @@ TEST_F (GpuPipelineCacheTests, GetOrCompileWithExplicitKeyStoresCompiledPipeline
 
 TEST_F (GpuPipelineTests, GpuFrameHeadlessIsInvalid)
 {
-    auto frame = GpuFrame::begin (*context);
+    auto frame = GpuFrame::begin (context);
     EXPECT_FALSE (frame.isValid());
     EXPECT_FALSE (frame.submit());
 }
 
 TEST_F (GpuPipelineTests, GpuFrameSubmitIsIdempotentOnInvalid)
 {
-    auto frame = GpuFrame::begin (*context);
+    auto frame = GpuFrame::begin (context);
     EXPECT_FALSE (frame.submit());
     EXPECT_FALSE (frame.submit());
     EXPECT_NO_THROW (frame.waitForGPU());
@@ -493,10 +493,10 @@ TEST_F (GpuPipelineTests, GpuFrameSubmitIsIdempotentOnInvalid)
 
 TEST_F (GpuPipelineTests, GpuFrameMoveAssignmentMovesInvalidState)
 {
-    auto src = GpuFrame::begin (*context);
+    auto src = GpuFrame::begin (context);
     EXPECT_FALSE (src.isValid());
 
-    auto dst = GpuFrame::begin (*context);
+    auto dst = GpuFrame::begin (context);
     dst = std::move (src);
 
     EXPECT_FALSE (dst.isValid());
@@ -505,7 +505,7 @@ TEST_F (GpuPipelineTests, GpuFrameMoveAssignmentMovesInvalidState)
 
 TEST_F (GpuPipelineTests, GpuFrameMoveConstructionFromInvalidIsInvalid)
 {
-    auto src = GpuFrame::begin (*context);
+    auto src = GpuFrame::begin (context);
     GpuFrame dst (std::move (src));
 
     EXPECT_FALSE (dst.isValid());
@@ -515,7 +515,7 @@ TEST_F (GpuPipelineTests, GpuFrameMoveConstructionFromInvalidIsInvalid)
 TEST_F (GpuPipelineTests, GpuFrameDestructorDoesNotCrashOnInvalid)
 {
     {
-        auto frame = GpuFrame::begin (*context);
+        auto frame = GpuFrame::begin (context);
         EXPECT_FALSE (frame.isValid());
     }
     // Destructor calls submit() which is idempotent.

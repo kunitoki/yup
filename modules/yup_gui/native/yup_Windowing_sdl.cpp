@@ -160,7 +160,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     }
 #endif
 
-    if (currentGraphicsApi == GraphicsContext::OpenGL || currentGraphicsApi == GraphicsContext::OpenGLES)
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
@@ -1001,7 +1001,7 @@ void SDLComponentNative::renderContext()
     renderFrame();
 
     // Swap buffers
-    if (window != nullptr && (currentGraphicsApi == GraphicsContext::OpenGL || currentGraphicsApi == GraphicsContext::OpenGLES))
+    if (window != nullptr && (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES))
         SDL_GL_SwapWindow (window);
 
     // Clear repainted areas

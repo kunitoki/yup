@@ -145,7 +145,7 @@ TEST_F (ComponentEffectTest, ApplyIsCalled)
     auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
     EXPECT_EQ (effect->applyCount, 0);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -238,7 +238,7 @@ TEST_F (ComponentEffectTest, ClearsCachedCanvasWhenEnabled)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -259,7 +259,7 @@ TEST_F (ComponentEffectTest, RepaintInvalidatesCache)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -276,7 +276,7 @@ TEST_F (ComponentEffectTest, RepaintWithRectInvalidatesCache)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -294,7 +294,7 @@ TEST_F (ComponentEffectTest, SetBoundsInvalidatesCache)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -388,7 +388,7 @@ TEST_F (ComponentEffectTest, ChildrenArePainted)
     parentMock.addAndMakeVisible (child1);
     parentMock.addAndMakeVisible (child2);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -406,7 +406,7 @@ TEST_F (ComponentEffectTest, PaintOverChildrenIsCalled)
     parentMock.setBounds (0, 0, 400, 300);
     parentMock.setVisible (true);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -427,7 +427,7 @@ TEST_F (ComponentEffectTest, ZeroSizedReturnsEmpty)
 {
     Component comp ("test");
     // Default 0×0 size
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     EXPECT_FALSE (comp.snapshotToImage (*ctx).isValid());
 }
@@ -437,7 +437,7 @@ TEST_F (ComponentEffectTest, HeadlessContextReturnsEmpty)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     EXPECT_FALSE (comp.snapshotToImage (*ctx).isValid());
 }
@@ -447,7 +447,7 @@ TEST_F (ComponentEffectTest, IncludeEffectsFlagDoesNotCrashWithHeadless)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
 
     // Both calls should return empty without crashing
@@ -470,7 +470,7 @@ TEST_F (ComponentEffectTest, ChildrenStillPaintWhenParentIsCached)
     parentMock.setCachedToTexture (true);
     parentMock.addAndMakeVisible (child);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -526,7 +526,7 @@ protected:
 
     static void SetUpTestSuite()
     {
-        gpuContext = GraphicsContext::createContext (GraphicsContext::Metal, {});
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
         if (gpuContext == nullptr)
             return;
 

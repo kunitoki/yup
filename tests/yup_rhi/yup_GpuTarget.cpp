@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_graphics/yup_graphics.h>
+#include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
 
@@ -30,11 +30,11 @@ class GpuTargetTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GpuDevice::create (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
     }
 
-    std::unique_ptr<GraphicsContext> context;
+    GpuDevice::Ptr context;
 };
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ TEST_F (GpuTargetTests, GetWidthAndHeightAreNonNegative)
 
 TEST_F (GpuTargetTests, BeginRenderPassWithHeadlessReturnsInvalidPass)
 {
-    auto frame = GpuFrame::begin (*context);
+    auto frame = GpuFrame::begin (context);
     if (! frame.isValid())
         return;
 

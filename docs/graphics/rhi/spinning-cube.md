@@ -39,11 +39,11 @@ The cube uses a vertex + fragment shader pair. With the transpiler enabled, GLSL
 
 ```cpp
 GpuPipelineOptions options;
-options.vertexBuffers       = &cubeLayout;   // position/color/normal
-options.vertexBufferCount   = 1;
-options.indexFormat         = GpuIndexFormat::uint16;
-options.cullMode            = GpuCullMode::back;
-options.winding             = GpuFaceWinding::counterClockwise;
+options.vertexBuffers        = &cubeLayout;   // position/color/normal
+options.vertexBufferCount    = 1;
+options.indexFormat          = GpuIndexFormat::uint16;
+options.cullMode             = GpuCullMode::back;
+options.winding              = GpuFaceWinding::counterClockwise;
 options.depthStencil.enabled = true;
 
 auto result = GpuPipeline::compileFromGlsl (ctx, vertGlsl, fragGlsl, options);
@@ -85,10 +85,10 @@ Each frame, begin a `GpuFrame`, open a render pass on the scene canvas, bind the
 pipeline + per-frame uniforms + geometry, and issue an indexed draw:
 
 ```cpp
-auto frame = GpuFrame::begin (ctx);
+auto frame = GpuFrame::begin (device);
 
 auto pass = sceneCanvas->beginRenderPass (frame, { true, Colors::black });
-pass.setPipeline (*cubePipeline);
+pass.setPipeline (cubePipeline);
 pass.setUniformBuffer (0, 0, &mvp, sizeof mvp); // per-frame transform
 pass.setTexture (0, 1, animatedTexture);
 pass.setVertexBuffer (0, cubeVerts);
@@ -107,14 +107,14 @@ samples the previous result and generates its vertices from the vertex index:
 GpuRenderOptions load { false, Colors::transparentBlack };
 
 auto hPass = blurCanvasH->beginRenderPass (frame, { true, Colors::transparentBlack });
-hPass.setPipeline (*blurPipeline);
+hPass.setPipeline (blurPipeline);
 hPass.setTexture (0, 0, sceneCanvas->asTexture());
 hPass.setUniformBuffer (0, 1, &horizontalParams, sizeof horizontalParams);
 hPass.draw (3);
 hPass.finish();
 
 auto vPass = blurCanvasV->beginRenderPass (frame, { true, Colors::transparentBlack });
-vPass.setPipeline (*blurPipeline);
+vPass.setPipeline (blurPipeline);
 vPass.setTexture (0, 0, blurCanvasH->asTexture());
 vPass.setUniformBuffer (0, 1, &verticalParams, sizeof verticalParams);
 vPass.draw (3);
