@@ -1859,6 +1859,8 @@ void registerYupGraphicsBindings (py::module_& m)
 
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)
+        .def ("drawImage", &Graphics::drawImage)
+        .def ("drawTexture", &Graphics::drawTexture)
 
         // Text operations
         .def ("fillFittedText", py::overload_cast<const String&, const Font&, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
@@ -1871,6 +1873,7 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getContextScale", &Graphics::getContextScale)
         .def ("getFactory", &Graphics::getFactory, py::return_value_policy::reference_internal)
         .def ("getRenderer", &Graphics::getRenderer, py::return_value_policy::reference_internal)
+        .def ("getGraphicsContext", &Graphics::getGraphicsContext, py::return_value_policy::reference)
     ;
 
     // ============================================================================================ yup::Colors

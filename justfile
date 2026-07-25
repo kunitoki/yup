@@ -89,26 +89,28 @@ emscripten_test:
 
 [doc("serve project for WASM")]
 emscripten_serve:
-  #python3 -m http.server -d .
-  python3 tools/serve.py -p 8000 -d .
+  #uv run python -m http.server -d .
+  uv run python tools/serve.py -p 8000 -d .
 
 [working-directory: 'python']
 python_wheel:
-  python -m build --wheel
+  uv pip install build
+  uv run python -m build --wheel
   @just python_install
   @just python_test
 
 [working-directory: 'python']
 python_install:
-  python -m pip install --force-reinstall dist/yup-*.whl
+  uv pip install --force-reinstall dist/yup-*.whl
 
 [working-directory: 'python']
 python_uninstall:
-  python -m pip uninstall -y yup
+  uv pip uninstall -y yup
 
 [working-directory: 'python']
 python_test *TEST_OPTS:
-  python -m pytest -s {{TEST_OPTS}}
+  uv sync --group test
+  uv run --group test python -m pytest -s {{TEST_OPTS}}
 
 [working-directory: 'cmake/tools/shader_bundler']
 shader_bundler *COMPILE_ARGS:

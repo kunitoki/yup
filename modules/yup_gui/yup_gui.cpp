@@ -160,6 +160,10 @@
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
 #include "dialogs/yup_FileChooser.cpp"
+#include "layout/yup_FlexItem.cpp"
+#include "layout/yup_FlexBox.cpp"
+#include "layout/yup_GridItem.cpp"
+#include "layout/yup_Grid.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
 
 //==============================================================================
