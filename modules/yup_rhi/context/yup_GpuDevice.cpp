@@ -92,4 +92,75 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
     return ctx.release();
 }
 
+//==============================================================================
+
+ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type,
+                                                              const void* data,
+                                                              size_t byteSize)
+{
+    jassert (data != nullptr && byteSize > 0);
+    if (data == nullptr || byteSize == 0)
+        return nullptr;
+
+    // Storage buffers must be handled by backend overrides.
+    if (type == GpuBufferType::storage)
+        return nullptr;
+
+    auto* oreCtx = gpuContext();
+    if (oreCtx == nullptr)
+        return nullptr;
+
+    rive::ore::BufferDesc desc;
+    switch (type)
+    {
+        case GpuBufferType::vertex:
+            desc.usage = rive::ore::BufferUsage::vertex;
+            break;
+        case GpuBufferType::index:
+            desc.usage = rive::ore::BufferUsage::index;
+            break;
+        default:
+            desc.usage = rive::ore::BufferUsage::uniform;
+            break;
+    }
+
+    desc.size = (uint32_t) byteSize;
+    desc.data = data;
+    desc.immutable = true;
+    desc.label = "GpuBuffer";
+
+    auto buffer = oreCtx->makeBuffer (desc);
+    if (buffer == nullptr)
+        return nullptr;
+
+    return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
+}
+
+bool GpuDevice::readBuffer (GpuBuffer::Ptr, void*, size_t)
+{
+    return false;
+}
+
+bool GpuDevice::updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize)
+{
+    if (buffer == nullptr || data == nullptr || byteSize == 0)
+        return false;
+
+    auto* impl = buffer->getImpl();
+    if (impl == nullptr)
+        return false;
+
+    // For ore-backed buffers (vertex, index, uniform), update in place.
+    if (impl->oreBuffer != nullptr)
+    {
+        if (byteSize > buffer->getSizeInBytes())
+            return false;
+
+        impl->oreBuffer->update (data, (uint32_t) byteSize);
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace yup

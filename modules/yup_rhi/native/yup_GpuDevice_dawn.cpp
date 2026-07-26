@@ -135,6 +135,47 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            wgpu::BufferDescriptor bufDesc {};
+            bufDesc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
+            bufDesc.size = byteSize;
+            bufDesc.label = "GpuBuffer storage";
+
+            wgpu::Buffer wgpuBuffer = m_device.CreateBuffer (&bufDesc);
+            if (wgpuBuffer == nullptr)
+                return nullptr;
+
+            m_queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (wgpuBuffer) });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->webgpuStorageBuffer == nullptr)
+            return false;
+
+        if (byteSize > buffer->getSizeInBytes())
+            return false;
+
+        m_queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
+        return true;
+    }
+
     // Dawn doesn't support PLS offscreen targets through ore yet.
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
 

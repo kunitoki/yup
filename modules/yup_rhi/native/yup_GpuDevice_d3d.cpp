@@ -51,6 +51,82 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
+    /** Returns the native ID3D11Device for compute operations. */
+    ID3D11Device* getD3DDevice() const noexcept { return m_gpu.Get(); }
+
+    /** Returns the native ID3D11DeviceContext for compute operations. */
+    ID3D11DeviceContext* getD3DDeviceContext() const noexcept { return m_gpuContext.Get(); }
+
+    //==============================================================================
+
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            D3D11_BUFFER_DESC bufDesc {};
+            bufDesc.ByteWidth = static_cast<UINT> (byteSize);
+            bufDesc.Usage = D3D11_USAGE_DEFAULT;
+            bufDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+            bufDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+            bufDesc.StructureByteStride = 0;
+
+            D3D11_SUBRESOURCE_DATA initData {};
+            initData.pSysMem = data;
+
+            ComPtr<ID3D11Buffer> d3dBuffer;
+            HRESULT hr = m_gpu->CreateBuffer (&bufDesc, &initData, d3dBuffer.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || d3dBuffer == nullptr)
+                return nullptr;
+
+            D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc {};
+            uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+            uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            uavDesc.Buffer.NumElements = static_cast<UINT> (byteSize / 4);
+            uavDesc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+
+            ComPtr<ID3D11UnorderedAccessView> uav;
+            hr = m_gpu->CreateUnorderedAccessView (d3dBuffer.Get(), &uavDesc, uav.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || uav == nullptr)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (d3dBuffer), std::move (uav) });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    //==============================================================================
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->d3dStorageBuffer == nullptr)
+            return false;
+
+        const auto fullSize = buffer->getSizeInBytes();
+        if (byteSize > fullSize)
+            return false;
+
+        if (byteSize == fullSize)
+        {
+            m_gpuContext->UpdateSubresource (impl->d3dStorageBuffer.Get(), 0, nullptr, data, static_cast<UINT> (byteSize), 0);
+        }
+        else
+        {
+            D3D11_BOX box { 0, 0, 0, static_cast<UINT> (byteSize), 1, 1 };
+            m_gpuContext->UpdateSubresource (impl->d3dStorageBuffer.Get(), 0, &box, data, static_cast<UINT> (byteSize), 0);
+        }
+
+        return true;
+    }
+
     //==============================================================================
 
     struct OffscreenContextSlot

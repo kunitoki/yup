@@ -1352,6 +1352,11 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
 
                 spirv_cross::CompilerMSL::Options mslOpts;
                 mslOpts.use_framebuffer_fetch_subpasses = options.mslUsesFramebufferFetch;
+                // Use the shader's declared `binding=N` directly as the MSL [[buffer(N)]]
+                // index, rather than spirv-cross's own auto-incrementing allocation.
+                // GpuComputePass binds native Metal buffer slots as group*16+binding
+                // with no reflection indirection, so it requires this to hold.
+                mslOpts.enable_decoration_binding = true;
                 compiler.set_msl_options (mslOpts);
 
                 if (! entryName.empty())
@@ -1479,6 +1484,11 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
 
                 spirv_cross::CompilerMSL::Options mslOpts;
                 mslOpts.use_framebuffer_fetch_subpasses = options.mslUsesFramebufferFetch;
+                // Use the shader's declared `binding=N` directly as the MSL [[buffer(N)]]
+                // index, rather than spirv-cross's own auto-incrementing allocation.
+                // GpuComputePass binds native Metal buffer slots as group*16+binding
+                // with no reflection indirection, so it requires this to hold.
+                mslOpts.enable_decoration_binding = true;
                 compiler.set_msl_options (mslOpts);
 
                 if (! entryName.empty())

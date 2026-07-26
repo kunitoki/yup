@@ -67,10 +67,12 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/ClipboardDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ComponentEffectsDemo.h"
+#include "examples/ComputeParticlesDemo.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
+#include "examples/GpuAudioProcessingDemo.h"
 #include "examples/Images.h"
 #include "examples/LayoutFonts.h"
 #include "examples/LottieDemo.h"
@@ -192,6 +194,10 @@ public:
         {
             return std::make_unique<ComponentEffectsDemo>();
         });
+        addDemo ("Compute Particles", []
+        {
+            return std::make_unique<ComputeParticlesDemo>();
+        });
         addDemo ("Convolution Demo", []
         {
             return std::make_unique<ConvolutionDemo>();
@@ -207,6 +213,10 @@ public:
         addDemo ("Filter Demo", []
         {
             return std::make_unique<FilterDemo>();
+        });
+        addDemo ("GPU Audio", []
+        {
+            return std::make_unique<GpuAudioProcessingDemo>();
         });
         addDemo ("Images", []
         {

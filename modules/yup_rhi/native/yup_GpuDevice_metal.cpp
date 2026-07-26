@@ -59,6 +59,108 @@ public:
 
     //==============================================================================
 
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            MTLResourceOptions options = MTLResourceStorageModeShared;
+            id<MTLBuffer> mtlBuffer = [gpu newBufferWithBytes:data
+                                                       length:byteSize
+                                                      options:options];
+            if (mtlBuffer == nil)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, mtlBuffer });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    //==============================================================================
+
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+        if (buffer == nullptr || dst == nullptr)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->mtlStorageBuffer == nil)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        YUP_AUTORELEASEPOOL
+        {
+            // Fence the GPU queue with a tiny fill so we know the compute
+            // dispatch has finished, then read directly from the shared buffer.
+            // Avoids a full-size staging allocation + blit (~2 MB for the
+            // particle demo) by exploiting Apple Silicon's unified memory.
+            id<MTLBuffer> fenceBuf = [gpu newBufferWithLength:4
+                                                      options:MTLResourceStorageModeShared];
+            if (fenceBuf == nil)
+                return false;
+
+            id<MTLCommandBuffer> cmd = [queue commandBuffer];
+            id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+            [blit fillBuffer:fenceBuf range:NSMakeRange (0, 4) value:0];
+            [blit endEncoding];
+            [cmd commit];
+            [cmd waitUntilCompleted];
+
+            std::memcpy (dst, [impl->mtlStorageBuffer contents], byteSize);
+        }
+
+        return true;
+    }
+
+    //==============================================================================
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr)
+            return false;
+
+        // Storage buffers: write directly into the shared MTLBuffer.
+        if (impl->mtlStorageBuffer != nil)
+        {
+            if (byteSize > buffer->getSizeInBytes())
+                return false;
+
+            YUP_AUTORELEASEPOOL
+            {
+                // Serialise after all prior GPU work with a blit, then write.
+                id<MTLBuffer> stagingBuf = [gpu newBufferWithLength:4
+                                                            options:MTLResourceStorageModeShared];
+
+                id<MTLCommandBuffer> cmd = [queue commandBuffer];
+                id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+                [blit fillBuffer:stagingBuf range:NSMakeRange (0, 4) value:0];
+                [blit endEncoding];
+                [cmd commit];
+                [cmd waitUntilCompleted];
+
+                std::memcpy ([impl->mtlStorageBuffer contents], data, byteSize);
+            }
+
+            return true;
+        }
+
+        // Vertex, index, and uniform buffers go through ore's update().
+        return GpuDevice::updateBuffer (buffer, data, byteSize);
+    }
+
+    //==============================================================================
+
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
         if (width <= 0 || height <= 0 || renderContext == nullptr)

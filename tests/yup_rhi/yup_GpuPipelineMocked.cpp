@@ -415,6 +415,23 @@ TEST_F (GpuBufferMockTests, CreateReturnsNullWhenMakeBufferFails)
     EXPECT_EQ (buf, nullptr);
 }
 
+TEST_F (GpuBufferMockTests, UpdateBufferOnNonStorageBufferReturnsFalse)
+{
+    // GpuDevice::updateBuffer() is only meaningful for storage buffers, which
+    // this device doesn't support — the base implementation always returns
+    // false, even for an otherwise-valid vertex buffer.
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+
+    const float newData[] = { 5.0f, 6.0f, 7.0f, 8.0f };
+    EXPECT_FALSE (ctx->updateBuffer (buf, newData, sizeof (newData)));
+}
+
 // ==============================================================================
 // GpuFrame mock-based tests
 // ==============================================================================

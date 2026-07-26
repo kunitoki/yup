@@ -108,7 +108,7 @@ private:
     static constexpr size_t ImplSizeBytes = 128;
     TypeErasedObject<ImplSizeBytes> impl;
 
-    YUP_DECLARE_NON_COPYABLE (GpuFrame)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuFrame)
 };
 
 } // namespace yup

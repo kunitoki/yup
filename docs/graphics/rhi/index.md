@@ -7,8 +7,8 @@ and textures while remaining portable across Metal, Direct3D, OpenGL / OpenGL ES
 WebGL2, WebGPU, and Vulkan (in progress).
 
 Use the RHI when you need custom GPU work that the 2D `Graphics` API does not
-express - 3D geometry, post-process effects, compute-style fullscreen passes, or
-offscreen render-to-texture pipelines. For GPU compute without any window or
+express - 3D geometry, post-process effects, compute passes for DSP or simulation,
+or offscreen render-to-texture pipelines. For GPU compute without any window or
 graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 `GraphicsContext` or `yup_graphics` dependency needed.
 
@@ -19,8 +19,9 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
 | Draw 2D vector content (paths, text, images)          | `Graphics` (not the RHI)         |
 | Render custom geometry with your own shaders          | `GpuPipeline` + `GpuRenderPass`  |
 | Apply a fullscreen post-process effect                | `GpuPipeline` (fullscreen)       |
+| Run GPU compute (DSP, simulation)                     | `GpuComputePipeline` + `GpuComputePass` |
 | Render offscreen and sample the result as a texture   | `GpuTarget` or `GpuCanvas`       |
-| Mix 2D drawing *and* custom passes on one surface      | `GpuCanvas`                      |
+| Mix 2D drawing *and* custom passes on one surface     | `GpuCanvas`                      |
 
 ## Classes at a glance
 
@@ -30,10 +31,14 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
   submit.
 - **`GpuRenderPass`** - records draw commands (pipeline, bindings, draws) into a
   render target within a frame.
+- **`GpuComputePass`** - records compute dispatch commands (pipeline, storage
+  buffers, uniforms) directly against the backend-native API.
 - **`GpuPipeline`** - an immutable, compiled vertex + fragment pipeline plus
   fixed state.
+- **`GpuComputePipeline`** - an immutable, compiled compute pipeline (single
+  compute stage, native backend API, no ore dependency).
 - **`GpuPipelineCache`** - thread-safe compile-or-fetch cache for pipelines.
-- **`GpuBuffer`** - an immutable vertex, index, or uniform buffer.
+- **`GpuBuffer`** - an immutable vertex, index, uniform, or storage buffer.
 - **`GpuTexture`** - an opaque GPU texture, the currency between passes,
   `Image`, and `Graphics::drawTexture`.
 - **`GpuTarget`** - a minimal offscreen render surface for render-pass-only work.

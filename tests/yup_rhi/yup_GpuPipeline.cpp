@@ -131,6 +131,26 @@ TEST (GpuBufferDefaults, DefaultPtrIsNull)
 }
 
 // ---------------------------------------------------------------------------
+// GpuDevice::updateBuffer — base contract (default returns false)
+
+TEST_F (GpuPipelineTests, UpdateBufferWithNullBufferReturnsFalse)
+{
+    const float data[] = { 1.0f, 2.0f };
+    EXPECT_FALSE (context->updateBuffer (nullptr, data, sizeof (data)));
+}
+
+TEST_F (GpuPipelineTests, UpdateBufferWithNullDataReturnsFalse)
+{
+    EXPECT_FALSE (context->updateBuffer (nullptr, nullptr, 16));
+}
+
+TEST_F (GpuPipelineTests, UpdateBufferWithZeroSizeReturnsFalse)
+{
+    const float data[] = { 1.0f };
+    EXPECT_FALSE (context->updateBuffer (nullptr, data, 0));
+}
+
+// ---------------------------------------------------------------------------
 // GpuPipeline::compile — validation and headless (no ore) paths
 
 TEST_F (GpuPipelineTests, CompileHeadlessReturnsNullWithError)

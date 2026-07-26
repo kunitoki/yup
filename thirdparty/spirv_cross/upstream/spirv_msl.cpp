@@ -16115,7 +16115,10 @@ uint32_t CompilerMSL::get_metal_resource_index(SPIRVariable &var, SPIRType::Base
 			var_binding = get_decoration(var.self, DecorationBinding);
 			// Avoid emitting sentinel bindings.
 			if (var_binding < 0x80000000u)
+			{
+				set_extended_decoration(var.self, resource_decoration, var_binding);
 				return var_binding;
+			}
 		}
 	}
 

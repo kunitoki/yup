@@ -143,10 +143,32 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
     std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
 
+    // Fast path: skip bind-group creation when there are no UBOs, textures,
+    // or samplers to bind (common for simple vertex-only draws).
+    const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty();
+
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
     {
         auto* layout = layouts[groupIdx].get();
         if (layout == nullptr)
+            continue;
+
+        // Check if this layout declares any sampler slots we'd need to fill.
+        bool layoutHasSamplers = false;
+        if (! hasAnyBindings)
+        {
+            for (const auto& entry : layout->entries())
+            {
+                if (entry.kind == rive::ore::BindingKind::sampler
+                    || entry.kind == rive::ore::BindingKind::comparisonSampler)
+                {
+                    layoutHasSamplers = true;
+                    break;
+                }
+            }
+        }
+
+        if (! hasAnyBindings && ! layoutHasSamplers)
             continue;
 
         // UBO entries for this group.
@@ -387,7 +409,7 @@ void GpuRenderPass::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
     if (i == nullptr)
         return;
 
-    auto* ore = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
+    auto* ore = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->oreBuffer.get() : nullptr;
 
     for (auto& vb : i->vertexBindings)
     {
@@ -408,7 +430,7 @@ void GpuRenderPass::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer
     if (i == nullptr)
         return;
 
-    i->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
+    i->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->oreBuffer.get() : nullptr;
     i->indexBuffer = std::move (buffer);
     i->indexFormat = GpuPipelineHelpers::toOreIndexFormat (format);
 }

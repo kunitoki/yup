@@ -101,6 +101,83 @@ public:
 
     //==============================================================================
 
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            GLuint buf = 0;
+            glGenBuffers (1, &buf);
+            if (buf == 0)
+                return nullptr;
+
+            glBindBuffer (GL_SHADER_STORAGE_BUFFER, buf);
+            glBufferData (GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr> (byteSize), data, GL_DYNAMIC_COPY);
+            glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, buf });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    //==============================================================================
+
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+#if YUP_WASM
+        // WebGL 2.0 (GLES 3.0) has no GL_SHADER_STORAGE_BUFFER — fall back to base.
+        return GpuDevice::readBuffer (std::move (buffer), dst, dstSize);
+#else
+        if (buffer == nullptr || dst == nullptr)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->glBuffer == 0)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        glFinish();
+        glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glBuffer);
+        void* mapped = glMapBufferRange (GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr> (byteSize), GL_MAP_READ_BIT);
+        if (mapped != nullptr)
+        {
+            std::memcpy (dst, mapped, byteSize);
+            glUnmapBuffer (GL_SHADER_STORAGE_BUFFER);
+        }
+        glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
+        return mapped != nullptr;
+#endif
+    }
+
+    //==============================================================================
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->glBuffer == 0)
+            return false;
+
+        if (byteSize > buffer->getSizeInBytes())
+            return false;
+
+        glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glBuffer);
+        glBufferSubData (GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr> (byteSize), data);
+        glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
+        return true;
+    }
+
+    //==============================================================================
+
     struct OffscreenContextSlot
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;

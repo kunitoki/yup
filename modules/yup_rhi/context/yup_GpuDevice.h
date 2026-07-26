@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class GpuBuffer;
+
 //==============================================================================
 /** Encapsulates a GPU context that abstracts low-level GPU device operations
     across various graphics APIs without requiring a window or framebuffer.
@@ -63,17 +65,23 @@ public:
     };
 
     //==============================================================================
-    /** Default constructor. */
-    GpuDevice() noexcept = default;
+    /** Creates a GPU context using a specific GPU API.
 
+        @param gpuApi The GPU API to use.
+        @param options Configuration options for the GPU context.
+
+        @return A reference-counted pointer to a GpuDevice, using the specified
+                GPU API and configured according to the options.
+    */
+    static GpuDevice::Ptr create (GpuPlatform gpuApi, Options options);
+
+    //==============================================================================
     /** Destructor. */
     ~GpuDevice() override = default;
 
     //==============================================================================
-    /** Copy and move constructors and assignment operators. */
-    GpuDevice (const GpuDevice& other) noexcept = delete;
+    /** Move constructors and assignment operators. */
     GpuDevice (GpuDevice&& other) noexcept = default;
-    GpuDevice& operator= (const GpuDevice& other) noexcept = delete;
     GpuDevice& operator= (GpuDevice&& other) noexcept = default;
 
     //==============================================================================
@@ -168,15 +176,56 @@ public:
     virtual bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) = 0;
 
     //==============================================================================
-    /** Static factory method to create a GPU context using a specific GPU API.
+    /** Creates a GPU buffer of the given type with initial data.
 
-        @param gpuApi The GPU API to use.
-        @param options Configuration options for the GPU context.
+        The default implementation routes vertex, index, and uniform buffers
+        through the ore context. Backends that support compute override this to
+        also handle storage buffers natively.
 
-        @return A reference-counted pointer to a GpuDevice, using the specified
-                GPU API and configured according to the options.
+        @param type       The intended usage of the buffer.
+        @param data       Pointer to the source data to upload (must be non-null).
+        @param byteSize   Number of bytes to upload (must be greater than zero).
+
+        @returns A valid GpuBuffer, or nullptr on failure.
     */
-    static GpuDevice::Ptr create (GpuPlatform gpuApi, Options options);
+    virtual ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type,
+                                                               const void* data,
+                                                               size_t byteSize);
+
+    /** Reads storage buffer contents back to CPU memory (blocking).
+
+        The buffer must have been created with GpuBufferType::storage.
+
+        @param buffer   A storage buffer to read from.
+        @param dst      Destination buffer in CPU memory.
+        @param dstSize  Size in bytes (must match the buffer's byte size).
+
+        @returns true on success.
+    */
+    virtual bool readBuffer (ReferenceCountedObjectPtr<GpuBuffer> buffer, void* dst, size_t dstSize);
+
+    /** Overwrites storage buffer contents in place, without reallocating the buffer.
+
+        The buffer must have been created with GpuBufferType::storage. Unlike
+        createBuffer(), this does not allocate a new native GPU resource — it
+        writes into the existing one, which is the only allocation-free way to
+        feed new data to a storage buffer every frame or audio callback.
+
+        @param buffer   A storage buffer to write into.
+        @param data     Pointer to the source data to upload (must be non-null).
+        @param byteSize Number of bytes to upload (must be greater than zero and
+                        not exceed the buffer's size).
+
+        @returns true on success.
+    */
+    virtual bool updateBuffer (ReferenceCountedObjectPtr<GpuBuffer> buffer, const void* data, size_t byteSize);
+
+protected:
+    /** Default constructor. */
+    GpuDevice() noexcept = default;
+
+private:
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuDevice)
 };
 
 } // namespace yup
