@@ -23,31 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-// Backend factory functions — defined in native/yup_GpuComputePipeline_*.cpp
-//==============================================================================
-/*
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
-ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineMetal (GpuDevice&,
-                                                                         const GpuShaderSource&,
-                                                                         const GpuWorkgroupSize&);
-#endif
-#if YUP_RIVE_USE_D3D && YUP_WINDOWS
-ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineD3D11 (GpuDevice&,
-                                                                         const GpuShaderSource&,
-                                                                         const GpuWorkgroupSize&);
-#endif
-#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
-ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevice&,
-                                                                          const GpuShaderSource&,
-                                                                          const GpuWorkgroupSize&);
-#endif
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
-ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineGL (const GpuShaderSource&,
-                                                                      const GpuWorkgroupSize&);
-#endif
-*/
-
-//==============================================================================
 
 ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr ctx,
                                                                   const GpuShaderSource& source,
