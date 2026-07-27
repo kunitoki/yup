@@ -100,6 +100,7 @@ public:
     }
 
     LV2_URID_Map* getMapFeature() { return &mapFeature; }
+
     LV2_URID_Unmap* getUnmapFeature() { return &unmapFeature; }
 
 private:
@@ -233,11 +234,11 @@ public:
         } storeData;
 
         LV2_State_Store_Function storeFn = [] (LV2_State_Handle handle,
-                                                uint32_t key,
-                                                const void* value,
-                                                size_t size,
-                                                uint32_t type,
-                                                uint32_t flags)
+                                               uint32_t key,
+                                               const void* value,
+                                               size_t size,
+                                               uint32_t type,
+                                               uint32_t flags)
         {
             auto* d = static_cast<StoreData*> (handle);
             MemoryOutputStream stream (d->result, true);
@@ -247,9 +248,9 @@ public:
         };
 
         auto* stateIface = lilv_plugin_has_extension_data (lilvPlugin, LV2_STATE__interface)
-                           ? static_cast<const LV2_State_Interface*> (
-                                 lilv_instance_get_extension_data (lilvInstance, LV2_STATE__interface))
-                           : nullptr;
+                             ? static_cast<const LV2_State_Interface*> (
+                                   lilv_instance_get_extension_data (lilvInstance, LV2_STATE__interface))
+                             : nullptr;
 
         if (stateIface != nullptr)
         {
@@ -269,9 +270,9 @@ public:
             return;
 
         auto* stateIface = lilv_plugin_has_extension_data (lilvPlugin, LV2_STATE__interface)
-                           ? static_cast<const LV2_State_Interface*> (
-                                 lilv_instance_get_extension_data (lilvInstance, LV2_STATE__interface))
-                           : nullptr;
+                             ? static_cast<const LV2_State_Interface*> (
+                                   lilv_instance_get_extension_data (lilvInstance, LV2_STATE__interface))
+                             : nullptr;
 
         if (stateIface == nullptr)
             return;
@@ -279,10 +280,10 @@ public:
         MemoryInputStream stream (data, static_cast<std::size_t> (sizeInBytes), false);
 
         LV2_State_Retrieve_Function retrieveFn = [] (LV2_State_Handle handle,
-                                                      uint32_t key,
-                                                      size_t* size,
-                                                      uint32_t* type,
-                                                      uint32_t* flags)
+                                                     uint32_t key,
+                                                     size_t* size,
+                                                     uint32_t* type,
+                                                     uint32_t* flags)
         {
             auto* remaining = static_cast<int64*> (handle);
             return nullptr; // simplified - see setStateInformation full impl below
@@ -291,10 +292,10 @@ public:
         // For a basic implementation, delegate to the interface directly
         stateIface->restore (lilv_instance_get_handle (lilvInstance),
                              [] (LV2_State_Handle handle, uint32_t key, size_t* size, uint32_t* type, uint32_t* flags) -> const void*
-                             {
-                                 // Simplified: restore from saved data
-                                 return nullptr;
-                             },
+        {
+            // Simplified: restore from saved data
+            return nullptr;
+        },
                              nullptr,
                              0,
                              nullptr);
@@ -304,8 +305,11 @@ private:
     struct PortIndices
     {
         int numInputs, numOutputs;
+
         int getAudioInputPort (int i) const noexcept { return i; }
+
         int getAudioOutputPort (int i) const noexcept { return i + numInputs; }
+
         int getMaxAudioPortIndex() const noexcept { return numInputs + numOutputs; }
     };
 
@@ -400,8 +404,8 @@ private:
         LV2_Atom_Forge forge;
         lv2_atom_forge_init (&forge, uridMap->getMapFeature());
         lv2_atom_forge_set_buffer (&forge,
-                                    reinterpret_cast<uint8_t*> (seq),
-                                    static_cast<uint32_t> (inputSeqBuffer.size()));
+                                   reinterpret_cast<uint8_t*> (seq),
+                                   static_cast<uint32_t> (inputSeqBuffer.size()));
 
         LV2_Atom_Forge_Frame seqFrame;
         lv2_atom_forge_sequence_head (&forge, &seqFrame, 0);
@@ -428,8 +432,8 @@ private:
         LV2_Atom_Forge forge;
         lv2_atom_forge_init (&forge, uridMap->getMapFeature());
         lv2_atom_forge_set_buffer (&forge,
-                                    reinterpret_cast<uint8_t*> (seq),
-                                    static_cast<uint32_t> (inputSeqBuffer.size()));
+                                   reinterpret_cast<uint8_t*> (seq),
+                                   static_cast<uint32_t> (inputSeqBuffer.size()));
 
         const auto patchSetUrid = uridMap->map (LV2_PATCH__Set);
         const auto patchPropertyUrid = uridMap->map (LV2_PATCH__property);
@@ -465,8 +469,8 @@ private:
         LV2_Atom_Forge forge;
         lv2_atom_forge_init (&forge, uridMap->getMapFeature());
         lv2_atom_forge_set_buffer (&forge,
-                                    reinterpret_cast<uint8_t*> (seq),
-                                    static_cast<uint32_t> (inputSeqBuffer.size()));
+                                   reinterpret_cast<uint8_t*> (seq),
+                                   static_cast<uint32_t> (inputSeqBuffer.size()));
 
         lv2_atom_forge_frame_time (&forge, 0);
 
@@ -515,8 +519,7 @@ private:
                 const auto* data = reinterpret_cast<const uint8_t*> (iter + 1);
                 const auto size = static_cast<int> (iter->body.size);
                 if (size > 0)
-                    context.getMidiBuffer().addEvent (data, size,
-                                                      static_cast<int> (iter->time.frames));
+                    context.getMidiBuffer().addEvent (data, size, static_cast<int> (iter->time.frames));
             }
 
             iter = lv2_atom_sequence_next (iter);
@@ -546,7 +549,7 @@ private:
                     const LV2_Atom *propertyAtom = nullptr, *valueAtom = nullptr;
                     LV2_Atom_Object_Query query[] = {
                         { uridMap->map (LV2_PATCH__property), &propertyAtom },
-                        { uridMap->map (LV2_PATCH__value),    &valueAtom },
+                        { uridMap->map (LV2_PATCH__value), &valueAtom },
                         LV2_ATOM_OBJECT_QUERY_END
                     };
                     lv2_atom_object_query (obj, query);
@@ -712,7 +715,7 @@ ResultValue<std::vector<AudioPluginDescription>> LV2Format::scanFile (const File
 
         // Check if this plugin belongs to this bundle
         auto pluginBundleUri = Pimpl::makeNode (pimpl->world,
-                                                 lilv_node_as_uri (lilv_plugin_get_bundle_uri (plugin)));
+                                                lilv_node_as_uri (lilv_plugin_get_bundle_uri (plugin)));
         auto fileUri = Pimpl::makeNode (pimpl->world, uriStr);
 
         if (pluginBundleUri != nullptr && fileUri != nullptr
@@ -812,36 +815,33 @@ ResultValue<std::unique_ptr<AudioPluginInstance>> LV2Format::loadPlugin (
     int32_t seqSize = 32768;
 
     LV2_Options_Option options[] = {
-        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__maxBlockLength),
-          sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &maxBlockLen },
-        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__minBlockLength),
-          sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &minBlockLen },
-        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__sequenceSize),
-          sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &seqSize },
+        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__maxBlockLength), sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &maxBlockLen },
+        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__minBlockLength), sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &minBlockLen },
+        { LV2_OPTIONS_INSTANCE, 0, uridMap->map (LV2_BUF_SIZE__sequenceSize), sizeof (int32_t), uridMap->map (LV2_ATOM__Int), &seqSize },
         { LV2_OPTIONS_INSTANCE, 0, 0, 0, 0, nullptr }
     };
 
     const LV2_Feature features[] = {
-        { LV2_URID__map,              &mapFeature },
-        { LV2_URID__unmap,            &unmapFeature },
-        { LV2_OPTIONS__options,       options },
+        { LV2_URID__map, &mapFeature },
+        { LV2_URID__unmap, &unmapFeature },
+        { LV2_OPTIONS__options, options },
         { LV2_BUF_SIZE__boundedBlockLength, nullptr },
         { nullptr, nullptr }
     };
 
     // Instantiate plugin
     auto* instance = lilv_plugin_instantiate (foundPlugin,
-                                               context.sampleRate,
-                                               features);
+                                              context.sampleRate,
+                                              features);
 
     if (instance == nullptr)
         return makeResultValueFail ("Failed to instantiate LV2 plugin");
 
     auto pluginInstance = std::make_unique<LV2PluginInstance> (description,
-                                                                context,
-                                                                foundPlugin,
-                                                                instance,
-                                                                std::move (uridMap));
+                                                               context,
+                                                               foundPlugin,
+                                                               instance,
+                                                               std::move (uridMap));
 
     return ResultValue<std::unique_ptr<AudioPluginInstance>>::ok (std::move (pluginInstance));
 }
