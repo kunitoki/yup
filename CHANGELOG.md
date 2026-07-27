@@ -83,9 +83,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New standalone `yup_shader_bundler` console tool (`cmake/tools/shader_bundler`): takes a `.vert` and `.frag` GLSL (v450 Vulkan dialect) pair on disk and produces a single `.ysl` bundle containing transpiled variants for all target languages (GLSL/ESSL/HLSL/MSL).
 - New `yup_add_shader_bundle()` CMake helper (`cmake/yup_shader_bundler.cmake`): builds the `yup_shader_bundler` tool for the host once (cached in the global property `YUP_SHADER_BUNDLER_EXECUTABLE`), runs it at configure time to generate the `.ysl`, and embeds it into a linkable object library via `yup_add_embedded_binary_resources`. Works even when the outer build is cross-compiling, since the tool is built in its own host binary tree without forwarding the cross toolchain. Accepts an `OPTIONS` argument that forwards arbitrary extra flags verbatim to `yup_shader_bundler` (e.g. `--spirv-opt`, `--target-langs`, `-DNAME=VALUE`, `-I<dir>`).
 
+### AI (`yup_ai`)
+
+- New `yup_ai` module (`modules/yup_ai`): LLM client and AI integration classes depending on `yup_core` and `yup_events`.
+
+#### LLM
+
+- `LLMClient` (`yup_LLMClient.h`): abstract base for chat-completion backends with `complete()` and `completeStreaming()` methods, tool-call loop support via `runToolLoop()`, and structured output via `LLMSchema` JSON Schema or GBNF grammars.
+- `LLMHttpClient` (`yup_LLMHttpClient.h`): HTTP transport for `LLMClient` with retry and timeout logic, handling streaming SSE and non-streaming JSON responses.
+- `LLMClientFactory` (`yup_LLMClientFactory.h`): creates the correct `LLMHttpClient` subclass from `LLMClient::Options::provider`, with convenience factories for each provider.
+- `LLMMessage` (`yup_LLMMessage.h`): chat message with four roles (system, user, assistant, tool), optional tool calls, and serialisation to/from OpenAI ChatML JSON.
+- `LLMResponse` (`yup_LLMResponse.h`): parsed completion response with choices, token usage, tool-call extraction, streaming chunk accumulation, and error handling.
+- `LLMTool` (`yup_LLMTool.h`): callable function descriptor with JSON Schema parameters and a local handler, serialised to OpenAI function-calling format.
+- `LLMToolRegistry` (`yup_LLMToolRegistry.h`): thread-safe registry for `LLMTool` instances with snapshot, lookup, dispatch, and tools-array serialisation.
+- `LLMSchema` (`yup_LLMSchema.h`): fluent builder for JSON Schema objects (`string`, `number`, `integer`, `boolean`, `array`, `object`, `oneOf`) used in structured-output requests across all providers.
+
+#### LLM Providers
+
+- `LLMOpenAIChatClient` (`yup_LLMOpenAIChatClient.h`): OpenAI Chat Completions API — also compatible with Ollama, DeepSeek, OpenRouter, and llama-server.
+- `LLMOpenAIResponsesClient` (`yup_LLMOpenAIResponsesClient.h`): OpenAI Responses API (GPT-5+, reasoning models).
+- `LLMAnthropicClient` (`yup_LLMAnthropicClient.h`): Anthropic Messages API (Claude models).
+- `LLMGeminiClient` (`yup_LLMGeminiClient.h`): Google Gemini generateContent API.
+
+#### Embeddings
+
+- `EmbeddingModel` (`yup_EmbeddingModel.h`): OpenAI-compatible HTTP embedding model with `embed()` / `embedBatch()` and `cosineSimilarity()` helper.
+
+#### MCP (Model Context Protocol)
+
+- `MCPTypes` (`yup_MCPTypes.h`): JSON-RPC 2.0 request/response/error types, MCP capability flags, tool and resource definitions with `toVar` / `fromVar` serialisation.
+- `MCPTransport` (`yup_MCPTransport.h`): abstract transport interface for JSON-RPC messages (stdio, HTTP/SSE, sockets, in-process).
+- `MCPClient` (`yup_MCPClient.h`): synchronous MCP client with `initialize()` handshake, `listTools()` / `callTool()`, `listResources()` / `readResource()`, and tool-import bridge `registerToolsWith()`.
+- `MCPServer` (`yup_MCPServer.h`): MCP server exposing local YUP tools and resources over a transport, with `registerTool()` / `registerResource()`, `start()` / `stop()`, and placeholder `startStdio()` / `startHttp()`.
+
+#### Python Bindings
+
+- Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
+- `AIDemo` example (`examples/graphics/source/examples/AI.h`): interactive demo for all four LLM providers (OpenAI Chat, OpenAI Responses, Anthropic, Gemini) with model and API key configuration, system prompt editing, streaming and non-streaming completion, tool calling, MCP server integration, and embedded text generation.
 
 ### Build System
 

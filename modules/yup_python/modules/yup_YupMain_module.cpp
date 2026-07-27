@@ -40,6 +40,10 @@
 #include "../bindings/yup_YupGui_bindings.h"
 #endif
 
+#if YUP_MODULE_AVAILABLE_yup_ai
+#include "../bindings/yup_YupAi_bindings.h"
+#endif
+
 #if YUP_MODULE_AVAILABLE_yup_audio_basics
 #include "../bindings/yup_YupAudioBasics_bindings.h"
 #endif
@@ -90,6 +94,10 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
 #if YUP_MODULE_AVAILABLE_yup_gui
     yup::Bindings::registerYupGuiBindings (m);
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_ai
+    yup::Bindings::registerYupAiBindings (m);
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_audio_basics

@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_graphics
 #include "bindings/yup_YupGraphics_bindings.cpp"
+#endif

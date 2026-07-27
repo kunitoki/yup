@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_data_model
 #include "bindings/yup_YupDataModel_bindings.cpp"
+#endif
