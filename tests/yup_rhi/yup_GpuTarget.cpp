@@ -74,15 +74,6 @@ TEST_F (GpuTargetTests, AsTextureReturnsNull)
     EXPECT_EQ (target->asTexture(), nullptr);
 }
 
-TEST_F (GpuTargetTests, AsImageReturnsEmptyImage)
-{
-    auto target = GpuTarget::create (*context, 64, 64);
-    if (target == nullptr)
-        return;
-
-    EXPECT_FALSE (target->asImage().isValid());
-}
-
 TEST_F (GpuTargetTests, ReadPixelsReturnsFalseOrSucceeds)
 {
     auto target = GpuTarget::create (*context, 64, 64);

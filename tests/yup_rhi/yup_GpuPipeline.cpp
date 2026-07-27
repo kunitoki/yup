@@ -295,7 +295,7 @@ TEST_F (GpuPipelineCacheTests, OpenGLES_ApisGenerateDifferentKeys)
     ShaderBundle bundle;
     GpuPipelineOptions options;
 
-    const auto keyGL = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGL;
+    const auto keyGL = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGL);
     const auto keyGLES = GpuPipelineCache::generateCacheKey (bundle, options, GpuPlatform::OpenGLES);
     EXPECT_NE (keyGL, keyGLES);
 }
@@ -385,8 +385,8 @@ TEST_F (GpuPipelineCacheTests, KeyChangesWhenShaderSourceDiffers)
 
     GpuPipelineOptions options;
 
-    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL;
-    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL;
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL);
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL);
     EXPECT_NE (keyA, keyB);
 }
 
@@ -410,8 +410,8 @@ TEST_F (GpuPipelineCacheTests, KeyChangesWhenEntryPointDiffers)
 
     GpuPipelineOptions options;
 
-    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL;
-    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL;
+    const auto keyA = GpuPipelineCache::generateCacheKey (bundleA, options, GpuPlatform::OpenGL);
+    const auto keyB = GpuPipelineCache::generateCacheKey (bundleB, options, GpuPlatform::OpenGL);
     EXPECT_NE (keyA, keyB);
 }
 
