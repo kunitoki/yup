@@ -66,6 +66,7 @@ set (target_modules
     yup_data_model
     yup_graphics
     yup_animation
+    yup_rhi
     yup_shading
     dr_libs
     pffft_library

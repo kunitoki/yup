@@ -22,6 +22,7 @@
 #include "mocks/rive_gpu.h"
 #include "mocks/rive_ore.h"
 #include "mocks/yup_rhi.h"
+#include "mocks/yup_graphics.h"
 
 #include "yup_rhi/yup_GpuTarget.cpp"
 #include "yup_rhi/yup_GpuPipeline.cpp"

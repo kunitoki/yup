@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <yup_graphics/yup_graphics.h>
 #include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
@@ -827,11 +828,11 @@ protected:
 
 TEST_F (GpuRenderPassMockTests, BeginRenderPassWithInvalidFrameReturnsInvalidPass)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto pass = canvas->beginRenderPass (invalid);
+    auto pass = target->beginRenderPass (invalid);
     EXPECT_FALSE (pass.isValid());
     EXPECT_FALSE (pass.draw (3));
     EXPECT_FALSE (pass.drawIndexed (3));
@@ -840,11 +841,11 @@ TEST_F (GpuRenderPassMockTests, BeginRenderPassWithInvalidFrameReturnsInvalidPas
 
 TEST_F (GpuRenderPassMockTests, BeginRenderPassWithValidFrameReturnsValidPass)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto valid = makeValidFrame();
-    auto pass = canvas->beginRenderPass (valid);
+    auto pass = target->beginRenderPass (valid);
     EXPECT_TRUE (pass.isValid());
 
     pass.finish();
@@ -853,8 +854,8 @@ TEST_F (GpuRenderPassMockTests, BeginRenderPassWithValidFrameReturnsValidPass)
 
 TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassDoesNotCrash)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     // Compile a real pipeline via mocks for the setPipeline test.
     auto vsModule = makeShaderModuleWithBindingMap();
@@ -875,7 +876,7 @@ TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassDoesNotCrash)
     auto* compiledPipeline = compileResult.getValue().get();
 
     auto valid = makeValidFrame();
-    auto pass = canvas->beginRenderPass (valid);
+    auto pass = target->beginRenderPass (valid);
     EXPECT_TRUE (pass.isValid());
 
     EXPECT_NO_THROW (pass.setPipeline (*compiledPipeline));
@@ -892,11 +893,11 @@ TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassDoesNotCrash)
 
 TEST_F (GpuRenderPassMockTests, SetPipelineOnInvalidPassDoesNotCrash)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto pass = canvas->beginRenderPass (invalid);
+    auto pass = target->beginRenderPass (invalid);
     EXPECT_FALSE (pass.isValid());
 
     int dummy = 0;
@@ -908,11 +909,11 @@ TEST_F (GpuRenderPassMockTests, SetPipelineOnInvalidPassDoesNotCrash)
 
 TEST_F (GpuRenderPassMockTests, SetTextureOnInvalidPassDoesNotCrash)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto pass = canvas->beginRenderPass (invalid);
+    auto pass = target->beginRenderPass (invalid);
     EXPECT_FALSE (pass.isValid());
 
     int dummy = 0;
@@ -926,11 +927,11 @@ TEST_F (GpuRenderPassMockTests, SetTextureOnInvalidPassDoesNotCrash)
 
 TEST_F (GpuRenderPassMockTests, MoveConstructionPreservesInvalidState)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto src = canvas->beginRenderPass (invalid);
+    auto src = target->beginRenderPass (invalid);
     EXPECT_FALSE (src.isValid());
 
     GpuRenderPass dst (std::move (src));
@@ -940,12 +941,12 @@ TEST_F (GpuRenderPassMockTests, MoveConstructionPreservesInvalidState)
 
 TEST_F (GpuRenderPassMockTests, MoveAssignmentPreservesInvalidState)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto src = canvas->beginRenderPass (invalid);
-    auto dst = canvas->beginRenderPass (invalid);
+    auto src = target->beginRenderPass (invalid);
+    auto dst = target->beginRenderPass (invalid);
 
     dst = std::move (src);
     EXPECT_FALSE (dst.isValid());
@@ -953,23 +954,23 @@ TEST_F (GpuRenderPassMockTests, MoveAssignmentPreservesInvalidState)
 
 TEST_F (GpuRenderPassMockTests, FinishIsIdempotentOnInvalidPass)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     auto invalid = makeInvalidFrame();
-    auto pass = canvas->beginRenderPass (invalid);
+    auto pass = target->beginRenderPass (invalid);
     EXPECT_FALSE (pass.finish());
     EXPECT_FALSE (pass.finish());
 }
 
 TEST_F (GpuRenderPassMockTests, DestructorDoesNotCrashOnInvalidPass)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     {
         auto invalid = makeInvalidFrame();
-        auto pass = canvas->beginRenderPass (invalid);
+        auto pass = target->beginRenderPass (invalid);
         EXPECT_FALSE (pass.isValid());
     }
     EXPECT_TRUE (true);
@@ -977,8 +978,8 @@ TEST_F (GpuRenderPassMockTests, DestructorDoesNotCrashOnInvalidPass)
 
 TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
 
     // Compile a pipeline
     auto vsModule = makeShaderModuleWithBindingMap();
@@ -1013,7 +1014,7 @@ TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
         .WillOnce (Return (std::move (mockRenderPass)));
 
     auto valid = makeValidFrame();
-    auto pass = canvas->beginRenderPass (valid);
+    auto pass = target->beginRenderPass (valid);
     ASSERT_TRUE (pass.isValid());
 
     pass.setPipeline (*compiledPipeline);
