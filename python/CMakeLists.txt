@@ -58,7 +58,8 @@ yup_standalone_app (
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
-        yup::yup_python)
+        yup::yup_python
+        yup::yup_ai)
 
 set_target_properties (${target_name} PROPERTIES
     CXX_EXTENSIONS OFF

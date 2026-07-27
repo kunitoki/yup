@@ -96,6 +96,24 @@ flowchart LR
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
+## AI
+
+LLM clients, embeddings, and MCP (Model Context Protocol). See the [AI](ai/index.md) area.
+
+### yup_ai
+
+Chat-completion clients for OpenAI, Anthropic, and Gemini; function-calling tools;
+text embeddings; and MCP client/server for tool/resource bridging — all over
+HTTP or custom transports.
+
+```mermaid
+flowchart LR
+    yup_ai:::self --> yup_core
+    yup_ai --> yup_events
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ## Graphics
 
 The rendering stack. See the [Graphics](graphics/index.md) area; bitmap image
@@ -360,20 +378,21 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 Python bindings for creating and driving YUP applications from scripts. Its only
 hard dependency is `yup_core`; it additionally generates bindings for
-`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_audio_basics`,
-`yup_audio_devices`, and `yup_audio_processors` when those modules are present in
+`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
+`yup_audio_basics`, `yup_audio_devices`, and `yup_audio_processors` when those modules are present in
 the build.
 
 ```mermaid
 flowchart LR
     yup_python:::self --> yup_core
-    yup_python -. optional .-> yup_events:::opt
-    yup_python -. optional .-> yup_data_model:::opt
-    yup_python -. optional .-> yup_graphics:::opt
-    yup_python -. optional .-> yup_gui:::opt
+    yup_python -. optional .-> yup_ai:::opt
     yup_python -. optional .-> yup_audio_basics:::opt
     yup_python -. optional .-> yup_audio_devices:::opt
     yup_python -. optional .-> yup_audio_processors:::opt
+    yup_python -. optional .-> yup_data_model:::opt
+    yup_python -. optional .-> yup_events:::opt
+    yup_python -. optional .-> yup_graphics:::opt
+    yup_python -. optional .-> yup_gui:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -392,6 +411,8 @@ flowchart TD
     rhi[yup_rhi] --> core
     rhi --> shading
     python[yup_python] --> core
+    ai[yup_ai] --> core
+    ai --> events
 
     graphics[yup_graphics] --> core
     graphics --> simd
