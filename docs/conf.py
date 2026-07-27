@@ -20,6 +20,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinxcontrib.mermaid",
     "breathe",
+    "exhale",
 ]
 
 myst_enable_extensions = [
@@ -42,13 +43,17 @@ myst_fence_as_directive = ["mermaid"]
 # -- Mermaid configuration ---------------------------------------------------
 mermaid_version = "11.6.0"
 autosectionlabel_prefix_document = True
+
+# Support both MyST Markdown (.md) and reStructuredText (.rst).
+# Exhale generates .rst API reference pages from Doxygen XML.
 source_suffix = {
     ".md": "markdown",
+    ".rst": "restructuredtext",
 }
 
-# -- Breathe configuration ---------------------------------------------------
-# Breathe bridges Doxygen XML output into Sphinx, rendering C++ API docs.
+# -- Breathe / Doxygen configuration -----------------------------------------
 # Doxygen must be run before Sphinx (see .readthedocs.yaml).
+# Breathe reads the XML and Exhale uses Breathe to render C++ API docs.
 breathe_projects = {
     "YUP": "_doxygen/xml",
 }
@@ -56,6 +61,18 @@ breathe_default_project = "YUP"
 breathe_domain_by_extension = {
     "h": "cpp",
     "cpp": "cpp",
+}
+
+# -- Exhale configuration ----------------------------------------------------
+# Exhale auto-generates a complete API reference tree from Doxygen XML.
+# It writes .rst files (not inline eval-rst blocks) so they go through
+# Sphinx's native RST parser, avoiding the MyST mock-inliner issues.
+exhale_args = {
+    "containmentFolder":     "./api-reference",
+    "rootFileName":          "index.rst",
+    "doxygenStripFromPath":  "..",
+    "createTreeView":        True,
+    "exhaleExecutesDoxygen": False,
 }
 
 # The root document of the documentation tree.
@@ -117,27 +134,3 @@ html_theme_options = {
         }
     ]
 }
-
-
-def setup(app):
-    """Work around a Breathe + MyST incompatibility.
-
-    When Breathe renders C++ function signatures inside a MyST ``eval-rst``
-    block, Sphinx's DocFieldTransformer tries to cross-reference parameter
-    types.  That resolver needs ``inliner.reporter``, but the inliner created
-    by MyST's mock-RST-parser sometimes lacks the attribute.  Ensure every
-    docutils Inliner has a fallback reporter so the build doesn't crash.
-    """
-    from docutils.parsers.rst.states import Inliner
-    from docutils.utils import Reporter as _DocutilsReporter
-
-    _orig_init = Inliner.__init__
-
-    def _patched_init(self, *args, **kwargs):
-        _orig_init(self, *args, **kwargs)
-        if not hasattr(self, "reporter") or not hasattr(self.reporter, "get_source_and_line"):
-            r = _DocutilsReporter("", 0, 0)
-            r.get_source_and_line = lambda lineno: ("", lineno)
-            self.reporter = r
-
-    Inliner.__init__ = _patched_init

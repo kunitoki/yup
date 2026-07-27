@@ -56,3 +56,4 @@ reasonix.toml
 # Documentation generated output
 docs/_build/
 docs/_doxygen/
+docs/api-reference/

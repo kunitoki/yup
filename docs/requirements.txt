@@ -4,3 +4,4 @@ linkify-it-py>=2.0
 shibuya>=2026.7.12
 sphinxcontrib-mermaid>=0.9
 breathe
+exhale
