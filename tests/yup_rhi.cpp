@@ -26,3 +26,7 @@
 #include "yup_rhi/yup_GpuTarget.cpp"
 #include "yup_rhi/yup_GpuPipeline.cpp"
 #include "yup_rhi/yup_GpuPipelineMocked.cpp"
+
+#if YUP_LINUX
+#include "yup_rhi/native/yup_GpuDevice_linux.cpp"
+#endif

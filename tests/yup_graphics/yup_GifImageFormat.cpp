@@ -23,8 +23,6 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libgif && YUP_IMAGE_FORMAT_GIF
-
 //==============================================================================
 // Helpers
 //==============================================================================
@@ -1162,5 +1160,3 @@ TEST (GifImageFormatTests, WriteImageReturnsFalseForInvalidImage)
     Image invalid;
     EXPECT_FALSE (writer.writeImage (invalid));
 }
-
-#endif // YUP_MODULE_AVAILABLE_libgif && YUP_IMAGE_FORMAT_GIF
