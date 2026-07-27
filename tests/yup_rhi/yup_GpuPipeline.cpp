@@ -185,10 +185,8 @@ TEST (ShaderBindingMapTests, GLFixupBlobEncodesCombinedSamplers)
 {
     ShaderReflection refl;
 
-    ShaderReflection::ResourceBinding cs;
+    ShaderReflection::GLCombinedSampler cs;
     cs.name = "texSampler";
-    cs.set = 0;
-    cs.binding = 0;
     cs.textureSlot = 2;
     refl.glCombinedSamplers.push_back (cs);
 
@@ -212,10 +210,8 @@ TEST (ShaderBindingMapTests, GLFixupBlobEncodesBothUniformBuffersAndSamplers)
     ub.backendSlot = 0;
     refl.uniformBuffers.push_back (ub);
 
-    ShaderReflection::ResourceBinding cs;
+    ShaderReflection::GLCombinedSampler cs;
     cs.name = "texSampler";
-    cs.set = 0;
-    cs.binding = 0;
     cs.textureSlot = 1;
     refl.glCombinedSamplers.push_back (cs);
 
