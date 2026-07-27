@@ -71,7 +71,8 @@ exhale_args = {
     "containmentFolder":     "./api-reference",
     "rootFileName":          "index.rst",
     "doxygenStripFromPath":  "..",
-    "createTreeView":        True,
+    "createTreeView":        False,
+    "fullToctreeMaxDepth":   1,
     "exhaleExecutesDoxygen": False,
 }
 
