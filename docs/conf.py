@@ -50,7 +50,7 @@ source_suffix = {
 # Breathe bridges Doxygen XML output into Sphinx, rendering C++ API docs.
 # Doxygen must be run before Sphinx (see .readthedocs.yaml).
 breathe_projects = {
-    "YUP": "docs/_doxygen/xml",
+    "YUP": "_doxygen/xml",
 }
 breathe_default_project = "YUP"
 breathe_domain_by_extension = {
