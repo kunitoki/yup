@@ -68,7 +68,6 @@ set (target_modules
     yup_animation
     yup_rhi
     yup_shading
-    yup_rhi
     dr_libs
     pffft_library
     opus_library
