@@ -31,6 +31,7 @@ coverage:
           - yup_graphics
           - yup_gui
           - yup_python
+          - yup_rhi
           - yup_shading
           - yup_simd
     patch:
@@ -57,6 +58,7 @@ flags:
   yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
   yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }
   yup_python:                { paths: [modules/yup_python/], carryforward: true }
+  yup_rhi:                   { paths: [modules/yup_rhi/], carryforward: true }
   yup_shading:               { paths: [modules/yup_shading/], carryforward: true }
   yup_simd:                  { paths: [modules/yup_simd/], carryforward: true }
 
