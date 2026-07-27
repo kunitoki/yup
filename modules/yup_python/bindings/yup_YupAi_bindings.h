@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,6 +19,19 @@
   ==============================================================================
 */
 
-#if YUP_MODULE_AVAILABLE_yup_gui
-#include "bindings/yup_YupGui_bindings.cpp"
+#pragma once
+
+#if ! YUP_MODULE_AVAILABLE_yup_ai
+#error This binding file requires adding the yup_ai module in the project
+#else
+#include <yup_ai/yup_ai.h>
 #endif
+
+#include "yup_YupCore_bindings.h"
+
+namespace yup::Bindings
+{
+
+void registerYupAiBindings (pybind11::module_& m);
+
+} // namespace yup::Bindings

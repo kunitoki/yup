@@ -1,0 +1,57 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#ifdef YUP_AI_H_INCLUDED
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
+   already included any other headers - just put it inside a file on its own, possibly with your config
+   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
+   header files that the compiler may be using.
+*/
+#error "Incorrect use of YUP cpp file"
+#endif
+
+#include "yup_ai.h"
+
+//==============================================================================
+// Core LLM.
+#include "llm/yup_LLMMessage.cpp"
+#include "llm/yup_LLMTool.cpp"
+#include "llm/yup_LLMToolRegistry.cpp"
+#include "llm/yup_LLMResponse.cpp"
+#include "llm/yup_LLMClient.cpp"
+#include "llm/yup_LLMHttpClient.cpp"
+
+// Embedding.
+#include "embedding/yup_EmbeddingModel.cpp"
+
+// MCP.
+#include "mcp/yup_MCPTypes.cpp"
+#include "mcp/yup_MCPClient.cpp"
+#include "mcp/yup_MCPServer.cpp"
+
+// Provider implementations.
+#include "providers/yup_LLMOpenAIChatClient.cpp"
+#include "providers/yup_LLMAnthropicClient.cpp"
+#include "providers/yup_LLMGeminiClient.cpp"
+#include "providers/yup_LLMOpenAIResponsesClient.cpp"
+
+// Factory.
+#include "llm/yup_LLMClientFactory.cpp"
