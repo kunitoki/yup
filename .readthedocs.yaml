@@ -11,10 +11,8 @@ build:
     python: "3.13"
   apt_packages:
     - doxygen
-  jobs:
-    pre_build:
-      - doxygen Doxyfile
   commands:
+    - doxygen Doxyfile
     - pip install --upgrade pip
     - pip install -r docs/requirements.txt
     - python -m sphinx -T -j 1 -b html -d docs/_build/doctrees -D language=en docs $READTHEDOCS_OUTPUT/html
