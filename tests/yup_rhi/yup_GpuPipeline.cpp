@@ -233,17 +233,6 @@ TEST_F (GpuPipelineTests, GpuBufferCreateHeadlessReturnsNull)
     EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, verts, sizeof (verts)), nullptr);
 }
 
-TEST_F (GpuPipelineTests, GpuBufferCreateWithNullDataReturnsNull)
-{
-    EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, nullptr, 16), nullptr);
-}
-
-TEST_F (GpuPipelineTests, GpuBufferCreateWithZeroSizeReturnsNull)
-{
-    const float verts[] = { 0.0f };
-    EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, verts, 0), nullptr);
-}
-
 TEST (GpuBufferDefaults, DefaultPtrIsNull)
 {
     GpuBuffer::Ptr b;

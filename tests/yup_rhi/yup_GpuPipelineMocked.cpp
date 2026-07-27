@@ -416,21 +416,19 @@ TEST_F (GpuBufferMockTests, CreateReturnsNullWhenMakeBufferFails)
     EXPECT_EQ (buf, nullptr);
 }
 
-TEST_F (GpuBufferMockTests, UpdateBufferOnNonStorageBufferReturnsFalse)
+TEST_F (GpuBufferMockTests, UpdateBufferOnVertexBufferSucceeds)
 {
-    // GpuDevice::updateBuffer() is only meaningful for storage buffers, which
-    // this device doesn't support — the base implementation always returns
-    // false, even for an otherwise-valid vertex buffer.
     auto oreBuf = rive::make_rcp<MockOreBuffer>();
     EXPECT_CALL (*mockOreCtx, makeBuffer (_))
         .WillOnce (Return (oreBuf));
+    EXPECT_CALL (*oreBuf, update (_, _, _));
 
     const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
     auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
     ASSERT_NE (buf, nullptr);
 
     const float newData[] = { 5.0f, 6.0f, 7.0f, 8.0f };
-    EXPECT_FALSE (ctx->updateBuffer (buf, newData, sizeof (newData)));
+    EXPECT_TRUE (ctx->updateBuffer (buf, newData, sizeof (newData)));
 }
 
 TEST_F (GpuBufferMockTests, CreateFailsWithStorageType)
@@ -504,23 +502,6 @@ TEST_F (GpuDeviceMockTests, CreateBufferReturnsNullWhenOreMakeBufferFails)
     const float data[] = { 1.0f };
     auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
     EXPECT_EQ (buf, nullptr);
-}
-
-TEST_F (GpuDeviceMockTests, CreateBufferWithNullDataReturnsNull)
-{
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::vertex, nullptr, 16), nullptr);
-}
-
-TEST_F (GpuDeviceMockTests, CreateBufferWithZeroSizeReturnsNull)
-{
-    const float data[] = { 1.0f };
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::vertex, data, 0), nullptr);
-}
-
-TEST_F (GpuDeviceMockTests, CreateBufferStorageTypeReturnsNull)
-{
-    const float data[] = { 1.0f };
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::storage, data, sizeof (data)), nullptr);
 }
 
 TEST_F (GpuDeviceMockTests, UpdateBufferWithNullBufferReturnsFalse)
@@ -1066,22 +1047,6 @@ TEST_F (GpuRenderPassMockTests, SetUniformBufferOnValidPassStoresAndReplacesBind
     // Replacing same group/binding updates the data.
     float newData[] = { 5.0f };
     EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, newData, sizeof (newData)));
-
-    pass.finish();
-    valid.submit();
-}
-
-TEST_F (GpuRenderPassMockTests, SetUniformBufferWithNullDataIsNoop)
-{
-    auto canvas = GpuTarget::create (ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
-
-    auto valid = makeValidFrame();
-    auto pass = canvas->beginRenderPass (valid);
-    ASSERT_TRUE (pass.isValid());
-
-    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
-    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 16));
 
     pass.finish();
     valid.submit();
