@@ -117,3 +117,25 @@ html_theme_options = {
         }
     ]
 }
+
+
+def setup(app):
+    """Work around a Breathe + MyST incompatibility.
+
+    When Breathe renders C++ function signatures inside a MyST ``eval-rst``
+    block, Sphinx's DocFieldTransformer tries to cross-reference parameter
+    types.  That resolver needs ``inliner.reporter``, but the inliner created
+    by MyST's mock-RST-parser sometimes lacks the attribute.  Ensure every
+    docutils Inliner has a fallback reporter so the build doesn't crash.
+    """
+    from docutils.parsers.rst.states import Inliner
+    from docutils.utils import Reporter
+
+    _orig_init = Inliner.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        _orig_init(self, *args, **kwargs)
+        if not hasattr(self, "reporter"):
+            self.reporter = Reporter("", 0, 0)
+
+    Inliner.__init__ = _patched_init
