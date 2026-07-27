@@ -55,12 +55,12 @@ public:
     Result sendMessage (const var& message) override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "sendMessage");
+        auto method = py::get_override (this, "sendMessage");
 
-        if (! override)
+        if (! method)
             py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.sendMessage\"");
 
-        auto result = override (message);
+        auto result = method (message);
 
         if (py::isinstance<Result> (result))
             return result.cast<Result>();
@@ -74,12 +74,12 @@ public:
     ResultValue<var> receiveMessage (int timeoutMs = -1) override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "receiveMessage");
+        auto method = py::get_override (this, "receiveMessage");
 
-        if (! override)
+        if (! method)
             py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.receiveMessage\"");
 
-        auto result = override (timeoutMs);
+        auto result = method (timeoutMs);
         if (result.is_none())
             return makeResultValueFail ("Python MCPTransport.receiveMessage returned None");
 
@@ -89,23 +89,23 @@ public:
     void setMessageHandler (MessageHandler handler) override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "setMessageHandler");
+        auto method = py::get_override (this, "setMessageHandler");
 
-        if (! override)
+        if (! method)
             py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.setMessageHandler\"");
 
-        override (std::move (handler));
+        method (std::move (handler));
     }
 
     Result start() override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "start");
+        auto method = py::get_override (this, "start");
 
-        if (! override)
+        if (! method)
             py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.start\"");
 
-        auto result = override();
+        auto result = method();
 
         if (py::isinstance<Result> (result))
             return result.cast<Result>();
@@ -119,25 +119,25 @@ public:
     void stop() override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "stop");
+        auto method = py::get_override (this, "stop");
 
-        if (! override)
+        if (! method)
             py::pybind11_fail ("Tried to call pure virtual function \"MCPTransport.stop\"");
 
-        override();
+        method();
     }
 
     bool isConnected() const noexcept override
     {
         py::gil_scoped_acquire gil;
-        auto override = py::get_override (this, "isConnected");
+        auto method = py::get_override (this, "isConnected");
 
-        if (! override)
+        if (! method)
             return false;
 
         try
         {
-            return override().cast<bool>();
+            return method().cast<bool>();
         }
         catch (...)
         {

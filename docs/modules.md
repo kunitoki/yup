@@ -364,14 +364,14 @@ the build.
 ```mermaid
 flowchart LR
     yup_python:::self --> yup_core
-    yup_python -. optional .-> yup_events:::opt
-    yup_python -. optional .-> yup_data_model:::opt
-    yup_python -. optional .-> yup_graphics:::opt
-    yup_python -. optional .-> yup_gui:::opt
     yup_python -. optional .-> yup_ai:::opt
     yup_python -. optional .-> yup_audio_basics:::opt
     yup_python -. optional .-> yup_audio_devices:::opt
     yup_python -. optional .-> yup_audio_processors:::opt
+    yup_python -. optional .-> yup_data_model:::opt
+    yup_python -. optional .-> yup_events:::opt
+    yup_python -. optional .-> yup_graphics:::opt
+    yup_python -. optional .-> yup_gui:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
