@@ -134,7 +134,7 @@ LLMClient::Options makeOptions (LLMClient::Provider provider,
 //==============================================================================
 // LLMOpenAIChatClient
 
-TEST (YupAiOpenAIChatClient, GetEndpointUrl_AppendsChatCompletionsPath)
+TEST (OpenAIChatClient, GetEndpointUrl_AppendsChatCompletionsPath)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -144,7 +144,7 @@ TEST (YupAiOpenAIChatClient, GetEndpointUrl_AppendsChatCompletionsPath)
     EXPECT_EQ ("https://api.openai.com/v1/chat/completions", client.endpointUrl());
 }
 
-TEST (YupAiOpenAIChatClient, GetEndpointUrl_StripsTrailingSlashFromBaseUrl)
+TEST (OpenAIChatClient, GetEndpointUrl_StripsTrailingSlashFromBaseUrl)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -154,7 +154,7 @@ TEST (YupAiOpenAIChatClient, GetEndpointUrl_StripsTrailingSlashFromBaseUrl)
     EXPECT_EQ ("https://api.openai.com/v1/chat/completions", client.endpointUrl());
 }
 
-TEST (YupAiOpenAIChatClient, GetStreamingEndpointUrl_SameAsNonStreaming)
+TEST (OpenAIChatClient, GetStreamingEndpointUrl_SameAsNonStreaming)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -164,7 +164,7 @@ TEST (YupAiOpenAIChatClient, GetStreamingEndpointUrl_SameAsNonStreaming)
     EXPECT_EQ (client.endpointUrl(), client.streamingEndpointUrl());
 }
 
-TEST (YupAiOpenAIChatClient, BuildHeaders_IncludesBearerToken)
+TEST (OpenAIChatClient, BuildHeaders_IncludesBearerToken)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -174,7 +174,7 @@ TEST (YupAiOpenAIChatClient, BuildHeaders_IncludesBearerToken)
     EXPECT_TRUE (client.headers().contains ("Authorization: Bearer sk-test-key"));
 }
 
-TEST (YupAiOpenAIChatClient, BuildHeaders_OmitsBearerWhenApiKeyEmpty)
+TEST (OpenAIChatClient, BuildHeaders_OmitsBearerWhenApiKeyEmpty)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gemma4",
@@ -183,7 +183,7 @@ TEST (YupAiOpenAIChatClient, BuildHeaders_OmitsBearerWhenApiKeyEmpty)
     EXPECT_FALSE (client.headers().contains ("Authorization:"));
 }
 
-TEST (YupAiOpenAIChatClient, BuildHeaders_OpenRouter_InjectsTitleAndReferer)
+TEST (OpenAIChatClient, BuildHeaders_OpenRouter_InjectsTitleAndReferer)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIChat,
                                            "openai/gpt-4o",
@@ -198,7 +198,7 @@ TEST (YupAiOpenAIChatClient, BuildHeaders_OpenRouter_InjectsTitleAndReferer)
     EXPECT_TRUE (h.contains ("HTTP-Referer: https://myapp.com"));
 }
 
-TEST (YupAiOpenAIChatClient, BuildPayload_ContainsModelName)
+TEST (OpenAIChatClient, BuildPayload_ContainsModelName)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -212,7 +212,7 @@ TEST (YupAiOpenAIChatClient, BuildPayload_ContainsModelName)
     EXPECT_EQ ("gpt-4o", body["model"].toString());
 }
 
-TEST (YupAiOpenAIChatClient, BuildPayload_StreamFlagIsFalse)
+TEST (OpenAIChatClient, BuildPayload_StreamFlagIsFalse)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -226,7 +226,7 @@ TEST (YupAiOpenAIChatClient, BuildPayload_StreamFlagIsFalse)
     EXPECT_FALSE (static_cast<bool> (body["stream"]));
 }
 
-TEST (YupAiOpenAIChatClient, BuildStreamingPayload_StreamFlagIsTrue)
+TEST (OpenAIChatClient, BuildStreamingPayload_StreamFlagIsTrue)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -240,7 +240,7 @@ TEST (YupAiOpenAIChatClient, BuildStreamingPayload_StreamFlagIsTrue)
     EXPECT_TRUE (static_cast<bool> (body["stream"]));
 }
 
-TEST (YupAiOpenAIChatClient, BuildPayload_SetsMaxCompletionTokens)
+TEST (OpenAIChatClient, BuildPayload_SetsMaxCompletionTokens)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -255,7 +255,7 @@ TEST (YupAiOpenAIChatClient, BuildPayload_SetsMaxCompletionTokens)
     EXPECT_EQ (100, static_cast<int> (body["max_completion_tokens"]));
 }
 
-TEST (YupAiOpenAIChatClient, BuildPayload_SystemPromptAppearsFirst)
+TEST (OpenAIChatClient, BuildPayload_SystemPromptAppearsFirst)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -272,7 +272,7 @@ TEST (YupAiOpenAIChatClient, BuildPayload_SystemPromptAppearsFirst)
     EXPECT_EQ ("user", body["messages"][1]["role"].toString());
 }
 
-TEST (YupAiOpenAIChatClient, ParseResponse_ExtractsChoiceContent)
+TEST (OpenAIChatClient, ParseResponse_ExtractsChoiceContent)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -295,7 +295,7 @@ TEST (YupAiOpenAIChatClient, ParseResponse_ExtractsChoiceContent)
     EXPECT_EQ ("world", response.choices.front().message.content);
 }
 
-TEST (YupAiOpenAIChatClient, ParseChunk_ExtractsDeltaContent)
+TEST (OpenAIChatClient, ParseChunk_ExtractsDeltaContent)
 {
     TestableChatClient client (makeOptions (LLMClient::Provider::OpenAIChat,
                                             "gpt-4o",
@@ -320,7 +320,7 @@ TEST (YupAiOpenAIChatClient, ParseChunk_ExtractsDeltaContent)
 //==============================================================================
 // LLMAnthropicClient
 
-TEST (YupAiAnthropicClient, GetEndpointUrl_AppendsMessagesPath)
+TEST (AnthropicClient, GetEndpointUrl_AppendsMessagesPath)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -330,7 +330,7 @@ TEST (YupAiAnthropicClient, GetEndpointUrl_AppendsMessagesPath)
     EXPECT_EQ ("https://api.anthropic.com/v1/messages", client.endpointUrl());
 }
 
-TEST (YupAiAnthropicClient, BuildHeaders_IncludesApiKey)
+TEST (AnthropicClient, BuildHeaders_IncludesApiKey)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -340,7 +340,7 @@ TEST (YupAiAnthropicClient, BuildHeaders_IncludesApiKey)
     EXPECT_TRUE (client.headers().contains ("x-api-key: ant-key"));
 }
 
-TEST (YupAiAnthropicClient, BuildHeaders_IncludesAnthropicVersion)
+TEST (AnthropicClient, BuildHeaders_IncludesAnthropicVersion)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -350,7 +350,7 @@ TEST (YupAiAnthropicClient, BuildHeaders_IncludesAnthropicVersion)
     EXPECT_TRUE (client.headers().contains ("anthropic-version: 2023-06-01"));
 }
 
-TEST (YupAiAnthropicClient, BuildHeaders_DoesNotUseBearerScheme)
+TEST (AnthropicClient, BuildHeaders_DoesNotUseBearerScheme)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -360,7 +360,7 @@ TEST (YupAiAnthropicClient, BuildHeaders_DoesNotUseBearerScheme)
     EXPECT_FALSE (client.headers().contains ("Authorization: Bearer"));
 }
 
-TEST (YupAiAnthropicClient, BuildPayload_DefaultsMaxTokensTo4096)
+TEST (AnthropicClient, BuildPayload_DefaultsMaxTokensTo4096)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -374,7 +374,7 @@ TEST (YupAiAnthropicClient, BuildPayload_DefaultsMaxTokensTo4096)
     EXPECT_EQ (4096, static_cast<int> (body["max_tokens"]));
 }
 
-TEST (YupAiAnthropicClient, BuildPayload_RespectsRequestMaxTokens)
+TEST (AnthropicClient, BuildPayload_RespectsRequestMaxTokens)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -389,7 +389,7 @@ TEST (YupAiAnthropicClient, BuildPayload_RespectsRequestMaxTokens)
     EXPECT_EQ (512, static_cast<int> (body["max_tokens"]));
 }
 
-TEST (YupAiAnthropicClient, BuildPayload_SystemPromptGoesToSystemFieldWithCacheControl)
+TEST (AnthropicClient, BuildPayload_SystemPromptGoesToSystemFieldWithCacheControl)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -408,7 +408,7 @@ TEST (YupAiAnthropicClient, BuildPayload_SystemPromptGoesToSystemFieldWithCacheC
     EXPECT_EQ ("ephemeral", body["system"][0]["cache_control"]["type"].toString());
 }
 
-TEST (YupAiAnthropicClient, BuildPayload_FiltersSystemMessagesFromMessagesArray)
+TEST (AnthropicClient, BuildPayload_FiltersSystemMessagesFromMessagesArray)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -429,7 +429,7 @@ TEST (YupAiAnthropicClient, BuildPayload_FiltersSystemMessagesFromMessagesArray)
     EXPECT_EQ ("assistant", (*messages)[1]["role"].toString());
 }
 
-TEST (YupAiAnthropicClient, ParseResponse_ExtractsContentArrayText)
+TEST (AnthropicClient, ParseResponse_ExtractsContentArrayText)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -450,7 +450,7 @@ TEST (YupAiAnthropicClient, ParseResponse_ExtractsContentArrayText)
     EXPECT_EQ (8, response.usage->totalTokens);
 }
 
-TEST (YupAiAnthropicClient, ParseResponse_ReportsApiError)
+TEST (AnthropicClient, ParseResponse_ReportsApiError)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -465,7 +465,7 @@ TEST (YupAiAnthropicClient, ParseResponse_ReportsApiError)
     EXPECT_EQ ("invalid api key", *response.errorMessage);
 }
 
-TEST (YupAiAnthropicClient, ParseChunk_ExtractsContentBlockDeltaText)
+TEST (AnthropicClient, ParseChunk_ExtractsContentBlockDeltaText)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -484,7 +484,7 @@ TEST (YupAiAnthropicClient, ParseChunk_ExtractsContentBlockDeltaText)
     EXPECT_EQ (LLMMessage::Role::assistant, response.choices.front().message.role);
 }
 
-TEST (YupAiAnthropicClient, ParseChunk_IgnoresNonContentBlockDeltaEvents)
+TEST (AnthropicClient, ParseChunk_IgnoresNonContentBlockDeltaEvents)
 {
     TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
                                                  "claude-opus-4-5",
@@ -497,10 +497,108 @@ TEST (YupAiAnthropicClient, ParseChunk_IgnoresNonContentBlockDeltaEvents)
     EXPECT_TRUE (response.choices.empty());
 }
 
+TEST (AnthropicClient, ParseChunk_IgnoresMessageDeltaEvent)
+{
+    TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
+                                                 "claude-opus-4-5",
+                                                 "https://api.anthropic.com/v1",
+                                                 "ant-key"));
+
+    const auto json = JSON::parse (R"({ "type": "message_delta", "usage": { "output_tokens": 42 } })");
+
+    const auto response = client.chunk (json);
+    EXPECT_TRUE (response.choices.empty());
+}
+
+TEST (AnthropicClient, ParseResponse_VoidJsonReturnsError)
+{
+    TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
+                                                 "claude-opus-4-5",
+                                                 "https://api.anthropic.com/v1",
+                                                 "ant-key"));
+
+    const auto response = client.response (var());
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
+}
+
+TEST (AnthropicClient, ParseResponse_ErrorWithoutMessage)
+{
+    TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
+                                                 "claude-opus-4-5",
+                                                 "https://api.anthropic.com/v1",
+                                                 "ant-key"));
+
+    const auto json = JSON::parse (R"({ "error": { "type": "invalid_request_error" } })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("Unknown Anthropic API error", *response.errorMessage);
+}
+
+TEST (AnthropicClient, ParseResponse_EmptyContentArray)
+{
+    TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
+                                                 "claude-opus-4-5",
+                                                 "https://api.anthropic.com/v1",
+                                                 "ant-key"));
+
+    const auto json = JSON::parse (R"({
+        "model": "claude-opus-4-5",
+        "content": [],
+        "usage": { "input_tokens": 5, "output_tokens": 0 }
+    })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.choices.empty());
+    ASSERT_TRUE (response.usage.has_value());
+    EXPECT_EQ (5, response.usage->totalTokens);
+}
+
+TEST (AnthropicClient, BuildHeaders_OmitsApiKeyWhenEmpty)
+{
+    TestableAnthropicClient client (makeOptions (LLMClient::Provider::Anthropic,
+                                                 "claude-opus-4-5",
+                                                 "https://api.anthropic.com/v1"));
+
+    EXPECT_FALSE (client.headers().contains ("x-api-key:"));
+    EXPECT_TRUE (client.headers().contains ("anthropic-version: 2023-06-01"));
+}
+
+TEST (AnthropicClient, BuildHeaders_IncludesUserAgentWhenSet)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::Anthropic,
+                                           "claude-opus-4-5",
+                                           "https://api.anthropic.com/v1",
+                                           "ant-key");
+    opts.userAgent = "MyApp/1.0";
+    TestableAnthropicClient client (opts);
+
+    EXPECT_TRUE (client.headers().contains ("User-Agent: MyApp/1.0"));
+}
+
+TEST (AnthropicClient, BuildPayload_IncludesMetadataWhenUserAgentSet)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::Anthropic,
+                                           "claude-opus-4-5",
+                                           "https://api.anthropic.com/v1",
+                                           "ant-key");
+    opts.userAgent = "test-user";
+    TestableAnthropicClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ ("test-user", body["metadata"]["user_id"].toString());
+}
+
 //==============================================================================
 // LLMGeminiClient
 
-TEST (YupAiGeminiClient, GetEndpointUrl_IncludesModelNameAndGenerateContent)
+TEST (GeminiClient, GetEndpointUrl_IncludesModelNameAndGenerateContent)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -511,7 +609,7 @@ TEST (YupAiGeminiClient, GetEndpointUrl_IncludesModelNameAndGenerateContent)
                client.endpointUrl());
 }
 
-TEST (YupAiGeminiClient, GetStreamingEndpointUrl_UsesStreamGenerateContentWithSse)
+TEST (GeminiClient, GetStreamingEndpointUrl_UsesStreamGenerateContentWithSse)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -522,7 +620,7 @@ TEST (YupAiGeminiClient, GetStreamingEndpointUrl_UsesStreamGenerateContentWithSs
                client.streamingEndpointUrl());
 }
 
-TEST (YupAiGeminiClient, BuildHeaders_IncludesGoogApiKey)
+TEST (GeminiClient, BuildHeaders_IncludesGoogApiKey)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -532,7 +630,7 @@ TEST (YupAiGeminiClient, BuildHeaders_IncludesGoogApiKey)
     EXPECT_TRUE (client.headers().contains ("x-goog-api-key: gemini-key"));
 }
 
-TEST (YupAiGeminiClient, BuildPayload_MapsAssistantRoleToModel)
+TEST (GeminiClient, BuildPayload_MapsAssistantRoleToModel)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -552,7 +650,7 @@ TEST (YupAiGeminiClient, BuildPayload_MapsAssistantRoleToModel)
     EXPECT_EQ ("model", (*contents)[1]["role"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_FiltersSystemMessages)
+TEST (GeminiClient, BuildPayload_FiltersSystemMessages)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -571,7 +669,7 @@ TEST (YupAiGeminiClient, BuildPayload_FiltersSystemMessages)
     EXPECT_EQ ("user", (*contents)[0]["role"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_SetsSystemInstruction)
+TEST (GeminiClient, BuildPayload_SetsSystemInstruction)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -590,7 +688,7 @@ TEST (YupAiGeminiClient, BuildPayload_SetsSystemInstruction)
     EXPECT_EQ ("You are a helpful assistant.", (*parts)[0]["text"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortLow_SetsThinkingBudget1024)
+TEST (GeminiClient, BuildPayload_ReasoningEffortLow_SetsThinkingBudget1024)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::Gemini,
                                            "gemini-2.5-flash",
@@ -607,7 +705,7 @@ TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortLow_SetsThinkingBudget1024)
                static_cast<int> (body["generationConfig"]["thinkingConfig"]["thinkingBudget"]));
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortHigh_SetsThinkingBudget16384)
+TEST (GeminiClient, BuildPayload_ReasoningEffortHigh_SetsThinkingBudget16384)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::Gemini,
                                            "gemini-2.5-flash",
@@ -624,7 +722,7 @@ TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortHigh_SetsThinkingBudget1638
                static_cast<int> (body["generationConfig"]["thinkingConfig"]["thinkingBudget"]));
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortDefault_SetsThinkingBudget4096)
+TEST (GeminiClient, BuildPayload_ReasoningEffortDefault_SetsThinkingBudget4096)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::Gemini,
                                            "gemini-2.5-flash",
@@ -641,7 +739,7 @@ TEST (YupAiGeminiClient, BuildPayload_ReasoningEffortDefault_SetsThinkingBudget4
                static_cast<int> (body["generationConfig"]["thinkingConfig"]["thinkingBudget"]));
 }
 
-TEST (YupAiGeminiClient, BuildStreamingPayload_MatchesNonStreamingPayload)
+TEST (GeminiClient, BuildStreamingPayload_MatchesNonStreamingPayload)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -654,7 +752,7 @@ TEST (YupAiGeminiClient, BuildStreamingPayload_MatchesNonStreamingPayload)
     EXPECT_EQ (client.payload (request), client.streamingPayload (request));
 }
 
-TEST (YupAiGeminiClient, ParseResponse_ExtractsCandidateText)
+TEST (GeminiClient, ParseResponse_ExtractsCandidateText)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -677,7 +775,7 @@ TEST (YupAiGeminiClient, ParseResponse_ExtractsCandidateText)
     EXPECT_EQ ("STOP", *response.choices.front().finishReason);
 }
 
-TEST (YupAiGeminiClient, ParseResponse_ReportsApiError)
+TEST (GeminiClient, ParseResponse_ReportsApiError)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -692,7 +790,7 @@ TEST (YupAiGeminiClient, ParseResponse_ReportsApiError)
     EXPECT_EQ ("quota exceeded", *response.errorMessage);
 }
 
-TEST (YupAiGeminiClient, ParseChunk_UsesSameCandidatesStructure)
+TEST (GeminiClient, ParseChunk_UsesSameCandidatesStructure)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -710,7 +808,7 @@ TEST (YupAiGeminiClient, ParseChunk_UsesSameCandidatesStructure)
     EXPECT_EQ ("delta", response.choices.front().message.content);
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ToolsUseFunctionDeclarationsKey)
+TEST (GeminiClient, BuildPayload_ToolsUseFunctionDeclarationsKey)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -739,7 +837,7 @@ TEST (YupAiGeminiClient, BuildPayload_ToolsUseFunctionDeclarationsKey)
     EXPECT_EQ ("string", decls[0]["parameters"]["properties"]["city"]["type"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ToolConfigDefaultsToAutoMode)
+TEST (GeminiClient, BuildPayload_ToolConfigDefaultsToAutoMode)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -759,7 +857,7 @@ TEST (YupAiGeminiClient, BuildPayload_ToolConfigDefaultsToAutoMode)
     EXPECT_EQ ("AUTO", body["toolConfig"]["functionCallingConfig"]["mode"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ToolChoiceNone_SetsNoneMode)
+TEST (GeminiClient, BuildPayload_ToolChoiceNone_SetsNoneMode)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -778,7 +876,7 @@ TEST (YupAiGeminiClient, BuildPayload_ToolChoiceNone_SetsNoneMode)
     EXPECT_EQ ("NONE", body["toolConfig"]["functionCallingConfig"]["mode"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ToolChoiceRequired_SetsAnyMode)
+TEST (GeminiClient, BuildPayload_ToolChoiceRequired_SetsAnyMode)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -797,7 +895,7 @@ TEST (YupAiGeminiClient, BuildPayload_ToolChoiceRequired_SetsAnyMode)
     EXPECT_EQ ("ANY", body["toolConfig"]["functionCallingConfig"]["mode"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_SpecificToolChoice_SetsAllowedFunctionNames)
+TEST (GeminiClient, BuildPayload_SpecificToolChoice_SetsAllowedFunctionNames)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -820,7 +918,7 @@ TEST (YupAiGeminiClient, BuildPayload_SpecificToolChoice_SetsAllowedFunctionName
     EXPECT_EQ ("get_weather", fcc["allowedFunctionNames"][0].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_ToolResultMessage_BecomesUserFunctionResponse)
+TEST (GeminiClient, BuildPayload_ToolResultMessage_BecomesUserFunctionResponse)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -848,7 +946,7 @@ TEST (YupAiGeminiClient, BuildPayload_ToolResultMessage_BecomesUserFunctionRespo
     EXPECT_EQ ("sunny", fr["response"]["result"].toString());
 }
 
-TEST (YupAiGeminiClient, BuildPayload_AssistantWithToolCalls_BecomesModelFunctionCallTurn)
+TEST (GeminiClient, BuildPayload_AssistantWithToolCalls_BecomesModelFunctionCallTurn)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -882,7 +980,7 @@ TEST (YupAiGeminiClient, BuildPayload_AssistantWithToolCalls_BecomesModelFunctio
     EXPECT_EQ ("London", fc["args"]["city"].toString());
 }
 
-TEST (YupAiGeminiClient, ParseResponse_ExtractsFunctionCallPart)
+TEST (GeminiClient, ParseResponse_ExtractsFunctionCallPart)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -915,7 +1013,7 @@ TEST (YupAiGeminiClient, ParseResponse_ExtractsFunctionCallPart)
     EXPECT_EQ ("Paris", toolCalls.front().arguments["city"].toString());
 }
 
-TEST (YupAiGeminiClient, ParseResponse_FunctionCallId_FallsBackToNameWhenAbsent)
+TEST (GeminiClient, ParseResponse_FunctionCallId_FallsBackToNameWhenAbsent)
 {
     TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
                                               "gemini-2.5-flash",
@@ -943,10 +1041,186 @@ TEST (YupAiGeminiClient, ParseResponse_FunctionCallId_FallsBackToNameWhenAbsent)
     EXPECT_EQ ("echo", toolCalls.front().name);
 }
 
+TEST (GeminiClient, ParseResponse_VoidJsonReturnsError)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    const auto response = client.response (var());
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
+}
+
+TEST (GeminiClient, ParseResponse_ErrorWithoutMessage)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    const auto json = JSON::parse (R"({ "error": { "type": "quota_exceeded" } })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("Unknown Gemini API error", *response.errorMessage);
+}
+
+TEST (GeminiClient, ParseResponse_EmptyCandidates_ReturnsEmpty)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    const auto json = JSON::parse (R"({ "candidates": [] })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.choices.empty());
+}
+
+TEST (GeminiClient, ParseResponse_NullParts_Skipped)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    const auto json = JSON::parse (R"({
+        "candidates": [{ "content": {} }]
+    })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.choices.empty());
+}
+
+TEST (GeminiClient, ParseResponse_FunctionCallVoidArgs_ReturnsEmptyVar)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    const auto json = JSON::parse (R"({
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "functionCall": { "name": "echo" }
+                }]
+            }
+        }]
+    })");
+
+    const auto response = client.response (json);
+    ASSERT_TRUE (response.hasToolCalls());
+
+    auto toolCalls = response.getToolCalls();
+    ASSERT_EQ (1u, toolCalls.size());
+    EXPECT_TRUE (toolCalls.front().arguments.isVoid());
+}
+
+TEST (GeminiClient, BuildPayload_SchemaResponseMimeType)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("extract"));
+    request.schema = JSON::parse (R"({"type":"object","properties":{"name":{"type":"string"}}})");
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ ("application/json", body["generationConfig"]["responseMimeType"].toString());
+    EXPECT_EQ ("object", body["generationConfig"]["responseSchema"]["type"].toString());
+}
+
+TEST (GeminiClient, BuildPayload_MaxOutputTokens)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::Gemini,
+                                           "gemini-2.5-flash",
+                                           "https://generativelanguage.googleapis.com",
+                                           "gemini-key");
+    opts.maxTokens = 2048;
+    TestableGeminiClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ (2048, static_cast<int> (body["generationConfig"]["maxOutputTokens"]));
+}
+
+TEST (GeminiClient, BuildHeaders_IncludesUserAgentWhenSet)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::Gemini,
+                                           "gemini-2.5-flash",
+                                           "https://generativelanguage.googleapis.com",
+                                           "gemini-key");
+    opts.userAgent = "GeminiApp/1.0";
+    TestableGeminiClient client (opts);
+
+    EXPECT_TRUE (client.headers().contains ("User-Agent: GeminiApp/1.0"));
+}
+
+TEST (GeminiClient, BuildPayload_ToolResultWithoutName_SkipsMessage)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    auto toolResult = LLMMessage::toolResult ("", R"({"result":"ok"})");
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+    request.messages.push_back (toolResult);
+
+    const auto body = JSON::parse (client.payload (request));
+    auto* contents = body["contents"].getArray();
+
+    ASSERT_NE (nullptr, contents);
+    EXPECT_EQ (1u, contents->size());
+}
+
+TEST (GeminiClient, BuildPayload_AssistantToolCallsWithoutDistinctId)
+{
+    TestableGeminiClient client (makeOptions (LLMClient::Provider::Gemini,
+                                              "gemini-2.5-flash",
+                                              "https://generativelanguage.googleapis.com",
+                                              "gemini-key"));
+
+    LLMToolCall toolCall;
+    toolCall.index = 0;
+    toolCall.id = "echo";
+    toolCall.name = "echo";
+    toolCall.arguments = JSON::parse (R"({"value":"test"})");
+
+    auto assistantMsg = LLMMessage::assistant ("");
+    assistantMsg.toolCalls = std::vector<LLMToolCall> { toolCall };
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hi"));
+    request.messages.push_back (assistantMsg);
+
+    const auto body = JSON::parse (client.payload (request));
+    auto* contents = body["contents"].getArray();
+
+    ASSERT_NE (nullptr, contents);
+    EXPECT_EQ (2u, contents->size());
+
+    const auto& fc = (*contents)[1]["parts"][0]["functionCall"];
+    EXPECT_FALSE (fc.hasProperty ("id"));
+    EXPECT_EQ ("echo", fc["name"].toString());
+}
+
 //==============================================================================
 // LLMOpenAIResponsesClient
 
-TEST (YupAiOpenAIResponsesClient, GetEndpointUrl_AppendsResponsesPath)
+TEST (OpenAIResponsesClient, GetEndpointUrl_AppendsResponsesPath)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -956,7 +1230,7 @@ TEST (YupAiOpenAIResponsesClient, GetEndpointUrl_AppendsResponsesPath)
     EXPECT_EQ ("https://api.openai.com/v1/responses", client.endpointUrl());
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildHeaders_IncludesBearerToken)
+TEST (OpenAIResponsesClient, BuildHeaders_IncludesBearerToken)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -966,7 +1240,7 @@ TEST (YupAiOpenAIResponsesClient, BuildHeaders_IncludesBearerToken)
     EXPECT_TRUE (client.headers().contains ("Authorization: Bearer sk-resp-key"));
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildPayload_SingleUserMessage_UsesStringInput)
+TEST (OpenAIResponsesClient, BuildPayload_SingleUserMessage_UsesStringInput)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -981,7 +1255,7 @@ TEST (YupAiOpenAIResponsesClient, BuildPayload_SingleUserMessage_UsesStringInput
     EXPECT_FALSE (body["input"].isArray());
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildPayload_MultiTurnMessages_UsesArrayInput)
+TEST (OpenAIResponsesClient, BuildPayload_MultiTurnMessages_UsesArrayInput)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1001,7 +1275,7 @@ TEST (YupAiOpenAIResponsesClient, BuildPayload_MultiTurnMessages_UsesArrayInput)
     EXPECT_EQ ("user", body["input"][2]["role"].toString());
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildPayload_SetsSystemPromptAsInstructions)
+TEST (OpenAIResponsesClient, BuildPayload_SetsSystemPromptAsInstructions)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1016,7 +1290,7 @@ TEST (YupAiOpenAIResponsesClient, BuildPayload_SetsSystemPromptAsInstructions)
     EXPECT_EQ ("Be concise.", body["instructions"].toString());
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildPayload_SetsReasoningEffort)
+TEST (OpenAIResponsesClient, BuildPayload_SetsReasoningEffort)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIResponses,
                                            "gpt-4.1",
@@ -1032,7 +1306,7 @@ TEST (YupAiOpenAIResponsesClient, BuildPayload_SetsReasoningEffort)
     EXPECT_EQ ("high", body["reasoning"]["effort"].toString());
 }
 
-TEST (YupAiOpenAIResponsesClient, BuildPayload_NoTemperatureFlag_OmitsTemperatureField)
+TEST (OpenAIResponsesClient, BuildPayload_NoTemperatureFlag_OmitsTemperatureField)
 {
     LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIResponses,
                                            "gpt-4.1",
@@ -1049,7 +1323,7 @@ TEST (YupAiOpenAIResponsesClient, BuildPayload_NoTemperatureFlag_OmitsTemperatur
     EXPECT_TRUE (body["temperature"].isVoid());
 }
 
-TEST (YupAiOpenAIResponsesClient, ParseResponse_ExtractsOutputTextFromMessageItem)
+TEST (OpenAIResponsesClient, ParseResponse_ExtractsOutputTextFromMessageItem)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1072,7 +1346,7 @@ TEST (YupAiOpenAIResponsesClient, ParseResponse_ExtractsOutputTextFromMessageIte
     EXPECT_EQ ("result", response.choices.front().message.content);
 }
 
-TEST (YupAiOpenAIResponsesClient, ParseResponse_ExtractsGrammarToolCallInput)
+TEST (OpenAIResponsesClient, ParseResponse_ExtractsGrammarToolCallInput)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1090,7 +1364,7 @@ TEST (YupAiOpenAIResponsesClient, ParseResponse_ExtractsGrammarToolCallInput)
     EXPECT_EQ ("constrained output", response.choices.front().message.content);
 }
 
-TEST (YupAiOpenAIResponsesClient, ParseResponse_ReportsApiError)
+TEST (OpenAIResponsesClient, ParseResponse_ReportsApiError)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1105,7 +1379,7 @@ TEST (YupAiOpenAIResponsesClient, ParseResponse_ReportsApiError)
     EXPECT_EQ ("rate limit exceeded", *response.errorMessage);
 }
 
-TEST (YupAiOpenAIResponsesClient, ParseChunk_ExtractsOutputTextDelta)
+TEST (OpenAIResponsesClient, ParseChunk_ExtractsOutputTextDelta)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1124,7 +1398,7 @@ TEST (YupAiOpenAIResponsesClient, ParseChunk_ExtractsOutputTextDelta)
     EXPECT_EQ (LLMMessage::Role::assistant, response.choices.front().message.role);
 }
 
-TEST (YupAiOpenAIResponsesClient, ParseChunk_IgnoresNonDeltaEvents)
+TEST (OpenAIResponsesClient, ParseChunk_IgnoresNonDeltaEvents)
 {
     TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
                                                  "gpt-4.1",
@@ -1137,10 +1411,160 @@ TEST (YupAiOpenAIResponsesClient, ParseChunk_IgnoresNonDeltaEvents)
     EXPECT_TRUE (response.choices.empty());
 }
 
+TEST (OpenAIResponsesClient, ParseResponse_VoidJsonReturnsError)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    const auto response = client.response (var());
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
+}
+
+TEST (OpenAIResponsesClient, ParseResponse_ErrorWithoutMessage)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    const auto json = JSON::parse (R"({ "error": { "type": "server_error" } })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("Unknown OpenAI Responses API error", *response.errorMessage);
+}
+
+TEST (OpenAIResponsesClient, ParseResponse_EmptyOutput_ReturnsError)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    const auto json = JSON::parse (R"({ "output": [] })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("No content found"));
+}
+
+TEST (OpenAIResponsesClient, ParseResponse_OutputWithoutMessageType_ReturnsError)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    const auto json = JSON::parse (R"({
+        "output": [{ "type": "unknown_type", "text": "hello" }]
+    })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("No content found"));
+}
+
+TEST (OpenAIResponsesClient, ParseResponse_GrammarToolCallEmptyInput_ReturnsError)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    const auto json = JSON::parse (R"({
+        "output": [{ "type": "custom_tool_call", "input": "" }]
+    })");
+
+    const auto response = client.response (json);
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("No content found"));
+}
+
+TEST (OpenAIResponsesClient, BuildPayload_MaxOutputTokens)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIResponses,
+                                           "gpt-4.1",
+                                           "https://api.openai.com/v1",
+                                           "sk-key");
+    opts.maxTokens = 512;
+    TestableResponsesClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ (512, static_cast<int> (body["max_output_tokens"]));
+}
+
+TEST (OpenAIResponsesClient, BuildPayload_PromptCache)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIResponses,
+                                           "gpt-4.1",
+                                           "https://api.openai.com/v1",
+                                           "sk-key");
+    opts.userAgent = "testing-app";
+    TestableResponsesClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ ("testing-app", body["prompt_cache_key"].toString());
+    EXPECT_EQ ("24h", body["prompt_cache_retention"].toString());
+}
+
+TEST (OpenAIResponsesClient, BuildPayload_GrammarWithCustomNames)
+{
+    LLMClient::Options opts = makeOptions (LLMClient::Provider::OpenAIResponses,
+                                           "gpt-4.1",
+                                           "https://api.openai.com/v1",
+                                           "sk-key");
+    TestableResponsesClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("parse"));
+    request.grammar = "start: rule";
+    request.grammarToolName = "my_parser";
+    request.grammarToolDescription = "Parses input";
+
+    const auto body = JSON::parse (client.payload (request));
+    ASSERT_TRUE (body["tools"].isArray());
+    EXPECT_EQ (1, body["tools"].size());
+    EXPECT_EQ ("my_parser", body["tools"][0]["name"].toString());
+    EXPECT_EQ ("Parses input", body["tools"][0]["description"].toString());
+    EXPECT_EQ ("lark", body["tools"][0]["format"]["syntax"].toString());
+    EXPECT_EQ ("start: rule", body["tools"][0]["format"]["definition"].toString());
+}
+
+TEST (OpenAIResponsesClient, BuildPayload_JsonSchemaFormat)
+{
+    TestableResponsesClient client (makeOptions (LLMClient::Provider::OpenAIResponses,
+                                                 "gpt-4.1",
+                                                 "https://api.openai.com/v1",
+                                                 "sk-key"));
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("extract"));
+    request.schema = JSON::parse (R"({"type":"object","properties":{"name":{"type":"string"}}})");
+
+    const auto body = JSON::parse (client.payload (request));
+    EXPECT_EQ ("json_schema", body["text"]["format"]["type"].toString());
+    EXPECT_EQ ("response", body["text"]["format"]["name"].toString());
+    EXPECT_TRUE (static_cast<bool> (body["text"]["format"]["strict"]));
+}
+
 //==============================================================================
 // LLMClientFactory
 
-TEST (YupAiLLMClientFactory, Create_OpenAIChat_ReturnsNonNull)
+TEST (LLMClientFactory, Create_OpenAIChat_ReturnsNonNull)
 {
     LLMClient::Options opts;
     opts.provider = LLMClient::Provider::OpenAIChat;
@@ -1152,7 +1576,7 @@ TEST (YupAiLLMClientFactory, Create_OpenAIChat_ReturnsNonNull)
     EXPECT_EQ (LLMClient::Provider::OpenAIChat, client->getOptions().provider);
 }
 
-TEST (YupAiLLMClientFactory, Create_Anthropic_ReturnsNonNull)
+TEST (LLMClientFactory, Create_Anthropic_ReturnsNonNull)
 {
     LLMClient::Options opts;
     opts.provider = LLMClient::Provider::Anthropic;
@@ -1164,7 +1588,7 @@ TEST (YupAiLLMClientFactory, Create_Anthropic_ReturnsNonNull)
     EXPECT_EQ (LLMClient::Provider::Anthropic, client->getOptions().provider);
 }
 
-TEST (YupAiLLMClientFactory, Create_Gemini_ReturnsNonNull)
+TEST (LLMClientFactory, Create_Gemini_ReturnsNonNull)
 {
     LLMClient::Options opts;
     opts.provider = LLMClient::Provider::Gemini;
@@ -1176,7 +1600,7 @@ TEST (YupAiLLMClientFactory, Create_Gemini_ReturnsNonNull)
     EXPECT_EQ (LLMClient::Provider::Gemini, client->getOptions().provider);
 }
 
-TEST (YupAiLLMClientFactory, Create_OpenAIResponses_ReturnsNonNull)
+TEST (LLMClientFactory, Create_OpenAIResponses_ReturnsNonNull)
 {
     LLMClient::Options opts;
     opts.provider = LLMClient::Provider::OpenAIResponses;
@@ -1188,7 +1612,7 @@ TEST (YupAiLLMClientFactory, Create_OpenAIResponses_ReturnsNonNull)
     EXPECT_EQ (LLMClient::Provider::OpenAIResponses, client->getOptions().provider);
 }
 
-TEST (YupAiLLMClientFactory, OpenAIChat_HelperSetsModelAndBaseUrl)
+TEST (LLMClientFactory, OpenAIChat_HelperSetsModelAndBaseUrl)
 {
     auto client = LLMClientFactory::openAIChat ("gpt-4o", "https://api.openai.com/v1", "sk-key");
 
@@ -1199,7 +1623,7 @@ TEST (YupAiLLMClientFactory, OpenAIChat_HelperSetsModelAndBaseUrl)
     EXPECT_EQ ("sk-key", client->getOptions().apiKey);
 }
 
-TEST (YupAiLLMClientFactory, Anthropic_HelperUsesDefaultAnthropicBaseUrl)
+TEST (LLMClientFactory, Anthropic_HelperUsesDefaultAnthropicBaseUrl)
 {
     auto client = LLMClientFactory::anthropic ("claude-opus-4-5", "ant-key");
 
@@ -1209,7 +1633,7 @@ TEST (YupAiLLMClientFactory, Anthropic_HelperUsesDefaultAnthropicBaseUrl)
     EXPECT_EQ ("ant-key", client->getOptions().apiKey);
 }
 
-TEST (YupAiLLMClientFactory, Gemini_HelperUsesDefaultGeminiBaseUrl)
+TEST (LLMClientFactory, Gemini_HelperUsesDefaultGeminiBaseUrl)
 {
     auto client = LLMClientFactory::gemini ("gemini-2.5-flash", "gemini-key");
 
@@ -1219,7 +1643,7 @@ TEST (YupAiLLMClientFactory, Gemini_HelperUsesDefaultGeminiBaseUrl)
     EXPECT_EQ ("gemini-key", client->getOptions().apiKey);
 }
 
-TEST (YupAiLLMClientFactory, OpenAIResponses_HelperUsesDefaultOpenAIBaseUrl)
+TEST (LLMClientFactory, OpenAIResponses_HelperUsesDefaultOpenAIBaseUrl)
 {
     auto client = LLMClientFactory::openAIResponses ("gpt-4.1", "sk-key");
 
@@ -1232,38 +1656,38 @@ TEST (YupAiLLMClientFactory, OpenAIResponses_HelperUsesDefaultOpenAIBaseUrl)
 //==============================================================================
 // LLMSchema
 
-TEST (YupAiLLMSchema, String_HasTypeString)
+TEST (LLMSchema, String_HasTypeString)
 {
     const auto schema = LLMSchema::string();
     EXPECT_EQ ("string", schema["type"].toString());
 }
 
-TEST (YupAiLLMSchema, Number_HasTypeNumber)
+TEST (LLMSchema, Number_HasTypeNumber)
 {
     const auto schema = LLMSchema::number();
     EXPECT_EQ ("number", schema["type"].toString());
 }
 
-TEST (YupAiLLMSchema, Integer_HasTypeInteger)
+TEST (LLMSchema, Integer_HasTypeInteger)
 {
     const auto schema = LLMSchema::integer();
     EXPECT_EQ ("integer", schema["type"].toString());
 }
 
-TEST (YupAiLLMSchema, Boolean_HasTypeBoolean)
+TEST (LLMSchema, Boolean_HasTypeBoolean)
 {
     const auto schema = LLMSchema::boolean();
     EXPECT_EQ ("boolean", schema["type"].toString());
 }
 
-TEST (YupAiLLMSchema, Array_HasTypeArrayAndItems)
+TEST (LLMSchema, Array_HasTypeArrayAndItems)
 {
     const auto schema = LLMSchema::array (LLMSchema::string());
     EXPECT_EQ ("array", schema["type"].toString());
     EXPECT_EQ ("string", schema["items"]["type"].toString());
 }
 
-TEST (YupAiLLMSchema, Object_HasTypePropertiesAndRequiredArray)
+TEST (LLMSchema, Object_HasTypePropertiesAndRequiredArray)
 {
     const auto schema = LLMSchema::object ({
         { "name", LLMSchema::string() },
@@ -1277,7 +1701,7 @@ TEST (YupAiLLMSchema, Object_HasTypePropertiesAndRequiredArray)
     EXPECT_EQ (2, schema["required"].size());
 }
 
-TEST (YupAiLLMSchema, Object_DisallowsAdditionalProperties)
+TEST (LLMSchema, Object_DisallowsAdditionalProperties)
 {
     const auto schema = LLMSchema::object ({
         { "x", LLMSchema::integer() },
@@ -1286,7 +1710,7 @@ TEST (YupAiLLMSchema, Object_DisallowsAdditionalProperties)
     EXPECT_FALSE (static_cast<bool> (schema["additionalProperties"]));
 }
 
-TEST (YupAiLLMSchema, OneOf_HasTypeStringAndEnumValues)
+TEST (LLMSchema, OneOf_HasTypeStringAndEnumValues)
 {
     const auto schema = LLMSchema::oneOf ({ "red", "green", "blue" });
 
@@ -1298,7 +1722,7 @@ TEST (YupAiLLMSchema, OneOf_HasTypeStringAndEnumValues)
     EXPECT_EQ ("blue", schema["enum"][2].toString());
 }
 
-TEST (YupAiLLMSchema, ToJsonString_ProducesReparseableJson)
+TEST (LLMSchema, ToJsonString_ProducesReparseableJson)
 {
     const auto schema = LLMSchema::string();
     const auto jsonStr = LLMSchema::toJsonString (schema);
@@ -1307,7 +1731,7 @@ TEST (YupAiLLMSchema, ToJsonString_ProducesReparseableJson)
     EXPECT_EQ ("string", reparsed["type"].toString());
 }
 
-TEST (YupAiLLMSchema, NestedObject_WorksInsideArray)
+TEST (LLMSchema, NestedObject_WorksInsideArray)
 {
     const auto itemSchema = LLMSchema::object ({
         { "id", LLMSchema::integer() },

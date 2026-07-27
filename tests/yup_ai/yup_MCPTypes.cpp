@@ -324,7 +324,7 @@ public:
 
 } // namespace
 
-TEST (YupAiMCPTypes, SerializesAndParsesJsonRpcRequest)
+TEST (MCPTypes, SerializesAndParsesJsonRpcRequest)
 {
     JsonRpcRequest request;
     request.id = 7;
@@ -343,7 +343,7 @@ TEST (YupAiMCPTypes, SerializesAndParsesJsonRpcRequest)
     EXPECT_EQ ("hello", (*parsed->params)["arguments"]["value"].toString());
 }
 
-TEST (YupAiMCPTypes, ParsesNotificationWithoutId)
+TEST (MCPTypes, ParsesNotificationWithoutId)
 {
     auto parsed = JsonRpcRequest::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -355,7 +355,7 @@ TEST (YupAiMCPTypes, ParsesNotificationWithoutId)
     EXPECT_EQ ("notifications/initialized", parsed->method);
 }
 
-TEST (YupAiMCPTypes, SerializesAndParsesJsonRpcErrorResponse)
+TEST (MCPTypes, SerializesAndParsesJsonRpcErrorResponse)
 {
     JsonRpcResponse response;
     response.id = "abc";
@@ -377,7 +377,7 @@ TEST (YupAiMCPTypes, SerializesAndParsesJsonRpcErrorResponse)
     EXPECT_EQ ("missing", (*parsed->error->data)["method"].toString());
 }
 
-TEST (YupAiMCPTypes, SerializesAndParsesCapabilities)
+TEST (MCPTypes, SerializesAndParsesCapabilities)
 {
     MCPCapabilities capabilities;
     capabilities.supportsTools = true;
@@ -391,7 +391,7 @@ TEST (YupAiMCPTypes, SerializesAndParsesCapabilities)
     EXPECT_FALSE (parsed.supportsLogging);
 }
 
-TEST (YupAiMCPTypes, SerializesAndParsesToolDefinition)
+TEST (MCPTypes, SerializesAndParsesToolDefinition)
 {
     MCPToolDefinition tool;
     tool.name = "set_background_color";
@@ -412,7 +412,7 @@ TEST (YupAiMCPTypes, SerializesAndParsesToolDefinition)
     EXPECT_EQ ("color", parsed->inputSchema["required"][0].toString());
 }
 
-TEST (YupAiMCPTypes, SerializesAndParsesResourceDefinition)
+TEST (MCPTypes, SerializesAndParsesResourceDefinition)
 {
     MCPResourceDefinition resource;
     resource.uri = "yup://graph/main/nodes";
@@ -427,13 +427,13 @@ TEST (YupAiMCPTypes, SerializesAndParsesResourceDefinition)
     EXPECT_EQ ("application/json", parsed->mimeType);
 }
 
-TEST (YupAiMCPTypes, JsonRpcErrorFromVarRejectsNonObject)
+TEST (MCPTypes, JsonRpcErrorFromVarRejectsNonObject)
 {
     EXPECT_FALSE (JsonRpcError::fromVar (var ("not an object")).has_value());
     EXPECT_FALSE (JsonRpcError::fromVar (var (42)).has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcErrorToVarWithoutData)
+TEST (MCPTypes, JsonRpcErrorToVarWithoutData)
 {
     JsonRpcError error { MCPErrorCodes::internalError, "fail", std::nullopt };
 
@@ -444,12 +444,12 @@ TEST (YupAiMCPTypes, JsonRpcErrorToVarWithoutData)
     EXPECT_EQ ("fail", serialized["message"].toString());
 }
 
-TEST (YupAiMCPTypes, JsonRpcRequestFromVarRejectsNonObject)
+TEST (MCPTypes, JsonRpcRequestFromVarRejectsNonObject)
 {
     EXPECT_FALSE (JsonRpcRequest::fromVar (var ("not an object")).has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcRequestFromVarRejectsWrongVersion)
+TEST (MCPTypes, JsonRpcRequestFromVarRejectsWrongVersion)
 {
     auto parsed = JsonRpcRequest::fromVar (JSON::parse (R"({
         "jsonrpc": "1.0",
@@ -460,7 +460,7 @@ TEST (YupAiMCPTypes, JsonRpcRequestFromVarRejectsWrongVersion)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcRequestFromVarRejectsResponseLike)
+TEST (MCPTypes, JsonRpcRequestFromVarRejectsResponseLike)
 {
     auto parsed = JsonRpcRequest::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -471,12 +471,12 @@ TEST (YupAiMCPTypes, JsonRpcRequestFromVarRejectsResponseLike)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsNonObject)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsNonObject)
 {
     EXPECT_FALSE (JsonRpcResponse::fromVar (var ("not an object")).has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsWrongVersion)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsWrongVersion)
 {
     auto parsed = JsonRpcResponse::fromVar (JSON::parse (R"({
         "jsonrpc": "1.0",
@@ -487,7 +487,7 @@ TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsWrongVersion)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsRequestLike)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsRequestLike)
 {
     auto parsed = JsonRpcResponse::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -498,7 +498,7 @@ TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsRequestLike)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsMissingId)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsMissingId)
 {
     auto parsed = JsonRpcResponse::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -508,7 +508,7 @@ TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsMissingId)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsNeitherResultNorError)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsNeitherResultNorError)
 {
     auto parsed = JsonRpcResponse::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -518,7 +518,7 @@ TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsNeitherResultNorError)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsInvalidError)
+TEST (MCPTypes, JsonRpcResponseFromVarRejectsInvalidError)
 {
     auto parsed = JsonRpcResponse::fromVar (JSON::parse (R"({
         "jsonrpc": "2.0",
@@ -529,7 +529,7 @@ TEST (YupAiMCPTypes, JsonRpcResponseFromVarRejectsInvalidError)
     EXPECT_FALSE (parsed.has_value());
 }
 
-TEST (YupAiMCPTypes, CapabilitiesWithPromptsAndLogging)
+TEST (MCPTypes, CapabilitiesWithPromptsAndLogging)
 {
     MCPCapabilities capabilities;
     capabilities.supportsPrompts = true;
@@ -545,7 +545,7 @@ TEST (YupAiMCPTypes, CapabilitiesWithPromptsAndLogging)
     EXPECT_TRUE (parsed.supportsLogging);
 }
 
-TEST (YupAiMCPTypes, CapabilitiesFromVarRejectsNonObject)
+TEST (MCPTypes, CapabilitiesFromVarRejectsNonObject)
 {
     auto parsed = MCPCapabilities::fromVar (var ("not an object"));
 
@@ -555,12 +555,12 @@ TEST (YupAiMCPTypes, CapabilitiesFromVarRejectsNonObject)
     EXPECT_FALSE (parsed.supportsLogging);
 }
 
-TEST (YupAiMCPTypes, ToolDefinitionFromVarRejectsNonObject)
+TEST (MCPTypes, ToolDefinitionFromVarRejectsNonObject)
 {
     EXPECT_FALSE (MCPToolDefinition::fromVar (var ("not an object")).has_value());
 }
 
-TEST (YupAiMCPTypes, ToolDefinitionFromVarRejectsEmptyName)
+TEST (MCPTypes, ToolDefinitionFromVarRejectsEmptyName)
 {
     EXPECT_FALSE (MCPToolDefinition::fromVar (JSON::parse (R"({
         "name": "",
@@ -569,12 +569,12 @@ TEST (YupAiMCPTypes, ToolDefinitionFromVarRejectsEmptyName)
                       .has_value());
 }
 
-TEST (YupAiMCPTypes, ResourceDefinitionFromVarRejectsNonObject)
+TEST (MCPTypes, ResourceDefinitionFromVarRejectsNonObject)
 {
     EXPECT_FALSE (MCPResourceDefinition::fromVar (var ("not an object")).has_value());
 }
 
-TEST (YupAiMCPTypes, ResourceDefinitionFromVarRejectsEmptyUri)
+TEST (MCPTypes, ResourceDefinitionFromVarRejectsEmptyUri)
 {
     EXPECT_FALSE (MCPResourceDefinition::fromVar (JSON::parse (R"({
         "uri": "",
@@ -583,7 +583,7 @@ TEST (YupAiMCPTypes, ResourceDefinitionFromVarRejectsEmptyUri)
                       .has_value());
 }
 
-TEST (YupAiMCPTypes, ResourceDefinitionFromVarRejectsEmptyName)
+TEST (MCPTypes, ResourceDefinitionFromVarRejectsEmptyName)
 {
     EXPECT_FALSE (MCPResourceDefinition::fromVar (JSON::parse (R"({
         "uri": "yup://test/uri",
@@ -592,7 +592,7 @@ TEST (YupAiMCPTypes, ResourceDefinitionFromVarRejectsEmptyName)
                       .has_value());
 }
 
-TEST (YupAiMCPClient, InitializesAndSendsInitializedNotification)
+TEST (MCPClient, InitializesAndSendsInitializedNotification)
 {
     auto transport = std::make_unique<MockMCPTransport>();
     auto* transportPtr = transport.get();
@@ -605,7 +605,7 @@ TEST (YupAiMCPClient, InitializesAndSendsInitializedNotification)
     EXPECT_EQ ("notifications/initialized", transportPtr->sentMessages[1]["method"].toString());
 }
 
-TEST (YupAiMCPClient, ListsAndCallsTools)
+TEST (MCPClient, ListsAndCallsTools)
 {
     auto transport = std::make_unique<MockMCPTransport>();
     MCPClient client (std::move (transport));
@@ -620,7 +620,7 @@ TEST (YupAiMCPClient, ListsAndCallsTools)
     EXPECT_EQ ("hello", result.getValue().toString());
 }
 
-TEST (YupAiMCPClient, ListsAndReadsResources)
+TEST (MCPClient, ListsAndReadsResources)
 {
     auto transport = std::make_unique<MockMCPTransport>();
     MCPClient client (std::move (transport));
@@ -634,7 +634,7 @@ TEST (YupAiMCPClient, ListsAndReadsResources)
     EXPECT_EQ (R"({"ok":true})", result.getValue());
 }
 
-TEST (YupAiMCPClient, RegistersRemoteToolsWithLLMRegistry)
+TEST (MCPClient, RegistersRemoteToolsWithLLMRegistry)
 {
     auto transport = std::make_unique<MockMCPTransport>();
     MCPClient client (std::move (transport));
@@ -653,7 +653,7 @@ TEST (YupAiMCPClient, RegistersRemoteToolsWithLLMRegistry)
     EXPECT_EQ ("from registry", result.toString());
 }
 
-TEST (YupAiMCPServer, StartsAndHandlesInitialize)
+TEST (MCPServer, StartsAndHandlesInitialize)
 {
     MCPServer::Options options;
     options.serverName = "Test Server";
@@ -676,7 +676,7 @@ TEST (YupAiMCPServer, StartsAndHandlesInitialize)
     EXPECT_EQ ("2.0", (*response->result)["serverInfo"]["version"].toString());
 }
 
-TEST (YupAiMCPServer, ListsAndCallsRegisteredTool)
+TEST (MCPServer, ListsAndCallsRegisteredTool)
 {
     MCPServer server;
     server.registerTool (makeEchoToolDefinition(), [] (const var& arguments)
@@ -710,7 +710,7 @@ TEST (YupAiMCPServer, ListsAndCallsRegisteredTool)
     EXPECT_EQ ("hello server", (*callResponse->result)["content"][0]["text"].toString());
 }
 
-TEST (YupAiMCPServer, RegistersLLMToolAndDerivesSchema)
+TEST (MCPServer, RegistersLLMToolAndDerivesSchema)
 {
     MCPServer server;
 
@@ -741,7 +741,7 @@ TEST (YupAiMCPServer, RegistersLLMToolAndDerivesSchema)
     EXPECT_EQ ("gainDb", (*response->result)["tools"][0]["inputSchema"]["required"][0].toString());
 }
 
-TEST (YupAiMCPServer, ListsAndReadsRegisteredResource)
+TEST (MCPServer, ListsAndReadsRegisteredResource)
 {
     MCPServer server;
 
@@ -778,7 +778,7 @@ TEST (YupAiMCPServer, ListsAndReadsRegisteredResource)
     EXPECT_EQ (R"({"running":true})", (*readResponse->result)["contents"][0]["text"].toString());
 }
 
-TEST (YupAiMCPServer, ReturnsErrorsForUnknownMethodsAndResources)
+TEST (MCPServer, ReturnsErrorsForUnknownMethodsAndResources)
 {
     MCPServer server;
     auto transport = std::make_unique<ServerCaptureTransport>();
@@ -805,7 +805,7 @@ TEST (YupAiMCPServer, ReturnsErrorsForUnknownMethodsAndResources)
     EXPECT_EQ (MCPErrorCodes::invalidParams, resourceResponse->error->code);
 }
 
-TEST (YupAiMCPServer, IgnoresNotifications)
+TEST (MCPServer, IgnoresNotifications)
 {
     MCPServer server;
     auto transport = std::make_unique<ServerCaptureTransport>();
@@ -819,7 +819,7 @@ TEST (YupAiMCPServer, IgnoresNotifications)
     EXPECT_TRUE (transportPtr->sentMessages.empty());
 }
 
-TEST (YupAiMCPServer, UnregistersToolsAndResources)
+TEST (MCPServer, UnregistersToolsAndResources)
 {
     MCPServer server;
     server.registerTool (makeEchoToolDefinition(), [] (const var& arguments)
@@ -865,7 +865,7 @@ TEST (YupAiMCPServer, UnregistersToolsAndResources)
     EXPECT_EQ (MCPErrorCodes::invalidParams, readResponse->error->code);
 }
 
-TEST (YupAiMCPServer, ReturnsInvalidRequestForMalformedJsonRpc)
+TEST (MCPServer, ReturnsInvalidRequestForMalformedJsonRpc)
 {
     MCPServer server;
     auto transport = std::make_unique<ServerCaptureTransport>();
@@ -886,7 +886,7 @@ TEST (YupAiMCPServer, ReturnsInvalidRequestForMalformedJsonRpc)
     EXPECT_EQ (MCPErrorCodes::invalidRequest, response->error->code);
 }
 
-TEST (YupAiMCPClient, InitializeFailsWithFailingTransport)
+TEST (MCPClient, InitializeFailsWithFailingTransport)
 {
     auto transport = std::make_unique<FailingMCPTransport>();
     MCPClient client (std::move (transport));
@@ -894,7 +894,7 @@ TEST (YupAiMCPClient, InitializeFailsWithFailingTransport)
     EXPECT_TRUE (client.initialize().failed());
 }
 
-TEST (YupAiMCPClient, ListToolsReturnsEmptyOnFailure)
+TEST (MCPClient, ListToolsReturnsEmptyOnFailure)
 {
     auto transport = std::make_unique<FailingMCPTransport>();
     MCPClient client (std::move (transport));
@@ -902,7 +902,7 @@ TEST (YupAiMCPClient, ListToolsReturnsEmptyOnFailure)
     EXPECT_TRUE (client.listTools().empty());
 }
 
-TEST (YupAiMCPClient, CallToolReturnsErrorOnTransportFailure)
+TEST (MCPClient, CallToolReturnsErrorOnTransportFailure)
 {
     auto transport = std::make_unique<FailingMCPTransport>();
     MCPClient client (std::move (transport));
@@ -910,7 +910,7 @@ TEST (YupAiMCPClient, CallToolReturnsErrorOnTransportFailure)
     EXPECT_TRUE (client.callTool ("test", var()).failed());
 }
 
-TEST (YupAiMCPClient, ListResourcesReturnsEmptyOnFailure)
+TEST (MCPClient, ListResourcesReturnsEmptyOnFailure)
 {
     auto transport = std::make_unique<FailingMCPTransport>();
     MCPClient client (std::move (transport));
@@ -918,7 +918,7 @@ TEST (YupAiMCPClient, ListResourcesReturnsEmptyOnFailure)
     EXPECT_TRUE (client.listResources().empty());
 }
 
-TEST (YupAiMCPClient, ReadResourceReturnsErrorOnFailure)
+TEST (MCPClient, ReadResourceReturnsErrorOnFailure)
 {
     auto transport = std::make_unique<FailingMCPTransport>();
     MCPClient client (std::move (transport));
@@ -926,7 +926,7 @@ TEST (YupAiMCPClient, ReadResourceReturnsErrorOnFailure)
     EXPECT_TRUE (client.readResource ("yup://test").failed());
 }
 
-TEST (YupAiMCPClient, GetTransportReturnsPointer)
+TEST (MCPClient, GetTransportReturnsPointer)
 {
     auto transport = std::make_unique<MockMCPTransport>();
     auto* transportPtr = transport.get();
@@ -935,7 +935,7 @@ TEST (YupAiMCPClient, GetTransportReturnsPointer)
     EXPECT_EQ (transportPtr, client.getTransport());
 }
 
-TEST (YupAiMCPServer, ToolReturningNonStringUsesJsonContent)
+TEST (MCPServer, ToolReturningNonStringUsesJsonContent)
 {
     MCPServer server;
     server.registerTool (makeEchoToolDefinition(), [] (const var& arguments)
@@ -963,7 +963,7 @@ TEST (YupAiMCPServer, ToolReturningNonStringUsesJsonContent)
     EXPECT_EQ ("test", (*response->result)["content"][0]["json"]["echoed"].toString());
 }
 
-TEST (YupAiMCPServer, CallToolWithEmptyNameReturnsError)
+TEST (MCPServer, CallToolWithEmptyNameReturnsError)
 {
     MCPServer server;
     auto transport = std::make_unique<ServerCaptureTransport>();
@@ -983,7 +983,7 @@ TEST (YupAiMCPServer, CallToolWithEmptyNameReturnsError)
     EXPECT_TRUE ((*response->result)["content"][0]["text"].toString().contains ("Missing"));
 }
 
-TEST (YupAiMCPServer, ResourceWithNullReaderReturnsEmptyString)
+TEST (MCPServer, ResourceWithNullReaderReturnsEmptyString)
 {
     MCPServer server;
 
@@ -1008,14 +1008,14 @@ TEST (YupAiMCPServer, ResourceWithNullReaderReturnsEmptyString)
     EXPECT_EQ ("", (*response->result)["contents"][0]["text"].toString());
 }
 
-TEST (YupAiMCPServer, StartWithNullTransportReturnsError)
+TEST (MCPServer, StartWithNullTransportReturnsError)
 {
     MCPServer server;
     EXPECT_TRUE (server.start (nullptr).failed());
     EXPECT_FALSE (server.isRunning());
 }
 
-TEST (YupAiMCPServer, DoubleStopIsSafe)
+TEST (MCPServer, DoubleStopIsSafe)
 {
     MCPServer server;
     auto transport = std::make_unique<ServerCaptureTransport>();
@@ -1029,19 +1029,19 @@ TEST (YupAiMCPServer, DoubleStopIsSafe)
     EXPECT_FALSE (server.isRunning());
 }
 
-TEST (YupAiMCPServer, StartStdioReturnsNotImplemented)
+TEST (MCPServer, StartStdioReturnsNotImplemented)
 {
     MCPServer server;
     EXPECT_TRUE (server.startStdio().failed());
 }
 
-TEST (YupAiMCPServer, StartHttpReturnsNotImplemented)
+TEST (MCPServer, StartHttpReturnsNotImplemented)
 {
     MCPServer server;
     EXPECT_TRUE (server.startHttp (8080).failed());
 }
 
-TEST (YupAiMCPIntegration, ClientAndServerCommunicateOverLinkedTransports)
+TEST (MCPIntegration, ClientAndServerCommunicateOverLinkedTransports)
 {
     auto clientTransport = std::make_unique<LinkedMCPTransport>();
     auto serverTransport = std::make_unique<LinkedMCPTransport>();

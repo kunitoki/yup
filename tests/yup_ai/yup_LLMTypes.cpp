@@ -63,7 +63,7 @@ public:
 };
 } // namespace
 
-TEST (YupAiLLMMessage, SerializesAndParsesChatMessage)
+TEST (LLMMessage, SerializesAndParsesChatMessage)
 {
     auto message = LLMMessage::user ("hello");
     message.name = "tester";
@@ -76,7 +76,7 @@ TEST (YupAiLLMMessage, SerializesAndParsesChatMessage)
     EXPECT_EQ ("tester", parsed->name);
 }
 
-TEST (YupAiLLMMessage, SerializesToolCalls)
+TEST (LLMMessage, SerializesToolCalls)
 {
     LLMToolCall toolCall;
     toolCall.id = "call_1";
@@ -95,7 +95,7 @@ TEST (YupAiLLMMessage, SerializesToolCalls)
     EXPECT_EQ ("abc", parsed->toolCalls->front().arguments["query"].toString());
 }
 
-TEST (YupAiLLMMessage, CreatesToolResultMessage)
+TEST (LLMMessage, CreatesToolResultMessage)
 {
     auto message = LLMMessage::toolResult ("call_42", "done");
 
@@ -105,7 +105,7 @@ TEST (YupAiLLMMessage, CreatesToolResultMessage)
     EXPECT_EQ ("call_42", *message.toolCallId);
 }
 
-TEST (YupAiLLMMessage, SerializesToolResultMessage)
+TEST (LLMMessage, SerializesToolResultMessage)
 {
     auto message = LLMMessage::toolResult ("call_42", "done");
 
@@ -118,7 +118,7 @@ TEST (YupAiLLMMessage, SerializesToolResultMessage)
     EXPECT_EQ ("call_42", *parsed->toolCallId);
 }
 
-TEST (YupAiLLMMessage, ParsesFlatToolCall)
+TEST (LLMMessage, ParsesFlatToolCall)
 {
     auto message = LLMMessage::fromVar (JSON::parse (R"({
         "role": "assistant",
@@ -139,13 +139,13 @@ TEST (YupAiLLMMessage, ParsesFlatToolCall)
     EXPECT_EQ ("lookup", message->toolCalls->front().name);
 }
 
-TEST (YupAiLLMMessage, FromVarRejectsNonObject)
+TEST (LLMMessage, FromVarRejectsNonObject)
 {
     EXPECT_FALSE (LLMMessage::fromVar (var (42)).has_value());
     EXPECT_FALSE (LLMMessage::fromVar (var ("string")).has_value());
 }
 
-TEST (YupAiLLMMessage, FromVarRejectsUnknownRole)
+TEST (LLMMessage, FromVarRejectsUnknownRole)
 {
     EXPECT_FALSE (LLMMessage::fromVar (JSON::parse (R"({
         "role": "bogus",
@@ -154,18 +154,18 @@ TEST (YupAiLLMMessage, FromVarRejectsUnknownRole)
                       .has_value());
 }
 
-TEST (YupAiLLMMessage, RoleFromStringReturnsNulloptForUnknown)
+TEST (LLMMessage, RoleFromStringReturnsNulloptForUnknown)
 {
     EXPECT_FALSE (LLMMessage::roleFromString ("unknown").has_value());
     EXPECT_FALSE (LLMMessage::roleFromString ("").has_value());
 }
 
-TEST (YupAiLLMToolCall, FromVarRejectsNonObject)
+TEST (LLMToolCall, FromVarRejectsNonObject)
 {
     EXPECT_FALSE (LLMToolCall::fromVar (var ("not an object")).has_value());
 }
 
-TEST (YupAiLLMTool, GeneratesOpenAiSchema)
+TEST (LLMTool, GeneratesOpenAiSchema)
 {
     LLMTool tool;
     tool.name = "weather";
@@ -182,7 +182,7 @@ TEST (YupAiLLMTool, GeneratesOpenAiSchema)
     EXPECT_EQ ("city", schema["function"]["parameters"]["required"][0].toString());
 }
 
-TEST (YupAiLLMTool, DispatchesHandlerAndReportsMissingHandler)
+TEST (LLMTool, DispatchesHandlerAndReportsMissingHandler)
 {
     LLMTool tool;
     tool.name = "echo";
@@ -198,7 +198,7 @@ TEST (YupAiLLMTool, DispatchesHandlerAndReportsMissingHandler)
     EXPECT_TRUE (static_cast<bool> (missing.execute (var())["error"]));
 }
 
-TEST (YupAiLLMTool, GeneratesSchemaWithDefaultValue)
+TEST (LLMTool, GeneratesSchemaWithDefaultValue)
 {
     LLMTool tool;
     tool.name = "counter";
@@ -210,7 +210,7 @@ TEST (YupAiLLMTool, GeneratesSchemaWithDefaultValue)
     EXPECT_EQ (10, static_cast<int> (schema["function"]["parameters"]["properties"]["count"]["default"]));
 }
 
-TEST (YupAiLLMTool, GeneratesSchemaWithNestedProperties)
+TEST (LLMTool, GeneratesSchemaWithNestedProperties)
 {
     LLMTool tool;
     tool.name = "set_color";
@@ -248,7 +248,7 @@ TEST (YupAiLLMTool, GeneratesSchemaWithNestedProperties)
     EXPECT_EQ ("b", required[2].toString());
 }
 
-TEST (YupAiLLMToolRegistry, UnregistersAndFindsTools)
+TEST (LLMToolRegistry, UnregistersAndFindsTools)
 {
     LLMToolRegistry registry;
 
@@ -268,7 +268,7 @@ TEST (YupAiLLMToolRegistry, UnregistersAndFindsTools)
     EXPECT_EQ (nullptr, registry.findTool ("double"));
 }
 
-TEST (YupAiLLMToolRegistry, DispatchUnknownToolReturnsError)
+TEST (LLMToolRegistry, DispatchUnknownToolReturnsError)
 {
     LLMToolRegistry registry;
 
@@ -279,14 +279,14 @@ TEST (YupAiLLMToolRegistry, DispatchUnknownToolReturnsError)
     EXPECT_TRUE (result["message"].toString().contains ("Unknown tool"));
 }
 
-TEST (YupAiLLMToolRegistry, FindToolReturnsNullForMissing)
+TEST (LLMToolRegistry, FindToolReturnsNullForMissing)
 {
     LLMToolRegistry registry;
 
     EXPECT_EQ (nullptr, registry.findTool ("missing"));
 }
 
-TEST (YupAiLLMToolRegistry, RegistersFindsAndDispatchesTools)
+TEST (LLMToolRegistry, RegistersFindsAndDispatchesTools)
 {
     LLMToolRegistry registry;
 
@@ -306,7 +306,7 @@ TEST (YupAiLLMToolRegistry, RegistersFindsAndDispatchesTools)
     EXPECT_TRUE (registry.toToolsArray().isArray());
 }
 
-TEST (YupAiLLMToolRegistry, HandlesConcurrentRegistration)
+TEST (LLMToolRegistry, HandlesConcurrentRegistration)
 {
     LLMToolRegistry registry;
 
@@ -328,7 +328,7 @@ TEST (YupAiLLMToolRegistry, HandlesConcurrentRegistration)
     EXPECT_EQ (32u, registry.getAllTools().size());
 }
 
-TEST (YupAiLLMResponse, ParsesOpenAiResponse)
+TEST (LLMResponse, ParsesOpenAiResponse)
 {
     auto json = JSON::parse (R"({
         "model": "test-model",
@@ -351,7 +351,7 @@ TEST (YupAiLLMResponse, ParsesOpenAiResponse)
     EXPECT_EQ (5, response.usage->totalTokens);
 }
 
-TEST (YupAiLLMResponse, ExtractsToolCalls)
+TEST (LLMResponse, ExtractsToolCalls)
 {
     auto json = JSON::parse (R"({
         "model": "test-model",
@@ -388,7 +388,7 @@ TEST (YupAiLLMResponse, ExtractsToolCalls)
     EXPECT_EQ ("darkgreen", toolCalls.front().arguments["color"].toString());
 }
 
-TEST (YupAiLLMResponse, ParsesOpenAiError)
+TEST (LLMResponse, ParsesOpenAiError)
 {
     auto json = JSON::parse (R"({
         "error": {
@@ -404,7 +404,7 @@ TEST (YupAiLLMResponse, ParsesOpenAiError)
     EXPECT_EQ ("model not found", *response.errorMessage);
 }
 
-TEST (YupAiLLMResponse, ParsesStreamingChunk)
+TEST (LLMResponse, ParsesStreamingChunk)
 {
     auto chunk = JSON::parse (R"({
         "model": "test-model",
@@ -424,7 +424,7 @@ TEST (YupAiLLMResponse, ParsesStreamingChunk)
     EXPECT_EQ ("hel", response.choices.front().message.content);
 }
 
-TEST (YupAiLLMResponse, AccumulatesStreamingToolCallArguments)
+TEST (LLMResponse, AccumulatesStreamingToolCallArguments)
 {
     auto first = LLMResponse::fromStreamChunk (JSON::parse (R"({
         "model": "test-model",
@@ -483,7 +483,7 @@ TEST (YupAiLLMResponse, AccumulatesStreamingToolCallArguments)
     EXPECT_EQ ("darkgreen", toolCalls.front().arguments["color"].toString());
 }
 
-TEST (YupAiLLMResponse, ParsesOpenAiErrorAsString)
+TEST (LLMResponse, ParsesOpenAiErrorAsString)
 {
     auto json = JSON::parse (R"({
         "error": "unauthorized"
@@ -496,7 +496,7 @@ TEST (YupAiLLMResponse, ParsesOpenAiErrorAsString)
     EXPECT_EQ ("unauthorized", *response.errorMessage);
 }
 
-TEST (YupAiLLMResponse, ParsesOpenAiErrorObjectWithoutMessage)
+TEST (LLMResponse, ParsesOpenAiErrorObjectWithoutMessage)
 {
     auto json = JSON::parse (R"({
         "error": {
@@ -510,7 +510,7 @@ TEST (YupAiLLMResponse, ParsesOpenAiErrorObjectWithoutMessage)
     EXPECT_FALSE (response.errorMessage.has_value());
 }
 
-TEST (YupAiLLMResponse, ParsesVoidJsonReturnsError)
+TEST (LLMResponse, ParsesVoidJsonReturnsError)
 {
     auto response = LLMResponse::fromOpenAiJson (var());
 
@@ -519,7 +519,7 @@ TEST (YupAiLLMResponse, ParsesVoidJsonReturnsError)
     EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
 }
 
-TEST (YupAiLLMResponse, ParsesVoidStreamChunkReturnsError)
+TEST (LLMResponse, ParsesVoidStreamChunkReturnsError)
 {
     auto response = LLMResponse::fromStreamChunk (var());
 
@@ -528,7 +528,7 @@ TEST (YupAiLLMResponse, ParsesVoidStreamChunkReturnsError)
     EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
 }
 
-TEST (YupAiLLMResponse, AppendsStreamChunkWithError)
+TEST (LLMResponse, AppendsStreamChunkWithError)
 {
     auto errorChunk = LLMResponse::fromError ("stream error");
 
@@ -541,7 +541,7 @@ TEST (YupAiLLMResponse, AppendsStreamChunkWithError)
     EXPECT_EQ ("stream error", *accumulated.errorMessage);
 }
 
-TEST (YupAiLLMResponse, AppendsStreamChunkNonAssistantRoleRetained)
+TEST (LLMResponse, AppendsStreamChunkNonAssistantRoleRetained)
 {
     auto first = LLMResponse::fromStreamChunk (JSON::parse (R"({
         "model": "test-model",
@@ -574,7 +574,7 @@ TEST (YupAiLLMResponse, AppendsStreamChunkNonAssistantRoleRetained)
     EXPECT_EQ ("system message more text", accumulated.choices.front().message.content);
 }
 
-TEST (YupAiLLMResponse, AppendsStreamChunkNegativeToolCallIndexSkipped)
+TEST (LLMResponse, AppendsStreamChunkNegativeToolCallIndexSkipped)
 {
     auto chunk = LLMResponse::fromStreamChunk (JSON::parse (R"({
         "model": "test-model",
@@ -603,7 +603,7 @@ TEST (YupAiLLMResponse, AppendsStreamChunkNegativeToolCallIndexSkipped)
     EXPECT_FALSE (accumulated.hasToolCalls());
 }
 
-TEST (YupAiLLMResponse, AppendsStreamChunkEmptyMergedArguments)
+TEST (LLMResponse, AppendsStreamChunkEmptyMergedArguments)
 {
     auto chunk = LLMResponse::fromStreamChunk (JSON::parse (R"({
         "model": "test-model",
@@ -636,7 +636,7 @@ TEST (YupAiLLMResponse, AppendsStreamChunkEmptyMergedArguments)
     EXPECT_EQ ("", toolCalls.front().arguments.toString());
 }
 
-TEST (YupAiLLMResponse, FromErrorWithEmptyString)
+TEST (LLMResponse, FromErrorWithEmptyString)
 {
     auto response = LLMResponse::fromError ("");
 
@@ -645,7 +645,7 @@ TEST (YupAiLLMResponse, FromErrorWithEmptyString)
     EXPECT_EQ ("Unknown AI response error", *response.errorMessage);
 }
 
-TEST (YupAiLLMResponse, ParsesErrorAsStringInStreamChunk)
+TEST (LLMResponse, ParsesErrorAsStringInStreamChunk)
 {
     auto chunk = JSON::parse (R"({
         "error": "rate limit exceeded"
@@ -658,7 +658,7 @@ TEST (YupAiLLMResponse, ParsesErrorAsStringInStreamChunk)
     EXPECT_EQ ("rate limit exceeded", *response.errorMessage);
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBody)
+TEST (LLMClient, BuildsChatCompletionBody)
 {
     TestLLMClient client;
 
@@ -676,7 +676,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBody)
     EXPECT_EQ (32, static_cast<int> (body["max_completion_tokens"]));
 }
 
-TEST (YupAiLLMClient, SerializesSpecificToolChoice)
+TEST (LLMClient, SerializesSpecificToolChoice)
 {
     TestLLMClient client;
 
@@ -696,7 +696,7 @@ TEST (YupAiLLMClient, SerializesSpecificToolChoice)
     EXPECT_EQ ("set_background_color", body["tool_choice"]["function"]["name"].toString());
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithAllOptions)
+TEST (LLMClient, BuildsChatCompletionBodyWithAllOptions)
 {
     TestLLMClient client;
 
@@ -718,7 +718,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithAllOptions)
     EXPECT_EQ ("END", body["stop"][1].toString());
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithGrammarAndCache)
+TEST (LLMClient, BuildsChatCompletionBodyWithGrammarAndCache)
 {
     LLMClient::Options opts;
     opts.grammar = "root ::= ...";
@@ -737,7 +737,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithGrammarAndCache)
     EXPECT_EQ ("24h", body["prompt_cache_retention"].toString());
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithPerRequestGrammar)
+TEST (LLMClient, BuildsChatCompletionBodyWithPerRequestGrammar)
 {
     LLMClient::Options opts;
     opts.grammar = "default_grammar";
@@ -752,7 +752,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithPerRequestGrammar)
     EXPECT_EQ ("per_request_grammar", body["grammar"].toString());
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithJsonSchema)
+TEST (LLMClient, BuildsChatCompletionBodyWithJsonSchema)
 {
     TestLLMClient client;
 
@@ -767,7 +767,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithJsonSchema)
     EXPECT_TRUE (static_cast<bool> (body["response_format"]["json_schema"]["strict"]));
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithModel)
+TEST (LLMClient, BuildsChatCompletionBodyWithModel)
 {
     LLMClient::Options opts;
     opts.model = "gpt-4";
@@ -781,7 +781,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithModel)
     EXPECT_EQ ("gpt-4", body["model"].toString());
 }
 
-TEST (YupAiLLMClient, BuildsChatCompletionBodyWithNoTemperature)
+TEST (LLMClient, BuildsChatCompletionBodyWithNoTemperature)
 {
     LLMClient::Options opts;
     opts.noTemperature = true;
@@ -796,7 +796,7 @@ TEST (YupAiLLMClient, BuildsChatCompletionBodyWithNoTemperature)
     EXPECT_FALSE (body.hasProperty ("temperature"));
 }
 
-TEST (YupAiLLMClient, ChatMethodCreatesRequestAndReturnsResponse)
+TEST (LLMClient, ChatMethodCreatesRequestAndReturnsResponse)
 {
     TestLLMClient client;
 
@@ -806,7 +806,7 @@ TEST (YupAiLLMClient, ChatMethodCreatesRequestAndReturnsResponse)
     EXPECT_EQ ("done", response.choices.front().message.content);
 }
 
-TEST (YupAiLLMClient, ChatWithToolsCreatesRequestWithAllTools)
+TEST (LLMClient, ChatWithToolsCreatesRequestWithAllTools)
 {
     TestLLMClient client;
 
@@ -822,7 +822,7 @@ TEST (YupAiLLMClient, ChatWithToolsCreatesRequestWithAllTools)
     EXPECT_EQ ("done", response.choices.front().message.content);
 }
 
-TEST (YupAiLLMClient, RunToolLoopCompletesWithoutToolCalls)
+TEST (LLMClient, RunToolLoopCompletesWithoutToolCalls)
 {
     TestLLMClient client;
 
@@ -836,14 +836,14 @@ TEST (YupAiLLMClient, RunToolLoopCompletesWithoutToolCalls)
     EXPECT_EQ ("done", response.choices.front().message.content);
 }
 
-TEST (YupAiLLMClient, GetOptionsReturnsReference)
+TEST (LLMClient, GetOptionsReturnsReference)
 {
     TestLLMClient client;
 
     EXPECT_TRUE (client.getOptions().model.isEmpty());
 }
 
-TEST (YupAiEmbeddingModel, ComputesCosineSimilarity)
+TEST (EmbeddingModel, ComputesCosineSimilarity)
 {
     EmbeddingModel::Embedding a;
     a.values = { 1.0f, 0.0f };
@@ -856,4 +856,71 @@ TEST (YupAiEmbeddingModel, ComputesCosineSimilarity)
 
     EXPECT_FLOAT_EQ (0.0f, EmbeddingModel::cosineSimilarity (a, b));
     EXPECT_FLOAT_EQ (1.0f, EmbeddingModel::cosineSimilarity (a, c));
+}
+
+TEST (EmbeddingModel, CosineSimilarity_EmptyVectors_ReturnsZero)
+{
+    EmbeddingModel::Embedding a;
+    EmbeddingModel::Embedding b;
+
+    EXPECT_FLOAT_EQ (0.0f, EmbeddingModel::cosineSimilarity (a, b));
+}
+
+TEST (EmbeddingModel, CosineSimilarity_OneEmptyVector_ReturnsZero)
+{
+    EmbeddingModel::Embedding a;
+    a.values = { 1.0f, 2.0f, 3.0f };
+    EmbeddingModel::Embedding b;
+
+    EXPECT_FLOAT_EQ (0.0f, EmbeddingModel::cosineSimilarity (a, b));
+}
+
+TEST (EmbeddingModel, CosineSimilarity_DifferentSizes_UsesMinimum)
+{
+    EmbeddingModel::Embedding a;
+    a.values = { 1.0f, 0.0f, 0.0f };
+
+    EmbeddingModel::Embedding b;
+    b.values = { 0.0f, 1.0f };
+
+    EXPECT_FLOAT_EQ (0.0f, EmbeddingModel::cosineSimilarity (a, b));
+}
+
+TEST (EmbeddingModel, CosineSimilarity_NegativeCorrelation)
+{
+    EmbeddingModel::Embedding a;
+    a.values = { 1.0f, 0.0f };
+
+    EmbeddingModel::Embedding b;
+    b.values = { -1.0f, 0.0f };
+
+    EXPECT_FLOAT_EQ (-1.0f, EmbeddingModel::cosineSimilarity (a, b));
+}
+
+TEST (EmbeddingModel, CosineSimilarity_ZeroMagnitude_ReturnsZero)
+{
+    EmbeddingModel::Embedding a;
+    a.values = { 0.0f, 0.0f };
+
+    EmbeddingModel::Embedding b;
+    b.values = { 1.0f, 0.0f };
+
+    EXPECT_FLOAT_EQ (0.0f, EmbeddingModel::cosineSimilarity (a, b));
+}
+
+TEST (EmbeddingModel, Embedding_HasDimensions)
+{
+    EmbeddingModel::Embedding e;
+    e.values = { 1.0f, 2.0f, 3.0f, 4.0f };
+    e.index = 5;
+
+    EXPECT_EQ (5, e.index);
+    EXPECT_EQ (4, e.dimensions());
+}
+
+TEST (EmbeddingModel, Embedding_EmptyHasZeroDimensions)
+{
+    EmbeddingModel::Embedding e;
+
+    EXPECT_EQ (0, e.dimensions());
 }
