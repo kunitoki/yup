@@ -3,13 +3,14 @@
 
 #include "rive/importers/import_stack.hpp"
 #include "rive/animation/keyframe_interpolator.hpp"
+#include "rive/refcnt.hpp"
+#include "rive/file.hpp"
 #include <unordered_map>
 #include <vector>
 
 namespace rive
 {
 class Artboard;
-class File;
 class NestedArtboard;
 class Backboard;
 class FileAsset;
@@ -17,14 +18,17 @@ class FileAssetReferencer;
 class DataConverter;
 class DataBind;
 class DataConverterGroupItem;
+class ScriptInputArtboard;
 class ScrollPhysics;
+class ArtboardReferencer;
+class ViewModelInstance;
 class BackboardImporter : public ImportStackObject
 {
 private:
     Backboard* m_Backboard;
     std::unordered_map<int, Artboard*> m_ArtboardLookup;
-    std::vector<NestedArtboard*> m_NestedArtboards;
-    std::vector<FileAsset*> m_FileAssets;
+    std::vector<ArtboardReferencer*> m_ArtboardsReferencers;
+    std::vector<rcp<FileAsset>> m_FileAssets;
     std::vector<FileAssetReferencer*> m_FileAssetReferencers;
     std::vector<DataConverter*> m_DataConverters;
     std::vector<DataBind*> m_DataConverterReferencers;
@@ -38,8 +42,8 @@ public:
     BackboardImporter(Backboard* backboard);
     void addArtboard(Artboard* artboard);
     void addMissingArtboard();
-    void addNestedArtboard(NestedArtboard* artboard);
-    void addFileAsset(FileAsset* asset);
+    void addArtboardReferencer(ArtboardReferencer* artboard);
+    void addFileAsset(rcp<FileAsset> asset);
     void addFileAssetReferencer(FileAssetReferencer* referencer);
     void addDataConverterReferencer(DataBind* referencer);
     void addDataConverter(DataConverter* converter);
@@ -47,8 +51,9 @@ public:
         DataConverterGroupItem* referencer);
     void addInterpolator(KeyFrameInterpolator* interpolator);
     void addPhysics(ScrollPhysics* physics);
+    void addViewModelInstance(ViewModelInstance* instance);
     std::vector<ScrollPhysics*> physics() { return m_physics; }
-    std::vector<FileAsset*>* assets() { return &m_FileAssets; }
+    std::vector<rcp<FileAsset>>* assets() { return &m_FileAssets; }
     void file(File* value);
     File* file() { return m_file; };
 

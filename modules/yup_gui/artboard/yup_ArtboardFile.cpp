@@ -57,7 +57,7 @@ private:
 
 //==============================================================================
 
-ArtboardFile::ArtboardFile (std::unique_ptr<rive::File> rivFile)
+ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile)
     : rivFile (std::move (rivFile))
 {
 }
@@ -106,7 +106,7 @@ ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& fac
     is.readIntoMemoryBlock (mb);
 
     rive::ImportResult result;
-    std::unique_ptr<rive::File> rivFile;
+    rive::rcp<rive::File> rivFile;
 
     if (assetCallback != nullptr)
     {

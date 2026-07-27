@@ -28,19 +28,38 @@
 #endif
 
 #if RIVE_WEBGPU
-#include "source/webgpu/em_js_handle.cpp"
 #include "source/webgpu/render_context_webgpu_impl.cpp"
-//#include "source/webgpu/render_context_webgpu_vulkan.cpp"
+
+#include "source/ore/wgpu/ore_bind_group_wgpu.cpp"
+#include "source/ore/wgpu/ore_buffer_wgpu.cpp"
+#include "source/ore/wgpu/ore_context_wgpu.cpp"
+#include "source/ore/wgpu/ore_pipeline_wgpu.cpp"
+#include "source/ore/wgpu/ore_render_pass_wgpu.cpp"
+#include "source/ore/wgpu/ore_sampler_wgpu.cpp"
+#include "source/ore/wgpu/ore_shader_module_wgpu.cpp"
+#include "source/ore/wgpu/ore_texture_wgpu.cpp"
 
 #elif RIVE_WEBGL
 #include "source/gl/gl_state.cpp"
 #include "source/gl/gl_utils.cpp"
-#include "source/gl/load_gles_extensions.cpp"
 #include "source/gl/load_store_actions_ext.cpp"
 #include "source/gl/pls_impl_webgl.cpp"
 #include "source/gl/render_buffer_gl_impl.cpp"
 #include "source/gl/render_context_gl_impl.cpp"
 #include "source/gl/render_target_gl.cpp"
+
+#include "source/ore/gl/ore_bind_group_gl.cpp"
+#include "source/ore/gl/ore_buffer_gl.cpp"
+#include "source/ore/gl/ore_context_gl.cpp"
+#include "source/ore/gl/ore_pipeline_gl.cpp"
+#define oreCompareFunctionToGL oreCompareFunctionToGL_rp
+#include "source/ore/gl/ore_render_pass_gl.cpp"
+#undef oreCompareFunctionToGL
+#include "source/ore/gl/ore_sampler_gl.cpp"
+#include "source/ore/gl/ore_shader_module_gl.cpp"
+#define oreFormatToGLInternal oreFormatToGLInternal_tex
+#include "source/ore/gl/ore_texture_gl.cpp"
+#undef oreFormatToGLInternal
 
 #else
 #error "No renderer backend defined"

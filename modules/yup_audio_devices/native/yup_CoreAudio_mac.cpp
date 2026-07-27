@@ -40,25 +40,492 @@
 namespace yup
 {
 
-#if YUP_COREAUDIO_LOGGING_ENABLED
-#define YUP_COREAUDIOLOG(a)           \
-    {                                 \
-        String camsg ("CoreAudio: "); \
-        camsg << a;                   \
-        Logger::writeToLog (camsg);   \
-    }
-#else
-#define YUP_COREAUDIOLOG(a)
-#endif
-
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnonnull")
 
+//==============================================================================
 constexpr auto yupAudioObjectPropertyElementMain =
 #if defined(MAC_OS_VERSION_12_0)
     kAudioObjectPropertyElementMain;
 #else
     kAudioObjectPropertyElementMaster;
 #endif
+
+//==============================================================================
+enum class PlaybackDirection : std::size_t
+{
+    input = 0,
+    output = 1
+};
+
+static constexpr std::size_t toDirectionIndex (PlaybackDirection d) noexcept
+{
+    return static_cast<std::size_t> (d);
+}
+
+static constexpr std::array<PlaybackDirection, 2> getAllPlaybackDirections() noexcept
+{
+    return { PlaybackDirection::input, PlaybackDirection::output };
+}
+
+static constexpr AudioObjectPropertyScope toAudioPropertyScope (PlaybackDirection direction) noexcept
+{
+    return direction == PlaybackDirection::input ? kAudioDevicePropertyScopeInput
+                                                 : kAudioDevicePropertyScopeOutput;
+}
+
+//==============================================================================
+class PropertyAddress
+{
+public:
+    explicit PropertyAddress (AudioObjectPropertySelector selector) noexcept
+        : PropertyAddress (selector, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain)
+    {
+    }
+
+    PropertyAddress (AudioObjectPropertySelector selector, AudioObjectPropertyScope scope) noexcept
+        : PropertyAddress (selector, scope, yupAudioObjectPropertyElementMain)
+    {
+    }
+
+    PropertyAddress (AudioObjectPropertySelector selector, AudioObjectPropertyScope scope, AudioObjectPropertyElement element) noexcept
+        : address { selector, scope, element }
+    {
+    }
+
+    PropertyAddress (AudioObjectPropertySelector selector, PlaybackDirection direction) noexcept
+        : PropertyAddress (selector, toAudioPropertyScope (direction), yupAudioObjectPropertyElementMain)
+    {
+    }
+
+    PropertyAddress (AudioObjectPropertySelector selector, PlaybackDirection direction, AudioObjectPropertyElement element) noexcept
+        : PropertyAddress (selector, toAudioPropertyScope (direction), element)
+    {
+    }
+
+    const AudioObjectPropertyAddress* get() const noexcept { return &address; }
+
+    operator AudioObjectPropertyAddress() const noexcept { return address; }
+
+private:
+    AudioObjectPropertyAddress address;
+};
+
+//==============================================================================
+class PropertyListener
+{
+public:
+    using Callback = std::function<void (UInt32, const AudioObjectPropertyAddress*)>;
+
+    PropertyListener (AudioObjectID objectIdIn,
+                      AudioObjectPropertySelector selector,
+                      AudioObjectPropertyScope scope,
+                      Callback callbackIn)
+        : objectId (objectIdIn)
+        , address (selector, scope, kAudioObjectPropertyElementWildcard)
+        , callback (std::move (callbackIn))
+    {
+        if (objectId == kAudioObjectUnknown)
+            return;
+
+        AudioObjectAddPropertyListener (objectId, address.get(), listenerCallback, this);
+    }
+
+    ~PropertyListener()
+    {
+        if (objectId == kAudioObjectUnknown)
+            return;
+
+        AudioObjectRemovePropertyListener (objectId, address.get(), listenerCallback, this);
+    }
+
+private:
+    static OSStatus listenerCallback (AudioObjectID,
+                                      UInt32 numAddresses,
+                                      const AudioObjectPropertyAddress* addrs,
+                                      void* clientData)
+    {
+        static_cast<PropertyListener*> (clientData)->callback (numAddresses, addrs);
+        return noErr;
+    }
+
+    AudioObjectID objectId = kAudioObjectUnknown;
+    PropertyAddress address;
+    Callback callback;
+
+    YUP_DECLARE_NON_COPYABLE (PropertyListener)
+    YUP_DECLARE_NON_MOVEABLE (PropertyListener)
+};
+
+//==============================================================================
+class AudioObject
+{
+public:
+    explicit AudioObject (AudioObjectID objectIdIn) noexcept
+        : objectId (objectIdIn)
+    {
+    }
+
+    AudioObject() noexcept = default;
+    AudioObject (const AudioObject&) noexcept = default;
+    AudioObject (AudioObject&&) noexcept = default;
+    AudioObject& operator= (const AudioObject&) noexcept = default;
+    AudioObject& operator= (AudioObject&&) noexcept = default;
+
+    AudioObjectID getId() const noexcept { return objectId; }
+
+    bool isValid() const noexcept { return objectId != kAudioObjectUnknown; }
+
+    bool operator== (const AudioObject& other) const noexcept { return objectId == other.objectId; }
+
+    bool operator!= (const AudioObject& other) const noexcept { return ! (*this == other); }
+
+    template <typename PropertyType>
+    std::optional<PropertyType> getProperty (PropertyAddress address) const
+    {
+        if (! hasProperty (address))
+            return {};
+
+        UInt32 size = sizeof (PropertyType);
+        PropertyType value {};
+
+        if (AudioObjectGetPropertyData (objectId, address.get(), 0, nullptr, &size, &value) != noErr)
+            return {};
+
+        return value;
+    }
+
+    template <typename PropertyType>
+    PropertyType getPropertyOrDefault (PropertyAddress address, PropertyType defaultValue = {}) const
+    {
+        return getProperty<PropertyType> (address).value_or (defaultValue);
+    }
+
+    template <typename PropertyType>
+    std::vector<PropertyType> getPropertyArray (PropertyAddress address) const
+    {
+        if (! hasProperty (address))
+            return {};
+
+        UInt32 size = 0;
+
+        if (AudioObjectGetPropertyDataSize (objectId, address.get(), 0, nullptr, &size) != noErr)
+            return {};
+
+        jassert ((size % sizeof (PropertyType)) == 0);
+        std::vector<PropertyType> result (size / sizeof (PropertyType));
+
+        if (AudioObjectGetPropertyData (objectId, address.get(), 0, nullptr, &size, result.data()) != noErr)
+            return {};
+
+        return result;
+    }
+
+    template <typename PropertyType>
+    bool setProperty (PropertyAddress address, const PropertyType& value)
+    {
+        if (! hasProperty (address))
+            return false;
+
+        Boolean isSettable = NO;
+
+        if (AudioObjectIsPropertySettable (objectId, address.get(), &isSettable) != noErr || ! isSettable)
+            return false;
+
+        return AudioObjectSetPropertyData (objectId, address.get(), 0, nullptr, sizeof (PropertyType), &value) == noErr;
+    }
+
+    std::unique_ptr<PropertyListener> createPropertyListener (AudioObjectPropertySelector selector,
+                                                              AudioObjectPropertyScope scope,
+                                                              PropertyListener::Callback callback)
+    {
+        return std::make_unique<PropertyListener> (objectId, selector, scope, std::move (callback));
+    }
+
+private:
+    bool hasProperty (PropertyAddress address) const noexcept
+    {
+        return isValid() && AudioObjectHasProperty (objectId, address.get());
+    }
+
+    AudioObjectID objectId = kAudioObjectUnknown;
+};
+
+static_assert (sizeof (AudioObject) == sizeof (AudioObjectID));
+
+//==============================================================================
+class AudioStream : public AudioObject
+{
+public:
+    using AudioObject::AudioObject;
+
+    int getLatency() const
+    {
+        return static_cast<int> (getPropertyOrDefault<UInt32> (PropertyAddress (kAudioStreamPropertyLatency)));
+    }
+
+    int getBitDepth() const
+    {
+        return static_cast<int> (getPropertyOrDefault<AudioStreamBasicDescription> (PropertyAddress (kAudioStreamPropertyPhysicalFormat)).mBitsPerChannel);
+    }
+};
+
+static_assert (sizeof (AudioStream) == sizeof (AudioObject));
+
+//==============================================================================
+static String stringFromRetainedCFString (CFStringRef string)
+{
+    if (string == nullptr)
+        return {};
+
+    const CFUniquePtr<CFStringRef> holder { string };
+    return String::fromCFString (holder.get());
+}
+
+//==============================================================================
+class AudioDevice : public AudioObject
+{
+    static constexpr AudioObjectPropertySelector mainVolumeSelector =
+#if defined(MAC_OS_VERSION_12_0)
+        kAudioHardwareServiceDeviceProperty_VirtualMainVolume;
+#else
+        kAudioHardwareServiceDeviceProperty_VirtualMasterVolume;
+#endif
+
+public:
+    using AudioObject::AudioObject;
+
+    String getName() const
+    {
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceNameCFString)).value_or (nullptr));
+    }
+
+    String getUid() const
+    {
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioDevicePropertyDeviceUID)).value_or (nullptr));
+    }
+
+    double getSampleRate() const
+    {
+        return static_cast<double> (getPropertyOrDefault<Float64> (PropertyAddress (kAudioDevicePropertyNominalSampleRate)));
+    }
+
+    bool requestSampleRate (double newRate)
+    {
+        return setProperty (PropertyAddress (kAudioDevicePropertyNominalSampleRate), static_cast<Float64> (newRate));
+    }
+
+    int getBufferSize() const
+    {
+        return static_cast<int> (getPropertyOrDefault<UInt32> (PropertyAddress (kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard)));
+    }
+
+    bool requestBufferSize (int newSize)
+    {
+        return setProperty (PropertyAddress (kAudioDevicePropertyBufferFrameSize), static_cast<UInt32> (newSize));
+    }
+
+    int getNumChannels (PlaybackDirection direction) const
+    {
+        if (! isValid())
+            return 0;
+
+        const PropertyAddress address { kAudioDevicePropertyStreamConfiguration, direction };
+
+        UInt32 size = 0;
+
+        if (! AudioObjectHasProperty (getId(), address.get()))
+            return 0;
+
+        if (AudioObjectGetPropertyDataSize (getId(), address.get(), 0, nullptr, &size) != noErr || size == 0)
+            return 0;
+
+        std::vector<std::byte> storage (size);
+        const auto* bufList = reinterpret_cast<const AudioBufferList*> (storage.data());
+
+        if (AudioObjectGetPropertyData (getId(), address.get(), 0, nullptr, &size, storage.data()) != noErr)
+            return 0;
+
+        int total = 0;
+        for (UInt32 i = 0; i < bufList->mNumberBuffers; ++i)
+            total += static_cast<int> (bufList->mBuffers[i].mNumberChannels);
+        return total;
+    }
+
+    std::vector<AudioStream> getStreams (PlaybackDirection direction) const
+    {
+        const auto ids = getPropertyArray<AudioStreamID> (PropertyAddress (kAudioDevicePropertyStreams, direction));
+        std::vector<AudioStream> streams;
+        streams.reserve (ids.size());
+        for (const auto id : ids)
+            streams.emplace_back (id);
+        return streams;
+    }
+
+    int getLatency (PlaybackDirection direction) const
+    {
+        return static_cast<int> (getPropertyOrDefault<UInt32> (PropertyAddress (kAudioDevicePropertyLatency, direction)));
+    }
+
+    int getSafetyOffset (PlaybackDirection direction) const
+    {
+        return static_cast<int> (getPropertyOrDefault<UInt32> (PropertyAddress (kAudioDevicePropertySafetyOffset, direction)));
+    }
+
+    int getStreamLatency (PlaybackDirection direction) const
+    {
+        const auto streams = getStreams (direction);
+        return streams.empty() ? 0 : streams.front().getLatency();
+    }
+
+    int getBitDepth() const
+    {
+        for (auto direction : getAllPlaybackDirections())
+            for (auto stream : getStreams (direction))
+                if (const auto depth = stream.getBitDepth(); depth > 0)
+                    return depth;
+
+        return 24;
+    }
+
+    String getChannelName (PlaybackDirection direction, int index) const
+    {
+        const auto element = static_cast<AudioObjectPropertyElement> (index + 1);
+        return stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (kAudioObjectPropertyElementName, direction, element)).value_or (nullptr));
+    }
+
+    float getMainVolume() const
+    {
+        return getPropertyOrDefault<Float32> (PropertyAddress (mainVolumeSelector));
+    }
+
+    bool setMainVolume (float newVolume)
+    {
+        return setProperty (PropertyAddress (mainVolumeSelector), static_cast<Float32> (newVolume));
+    }
+
+    bool isMuted() const
+    {
+        return getPropertyOrDefault<UInt32> (PropertyAddress (kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput)) != 0;
+    }
+
+    bool setMute (bool mute)
+    {
+        return setProperty (PropertyAddress (kAudioDevicePropertyMute, kAudioDevicePropertyScopeOutput), static_cast<UInt32> (mute ? 1 : 0));
+    }
+
+    bool isAlive() const
+    {
+        return getPropertyOrDefault<UInt32> (PropertyAddress (kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeWildcard)) != 0;
+    }
+
+    bool isAggregateDevice() const
+    {
+        return getPropertyOrDefault<AudioClassID> (PropertyAddress (kAudioObjectPropertyClass)) == kAudioAggregateDeviceClassID;
+    }
+
+    AudioWorkgroup getAudioWorkgroup() const
+    {
+#if YUP_AUDIOWORKGROUP_TYPES_AVAILABLE
+        if (auto handle = getProperty<void*> (PropertyAddress (kAudioDevicePropertyIOThreadOSWorkgroup, kAudioObjectPropertyScopeWildcard)))
+        {
+            os_workgroup_t workgroup = (__bridge_transfer os_workgroup_t) * handle;
+            return makeRealAudioWorkgroup (workgroup);
+        }
+#endif
+        return {};
+    }
+
+    std::unique_ptr<PropertyListener> createPropertyListener (AudioObjectPropertySelector selector,
+                                                              PropertyListener::Callback callback)
+    {
+        return AudioObject::createPropertyListener (selector, kAudioObjectPropertyScopeWildcard, std::move (callback));
+    }
+};
+
+static_assert (sizeof (AudioDevice) == sizeof (AudioObject));
+
+//==============================================================================
+class SystemObject final : public AudioObject
+{
+public:
+    SystemObject() noexcept
+        : AudioObject (kAudioObjectSystemObject)
+    {
+    }
+
+    AudioDevice getDefaultDevice (PlaybackDirection direction) const
+    {
+        static constexpr AudioObjectPropertySelector selectors[] {
+            kAudioHardwarePropertyDefaultInputDevice,
+            kAudioHardwarePropertyDefaultOutputDevice
+        };
+        return AudioDevice (getPropertyOrDefault<AudioDeviceID> (PropertyAddress (selectors[toDirectionIndex (direction)])));
+    }
+
+    std::vector<AudioDevice> getAudioDevices() const
+    {
+        const auto ids = getPropertyArray<AudioDeviceID> (PropertyAddress (kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard));
+        std::vector<AudioDevice> devices;
+        devices.reserve (ids.size());
+        for (const auto id : ids)
+            devices.emplace_back (id);
+        return devices;
+    }
+
+    AudioDevice translateUidToDevice (const String& uid) const
+    {
+        if (uid.isEmpty())
+            return AudioDevice (kAudioObjectUnknown);
+
+        const CFUniquePtr<CFStringRef> uidString { uid.toCFString() };
+        auto* uidRef = uidString.get();
+        AudioDeviceID result = kAudioObjectUnknown;
+        UInt32 resultSize = sizeof (result);
+        const PropertyAddress address { kAudioHardwarePropertyTranslateUIDToDevice };
+
+        AudioObjectGetPropertyData (kAudioObjectSystemObject, address.get(), sizeof (uidRef), &uidRef, &resultSize, &result);
+        return AudioDevice (result);
+    }
+};
+
+//==============================================================================
+class AggregateAudioDevice : public AudioDevice
+{
+public:
+    using AudioDevice::AudioDevice;
+
+    std::vector<AudioDevice> getSubDevices() const
+    {
+        const auto ids = getPropertyArray<AudioDeviceID> (PropertyAddress (kAudioAggregateDevicePropertyActiveSubDeviceList));
+        std::vector<AudioDevice> devices;
+        devices.reserve (ids.size());
+        for (const auto id : ids)
+            devices.emplace_back (id);
+        return devices;
+    }
+
+    String getClockingDeviceUid() const
+    {
+        constexpr auto mainSubDeviceSelector =
+#if defined(MAC_OS_VERSION_12_0)
+            kAudioAggregateDevicePropertyMainSubDevice;
+#else
+            kAudioAggregateDevicePropertyMasterSubDevice;
+#endif
+
+        for (const auto selector : { (AudioObjectPropertySelector) kAudioAggregateDevicePropertyClockDevice, (AudioObjectPropertySelector) mainSubDeviceSelector })
+        {
+            const auto uid = stringFromRetainedCFString (getProperty<CFStringRef> (PropertyAddress (selector)).value_or (nullptr));
+            if (uid.isNotEmpty())
+                return uid;
+        }
+
+        const auto subs = getSubDevices();
+        return subs.empty() ? String {} : subs.front().getUid();
+    }
+};
+
+static_assert (sizeof (AggregateAudioDevice) == sizeof (AudioObject));
 
 //==============================================================================
 class ManagedAudioBufferList final : public AudioBufferList
@@ -130,7 +597,7 @@ struct IgnoreUnused
 template <typename T>
 static auto getDataPtrAndSize (T& t)
 {
-    static_assert (std::is_pod_v<T>);
+    static_assert (std::is_standard_layout_v<T>);
     return std::make_tuple (&t, (UInt32) sizeof (T));
 }
 
@@ -250,67 +717,435 @@ template <typename T, typename OnError = IgnoreUnused>
     return result;
 }
 
-//==============================================================================
-struct AsyncRestarter
+static AudioObjectPropertyScope getAudioDevicePropertyScope (bool input) noexcept
 {
-    virtual ~AsyncRestarter() = default;
-    virtual void restartAsync() = 0;
+    return toAudioPropertyScope (input ? PlaybackDirection::input : PlaybackDirection::output);
+}
+
+constexpr auto yupPrivateAggregateDeviceNamePrefix = "YUP Aggregate ";
+constexpr auto yupPrivateAggregateDevicePIDMarker = "pid=";
+
+static String createPrivateAggregateDeviceName (const String& deviceName)
+{
+    return String (yupPrivateAggregateDeviceNamePrefix) + yupPrivateAggregateDevicePIDMarker + String ((int) ::getpid()) + " " + deviceName;
+}
+
+static bool isPrivateAggregateDeviceName (const String& name)
+{
+    return name.startsWith (yupPrivateAggregateDeviceNamePrefix);
+}
+
+static pid_t getPrivateAggregateDeviceProcessID (const String& name)
+{
+    if (! isPrivateAggregateDeviceName (name))
+        return 0;
+
+    const auto suffix = name.fromFirstOccurrenceOf (yupPrivateAggregateDeviceNamePrefix, false, false).trimStart();
+    if (! suffix.startsWith (yupPrivateAggregateDevicePIDMarker))
+        return 0;
+
+    const auto pidAndName = suffix.fromFirstOccurrenceOf (yupPrivateAggregateDevicePIDMarker, false, false);
+    const auto pidString = pidAndName.initialSectionContainingOnly ("0123456789");
+
+    if (pidString.isEmpty())
+        return 0;
+
+    const auto numDigits = pidString.length();
+    if (pidAndName.length() <= numDigits || ! CharacterFunctions::isWhitespace (pidAndName[numDigits]))
+        return 0;
+
+    return (pid_t) pidString.getIntValue();
+}
+
+static int getDirectionIndex (bool input) noexcept
+{
+    return static_cast<int> (toDirectionIndex (input ? PlaybackDirection::input : PlaybackDirection::output));
+}
+
+static String audioObjectGetStringProperty (AudioObjectID objectID, PropertyAddress address)
+{
+    return stringFromRetainedCFString (audioObjectGetProperty<CFStringRef> (objectID, address).value_or (nullptr));
+}
+
+static String audioObjectGetStringProperty (AudioObjectID objectID, AudioObjectPropertySelector selector)
+{
+    return audioObjectGetStringProperty (objectID, PropertyAddress (selector));
+}
+
+static String getAudioDeviceUID (AudioDeviceID deviceID)
+{
+    return audioObjectGetStringProperty (deviceID, kAudioDevicePropertyDeviceUID);
+}
+
+static String getAudioDeviceName (AudioDeviceID deviceID)
+{
+    return audioObjectGetStringProperty (deviceID, kAudioDevicePropertyDeviceNameCFString);
+}
+
+static AudioDeviceID getAudioDeviceIDForUID (const String& uid)
+{
+    if (uid.isEmpty())
+        return kAudioObjectUnknown;
+
+    const CFUniquePtr<CFStringRef> uidString { uid.toCFString() };
+    auto* uidRef = uidString.get();
+    AudioDeviceID result = kAudioObjectUnknown;
+    UInt32 resultSize = sizeof (result);
+    const PropertyAddress address { kAudioHardwarePropertyTranslateUIDToDevice };
+
+    if (AudioObjectGetPropertyData (kAudioObjectSystemObject, address.get(), sizeof (uidRef), &uidRef, &resultSize, &result) != noErr)
+        return kAudioObjectUnknown;
+
+    return result;
+}
+
+static bool isAggregateAudioDevice (AudioDeviceID deviceID)
+{
+    return audioObjectGetProperty<AudioClassID> (deviceID, PropertyAddress (kAudioObjectPropertyClass)).value_or (0) == kAudioAggregateDeviceClassID;
+}
+
+static int getDirectNumChannelsForDevice (AudioDeviceID deviceID, bool input)
+{
+    int total = 0;
+
+    if (auto bufList = audioObjectGetProperty<AudioBufferList> (deviceID, PropertyAddress (kAudioDevicePropertyStreamConfiguration, getAudioDevicePropertyScope (input))))
+    {
+        const auto numStreams = static_cast<int> (bufList->mNumberBuffers);
+
+        for (int i = 0; i < numStreams; ++i)
+            total += static_cast<int> (bufList->mBuffers[i].mNumberChannels);
+    }
+
+    return total;
+}
+
+static std::vector<AudioDeviceID> getAggregateSubDeviceIDs (AudioDeviceID deviceID)
+{
+    return audioObjectGetProperties<AudioDeviceID> (deviceID, PropertyAddress (kAudioAggregateDevicePropertyActiveSubDeviceList));
+}
+
+static void addAudioDeviceIDIfMissing (std::vector<AudioDeviceID>& deviceIDs, AudioDeviceID deviceID)
+{
+    if (deviceID == kAudioObjectUnknown || deviceID == 0)
+        return;
+
+    if (std::find (deviceIDs.begin(), deviceIDs.end(), deviceID) == deviceIDs.end())
+        deviceIDs.push_back (deviceID);
+}
+
+static void appendFlattenedAudioDeviceIDs (std::vector<AudioDeviceID>& result, AudioDeviceID deviceID, int depth = 0)
+{
+    if (deviceID == kAudioObjectUnknown || deviceID == 0)
+        return;
+
+    if (depth > 8 || ! isAggregateAudioDevice (deviceID))
+    {
+        addAudioDeviceIDIfMissing (result, deviceID);
+        return;
+    }
+
+    auto subDeviceIDs = getAggregateSubDeviceIDs (deviceID);
+
+    if (subDeviceIDs.empty())
+    {
+        addAudioDeviceIDIfMissing (result, deviceID);
+        return;
+    }
+
+    for (const auto subDeviceID : subDeviceIDs)
+        appendFlattenedAudioDeviceIDs (result, subDeviceID, depth + 1);
+}
+
+static std::vector<AudioDeviceID> getFlattenedAudioDeviceIDs (AudioDeviceID deviceID)
+{
+    std::vector<AudioDeviceID> result;
+    appendFlattenedAudioDeviceIDs (result, deviceID);
+    return result;
+}
+
+static int getNumChannelsForAudioDevice (AudioDeviceID deviceID, bool input)
+{
+    if (isAggregateAudioDevice (deviceID))
+    {
+        auto total = 0;
+
+        for (const auto subDeviceID : getFlattenedAudioDeviceIDs (deviceID))
+            total += getDirectNumChannelsForDevice (subDeviceID, input);
+
+        if (total > 0)
+            return total;
+    }
+
+    return getDirectNumChannelsForDevice (deviceID, input);
+}
+
+struct AggregateSubDeviceChannelGroup
+{
+    String name;
+    int remainingChannels = 0;
 };
 
-struct SystemVol
+static std::vector<AggregateSubDeviceChannelGroup> getAggregateSubDeviceChannelGroups (AudioDeviceID deviceID, bool input)
 {
-    explicit SystemVol (AudioObjectPropertySelector selector) noexcept
-        : outputDeviceID (audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }).value_or (kAudioObjectUnknown))
-        , addr { selector, kAudioDevicePropertyScopeOutput, yupAudioObjectPropertyElementMain }
+    std::vector<AggregateSubDeviceChannelGroup> result;
+
+    if (! isAggregateAudioDevice (deviceID))
+        return result;
+
+    for (const auto subDeviceID : getFlattenedAudioDeviceIDs (deviceID))
     {
+        const auto numChannels = getDirectNumChannelsForDevice (subDeviceID, input);
+
+        if (numChannels > 0)
+            result.push_back ({ getAudioDeviceName (subDeviceID), numChannels });
     }
 
-    float getGain() const noexcept
+    return result;
+}
+
+static String describeChannelMap (const std::vector<int>& channelMap)
+{
+    String result ("[");
+
+    for (std::size_t i = 0; i < channelMap.size(); ++i)
     {
-        return audioObjectGetProperty<Float32> (outputDeviceID, addr).value_or (0.0f);
+        if (i != 0)
+            result << ", ";
+
+        result << String (channelMap[i]);
     }
 
-    bool setGain (float gain) const noexcept
-    {
-        return audioObjectSetProperty (outputDeviceID, addr, static_cast<Float32> (gain));
-    }
+    result << "]";
+    return result;
+}
 
-    bool isMuted() const noexcept
-    {
-        return audioObjectGetProperty<UInt32> (outputDeviceID, addr).value_or (0) != 0;
-    }
+static String describeChannelBits (const BigInteger& channels)
+{
+    return "set=" + String (channels.countNumberOfSetBits())
+         + ", highest=" + String (channels.getHighestBit())
+         + ", bits=" + channels.toString (2);
+}
 
-    bool setMuted (bool mute) const noexcept
-    {
-        return audioObjectSetProperty (outputDeviceID, addr, static_cast<UInt32> (mute ? 1 : 0));
-    }
+static String describeAudioDeviceID (AudioDeviceID deviceID)
+{
+    if (deviceID == kAudioObjectUnknown || deviceID == 0)
+        return "none";
 
-private:
-    AudioDeviceID outputDeviceID;
-    AudioObjectPropertyAddress addr;
-};
+    auto result = getAudioDeviceName (deviceID);
+
+    if (result.isEmpty())
+        result = "<unnamed>";
+
+    result << " [" << String (deviceID) << "]";
+
+    if (const auto uid = getAudioDeviceUID (deviceID); uid.isNotEmpty())
+        result << ", uid=" << uid;
+
+    result << ", inputs=" << String (getNumChannelsForAudioDevice (deviceID, true))
+           << ", outputs=" << String (getNumChannelsForAudioDevice (deviceID, false));
+
+    if (isAggregateAudioDevice (deviceID))
+        result << ", aggregate";
+
+    return result;
+}
 
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
-
-constexpr auto yupAudioHardwareServiceDeviceProperty_VirtualMainVolume =
-#if defined(MAC_OS_VERSION_12_0)
-    kAudioHardwareServiceDeviceProperty_VirtualMainVolume;
-#else
-    kAudioHardwareServiceDeviceProperty_VirtualMasterVolume;
-#endif
 
 #define YUP_SYSTEMAUDIOVOL_IMPLEMENTED 1
 
 float YUP_CALLTYPE SystemAudioVolume::getGain()
 {
-    return SystemVol (yupAudioHardwareServiceDeviceProperty_VirtualMainVolume).getGain();
+    return SystemObject {}.getDefaultDevice (PlaybackDirection::output).getMainVolume();
 }
 
-bool YUP_CALLTYPE SystemAudioVolume::setGain (float gain) { return SystemVol (yupAudioHardwareServiceDeviceProperty_VirtualMainVolume).setGain (gain); }
+bool YUP_CALLTYPE SystemAudioVolume::setGain (float gain)
+{
+    return SystemObject {}.getDefaultDevice (PlaybackDirection::output).setMainVolume (gain);
+}
 
-bool YUP_CALLTYPE SystemAudioVolume::isMuted() { return SystemVol (kAudioDevicePropertyMute).isMuted(); }
+bool YUP_CALLTYPE SystemAudioVolume::isMuted()
+{
+    return SystemObject {}.getDefaultDevice (PlaybackDirection::output).isMuted();
+}
 
-bool YUP_CALLTYPE SystemAudioVolume::setMuted (bool mute) { return SystemVol (kAudioDevicePropertyMute).setMuted (mute); }
+bool YUP_CALLTYPE SystemAudioVolume::setMuted (bool mute)
+{
+    return SystemObject {}.getDefaultDevice (PlaybackDirection::output).setMute (mute);
+}
+
+//==============================================================================
+template <typename T>
+static T findNearestValue (const Array<T>& values, T target)
+{
+    if (values.isEmpty())
+        return target;
+
+    const auto it = std::lower_bound (values.begin(), values.end(), target);
+
+    if (it == values.begin())
+        return *it;
+
+    if (it == values.end())
+        return *(it - 1);
+
+    const T upper = *it;
+    const T lower = *(it - 1);
+    return std::abs (target - lower) < std::abs (target - upper) ? lower : upper;
+}
+
+template <typename Fn>
+static bool tryMultiple (Fn predicate, int maxTries)
+{
+    if (predicate())
+        return true;
+
+    for (int i = 1; i < maxTries; ++i)
+    {
+        Thread::yield();
+        if (predicate())
+            return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+struct AggregateDeviceDescription
+{
+    struct SubDevice
+    {
+        AudioDeviceID deviceID = kAudioObjectUnknown;
+        String uid;
+    };
+
+    String name;
+    AudioDeviceID clockDeviceID = kAudioObjectUnknown;
+    std::vector<SubDevice> subDevices;
+    std::array<std::vector<int>, 2> channelMaps;
+
+    AggregateDeviceDescription (const String& nameIn, AudioDeviceID inputDeviceID, AudioDeviceID outputDeviceID)
+        : name (nameIn)
+    {
+        clockDeviceID = findClockingDeviceID (outputDeviceID);
+
+        if (clockDeviceID == kAudioObjectUnknown)
+            clockDeviceID = findClockingDeviceID (inputDeviceID);
+
+        addDevice (outputDeviceID, PlaybackDirection::output);
+        addDevice (inputDeviceID, PlaybackDirection::input);
+    }
+
+    bool isEmpty() const noexcept { return subDevices.empty(); }
+
+    AudioDeviceID createAggregateDevice() const
+    {
+        AudioDeviceID result = kAudioObjectUnknown;
+        const auto dict = toDictionary();
+        const OSStatus status = AudioHardwareCreateAggregateDevice (dict.get(), &result);
+        return status == noErr ? result : kAudioObjectUnknown;
+    }
+
+private:
+    static AudioDeviceID findClockingDeviceID (AudioDeviceID deviceID)
+    {
+        if (deviceID == kAudioObjectUnknown || deviceID == 0)
+            return kAudioObjectUnknown;
+
+        if (! isAggregateAudioDevice (deviceID))
+            return deviceID;
+
+        const AggregateAudioDevice aggregate (deviceID);
+        const auto uid = aggregate.getClockingDeviceUid();
+
+        if (uid.isNotEmpty())
+        {
+            if (const auto translated = SystemObject {}.translateUidToDevice (uid); translated.isValid())
+                return translated.getId();
+        }
+
+        const auto subs = getFlattenedAudioDeviceIDs (deviceID);
+        return subs.empty() ? kAudioObjectUnknown : subs.front();
+    }
+
+    int getFirstChannelIndex (AudioDeviceID deviceID, PlaybackDirection direction) const
+    {
+        int index = 0;
+
+        for (const auto& sub : subDevices)
+        {
+            if (sub.deviceID == deviceID)
+                break;
+
+            index += getDirectNumChannelsForDevice (sub.deviceID, direction == PlaybackDirection::input);
+        }
+
+        return index;
+    }
+
+    void addDevice (AudioDeviceID deviceID, PlaybackDirection direction)
+    {
+        if (deviceID == kAudioObjectUnknown || deviceID == 0)
+            return;
+
+        for (const auto subDeviceID : getFlattenedAudioDeviceIDs (deviceID))
+        {
+            const auto uid = getAudioDeviceUID (subDeviceID);
+
+            if (std::none_of (subDevices.begin(), subDevices.end(), [subDeviceID] (const auto& s)
+            {
+                return s.deviceID == subDeviceID;
+            }))
+                subDevices.push_back ({ subDeviceID, uid });
+
+            const auto numChannels = getDirectNumChannelsForDevice (subDeviceID, direction == PlaybackDirection::input);
+            const auto baseChannel = getFirstChannelIndex (subDeviceID, direction);
+            auto& map = channelMaps[toDirectionIndex (direction)];
+
+            for (int ch = 0; ch < numChannels; ++ch)
+                map.push_back (baseChannel + ch);
+        }
+    }
+
+    ScopedCFDictionary toDictionary() const
+    {
+        const auto clockUid = getAudioDeviceUID (clockDeviceID);
+
+        static constexpr UInt32 kDriftCompensationMaxQuality = 0x7F;
+
+        ScopedCFArray subDeviceArray;
+
+        for (const auto& sub : subDevices)
+        {
+            ScopedCFDictionary subDict;
+            subDict.setString (kAudioSubDeviceUIDKey, sub.uid);
+            subDict.setInt (kAudioSubDeviceDriftCompensationKey, sub.deviceID != clockDeviceID ? 1 : 0);
+            subDict.setInt (kAudioSubDeviceDriftCompensationQualityKey, kDriftCompensationMaxQuality);
+            subDeviceArray.appendDictionary (subDict);
+        }
+
+        constexpr auto mainSubDeviceKey =
+#if defined(kAudioAggregateDeviceMainSubDeviceKey)
+            kAudioAggregateDeviceMainSubDeviceKey;
+#else
+            kAudioAggregateDeviceMasterSubDeviceKey;
+#endif
+
+        ScopedCFDictionary description;
+        description.setString (kAudioAggregateDeviceUIDKey, Uuid().toString());
+        description.setString (kAudioAggregateDeviceNameKey, name);
+        description.setInt (kAudioAggregateDeviceIsPrivateKey, 1);
+        description.setArray (kAudioAggregateDeviceSubDeviceListKey, subDeviceArray);
+
+        if (clockUid.isNotEmpty())
+        {
+            description.setString (kAudioAggregateDeviceClockDeviceKey, clockUid);
+            description.setString (mainSubDeviceKey, clockUid);
+        }
+
+        return description;
+    }
+};
 
 //==============================================================================
 struct CoreAudioClasses
@@ -322,10 +1157,6 @@ struct CoreAudioClasses
     class CoreAudioInternal final : private Timer
         , private AsyncUpdater
     {
-    private:
-        // members with deduced return types need to be defined before they
-        // are used, so define it here. decltype doesn't help as you can't
-        // capture anything in lambdas inside a decltype context.
         auto err2log() const
         {
             return [this] (OSStatus err)
@@ -335,26 +1166,29 @@ struct CoreAudioClasses
         }
 
     public:
-        CoreAudioInternal (CoreAudioIODevice& d, AudioDeviceID id, bool hasInput, bool hasOutput)
+        CoreAudioInternal (CoreAudioIODevice& d,
+                           AudioDeviceID id,
+                           bool hasInput,
+                           bool hasOutput,
+                           AudioDeviceID inputChannelDeviceIDIn = kAudioObjectUnknown,
+                           AudioDeviceID outputChannelDeviceIDIn = kAudioObjectUnknown,
+                           std::array<std::vector<int>, 2> channelMapsIn = {})
             : owner (d)
             , deviceID (id)
+            , channelDeviceIDs { inputChannelDeviceIDIn != kAudioObjectUnknown ? inputChannelDeviceIDIn : id,
+                                 outputChannelDeviceIDIn != kAudioObjectUnknown ? outputChannelDeviceIDIn : id }
+            , channelMaps (std::move (channelMapsIn))
             , inStream (hasInput ? new Stream (true, *this, {}) : nullptr)
             , outStream (hasOutput ? new Stream (false, *this, {}) : nullptr)
         {
             jassert (deviceID != 0);
 
             updateDetailsFromDevice();
-            YUP_COREAUDIOLOG ("Creating CoreAudioInternal\n"
-                              << (inStream != nullptr ? ("    inputDeviceId " + String (deviceID) + "\n") : "")
-                              << (outStream != nullptr ? ("    outputDeviceId " + String (deviceID) + "\n") : "")
-                              << getDeviceDetails().joinIntoString ("\n    "));
+            YUP_MODULE_DBG (CORE_AUDIO, "Creating CoreAudioInternal\n"
+                                            << (inStream != nullptr ? ("    inputDeviceId " + String (deviceID) + "\n") : "") << (outStream != nullptr ? ("    outputDeviceId " + String (deviceID) + "\n") : "") << getDeviceDetails().joinIntoString ("\n    "));
 
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioObjectPropertySelectorWildcard;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
-
-            AudioObjectAddPropertyListener (deviceID, &pa, deviceListenerProc, this);
+            const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+            AudioObjectAddPropertyListener (deviceID, wildcardAddress.get(), deviceListenerProc, this);
         }
 
         ~CoreAudioInternal() override
@@ -362,12 +1196,8 @@ struct CoreAudioClasses
             stopTimer();
             cancelPendingUpdate();
 
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioObjectPropertySelectorWildcard;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
-
-            AudioObjectRemovePropertyListener (deviceID, &pa, deviceListenerProc, this);
+            const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+            AudioObjectRemovePropertyListener (deviceID, wildcardAddress.get(), deviceListenerProc, this);
 
             stop (false);
         }
@@ -402,9 +1232,7 @@ struct CoreAudioClasses
             Array<double> newSampleRates;
 
             if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID,
-                                                                         { kAudioDevicePropertyAvailableNominalSampleRates,
-                                                                           kAudioObjectPropertyScopeWildcard,
-                                                                           yupAudioObjectPropertyElementMain },
+                                                                         PropertyAddress (kAudioDevicePropertyAvailableNominalSampleRates, kAudioObjectPropertyScopeWildcard),
                                                                          err2log());
                 ! ranges.empty())
             {
@@ -436,7 +1264,7 @@ struct CoreAudioClasses
         {
             Array<int> newBufferSizes;
 
-            if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID, { kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }, err2log()); ! ranges.empty())
+            if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID, PropertyAddress (kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeWildcard), err2log()); ! ranges.empty())
             {
                 newBufferSizes.add ((int) (ranges[0].mMinimum + 15) & ~15);
 
@@ -464,13 +1292,13 @@ struct CoreAudioClasses
 
         int getFrameSizeFromDevice() const
         {
-            return static_cast<int> (audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }).value_or (0));
+            return static_cast<int> (audioObjectGetProperty<UInt32> (deviceID, PropertyAddress (kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard)).value_or (0));
         }
 
         bool isDeviceAlive() const
         {
             return deviceID != 0
-                && audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }, err2log()).value_or (0) != 0;
+                && audioObjectGetProperty<UInt32> (deviceID, PropertyAddress (kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeWildcard), err2log()).value_or (0) != 0;
         }
 
         bool updateDetailsFromDevice (const BigInteger& activeIns, const BigInteger& activeOuts)
@@ -479,9 +1307,6 @@ struct CoreAudioClasses
 
             if (! isDeviceAlive())
                 return false;
-
-            // this collects all the new details from the device without any locking, then
-            // locks + swaps them afterwards.
 
             auto newSampleRate = getNominalSampleRate();
             auto newBufferSize = getFrameSizeFromDevice();
@@ -497,17 +1322,9 @@ struct CoreAudioClasses
 #if YUP_AUDIOWORKGROUP_TYPES_AVAILABLE
             audioWorkgroup = [this]() -> AudioWorkgroup
             {
-                AudioObjectPropertyAddress pa;
-                pa.mSelector = kAudioDevicePropertyIOThreadOSWorkgroup;
-                pa.mScope = kAudioObjectPropertyScopeWildcard;
-                pa.mElement = yupAudioObjectPropertyElementMain;
-
-                if (auto* workgroup = audioObjectGetProperty<os_workgroup_t> (deviceID, pa).value_or (nullptr))
+                if (auto* workgroupHandle = audioObjectGetProperty<void*> (deviceID, PropertyAddress (kAudioDevicePropertyIOThreadOSWorkgroup, kAudioObjectPropertyScopeWildcard)).value_or (nullptr))
                 {
-                    ScopeGuard scope { [&]
-                    {
-                        os_release (workgroup);
-                    } };
+                    os_workgroup_t workgroup = (__bridge_transfer os_workgroup_t) workgroupHandle;
                     return makeRealAudioWorkgroup (workgroup);
                 }
 
@@ -533,6 +1350,8 @@ struct CoreAudioClasses
 
                 allocateTempBuffers();
             }
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Updated device details: deviceID=" << String (deviceID) << "\n    " << getDeviceDetails().joinIntoString ("\n    "));
 
             return true;
         }
@@ -571,14 +1390,24 @@ struct CoreAudioClasses
 
         static auto getScope (bool input)
         {
-            return input ? kAudioDevicePropertyScopeInput : kAudioDevicePropertyScopeOutput;
+            return getAudioDevicePropertyScope (input);
+        }
+
+        AudioDeviceID getChannelDeviceID (bool input) const
+        {
+            return channelDeviceIDs[static_cast<std::size_t> (getDirectionIndex (input))];
+        }
+
+        const std::vector<int>& getChannelMap (bool input) const
+        {
+            return channelMaps[static_cast<std::size_t> (getDirectionIndex (input))];
         }
 
         //==============================================================================
         StringArray getSources (bool input)
         {
             StringArray s;
-            auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
+            auto types = audioObjectGetProperties<OSType> (deviceID, PropertyAddress (kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard));
 
             for (auto type : types)
             {
@@ -591,13 +1420,9 @@ struct CoreAudioClasses
                 avt.mOutputDataSize = 256;
 
                 UInt32 transSize = sizeof (avt);
+                const PropertyAddress pa { kAudioDevicePropertyDataSourceNameForID, getScope (input) };
 
-                AudioObjectPropertyAddress pa;
-                pa.mSelector = kAudioDevicePropertyDataSourceNameForID;
-                pa.mScope = getScope (input);
-                pa.mElement = yupAudioObjectPropertyElementMain;
-
-                if (OK (AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &transSize, &avt)))
+                if (OK (AudioObjectGetPropertyData (deviceID, pa.get(), 0, nullptr, &transSize, &avt)))
                     s.add (buffer);
             }
 
@@ -608,9 +1433,9 @@ struct CoreAudioClasses
         {
             if (deviceID != 0)
             {
-                if (auto currentSourceID = audioObjectGetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), yupAudioObjectPropertyElementMain }, err2log()))
+                if (auto currentSourceID = audioObjectGetProperty<OSType> (deviceID, PropertyAddress (kAudioDevicePropertyDataSource, getScope (input)), err2log()))
                 {
-                    auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
+                    auto types = audioObjectGetProperties<OSType> (deviceID, PropertyAddress (kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard));
 
                     if (auto it = std::find (types.begin(), types.end(), *currentSourceID); it != types.end())
                         return static_cast<int> (std::distance (types.begin(), it));
@@ -624,31 +1449,43 @@ struct CoreAudioClasses
         {
             if (deviceID != 0)
             {
-                auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
+                auto types = audioObjectGetProperties<OSType> (deviceID, PropertyAddress (kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard));
 
                 if (isPositiveAndBelow (index, static_cast<int> (types.size())))
                 {
-                    audioObjectSetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), yupAudioObjectPropertyElementMain }, types[static_cast<std::size_t> (index)], err2log());
+                    audioObjectSetProperty<OSType> (deviceID, PropertyAddress (kAudioDevicePropertyDataSource, getScope (input)), types[static_cast<std::size_t> (index)], err2log());
                 }
             }
         }
 
         double getNominalSampleRate() const
         {
-            return static_cast<double> (audioObjectGetProperty<Float64> (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, err2log()).value_or (0.0));
+            return static_cast<double> (audioObjectGetProperty<Float64> (deviceID, PropertyAddress (kAudioDevicePropertyNominalSampleRate), err2log()).value_or (0.0));
         }
 
         bool setNominalSampleRate (double newSampleRate) const
         {
-            if (std::abs (getNominalSampleRate() - newSampleRate) < 1.0)
-                return true;
+            const auto currentSampleRate = getNominalSampleRate();
 
-            return audioObjectSetProperty (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, static_cast<Float64> (newSampleRate), err2log());
+            if (std::abs (currentSampleRate - newSampleRate) < 1.0)
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Sample-rate already set: deviceID=" << String (deviceID) << ", sampleRate=" << String (currentSampleRate));
+                return true;
+            }
+
+            const auto result = audioObjectSetProperty (deviceID, PropertyAddress (kAudioDevicePropertyNominalSampleRate), static_cast<Float64> (newSampleRate), err2log());
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Set sample-rate " << (result ? "succeeded" : "failed") << ": deviceID=" << String (deviceID) << ", current=" << String (currentSampleRate) << ", requested=" << String (newSampleRate) << ", reported=" << String (getNominalSampleRate()));
+
+            return result;
         }
 
         //==============================================================================
         String reopen (const BigInteger& ins, const BigInteger& outs, double newSampleRate, int bufferSizeSamples)
         {
+            YUP_MODULE_DBG (CORE_AUDIO, "Reopen requested: deviceID=" << String (deviceID) << ", sampleRate=" << String (newSampleRate) << ", bufferSize=" << String (bufferSizeSamples) << ", inputs={" << describeChannelBits (ins) << "}"
+                                                                      << ", outputs={" << describeChannelBits (outs) << "}");
+
             callbacksAllowed = false;
             const ScopeGuard scope { [&]
             {
@@ -662,28 +1499,34 @@ struct CoreAudioClasses
             if (! setNominalSampleRate (newSampleRate))
             {
                 updateDetailsFromDevice (ins, outs);
+                YUP_MODULE_DBG (CORE_AUDIO, "Reopen failed: couldn't change sample-rate, deviceID=" << String (deviceID));
                 return "Couldn't change sample rate";
             }
 
-            if (! audioObjectSetProperty (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, static_cast<UInt32> (bufferSizeSamples), err2log()))
+            if (! audioObjectSetProperty (deviceID, PropertyAddress (kAudioDevicePropertyBufferFrameSize), static_cast<UInt32> (bufferSizeSamples), err2log()))
             {
                 updateDetailsFromDevice (ins, outs);
+                YUP_MODULE_DBG (CORE_AUDIO, "Reopen failed: couldn't change buffer size, deviceID=" << String (deviceID));
                 return "Couldn't change buffer size";
             }
 
-            // Annoyingly, after changing the rate and buffer size, some devices fail to
-            // correctly report their new settings until some random time in the future, so
-            // after calling updateDetailsFromDevice, we need to manually bodge these values
-            // to make sure we're using the correct numbers..
             updateDetailsFromDevice (ins, outs);
             sampleRate = newSampleRate;
             bufferSize = bufferSizeSamples;
 
             if (sampleRates.size() == 0)
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Reopen failed: no sample-rates, deviceID=" << String (deviceID));
                 return "Device has no available sample-rates";
+            }
 
             if (bufferSizes.size() == 0)
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Reopen failed: no buffer-sizes, deviceID=" << String (deviceID));
                 return "Device has no available buffer-sizes";
+            }
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Reopen completed: deviceID=" << String (deviceID) << ", sampleRate=" << String (sampleRate) << ", bufferSize=" << String (bufferSize) << ", inputChannels=" << String (getChannels (inStream)) << ", outputChannels=" << String (getChannels (outStream)) << ", bitDepth=" << String (bitDepth) << ", inputLatency=" << String (getLatency (inStream)) << ", outputLatency=" << String (getLatency (outStream)));
 
             return {};
         }
@@ -691,6 +1534,8 @@ struct CoreAudioClasses
         bool start (AudioIODeviceCallback* callbackToNotify)
         {
             const ScopedLock sl (callbackLock);
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Start requested: deviceID=" << String (deviceID) << ", callback=" << (callbackToNotify != nullptr ? "set" : "null") << ", hasProc=" << (scopedProcID.get() != nullptr ? "true" : "false") << ", sampleRate=" << String (sampleRate) << ", bufferSize=" << String (bufferSize) << ", inputChannels=" << String (getChannels (inStream)) << ", outputChannels=" << String (getChannels (outStream)));
 
             if (callback == nullptr && callbackToNotify != nullptr)
             {
@@ -716,8 +1561,8 @@ struct CoreAudioClasses
                     // The same mutex is locked before calling the audioIOProc.
                     // If we get very unlucky, then we can end up with thread A taking the callbackLock
                     // and calling AudioDeviceStart, followed by thread B taking the CoreAudio lock
-                    // and calling into audioIOProc, which waits on the callbackLock. When thread A
-                    // continues it attempts to take the CoreAudio lock, and the program deadlocks.
+                    // and calling into audioIOProc while thread A then attempts to take the CoreAudio
+                    // lock. Keep AudioDeviceStart outside callbackLock to preserve the lock order.
 
                     if (auto* procID = nextProcID.get())
                     {
@@ -733,6 +1578,8 @@ struct CoreAudioClasses
 
             playing = scopedProcID.get() != nullptr && callback != nullptr;
 
+            YUP_MODULE_DBG (CORE_AUDIO, "Start " << (playing.load() ? "succeeded" : "failed") << ": deviceID=" << String (deviceID) << ", hasProc=" << (scopedProcID.get() != nullptr ? "true" : "false"));
+
             return scopedProcID.get() != nullptr;
         }
 
@@ -740,25 +1587,31 @@ struct CoreAudioClasses
         {
             const ScopedLock sl (callbackLock);
 
+            YUP_MODULE_DBG (CORE_AUDIO, "Stop requested: deviceID=" << String (deviceID) << ", leaveInterruptRunning=" << (leaveInterruptRunning ? "true" : "false") << ", hasCallback=" << (callback != nullptr ? "true" : "false") << ", hasProc=" << (scopedProcID.get() != nullptr ? "true" : "false") << ", playing=" << (playing.load() ? "true" : "false"));
+
             auto result = std::exchange (callback, nullptr);
 
             if (scopedProcID.get() != nullptr && (deviceID != 0) && ! leaveInterruptRunning)
             {
                 audioDeviceStopPending = true;
 
-                // wait until AudioDeviceStop() has been called on the IO thread
-                for (int i = 40; --i >= 0;)
                 {
-                    if (audioDeviceStopPending == false)
-                        break;
-
                     const ScopedUnlock ul (callbackLock);
-                    Thread::sleep (50);
+
+                    for (int i = 40; --i >= 0;)
+                    {
+                        if (audioDeviceStopPending == false)
+                            break;
+
+                        Thread::sleep (50);
+                    }
                 }
 
                 scopedProcID = {};
                 playing = false;
             }
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Stop completed: deviceID=" << String (deviceID) << ", callbackReturned=" << (result != nullptr ? "true" : "false") << ", hasProc=" << (scopedProcID.get() != nullptr ? "true" : "false") << ", playing=" << (playing.load() ? "true" : "false") << ", stopPending=" << (audioDeviceStopPending ? "true" : "false"));
 
             return result;
         }
@@ -772,11 +1625,16 @@ struct CoreAudioClasses
                             const AudioBufferList* inInputData,
                             AudioBufferList* outOutputData)
         {
-            const ScopedLock sl (callbackLock);
+            const ScopedTryLock sl (callbackLock);
+            if (! sl.isLocked())
+            {
+                clearOutputBuffers (outOutputData);
+                return;
+            }
 
             if (audioDeviceStopPending)
             {
-                if (OK (AudioDeviceStop (deviceID, scopedProcID.get())))
+                if (OK (AudioDeviceStop (deviceID, scopedProcID.get()), false))
                     audioDeviceStopPending = false;
 
                 return;
@@ -817,6 +1675,9 @@ struct CoreAudioClasses
 
                 callback->audioDeviceIOCallbackWithContext (getTempBuffers (inStream), numInputChans, getTempBuffers (outStream), numOutputChans, bufferSize, context);
 
+                if (! getChannelMap (false).empty())
+                    clearOutputBuffers (outOutputData);
+
                 for (int i = numOutputChans; --i >= 0;)
                 {
                     auto& info = outStream->channelInfo.getReference (i);
@@ -836,9 +1697,7 @@ struct CoreAudioClasses
             }
             else
             {
-                for (UInt32 i = 0; i < outOutputData->mNumberBuffers; ++i)
-                    zeromem (outOutputData->mBuffers[i].mData,
-                             outOutputData->mBuffers[i].mDataByteSize);
+                clearOutputBuffers (outOutputData);
             }
 
             for (auto* stream : getStreams())
@@ -901,22 +1760,50 @@ struct CoreAudioClasses
 
                 using VisitorResultType = typename std::invoke_result_t<Visitor, const Args&>::value_type;
                 Array<VisitorResultType> result;
-                int chanNum = 0;
+                std::vector<Args> physicalChannels;
 
-                if (auto bufList = audioObjectGetProperty<AudioBufferList> (parent.deviceID, { kAudioDevicePropertyStreamConfiguration, getScope (isInput), yupAudioObjectPropertyElementMain }, parent.err2log()))
+                if (auto bufList = audioObjectGetProperty<AudioBufferList> (parent.deviceID, PropertyAddress (kAudioDevicePropertyStreamConfiguration, getScope (isInput)), parent.err2log()))
                 {
                     const int numStreams = static_cast<int> (bufList->mNumberBuffers);
+                    int chanNum = 0;
 
                     for (int i = 0; i < numStreams; ++i)
                     {
                         auto& b = bufList->mBuffers[i];
 
                         for (unsigned int j = 0; j < b.mNumberChannels; ++j)
+                            physicalChannels.push_back (Args { i, static_cast<int> (j), chanNum++, static_cast<int> (b.mNumberChannels) });
+                    }
+                }
+
+                const auto addResult = [&] (const Args& args)
+                {
+                    // Passing an anonymous struct ensures that callback can't confuse the argument order
+                    if (auto opt = visitor (args))
+                        result.add (std::move (*opt));
+                };
+
+                const auto& channelMap = parent.getChannelMap (isInput);
+
+                if (channelMap.empty())
+                {
+                    for (const auto& args : physicalChannels)
+                        addResult (args);
+                }
+                else
+                {
+                    auto logicalChannel = 0;
+
+                    for (const auto physicalChannel : channelMap)
+                    {
+                        if (physicalChannel >= 0 && physicalChannel < static_cast<int> (physicalChannels.size()))
                         {
-                            // Passing an anonymous struct ensures that callback can't confuse the argument order
-                            if (auto opt = visitor (Args { i, static_cast<int> (j), chanNum++, static_cast<int> (b.mNumberChannels) }))
-                                result.add (std::move (*opt));
+                            auto args = physicalChannels[static_cast<std::size_t> (physicalChannel)];
+                            args.chanNum = logicalChannel;
+                            addResult (args);
                         }
+
+                        ++logicalChannel;
                     }
                 }
 
@@ -936,19 +1823,33 @@ struct CoreAudioClasses
 
             static StringArray getChannelNames (bool isInput, CoreAudioInternal& parent)
             {
+                const auto channelDeviceID = parent.getChannelDeviceID (isInput);
+                auto subDeviceGroups = getAggregateSubDeviceChannelGroups (channelDeviceID, isInput);
+                std::size_t subDeviceGroupIndex = 0;
+
+                const auto getSubDeviceName = [&]() -> String
+                {
+                    while (subDeviceGroupIndex < subDeviceGroups.size() && subDeviceGroups[subDeviceGroupIndex].remainingChannels == 0)
+                        ++subDeviceGroupIndex;
+
+                    if (subDeviceGroupIndex >= subDeviceGroups.size())
+                        return {};
+
+                    --subDeviceGroups[subDeviceGroupIndex].remainingChannels;
+                    return subDeviceGroups[subDeviceGroupIndex].name;
+                };
+
                 auto names = visitChannels (isInput, parent, [&] (const auto& args) -> std::optional<String>
                 {
-                    String name;
                     const auto element = static_cast<AudioObjectPropertyElement> (args.chanNum + 1);
 
-                    if (auto nameNSString = audioObjectGetProperty<NSString*> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
-                    {
-                        name = nsStringToYup (nameNSString);
-                        [nameNSString release];
-                    }
+                    String name = audioObjectGetStringProperty (channelDeviceID, PropertyAddress (kAudioObjectPropertyElementName, getScope (isInput), element));
 
                     if (name.isEmpty())
                         name << (isInput ? "Input " : "Output ") << (args.chanNum + 1);
+
+                    if (auto subDeviceName = getSubDeviceName(); subDeviceName.isNotEmpty())
+                        name << " (" << subDeviceName << ")";
 
                     return name;
                 });
@@ -958,7 +1859,7 @@ struct CoreAudioClasses
 
             static int getBitDepthFromDevice (bool isInput, CoreAudioInternal& parent)
             {
-                return static_cast<int> (audioObjectGetProperty<AudioStreamBasicDescription> (parent.deviceID, { kAudioStreamPropertyPhysicalFormat, getScope (isInput), yupAudioObjectPropertyElementMain }, parent.err2log())
+                return static_cast<int> (audioObjectGetProperty<AudioStreamBasicDescription> (parent.deviceID, PropertyAddress (kAudioStreamPropertyPhysicalFormat, getScope (isInput)), parent.err2log())
                                              .value_or (AudioStreamBasicDescription {})
                                              .mBitsPerChannel);
             }
@@ -967,16 +1868,16 @@ struct CoreAudioClasses
             {
                 const auto scope = getScope (isInput);
 
-                const auto deviceLatency = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyLatency, scope, yupAudioObjectPropertyElementMain }).value_or (0);
+                const auto deviceLatency = audioObjectGetProperty<UInt32> (parent.deviceID, PropertyAddress (kAudioDevicePropertyLatency, scope)).value_or (0);
 
-                const auto safetyOffset = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertySafetyOffset, scope, yupAudioObjectPropertyElementMain }).value_or (0);
+                const auto safetyOffset = audioObjectGetProperty<UInt32> (parent.deviceID, PropertyAddress (kAudioDevicePropertySafetyOffset, scope)).value_or (0);
 
-                const auto framesInBuffer = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }).value_or (0);
+                const auto framesInBuffer = audioObjectGetProperty<UInt32> (parent.deviceID, PropertyAddress (kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard)).value_or (0);
 
                 UInt32 streamLatency = 0;
 
-                if (auto streams = audioObjectGetProperties<AudioStreamID> (parent.deviceID, { kAudioDevicePropertyStreams, scope, yupAudioObjectPropertyElementMain }); ! streams.empty())
-                    streamLatency = audioObjectGetProperty<UInt32> (streams.front(), { kAudioStreamPropertyLatency, scope, yupAudioObjectPropertyElementMain }).value_or (0);
+                if (auto streams = audioObjectGetProperties<AudioStreamID> (parent.deviceID, PropertyAddress (kAudioDevicePropertyStreams, scope)); ! streams.empty())
+                    streamLatency = audioObjectGetProperty<UInt32> (streams.front(), PropertyAddress (kAudioStreamPropertyLatency, scope)).value_or (0);
 
                 return static_cast<int> (deviceLatency + safetyOffset + framesInBuffer + streamLatency);
             }
@@ -1055,10 +1956,12 @@ struct CoreAudioClasses
 
         CoreAudioIODevice& owner;
         int bitDepth = 32;
-        int xruns = 0;
+        std::atomic<int> xruns { 0 };
         Array<double> sampleRates;
         Array<int> bufferSizes;
         AudioDeviceID deviceID;
+        std::array<AudioDeviceID, 2> channelDeviceIDs;
+        std::array<std::vector<int>, 2> channelMaps;
         std::unique_ptr<Stream> inStream, outStream;
 
         AudioWorkgroup audioWorkgroup;
@@ -1111,7 +2014,7 @@ struct CoreAudioClasses
         CoreAudioTimeConversions timeConversions;
         AudioIODeviceCallback* callback = nullptr;
         CriticalSection callbackLock;
-        bool audioDeviceStopPending = false;
+        std::atomic<bool> audioDeviceStopPending { false };
         std::atomic<bool> playing { false };
         double sampleRate = 0;
         int bufferSize = 0;
@@ -1119,18 +2022,39 @@ struct CoreAudioClasses
         Atomic<int> callbacksAllowed { 1 };
 
         //==============================================================================
+        static void clearOutputBuffers (AudioBufferList* outputData) noexcept
+        {
+            if (outputData == nullptr)
+                return;
+
+            for (UInt32 i = 0; i < outputData->mNumberBuffers; ++i)
+                zeromem (outputData->mBuffers[i].mData,
+                         outputData->mBuffers[i].mDataByteSize);
+        }
+
+        //==============================================================================
         void timerCallback() override
         {
-            YUP_COREAUDIOLOG ("Device changed");
-
             stopTimer();
             auto oldSampleRate = sampleRate;
             auto oldBufferSize = bufferSize;
 
+            YUP_MODULE_DBG (CORE_AUDIO, "Device change timer: deviceID=" << String (deviceID) << ", oldSampleRate=" << String (oldSampleRate) << ", oldBufferSize=" << String (oldBufferSize));
+
             if (! updateDetailsFromDevice())
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Device change update failed: deviceID=" << String (deviceID));
                 owner.stopInternal();
+            }
             else if ((oldBufferSize != bufferSize || ! approximatelyEqual (oldSampleRate, sampleRate)) && owner.shouldRestartDevice())
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Device change requires restart: deviceID=" << String (deviceID) << ", newSampleRate=" << String (sampleRate) << ", newBufferSize=" << String (bufferSize));
                 owner.restart();
+            }
+            else
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Device change applied without restart: deviceID=" << String (deviceID) << ", newSampleRate=" << String (sampleRate) << ", newBufferSize=" << String (bufferSize));
+            }
         }
 
         void handleAsyncUpdate() override
@@ -1158,12 +2082,12 @@ struct CoreAudioClasses
         {
             auto& intern = *static_cast<CoreAudioInternal*> (inClientData);
 
-            const auto xruns = std::count_if (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
+            const auto xruns = (int) std::count_if (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
             {
                 return x.mSelector == kAudioDeviceProcessorOverload;
             });
 
-            intern.xruns += xruns;
+            intern.xruns.fetch_add (xruns);
 
             const auto detailsChanged = std::any_of (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
             {
@@ -1199,13 +2123,15 @@ struct CoreAudioClasses
         }
 
         //==============================================================================
-        bool OK (const OSStatus errorCode) const
+        bool OK (const OSStatus errorCode, bool logError = true) const
         {
             if (errorCode == noErr)
                 return true;
 
             const String errorMessage ("CoreAudio error: " + String::toHexString ((int) errorCode));
-            YUP_COREAUDIOLOG (errorMessage);
+
+            if (logError)
+                YUP_MODULE_DBG (CORE_AUDIO, errorMessage);
 
             if (callback != nullptr)
                 callback->audioDeviceError (errorMessage);
@@ -1224,82 +2150,87 @@ struct CoreAudioClasses
         CoreAudioIODevice (CoreAudioIODeviceType* dt,
                            const String& deviceName,
                            AudioDeviceID inputDeviceId,
-                           AudioDeviceID outputDeviceId)
+                           AudioDeviceID outputDeviceId,
+                           int inputDeviceIndexIn,
+                           int outputDeviceIndexIn)
             : AudioIODevice (deviceName, "CoreAudio")
             , deviceType (dt)
+            , inputDeviceIndex (inputDeviceIndexIn)
+            , outputDeviceIndex (outputDeviceIndexIn)
         {
-            internal = [this, &inputDeviceId, &outputDeviceId]
+            internal = [this, &deviceName, &inputDeviceId, &outputDeviceId]() -> std::unique_ptr<CoreAudioInternal>
             {
                 if (outputDeviceId == 0 || outputDeviceId == inputDeviceId)
                 {
                     jassert (inputDeviceId != 0);
-                    return std::make_unique<CoreAudioInternal> (*this, inputDeviceId, true, outputDeviceId != 0);
+                    return std::make_unique<CoreAudioInternal> (*this,
+                                                                inputDeviceId,
+                                                                true,
+                                                                outputDeviceId != 0,
+                                                                inputDeviceId,
+                                                                outputDeviceId != 0 ? outputDeviceId : kAudioObjectUnknown);
                 }
 
                 if (inputDeviceId == 0)
-                    return std::make_unique<CoreAudioInternal> (*this, outputDeviceId, false, true);
+                {
+                    return std::make_unique<CoreAudioInternal> (*this,
+                                                                outputDeviceId,
+                                                                false,
+                                                                true,
+                                                                kAudioObjectUnknown,
+                                                                outputDeviceId);
+                }
 
-                // This used to be just "org.yup.aggregate", but macOS doesn't allow two different instances of an app with
-                // the same bundle ID to create the same aggregate device UID, even when it's private.
-                CFStringRef aggregateDeviceUid = Uuid().toString().toCFString();
+                const AggregateDeviceDescription aggregateDesc (createPrivateAggregateDeviceName (deviceName),
+                                                                inputDeviceId,
+                                                                outputDeviceId);
 
-                // kAudioSubDeviceDriftCompensationMaxQuality has this value but for some reason in Xcode 15 started being
-                // marked available only since macOS 13.0, even though it's been available since forever (see
-                // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.9.sdk/System/Library/Frameworks/CoreAudio.framework/Versions/A/Headers/AudioHardware.h)
-                // Maybe it's because the enum type changed?... So, just use our own constant with the same value.
-                static constexpr UInt32 kDriftCompensationMaxQuality = 0x7F;
+                if (aggregateDesc.isEmpty())
+                    return nullptr;
 
-                // clang-format off
-                NSDictionary* description =
-                @{
-                    @(kAudioAggregateDeviceUIDKey) : (NSString*) aggregateDeviceUid,
-                    @(kAudioAggregateDeviceIsPrivateKey) : @(1),
-                    @(kAudioAggregateDeviceSubDeviceListKey):
-                    @[
-                        @{
-                            @(kAudioSubDeviceUIDKey) : getDeviceUID (inputDeviceId),
-                            @(kAudioSubDeviceDriftCompensationKey) : @(1),
-                            @(kAudioSubDeviceDriftCompensationQualityKey) : @(kDriftCompensationMaxQuality),
-                        },
-                        @{
-                            @(kAudioSubDeviceUIDKey) : getDeviceUID (outputDeviceId),
-                            @(kAudioSubDeviceDriftCompensationKey) : @(1),
-                            @(kAudioSubDeviceDriftCompensationQualityKey) : @(kDriftCompensationMaxQuality),
-                        },
-                    ]
-                };
-                // clang-format on
+                YUP_MODULE_DBG (CORE_AUDIO, "Creating private aggregate for input=" << getAudioDeviceName (inputDeviceId) << " [" << String (inputDeviceId) << "]"
+                                                                                    << ", output=" << getAudioDeviceName (outputDeviceId) << " [" << String (outputDeviceId) << "]"
+                                                                                    << ", subdevices=" << String (static_cast<int> (aggregateDesc.subDevices.size())) << "\n    inputMap=" << describeChannelMap (aggregateDesc.channelMaps[0]) << "\n    outputMap=" << describeChannelMap (aggregateDesc.channelMaps[1]) << ", inputChannels=" << String (static_cast<int> (aggregateDesc.channelMaps[0].size())) << ", outputChannels=" << String (static_cast<int> (aggregateDesc.channelMaps[1].size())) << ", clockDevice=" << String (aggregateDesc.clockDeviceID));
 
-                CFRelease (aggregateDeviceUid);
+                aggregateDeviceID = aggregateDesc.createAggregateDevice();
 
-                // Guaranteed available earlier in CoreAudioIODeviceType::createDevice()
-                OSStatus status = AudioHardwareCreateAggregateDevice ((CFDictionaryRef) description, &aggregateDeviceID);
-                return status == noErr ? std::make_unique<CoreAudioInternal> (*this, aggregateDeviceID, true, true) : nullptr;
+                YUP_MODULE_DBG (CORE_AUDIO, "Private aggregate creation " << (aggregateDeviceID != kAudioObjectUnknown ? "succeeded" : "failed") << ", deviceID=" << String (aggregateDeviceID));
+
+                if (aggregateDeviceID == kAudioObjectUnknown)
+                    return nullptr;
+
+                auto channelMaps = aggregateDesc.channelMaps;
+                return std::make_unique<CoreAudioInternal> (*this,
+                                                            aggregateDeviceID,
+                                                            true,
+                                                            true,
+                                                            inputDeviceId,
+                                                            outputDeviceId,
+                                                            std::move (channelMaps));
             }();
 
-            jassert (internal != nullptr);
+            if (internal == nullptr)
+                return;
 
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioObjectPropertySelectorWildcard;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
-
-            AudioObjectAddPropertyListener (kAudioObjectSystemObject, &pa, hardwareListenerProc, internal.get());
+            const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, wildcardAddress.get(), hardwareListenerProc, internal.get());
         }
 
         ~CoreAudioIODevice() override
         {
-            close();
+            if (internal != nullptr)
+            {
+                close();
 
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioObjectPropertySelectorWildcard;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
-
-            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, &pa, hardwareListenerProc, internal.get());
+                const PropertyAddress wildcardAddress { kAudioObjectPropertySelectorWildcard, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+                AudioObjectRemovePropertyListener (kAudioObjectSystemObject, wildcardAddress.get(), hardwareListenerProc, internal.get());
+            }
 
             if (aggregateDeviceID != 0)
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "Destroying private aggregate: deviceID=" << String (aggregateDeviceID));
                 AudioHardwareDestroyAggregateDevice (aggregateDeviceID);
+            }
         }
 
         StringArray getOutputChannelNames() override { return internal->outStream != nullptr ? internal->outStream->chanNames : StringArray(); }
@@ -1318,9 +2249,15 @@ struct CoreAudioClasses
 
         int getCurrentBufferSizeSamples() override { return internal->getBufferSize(); }
 
-        int getXRunCount() const noexcept override { return internal->xruns; }
+        int getXRunCount() const noexcept override { return internal->xruns.load (std::memory_order_relaxed); }
 
-        int getIndexOfDevice (bool asInput) const { return deviceType->getDeviceNames (asInput).indexOf (getName()); }
+        bool isValid() const noexcept { return internal != nullptr; }
+
+        int getIndexOfDevice (bool asInput) const
+        {
+            return asInput ? inputDeviceIndex
+                           : outputDeviceIndex;
+        }
 
         int getDefaultBufferSize() override
         {
@@ -1340,8 +2277,12 @@ struct CoreAudioClasses
                      double sampleRate,
                      int bufferSizeSamples) override
         {
+            YUP_MODULE_DBG (CORE_AUDIO, "Open requested: " << getName() << ", inputChannels={" << describeChannelBits (inputChannels) << "}"
+                                                           << ", outputChannels={" << describeChannelBits (outputChannels) << "}"
+                                                           << ", requestedSampleRate=" << String (sampleRate) << ", requestedBufferSize=" << String (bufferSizeSamples));
+
             isOpen_ = true;
-            internal->xruns = 0;
+            internal->xruns.store (0);
 
             inputChannelsRequested = inputChannels;
             outputChannelsRequested = outputChannels;
@@ -1353,15 +2294,22 @@ struct CoreAudioClasses
                 sampleRate = internal->getNominalSampleRate();
 
             lastError = internal->reopen (inputChannels, outputChannels, sampleRate, bufferSizeSamples);
-            YUP_COREAUDIOLOG ("Opened: " << getName());
 
             isOpen_ = lastError.isEmpty();
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Open " << (isOpen_ ? "succeeded" : "failed") << ": " << getName() << ", sampleRate=" << String (getCurrentSampleRate()) << ", bufferSize=" << String (getCurrentBufferSizeSamples()) << ", activeInputs={" << describeChannelBits (getActiveInputChannels()) << "}"
+                                                << ", activeOutputs={" << describeChannelBits (getActiveOutputChannels()) << "}" << (lastError.isNotEmpty() ? ", error=" + lastError : String()));
 
             return lastError;
         }
 
         void close() override
         {
+            if (internal == nullptr)
+                return;
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Close requested: " << getName() << ", isOpen=" << (isOpen_ ? "true" : "false") << ", isPlaying=" << (internal->isPlaying() ? "true" : "false"));
+
             isOpen_ = false;
             internal->stop (false);
         }
@@ -1376,12 +2324,18 @@ struct CoreAudioClasses
 
         void start (AudioIODeviceCallback* callback) override
         {
+            YUP_MODULE_DBG (CORE_AUDIO, "AudioIODevice start requested: " << getName() << ", callback=" << (callback != nullptr ? "set" : "null"));
+
             if (internal->start (callback))
                 previousCallback = callback;
+
+            YUP_MODULE_DBG (CORE_AUDIO, "AudioIODevice start completed: " << getName() << ", isPlaying=" << (internal->isPlaying() ? "true" : "false"));
         }
 
         void stop() override
         {
+            YUP_MODULE_DBG (CORE_AUDIO, "AudioIODevice stop requested: " << getName());
+
             restartDevice = false;
             stopAndGetLastCallback();
         }
@@ -1426,11 +2380,7 @@ struct CoreAudioClasses
         // called by callbacks (possibly off the main thread)
         void restart()
         {
-            if (restarter != nullptr)
-            {
-                restarter->restartAsync();
-                return;
-            }
+            YUP_MODULE_DBG (CORE_AUDIO, "Restart requested: " << getName() << ", previousCallback=" << (previousCallback != nullptr ? "set" : "null"));
 
             {
                 const ScopedLock sl (closeLock);
@@ -1442,12 +2392,11 @@ struct CoreAudioClasses
 
         bool setCurrentSampleRate (double newSampleRate)
         {
-            return internal->setNominalSampleRate (newSampleRate);
-        }
+            const auto result = internal->setNominalSampleRate (newSampleRate);
 
-        void setAsyncRestarter (AsyncRestarter* restarterIn)
-        {
-            restarter = restarterIn;
+            YUP_MODULE_DBG (CORE_AUDIO, "setCurrentSampleRate " << (result ? "succeeded" : "failed") << ": " << getName() << ", requested=" << String (newSampleRate) << ", current=" << String (getCurrentSampleRate()));
+
+            return result;
         }
 
         bool shouldRestartDevice() const noexcept { return restartDevice; }
@@ -1458,16 +2407,18 @@ struct CoreAudioClasses
     private:
         std::unique_ptr<CoreAudioInternal> internal;
         AudioDeviceID aggregateDeviceID = 0;
+        int inputDeviceIndex = -1, outputDeviceIndex = -1;
         bool isOpen_ = false, restartDevice = true;
         String lastError;
         AudioIODeviceCallback* previousCallback = nullptr;
-        AsyncRestarter* restarter = nullptr;
         BigInteger inputChannelsRequested, outputChannelsRequested;
         CriticalSection closeLock;
 
         void timerCallback() override
         {
             stopTimer();
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Restart timer fired: " << getName() << ", sampleRate=" << String (getCurrentSampleRate()) << ", bufferSize=" << String (getCurrentBufferSizeSamples()) << ", previousCallback=" << (previousCallback != nullptr ? "set" : "null"));
 
             stopInternal();
 
@@ -1493,702 +2444,7 @@ struct CoreAudioClasses
             return noErr;
         }
 
-        static NSString* getDeviceUID (AudioDeviceID deviceID)
-        {
-            CFStringRef uid = nullptr;
-            UInt32 uidSize = sizeof (uid);
-
-            AudioObjectPropertyAddress pa { kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
-            AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &uidSize, &uid);
-
-            return [(NSString*) uid autorelease];
-        }
-
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CoreAudioIODevice)
-    };
-
-    //==============================================================================
-    class AudioIODeviceCombiner final : public AudioIODevice
-        , private AsyncRestarter
-        , private Timer
-    {
-    public:
-        AudioIODeviceCombiner (const String& deviceName, CoreAudioIODeviceType* deviceType, std::unique_ptr<CoreAudioIODevice>&& inputDevice, std::unique_ptr<CoreAudioIODevice>&& outputDevice)
-            : AudioIODevice (deviceName, "CoreAudio")
-            , owner (deviceType)
-            , currentSampleRate (inputDevice->getCurrentSampleRate())
-            , currentBufferSize (inputDevice->getCurrentBufferSizeSamples())
-            , inputWrapper (*this, std::move (inputDevice), true)
-            , outputWrapper (*this, std::move (outputDevice), false)
-        {
-            if (getAvailableSampleRates().isEmpty())
-                lastError = TRANS ("The input and output devices don't share a common sample rate!");
-        }
-
-        ~AudioIODeviceCombiner() override
-        {
-            close();
-        }
-
-        auto getDeviceWrappers() { return std::array<DeviceWrapper*, 2> { { &inputWrapper, &outputWrapper } }; }
-
-        auto getDeviceWrappers() const { return std::array<const DeviceWrapper*, 2> { { &inputWrapper, &outputWrapper } }; }
-
-        int getIndexOfDevice (bool asInput) const
-        {
-            return asInput ? inputWrapper.getIndexOfDevice (true)
-                           : outputWrapper.getIndexOfDevice (false);
-        }
-
-        StringArray getOutputChannelNames() override { return outputWrapper.getChannelNames(); }
-
-        StringArray getInputChannelNames() override { return inputWrapper.getChannelNames(); }
-
-        BigInteger getActiveOutputChannels() const override { return outputWrapper.getActiveChannels(); }
-
-        BigInteger getActiveInputChannels() const override { return inputWrapper.getActiveChannels(); }
-
-        Array<double> getAvailableSampleRates() override
-        {
-            auto commonRates = inputWrapper.getAvailableSampleRates();
-            commonRates.removeValuesNotIn (outputWrapper.getAvailableSampleRates());
-
-            return commonRates;
-        }
-
-        Array<int> getAvailableBufferSizes() override
-        {
-            auto commonSizes = inputWrapper.getAvailableBufferSizes();
-            commonSizes.removeValuesNotIn (outputWrapper.getAvailableBufferSizes());
-
-            return commonSizes;
-        }
-
-        bool isOpen() override { return active; }
-
-        bool isPlaying() override { return callback != nullptr; }
-
-        double getCurrentSampleRate() override { return currentSampleRate; }
-
-        int getCurrentBufferSizeSamples() override { return currentBufferSize; }
-
-        int getCurrentBitDepth() override
-        {
-            return jmin (32, inputWrapper.getCurrentBitDepth(), outputWrapper.getCurrentBitDepth());
-        }
-
-        int getDefaultBufferSize() override
-        {
-            return jmax (0, inputWrapper.getDefaultBufferSize(), outputWrapper.getDefaultBufferSize());
-        }
-
-        AudioWorkgroup getWorkgroup() const override
-        {
-            return inputWrapper.getWorkgroup();
-        }
-
-        String open (const BigInteger& inputChannels,
-                     const BigInteger& outputChannels,
-                     double sampleRate,
-                     int bufferSize) override
-        {
-            inputChannelsRequested = inputChannels;
-            outputChannelsRequested = outputChannels;
-            sampleRateRequested = sampleRate;
-            bufferSizeRequested = bufferSize;
-
-            close();
-            active = true;
-
-            if (bufferSize <= 0)
-                bufferSize = getDefaultBufferSize();
-
-            if (sampleRate <= 0)
-            {
-                auto rates = getAvailableSampleRates();
-
-                for (int i = 0; i < rates.size() && sampleRate < 44100.0; ++i)
-                    sampleRate = rates.getUnchecked (i);
-            }
-
-            currentSampleRate = sampleRate;
-            currentBufferSize = bufferSize;
-            targetLatency = bufferSize;
-
-            for (auto& d : getDeviceWrappers())
-            {
-                auto err = d->open (d->isInput() ? inputChannels : BigInteger(),
-                                    ! d->isInput() ? outputChannels : BigInteger(),
-                                    sampleRate,
-                                    bufferSize);
-
-                if (err.isNotEmpty())
-                {
-                    close();
-                    lastError = err;
-                    return err;
-                }
-
-                targetLatency += d->getLatencyInSamples();
-            }
-
-            const auto numOuts = outputWrapper.getChannelNames().size();
-
-            fifo.setSize (numOuts, targetLatency + (bufferSize * 2));
-            scratchBuffer.setSize (numOuts, bufferSize);
-
-            return {};
-        }
-
-        void close() override
-        {
-            stop();
-            fifo.clear();
-            active = false;
-
-            for (auto& d : getDeviceWrappers())
-                d->close();
-        }
-
-        void restart (AudioIODeviceCallback* cb)
-        {
-            const ScopedLock sl (closeLock);
-
-            close();
-
-            auto newSampleRate = sampleRateRequested;
-            auto newBufferSize = bufferSizeRequested;
-
-            for (auto& d : getDeviceWrappers())
-            {
-                auto deviceSampleRate = d->getCurrentSampleRate();
-
-                if (! approximatelyEqual (deviceSampleRate, sampleRateRequested))
-                {
-                    if (! getAvailableSampleRates().contains (deviceSampleRate))
-                        return;
-
-                    for (auto& d2 : getDeviceWrappers())
-                        if (&d2 != &d)
-                            d2->setCurrentSampleRate (deviceSampleRate);
-
-                    newSampleRate = deviceSampleRate;
-                    break;
-                }
-            }
-
-            for (auto& d : getDeviceWrappers())
-            {
-                auto deviceBufferSize = d->getCurrentBufferSizeSamples();
-
-                if (deviceBufferSize != bufferSizeRequested)
-                {
-                    if (! getAvailableBufferSizes().contains (deviceBufferSize))
-                        return;
-
-                    newBufferSize = deviceBufferSize;
-                    break;
-                }
-            }
-
-            open (inputChannelsRequested, outputChannelsRequested, newSampleRate, newBufferSize);
-
-            start (cb);
-        }
-
-        void restartAsync() override
-        {
-            {
-                const ScopedLock sl (closeLock);
-
-                if (active)
-                {
-                    if (callback != nullptr)
-                        previousCallback = callback;
-
-                    close();
-                }
-            }
-
-            startTimer (100);
-        }
-
-        int getOutputLatencyInSamples() override
-        {
-            return targetLatency - getInputLatencyInSamples();
-        }
-
-        int getInputLatencyInSamples() override
-        {
-            return inputWrapper.getLatencyInSamples();
-        }
-
-        void start (AudioIODeviceCallback* newCallback) override
-        {
-            const auto shouldStart = [&]
-            {
-                const ScopedLock sl (callbackLock);
-                return callback != newCallback;
-            }();
-
-            if (shouldStart)
-            {
-                stop();
-                fifo.clear();
-                reset();
-
-                {
-                    ScopedErrorForwarder forwarder (*this, newCallback);
-
-                    for (auto& d : getDeviceWrappers())
-                        d->start (d);
-
-                    if (! forwarder.encounteredError() && newCallback != nullptr)
-                        newCallback->audioDeviceAboutToStart (this);
-                    else if (lastError.isEmpty())
-                        lastError = TRANS ("Failed to initialise all requested devices.");
-                }
-
-                const ScopedLock sl (callbackLock);
-                previousCallback = callback = newCallback;
-            }
-        }
-
-        void stop() override { shutdown ({}); }
-
-        String getLastError() override
-        {
-            return lastError;
-        }
-
-        int getXRunCount() const noexcept override
-        {
-            return xruns.load();
-        }
-
-    private:
-        static constexpr auto invalidSampleTime = std::numeric_limits<std::uint64_t>::max();
-
-        WeakReference<CoreAudioIODeviceType> owner;
-        CriticalSection callbackLock;
-        AudioIODeviceCallback* callback = nullptr;
-        AudioIODeviceCallback* previousCallback = nullptr;
-        double currentSampleRate = 0;
-        int currentBufferSize = 0;
-        bool active = false;
-        String lastError;
-        AudioSampleBuffer fifo, scratchBuffer;
-        CriticalSection closeLock;
-        int targetLatency = 0;
-        std::atomic<int> xruns { -1 };
-        std::atomic<uint64_t> lastValidReadPosition { invalidSampleTime };
-
-        BigInteger inputChannelsRequested, outputChannelsRequested;
-        double sampleRateRequested = 44100;
-        int bufferSizeRequested = 512;
-
-        void timerCallback() override
-        {
-            stopTimer();
-
-            restart (previousCallback);
-        }
-
-        void shutdown (const String& error)
-        {
-            AudioIODeviceCallback* lastCallback = nullptr;
-
-            {
-                const ScopedLock sl (callbackLock);
-                std::swap (callback, lastCallback);
-            }
-
-            for (auto& d : getDeviceWrappers())
-                d->stopInternal();
-
-            if (lastCallback != nullptr)
-            {
-                if (error.isNotEmpty())
-                    lastCallback->audioDeviceError (error);
-                else
-                    lastCallback->audioDeviceStopped();
-            }
-        }
-
-        void reset()
-        {
-            xruns.store (0);
-            fifo.clear();
-            scratchBuffer.clear();
-
-            for (auto& d : getDeviceWrappers())
-                d->reset();
-        }
-
-        // AbstractFifo cannot be used here for two reasons:
-        // 1) We use absolute timestamps as the fifo's read/write positions. This not only makes the code
-        //    more readable (especially when checking for underruns/overflows) but also simplifies the
-        //    initial setup when actual latency is not known yet until both callbacks have fired.
-        // 2) AbstractFifo doesn't have the necessary mechanics to recover from underrun/overflow conditions
-        //    in a lock-free and data-race free way. It's great if you don't care (i.e. overwrite and/or
-        //    read stale data) or can abort the operation entirely, but this is not the case here. We
-        //    need bespoke underrun/overflow handling here which fits this use-case.
-        template <typename Callback>
-        void accessFifo (const uint64_t startPos, const int numChannels, const int numItems, Callback&& operateOnRange)
-        {
-            const auto fifoSize = fifo.getNumSamples();
-            auto fifoPos = static_cast<int> (startPos % static_cast<std::uint64_t> (fifoSize));
-
-            for (int pos = 0; pos < numItems;)
-            {
-                const auto max = std::min (numItems - pos, fifoSize - fifoPos);
-
-                struct Args
-                {
-                    int fifoPos, inputPos, nItems, channel;
-                };
-
-                for (auto ch = 0; ch < numChannels; ++ch)
-                    operateOnRange (Args { fifoPos, pos, max, ch });
-
-                fifoPos = (fifoPos + max) % fifoSize;
-                pos += max;
-            }
-        }
-
-        void inputAudioCallback (const float* const* channels, int numChannels, int n, const AudioIODeviceCallbackContext& context) noexcept
-        {
-            auto& writePos = inputWrapper.sampleTime;
-
-            {
-                ScopedLock lock (callbackLock);
-
-                if (callback != nullptr)
-                {
-                    const auto numActiveOutputChannels = outputWrapper.getActiveChannels().countNumberOfSetBits();
-                    jassert (numActiveOutputChannels <= scratchBuffer.getNumChannels());
-
-                    callback->audioDeviceIOCallbackWithContext (channels,
-                                                                numChannels,
-                                                                scratchBuffer.getArrayOfWritePointers(),
-                                                                numActiveOutputChannels,
-                                                                n,
-                                                                context);
-                }
-                else
-                {
-                    scratchBuffer.clear();
-                }
-            }
-
-            auto currentWritePos = writePos.load();
-            const auto nextWritePos = currentWritePos + static_cast<std::uint64_t> (n);
-
-            writePos.compare_exchange_strong (currentWritePos, nextWritePos);
-
-            if (currentWritePos == invalidSampleTime)
-                return;
-
-            const auto readPos = outputWrapper.sampleTime.load();
-
-            // check for fifo overflow
-            if (readPos != invalidSampleTime)
-            {
-                // write will overlap previous read
-                if (readPos > currentWritePos || (currentWritePos + static_cast<std::uint64_t> (n) - readPos) > static_cast<std::uint64_t> (fifo.getNumSamples()))
-                {
-                    xrun();
-                    return;
-                }
-            }
-
-            accessFifo (currentWritePos, scratchBuffer.getNumChannels(), n, [&] (const auto& args)
-            {
-                FloatVectorOperations::copy (fifo.getWritePointer (args.channel, args.fifoPos),
-                                             scratchBuffer.getReadPointer (args.channel, args.inputPos),
-                                             args.nItems);
-            });
-
-            {
-                auto invalid = invalidSampleTime;
-                lastValidReadPosition.compare_exchange_strong (invalid, nextWritePos);
-            }
-        }
-
-        void outputAudioCallback (float* const* channels, int numChannels, int n) noexcept
-        {
-            auto& readPos = outputWrapper.sampleTime;
-            auto currentReadPos = readPos.load();
-
-            if (currentReadPos == invalidSampleTime)
-                return;
-
-            const auto writePos = inputWrapper.sampleTime.load();
-
-            // check for fifo underrun
-            if (writePos != invalidSampleTime)
-            {
-                if ((currentReadPos + static_cast<std::uint64_t> (n)) > writePos)
-                {
-                    xrun();
-                    return;
-                }
-            }
-
-            // If there was an xrun, we want to output zeros until we're sure that there's some valid
-            // input for us to read.
-            const auto longN = static_cast<uint64_t> (n);
-            const auto nextReadPos = currentReadPos + longN;
-            const auto validReadPos = lastValidReadPosition.load();
-            const auto sanitisedValidReadPos = validReadPos != invalidSampleTime ? validReadPos : nextReadPos;
-            const auto numZerosToWrite = sanitisedValidReadPos <= currentReadPos
-                                           ? 0
-                                           : jmin (longN, sanitisedValidReadPos - currentReadPos);
-
-            for (auto i = 0; i < numChannels; ++i)
-                std::fill (channels[i], channels[i] + numZerosToWrite, 0.0f);
-
-            accessFifo (currentReadPos + numZerosToWrite, numChannels, static_cast<int> (longN - numZerosToWrite), [&] (const auto& args)
-            {
-                FloatVectorOperations::copy (channels[args.channel] + args.inputPos + numZerosToWrite,
-                                             fifo.getReadPointer (args.channel, args.fifoPos),
-                                             args.nItems);
-            });
-
-            // use compare exchange here as we need to avoid the case
-            // where we overwrite readPos being equal to invalidSampleTime
-            readPos.compare_exchange_strong (currentReadPos, nextReadPos);
-        }
-
-        void xrun() noexcept
-        {
-            for (auto& d : getDeviceWrappers())
-                d->sampleTime.store (invalidSampleTime);
-
-            ++xruns;
-        }
-
-        void handleAudioDeviceAboutToStart (AudioIODevice* device)
-        {
-            const ScopedLock sl (callbackLock);
-
-            auto newSampleRate = device->getCurrentSampleRate();
-            auto commonRates = getAvailableSampleRates();
-
-            if (! commonRates.contains (newSampleRate))
-            {
-                commonRates.sort();
-
-                if (newSampleRate < commonRates.getFirst() || newSampleRate > commonRates.getLast())
-                {
-                    newSampleRate = jlimit (commonRates.getFirst(), commonRates.getLast(), newSampleRate);
-                }
-                else
-                {
-                    for (auto it = commonRates.begin(); it < commonRates.end() - 1; ++it)
-                    {
-                        if (it[0] < newSampleRate && it[1] > newSampleRate)
-                        {
-                            newSampleRate = newSampleRate - it[0] < it[1] - newSampleRate ? it[0] : it[1];
-                            break;
-                        }
-                    }
-                }
-            }
-
-            currentSampleRate = newSampleRate;
-            bool anySampleRateChanges = false;
-
-            for (auto& d : getDeviceWrappers())
-            {
-                if (! approximatelyEqual (d->getCurrentSampleRate(), currentSampleRate))
-                {
-                    d->setCurrentSampleRate (currentSampleRate);
-                    anySampleRateChanges = true;
-                }
-            }
-
-            if (anySampleRateChanges && owner != nullptr)
-                owner->audioDeviceListChanged();
-
-            if (callback != nullptr)
-                callback->audioDeviceAboutToStart (device);
-        }
-
-        void handleAudioDeviceStopped() { shutdown ({}); }
-
-        void handleAudioDeviceError (const String& errorMessage) { shutdown (errorMessage.isNotEmpty() ? errorMessage : String ("unknown")); }
-
-        //==============================================================================
-        struct DeviceWrapper final : public AudioIODeviceCallback
-        {
-            DeviceWrapper (AudioIODeviceCombiner& cd, std::unique_ptr<CoreAudioIODevice> d, bool shouldBeInput)
-                : owner (cd)
-                , device (std::move (d))
-                , input (shouldBeInput)
-            {
-                device->setAsyncRestarter (&owner);
-            }
-
-            ~DeviceWrapper() override
-            {
-                device->close();
-            }
-
-            void reset()
-            {
-                sampleTime.store (invalidSampleTime);
-            }
-
-            void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
-                                                   int numInputChannels,
-                                                   float* const* outputChannelData,
-                                                   int numOutputChannels,
-                                                   int numSamples,
-                                                   const AudioIODeviceCallbackContext& context) override
-            {
-                if (std::exchange (device->hadDiscontinuity, false))
-                    owner.xrun();
-
-                updateSampleTimeFromContext (context);
-
-                if (input)
-                    owner.inputAudioCallback (inputChannelData, numInputChannels, numSamples, context);
-                else
-                    owner.outputAudioCallback (outputChannelData, numOutputChannels, numSamples);
-            }
-
-            void audioDeviceAboutToStart (AudioIODevice* d) override { owner.handleAudioDeviceAboutToStart (d); }
-
-            void audioDeviceStopped() override { owner.handleAudioDeviceStopped(); }
-
-            void audioDeviceError (const String& errorMessage) override { owner.handleAudioDeviceError (errorMessage); }
-
-            bool setCurrentSampleRate (double newSampleRate) { return device->setCurrentSampleRate (newSampleRate); }
-
-            StringArray getChannelNames() const { return input ? device->getInputChannelNames() : device->getOutputChannelNames(); }
-
-            BigInteger getActiveChannels() const { return input ? device->getActiveInputChannels() : device->getActiveOutputChannels(); }
-
-            int getLatencyInSamples() const { return input ? device->getInputLatencyInSamples() : device->getOutputLatencyInSamples(); }
-
-            int getIndexOfDevice (bool asInput) const { return device->getIndexOfDevice (asInput); }
-
-            double getCurrentSampleRate() const { return device->getCurrentSampleRate(); }
-
-            int getCurrentBufferSizeSamples() const { return device->getCurrentBufferSizeSamples(); }
-
-            Array<double> getAvailableSampleRates() const { return device->getAvailableSampleRates(); }
-
-            Array<int> getAvailableBufferSizes() const { return device->getAvailableBufferSizes(); }
-
-            int getCurrentBitDepth() const { return device->getCurrentBitDepth(); }
-
-            int getDefaultBufferSize() const { return device->getDefaultBufferSize(); }
-
-            void start (AudioIODeviceCallback* callbackToNotify) const { return device->start (callbackToNotify); }
-
-            AudioIODeviceCallback* stopInternal() const { return device->stopInternal(); }
-
-            void close() const { return device->close(); }
-
-            AudioWorkgroup getWorkgroup() const { return device->getWorkgroup(); }
-
-            String open (const BigInteger& inputChannels, const BigInteger& outputChannels, double sampleRate, int bufferSizeSamples) const
-            {
-                return device->open (inputChannels, outputChannels, sampleRate, bufferSizeSamples);
-            }
-
-            std::uint64_t nsToSampleTime (std::uint64_t ns) const noexcept
-            {
-                return static_cast<std::uint64_t> (std::round (static_cast<double> (ns) * device->getCurrentSampleRate() * 1e-9));
-            }
-
-            void updateSampleTimeFromContext (const AudioIODeviceCallbackContext& context) noexcept
-            {
-                auto callbackSampleTime = context.hostTimeNs != nullptr ? nsToSampleTime (*context.hostTimeNs) : 0;
-
-                if (input)
-                    callbackSampleTime += static_cast<std::uint64_t> (owner.targetLatency);
-
-                auto copy = invalidSampleTime;
-
-                if (sampleTime.compare_exchange_strong (copy, callbackSampleTime) && (! input))
-                    owner.lastValidReadPosition = invalidSampleTime;
-            }
-
-            bool isInput() const { return input; }
-
-            std::atomic<std::uint64_t> sampleTime { invalidSampleTime };
-
-        private:
-            //==============================================================================
-            AudioIODeviceCombiner& owner;
-            std::unique_ptr<CoreAudioIODevice> device;
-            const bool input;
-
-            //==============================================================================
-            YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DeviceWrapper)
-        };
-
-        /* If the current AudioIODeviceCombiner::callback is nullptr, it sets itself as the callback
-       and forwards error related callbacks to the provided callback
-    */
-        class ScopedErrorForwarder final : public AudioIODeviceCallback
-        {
-        public:
-            ScopedErrorForwarder (AudioIODeviceCombiner& ownerIn, AudioIODeviceCallback* cb)
-                : owner (ownerIn)
-                , target (cb)
-            {
-                const ScopedLock sl (owner.callbackLock);
-
-                if (owner.callback == nullptr)
-                    owner.callback = this;
-            }
-
-            ~ScopedErrorForwarder() override
-            {
-                const ScopedLock sl (owner.callbackLock);
-
-                if (owner.callback == this)
-                    owner.callback = nullptr;
-            }
-
-            // We only want to be notified about error conditions when the owner's callback is nullptr.
-            // This class shouldn't be relied on for forwarding this call.
-            void audioDeviceAboutToStart (AudioIODevice*) override {}
-
-            void audioDeviceStopped() override
-            {
-                if (target != nullptr)
-                    target->audioDeviceStopped();
-
-                // The audio device may stop because it's about to be restarted with new settings.
-                // Stopping the device doesn't necessarily count as an error.
-            }
-
-            void audioDeviceError (const String& errorMessage) override
-            {
-                owner.lastError = errorMessage;
-
-                if (target != nullptr)
-                    target->audioDeviceError (errorMessage);
-
-                error = true;
-            }
-
-            bool encounteredError() const { return error; }
-
-        private:
-            AudioIODeviceCombiner& owner;
-            AudioIODeviceCallback* target;
-            bool error = false;
-        };
-
-        DeviceWrapper inputWrapper, outputWrapper;
-
-        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioIODeviceCombiner)
     };
 
     //==============================================================================
@@ -2199,24 +2455,53 @@ struct CoreAudioClasses
         CoreAudioIODeviceType()
             : AudioIODeviceType ("CoreAudio")
         {
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioHardwarePropertyDevices;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
+            // Remove stale private aggregate devices left behind by previous crashes.
+            // The private aggregate name encodes the PID of the creating process.
+            for (const auto& device : SystemObject {}.getAudioDevices())
+            {
+                if (! device.isAggregateDevice())
+                    continue;
 
-            AudioObjectAddPropertyListener (kAudioObjectSystemObject, &pa, hardwareListenerProc, this);
+                const auto name = device.getName();
+
+                if (! isPrivateAggregateDeviceName (name))
+                    continue;
+
+                const auto pid = getPrivateAggregateDeviceProcessID (name);
+                if (pid <= 0)
+                    continue;
+
+                const auto processExists = pid > 0 && (::kill (pid, 0) == 0 || errno != ESRCH);
+
+                if (! processExists)
+                {
+                    YUP_MODULE_DBG (CORE_AUDIO, "Destroying stale private aggregate: " << name);
+                    AudioHardwareDestroyAggregateDevice (device.getId());
+                }
+            }
+
+            const PropertyAddress devicesAddress { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, devicesAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultInputAddress { kAudioHardwarePropertyDefaultInputDevice };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, defaultInputAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultOutputAddress { kAudioHardwarePropertyDefaultOutputDevice };
+            AudioObjectAddPropertyListener (kAudioObjectSystemObject, defaultOutputAddress.get(), hardwareListenerProc, this);
         }
 
         ~CoreAudioIODeviceType() override
         {
             cancelPendingUpdate();
 
-            AudioObjectPropertyAddress pa;
-            pa.mSelector = kAudioHardwarePropertyDevices;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = kAudioObjectPropertyElementWildcard;
+            const PropertyAddress devicesAddress { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, kAudioObjectPropertyElementWildcard };
+            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, devicesAddress.get(), hardwareListenerProc, this);
 
-            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, &pa, hardwareListenerProc, this);
+            const PropertyAddress defaultInputAddress { kAudioHardwarePropertyDefaultInputDevice };
+            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, defaultInputAddress.get(), hardwareListenerProc, this);
+
+            const PropertyAddress defaultOutputAddress { kAudioHardwarePropertyDefaultOutputDevice };
+            AudioObjectRemovePropertyListener (kAudioObjectSystemObject, defaultOutputAddress.get(), hardwareListenerProc, this);
         }
 
         //==============================================================================
@@ -2229,30 +2514,72 @@ struct CoreAudioClasses
             inputIds.clear();
             outputIds.clear();
 
-            auto audioDevices = audioObjectGetProperties<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
+            struct DeviceEntry
+            {
+                String name;
+                String uid;
+                AudioDeviceID deviceID = kAudioObjectUnknown;
+            };
+
+            std::vector<DeviceEntry> inputDevices, outputDevices;
+
+            auto audioDevices = audioObjectGetProperties<AudioDeviceID> (kAudioObjectSystemObject, PropertyAddress (kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard));
 
             for (const auto audioDevice : audioDevices)
             {
-                if (const auto optionalName = audioObjectGetProperty<CFStringRef> (audioDevice, { kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }))
+                if (const auto nameString = audioObjectGetStringProperty (audioDevice, PropertyAddress (kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard)); nameString.isNotEmpty())
                 {
-                    if (const CFUniquePtr<CFStringRef> name { *optionalName })
+                    if (isAggregateAudioDevice (audioDevice) && isPrivateAggregateDeviceName (nameString))
                     {
-                        const auto nameString = String::fromCFString (name.get());
-
-                        if (const auto numIns = getNumChannels (audioDevice, true); numIns > 0)
-                        {
-                            inputDeviceNames.add (nameString);
-                            inputIds.add (audioDevice);
-                        }
-
-                        if (const auto numOuts = getNumChannels (audioDevice, false); numOuts > 0)
-                        {
-                            outputDeviceNames.add (nameString);
-                            outputIds.add (audioDevice);
-                        }
+                        YUP_MODULE_DBG (CORE_AUDIO, "Skipping private aggregate during scan: " << nameString << " [" << String (audioDevice) << "]");
+                        continue;
                     }
+
+                    const auto uidString = getAudioDeviceUID (audioDevice);
+                    const auto numIns = getNumChannels (audioDevice, true);
+                    const auto numOuts = getNumChannels (audioDevice, false);
+
+                    YUP_MODULE_DBG (CORE_AUDIO, "Found device: " << nameString << " [" << String (audioDevice) << "]"
+                                                                 << ", uid=" << uidString << ", inputs=" << String (numIns) << ", outputs=" << String (numOuts));
+
+                    if (numIns > 0)
+                        inputDevices.push_back ({ nameString, uidString, audioDevice });
+
+                    if (numOuts > 0)
+                        outputDevices.push_back ({ nameString, uidString, audioDevice });
                 }
             }
+
+            const auto sortDevices = [] (std::vector<DeviceEntry>& devices)
+            {
+                std::sort (devices.begin(), devices.end(), [] (const auto& a, const auto& b)
+                {
+                    if (const auto byName = a.name.compareNatural (b.name); byName != 0)
+                        return byName < 0;
+
+                    if (const auto byUid = a.uid.compare (b.uid); byUid != 0)
+                        return byUid < 0;
+
+                    return a.deviceID < b.deviceID;
+                });
+            };
+
+            const auto populateDeviceList = [] (const std::vector<DeviceEntry>& devices, StringArray& names, Array<AudioDeviceID>& ids)
+            {
+                for (const auto& device : devices)
+                {
+                    names.add (device.name);
+                    ids.add (device.deviceID);
+                }
+            };
+
+            sortDevices (inputDevices);
+            sortDevices (outputDevices);
+
+            populateDeviceList (inputDevices, inputDeviceNames, inputIds);
+            populateDeviceList (outputDevices, outputDeviceNames, outputIds);
+
+            YUP_MODULE_DBG (CORE_AUDIO, "Scan complete: inputs=" << String (inputDeviceNames.size()) << ", outputs=" << String (outputDeviceNames.size()));
 
             inputDeviceNames.appendNumbersToDuplicates (false, true);
             outputDeviceNames.appendNumbersToDuplicates (false, true);
@@ -2273,20 +2600,24 @@ struct CoreAudioClasses
             // if they're asking for any input channels at all, use the default input, so we
             // get the built-in mic rather than the built-in output with no inputs..
 
-            AudioObjectPropertyAddress pa;
-            auto selector = forInput ? kAudioHardwarePropertyDefaultInputDevice
-                                     : kAudioHardwarePropertyDefaultOutputDevice;
-            pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = yupAudioObjectPropertyElementMain;
+            const auto selector = forInput ? kAudioHardwarePropertyDefaultInputDevice
+                                           : kAudioHardwarePropertyDefaultOutputDevice;
 
-            if (auto deviceID = audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { selector, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }))
+            if (auto deviceID = audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, PropertyAddress (selector)))
             {
                 auto& ids = forInput ? inputIds : outputIds;
 
                 if (auto it = std::find (ids.begin(), ids.end(), deviceID); it != ids.end())
-                    return static_cast<int> (std::distance (ids.begin(), it));
+                {
+                    const auto index = static_cast<int> (std::distance (ids.begin(), it));
+                    YUP_MODULE_DBG (CORE_AUDIO, "Default " << (forInput ? "input" : "output") << " device resolved: index=" << String (index) << ", " << describeAudioDeviceID (*deviceID));
+                    return index;
+                }
+
+                YUP_MODULE_DBG (CORE_AUDIO, "Default " << (forInput ? "input" : "output") << " device not found in scan: " << describeAudioDeviceID (*deviceID));
             }
 
+            YUP_MODULE_DBG (CORE_AUDIO, "Default " << (forInput ? "input" : "output") << " device falling back to index 0");
             return 0;
         }
 
@@ -2295,9 +2626,6 @@ struct CoreAudioClasses
             jassert (hasScanned); // need to call scanForDevices() before doing this
 
             if (auto* d = dynamic_cast<CoreAudioIODevice*> (device))
-                return d->getIndexOfDevice (asInput);
-
-            if (auto* d = dynamic_cast<AudioIODeviceCombiner*> (device))
                 return d->getIndexOfDevice (asInput);
 
             return -1;
@@ -2316,38 +2644,27 @@ struct CoreAudioClasses
             auto inputDeviceID = inputIds[inputIndex];
             auto outputDeviceID = outputIds[outputIndex];
 
+            YUP_MODULE_DBG (CORE_AUDIO, "createDevice requested: outputName=" << outputDeviceName << ", outputIndex=" << String (outputIndex) << ", output=" << describeAudioDeviceID (outputDeviceID) << ", inputName=" << inputDeviceName << ", inputIndex=" << String (inputIndex) << ", input=" << describeAudioDeviceID (inputDeviceID));
+
             if (inputDeviceID == 0 && outputDeviceID == 0)
-                return nullptr;
-
-            auto combinedName = outputDeviceName.isEmpty() ? inputDeviceName
-                                                           : outputDeviceName;
-
-            // Newer Apple platforms can create aggregate audio devices
-            // clang-format off
-            bool canCreateAppleAggregateDevice = []
             {
-                if (@available (macOS 10.9, iOS 7, *))
-                    return true;
-                return false;
-            }();
-            // clang-format on
+                YUP_MODULE_DBG (CORE_AUDIO, "createDevice failed: no input or output device selected");
+                return nullptr;
+            }
 
-            if (inputDeviceID == outputDeviceID || canCreateAppleAggregateDevice)
-                return std::make_unique<CoreAudioIODevice> (this, combinedName, inputDeviceID, outputDeviceID).release();
+            const auto combinedName = outputDeviceName.isEmpty() ? inputDeviceName
+                                                                 : outputDeviceName;
 
-            auto in = inputDeviceID != 0 ? std::make_unique<CoreAudioIODevice> (this, inputDeviceName, inputDeviceID, 0)
-                                         : nullptr;
+            YUP_MODULE_DBG (CORE_AUDIO, "createDevice using CoreAudioIODevice: name=" << combinedName);
+            auto device = std::make_unique<CoreAudioIODevice> (this, combinedName, inputDeviceID, outputDeviceID, inputIndex, outputIndex);
 
-            auto out = outputDeviceID != 0 ? std::make_unique<CoreAudioIODevice> (this, outputDeviceName, 0, outputDeviceID)
-                                           : nullptr;
+            if (! device->isValid())
+            {
+                YUP_MODULE_DBG (CORE_AUDIO, "createDevice failed: couldn't initialise CoreAudioIODevice");
+                return nullptr;
+            }
 
-            if (in == nullptr)
-                return out.release();
-            if (out == nullptr)
-                return in.release();
-
-            auto combo = std::make_unique<AudioIODeviceCombiner> (combinedName, this, std::move (in), std::move (out));
-            return combo.release();
+            return device.release();
         }
 
         void audioDeviceListChanged()
@@ -2370,17 +2687,7 @@ struct CoreAudioClasses
 
         static int getNumChannels (AudioDeviceID deviceID, bool input)
         {
-            int total = 0;
-
-            if (auto bufList = audioObjectGetProperty<AudioBufferList> (deviceID, { kAudioDevicePropertyStreamConfiguration, CoreAudioInternal::getScope (input), yupAudioObjectPropertyElementMain }))
-            {
-                auto numStreams = (int) bufList->mNumberBuffers;
-
-                for (int i = 0; i < numStreams; ++i)
-                    total += bufList->mBuffers[i].mNumberChannels;
-            }
-
-            return total;
+            return getNumChannelsForAudioDevice (deviceID, input);
         }
 
         static OSStatus hardwareListenerProc (AudioDeviceID, UInt32, const AudioObjectPropertyAddress*, void* clientData)
@@ -2393,7 +2700,5 @@ struct CoreAudioClasses
         YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CoreAudioIODeviceType)
     };
 };
-
-#undef YUP_COREAUDIOLOG
 
 } // namespace yup

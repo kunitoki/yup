@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -57,7 +57,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class View
+class YUP_API View
 {
 public:
     /** Create an invalid view. */
@@ -106,6 +106,6 @@ private:
     const uint32_t* ptr = nullptr;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

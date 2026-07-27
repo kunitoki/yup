@@ -26,16 +26,16 @@
 
     ID:                 yup_graphics
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Graphics Classes
     description:        The essential set of basic YUP graphics classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core rive rive_renderer
+    dependencies:       yup_core yup_simd yup_shading rive rive_renderer libclipper2
+    optionalDeps:       libpng libjpeg libwebp libgif
     appleFrameworks:    Metal
     searchpaths:        native
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 
@@ -46,25 +46,143 @@
 #define YUP_GRAPHICS_H_INCLUDED
 
 #include <yup_core/yup_core.h>
-
-#include <rive_renderer/rive_renderer.h>
-#include <rive_decoders/rive_decoders.h>
+#include <yup_simd/yup_simd.h>
+#include <yup_shading/yup_shading.h>
 
 //==============================================================================
 
-YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/factory.hpp>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
+#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/ore/ore_context.hpp>
+#include <rive/renderer/ore/ore_binding_map.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
-#include <tuple>
+namespace rive::ore
+{
+class Context;
+} // namespace rive::ore
 
 //==============================================================================
 
+#include <compare>
+#include <tuple>
+
+//==============================================================================
+/** Config: YUP_IMAGE_FORMAT_BMP
+
+    Enable BMP image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_BMP
+#define YUP_IMAGE_FORMAT_BMP 1
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_PPM
+
+    Enable PPM/PGM/PBM image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_PPM
+#define YUP_IMAGE_FORMAT_PPM 1
+#endif
+
+/**
+    Config: YUP_IMAGE_FORMAT_TGA
+
+    Enable TGA (Truevision TARGA) image format support (read and write).
+    This format has no external dependency.
+*/
+#ifndef YUP_IMAGE_FORMAT_TGA
+#define YUP_IMAGE_FORMAT_TGA 1
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_PNG
+
+    Enable PNG image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_PNG
+#if YUP_MODULE_AVAILABLE_libpng
+#define YUP_IMAGE_FORMAT_PNG 1
+#endif
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_JPEG
+
+    Enable JPEG image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_JPEG
+#if YUP_MODULE_AVAILABLE_libjpeg
+#define YUP_IMAGE_FORMAT_JPEG 1
+#endif
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_WEBP
+
+    Enable WebP image format support.
+*/
+#ifndef YUP_IMAGE_FORMAT_WEBP
+#if YUP_MODULE_AVAILABLE_libwebp
+#define YUP_IMAGE_FORMAT_WEBP 1
+#endif
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_GIF
+
+    Enable GIF image format support (read and write, including animation).
+    Requires libgif (YUP_MODULE_AVAILABLE_libgif).
+*/
+#ifndef YUP_IMAGE_FORMAT_GIF
+#if YUP_MODULE_AVAILABLE_libgif
+#define YUP_IMAGE_FORMAT_GIF 1
+#endif
+#endif
+
+/** Config: YUP_IMAGE_FORMAT_TIFF
+
+    Enable TIFF image format support (read and write, including multi-page TIFF).
+    Requires libtiff (YUP_MODULE_AVAILABLE_libtiff).
+*/
+#ifndef YUP_IMAGE_FORMAT_TIFF
+#if YUP_MODULE_AVAILABLE_libtiff
+#define YUP_IMAGE_FORMAT_TIFF 1
+#endif
+#endif
+
+//==============================================================================
+
+#if YUP_IMAGE_FORMAT_PNG && ! YUP_MODULE_AVAILABLE_libpng
+#undef YUP_IMAGE_FORMAT_PNG
+#define YUP_IMAGE_FORMAT_PNG 0
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG && ! YUP_MODULE_AVAILABLE_libjpeg
+#undef YUP_IMAGE_FORMAT_JPEG
+#define YUP_IMAGE_FORMAT_JPEG 0
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP && ! YUP_MODULE_AVAILABLE_libwebp
+#undef YUP_IMAGE_FORMAT_WEBP
+#define YUP_IMAGE_FORMAT_WEBP 0
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF && ! YUP_MODULE_AVAILABLE_libgif
+#undef YUP_IMAGE_FORMAT_GIF
+#define YUP_IMAGE_FORMAT_GIF 0
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF && ! YUP_MODULE_AVAILABLE_libtiff
+#undef YUP_IMAGE_FORMAT_TIFF
+#define YUP_IMAGE_FORMAT_TIFF 0
+#endif
+
+//==============================================================================
+
+#include "layout/yup_Justification.h"
+#include "layout/yup_Fitting.h"
 #include "primitives/yup_AffineTransform.h"
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"
@@ -72,13 +190,80 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_Rectangle.h"
 #include "primitives/yup_RectangleList.h"
 #include "primitives/yup_Path.h"
+#include "primitives/yup_CubicBezier.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
+#include "rhi/yup_GpuTexture.h"
+#include "imaging/yup_ImagePixelData.h"
+#include "imaging/yup_ImageMetadata.h"
+#include "imaging/yup_ImageFormat.h"
 #include "imaging/yup_Image.h"
+#include "imaging/yup_ImageFormatReader.h"
+#include "imaging/yup_ImageFormatWriter.h"
+#include "imaging/yup_ImageFormatManager.h"
+#include "graphics/yup_BlendMode.h"
 #include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
 #include "graphics/yup_Colors.h"
 #include "graphics/yup_StrokeJoin.h"
 #include "graphics/yup_StrokeCap.h"
-#include "graphics/yup_Graphics.h"
+#include "graphics/yup_StrokeType.h"
+#include "graphics/yup_FillType.h"
+#include "context/yup_OffscreenTarget.h"
+#include "context/yup_RenderableTarget.h"
 #include "context/yup_GraphicsContext.h"
+#include "graphics/yup_Graphics.h"
+#include "rhi/yup_ShaderBindingMap.h"
+#include "rhi/yup_GpuBuffer.h"
+#include "rhi/yup_GpuPipeline.h"
+#include "rhi/yup_GpuFrame.h"
+#include "rhi/yup_GpuRenderPass.h"
+#include "rhi/yup_GpuTarget.h"
+#include "rhi/yup_GpuCanvas.h"
+#include "rhi/yup_GpuPipelineCache.h"
+#include "svg/yup_SVGElement.h"
+#include "svg/yup_SVGGradient.h"
+#include "svg/yup_SVGClipPath.h"
+#include "svg/yup_SVGMask.h"
+#include "svg/yup_SVGMarker.h"
+#include "svg/yup_SVGPattern.h"
+#include "svg/yup_SVGFilter.h"
+#include "svg/yup_SVGCssRule.h"
+#include "svg/yup_SVGDocument.h"
+#include "svg/yup_SVGCssParser.h"
+#include "svg/yup_SVGParser.h"
+#include "drawables/yup_Drawable.h"
+
+//==============================================================================
+#if YUP_IMAGE_FORMAT_BMP
+#include "formats/yup_BmpImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_PPM
+#include "formats/yup_PpmImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_TGA
+#include "formats/yup_TgaImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_PNG
+#include "formats/yup_PngImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+#include "formats/yup_JpegImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+#include "formats/yup_WebPImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+#include <libgif/libgif.h>
+#include "formats/yup_GifImageFormat.h"
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+#include "formats/yup_TiffImageFormat.h"
+#endif

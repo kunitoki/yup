@@ -67,23 +67,31 @@ void YUPApplicationBase::setApplicationReturnValue (const int newReturnValue) no
 // This is called on the Mac and iOS where the OS doesn't allow the stack to unwind on shutdown..
 void YUPApplicationBase::appWillTerminateByForce()
 {
+    int appReturnValue = 0;
+
     YUP_AUTORELEASEPOOL
     {
         {
             const std::unique_ptr<YUPApplicationBase> app (appInstance);
 
             if (app != nullptr)
-                app->shutdownApp();
+                appReturnValue = app->shutdownApp();
         }
 
         DeletedAtShutdown::deleteAll();
         MessageManager::deleteInstance();
     }
+
+    if (appReturnValue != 0)
+        exit (appReturnValue);
 }
 
 void YUPApplicationBase::quit()
 {
-    MessageManager::getInstance()->stopDispatchLoop();
+    MessageManager::callAsync ([]
+    {
+        MessageManager::getInstance()->stopDispatchLoop();
+    });
 }
 
 void YUPApplicationBase::sendUnhandledException (const std::exception* const e,
@@ -259,8 +267,8 @@ extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*);
 int YUPApplicationBase::main()
 {
 #if YUP_ANDROID
-    auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
-    auto clazz = (jobject) SDL_AndroidGetActivity();
+    auto env = (JNIEnv*) SDL_GetAndroidJNIEnv();
+    auto clazz = (jobject) SDL_GetAndroidActivity();
     JavaVM* vm = nullptr;
 
     if (env != nullptr && env->GetJavaVM (&vm) == 0)

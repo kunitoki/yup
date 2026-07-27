@@ -1,60 +1,80 @@
 #pragma once
 
-#include "common.exports.h"
+#include "common.glsl.exports.h"
 
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char common[] = R"===(#define O2 3.14159265359
-#define e7 6.28318530718
-#define S5 1.57079632679
-#ifndef DB
-#define q3 float(.5)
+const char common[] = R"===(#define A3 3.14159265359
+#define p8 6.28318530718
+#define T6 1.57079632679
+#ifndef BB
+#define l4 float(.5)
 #else
-#define q3 float(.0)
+#define l4 float(.0)
 #endif
-#define F2(l) d7(l,q.bd,q.cd)
-#ifdef CE
-#define wa(g0,e,a) r4(g0,e,a)
-#define H3 f
-#define K8(m) m
-#define Y4(m) m
-#define L8(m) uintBitsToFloat(m)
-#define v4(m) floatBitsToUint(m)
+#define K3(l) o8(l,k.Xe,k.Ye)
+#ifdef ZE
+#define Yb(M,f,a) e5(M,f,a)
+#define C4 g
+#define R9(q) q
+#define U5(q) q
+#define S9(q) uintBitsToFloat(q)
+#define f5(q) floatBitsToUint(q)
 #else
-#define wa(g0,e,a) I3(g0,e,a)
-#define H3 M
-#define K8(m) floatBitsToUint(m)
-#define Y4(m) uintBitsToFloat(m)
-#define L8(m) m
-#define v4(m) m
+#define Yb(M,f,a) D4(M,f,a)
+#define C4 Q
+#define R9(q) floatBitsToUint(q)
+#define U5(q) uintBitsToFloat(q)
+#define S9(q) q
+#define f5(q) q
 #endif
-#define J3(m) T5(JC,M8,m,xa,float(xa),.0).x
-#define Z4(m) T5(JC,M8,m,ya,float(ya),.0).x
-#ifdef za
-d g d4(float x){return x;}d g f7(uint x){return float(x);}d g dd(a0 x){return float(x);}d g N8(int x){return float(x);}d i I5(f xyzw){return xyzw;}d G F6(c xy){return xy;}d i ra(M xyzw){return vec4(xyzw);}d a0 O8(g x){return uint(x);}d a0 Q1(uint x){return x;}
+#define Ze(a,l,q8) v1(a,U(l)+U(-1,0))q8,v1(a,U(l)+U(0,0))q8,v1(a,U(l)+U(0,-1))q8,v1(a,U(l)+U(-1,-1))q8
+#define g5(q) U6(QC,T9,q,Zb,float(Zb),.0).x
+#define bc(q) U6(QC,T9,q,ac,float(ac),.0).x
+#ifdef cc
+e d m4(float x){return x;}e d V5(uint x){return float(x);}e d af(X x){return float(x);}e d U9(int x){return float(x);}e i Y4(g xyzw){return xyzw;}e D R7(c xy){return xy;}e i Tb(Q xyzw){return vec4(xyzw);}e X W5(d x){return uint(x);}e X i2(uint x){return x;}
 #else
-d g d4(float x){return(g)x;}d g f7(uint x){return(g)x;}d g dd(a0 x){return(g)x;}d g N8(int x){return(g)x;}d i I5(f xyzw){return(i)xyzw;}d G F6(c xy){return(G)xy;}d i ra(M xyzw){return(i)xyzw;}d a0 O8(g x){return(a0)x;}d a0 Q1(uint x){return(a0)x;}
+e d m4(float x){return(d)x;}e d V5(uint x){return(d)x;}e d af(X x){return(d)x;}e d U9(int x){return(d)x;}e i Y4(g xyzw){return(i)xyzw;}e D R7(c xy){return(D)xy;}e i Tb(Q xyzw){return(i)xyzw;}e X W5(d x){return(X)x;}e X i2(uint x){return(X)x;}
 #endif
-d g v1(g x){return x;}d G Z3(G xy){return xy;}d G Z3(g x,g y){G V;V.x=x,V.y=y;return V;}d G Z3(g x){G V;V.x=x,V.y=x;return V;}d c J5(float x){return c(x,x);}d A K0(g x,g y,g z){A V;V.x=x,V.y=y,V.z=z;return V;}d A K0(g x){A V;V.x=x,V.y=x,V.z=x;return V;}d i E1(g x,g y,g z,g w){i V;V.x=x,V.y=y,V.z=z,V.w=w;return V;}d i E1(A xyz,g w){i V;V.xyz=xyz;V.w=w;return V;}d i E1(g x){i V;V.x=x,V.y=x,V.z=x,V.w=x;return V;}d a5 ed(bool b){return a5(b,b);}d U5 qf(A k,A b,A B0){U5 V;V[0]=k;V[1]=b;V[2]=B0;return V;}d V5 Ic(A k,A b){V5 V;V[0]=k;V[1]=b;return V;}d S D1(f x){return S(x.xy,x.zw);}d uint ea(a0 x){return x;}d uint Aa(uint Y){return(Y&fd)-1u;}d c c5(c k,c b,float t){return(b-k)*t+k;}d g g7(uint Ba,uint d5){return Ba==0u?.0:unpackHalf2x16((Ba+gd)*d5).x;}d float Ca(c M1){M1=normalize(M1);float O0=acos(clamp(M1.x,-1.,1.));return M1.y>=.0?O0:-O0;}d i rf(i j){return E1(j.xyz*j.w,j.w);}d A Y3(i P8){return P8.xyz*(P8.w!=.0?1./P8.w:.0);}d g A8(i Da){G Ea=min(Da.xy,Da.zw);g hd=min(Ea.x,Ea.y);return hd;}d float f8(c x){return abs(x.x)+abs(x.y);}
-#ifndef UNIFORM_DEFINITIONS_AUTO_GENERATED
-e5(K3,VB)float sa;float Fa;float bd;float cd;uint Ga;uint id;uint Oc;uint Pc;h7 J6;c U4;c Ha;uint Z2;uint d5;float C1;uint jd;W5(q)
+e d G0(d x){return x;}e D A2(D xy){return xy;}e D A2(d x,d y){D L;L.x=x,L.y=y;return L;}e D A2(d x){D L;L.x=x,L.y=x;return L;}e c J6(float x){return c(x,x);}e r T0(d x,d y,d z){r L;L.x=x,L.y=y,L.z=z;return L;}e r T0(d x){r L;L.x=x,L.y=x,L.z=x;return L;}e i B0(d x,d y,d z,d w){i L;L.x=x,L.y=y,L.z=z,L.w=w;return L;}e i B0(r xyz,d w){i L;L.xyz=xyz;L.w=w;return L;}e i B0(d x){i L;L.x=x,L.y=x,L.z=x,L.w=x;return L;}e i B0(i x){return x;}e E4 bf(bool b){return E4(b,b);}e V6 Dh(r o,r b,r I1){V6 L;L[0]=o;L[1]=b;L[2]=I1;return L;}e W6 Eh(r o,r b){W6 L;L[0]=o;L[1]=b;return L;}e h5 Fh(i o,i b,i I1,i cf){h5 L;L[0]=o;L[1]=b;L[2]=I1;L[3]=cf;return L;}e Z j2(g x){return Z(x.xy,x.zw);}e uint Gb(X x){return x;}e c X5(c o,c b,float t){return(b-o)*t+o;}e d r8(uint dc,uint Y5){return dc==0u?.0:unpackHalf2x16((dc+df)*Y5).x;}e float ec(c e2){e2=normalize(e2);float h1=acos(clamp(e2.x,-1.,1.));return e2.y>=.0?h1:-h1;}e i Gh(i j){return B0(j.xyz*j.w,j.w);}e r B6(i V9){return V9.xyz*(V9.w!=.0?1./V9.w:.0);}e d g3(D X6){return min(X6.x,X6.y);}e d g3(r fc){return min(g3(fc.xy),fc.z);}e d g3(i gc){D X6=min(gc.xy,gc.zw);d ef=min(X6.x,X6.y);return ef;}e d I5(D Y6){return max(Y6.x,Y6.y);}e d I5(r hc){return max(I5(hc.xy),hc.z);}e d I5(i ic){D Y6=max(ic.xy,ic.zw);d ff=max(Y6.x,Y6.y);return ff;}e float w9(c x){return abs(x.x)+abs(x.y);}e d W9(d x,d X9,d Y9){
+#if defined(AF)||defined(WC)
+#ifdef WC
+if(WC)
 #endif
+{if(x<Y9)if(x>X9)return x;else return X9;else return Y9;}
+#endif
+return clamp(x,X9,Y9);}e d jc(c K0,d B2,d m3){d gf=fract(0.06711056*K0.x+0.00583715*K0.y);d hf=fract(52.9829189*gf);return(hf*B2)+m3;}
+#if 0
+e d Hh(c K0,float B2,float m3){int x=int(K0.x);int y=int(K0.y);int kc=(x^y);int b=(y>>1)&1;b|=(kc&2);b|=(y&1)<<2;b|=(kc&1)<<3;float jf=float(b);d kf=m4(jf)/16.0;return(kf*B2)+m3;}e d Ih(c K0,float B2,float m3){K0.y*=0.5;K0.x=fract(K0.x*0.5+K0.y);K0.y=fract(K0.y);float M3=(K0.y*0.5+K0.x);return(M3*B2)+m3;}
+#endif
+#ifdef JB
+e d Z9(c K0,d B2,d m3){return JB?jc(K0,B2,m3):.0;}e r Q3(r j,c K0,d B2,d m3){return JB?(jc(K0,B2,m3)+j):j;}
+#else
+e d Z9(c K0,float B2,float m3){return 0.;}e r Q3(r j,c K0,d B2,d m3){return j;}
+#endif
+#ifdef CB
+e g o8(c lc,float lf,float mc){return g(lc.x*lf-1.,lc.y*mc-sign(mc),0.,1.);}
+#ifndef BB
+e g T7(Z k2,c D2,c aa){c ba=abs(k2[0])+abs(k2[1]);if(ba.x!=.0&&ba.y!=.0){c H=1./ba;c i5=Z0(k2,aa)+D2;const float mf=.5;return g(i5,-i5)*H.xyxy+H.xyxy+mf;}else{return D2.xyxy;}}
+#else
+e float ca(uint Z6){return 1.-float(Z6)*(2./32768.);}
 #ifdef AB
-d f d7(c Ia,float kd,float Ja){return f(Ia.x*kd-1.,Ia.y*Ja-sign(Ja),0.,1.);}
-#ifndef DB
-d f I6(S R1,c Z1,c Q8){c R8=abs(R1[0])+abs(R1[1]);if(R8.x!=.0&&R8.y!=.0){c d0=1./R8;c w4=C0(R1,Q8)+Z1;const float ld=.5;return f(w4,-w4)*d0.xyxy+d0.xyxy+ld;}else{return Z1.xyxy;}}
-#else
-d float S8(uint X5){return 1.-float(X5)*(2./32768.);}
-#ifdef BB
-d void Ka(S R1,c Z1,c Q8){if(R1!=S(0)){c w4=C0(R1,Q8)+Z1.xy;gl_ClipDistance[0]=w4.x+1.;gl_ClipDistance[1]=w4.y+1.;gl_ClipDistance[2]=1.-w4.x;gl_ClipDistance[3]=1.-w4.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=Z1.x-.5;}}
+e void nc(Z k2,c D2,c aa a7){
+#ifndef EE
+if(any(notEqual(g(k2),g(.0,.0,.0,.0)))){c i5=Z0(k2,aa)+D2.xy;gl_ClipDistance[0]=i5.x+1.;gl_ClipDistance[1]=i5.y+1.;gl_ClipDistance[2]=1.-i5.x;gl_ClipDistance[3]=1.-i5.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=D2.x-.5;}
+#endif
+}
 #endif
 #endif
 #endif
-#ifdef UC
-#ifndef UNIFORM_DEFINITIONS_AUTO_GENERATED
-e5(f5,EC)f H6;c S0;float H2;float sf;f R1;c Z1;uint Z0;uint z3;uint X5;W5(m0)
+#ifdef FB
+#ifdef UB
+e d k3(d j){return(j<=0.04045)?j/12.92:pow(abs((j+0.055)/1.055),2.4);}e r k3(r j){return T0(k3(j.x),k3(j.y),k3(j.z));}e i k3(i j){return B0(k3(j.xyz),j.w);}
 #endif
+#endif
+#if defined(FB)&&defined(BB)&&!defined(K)
+e i oc(h5 c7,int v8){if(v8==0xf){return(c7[0]+c7[1]+c7[2]+c7[3])*.25;}else{i nf=g(notEqual(v8&Z5(1,2,4,8),Z5(0)));i L=Z0(c7,nf);int w8=(v8&5)+((v8>>1)&5);w8=(w8&3)+(w8>>2);L*=1./float(w8);return L;}}
 #endif
 )===";
 } // namespace glsl

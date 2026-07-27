@@ -658,6 +658,56 @@ public:
     void setNotClear() noexcept { isClear = false; }
 
     //==============================================================================
+    /** Fills all the samples in all channels by a value.
+
+        This method will do nothing if the buffer has been marked as cleared (i.e. the
+        hasBeenCleared method returns true.)
+    */
+    void fill (Type value) noexcept
+    {
+        for (int i = 0; i < numChannels; ++i)
+            FloatVectorOperations::fill (channels[i], value, size);
+
+        isClear = false;
+    }
+
+    /** Fills a specified region of all the channels.
+
+        For speed, this doesn't check whether the channel and sample number
+        are in-range, so be careful!
+    */
+    void fill (int startSample, int numSamples, Type value) noexcept
+    {
+        jassert (startSample >= 0 && startSample + numSamples <= size);
+
+        if (numSamples <= 0)
+            return;
+
+        for (int i = 0; i < numChannels; ++i)
+            FloatVectorOperations::fill (channels[i] + startSample, value, numSamples);
+
+        isClear = false;
+    }
+
+    /** Fills a specified region of just one channel.
+
+        For speed, this doesn't check whether the channel and sample number
+        are in-range, so be careful!
+    */
+    void fill (int channel, int startSample, int numSamples, Type value) noexcept
+    {
+        jassert (isPositiveAndBelow (channel, numChannels));
+        jassert (startSample >= 0 && startSample + numSamples <= size);
+
+        if (numSamples <= 0)
+            return;
+
+        FloatVectorOperations::fill (channels[channel] + startSample, value, numSamples);
+
+        isClear = false;
+    }
+
+    //==============================================================================
     /** Returns a sample from the buffer.
 
         The channel and index are not checked - they are expected to be in-range. If not,
@@ -1201,7 +1251,7 @@ private:
     //==============================================================================
     void allocateData()
     {
-        static_assert (alignof (Type) <= maxAlignment,
+        static_assert (alignof (Type) <= getMaxAlignmentBytes(),
                        "AudioBuffer cannot hold types with alignment requirements larger than that guaranteed by malloc");
 
         jassert (size >= 0);
@@ -1254,43 +1304,12 @@ private:
         isClear = false;
     }
 
-    /*  On iOS/arm7 the alignment of `double` is greater than the alignment of
-        `std::max_align_t`, so we can't trust max_align_t. Instead, we query
-        lots of primitive types and use the maximum alignment of all of them.
-    */
-    static constexpr size_t getMaxAlignment() noexcept
-    {
-        constexpr size_t alignments[] { alignof (std::max_align_t),
-                                        alignof (void*),
-                                        alignof (float),
-                                        alignof (double),
-                                        alignof (long double),
-                                        alignof (short int),
-                                        alignof (int),
-                                        alignof (long int),
-                                        alignof (long long int),
-                                        alignof (bool),
-                                        alignof (char),
-                                        alignof (char16_t),
-                                        alignof (char32_t),
-                                        alignof (wchar_t) };
-
-        size_t max = 0;
-
-        for (const auto elem : alignments)
-            max = jmax (max, elem);
-
-        return max;
-    }
-
     int numChannels = 0, size = 0;
     size_t allocatedBytes = 0;
     Type** channels = nullptr;
     HeapBlock<char, true> allocatedData;
     Type* preallocatedChannelSpace[32] = {};
     bool isClear = true;
-
-    static constexpr size_t maxAlignment = getMaxAlignment();
 
     YUP_LEAK_DETECTOR (AudioBuffer)
 };

@@ -2029,19 +2029,56 @@ bool String::containsNonWhitespaceChars() const noexcept
     return false;
 }
 
-String String::reverse() const
+String String::reversed() const
 {
-    auto end = text.findTerminatingNull();
-    String t;
+    const int numChars = length();
+    if (numChars <= 0)
+        return *this;
 
-    while (end > text)
+    std::vector<yup_wchar> clusters;
+    clusters.reserve (numChars);
+
+    CharPointerType p { text };
+    while (! p.isEmpty())
+        clusters.push_back (p.getAndAdvance());
+
+    auto appendUTF32CodepointAsUTF8 = [] (String& dest, yup_wchar cp)
     {
-        --end;
+        char utf8[5] = { 0 };
+        size_t len = 0;
 
-        t.append (end, 1);
-    }
+        if (cp <= 0x7F)
+        {
+            utf8[len++] = static_cast<char> (cp);
+        }
+        else if (cp <= 0x7FF)
+        {
+            utf8[len++] = static_cast<char> (0xC0 | (cp >> 6));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else if (cp <= 0xFFFF)
+        {
+            utf8[len++] = static_cast<char> (0xE0 | (cp >> 12));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
+        else
+        {
+            utf8[len++] = static_cast<char> (0xF0 | (cp >> 18));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 12) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | ((cp >> 6) & 0x3F));
+            utf8[len++] = static_cast<char> (0x80 | (cp & 0x3F));
+        }
 
-    return t;
+        dest.append (CharPointer_UTF8 (utf8), len);
+    };
+
+    String result;
+    result.preallocateBytes (numChars);
+    for (auto it = clusters.rbegin(); it != clusters.rend(); ++it)
+        appendUTF32CodepointAsUTF8 (result, *it);
+
+    return result;
 }
 
 String String::formattedRaw (const char* pf, ...)
@@ -2055,7 +2092,14 @@ String String::formattedRaw (const char* pf, ...)
 
         YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-#if YUP_ANDROID
+#if YUP_WINDOWS
+        // On Windows, use narrow character functions to avoid encoding issues
+        // with mixed narrow format strings and arguments
+        HeapBlock<char> temp (bufferSize);
+        int num = (int) _vsnprintf (temp.get(), bufferSize - 1, pf, args);
+        if (num >= static_cast<int> (bufferSize))
+            num = -1;
+#elif YUP_ANDROID
         HeapBlock<char> temp (bufferSize);
         int num = (int) vsnprintf (temp.get(), bufferSize - 1, pf, args);
         if (num >= static_cast<int> (bufferSize))
@@ -2063,13 +2107,7 @@ String String::formattedRaw (const char* pf, ...)
 #else
         String wideCharVersion (pf);
         HeapBlock<wchar_t> temp (bufferSize);
-        const int num = (int)
-#if YUP_WINDOWS
-            _vsnwprintf
-#else
-            vswprintf
-#endif
-            (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
+        const int num = (int) vswprintf (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
 #endif
 
         YUP_END_IGNORE_DEPRECATION_WARNINGS
@@ -2077,7 +2115,11 @@ String String::formattedRaw (const char* pf, ...)
         va_end (args);
 
         if (num > 0)
+#if YUP_WINDOWS || YUP_ANDROID
+            return String (CharPointer_UTF8 (temp.get()));
+#else
             return String (temp.get());
+#endif
 
         bufferSize += 256;
 
@@ -2203,24 +2245,25 @@ String String::createStringFromData (const void* const unknownData, int size)
     if (size == 1)
         return charToString ((yup_wchar) data[0]);
 
-    if (CharPointer_UTF16::isByteOrderMarkBigEndian (data)
-        || CharPointer_UTF16::isByteOrderMarkLittleEndian (data))
+    const auto bigEndianData = CharPointer_UTF16::isByteOrderMarkBigEndian (data);
+
+    if (bigEndianData || CharPointer_UTF16::isByteOrderMarkLittleEndian (data))
     {
-        const int numChars = size / 2 - 1;
+        const auto numUnits = size / 2 - 1;
+        const auto src = unalignedPointerCast<const uint16*> (data + 2);
+        const auto swapBytes = bigEndianData ? ByteOrder::swapIfLittleEndian<uint16>
+                                             : ByteOrder::swapIfBigEndian<uint16>;
 
-        StringCreationHelper builder ((size_t) numChars);
+        StringCreationHelper builder ((size_t) numUnits);
 
-        auto src = unalignedPointerCast<const uint16*> (data + 2);
-
-        if (CharPointer_UTF16::isByteOrderMarkBigEndian (data))
+        for (int i = 0; i < numUnits;)
         {
-            for (int i = 0; i < numChars; ++i)
-                builder.write ((yup_wchar) ByteOrder::swapIfLittleEndian (src[i]));
-        }
-        else
-        {
-            for (int i = 0; i < numChars; ++i)
-                builder.write ((yup_wchar) ByteOrder::swapIfBigEndian (src[i]));
+            const uint16 wideBuffer[] { swapBytes (src[i]),
+                                        swapBytes ((i + 1 == numUnits) ? (uint16) 0 : src[i + 1]) };
+            const CharPointer_UTF16 ptr { reinterpret_cast<const CharPointer_UTF16::CharType*> (wideBuffer) };
+
+            builder.write (*ptr);
+            i += (int) ((ptr + 1).getAddress() - ptr.getAddress());
         }
 
         builder.write (0);
@@ -2551,4 +2594,156 @@ String serialiseDouble (double input, int maxDecimalPlaces = 0)
     return reduceLengthOfFloatString (String (input, numberOfDecimalPlaces));
 }
 
+//==============================================================================
+String String::indentLines (StringRef prefix, bool indentBlankLines) const
+{
+    if (isEmpty())
+        return *this;
+
+    String result;
+    auto t = text;
+
+    while (! t.isEmpty())
+    {
+        auto lineStart = t;
+
+        // Find end of line content (excluding line ending)
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+            ++t;
+
+        auto contentEnd = t;
+
+        // Find end of line ending
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        auto lineEnd = t;
+
+        // Determine if we should indent this line
+        bool shouldIndent = indentBlankLines;
+        if (! shouldIndent)
+        {
+            // Check if line has non-whitespace content
+            auto temp = lineStart;
+            while (temp < contentEnd)
+            {
+                if (! temp.isWhitespace())
+                {
+                    shouldIndent = true;
+                    break;
+                }
+                ++temp;
+            }
+        }
+
+        // Add prefix if needed
+        if (shouldIndent)
+            result += prefix;
+
+        // Add the line
+        result.appendCharPointer (lineStart, lineEnd);
+    }
+
+    return result;
+}
+
+String String::dedentLines() const
+{
+    if (isEmpty())
+        return *this;
+
+    // First pass: find minimum indentation
+    int minIndent = 999999; // Large number as sentinel
+    auto t = text;
+
+    while (! t.isEmpty())
+    {
+        // Count leading whitespace
+        int indent = 0;
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r')
+        {
+            ++indent;
+            ++t;
+        }
+
+        // Check if line has non-whitespace content
+        bool hasNonWhitespace = false;
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+        {
+            if (! t.isWhitespace())
+                hasNonWhitespace = true;
+            ++t;
+        }
+
+        // Skip line ending
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        // Update minimum indent only for lines with non-whitespace content
+        if (hasNonWhitespace)
+            minIndent = jmin (minIndent, indent);
+    }
+
+    if (minIndent == 999999 || minIndent == 0)
+        return *this;
+
+    // Second pass: build result
+    String result;
+    t = text;
+
+    while (! t.isEmpty())
+    {
+        auto lineStart = t;
+
+        // Skip leading whitespace (up to minIndent)
+        int skipped = 0;
+        while (! t.isEmpty() && t.isWhitespace() && *t != '\n' && *t != '\r' && skipped < minIndent)
+        {
+            ++skipped;
+            ++t;
+        }
+
+        auto contentStart = t;
+
+        // Find end of line content
+        bool hasNonWhitespace = false;
+        while (! t.isEmpty() && *t != '\n' && *t != '\r')
+        {
+            if (! t.isWhitespace())
+                hasNonWhitespace = true;
+            ++t;
+        }
+
+        auto contentEnd = t;
+
+        // Find end of line (including line ending)
+        if (! t.isEmpty() && *t == '\r')
+            ++t;
+        if (! t.isEmpty() && *t == '\n')
+            ++t;
+
+        auto lineEnd = t;
+
+        // Add line to result
+        if (hasNonWhitespace)
+        {
+            // Add from content start to line end
+            result.appendCharPointer (contentStart, lineEnd);
+        }
+        else
+        {
+            // For whitespace-only lines, just add line ending
+            result.appendCharPointer (contentEnd, lineEnd);
+        }
+    }
+
+    return result;
+}
+
 } // namespace yup
+

@@ -5,6 +5,7 @@
 #include "rive/importers/artboard_importer.hpp"
 #include "rive/importers/import_stack.hpp"
 #include "rive/layout_component.hpp"
+#include "rive/data_bind/data_bind.hpp"
 #include <algorithm>
 
 using namespace rive;
@@ -18,7 +19,6 @@ bool Component::validate(CoreContext* context)
 StatusCode Component::onAddedDirty(CoreContext* context)
 {
     m_Artboard = static_cast<Artboard*>(context);
-    m_DependencyHelper.dependecyRoot(m_Artboard);
     if (this == m_Artboard)
     {
         // We're the artboard, don't parent to ourselves.
@@ -27,11 +27,6 @@ StatusCode Component::onAddedDirty(CoreContext* context)
     m_Parent = context->resolve(parentId())->as<ContainerComponent>();
     m_Parent->addChild(this);
     return StatusCode::Ok;
-}
-
-void Component::addDependent(Component* component)
-{
-    m_DependencyHelper.addDependent(component);
 }
 
 bool Component::addDirt(ComponentDirt value, bool recurse)
@@ -47,14 +42,14 @@ bool Component::addDirt(ComponentDirt value, bool recurse)
 
     onDirty(m_Dirt);
 
-    m_DependencyHelper.onComponentDirty(this);
+    onComponentDirty(this);
 
     if (!recurse)
     {
         return true;
     }
 
-    m_DependencyHelper.addDirt(value);
+    addDirtToDependents(value);
     return true;
 }
 
@@ -80,7 +75,8 @@ StatusCode Component::import(ImportStack& importStack)
 
 bool Component::collapse(bool value)
 {
-    if (isCollapsed() == value)
+    if (((m_Dirt & ComponentDirt::Collapsed) == ComponentDirt::Collapsed) ==
+        value)
     {
         return false;
     }
@@ -93,6 +89,39 @@ bool Component::collapse(bool value)
         m_Dirt &= ~ComponentDirt::Collapsed;
     }
     onDirty(m_Dirt);
-    m_DependencyHelper.onComponentDirty(this);
+    onComponentDirty(this);
+    updateCollapsables();
     return true;
+}
+
+bool Component::hitTestPoint(const Vec2D& position,
+                             bool skipOnUnclipped,
+                             bool isPrimaryHit)
+{
+    if (parent())
+    {
+        return parent()->hitTestPoint(position, skipOnUnclipped, false);
+    }
+    return true;
+}
+
+void Component::addCollapsable(DataBind* collapsable)
+{
+    // pushUnique gives set semantics; the collapse side-effect should only
+    // fire on first add, so detect that via size delta.
+    auto sizeBefore = m_collapsables.size();
+    m_collapsables.pushUnique(collapsable);
+    if (m_collapsables.size() != sizeBefore)
+    {
+        collapsable->collapse(isCollapsed());
+    }
+}
+
+void Component::updateCollapsables()
+{
+    auto collapsed = isCollapsed();
+    for (auto* collapsable : m_collapsables)
+    {
+        collapsable->collapse(collapsed);
+    }
 }

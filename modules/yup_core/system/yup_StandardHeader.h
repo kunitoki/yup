@@ -44,9 +44,9 @@
 
     See also SystemStats::getYUPVersion() for a string version.
 */
-#define YUP_MAJOR_VERSION 7
+#define YUP_MAJOR_VERSION 2
 #define YUP_MINOR_VERSION 0
-#define YUP_BUILDNUMBER 12
+#define YUP_BUILDNUMBER 0
 
 /** Current YUP version number.
 
@@ -58,9 +58,15 @@
 */
 #define YUP_VERSION ((YUP_MAJOR_VERSION << 16) + (YUP_MINOR_VERSION << 8) + YUP_BUILDNUMBER)
 
+/** Current YUP version string.
+
+    See also SystemStats::getYUPVersion() for a runtime string version.
+*/
+#define YUP_VERSION_STRING YUP_STRINGIFY (YUP_MAJOR_VERSION) "." YUP_STRINGIFY (YUP_MINOR_VERSION) "." YUP_STRINGIFY (YUP_BUILDNUMBER)
+
 #if ! DOXYGEN
 #define YUP_VERSION_ID \
-    [[maybe_unused]] volatile auto yupVersionId = "yup_version_" YUP_STRINGIFY (YUP_MAJOR_VERSION) "_" YUP_STRINGIFY (YUP_MINOR_VERSION) "_" YUP_STRINGIFY (YUP_BUILDNUMBER);
+    [[maybe_unused]] volatile auto yupVersionId = "yup_version_" YUP_VERSION_STRING;
 #endif
 
 //==============================================================================
@@ -68,6 +74,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <concepts>
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -87,6 +94,7 @@
 #include <string_view>
 #include <thread>
 #include <type_traits>
+#include <typeinfo>
 #include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
@@ -117,14 +125,6 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4245 4100)
 #if YUP_LINUX || YUP_BSD || YUP_WASM
 #include <cstring>
 #include <signal.h>
-
-#if __INTEL_COMPILER
-#if __ia64__
-#include <ia64intrin.h>
-#else
-#include <ia32intrin.h>
-#endif
-#endif
 #endif
 
 #if YUP_MSVC && YUP_DEBUG
@@ -155,9 +155,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #elif defined(YUP_DLL)
 #define YUP_API __declspec (dllimport)
 #pragma warning(disable : 4251)
-#endif
-#ifdef __INTEL_COMPILER
-#pragma warning(disable : 1125) // (virtual override warning)
 #endif
 #elif defined(YUP_DLL) || defined(YUP_DLL_BUILD)
 #define YUP_API __attribute__ ((visibility ("default")))

@@ -19,10 +19,17 @@
   ==============================================================================
 */
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #include "rive_decoders.h"
 
+// BEGIN YUP GENERATED RIVE DECODER INCLUDES
 #include "source/bitmap_decoder.cpp"
 #include "source/bitmap_decoder_thirdparty.cpp"
+// END YUP GENERATED RIVE DECODER INCLUDES
 
 #if RIVE_JPEG
 #include "source/decode_jpeg.cpp"
@@ -34,4 +41,8 @@
 
 #if RIVE_WEBP
 #include "source/decode_webp.cpp"
+#endif
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
 #endif

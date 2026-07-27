@@ -24,11 +24,6 @@
 
 using namespace yup;
 
-namespace
-{
-static constexpr float tol = 1e-5f;
-} // namespace
-
 TEST (SizeTests, DefaultConstructor)
 {
     Size<float> s;
@@ -143,21 +138,76 @@ TEST (SizeTests, ConvertAndRound)
     EXPECT_EQ (rounded.getHeight(), 4);
 }
 
+TEST (SizeTests, PrimitiveConversions)
+{
+    Size<float> s (3.7f, 4.2f);
+
+    auto toPoint = s.toPoint();
+    EXPECT_FLOAT_EQ (toPoint.getX(), 3.7f);
+    EXPECT_FLOAT_EQ (toPoint.getY(), 4.2f);
+
+    auto toPointInt = s.toPoint<int>();
+    EXPECT_EQ (toPointInt.getX(), 3);
+    EXPECT_EQ (toPointInt.getY(), 4);
+
+    auto toRectangle1 = s.toRectangle();
+    EXPECT_FLOAT_EQ (toRectangle1.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle1.getHeight(), 4.2f);
+
+    auto toRectangle2 = s.toRectangle (1.2f, 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle2.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle2.getHeight(), 4.2f);
+
+    auto toRectangle3 = s.toRectangle (Point<float> { 1.2f, 2.9f });
+    EXPECT_FLOAT_EQ (toRectangle3.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle3.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle3.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle3.getHeight(), 4.2f);
+
+    auto toRectangleInt = s.toRectangle<int>();
+    EXPECT_EQ (toRectangleInt.getX(), 0);
+    EXPECT_EQ (toRectangleInt.getY(), 0);
+    EXPECT_EQ (toRectangleInt.getWidth(), 3);
+    EXPECT_EQ (toRectangleInt.getHeight(), 4);
+}
+
 TEST (SizeTests, ArithmeticOperators)
 {
-    Size<float> s (2.0f, 3.0f);
-    auto mul = s * 2.0f;
-    EXPECT_FLOAT_EQ (mul.getWidth(), 4.0f);
-    EXPECT_FLOAT_EQ (mul.getHeight(), 6.0f);
-    s *= 0.5f;
-    EXPECT_FLOAT_EQ (s.getWidth(), 1.0f);
-    EXPECT_FLOAT_EQ (s.getHeight(), 1.5f);
-    auto div = mul / 2.0f;
-    EXPECT_FLOAT_EQ (div.getWidth(), 2.0f);
-    EXPECT_FLOAT_EQ (div.getHeight(), 3.0f);
-    mul /= 2.0f;
-    EXPECT_FLOAT_EQ (mul.getWidth(), 2.0f);
-    EXPECT_FLOAT_EQ (mul.getHeight(), 3.0f);
+    {
+        Size<int> s (2, 4);
+        auto mul = s * 2;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 4);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 8);
+        s *= 2;
+        EXPECT_FLOAT_EQ (s.getWidth(), 4);
+        EXPECT_FLOAT_EQ (s.getHeight(), 8);
+        auto div = mul / 2;
+        EXPECT_FLOAT_EQ (div.getWidth(), 2);
+        EXPECT_FLOAT_EQ (div.getHeight(), 4);
+        mul /= 2;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 2);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 4);
+    }
+
+    {
+        Size<float> s (2.0f, 3.0f);
+        auto mul = s * 2.0f;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 4.0f);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 6.0f);
+        s *= 0.5f;
+        EXPECT_FLOAT_EQ (s.getWidth(), 1.0f);
+        EXPECT_FLOAT_EQ (s.getHeight(), 1.5f);
+        auto div = mul / 2.0f;
+        EXPECT_FLOAT_EQ (div.getWidth(), 2.0f);
+        EXPECT_FLOAT_EQ (div.getHeight(), 3.0f);
+        mul /= 2.0f;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 2.0f);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 3.0f);
+    }
 }
 
 TEST (SizeTests, EqualityAndApproxEqual)
@@ -175,4 +225,58 @@ TEST (SizeTests, StructuredBinding)
     auto [w, h] = s;
     EXPECT_EQ (w, 1);
     EXPECT_EQ (h, 2);
+}
+
+TEST (SizeTests, EnlargedWithTwoArgs)
+{
+    Size<float> s (3.0f, 5.0f);
+    auto e = s.enlarged (1.0f, 2.0f);
+    EXPECT_FLOAT_EQ (e.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (e.getHeight(), 7.0f);
+    // Original unchanged
+    EXPECT_FLOAT_EQ (s.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (s.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ReducedWithTwoArgs)
+{
+    Size<float> s (10.0f, 8.0f);
+    auto r = s.reduced (2.0f, 3.0f);
+    EXPECT_FLOAT_EQ (r.getWidth(), 8.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ScaledWithTwoFactors)
+{
+    Size<float> s (4.0f, 6.0f);
+    auto scaled = s.scaled (2.0f, 0.5f);
+    EXPECT_FLOAT_EQ (scaled.getWidth(), 8.0f);
+    EXPECT_FLOAT_EQ (scaled.getHeight(), 3.0f);
+    // Original unchanged
+    EXPECT_FLOAT_EQ (s.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (s.getHeight(), 6.0f);
+}
+
+TEST (SizeTests, ToNearestIntRoundsBothDimensions)
+{
+    // Values < 0.5 fractional part round down
+    Size<float> s1 (3.4f, 4.3f);
+    auto rounded1 = s1.toNearestInt();
+    EXPECT_FLOAT_EQ (rounded1.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (rounded1.getHeight(), 4.0f);
+
+    // Values >= 0.5 fractional part round up
+    Size<float> s2 (3.7f, 4.9f);
+    auto rounded2 = s2.toNearestInt();
+    EXPECT_FLOAT_EQ (rounded2.getWidth(), 4.0f);
+    EXPECT_FLOAT_EQ (rounded2.getHeight(), 5.0f);
+}
+
+TEST (SizeTests, ToStringIsNonEmpty)
+{
+    Size<int> s (5, 10);
+    const String str = s.toString();
+    EXPECT_FALSE (str.isEmpty());
+    // Should contain the width and height values
+    EXPECT_TRUE (str.contains ("5") || str.contains ("10"));
 }

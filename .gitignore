@@ -30,17 +30,25 @@
 *.exe
 *.out
 *.app
+*.pyc
 
 # Cruft
 .DS_Store
 
 # Intermediates
 build/*
-standalone/*/build/*
 cmake-build*
 out/*
 
-# Ides
+# Ides/Agents
+__pycache__/
+.juggler/
 .vscode/
-.idea
-.vs
+.idea/
+.vs/
+.claude/
+.opencode/
+.pytest_cache/
+.cache/
+docs/superpowers/
+reasonix.toml

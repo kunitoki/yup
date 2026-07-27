@@ -73,15 +73,18 @@ void SliceMesh::updateBuffers()
                                       vertexSizeInBytes);
     }
 
-    if (m_VertexRenderBuffer)
+    if (m_VertexRenderBuffer != nullptr)
     {
         Vec2D* mappedVertices =
             reinterpret_cast<Vec2D*>(m_VertexRenderBuffer->map());
-        for (auto v : m_vertices)
+        if (mappedVertices != nullptr)
         {
-            *mappedVertices++ = v;
+            for (auto v : m_vertices)
+            {
+                *mappedVertices++ = v;
+            }
+            m_VertexRenderBuffer->unmap();
         }
-        m_VertexRenderBuffer->unmap();
     }
 
     // 2. uv render buffer
@@ -106,12 +109,15 @@ void SliceMesh::updateBuffers()
             renderImage != nullptr ? renderImage->uvTransform() : Mat2D();
 
         Vec2D* mappedUVs = reinterpret_cast<Vec2D*>(m_UVRenderBuffer->map());
-        for (auto uv : m_uvs)
+        if (mappedUVs != nullptr)
         {
-            Vec2D xformedUV = uvTransform * uv;
-            *mappedUVs++ = xformedUV;
+            for (auto uv : m_uvs)
+            {
+                Vec2D xformedUV = uvTransform * uv;
+                *mappedUVs++ = xformedUV;
+            }
+            m_UVRenderBuffer->unmap();
         }
-        m_UVRenderBuffer->unmap();
     }
 
     // 3. index render buffer
@@ -132,8 +138,11 @@ void SliceMesh::updateBuffers()
     if (m_IndexRenderBuffer)
     {
         void* mappedIndex = m_IndexRenderBuffer->map();
-        memcpy(mappedIndex, m_indices.data(), indexSizeInBytes);
-        m_IndexRenderBuffer->unmap();
+        if (mappedIndex != nullptr)
+        {
+            memcpy(mappedIndex, m_indices.data(), indexSizeInBytes);
+            m_IndexRenderBuffer->unmap();
+        }
     }
 }
 
@@ -142,8 +151,8 @@ std::vector<float> SliceMesh::uvStops(AxisType forAxis)
     float imageSize = forAxis == AxisType::X ? m_nslicer->image()->width()
                                              : m_nslicer->image()->height();
     float imageScale =
-        std::abs(forAxis == AxisType::X ? m_nslicer->image()->scaleX()
-                                        : m_nslicer->image()->scaleY());
+        std::abs(forAxis == AxisType::X ? m_nslicer->image()->renderScaleX()
+                                        : m_nslicer->image()->renderScaleY());
     if (imageSize == 0 || imageScale == 0)
     {
         return {};
@@ -162,10 +171,10 @@ std::vector<float> SliceMesh::vertexStops(
     Image* image = m_nslicer->image();
     float imageSize = forAxis == AxisType::X ? image->width() : image->height();
 
-    // When doing calcualtions, we assume scale is always non-negative to keep
+    // When doing calculations, we assume scale is always non-negative to keep
     // everything in image space.
-    float imageScale =
-        std::abs(forAxis == AxisType::X ? image->scaleX() : image->scaleY());
+    float imageScale = std::abs(forAxis == AxisType::X ? image->renderScaleX()
+                                                       : image->renderScaleY());
     if (imageSize == 0 || imageScale == 0)
     {
         return {};
@@ -224,8 +233,8 @@ uint16_t SliceMesh::tileRepeat(std::vector<SliceMeshVertex>& vertices,
 
     // The size of each repeated tile in image space
     Image* image = m_nslicer->image();
-    float scaleX = std::abs(image->scaleX());
-    float scaleY = std::abs(image->scaleY());
+    float scaleX = std::abs(image->renderScaleX());
+    float scaleY = std::abs(image->renderScaleY());
 
     if (scaleX == 0 || scaleY == 0)
     {

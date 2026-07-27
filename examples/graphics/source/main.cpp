@@ -23,17 +23,107 @@
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
+#include <yup_animation/yup_animation.h>
 #include <yup_gui/yup_gui.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+#if YUP_MODULE_AVAILABLE_yup_python
+#include <yup_python/yup_python.h>
+#endif
 
 #include <memory>
+#include <functional>
+#include <vector>
 #include <cmath> // For sine wave generation
 
+#if YUP_MOBILE
+#include <BinaryData.h>
+#endif
+
+//==============================================================================
+
+inline yup::File getAssetPath (yup::StringRef subPath = {})
+{
+    yup::File basePath;
+
+#if YUP_WASM
+    basePath = yup::File ("/");
+#else
+    basePath = yup::File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory();
+#endif
+
+    if (! subPath.isEmpty())
+        basePath = basePath.getChildFile (subPath);
+
+    return basePath;
+}
+
+//==============================================================================
+
+#include "examples/Artboard.h"
 #include "examples/Audio.h"
-#include "examples/LayoutFonts.h"
+#include "examples/AudioFileDemo.h"
+#include "examples/ClipboardDemo.h"
+#include "examples/ColorLab.h"
+#include "examples/ComponentEffectsDemo.h"
+#include "examples/ConvolutionDemo.h"
+#include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
-#include "examples/VariableFonts.h"
-#include "examples/TextEditor.h"
+#include "examples/FilterDemo.h"
+#include "examples/Images.h"
+#include "examples/LayoutFonts.h"
+#include "examples/LottieDemo.h"
+#include "examples/OffscreenRenderDemo.h"
+#include "examples/OpaqueDemo.h"
+#include "examples/PaintProfilerDemo.h"
 #include "examples/Paths.h"
+#include "examples/PopupMenu.h"
+#include "examples/ScrollBarDemo.h"
+#include "examples/SliderDemo.h"
+#include "examples/SpectrumAnalyzer.h"
+#include "examples/SpinningCubeDemo.h"
+#include "examples/Svg.h"
+#include "examples/TextEditor.h"
+#include "examples/VariableFonts.h"
+#include "examples/Widgets.h"
+#if YUP_MODULE_AVAILABLE_yup_python
+#include "examples/Python.h"
+#endif
+
+//==============================================================================
+
+class DemoListModel : public yup::ListBoxModel
+{
+public:
+    DemoListModel (yup::Array<yup::String> names)
+        : demoNames (std::move (names))
+    {
+    }
+
+    int getNumRows() override
+    {
+        return demoNames.size();
+    }
+
+    yup::String getRowText (int rowIndex) override
+    {
+        if (rowIndex >= 0 && rowIndex < demoNames.size())
+            return demoNames[rowIndex];
+        return {};
+    }
+
+    void selectedRowsChanged (const yup::Array<int>& selectedRows) override
+    {
+        if (onSelectionChanged && ! selectedRows.isEmpty())
+            onSelectionChanged (selectedRows[0]);
+    }
+
+    std::function<void (int)> onSelectionChanged;
+
+private:
+    yup::Array<yup::String> demoNames;
+};
 
 //==============================================================================
 
@@ -49,16 +139,12 @@ public:
     {
         setTitle ("main");
 
+        // Load the logo image
 #if YUP_WASM
         auto baseFilePath = yup::File ("/data");
 #else
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-
-        /*
-        // Load an image
         {
             yup::MemoryBlock mb;
             auto imageFile = baseFilePath.getChildFile ("logo.png");
@@ -73,89 +159,142 @@ public:
                 yup::Logger::outputDebugString ("Unable to load requested image");
             }
         }
-        */
 
+        // Setup examples
+        auto addDemo = [&] (yup::StringRef name, auto factory)
         {
-            auto button = std::make_unique<yup::TextButton> ("Audio");
-            button->onClick = [this]
-            {
-                selectComponent (0);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
+            demoNames.add (name);
+            demoFactories.push_back (std::move (factory));
+            components.add (nullptr);
+        };
 
-            components.add (std::make_unique<AudioExample> (font));
-            addChildComponent (components.getLast());
-        }
-
+        addDemo ("Artboard", []
         {
-            auto button = std::make_unique<yup::TextButton> ("Layout Fonts");
-            button->onClick = [this]
-            {
-                selectComponent (1);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<LayoutFontsExample> (font));
-            addChildComponent (components.getLast());
-        }
-
+            return std::make_unique<ArtboardDemo>();
+        });
+        addDemo ("Audio", []
         {
-            auto button = std::make_unique<yup::TextButton> ("Variable Fonts");
-            button->onClick = [this]
-            {
-                selectComponent (2);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<VariableFontsExample> (font));
-            addChildComponent (components.getLast());
-        }
-
+            return std::make_unique<AudioExample>();
+        });
+        addDemo ("Audio File", []
         {
-            auto button = std::make_unique<yup::TextButton> ("Paths");
-            button->onClick = [this]
-            {
-                selectComponent (3);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<PathsExample>());
-            addChildComponent (components.getLast());
-        }
-
+            return std::make_unique<AudioFileDemo>();
+        });
+        addDemo ("Clipboard", []
         {
-            auto button = std::make_unique<yup::TextButton> ("Text Editor");
-            button->onClick = [this]
-            {
-                selectComponent (4);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
-
-            components.add (std::make_unique<TextEditorDemo>());
-            addChildComponent (components.getLast());
-        }
-
+            return std::make_unique<ClipboardDemo>();
+        });
+        addDemo ("Color Lab", []
         {
-            auto button = std::make_unique<yup::TextButton> ("File Chooser");
-            button->onClick = [this]
-            {
-                selectComponent (5);
-            };
-            addAndMakeVisible (button.get());
-            buttons.add (std::move (button));
+            return std::make_unique<ColorLabDemo>();
+        });
+        addDemo ("Component Effects", []
+        {
+            return std::make_unique<ComponentEffectsDemo>();
+        });
+        addDemo ("Convolution Demo", []
+        {
+            return std::make_unique<ConvolutionDemo>();
+        });
+        addDemo ("Crossover Demo", []
+        {
+            return std::make_unique<CrossoverDemo>();
+        });
+        addDemo ("File Chooser", []
+        {
+            return std::make_unique<FileChooserDemo>();
+        });
+        addDemo ("Filter Demo", []
+        {
+            return std::make_unique<FilterDemo>();
+        });
+        addDemo ("Images", []
+        {
+            return std::make_unique<ImagesDemo>();
+        });
+        addDemo ("Layout Fonts", []
+        {
+            return std::make_unique<LayoutFontsExample>();
+        });
+        addDemo ("Lottie", []
+        {
+            return std::make_unique<LottieDemo>();
+        });
+        addDemo ("Offscreen Render", []
+        {
+            return std::make_unique<OffscreenRenderDemo>();
+        });
+        addDemo ("Opaque Demo", []
+        {
+            return std::make_unique<OpaqueDemo>();
+        });
+        addDemo ("Paint Profiler", []
+        {
+            return std::make_unique<PaintProfilerDemo>();
+        });
+        addDemo ("Paths", []
+        {
+            return std::make_unique<PathsExample>();
+        });
+        addDemo ("Popup Menu", []
+        {
+            return std::make_unique<PopupMenuDemo>();
+        });
+        addDemo ("ScrollBar", []
+        {
+            return std::make_unique<ScrollBarDemo>();
+        });
+        addDemo ("Sliders", []
+        {
+            return std::make_unique<SliderDemo>();
+        });
+        addDemo ("FFT Analyzer", []
+        {
+            return std::make_unique<SpectrumAnalyzerDemo>();
+        });
+        addDemo ("Spinning Cube", []
+        {
+            return std::make_unique<SpinningCubeDemo>();
+        });
+        addDemo ("SVG", []
+        {
+            return std::make_unique<SvgDemo>();
+        });
+        addDemo ("Text Editor", []
+        {
+            return std::make_unique<TextEditorDemo>();
+        });
+        addDemo ("Variable Fonts", []
+        {
+            return std::make_unique<VariableFontsExample>();
+        });
+        addDemo ("Widgets", []
+        {
+            return std::make_unique<WidgetsDemo>();
+        });
+#if YUP_MODULE_AVAILABLE_yup_python
+        addDemo ("Python", []
+        {
+            return std::make_unique<PythonDemo>();
+        });
+#endif
 
-            components.add (std::make_unique<FileChooserDemo>());
-            addChildComponent (components.getLast());
-        }
+        // Create the ListBox with the demo names
+        listModel = std::make_unique<DemoListModel> (demoNames);
+        listModel->onSelectionChanged = [this] (int index)
+        {
+            selectComponent (index);
+        };
+
+        listBox = std::make_unique<yup::ListBox>();
+        listBox->setModel (listModel.get());
+        listBox->setRowHeight (30);
+        listBox->setRowWidth (200);
+        listBox->selectRow (0, false, yup::dontSendNotification);
+        addAndMakeVisible (listBox.get());
 
         selectComponent (0);
 
-        // Timer
         startTimerHz (10);
     }
 
@@ -166,50 +305,60 @@ public:
     void resized() override
     {
         constexpr auto margin = 5;
+        constexpr auto listBoxWidth = 200;
+        constexpr auto listBoxHeight = 40;
 
-        auto bounds = getLocalBounds().reduced (margin);
-        auto buttonBounds = bounds.removeFromTop (30);
+        auto bounds = getSafeAreaBounds().reduced (margin);
+        auto width = bounds.getWidth();
+        auto height = bounds.getHeight();
 
-        const auto totalMargin = margin * (buttons.size() - 1);
-        const auto buttonWidth = (buttonBounds.getWidth() - totalMargin) / buttons.size();
-        for (auto& button : buttons)
+        // Landscape orientation (width > height): vertical ListBox on the left
+        if (width > height)
         {
-            button->setBounds (buttonBounds.removeFromLeft (buttonWidth));
-            buttonBounds.removeFromLeft (margin);
+            listBox->setOrientation (yup::ListBox::Orientation::vertical);
+            listBox->setRowHeight (30);
+            listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
+            listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+
+            auto listBoxBounds = bounds.removeFromLeft (listBoxWidth);
+            listBox->setBounds (listBoxBounds);
+
+            // Add margin between ListBox and demo components
+            bounds.removeFromLeft (margin);
+        }
+        // Portrait orientation (width <= height): horizontal ListBox on top
+        else
+        {
+            listBox->setOrientation (yup::ListBox::Orientation::horizontal);
+            listBox->setRowWidth (80);
+            listBox->setRowHeight (listBoxHeight);
+            listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+            listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
+
+            auto listBoxBounds = bounds.removeFromTop (listBoxHeight);
+            listBox->setBounds (listBoxBounds);
+
+            // Add margin between ListBox and demo components
+            bounds.removeFromTop (margin);
         }
 
-        bounds.removeFromTop (margin);
-        for (auto& component : components)
-            component->setBounds (bounds);
+        // Demo components take the remaining space
+        for (auto* component : components)
+        {
+            if (component != nullptr)
+                component->setBounds (bounds);
+        }
     }
 
     void paint (yup::Graphics& g) override
     {
         yup::DocumentWindow::paint (g);
-
-        //g.drawImageAt (image, getLocalBounds().getCenter());
     }
-
-    /*
-    void paintOverChildren (yup::Graphics& g) override
-    {
-        if (! image.isValid())
-            return;
-
-        g.setBlendMode (yup::BlendMode::ColorDodge);
-        g.setOpacity (1.0f);
-        g.drawImageAt (image, getLocalBounds().getCenter());
-    }
-    */
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         switch (keys.getKey())
         {
-            case yup::KeyPress::textQKey:
-                std::cout << 'a';
-                break;
-
             case yup::KeyPress::escapeKey:
                 userTriedToCloseWindow();
                 break;
@@ -240,9 +389,19 @@ public:
 
     void selectComponent (int index)
     {
-        for (auto& component : components)
-            component->setVisible (false);
+        for (auto* component : components)
+        {
+            if (component != nullptr)
+                component->setVisible (false);
+        }
 
+        if (components[index] == nullptr)
+        {
+            components.set (index, demoFactories[index]().release());
+            addChildComponent (components[index]);
+        }
+
+        resized(); // Ensure the newly created component is sized correctly
         components[index]->setVisible (true);
     }
 
@@ -264,11 +423,11 @@ private:
         setTitle (title);
     }
 
-    yup::OwnedArray<yup::TextButton> buttons;
+    yup::Array<yup::String> demoNames;
+    std::vector<std::function<std::unique_ptr<yup::Component>()>> demoFactories;
+    std::unique_ptr<DemoListModel> listModel;
+    std::unique_ptr<yup::ListBox> listBox;
     yup::OwnedArray<yup::Component> components;
-
-    yup::Font font;
-
     yup::Image image;
 };
 
@@ -278,12 +437,12 @@ struct Application : yup::YUPApplication
 {
     Application() = default;
 
-    const yup::String getApplicationName() override
+    yup::String getApplicationName() override
     {
         return "yup! graphics";
     }
 
-    const yup::String getApplicationVersion() override
+    yup::String getApplicationVersion() override
     {
         return "1.0";
     }
@@ -294,18 +453,20 @@ struct Application : yup::YUPApplication
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        window = std::make_unique<CustomWindow>();
+        yup::MessageManager::callAsync ([this]
+        {
+            yup::Process::makeForegroundProcess();
 
-#if YUP_IOS
-        window->centreWithSize ({ 320, 480 });
-#elif YUP_ANDROID
-        window->centreWithSize ({ 1080, 2400 });
-        // window->setFullScreen(true);
+            window = std::make_unique<CustomWindow>();
+
+#if YUP_MOBILE
+            window->centreWithSize ({ 720, 1280 });
 #else
-        window->centreWithSize ({ 600, 800 });
+            window->centreWithSize ({ 1024, 768 });
 #endif
 
-        window->setVisible (true);
+            window->setVisible (true);
+        });
     }
 
     void shutdown() override

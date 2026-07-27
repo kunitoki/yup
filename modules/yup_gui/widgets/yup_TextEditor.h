@@ -41,9 +41,10 @@ namespace yup
     addAndMakeVisible(*editor);
     @endcode
 
-    @see Component, StyledText
+    @see Component, StyledText, TextInputTarget
 */
 class YUP_API TextEditor : public Component
+    , public TextInputTarget
 {
 public:
     //==============================================================================
@@ -255,7 +256,7 @@ public:
 
     //==============================================================================
     /** Color identifiers used by the text editor. */
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier textColorId;
@@ -275,6 +276,8 @@ public:
     /** @internal */
     void focusLost() override;
     /** @internal */
+    void enablementChanged() override;
+    /** @internal */
     void mouseDown (const MouseEvent& event) override;
     /** @internal */
     void mouseDrag (const MouseEvent& event) override;
@@ -283,12 +286,21 @@ public:
     /** @internal */
     void mouseDoubleClick (const MouseEvent& event) override;
     /** @internal */
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+    /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void textInput (const String& text) override;
 
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+
+    //==============================================================================
+    /** @internal
+        Returns the rectangle where text input is being edited.
+        This is used to position on-screen keyboards appropriately.
+    */
+    Rectangle<float> getTextInputRect() const override;
 
 private:
     //==============================================================================
@@ -299,12 +311,16 @@ private:
     int getGlyphIndexAtPosition (const Point<float>& position) const;
     void handleBackspace();
     void handleDelete();
+    void clampScrollOffset();
     void startCaretBlinking();
     void stopCaretBlinking();
+    bool canUseTextInput() const noexcept;
+    void updateTextInputRectIfActive();
     int findLineStart (int position) const;
     int findLineEnd (int position) const;
     int findPreviousLinePosition (int position) const;
     int findNextLinePosition (int position) const;
+    int findVisualLinePosition (int position, bool moveDown) const;
 
     // Word navigation methods
     int findWordStart (int position) const;
@@ -329,6 +345,7 @@ private:
     bool readOnly = false;
     bool isDragging = false;
     bool caretVisible = true;
+    bool caretBlinking = false;
     bool needsUpdate = true;
 
     Point<float> scrollOffset;

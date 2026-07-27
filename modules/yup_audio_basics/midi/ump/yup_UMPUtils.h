@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -47,7 +47,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-struct Utils
+struct YUP_API Utils
 {
     /** Joins 4 bytes into a single 32-bit word. */
     static constexpr uint32_t bytesToWord (std::byte a, std::byte b, std::byte c, std::byte d)
@@ -132,6 +132,6 @@ struct Utils
     static constexpr uint8_t getChannel (uint32_t w) noexcept { return U4<3>::get (w); }
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

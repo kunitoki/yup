@@ -28,10 +28,14 @@ namespace
 uint32_t axisTagFromString (StringRef tagName)
 {
     uint32_t tag = 0;
-    tag += static_cast<uint8_t> (tagName[0]) << 24;
-    tag += static_cast<uint8_t> (tagName[1]) << 16;
-    tag += static_cast<uint8_t> (tagName[2]) << 8;
-    tag += static_cast<uint8_t> (tagName[3]) << 0;
+    if (tagName.length() > 0)
+        tag += static_cast<uint8_t> (tagName[0]) << 24;
+    if (tagName.length() > 1)
+        tag += static_cast<uint8_t> (tagName[1]) << 16;
+    if (tagName.length() > 2)
+        tag += static_cast<uint8_t> (tagName[2]) << 8;
+    if (tagName.length() > 3)
+        tag += static_cast<uint8_t> (tagName[3]) << 0;
     return tag;
 }
 
@@ -55,11 +59,29 @@ Font::Font (rive::rcp<rive::Font> font)
 {
 }
 
+Font::Font (rive::rcp<rive::Font> font, float height)
+    : font (std::move (font))
+    , height (height)
+{
+}
+
 //==============================================================================
 
 Result Font::loadFromData (const MemoryBlock& fontBytes)
 {
+    if (fontBytes.isEmpty())
+        return Result::fail ("Unable to instantiate font from empty data");
+
     font = HBFont::Decode (rive::make_span (static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize()));
+    return font ? Result::ok() : Result::fail ("Unable to load font");
+}
+
+Result Font::loadFromData (const Span<const uint8>& fontBytes)
+{
+    if (fontBytes.empty())
+        return Result::fail ("Unable to instantiate font from empty data");
+
+    font = HBFont::Decode (rive::make_span (fontBytes.data(), fontBytes.size()));
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
 
@@ -114,6 +136,25 @@ bool Font::isItalic() const
 
 //==============================================================================
 
+float Font::getHeight() const noexcept
+{
+    return height;
+}
+
+void Font::setHeight (float newHeight)
+{
+    height = newHeight;
+}
+
+Font Font::withHeight (float height) const
+{
+    Font result (*this);
+    result.setHeight (height);
+    return result;
+}
+
+//==============================================================================
+
 int Font::getNumAxis() const
 {
     return font != nullptr ? static_cast<int> (font->getAxisCount()) : 0;
@@ -136,8 +177,6 @@ std::optional<Font::Axis> Font::getAxisDescription (int index) const
 
 std::optional<Font::Axis> Font::getAxisDescription (StringRef tagName) const
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return std::nullopt;
 
@@ -196,8 +235,6 @@ void Font::setAxisValue (int index, float value)
 
 void Font::setAxisValue (StringRef tagName, float value)
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return;
 
@@ -227,8 +264,6 @@ Font Font::withAxisValue (int index, float value) const
 
 Font Font::withAxisValue (StringRef tagName, float value) const
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return {};
 
@@ -242,9 +277,7 @@ Font Font::withAxisValue (StringRef tagName, float value) const
 
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 {
-    jassert (axisOptions.size() > 0);
-
-    if (font == nullptr)
+    if (font == nullptr || axisOptions.size() == 0)
         return;
 
     std::vector<rive::Font::Coord> coords;
@@ -270,9 +303,7 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 
 Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
 {
-    jassert (axisOptions.size() > 0);
-
-    if (font == nullptr)
+    if (font == nullptr || axisOptions.size() == 0)
         return {};
 
     std::vector<rive::Font::Coord> coords;
@@ -306,8 +337,6 @@ void Font::resetAxisValue (int index)
 
 void Font::resetAxisValue (StringRef tagName)
 {
-    jassert (tagName.length() == 4);
-
     if (font == nullptr)
         return;
 
@@ -341,6 +370,33 @@ void Font::resetAllAxisValues()
     auto newFont = font->makeAtCoords (coords);
     if (newFont != nullptr)
         std::swap (newFont, font);
+}
+
+//==============================================================================
+
+Font Font::withFeature (Feature feature) const
+{
+    if (font == nullptr)
+        return {};
+
+    std::vector<rive::Font::Feature> realFeatures;
+    realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
+
+    return Font (font->withOptions ({}, realFeatures));
+}
+
+Font Font::withFeatures (std::initializer_list<Feature> features) const
+{
+    if (font == nullptr)
+        return {};
+
+    std::vector<rive::Font::Feature> realFeatures;
+    realFeatures.reserve (features.size());
+
+    for (const auto& feature : features)
+        realFeatures.push_back (rive::Font::Feature { feature.tag, feature.value });
+
+    return Font (font->withOptions ({}, realFeatures));
 }
 
 //==============================================================================

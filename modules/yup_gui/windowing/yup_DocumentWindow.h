@@ -23,18 +23,32 @@ namespace yup
 {
 
 //==============================================================================
+/** A window that contains a single component.
 
+    A top-level window added to the desktop that contains a single component.
+*/
 class YUP_API DocumentWindow : public Component
 {
 public:
     //==============================================================================
+    /** Creates a document window. */
     DocumentWindow (
         const ComponentNative::Options& options = {},
-        const Color& backgroundColor = {});
+        const std::optional<Color>& backgroundColor = {});
+
+    /** Destructor. */
     ~DocumentWindow() override;
 
     //==============================================================================
+    /** Centres the window on the screen and sets its size. */
     void centreWithSize (const Size<int>& size);
+
+    //==============================================================================
+    /** The style identifiers for this class. */
+    struct Style
+    {
+        static const Identifier backgroundColorId;
+    };
 
     //==============================================================================
     /** @internal */
@@ -43,8 +57,6 @@ public:
     void userTriedToCloseWindow() override;
 
 private:
-    Color backgroundColor;
-
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
 };
 

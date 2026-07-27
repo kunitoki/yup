@@ -593,12 +593,22 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
 
     jassert (port->isValid());
 
-    std::unique_ptr<MidiInput> midiInput (new MidiInput (port->getPortName(), deviceIdentifier));
+    std::unique_ptr<MidiInput> midiInput (new MidiInput (port->getPortName(),
+                                                         deviceIdentifier,
+                                                         ump::PacketProtocol::MIDI_1_0));
 
     port->setupInput (midiInput.get(), callback);
     midiInput->internal = std::make_unique<Pimpl> (port);
 
     return midiInput;
+}
+
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    jassertfalse;
+    return {};
 }
 
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName, MidiInputCallback* callback)
@@ -609,7 +619,9 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName,
     if (port == nullptr || ! port->isValid())
         return {};
 
-    std::unique_ptr<MidiInput> midiInput (new MidiInput (deviceName, getFormattedPortIdentifier (client->getId(), port->getPortId())));
+    std::unique_ptr<MidiInput> midiInput (new MidiInput (deviceName,
+                                                         getFormattedPortIdentifier (client->getId(), port->getPortId()),
+                                                         ump::PacketProtocol::MIDI_1_0));
 
     port->setupInput (midiInput.get(), callback);
     midiInput->internal = std::make_unique<Pimpl> (port);
@@ -617,8 +629,18 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName,
     return midiInput;
 }
 
-MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
-    : deviceInfo (deviceName, deviceIdentifier)
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceIdentifier,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceIdentifier, protocol)
 {
 }
 
@@ -668,12 +690,23 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     if (port == nullptr || ! port->isValid())
         return {};
 
-    std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (port->getPortName(), deviceIdentifier));
+    std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (port->getPortName(),
+                                                            deviceIdentifier,
+                                                            ump::PacketProtocol::MIDI_1_0));
 
     port->setupOutput();
     midiOutput->internal = std::make_unique<Pimpl> (port);
 
     return midiOutput;
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifier,
+                                                    ump::PacketProtocol protocol)
+{
+    if (protocol != ump::PacketProtocol::MIDI_1_0)
+        return {};
+
+    return openDevice (deviceIdentifier);
 }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceName)
@@ -684,12 +717,23 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceNam
     if (port == nullptr || ! port->isValid())
         return {};
 
-    std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (deviceName, getFormattedPortIdentifier (client->getId(), port->getPortId())));
+    std::unique_ptr<MidiOutput> midiOutput (new MidiOutput (deviceName,
+                                                            getFormattedPortIdentifier (client->getId(), port->getPortId()),
+                                                            ump::PacketProtocol::MIDI_1_0));
 
     port->setupOutput();
     midiOutput->internal = std::make_unique<Pimpl> (port);
 
     return midiOutput;
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceName,
+                                                         ump::PacketProtocol protocol)
+{
+    if (protocol != ump::PacketProtocol::MIDI_1_0)
+        return {};
+
+    return createNewDevice (deviceName);
 }
 
 MidiOutput::~MidiOutput()
@@ -700,6 +744,21 @@ MidiOutput::~MidiOutput()
 void MidiOutput::sendMessageNow (const MidiMessage& message)
 {
     internal->ptr->sendMessageNow (message);
+}
+
+void MidiOutput::sendMessageNow (const ump::View& message)
+{
+    ump::ToBytestreamConverter converter { 2048 };
+    converter.convert (message, 0.0, [&] (const MidiMessage& midiMessage)
+    {
+        sendMessageNow (midiMessage);
+    });
+}
+
+void MidiOutput::sendMessageNow (const ump::Packets& packets)
+{
+    for (auto it = packets.cbegin(); it != packets.cend(); ++it)
+        sendMessageNow (*it);
 }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
@@ -722,8 +781,10 @@ class MidiInput::Pimpl
 };
 
 // (These are just stub functions if ALSA is unavailable...)
-MidiInput::MidiInput (const String& deviceName, const String& deviceID)
-    : deviceInfo (deviceName, deviceID)
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceID,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceID, protocol)
 {
 }
 
@@ -739,7 +800,21 @@ MidiDeviceInfo MidiInput::getDefaultDevice() { return {}; }
 
 std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*) { return {}; }
 
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    return {};
+}
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
+
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    return {};
+}
 
 class MidiOutput::Pimpl
 {
@@ -749,13 +824,21 @@ MidiOutput::~MidiOutput() {}
 
 void MidiOutput::sendMessageNow (const MidiMessage&) {}
 
+void MidiOutput::sendMessageNow (const ump::View&) {}
+
+void MidiOutput::sendMessageNow (const ump::Packets&) {}
+
 Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
 
 MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&, ump::PacketProtocol) { return {}; }
+
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&, ump::PacketProtocol) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {

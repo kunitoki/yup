@@ -23,6 +23,30 @@ void GLState::invalidate()
     // ANGLE_shader_pixel_local_storage doesn't allow dither.
     glDisable(GL_DITHER);
 
+    // Low-effort attempt to reset core state we don't use to default values.
+    glDisable(GL_POLYGON_OFFSET_FILL);
+#ifndef RIVE_WEBGL
+    // https://www.khronos.org/registry/webgl/specs/latest/2.0/#5.18
+    // WebGL 2.0 behaves as though PRIMITIVE_RESTART_FIXED_INDEX were always
+    // enabled.
+    glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+#endif
+    glDisable(GL_RASTERIZER_DISCARD);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glDisable(GL_SAMPLE_COVERAGE);
+    // glDisable(GL_COLOR_LOGIC_OP);
+    // glDisable(GL_INDEX_LOGIC_OP);
+    // glDisable(GL_ALPHA_TEST);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
 #ifndef RIVE_ANDROID
     // D3D and Metal both have a provoking vertex convention of "first" for flat
     // varyings, and it's very costly for ANGLE to implement the OpenGL
@@ -36,32 +60,78 @@ void GLState::invalidate()
     }
 #endif
 
-    // Low-effort attempt to reset core state we don't use to default values.
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_POLYGON_OFFSET_FILL);
+    // WebGL doesn't support glMaxShaderCompilerThreadsKHR.
 #ifndef RIVE_WEBGL
-    // https://www.khronos.org/registry/webgl/specs/latest/2.0/#5.18
-    // WebGL 2.0 behaves as though PRIMITIVE_RESTART_FIXED_INDEX were always
-    // enabled.
-    glDisable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+    if (m_capabilities.KHR_parallel_shader_compile)
+    {
+        // Allow GL's shader compilation to use 2 background threads.
+        //
+        // Parallel compilation is documented to be enabled by default, but on
+        // some drivers the parallel compilation does not actually activate
+        // without explicitly setting this.
+        //
+        // NOTE: the spec states that apps may use "0xffffffff" to mean "use the
+        // maximum number of threads", but that seems like an easy invitation
+        // for a driver bug, so we are explicit about the number of threads.
+        //
+        // FIXME: When AsyncPipelineManager starts using >1 thread, we should
+        // incorporate its same logic here.
+        glMaxShaderCompilerThreadsKHR(2);
+    }
 #endif
-    glDisable(GL_RASTERIZER_DISCARD);
-    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-    glDisable(GL_SAMPLE_COVERAGE);
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_STENCIL_TEST);
-    // glDisable(GL_COLOR_LOGIC_OP);
-    // glDisable(GL_INDEX_LOGIC_OP);
-    // glDisable(GL_ALPHA_TEST);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
-    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
-    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+}
+
+void GLState::setScissor(IAABB scissor, uint32_t renderTargetHeight)
+{
+    assert(scissor.left >= 0);
+    assert(scissor.right >= scissor.left);
+    assert(scissor.top >= 0);
+    assert(scissor.bottom >= scissor.top);
+    setScissorRaw(scissor.left,
+                  renderTargetHeight - scissor.bottom,
+                  scissor.width(),
+                  scissor.height());
+}
+
+void GLState::setScissor(AABBu16 scissor, uint32_t renderTargetHeight)
+{
+    assert(scissor.right >= scissor.left);
+    assert(scissor.bottom >= scissor.top);
+    setScissorRaw(scissor.left,
+                  renderTargetHeight - scissor.bottom,
+                  scissor.width(),
+                  scissor.height());
+}
+
+void GLState::setScissorRaw(uint32_t left,
+                            uint32_t top,
+                            uint32_t width,
+                            uint32_t height)
+{
+    if (!m_validState.scissorBox ||
+        m_scissorBox != std::array<uint32_t, 4>{left, top, width, height})
+    {
+        glScissor(left, top, width, height);
+        m_scissorBox = {left, top, width, height};
+        m_validState.scissorBox = true;
+    }
+
+    if (!m_validState.scissorEnabled || !m_scissorEnabled)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        m_scissorEnabled = true;
+        m_validState.scissorEnabled = true;
+    }
+}
+
+void GLState::disableScissor()
+{
+    if (!m_validState.scissorEnabled || m_scissorEnabled)
+    {
+        glDisable(GL_SCISSOR_TEST);
+        m_scissorEnabled = false;
+        m_validState.scissorEnabled = true;
+    }
 }
 
 static void gl_enable_disable(GLenum state, bool enabled)
@@ -183,6 +253,18 @@ void GLState::setBlendEquation(gpu::BlendEquation blendEquation)
             glBlendEquation(GL_FUNC_ADD);
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             break;
+        case gpu::BlendEquation::plus:
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
+        case gpu::BlendEquation::min:
+            glBlendEquation(GL_MIN);
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
+        case gpu::BlendEquation::max:
+            glBlendEquation(GL_MAX);
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
         case gpu::BlendEquation::screen:
             glBlendEquation(GL_SCREEN_KHR);
             break;
@@ -227,14 +309,6 @@ void GLState::setBlendEquation(gpu::BlendEquation blendEquation)
             break;
         case gpu::BlendEquation::luminosity:
             glBlendEquation(GL_HSL_LUMINOSITY_KHR);
-            break;
-        case gpu::BlendEquation::plus:
-            glBlendEquation(GL_FUNC_ADD);
-            glBlendFunc(GL_ONE, GL_ONE);
-            break;
-        case gpu::BlendEquation::max:
-            glBlendEquation(GL_MAX);
-            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             break;
     }
     m_blendEquation = blendEquation;
@@ -281,8 +355,19 @@ void GLState::setWriteMasks(bool colorWriteMask,
     }
 }
 
-void GLState::setPipelineState(const gpu::PipelineState& pipelineState)
+void GLState::setPipelineState(const gpu::PipelineState& pipelineState,
+                               ScissorAction scissorAction)
 {
+    switch (scissorAction)
+    {
+        case ScissorAction::disable:
+            disableScissor();
+            break;
+
+        case ScissorAction::ignore:
+            break;
+    }
+
     setDepthStencilEnabled(pipelineState.depthTestEnabled,
                            pipelineState.stencilTestEnabled);
     if (pipelineState.stencilTestEnabled)

@@ -81,16 +81,27 @@ public:
     MouseEvent (Buttons newButtons, KeyModifiers newModifiers, const Point<float>& newPosition, Component* sourceComponent) noexcept;
 
     //==============================================================================
-    /** Copy constructor. */
+    /** Creates a MouseEvent object with full state.
+
+        @param newButtons             The buttons that are currently held down
+        @param newModifiers           The key modifiers that are currently active
+        @param newPosition            The mouse position, relative to the component that receives the event
+        @param lastMouseDownPosition  The position where the last mouse down event occurred
+        @param lastMouseDownTime      The time of the last mouse down event
+        @param sourceComponent        The component that the mouse event applies to
+    */
+    MouseEvent (Buttons newButtons,
+                KeyModifiers newModifiers,
+                const Point<float>& newPosition,
+                const Point<float>& lastMouseDownPosition,
+                yup::Time lastMouseDownTime,
+                Component* sourceComponent) noexcept;
+
+    //==============================================================================
+    /** Copy constructor and assignment operators. */
     MouseEvent (const MouseEvent& other) noexcept = default;
-
-    /** Move constructor. */
     MouseEvent (MouseEvent&& other) noexcept = default;
-
-    /** Copy assignment operator. */
     MouseEvent& operator= (const MouseEvent& other) noexcept = default;
-
-    /** Move assignment operator. */
     MouseEvent& operator= (MouseEvent&& other) noexcept = default;
 
     //==============================================================================
@@ -98,7 +109,7 @@ public:
 
         @returns true if the left button is down
     */
-    bool isLeftButtoDown() const noexcept;
+    bool isLeftButtonDown() const noexcept;
 
     /** Returns true if the middle mouse button is currently held down.
 
@@ -163,6 +174,15 @@ public:
         @returns    the mouse position, relative to the component that received the event
     */
     Point<float> getPosition() const noexcept;
+
+    /** Returns the mouse position in absolute screen coordinates.
+
+        This method converts the mouse position from component-relative coordinates
+        to absolute screen coordinates by taking into account the component hierarchy.
+
+        @returns    the mouse position in absolute screen coordinates
+    */
+    Point<float> getScreenPosition() const noexcept;
 
     /** Creates a copy of this event with a different position.
 
@@ -253,13 +273,6 @@ public:
     bool operator!= (const MouseEvent& other) const noexcept;
 
 private:
-    MouseEvent (Buttons newButtons,
-                KeyModifiers newModifiers,
-                const Point<float>& newPosition,
-                const Point<float>& lastMouseDownPosition,
-                yup::Time lastMouseDownTime,
-                Component* sourceComponent) noexcept;
-
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;

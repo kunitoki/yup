@@ -43,11 +43,6 @@
 
 using namespace yup;
 
-static String operator"" _S (const char* chars, size_t)
-{
-    return String { chars };
-}
-
 class StringPairArrayTests : public ::testing::Test
 {
 protected:
@@ -73,6 +68,46 @@ TEST_F (StringPairArrayTests, ParameterizedConstructorCaseSensitivity)
 
     StringPairArray caseInsensitive (true);
     EXPECT_TRUE (caseInsensitive.getIgnoresCase());
+}
+
+TEST_F (StringPairArrayTests, InitializerListConstructor)
+{
+    StringPairArray spa {
+        { "key1", "value1" },
+        { "key2", "value2" },
+        { "key3", "value3" }
+    };
+
+    EXPECT_EQ (spa.size(), 3);
+    EXPECT_EQ (spa["key1"], "value1");
+    EXPECT_EQ (spa["key2"], "value2");
+    EXPECT_EQ (spa["key3"], "value3");
+    EXPECT_TRUE (spa.getIgnoresCase()); // Default should ignore case
+}
+
+TEST_F (StringPairArrayTests, InitializerListConstructorWithCaseSensitivity)
+{
+    StringPairArray caseSensitive (false, { { "Key", "value1" }, { "key", "value2" } });
+
+    EXPECT_EQ (caseSensitive.size(), 2);
+    EXPECT_EQ (caseSensitive["Key"], "value1");
+    EXPECT_EQ (caseSensitive["key"], "value2");
+    EXPECT_FALSE (caseSensitive.getIgnoresCase());
+
+    StringPairArray caseInsensitive (true, { { "Key", "value1" }, { "key", "value2" } });
+
+    EXPECT_EQ (caseInsensitive.size(), 2);
+    EXPECT_EQ (caseInsensitive["KEY"], "value1");
+    EXPECT_EQ (caseInsensitive["Key"], "value1");
+    EXPECT_TRUE (caseInsensitive.getIgnoresCase());
+}
+
+TEST_F (StringPairArrayTests, EmptyInitializerListConstructor)
+{
+    StringPairArray spa {};
+
+    EXPECT_EQ (spa.size(), 0);
+    EXPECT_TRUE (spa.getIgnoresCase()); // Default should ignore case
 }
 
 TEST_F (StringPairArrayTests, CopyConstructor)
@@ -231,14 +266,14 @@ TEST_F (StringPairArrayTests, AddMapRespectsCaseSensitivity)
     StringPairArray insensitive { true }; // Case insensitive
     insensitive.addMap ({ { "duplicate", "a" }, { "Duplicate", "b" } });
     EXPECT_EQ (insensitive.size(), 1);
-    EXPECT_EQ (insensitive["DUPLICATE"], "a"_S);
+    EXPECT_EQ (insensitive["DUPLICATE"], String ("a"));
 
     StringPairArray sensitive { false }; // Case sensitive
-    sensitive.addMap ({ { "duplicate", "a"_S }, { "Duplicate", "b"_S } });
+    sensitive.addMap ({ { "duplicate", String ("a") }, { "Duplicate", String ("b") } });
     EXPECT_EQ (sensitive.size(), 2);
-    EXPECT_EQ (sensitive["duplicate"], "a"_S);
-    EXPECT_EQ (sensitive["Duplicate"], "b"_S);
-    EXPECT_EQ (sensitive["DUPLICATE"], ""_S);
+    EXPECT_EQ (sensitive["duplicate"], String ("a"));
+    EXPECT_EQ (sensitive["Duplicate"], String ("b"));
+    EXPECT_EQ (sensitive["DUPLICATE"], String (""));
 }
 
 TEST_F (StringPairArrayTests, AddMapOverwritesExistingPairs)
@@ -247,8 +282,8 @@ TEST_F (StringPairArrayTests, AddMapOverwritesExistingPairs)
     insensitive.set ("key", "value");
     insensitive.addMap ({ { "KEY", "VALUE" } });
     EXPECT_EQ (insensitive.size(), 1);
-    EXPECT_EQ (insensitive.getAllKeys()[0], "key"_S);
-    EXPECT_EQ (insensitive.getAllValues()[0], "VALUE"_S);
+    EXPECT_EQ (insensitive.getAllKeys()[0], String ("key"));
+    EXPECT_EQ (insensitive.getAllValues()[0], String ("VALUE"));
 
     StringPairArray sensitive { false };
     sensitive.set ("key", "value");
@@ -292,4 +327,81 @@ TEST_F (StringPairArrayTests, AddMapHasEquivalentBehaviourToAddArray)
     }());
 
     EXPECT_EQ (withAddMap, withAddArray);
+}
+
+TEST_F (StringPairArrayTests, RangeBasedForLoopIteration)
+{
+    StringPairArray spa;
+    addDefaultPairs (spa);
+
+    StringArray keysFound, valuesFound;
+    for (const auto& pair : spa)
+    {
+        keysFound.add (pair.key);
+        valuesFound.add (pair.value);
+    }
+
+    EXPECT_EQ (keysFound.size(), 3);
+    EXPECT_EQ (valuesFound.size(), 3);
+    EXPECT_TRUE (keysFound.contains ("key1"));
+    EXPECT_TRUE (keysFound.contains ("key2"));
+    EXPECT_TRUE (keysFound.contains ("key3"));
+    EXPECT_TRUE (valuesFound.contains ("value1"));
+    EXPECT_TRUE (valuesFound.contains ("value2"));
+    EXPECT_TRUE (valuesFound.contains ("value3"));
+}
+
+TEST_F (StringPairArrayTests, RangeBasedForLoopEmpty)
+{
+    StringPairArray spa;
+    int count = 0;
+
+    // This should never execute
+    for (const auto& pair : spa)
+        ++count;
+
+    EXPECT_EQ (count, 0);
+}
+
+TEST_F (StringPairArrayTests, RangeBasedForLoopKeyValueAccess)
+{
+    StringPairArray spa;
+    spa.set ("testKey", "testValue");
+    spa.set ("anotherKey", "anotherValue");
+
+    for (const auto& pair : spa)
+    {
+        if (pair.key == StringRef ("testKey"))
+            EXPECT_EQ (pair.value, StringRef ("testValue"));
+        else if (pair.key == StringRef ("anotherKey"))
+            EXPECT_EQ (pair.value, StringRef ("anotherValue"));
+    }
+}
+
+TEST_F (StringPairArrayTests, IteratorComparison)
+{
+    StringPairArray spa;
+    addDefaultPairs (spa);
+
+    auto it1 = spa.begin();
+    auto it2 = spa.begin();
+    auto end = spa.end();
+
+    EXPECT_FALSE (it1 != it2); // Both should point to same position
+    EXPECT_TRUE (it1 != end);  // Begin should not equal end
+}
+
+TEST_F (StringPairArrayTests, IteratorIncrement)
+{
+    StringPairArray spa;
+    spa.set ("first", "1");
+    spa.set ("second", "2");
+
+    auto it = spa.begin();
+    auto firstPair = *it;
+    ++it;
+    auto secondPair = *it;
+
+    EXPECT_NE (firstPair.key, secondPair.key);
+    EXPECT_NE (firstPair.value, secondPair.value);
 }

@@ -8,12 +8,15 @@ on:
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
+      - "**/python/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_wasm.*"
       - "!**/native/*_windows.*"
@@ -28,41 +31,41 @@ env:
   INSTALL_DEPS: >-
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
-    libxrandr-dev libxrender-dev libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev
+    libxrandr-dev libxrender-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev
+    libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev
 
 jobs:
   configure:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-
     - name: Configure
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-
-    - name: Build SDL2
+    - name: Build SDL
       run: |
-        cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target SDL2-static
-
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
     - name: Cache Configure
       id: cache-build
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       with:
         path: ${{ runner.workspace }}/build
         key: linux-build-${{ github.sha }}
 
-  build_tests:
+  build_tests_debug:
     runs-on: ubuntu-latest
     needs: [configure]
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -70,10 +73,28 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+
+  build_tests_release:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v5
+      id: cache-restore
+      with:
+        path: ${{ runner.workspace }}/build
+        key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: ./yup_tests
 
@@ -81,10 +102,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -92,17 +114,18 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
 
   build_app:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -110,17 +133,18 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
 
   build_graphics:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -128,35 +152,18 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
-
-  build_render:
-    runs-on: ubuntu-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: linux-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
 
   build_plugin:
     runs-on: ubuntu-latest
     needs: [configure]
     steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache/restore@v5
       id: cache-restore
       with:
         path: ${{ runner.workspace }}/build
@@ -164,9 +171,9 @@ jobs:
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_clap_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_clap_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_clap_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_vst3_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_vst3_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_standalone_plugin

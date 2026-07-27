@@ -5,83 +5,80 @@
 #pragma once
 
 #include "rive/renderer/render_context_helper_impl.hpp"
-#include "rive/renderer/webgpu/em_js_handle.hpp"
-#include "rive/renderer/gl/load_store_actions_ext.hpp"
+#include "rive/renderer/texture.hpp"
+#include <array>
 #include <map>
+#include <memory>
 #include <webgpu/webgpu_cpp.h>
+
+#ifdef RIVE_WAGYU
+#include "rive/renderer/gl/load_store_actions_ext.hpp"
+#endif
 
 namespace rive::gpu
 {
-class RenderContextWebGPUVulkan;
+class RenderTargetWebGPU;
 
-class RenderTargetWebGPU : public RenderTarget
+namespace wgsl
 {
-public:
-    wgpu::TextureFormat framebufferFormat() const
-    {
-        return m_framebufferFormat;
-    }
-
-    void setTargetTextureView(wgpu::TextureView);
-
-private:
-    friend class RenderContextWebGPUImpl;
-    friend class RenderContextWebGPUVulkan;
-
-    RenderTargetWebGPU(wgpu::Device device,
-                       wgpu::TextureFormat framebufferFormat,
-                       uint32_t width,
-                       uint32_t height,
-                       wgpu::TextureUsage additionalTextureFlags);
-
-    const wgpu::TextureFormat m_framebufferFormat;
-
-    wgpu::Texture m_coverageTexture;
-    wgpu::Texture m_clipTexture;
-    wgpu::Texture m_scratchColorTexture;
-
-    wgpu::TextureView m_targetTextureView;
-    wgpu::TextureView m_coverageTextureView;
-    wgpu::TextureView m_clipTextureView;
-    wgpu::TextureView m_scratchColorTextureView;
-};
+struct Shader;
+}
 
 class RenderContextWebGPUImpl : public RenderContextHelperImpl
 {
 public:
+    struct ContextOptions
+    {};
+
     enum class PixelLocalStorageType
     {
         // Pixel local storage cannot be supported; make a best reasonable
         // effort to draw shapes.
         none,
 
+#ifdef RIVE_WAGYU
         // Backend is OpenGL ES 3.1+ and has GL_EXT_shader_pixel_local_storage.
         // Use "raw-glsl" shaders that take advantage of the extension.
-        EXT_shader_pixel_local_storage,
+        GL_EXT_shader_pixel_local_storage,
 
         // Backend is Vulkan with VK_EXT_rasterization_order_attachment_access.
         // Use nonstandard WebGPU APIs to set up vulkan input attachments and
         // subpassLoad() in shaders.
-        subpassLoad,
+        VK_EXT_rasterization_order_attachment_access,
+#endif
     };
 
-    struct ContextOptions
+    struct Capabilities
     {
+        wgpu::BackendType backendType = wgpu::BackendType::Undefined;
+#ifdef RIVE_WAGYU
+        // Driver extensions.
+        bool VK_EXT_rasterization_order_attachment_access = false;
+        bool GL_EXT_shader_pixel_local_storage = false;
+        bool GL_EXT_shader_pixel_local_storage2 = false;
+
         PixelLocalStorageType plsType = PixelLocalStorageType::none;
-        bool disableStorageBuffers = false;
-        // Invert Y when drawing to client-provided RenderTargets.
-        // TODO: We may need to eventually make this configurable
-        // per-RenderTarget.
-        bool invertRenderTargetY = false;
-        // Invert the front face when drawing to client-provied RenderTargets.
-        bool invertRenderTargetFrontFace = false;
+
+        // Rive requires 4 storage buffers in the vertex shader. We polyfill
+        // them if the hardware doesn't support this.
+        bool polyfillVertexStorageBuffers = false;
+#endif
     };
 
-    static std::unique_ptr<RenderContext> MakeContext(wgpu::Device,
+    static std::unique_ptr<RenderContext> MakeContext(wgpu::Adapter,
+                                                      wgpu::Device,
                                                       wgpu::Queue,
                                                       const ContextOptions&);
 
     virtual ~RenderContextWebGPUImpl();
+
+    wgpu::Device device() const { return m_device; }
+    wgpu::Queue queue() const { return m_queue; }
+
+    void* makeCommandBuffer() override;
+    void commitCommandBuffer(void* commandBuffer) override;
+    const ContextOptions& contextOptions() const { return m_contextOptions; }
+    const Capabilities& capabilities() const { return m_capabilities; }
 
     virtual rcp<RenderTargetWebGPU> makeRenderTarget(wgpu::TextureFormat,
                                                      uint32_t width,
@@ -94,58 +91,76 @@ public:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
-                                  const uint8_t imageDataRGBAPremul[]) override;
+                                  GPUTextureFormat format,
+                                  const uint8_t imageData[],
+                                  uint8_t blockWidth = 1,
+                                  uint8_t blockHeight = 1,
+                                  bool srgb = false,
+                                  bool generateRemainingMips = false) override;
 
-protected:
-    RenderContextWebGPUImpl(wgpu::Device device,
-                            wgpu::Queue queue,
-                            const ContextOptions&);
+#ifdef RIVE_CANVAS
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height) override;
 
-    // Create the BindGroupLayout that binds the PLS attachments as textures.
-    // This is not necessary on all implementations.
-    virtual wgpu::BindGroupLayout initTextureBindGroup()
-    {
-        // Only supported by RenderContextWebGPUVulkan for now.
-        RIVE_UNREACHABLE();
-    }
-
-    // Create a standard PLS "draw" pipeline for the current implementation.
-    virtual wgpu::RenderPipeline makeDrawPipeline(
-        rive::gpu::DrawType drawType,
-        wgpu::TextureFormat framebufferFormat,
-        wgpu::ShaderModule vertexShader,
-        wgpu::ShaderModule fragmentShader,
-        EmJsHandle* pipelineJSHandleIfNeeded);
-
-    // Create a standard PLS "draw" render pass for the current implementation.
-    virtual wgpu::RenderPassEncoder makePLSRenderPass(
-        wgpu::CommandEncoder,
-        const RenderTargetWebGPU*,
-        wgpu::LoadOp,
-        const wgpu::Color& clearColor,
-        EmJsHandle* renderPassJSHandleIfNeeded);
-
-    wgpu::Device device() const { return m_device; }
-    wgpu::FrontFace frontFaceForRenderTargetDraws() const
-    {
-        return m_contextOptions.invertRenderTargetFrontFace
-                   ? wgpu::FrontFace::CCW
-                   : wgpu::FrontFace::CW;
-    }
-    wgpu::PipelineLayout drawPipelineLayout() const
-    {
-        return m_drawPipelineLayout;
-    }
+    std::unique_ptr<rive::ore::Context> makeOreContext() override;
+#endif
 
 private:
+    RenderContextWebGPUImpl(wgpu::Adapter,
+                            wgpu::Device,
+                            wgpu::Queue,
+                            const ContextOptions&);
+
+    // Create a standard PLS "draw" pipeline for the current implementation.
+    // vertexShader / fragmentShader carry information about which override
+    // constants are actually used by the shader (WebGPU doesn't allow
+    // overriding a constant that is declared but not used via the main
+    // entrypoint). Pass nullptr for non-WGSL (e.g. WAGYU/GLSL) shader paths,
+    // where permutations are baked in via #defines and there are no overrides.
+    wgpu::RenderPipeline makeDrawPipeline(
+        rive::gpu::DrawType,
+        gpu::ShaderFeatures,
+        gpu::InterlockMode,
+        gpu::ShaderMiscFlags,
+        wgpu::TextureFormat framebufferFormat,
+        wgpu::ShaderModule vertexShaderModule,
+        wgpu::ShaderModule fragmentShaderModule,
+        const wgsl::Shader* vertexShader,
+        const wgsl::Shader* fragmentShader,
+        const gpu::PipelineState&);
+
+    // Specifies how to store MSAA color/depth/stencil attachments when ending
+    // an MSAA render pass.
+    enum class MSAAEndType : bool
+    {
+        finish,
+        breakForDstCopy,
+    };
+
+    // A Rive draw render pass for a single flush. Owns the live
+    // wgpu::RenderPassEncoder and knows how to (re)start itself in response to
+    // the barriers encountered while walking the DrawList. Subclasses implement
+    // the InterlockMode-specific begin/barrier behavior.
+    class DrawRenderPass;
+    class PLSDrawRenderPass;
+    class AtomicDrawRenderPass;
+    class MSAADrawRenderPass;
+
+    // Construct the DrawRenderPass for the flush's InterlockMode and begin it
+    // (the MSAA pass may defer its begin until the first barrier).
+    std::unique_ptr<DrawRenderPass> makeDrawRenderPass(const FlushDescriptor&,
+                                                       wgpu::CommandEncoder);
+
+    // Lazily-built wgpu::PipelineLayouts for Rive draw pipelines. The PLS
+    // bindings in the layout differ based on the interlockMode, so these are
+    // keyed off interlockMode.
+    class DrawPipelineLayout;
+    const DrawPipelineLayout& drawPipelineLayout(gpu::InterlockMode);
+
     // Called outside the constructor so we can use virtual methods.
     void initGPUObjects();
 
     void generateMipmaps(wgpu::Texture);
-
-    // PLS always expects a clockwise front face.
-    constexpr static wgpu::FrontFace kFrontFaceForOffscreenDraws =
-        wgpu::FrontFace::CW;
 
     std::unique_ptr<BufferRing> makeUniformBufferRing(
         size_t capacityInBytes) override;
@@ -158,31 +173,41 @@ private:
     void resizeGradientTexture(uint32_t width, uint32_t height) override;
     void resizeTessellationTexture(uint32_t width, uint32_t height) override;
     void resizeAtlasTexture(uint32_t width, uint32_t height) override;
+    void resizeAtomicCoverageBacking(uint32_t width, uint32_t height) override;
+
+    // Lazy allocators for PLS backing buffers in atomic mode.
+    wgpu::Buffer atomicPLSColorBuffer();
+    wgpu::Buffer atomicPLSClipBuffer();
+    wgpu::Buffer atomicPLSCoverageBuffer();
 
     void flush(const FlushDescriptor&) override;
 
     const wgpu::Device m_device;
     const wgpu::Queue m_queue;
     const ContextOptions m_contextOptions;
+    Capabilities m_capabilities;
 
     constexpr static int COLOR_RAMP_BINDINGS_COUNT = 1;
     constexpr static int TESS_BINDINGS_COUNT = 6;
     constexpr static int ATLAS_BINDINGS_COUNT = 7;
-    constexpr static int DRAW_BINDINGS_COUNT = 10;
-    std::array<wgpu::BindGroupLayoutEntry, DRAW_BINDINGS_COUNT>
-        m_perFlushBindingLayouts;
+    constexpr static int DRAW_BINDINGS_COUNT = 11;
+    std::array<std::unique_ptr<DrawPipelineLayout>, gpu::INTERLOCK_MODE_COUNT>
+        m_drawPipelineLayouts;
 
+#ifdef RIVE_WAGYU
     // Draws emulated render-pass load/store actions for
     // EXT_shader_pixel_local_storage.
     class LoadStoreEXTPipeline;
-    std::map<LoadStoreActionsEXT, LoadStoreEXTPipeline> m_loadStoreEXTPipelines;
-    EmJsHandle m_loadStoreEXTVertexShaderHandle;
+    std::map<uint32_t, LoadStoreEXTPipeline> m_loadStoreEXTPipelines;
     wgpu::ShaderModule m_loadStoreEXTVertexShader;
     std::unique_ptr<BufferRing> m_loadStoreEXTUniforms;
+#endif
 
+#ifndef RIVE_WAGYU
     // Blits texture-to-texture using a draw command.
     class BlitTextureAsDrawPipeline;
     std::unique_ptr<BlitTextureAsDrawPipeline> m_blitTextureAsDrawPipeline;
+#endif
 
     // Renders color ramps to the gradient texture.
     class ColorRampPipeline;
@@ -205,22 +230,108 @@ private:
 
     // Draw paths and image meshes using the gradient and tessellation textures.
     class DrawPipeline;
-    std::map<uint32_t, DrawPipeline> m_drawPipelines;
-    wgpu::BindGroupLayout m_drawBindGroupLayouts[4 /*BINDINGS_SET_COUNT*/];
+    std::map<uint64_t, DrawPipeline> m_drawPipelines;
     wgpu::Sampler m_linearSampler;
-    wgpu::Sampler m_mipmapSampler;
+    wgpu::Sampler m_imageSamplers[ImageSampler::MAX_SAMPLER_PERMUTATIONS];
     wgpu::BindGroup m_samplerBindings;
-    wgpu::PipelineLayout m_drawPipelineLayout;
     wgpu::BindGroupLayout m_emptyBindingsLayout; // For when a set is unused.
     wgpu::Buffer m_pathPatchVertexBuffer;
     wgpu::Buffer m_pathPatchIndexBuffer;
+    wgpu::Buffer m_imageRectVertexBuffer;
+    wgpu::Buffer m_imageRectIndexBuffer;
 
     // Gaussian integral table for feathering.
     wgpu::Texture m_featherTexture;
     wgpu::TextureView m_featherTextureView;
 
-    // Bound when there is not an image paint.
-    wgpu::Texture m_nullImagePaintTexture;
-    wgpu::TextureView m_nullImagePaintTextureView;
+    // PLS backing buffers for atomic mode.
+    uint64_t m_atomicPLSBackingBufferSize = 0;
+    wgpu::Buffer m_atomicPLSColorBuffer;
+    wgpu::Buffer m_atomicPLSClipBuffer;
+    wgpu::Buffer m_atomicPLSCoverageBuffer;
+
+    // "Layout satisfiers" bound when texture/buffer bindings are unused.
+    wgpu::Texture m_nullTexture;
+    wgpu::TextureView m_nullTextureView;
+    wgpu::Buffer m_nullStorageBuffer;
+};
+
+class RenderTargetWebGPU : public RenderTarget
+{
+public:
+    wgpu::TextureFormat framebufferFormat() const
+    {
+        return m_framebufferFormat;
+    }
+
+    wgpu::Texture targetTexture() const { return m_targetTexture; };
+    wgpu::TextureView targetTextureView() const { return m_targetTextureView; };
+    void setTargetTextureView(wgpu::TextureView, wgpu::Texture);
+
+protected:
+    RenderTargetWebGPU(wgpu::Device device,
+                       const RenderContextWebGPUImpl::Capabilities&,
+                       wgpu::TextureFormat framebufferFormat,
+                       uint32_t width,
+                       uint32_t height);
+
+    // Lazily loaded render pass resources.
+    wgpu::TextureView coverageTextureView();
+    wgpu::TextureView clipTextureView();
+    wgpu::TextureView scratchColorTextureView();
+    wgpu::TextureView msaaColorTextureView();
+    wgpu::TextureView msaaDepthStencilTextureView();
+    wgpu::Texture dstColorTexture();
+    wgpu::TextureView dstColorTextureView();
+
+    // Copies a sub-rectangle of the targetTexture to the dstColorTexture for
+    // shader blending. Shaders can't read from the targetTexture itself because
+    // it's also the resolveTarget.
+    void copyTargetToDstColorTexture(wgpu::CommandEncoder, IAABB dstReadBounds);
+
+private:
+    friend class RenderContextWebGPUImpl;
+
+    const wgpu::Device m_device;
+    const wgpu::TextureFormat m_framebufferFormat;
+    wgpu::TextureUsage m_transientPLSUsage;
+
+    wgpu::Texture m_targetTexture;
+    wgpu::Texture m_coverageTexture;
+    wgpu::Texture m_clipTexture;
+    wgpu::Texture m_scratchColorTexture;
+    wgpu::Texture m_msaaColorTexture;
+    wgpu::Texture m_msaaDepthStencilTexture;
+    wgpu::Texture m_dstColorTexture;
+
+    wgpu::TextureView m_targetTextureView;
+    wgpu::TextureView m_coverageTextureView;
+    wgpu::TextureView m_clipTextureView;
+    wgpu::TextureView m_scratchColorTextureView;
+    wgpu::TextureView m_msaaColorTextureView;
+    wgpu::TextureView m_msaaDepthStencilTextureView;
+    wgpu::TextureView m_dstColorTextureView;
+};
+
+class TextureWebGPUImpl : public Texture
+{
+public:
+    TextureWebGPUImpl(uint32_t width, uint32_t height, wgpu::Texture texture) :
+        Texture(width, height),
+        m_texture(std::move(texture)),
+        m_textureView(m_texture.CreateView())
+    {}
+
+    wgpu::Texture texture() const { return m_texture; }
+    wgpu::TextureView textureView() const { return m_textureView; }
+    void* nativeHandle() const override
+    {
+        // Return the raw WGPUTexture handle.
+        return m_texture.Get();
+    }
+
+private:
+    wgpu::Texture m_texture;
+    wgpu::TextureView m_textureView;
 };
 } // namespace rive::gpu

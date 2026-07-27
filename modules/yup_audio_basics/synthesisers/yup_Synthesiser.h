@@ -99,7 +99,7 @@ private:
 
     @tags{Audio}
 */
-class YUP_API SynthesiserVoice
+class YUP_API SynthesiserVoice : public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -261,6 +261,9 @@ public:
     /** Returns true if this voice started playing its current note before the other voice did. */
     bool wasStartedBefore (const SynthesiserVoice& other) const noexcept;
 
+    /** The class is reference-counted, so this is a handy pointer class for it. */
+    using Ptr = ReferenceCountedObjectPtr<SynthesiserVoice>;
+
 protected:
     /** Resets the state of this voice after a sound has finished playing.
 
@@ -337,17 +340,16 @@ public:
     int getNumVoices() const noexcept { return voices.size(); }
 
     /** Returns one of the voices that have been added. */
-    SynthesiserVoice* getVoice (int index) const;
+    SynthesiserVoice::Ptr getVoice (int index) const;
 
     /** Adds a new voice to the synth.
 
         All the voices should be the same class of object and are treated equally.
 
-        The object passed in will be managed by the synthesiser, which will delete
-        it later on when no longer needed. The caller should not retain a pointer to the
-        voice.
+        The object passed in is reference counted, so will be deleted when the
+        synthesiser and all voices are no longer using it.
     */
-    SynthesiserVoice* addVoice (SynthesiserVoice* newVoice);
+    SynthesiserVoice* addVoice (SynthesiserVoice::Ptr newVoice);
 
     /** Deletes one of the voices. */
     void removeVoice (int index);
@@ -400,9 +402,7 @@ public:
 
         The midiChannel parameter is the channel, between 1 and 16 inclusive.
     */
-    virtual void noteOn (int midiChannel,
-                         int midiNoteNumber,
-                         float velocity);
+    virtual void noteOn (int midiChannel, int midiNoteNumber, float velocity);
 
     /** Triggers a note-off event.
 
@@ -416,10 +416,7 @@ public:
 
         The midiChannel parameter is the channel, between 1 and 16 inclusive.
     */
-    virtual void noteOff (int midiChannel,
-                          int midiNoteNumber,
-                          float velocity,
-                          bool allowTailOff);
+    virtual void noteOff (int midiChannel, int midiNoteNumber, float velocity, bool allowTailOff);
 
     /** Turns off all notes.
 
@@ -435,8 +432,7 @@ public:
         This method will be called automatically according to the midi data passed into
         renderNextBlock(), but may be called explicitly too.
     */
-    virtual void allNotesOff (int midiChannel,
-                              bool allowTailOff);
+    virtual void allNotesOff (int midiChannel, bool allowTailOff);
 
     /** Sends a pitch-wheel message to any active voices.
 
@@ -449,8 +445,7 @@ public:
         @param midiChannel          the midi channel, from 1 to 16 inclusive
         @param wheelValue           the wheel position, from 0 to 0x3fff, as returned by MidiMessage::getPitchWheelValue()
     */
-    virtual void handlePitchWheel (int midiChannel,
-                                   int wheelValue);
+    virtual void handlePitchWheel (int midiChannel, int wheelValue);
 
     /** Sends a midi controller message to any active voices.
 
@@ -464,9 +459,7 @@ public:
         @param controllerNumber     the midi controller type, as returned by MidiMessage::getControllerNumber()
         @param controllerValue      the midi controller value, between 0 and 127, as returned by MidiMessage::getControllerValue()
     */
-    virtual void handleController (int midiChannel,
-                                   int controllerNumber,
-                                   int controllerValue);
+    virtual void handleController (int midiChannel, int controllerNumber, int controllerValue);
 
     /** Sends an aftertouch message.
 
@@ -510,8 +503,7 @@ public:
         The base class implementation of this has no effect, but you may want to make your
         own synth react to program changes.
     */
-    virtual void handleProgramChange (int midiChannel,
-                                      int programNumber);
+    virtual void handleProgramChange (int midiChannel, int programNumber);
 
     //==============================================================================
     /** Tells the synthesiser what the sample rate is for the audio it's being used to render.
@@ -575,7 +567,7 @@ protected:
     /** This is used to control access to the rendering callback and the note trigger methods. */
     CriticalSection lock;
 
-    OwnedArray<SynthesiserVoice> voices;
+    ReferenceCountedArray<SynthesiserVoice> voices;
     ReferenceCountedArray<SynthesiserSound> sounds;
 
     /** The last pitch-wheel values for each midi channel. */

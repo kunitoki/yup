@@ -10,25 +10,25 @@ DataBindContextValueString::DataBindContextValueString(DataBind* dataBind) :
 
 void DataBindContextValueString::apply(Core* target,
                                        uint32_t propertyKey,
-                                       bool isMainDirection)
+                                       bool isMainDirection,
+                                       DataBind* dataBind)
 {
-    syncSourceValue();
+    syncSourceValue(dataBind);
     auto value = calculateValue<DataValueString, std::string>(m_dataValue,
                                                               isMainDirection,
-                                                              m_dataBind);
-    CoreRegistry::setString(target, propertyKey, value);
-}
-
-bool DataBindContextValueString::syncTargetValue(Core* target,
-                                                 uint32_t propertyKey)
-{
-    auto value = CoreRegistry::getString(target, propertyKey);
-
-    if (m_previousValue != value)
+                                                              dataBind);
+    switch (CoreRegistry::propertyFieldId(propertyKey))
     {
-        m_previousValue = value;
-        m_targetDataValue.value(value);
-        return true;
+        case CoreUintType::id:
+        {
+            if (target && target->is<Solo>())
+            {
+                target->as<Solo>()->updateByName(value);
+            }
+            break;
+        }
+        default:
+            CoreRegistry::setString(target, propertyKey, value);
+            break;
     }
-    return false;
 }

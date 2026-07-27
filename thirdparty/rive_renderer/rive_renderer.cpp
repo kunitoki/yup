@@ -19,20 +19,23 @@
   ==============================================================================
 */
 
-#include "rive_renderer.h"
-
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
  #pragma clang diagnostic ignored "-Wattributes"
+ #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wattributes"
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
- __pragma (warning (push))
- __pragma (warning (disable: 4244))
+ #pragma warning (push)
+ #pragma warning (disable: 4244)
 #endif
 
+#include "rive_renderer.h"
+
+// BEGIN YUP GENERATED RIVE RENDERER INCLUDES
 #include "source/rive_renderer.cpp"
 #include "source/render_context.cpp"
 #include "source/rive_render_paint.cpp"
@@ -46,11 +49,21 @@
 #include "source/gpu.cpp"
 #include "source/rive_render_factory.cpp"
 #include "source/render_context_helper_impl.cpp"
+#include "source/gpu_resource.cpp"
+// END YUP GENERATED RIVE RENDERER INCLUDES
+
+#define readU16LE readU16LE_vec
+#define readU32LE readU32LE_vec
+#include "source/ore/hlsl_struct_layout.cpp"
+#undef readU16LE
+#undef readU32LE
+#include "source/ore/ore_bind_group_layout.cpp"
+#include "source/ore/ore_binding_map.cpp"
 
 #if __clang__
  #pragma clang diagnostic pop
 #elif __GNUC__
  #pragma GCC diagnostic pop
 #elif _MSC_VER
- __pragma (warning (pop))
+ #pragma warning (pop)
 #endif

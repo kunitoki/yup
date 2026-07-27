@@ -6,6 +6,7 @@
 #define _RIVE_SIMPLE_ARRAY_HPP_
 
 #include "rive/rive_types.hpp"
+#include "rive/core/type_conversions.hpp"
 
 #include <initializer_list>
 #include <type_traits>
@@ -28,10 +29,10 @@ void resetCounters();
 #endif
 
 // Helper for constructing and destructing arrays of objects.
-template <typename T, bool IsPOD = std::is_pod<T>()> class SimpleArrayHelper
+template <typename T, bool IsTrivial = std::is_trivially_copyable<T>()> class SimpleArrayHelper
 {
 public:
-    static_assert(!std::is_pod<T>(), "This helper is for non-POD types.");
+    static_assert(!std::is_trivially_copyable<T>(), "This helper is for non-trivial types.");
     static void DefaultConstructArray(T* ptr, T* end)
     {
         for (; ptr < end; ++ptr)
@@ -49,11 +50,11 @@ public:
     }
 };
 
-// Specialized helper for constructing and destructing arrays of POD objects.
+// Specialized helper for constructing and destructing arrays of trivial objects.
 template <typename T> class SimpleArrayHelper<T, true>
 {
 public:
-    static_assert(std::is_pod<T>(), "This helper is only for POD types.");
+    static_assert(std::is_trivially_copyable<T>(), "This helper is only for trivial types.");
     static void DefaultConstructArray(T* ptr, T* end) {}
     static void CopyConstructArray(const T* first, const T* end, T* ptr)
     {
@@ -77,18 +78,35 @@ template <typename T> class SimpleArray
 {
 public:
     SimpleArray() : m_ptr(nullptr), m_size(0) {}
-    SimpleArray(size_t size) :
-        m_ptr(static_cast<T*>(malloc(size * sizeof(T)))), m_size(size)
+    SimpleArray(size_t size) : m_ptr(nullptr), m_size(0)
     {
-        SimpleArrayHelper<T>::DefaultConstructArray(m_ptr, m_ptr + m_size);
+        size_t bytes;
+        if (size != 0 && checkedMul<size_t>(size, sizeof(T), &bytes))
+        {
+            m_ptr = static_cast<T*>(malloc(bytes));
+            if (m_ptr != nullptr)
+            {
+                m_size = size;
+                SimpleArrayHelper<T>::DefaultConstructArray(m_ptr,
+                                                            m_ptr + m_size);
 #ifdef TESTING
-        SimpleArrayTesting::mallocCount++;
+                SimpleArrayTesting::mallocCount++;
 #endif
+            }
+        }
     }
     SimpleArray(const T* ptr, size_t size) : SimpleArray(size)
     {
-        assert(ptr <= ptr + size);
-        SimpleArrayHelper<T>::CopyConstructArray(ptr, ptr + size, m_ptr);
+        // Early-return on the empty state: the delegated ctor clamps
+        // m_size to 0 on overflow / OOM, and we must avoid any pointer
+        // arithmetic or memcpy when ptr may be null with m_size == 0.
+        if (m_size == 0)
+        {
+            return;
+        }
+        assert(ptr != nullptr);
+        assert(ptr <= ptr + m_size);
+        SimpleArrayHelper<T>::CopyConstructArray(ptr, ptr + m_size, m_ptr);
     }
 
     constexpr SimpleArray(const SimpleArray<T>& other) :
@@ -222,8 +240,9 @@ private:
         SimpleArrayTesting::reallocCount++;
 #endif
         // Call destructor for elements when sizing down.
-        SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
-                                            this->m_ptr + this->m_size);
+        if (this->m_ptr)
+            SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
+                                                this->m_ptr + this->m_size);
         this->m_ptr = static_cast<T*>(realloc(this->m_ptr, size * sizeof(T)));
         // Call constructor for elements when sizing up.
         SimpleArrayHelper<T>::DefaultConstructArray(this->m_ptr + this->m_size,

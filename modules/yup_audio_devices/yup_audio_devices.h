@@ -44,13 +44,14 @@
 
     ID:                 yup_audio_devices
     vendor:             yup
-    version:            7.0.12
+    version:            2.0.0
     name:               YUP audio and MIDI I/O device classes
     description:        Classes to play and record from audio and MIDI I/O devices
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
     dependencies:       yup_audio_basics yup_events
+    optionalDeps:       yup_graphics
     appleFrameworks:    CoreAudio CoreMIDI AudioToolbox
     iosFrameworks:      AVFoundation
     iosSimFrameworks:   AVFoundation
@@ -171,9 +172,18 @@
 #define YUP_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS 0
 #endif
 
+/** Config: YUP_ENABLE_CORE_AUDIO_LOGGING
+
+    Enable logging of audio device events on macOS, such as device changes and errors.
+*/
+#ifndef YUP_ENABLE_CORE_AUDIO_LOGGING
+#define YUP_ENABLE_CORE_AUDIO_LOGGING 1
+#endif
+
 //==============================================================================
 #include "midi_io/yup_MidiDevices.h"
 #include "midi_io/yup_MidiMessageCollector.h"
+#include "midi_io/ump/yup_UMPPacketCollector.h"
 
 namespace yup
 {

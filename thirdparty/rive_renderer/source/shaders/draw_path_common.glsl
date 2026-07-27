@@ -57,11 +57,14 @@ TEXTURE_R16F_1D_ARRAY(PER_FLUSH_BINDINGS_SET,
                       @featherTexture);
 #endif
 #ifdef @ATLAS_BLIT
-TEXTURE_R16F(PER_DRAW_BINDINGS_SET, ATLAS_TEXTURE_IDX, @atlasTexture);
+TEXTURE_R16F(PER_FLUSH_BINDINGS_SET, ATLAS_TEXTURE_IDX, @atlasTexture);
 #endif
 TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
-#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_ADVANCED_BLEND)
-TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, @dstColorTexture);
+// The Qualcomm compiler can't handle line breaks in #ifs.
+// clang-format off
+#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
+// clang-format on
+DST_COLOR_TEXTURE(@dstColorTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
 
@@ -72,7 +75,7 @@ SAMPLER_LINEAR(GRAD_TEXTURE_IDX, gradSampler)
 SAMPLER_LINEAR(ATLAS_TEXTURE_IDX, atlasSampler)
 #endif
 DYNAMIC_SAMPLER_BLOCK_BEGIN
-SAMPLER_DYNAMIC(IMAGE_SAMPLER_IDX, imageSampler)
+SAMPLER_DYNAMIC_IMAGE(imageSampler)
 DYNAMIC_SAMPLER_BLOCK_END
 #endif // @FRAGMENT
 
@@ -253,38 +256,6 @@ INLINE half eval_feathered_stroke(float4 coverages TEXTURE_CONTEXT_DECL)
 }
 #endif // @ENABLE_FEATHER
 
-#if defined(@FRAGMENT) && defined(@ATLAS_BLIT)
-// Upscales a pre-rendered feather from the atlas, converting from gaussian
-// space to linear before doing a bilerp.
-INLINE half
-filter_feather_atlas(float2 atlasCoord,
-                     float2 atlasTextureInverseSize TEXTURE_CONTEXT_DECL)
-{
-    // Gather the quad of pixels we need to filter.
-    // Gather from the exact center of the quad to make sure there are no
-    // rounding differences between us and the texture unit.
-    float2 atlasQuadCenter = round(atlasCoord);
-    half4 coverages = TEXTURE_GATHER(@atlasTexture,
-                                     atlasSampler,
-                                     atlasQuadCenter,
-                                     atlasTextureInverseSize);
-    // Convert each pixel from gaussian space back to linear.
-    coverages = make_half4(INVERSE_FEATHER(coverages.x),
-                           INVERSE_FEATHER(coverages.y),
-                           INVERSE_FEATHER(coverages.z),
-                           INVERSE_FEATHER(coverages.w));
-    // Bilerp in linear space.
-    coverages.xw = mix(coverages.xw,
-                       coverages.yz,
-                       make_half(atlasCoord.x + .5 - atlasQuadCenter.x));
-    coverages.x = mix(coverages.w,
-                      coverages.x,
-                      make_half(atlasCoord.y + .5 - atlasQuadCenter.y));
-    // Go back to gaussian now that the bilerp is finished.
-    return FEATHER(coverages.x);
-}
-#endif // @FRAGMENT && @ATLAS_BLIT
-
 #if defined(@VERTEX) && defined(@DRAW_PATH)
 INLINE int2 tess_texel_coord(int texelIndex)
 {
@@ -328,9 +299,11 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
     uint contourIDWithFlags = TESSDATA_AS_UINT(tessVertexData.w);
 
     // Fetch and unpack the contour referenced by the tessellation vertex.
-    uint4 contourData =
-        STORAGE_BUFFER_LOAD4(@contourBuffer,
-                             contour_data_idx(contourIDWithFlags));
+    // NOTE: The contourID is guaranteed to be >= 1 at this point, but clamp it
+    // anyway because in the event of a bug, a buffer load at index "0u - 1" can
+    // be very serious and hard to catch.
+    uint contourID = max(contourIDWithFlags & CONTOUR_ID_MASK, 1u);
+    uint4 contourData = STORAGE_BUFFER_LOAD4(@contourBuffer, contourID - 1u);
     float2 midpoint = uintBitsToFloat(contourData.xy);
     outPathID = contourData.z & 0xffffu;
     uint vertexIndex0 = contourData.w;
@@ -776,7 +749,11 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         if (bool(contourIDWithFlags & MIRRORED_CONTOUR_CONTOUR_FLAG) !=
             bool(contourIDWithFlags & NEGATE_PATH_FILL_COVERAGE_FLAG))
         {
-            outCoverages.x = -outCoverages.x;
+            // Effectively: outCoverages.x = -outCoverages.x
+            //
+            // ... But don't write that because it hits a bug in the Mali T720
+            // compiler that also negates Y.
+            outCoverages *= float4(-1., +1., +1., +1.);
         }
 #endif // !RENDER_MODE_MSAA
 
@@ -858,7 +835,78 @@ unpack_atlas_coverage_vertex(float3 triangleVertex,
     // outAtlasCoord tells the fragment shader where to fetch coverage from the
     // atlas, when using atlas coverage.
     float3 atlasTransform = uintBitsToFloat(pathData2.yzw);
-    outAtlasCoord = vertexPos * atlasTransform.x + atlasTransform.yz;
+    outAtlasCoord = (vertexPos * atlasTransform.x + atlasTransform.yz) *
+                    uniforms.atlasTextureInverseSize;
     return vertexPos;
 }
 #endif // @VERTEX && @ATLAS_BLIT
+
+// Calculates a coverage value to multiply into the paintColor that will
+// convert the current framebuffer value from "paint blended on top with
+// coverage of c0" to "paint blended on top with coverage of c1".
+//
+// i.e., The paint has already been blended into the framebuffer with coverage
+// "c0". After this fragment blends, it will be equivalent to the paint having
+// been blended into the framebuffer with coverage "c1".
+//
+// NOTE: c1 must be > c0, which is why this is only applicable in clockwise
+// modes.
+INLINE half incremental_clockwise_coverage(half c0, half c1, half paintAlpha)
+{
+    // NOTE: "max(, eps)" is just to avoid a divide by zero. When the
+    // denominator would be 0, c0 == 1, which also means c1 == 1, and there is
+    // no coverage to apply. Since c0 == c1 == 1, (c1 - c0) / eps == 0, which is
+    // the result we want in this case.
+    return (c1 - c0) / max(1. - c0 * paintAlpha, EPSILON_FP16_NON_DENORM);
+}
+
+// Converts an x,y image coordinate into a buffer index, swizzling into
+// BUFFER_IMAGE_TILE_SIZE x BUFFER_IMAGE_TILE_SIZE tiles for better cache
+// performance.
+// imageWidth must be a multiple of BUFFER_IMAGE_TILE_SIZE.
+INLINE uint swizzle_image_buffer_idx(uint2 imageCoord, uint imageWidth)
+{
+    uint idx = (imageCoord.y >> BUFFER_IMAGE_TILE_SIZE_LOG2) *
+                   (imageWidth << BUFFER_IMAGE_TILE_SIZE_LOG2) +
+               ((imageCoord.x >> BUFFER_IMAGE_TILE_SIZE_LOG2)
+                << (BUFFER_IMAGE_TILE_SIZE_LOG2 << 1));
+    // Subdivide each main tile into 4x4 column-major tiles.
+    idx += ((imageCoord.x & 0x1cu) << BUFFER_IMAGE_TILE_SIZE_LOG2) +
+           ((imageCoord.y & 0x1cu) << 2);
+    // Let the 4x4 tiles be row-major.
+    idx += ((imageCoord.y & 0x3u) << 2) + (imageCoord.x & 0x3u);
+    return idx;
+}
+
+#ifdef @RENDER_MODE_CLOCKWISE_ATOMIC
+
+#ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+#define CLOCKWISE_ATOMIC_PLS_MAIN PLS_FRAG_COLOR_MAIN
+#define EMIT_CLOCKWISE_ATOMIC_PLS(FRAG_COLOR)                                  \
+    _fragColor = FRAG_COLOR;                                                   \
+    EMIT_PLS_AND_FRAG_COLOR
+#else
+#define CLOCKWISE_ATOMIC_PLS_MAIN PLS_MAIN
+#define EMIT_CLOCKWISE_ATOMIC_PLS(FRAG_COLOR)                                  \
+    PLS_STORE4F(colorBuffer, FRAG_COLOR);                                      \
+    EMIT_PLS;
+#endif
+
+// Extracts coverage from its fixed-point encoding in a coverage buffer value.
+INLINE half clockwise_atomic_fixed_to_coverage(uint coverageFixed)
+{
+    return cast_int_to_half(int((coverageFixed & CLOCKWISE_COVERAGE_MASK) -
+                                CLOCKWISE_FILL_ZERO_VALUE)) *
+           CLOCKWISE_COVERAGE_INVERSE_PRECISION;
+}
+
+// Converts a coverage to a fixed point delta that may be added to a coverage
+// buffer value.
+// NOTE: This is not the same as converting it to a plain coverage value, since
+// those must be biased by CLOCKWISE_FILL_ZERO_VALUE.
+INLINE uint clockwise_atomic_coverage_delta_to_fixed(half coverage)
+{
+    return uint(coverage * CLOCKWISE_COVERAGE_PRECISION + .5);
+}
+
+#endif // @RENDER_MODE_CLOCKWISE_ATOMIC

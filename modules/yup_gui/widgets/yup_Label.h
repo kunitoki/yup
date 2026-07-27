@@ -36,7 +36,7 @@ class YUP_API Label : public Component
 public:
     //==============================================================================
     /** Creates an empty label. */
-    Label (StringRef componentID);
+    Label (StringRef componentID = {});
 
     //==============================================================================
     /** Returns the label's current text.
@@ -81,14 +81,26 @@ public:
 
         @param newWidth    The new width to use for the text outline
     */
-    void setStrokeWidth (float newWidth) noexcept;
+    void setStrokeWidth (float newWidth);
 
     //==============================================================================
 
-    struct Colors
+    Justification getJustification() const { return justification; }
+
+    void setJustification (Justification newJustification);
+
+    //==============================================================================
+
+    struct Style
     {
-        static const Identifier fillColorId;
-        static const Identifier strokeColorId;
+        //! Colors
+        static const Identifier textFillColorId;
+        static const Identifier textStrokeColorId;
+        static const Identifier backgroundColorId;
+        static const Identifier outlineColorId;
+
+        //! Metrics
+        static const Identifier textHeightProportionMetricId;
     };
 
     //==============================================================================
@@ -108,6 +120,7 @@ private:
     String text;
     StyledText styledText;
     float strokeWidth = 0.0f;
+    Justification justification { Justification::left };
     std::optional<Font> font;
     bool needsUpdate = true;
 

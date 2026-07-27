@@ -17,8 +17,6 @@
 #
 # ==============================================================================
 
-#==============================================================================
-
 function (_yup_module_parse_config module_header output_module_configs output_module_user_configs)
     set (module_configs "")
     set (module_user_configs "")
@@ -58,6 +56,181 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_upstream_has_content module_name module_path output_variable)
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
+        if (EXISTS "${candidate_path}")
+            file (GLOB upstream_items "${candidate_path}/*")
+            list (LENGTH upstream_items upstream_items_len)
+            if (upstream_items_len GREATER 0)
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_get_upstream_path module_name module_path output_variable)
+    _yup_collect_upstream_candidate_paths ("${module_name}" "${module_path}" candidate_paths)
+    foreach (candidate_path IN LISTS candidate_paths)
+        if (EXISTS "${candidate_path}")
+            set (${output_variable} "${candidate_path}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+
+    set (${output_variable} "" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_fetch_upstream module_name module_path module_upstream module_sha256 module_repository module_branch module_submodules output_target_variable)
+    if (NOT YUP_FETCH_UPSTREAM_MODULES)
+        return()
+    endif()
+
+    if (module_upstream AND module_repository)
+        _yup_message (FATAL_ERROR "Module ${module_name} defines both upstream and repository sources")
+    endif()
+
+    if (NOT module_upstream AND NOT module_repository)
+        return()
+    endif()
+
+    _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+    if (upstream_has_content)
+        return()
+    endif()
+
+    _yup_message (STATUS "Fetching upstream sources for ${module_name}")
+
+    set (upstream_target_dir "${CMAKE_BINARY_DIR}/externals/${module_name}")
+
+    if (module_upstream)
+        set (download_dir "${CMAKE_BINARY_DIR}/_yup_upstream_downloads")
+        file (MAKE_DIRECTORY "${download_dir}")
+        get_filename_component (archive_name "${module_upstream}" NAME)
+        if ("${archive_name}" STREQUAL "")
+            set (archive_name "${module_name}.archive")
+        endif()
+        set (archive_path "${download_dir}/${archive_name}")
+
+        # SHOW_PROGRESS
+        if (module_sha256)
+            file (DOWNLOAD "${module_upstream}" "${archive_path}" EXPECTED_HASH SHA256=${module_sha256})
+        else()
+            file (DOWNLOAD "${module_upstream}" "${archive_path}")
+        endif()
+
+        set (extract_dir "${CMAKE_BINARY_DIR}/_yup_upstream_extract/${module_name}")
+        file (REMOVE_RECURSE "${extract_dir}")
+        file (MAKE_DIRECTORY "${extract_dir}")
+        file (ARCHIVE_EXTRACT INPUT "${archive_path}" DESTINATION "${extract_dir}")
+
+        file (GLOB extracted_entries RELATIVE "${extract_dir}" "${extract_dir}/*")
+        list (LENGTH extracted_entries extracted_entries_len)
+        set (source_dir "${extract_dir}")
+        if (extracted_entries_len EQUAL 1)
+            list (GET extracted_entries 0 single_entry)
+            if (IS_DIRECTORY "${extract_dir}/${single_entry}")
+                set (source_dir "${extract_dir}/${single_entry}")
+            endif()
+        endif()
+
+        file (GLOB extracted_items "${source_dir}/*")
+        if (extracted_items)
+            file (REMOVE_RECURSE "${upstream_target_dir}")
+            file (MAKE_DIRECTORY "${upstream_target_dir}")
+            file (COPY ${extracted_items} DESTINATION "${upstream_target_dir}")
+        endif()
+    else()
+        if (NOT module_branch)
+            set (module_branch "HEAD")
+        endif()
+
+        if (module_submodules)
+            set (module_submodules_recurse ON)
+        else()
+            set (module_submodules_recurse OFF)
+        endif()
+
+        file (REMOVE_RECURSE "${upstream_target_dir}")
+        file (MAKE_DIRECTORY "${upstream_target_dir}")
+
+        set (module_branch_value "${module_branch}")
+        string (STRIP "${module_branch_value}" module_branch_value)
+        string (REGEX REPLACE "^\"(.*)\"$" "\\1" module_branch_value "${module_branch_value}")
+        string (REGEX REPLACE "^'(.*)'$" "\\1" module_branch_value "${module_branch_value}")
+
+        if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+            string (REGEX MATCH "^[0-9a-fA-F]+$" module_branch_is_hex "${module_branch_value}")
+            string (LENGTH "${module_branch_value}" module_branch_length)
+            if (module_branch_is_hex AND module_branch_length GREATER_EQUAL 7 AND module_branch_length LESS_EQUAL 40)
+                set (module_branch_is_commit ON)
+            else()
+                set (module_branch_is_commit "")
+            endif()
+        else()
+            set (module_branch_is_commit "")
+        endif()
+
+        if (module_branch_is_commit)
+            execute_process (
+                COMMAND git clone -q --no-checkout "${module_repository}" "${upstream_target_dir}"
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/externals/${module_name}"
+                RESULT_VARIABLE clone_result)
+            if (clone_result EQUAL 0)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" fetch -q --depth=1 origin "${module_branch_value}"
+                    RESULT_VARIABLE fetch_result)
+                execute_process (
+                    COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" checkout -q "${module_branch_value}"
+                    RESULT_VARIABLE checkout_result)
+                if (module_submodules_recurse AND fetch_result EQUAL 0 AND checkout_result EQUAL 0)
+                    execute_process (
+                        COMMAND git -c advice.detachedHead=false -C "${upstream_target_dir}" submodule update --init --recursive --depth=1
+                        RESULT_VARIABLE submodule_result)
+                endif()
+            endif()
+        else()
+            set (clone_args git clone)
+            if (module_submodules_recurse)
+                list (APPEND clone_args --recurse-submodules --shallow-submodules)
+            endif()
+            list (APPEND clone_args -q --depth=1)
+            if (module_branch_value AND NOT module_branch_value STREQUAL "HEAD")
+                list (APPEND clone_args --branch "${module_branch_value}")
+            endif()
+            list (APPEND clone_args "${module_repository}" "${upstream_target_dir}")
+            execute_process (
+                COMMAND ${clone_args}
+                WORKING_DIRECTORY "${upstream_target_dir}"
+                RESULT_VARIABLE clone_result)
+        endif()
+
+        if (module_branch_is_commit)
+            if (NOT clone_result EQUAL 0 OR NOT fetch_result EQUAL 0 OR NOT checkout_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} at commit ${module_branch} for ${module_name}")
+            endif()
+            if (module_submodules_recurse AND NOT submodule_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to update submodules for ${module_repository} at commit ${module_branch}")
+            endif()
+        else()
+            if (NOT clone_result EQUAL 0)
+                _yup_message (FATAL_ERROR "Failed to clone ${module_repository} for ${module_name}")
+            endif()
+        endif()
+
+        set (${output_target_variable} "" PARENT_SCOPE)
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_collect_sources folder output_variable)
     set(source_extensions ".c;.cc;.cxx;.cpp;.h;.hh;.hxx;.hpp")
     if (APPLE)
@@ -67,7 +240,7 @@ function (_yup_module_collect_sources folder output_variable)
     set (base_path "${folder}/${module_name}")
     set (all_module_sources "")
 
-    foreach (extension ${source_extensions})
+    foreach (extension IN LISTS source_extensions)
         file (GLOB found_source_files "${base_path}*${extension}")
 
         if (NOT YUP_PLATFORM_MSFT)
@@ -90,8 +263,7 @@ function (_yup_module_collect_sources folder output_variable)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
 
-        if (NOT YUP_PLATFORM_OSX)
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
+        if (NOT YUP_PLATFORM_MAC)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
@@ -119,7 +291,7 @@ function (_yup_module_collect_sources folder output_variable)
     endforeach()
 
     set (module_sources "")
-    foreach (module_source ${all_module_sources})
+    foreach (module_source IN LISTS all_module_sources)
         if (APPLE)
             if (module_source MATCHES "^.*\.(cc|cxx|cpp)$")
                 get_filename_component (source_directory ${module_source} DIRECTORY)
@@ -147,16 +319,168 @@ endfunction()
 
 function (_yup_module_prepare_frameworks frameworks weak_frameworks output_variable)
     set (temp_frameworks "")
-    foreach (framework ${frameworks})
+    foreach (framework IN LISTS frameworks)
         list (APPEND temp_frameworks "-framework ${framework}")
     endforeach()
 
-    foreach (framework ${weak_frameworks})
+    foreach (framework IN LISTS weak_frameworks)
         list (APPEND temp_frameworks "-weak_framework ${framework}")
     endforeach()
 
     list (JOIN temp_frameworks " " final_frameworks)
     set (${output_variable} "${final_frameworks}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_collect_objc_sources output_variable)
+    set (objc_sources "")
+    foreach (source_file IN LISTS ARGN)
+        if (source_file MATCHES "^.*\\.(m|mm)$")
+            list (APPEND objc_sources "${source_file}")
+        endif()
+    endforeach()
+
+    set (${output_variable} "${objc_sources}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_apply_objc_arc_to_sources target_name)
+    if (NOT YUP_PLATFORM_APPLE OR NOT TARGET "${target_name}")
+        return()
+    endif()
+
+    set (objc_sources ${ARGN})
+    if (NOT objc_sources)
+        return()
+    endif()
+
+    set_property (SOURCE ${objc_sources}
+        TARGET_DIRECTORY ${target_name}
+        APPEND PROPERTY COMPILE_OPTIONS "-fobjc-arc")
+
+    set_property (SOURCE ${objc_sources}
+        TARGET_DIRECTORY ${target_name}
+        APPEND PROPERTY XCODE_FILE_ATTRIBUTES "RequiresObjCArc")
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_collect_objc_sources_from_target target_name output_variable visited_variable)
+    set (arc_sources "${${output_variable}}")
+    set (visited_targets "${${visited_variable}}")
+
+    if (NOT TARGET "${target_name}")
+        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+        return()
+    endif()
+
+    get_target_property (aliased_target "${target_name}" ALIASED_TARGET)
+    if (aliased_target)
+        set (target_name "${aliased_target}")
+    endif()
+
+    if ("${target_name}" IN_LIST visited_targets)
+        set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+        set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+        return()
+    endif()
+
+    list (APPEND visited_targets "${target_name}")
+
+    get_target_property (target_arc_sources "${target_name}" YUP_MODULE_ARC_SOURCES)
+    if (target_arc_sources)
+        list (APPEND arc_sources ${target_arc_sources})
+    endif()
+
+    foreach (link_property IN ITEMS INTERFACE_LINK_LIBRARIES LINK_LIBRARIES)
+        get_target_property (target_libraries "${target_name}" ${link_property})
+        foreach (target_library IN LISTS target_libraries)
+            _yup_module_collect_objc_sources_from_target ("${target_library}" arc_sources visited_targets)
+        endforeach()
+    endforeach()
+
+    set (${output_variable} "${arc_sources}" PARENT_SCOPE)
+    set (${visited_variable} "${visited_targets}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_apply_arc_to_target_sources target_name)
+    if (NOT YUP_PLATFORM_APPLE)
+        return()
+    endif()
+
+    set (arc_sources "")
+    set (visited_targets "")
+    foreach (linked_target IN LISTS ARGN)
+        _yup_module_collect_objc_sources_from_target ("${linked_target}" arc_sources visited_targets)
+    endforeach()
+
+    if (arc_sources)
+        list (REMOVE_DUPLICATES arc_sources)
+        _yup_module_apply_objc_arc_to_sources ("${target_name}" ${arc_sources})
+    endif()
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_normalize_dependency_target dependency output_variable)
+    set (normalized_dependency "${dependency}")
+
+    if (TARGET "${normalized_dependency}")
+        get_target_property (aliased_target "${normalized_dependency}" ALIASED_TARGET)
+        if (aliased_target)
+            set (normalized_dependency "${aliased_target}")
+        endif()
+    elseif ("${normalized_dependency}" MATCHES "^yup::(.+)$")
+        string (REGEX REPLACE "^yup::" "" normalized_dependency "${normalized_dependency}")
+    endif()
+
+    set (${output_variable} "${normalized_dependency}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_dependency_cycle module_name context_name active_stack)
+    _yup_module_normalize_dependency_target ("${module_name}" module_target)
+
+    if (NOT TARGET "${module_target}")
+        return()
+    endif()
+
+    get_target_property (module_path "${module_target}" YUP_MODULE_PATH)
+    if (NOT module_path)
+        return()
+    endif()
+
+    list (FIND active_stack "${module_target}" cycle_start)
+    if (NOT cycle_start EQUAL -1)
+        list (LENGTH active_stack active_stack_length)
+        math (EXPR cycle_length "${active_stack_length} - ${cycle_start}")
+        list (SUBLIST active_stack ${cycle_start} ${cycle_length} cycle_path)
+        list (APPEND cycle_path "${module_target}")
+        list (JOIN cycle_path " -> " cycle_message)
+
+        _yup_message (FATAL_ERROR "${context_name} introduces a circular YUP module dependency: ${cycle_message}")
+    endif()
+
+    list (APPEND active_stack "${module_target}")
+
+    get_target_property (module_dependencies "${module_target}" YUP_MODULE_DEPENDENCIES)
+    foreach (module_dependency IN LISTS module_dependencies)
+        _yup_module_check_dependency_cycle ("${module_dependency}" "${context_name}" "${active_stack}")
+    endforeach()
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_check_circular_dependencies context_name module_targets)
+    foreach (module_target IN LISTS module_targets)
+        _yup_module_check_dependency_cycle ("${module_target}" "${context_name}" "")
+    endforeach()
 endfunction()
 
 #==============================================================================
@@ -169,10 +493,10 @@ function (_yup_module_setup_target module_name
                                    module_defines
                                    module_sources
                                    module_libs
+                                   module_libs_paths
                                    module_link_options
                                    module_frameworks
-                                   module_dependencies
-                                   module_arc_enabled)
+                                   module_dependencies)
     if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
         list (APPEND module_options /bigobj)
@@ -180,10 +504,16 @@ function (_yup_module_setup_target module_name
 
     target_sources (${module_name} INTERFACE ${module_sources})
 
+    set (module_objc_sources "")
+    set (module_arc_sources "")
+    _yup_module_collect_objc_sources (module_objc_sources ${module_sources})
+    set (module_arc_sources "${module_objc_sources}")
+    _yup_module_apply_objc_arc_to_sources ("${module_name}" ${module_arc_sources})
+
     if (module_cpp_standard)
         target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
     else()
-        target_compile_features (${module_name} INTERFACE cxx_std_17)
+        target_compile_features (${module_name} INTERFACE cxx_std_20)
     endif()
 
     set_target_properties (${module_name} PROPERTIES
@@ -191,9 +521,12 @@ function (_yup_module_setup_target module_name
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
-    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
+    set_target_properties (${module_name} PROPERTIES
+        YUP_MODULE_ARC_SOURCES "${module_arc_sources}")
+
+    if (YUP_PLATFORM_APPLE)
         set_target_properties (${module_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled}
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ON
             XCODE_GENERATE_SCHEME OFF)
     endif()
 
@@ -208,6 +541,9 @@ function (_yup_module_setup_target module_name
 
     target_include_directories (${module_name} INTERFACE
         ${module_include_paths})
+
+    target_link_directories (${module_name} INTERFACE
+        ${module_libs_paths})
 
     target_link_libraries (${module_name} INTERFACE
         ${module_libs}
@@ -231,8 +567,16 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     endif()
 
     set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO)
-    set (multi_value_args "")
+    set (one_value_args
+        PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL
+        PLUGIN_IS_SYNTH PLUGIN_IS_MONO
+        PLUGIN_AU_SUBTYPE PLUGIN_AU_MANUFACTURER PLUGIN_AU_SANDBOX_SAFE
+        PLUGIN_AAX_MANUFACTURER_ID PLUGIN_AAX_PRODUCT_ID
+        PLUGIN_AAX_PLUGIN_ID_NATIVE PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE
+        PLUGIN_AAX_CATEGORY PLUGIN_AAX_PAGE_TABLE_FILE)
+    set (multi_value_args
+        PLUGIN_CLAP_FEATURES
+        PLUGIN_VST3_CATEGORIES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -245,8 +589,20 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     elseif (plugin_type STREQUAL "standalone")
         set (custom_target_name "${target_name}_standalone")
         set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1")
+    elseif (plugin_type STREQUAL "au")
+        set (custom_target_name "${target_name}_au")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AU=1")
+    elseif (plugin_type STREQUAL "auv3")
+        set (custom_target_name "${target_name}_auv3")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AUv3=1")
+    elseif (plugin_type STREQUAL "aax")
+        set (custom_target_name "${target_name}_aax")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_AAX=1")
+    elseif (plugin_type STREQUAL "lv2")
+        set (custom_target_name "${target_name}_lv2")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_LV2=1")
     else()
-        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap' or 'standalone'")
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap', 'au', 'auv3', 'aax', 'lv2' or 'standalone'")
     endif()
 
     add_library (${custom_target_name} INTERFACE)
@@ -258,10 +614,10 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
     get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
+    get_target_property (module_libs_paths ${plugin_client_target} YUP_MODULE_LIBS_PATHS)
     get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
-    get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
 
     list (APPEND module_defines ${plugin_define})
     list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
@@ -284,6 +640,73 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
         list (APPEND module_defines YupPlugin_IsMono=0)
     endif()
 
+    if (YUP_ARG_PLUGIN_AU_SUBTYPE)
+        list (APPEND module_defines "YupPlugin_AUSubType=\"${YUP_ARG_PLUGIN_AU_SUBTYPE}\"")
+    endif()
+
+    if (YUP_ARG_PLUGIN_AU_MANUFACTURER)
+        list (APPEND module_defines "YupPlugin_AUManufacturer=\"${YUP_ARG_PLUGIN_AU_MANUFACTURER}\"")
+    endif()
+
+    # -- AAX-specific defines
+    if (plugin_type STREQUAL "aax")
+        if (YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID)
+            list (APPEND module_defines "YupPlugin_AAX_ManufacturerID='${YUP_ARG_PLUGIN_AAX_MANUFACTURER_ID}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PRODUCT_ID)
+            list (APPEND module_defines "YupPlugin_AAX_ProductID='${YUP_ARG_PLUGIN_AAX_PRODUCT_ID}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE)
+            list (APPEND module_defines "YupPlugin_AAX_PlugInID_Native='${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_NATIVE}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE)
+            list (APPEND module_defines "YupPlugin_AAX_PlugInID_AudioSuite='${YUP_ARG_PLUGIN_AAX_PLUGIN_ID_AUDIOSUITE}'")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_CATEGORY)
+            list (APPEND module_defines "YupPlugin_AAXCategory=${YUP_ARG_PLUGIN_AAX_CATEGORY}")
+        endif()
+        if (YUP_ARG_PLUGIN_AAX_PAGE_TABLE_FILE)
+            list (APPEND module_defines "YupPlugin_AAXPageTableFile=\"${YUP_ARG_PLUGIN_AAX_PAGE_TABLE_FILE}\"")
+        endif()
+    endif()
+
+    # -- CLAP-specific defines
+    if (plugin_type STREQUAL "clap" AND YUP_ARG_PLUGIN_CLAP_FEATURES)
+        set (_clap_features_str "")
+        foreach (_feature IN LISTS YUP_ARG_PLUGIN_CLAP_FEATURES)
+            if (_feature STREQUAL "instrument")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_INSTRUMENT,")
+            elseif (_feature STREQUAL "audio-effect")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,")
+            elseif (_feature STREQUAL "note-effect")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_EFFECT,")
+            elseif (_feature STREQUAL "note-detector")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_NOTE_DETECTOR,")
+            elseif (_feature STREQUAL "analyzer")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_ANALYZER,")
+            elseif (_feature STREQUAL "synthesizer")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SYNTHESIZER,")
+            elseif (_feature STREQUAL "mono")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_MONO,")
+            elseif (_feature STREQUAL "stereo")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_STEREO,")
+            elseif (_feature STREQUAL "surround")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_SURROUND,")
+            elseif (_feature STREQUAL "utility")
+                string (APPEND _clap_features_str "CLAP_PLUGIN_FEATURE_UTILITY,")
+            else()
+                _yup_message (WARNING "Unknown CLAP feature: ${_feature}")
+            endif()
+        endforeach()
+        list (APPEND module_defines "YupPlugin_CLAP_Features=${_clap_features_str}")
+    endif()
+
+    # -- VST3-specific defines
+    if (plugin_type STREQUAL "vst3" AND YUP_ARG_PLUGIN_VST3_CATEGORIES)
+        list (JOIN YUP_ARG_PLUGIN_VST3_CATEGORIES "|" _vst3_categories_joined)
+        list (APPEND module_defines "YupPlugin_VST3_Categories=\"${_vst3_categories_joined}\"")
+    endif()
+
     if (YUP_PLATFORM_APPLE)
         _yup_glob_recurse ("${module_path}/${plugin_type}/*.mm" module_sources)
     else()
@@ -298,10 +721,10 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
-                              "${module_dependencies}"
-                              "${module_arc_enabled}")
+                              "${module_dependencies}")
 
     _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
     target_sources (${custom_target_name} PRIVATE ${all_module_files})
@@ -312,7 +735,7 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_module module_path module_group)
+function (yup_add_module module_path modules_definitions module_group)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
 
@@ -336,11 +759,11 @@ function (yup_add_module module_path module_group)
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
 
     # ==== Assign Configurations Dynamically
-    set (global_properties "dependencies|defines|options|searchpaths")
+    set (global_properties "dependencies|defines|libs|options|searchpaths")
     set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)LinkOptions$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
 
     set (parsed_config "")
-    foreach (module_config ${module_configs})
+    foreach (module_config IN LISTS module_configs)
         string (REGEX REPLACE "^(.+):[ \t\r\n]+(.+)$" "\\1;\\2" parsed_config ${module_config})
         list (GET parsed_config 0 key)
         list (LENGTH parsed_config parsed_config_len)
@@ -354,14 +777,37 @@ function (yup_add_module module_path module_group)
             _yup_comma_or_space_separated_list ("${value}" module_${key})
         elseif (${key} MATCHES "^minimumCppStandard$")
             set (module_cpp_standard "${value}")
-        elseif (${key} MATCHES "^enableARC$")
-            _yup_boolean_property ("${value}" module_arc_enabled)
+        elseif (${key} MATCHES "^needsPython$")
+            _yup_boolean_property ("${value}" module_needs_python)
+        elseif (${key} MATCHES "^upstream$")
+            set (module_upstream "${value}")
+        elseif (${key} MATCHES "^sha256$")
+            set (module_sha256 "${value}")
+        elseif (${key} MATCHES "^repository$")
+            set (module_repository "${value}")
+        elseif (${key} MATCHES "^branch$")
+            set (module_branch "${value}")
+        elseif (${key} MATCHES "^submodules$")
+            _yup_boolean_property ("${value}" module_submodules)
         endif()
     endforeach()
 
-    _yup_set_default (module_cpp_standard "17")
-    _yup_set_default (module_arc_enabled OFF)
+    _yup_set_default (module_cpp_standard "20")
+    _yup_set_default (module_needs_python OFF)
+    _yup_set_default (module_submodules ON)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
+
+    set (module_upstream_target "")
+    if (module_upstream OR module_repository)
+        _yup_module_upstream_has_content ("${module_name}" "${module_path}" upstream_has_content)
+        if (NOT upstream_has_content)
+            if (YUP_FETCH_UPSTREAM_MODULES)
+                _yup_module_fetch_upstream ("${module_name}" "${module_path}" "${module_upstream}" "${module_sha256}" "${module_repository}" "${module_branch}" "${module_submodules}" module_upstream_target)
+            else()
+                _yup_message (WARNING "Upstream sources for ${module_name} are missing and YUP_FETCH_UPSTREAM_MODULES is OFF")
+            endif()
+        endif()
+    endif()
 
     # ==== Setup Platform-Specific Configurations
     if (YUP_PLATFORM_IOS)
@@ -407,30 +853,30 @@ function (yup_add_module module_path module_group)
         _yup_module_prepare_frameworks ("${module_appleFrameworks}" "${module_appleWeakFrameworks}" module_appleFrameworks)
         list (APPEND module_frameworks ${module_appleFrameworks})
 
-    elseif (YUP_PLATFORM_OSX)
+    elseif (YUP_PLATFORM_MAC)
         if (module_appleCppStandard)
             set (module_cpp_standard "${module_appleCppStandard}")
         endif()
-        list (APPEND module_dependencies ${module_osxDeps})
+        list (APPEND module_dependencies ${module_macDeps})
         list (APPEND module_dependencies ${module_appleDeps})
-        list (APPEND module_defines ${module_osxDefines})
+        list (APPEND module_defines ${module_macDefines})
         list (APPEND module_defines ${module_appleDefines})
-        list (APPEND module_options ${module_osxOptions})
+        list (APPEND module_options ${module_macOptions})
         list (APPEND module_options ${module_appleOptions})
-        list (APPEND module_libs ${module_osxLibs})
-        list (APPEND module_link_options ${module_osxLinkOptions})
+        list (APPEND module_libs ${module_macLibs})
+        list (APPEND module_link_options ${module_macLinkOptions})
         list (APPEND module_libs ${module_appleLibs})
         list (APPEND module_link_options ${module_appleLinkOptions})
-        _yup_resolve_variable_paths ("${module_osxSearchpaths}" module_osxSearchpaths)
-        list (APPEND module_searchpaths ${module_osxSearchpaths})
+        _yup_resolve_variable_paths ("${module_macSearchpaths}" module_macSearchpaths)
+        list (APPEND module_searchpaths ${module_macSearchpaths})
         _yup_resolve_variable_paths ("${module_appleSearchpaths}" module_appleSearchpaths)
         list (APPEND module_searchpaths ${module_appleSearchpaths})
-        _yup_module_prepare_frameworks ("${module_osxFrameworks}" "${module_osxWeakFrameworks}" module_osxFrameworks)
-        list (APPEND module_frameworks ${module_osxFrameworks})
+        _yup_module_prepare_frameworks ("${module_macFrameworks}" "${module_macWeakFrameworks}" module_macFrameworks)
+        list (APPEND module_frameworks ${module_macFrameworks})
         _yup_module_prepare_frameworks ("${module_appleFrameworks}" "${module_appleWeakFrameworks}" module_appleFrameworks)
         list (APPEND module_frameworks ${module_appleFrameworks})
-        if (module_osxCppStandard)
-            set (module_cpp_standard "${module_osxCppStandard}")
+        if (module_macCppStandard)
+            set (module_cpp_standard "${module_macCppStandard}")
         endif()
 
     elseif (YUP_PLATFORM_LINUX)
@@ -444,7 +890,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_link_options ${module_linuxLinkOptions})
         _yup_resolve_variable_paths ("${module_linuxSearchpaths}" module_linuxSearchpaths)
         list (APPEND module_searchpaths ${module_linuxSearchpaths})
-        foreach (package ${module_linuxPackages})
+        foreach (package IN LISTS module_linuxPackages)
             _yup_get_package_config_libs ("${package}" package_libs)
             list (APPEND module_libs ${package_libs})
         endforeach()
@@ -496,17 +942,64 @@ function (yup_add_module module_path module_group)
         endif()
     endif()
 
+    # ==== Add module definitions
+    foreach (module_definition IN LISTS modules_definitions)
+        list (APPEND module_defines ${module_definition})
+    endforeach()
+
+    if ("${module_name}" STREQUAL "yup_audio_plugin_host")
+        _yup_collect_audio_plugin_host_dependencies ("${module_defines}" audio_plugin_host_dependencies)
+        list (APPEND module_dependencies ${audio_plugin_host_dependencies})
+    endif()
+
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
-    list (APPEND module_include_paths "${module_include_path}")
+    list (APPEND module_include_paths "${module_include_path}" "${module_path}")
 
-    foreach (searchpath ${module_searchpaths})
-        if (EXISTS "${searchpath}")
-            list (APPEND module_include_paths "${searchpath}")
+    if (module_upstream OR module_repository)
+        _yup_module_get_upstream_path ("${module_name}" "${module_path}" module_upstream_path)
+        if (module_upstream_path)
+            get_filename_component (module_upstream_include_path ${module_upstream_path} DIRECTORY)
+            list (APPEND module_include_paths "${module_upstream_path}" "${module_upstream_include_path}")
+        else()
+            list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals")
+        endif()
+    endif()
+
+    foreach (searchpath IN LISTS module_searchpaths)
+        if (module_upstream_path AND EXISTS "${module_upstream_path}/${searchpath}")
+            list (APPEND module_include_paths "${module_upstream_path}/${searchpath}")
+        elseif (module_upstream OR module_repository)
+            if (EXISTS "${CMAKE_BINARY_DIR}/externals/${module_name}/${searchpath}")
+                list (APPEND module_include_paths "${CMAKE_BINARY_DIR}/externals/${module_name}/${searchpath}")
+            endif()
         elseif (EXISTS "${module_path}/${searchpath}")
             list (APPEND module_include_paths "${module_path}/${searchpath}")
+        elseif (EXISTS "${searchpath}")
+            list (APPEND module_include_paths "${searchpath}")
         endif()
     endforeach()
+
+    # ==== Fetch Python if needed
+    if (module_needs_python)
+        if (YUP_ENABLE_STATIC_PYTHON_LIBS)
+            list (APPEND module_libs ${Python_LIBRARIES})
+        elseif (NOT YUP_BUILD_WHEEL)
+            list (APPEND module_libs Python::Python)
+            if (YUP_PLATFORM_MAC)
+                list (APPEND module_link_options "-Wl,-weak_reference_mismatches,weak")
+            endif()
+        else()
+            list (APPEND module_libs Python::Module)
+        endif()
+
+        if (NOT "${Python_INCLUDE_DIRS}" STREQUAL "")
+            list (APPEND module_include_paths "${Python_INCLUDE_DIRS}")
+        endif()
+        if (NOT "${Python_LIBRARY_DIRS}" STREQUAL "")
+            list (APPEND module_libs_paths "${Python_LIBRARY_DIRS}")
+        endif()
+    endif()
 
     # ==== Scan sources to include
     _yup_module_collect_sources ("${module_path}" module_sources)
@@ -520,10 +1013,14 @@ function (yup_add_module module_path module_group)
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_libs_paths}"
                               "${module_link_options}"
                               "${module_frameworks}"
-                              "${module_dependencies}"
-                              "${module_arc_enabled}")
+                              "${module_dependencies}")
+
+    if (module_upstream_target)
+        add_dependencies (${module_name} "${module_upstream_target}")
+    endif()
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
@@ -545,61 +1042,72 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
+        YUP_MODULE_LIBS_PATHS "${module_libs_paths}"
         YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
-        YUP_MODULE_DEPENDENCIES "${module_dependencies}"
-        YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
+        YUP_MODULE_DEPENDENCIES "${module_dependencies}")
 
     # ==== Add Java support for Android if available (after target properties are set)
     if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)
-        _yup_module_add_java_support (${module_name})
+        _yup_android_module_add_java_support (${module_name})
     endif()
 
 endfunction()
 
 #==============================================================================
 
-function (_yup_add_default_modules modules_path)
-    # Thirdparty modules
+macro (yup_add_default_modules modules_path)
+    get_filename_component (modules_path "${modules_path}" ABSOLUTE)
+    _yup_message (STATUS "Adding default modules from ${modules_path}")
+
+    # ==== Fetch options
+    set (options "")
+    set (one_value_args ENABLE_PYTHON)
+    set (multi_value_args DEFINITIONS)
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+    _yup_set_default (YUP_ARG_TARGET_DEFINITIONS "")
+    _yup_set_default (YUP_ARG_ENABLE_PYTHON OFF)
+    set (modules_definitions "${YUP_ARG_DEFINITIONS}")
+
+    # ==== Thirdparty modules
     set (thirdparty_group "Thirdparty")
-    yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libpng ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/libwebp ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/sheenbidi ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/yoga_library ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_decoders ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
-    yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
+    file (GLOB thirdparty_module_dirs "${modules_path}/thirdparty/*")
+    foreach (thirdparty_module_dir IN LISTS thirdparty_module_dirs)
+        if (IS_DIRECTORY "${thirdparty_module_dir}")
+            get_filename_component (module_dir_name "${thirdparty_module_dir}" NAME)
+            yup_add_module (${modules_path}/thirdparty/${module_dir_name} "${modules_definitions}" ${thirdparty_group})
+        endif()
+    endforeach()
 
-    # Yup modules
+    # ==== Yup modules
     set (modules_group "Modules")
-    yup_add_module (${modules_path}/modules/yup_core ${modules_group})
-    add_library (yup::yup_core ALIAS yup_core)
+    file (GLOB yup_module_dirs "${modules_path}/modules/*")
+    list (FILTER yup_module_dirs EXCLUDE REGEX ".*yup_python.*")
+    foreach (yup_module_dir IN LISTS yup_module_dirs)
+        if (IS_DIRECTORY "${yup_module_dir}")
+            get_filename_component (module_dir_name "${yup_module_dir}" NAME)
+            yup_add_module (${modules_path}/modules/${module_dir_name} "${modules_definitions}" ${modules_group})
+            add_library (yup::${module_dir_name} ALIAS ${module_dir_name})
+        endif()
+    endforeach()
 
-    yup_add_module (${modules_path}/modules/yup_events ${modules_group})
-    add_library (yup::yup_events ALIAS yup_events)
+    if (YUP_ARG_ENABLE_PYTHON)
+        if (NOT YUP_BUILD_WHEEL)
+            set (python_modules "Interpreter;Development.Embed")
+        else()
+            set (python_modules "Interpreter;Development.Module")
+        endif()
 
-    yup_add_module (${modules_path}/modules/yup_data_model ${modules_group})
-    add_library (yup::yup_data_model ALIAS yup_data_model)
+        _yup_fetch_python ("${YUP_ENABLE_STATIC_PYTHON_LIBS}" "${python_modules}")
+        _yup_message (STATUS "Found python modules: ${python_modules}")
+        _yup_message (STATUS "* Python_EXECUTABLE: ${Python_EXECUTABLE}")
+        _yup_message (STATUS "* Python_VERSION_MAJOR: ${Python_VERSION_MAJOR}")
+        _yup_message (STATUS "* Python_VERSION_MINOR: ${Python_VERSION_MINOR}")
+        _yup_message (STATUS "* Python_INCLUDE_DIR: ${Python_INCLUDE_DIR}")
+        _yup_message (STATUS "* Python_LIBRARY_DIRS: ${Python_LIBRARY_DIRS}")
+        _yup_message (STATUS "* Python_ROOT_DIR: ${Python_ROOT_DIR}")
 
-    yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
-    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
-
-    yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
-    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
-
-    yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
-    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
-
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
-    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
-
-    yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
-    add_library (yup::yup_graphics ALIAS yup_graphics)
-
-    yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
-    add_library (yup::yup_gui ALIAS yup_gui)
-endfunction()
+        yup_add_module (${modules_path}/modules/yup_python "${modules_definitions}" ${modules_group})
+        add_library (yup::yup_python ALIAS yup_python)
+    endif()
+endmacro()

@@ -50,6 +50,26 @@ VkImageView RenderTargetVulkanImpl::accessTargetImageView(
     return m_targetImageView;
 }
 
+VkImageView RenderTargetVulkan::clearTargetImageView(
+    VkCommandBuffer commandBuffer,
+    ColorInt clearColor,
+    const vkutil::ImageAccess& dstAccessAfterClear)
+{
+    m_vk->clearColorImage(
+        commandBuffer,
+        clearColor,
+        accessTargetImage(commandBuffer,
+                          {
+                              .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                              .accessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                              .layout = VK_IMAGE_LAYOUT_GENERAL,
+                          },
+                          vkutil::ImageAccessAction::invalidateContents),
+        VK_IMAGE_LAYOUT_GENERAL);
+
+    return accessTargetImageView(commandBuffer, dstAccessAfterClear);
+}
+
 vkutil::Texture2D* RenderTargetVulkan::accessOffscreenColorTexture(
     VkCommandBuffer commandBuffer,
     const vkutil::ImageAccess& dstAccess,
@@ -57,14 +77,16 @@ vkutil::Texture2D* RenderTargetVulkan::accessOffscreenColorTexture(
 {
     if (m_offscreenColorTexture == nullptr)
     {
-        m_offscreenColorTexture = m_vk->makeTexture2D({
-            .format = m_framebufferFormat,
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                     VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        });
+        m_offscreenColorTexture = m_vk->makeTexture2D(
+            {
+                .format = m_framebufferFormat,
+                .extent = {width(), height()},
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+                         VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                         VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            },
+            "offscreen color texture");
     }
 
     m_offscreenColorTexture->barrier(commandBuffer,
@@ -74,93 +96,69 @@ vkutil::Texture2D* RenderTargetVulkan::accessOffscreenColorTexture(
     return m_offscreenColorTexture.get();
 }
 
-vkutil::Texture2D* RenderTargetVulkan::clipTextureR32UI()
+vkutil::Texture2D* RenderTargetVulkan::copyTargetImageToOffscreenColorTexture(
+    VkCommandBuffer commandBuffer,
+    const vkutil::ImageAccess& dstAccessAfterCopy,
+    const IAABB& copyBounds)
 {
-    if (m_clipTextureR32UI == nullptr)
-    {
-        m_clipTextureR32UI = m_vk->makeTexture2D({
-            .format = VK_FORMAT_R32_UINT,
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-        });
-    }
-    return m_clipTextureR32UI.get();
+    m_vk->blitSubRect(
+        commandBuffer,
+        accessTargetImage(commandBuffer,
+                          {
+                              .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                              .accessMask = VK_ACCESS_TRANSFER_READ_BIT,
+                              .layout = VK_IMAGE_LAYOUT_GENERAL,
+                          }),
+        VK_IMAGE_LAYOUT_GENERAL,
+        accessOffscreenColorTexture(
+            commandBuffer,
+            {
+                .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .accessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .layout = VK_IMAGE_LAYOUT_GENERAL,
+            },
+            vkutil::ImageAccessAction::invalidateContents)
+            ->vkImage(),
+        VK_IMAGE_LAYOUT_GENERAL,
+        copyBounds);
+
+    return accessOffscreenColorTexture(commandBuffer, dstAccessAfterCopy);
 }
 
-vkutil::Texture2D* RenderTargetVulkan::scratchColorTexture()
+vkutil::Texture2D* RenderTargetVulkan::msaaColorTexture()
 {
-    if (m_scratchColorTexture == nullptr)
+    if (m_msaaColorTexture == nullptr)
     {
-        m_scratchColorTexture = m_vk->makeTexture2D({
-            .format = m_framebufferFormat,
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-        });
+        m_msaaColorTexture = m_vk->makeTexture2D(
+            {
+                .format = m_framebufferFormat,
+                .extent = {width(), height(), 1},
+                .samples = VK_SAMPLE_COUNT_4_BIT,
+                .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                         VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+                         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+            },
+            "MSAA Color Texture");
     }
-    return m_scratchColorTexture.get();
+    return m_msaaColorTexture.get();
 }
 
-vkutil::Texture2D* RenderTargetVulkan::coverageTexture()
+vkutil::Texture2D* RenderTargetVulkan::msaaDepthStencilTexture()
 {
-    if (m_coverageTexture == nullptr)
+    if (m_msaaDepthStencilTexture == nullptr)
     {
-        m_coverageTexture = m_vk->makeTexture2D({
-            .format = VK_FORMAT_R32_UINT,
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-        });
+        m_msaaDepthStencilTexture = m_vk->makeTexture2D(
+            {
+                .format = vkutil::get_preferred_depth_stencil_format(
+                    m_vk->supportsD24S8()),
+                .extent = {width(), height(), 1},
+                .samples = VK_SAMPLE_COUNT_4_BIT,
+                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+                         VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+            },
+            "MSAA Depth/Stencil Texture");
     }
-    return m_coverageTexture.get();
-}
-
-vkutil::Texture2D* RenderTargetVulkan::clipTextureRGBA8()
-{
-    if (m_clipTextureRGBA8 == nullptr)
-    {
-        m_clipTextureRGBA8 = m_vk->makeTexture2D({
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                     VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-        });
-    }
-    return m_clipTextureRGBA8.get();
-}
-
-vkutil::Texture2D* RenderTargetVulkan::coverageAtomicTexture()
-{
-    if (m_coverageAtomicTexture == nullptr)
-    {
-        m_coverageAtomicTexture = m_vk->makeTexture2D({
-            .format = VK_FORMAT_R32_UINT,
-            .extent = {width(), height()},
-            .usage =
-                VK_IMAGE_USAGE_STORAGE_BIT |
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT, // For vkCmdClearColorImage
-        });
-    }
-    return m_coverageAtomicTexture.get();
-}
-
-vkutil::Texture2D* RenderTargetVulkan::depthStencilTexture()
-{
-    if (m_depthStencilTexture == nullptr)
-    {
-        m_depthStencilTexture = m_vk->makeTexture2D({
-            .format = vkutil::get_preferred_depth_stencil_format(
-                m_vk->supportsD24S8()),
-            .extent = {width(), height()},
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        });
-    }
-    return m_depthStencilTexture.get();
+    return m_msaaDepthStencilTexture.get();
 }
 
 rcp<RenderTargetVulkanImpl> RenderContextVulkanImpl::makeRenderTarget(

@@ -289,7 +289,7 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
 
     AndroidMidiDeviceManager manager;
 
-    std::unique_ptr<MidiInput> midiInput (new MidiInput ({}, deviceIdentifier));
+    std::unique_ptr<MidiInput> midiInput (new MidiInput ({}, deviceIdentifier, ump::PacketProtocol::MIDI_1_0));
 
     if (auto* port = manager.openMidiInputPortWithID (deviceIdentifier.getIntValue(), midiInput.get(), callback))
     {
@@ -302,8 +302,18 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     return {};
 }
 
-MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
-    : deviceInfo (deviceName, deviceIdentifier)
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    jassertfalse;
+    return {};
+}
+
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceIdentifier,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceIdentifier, protocol)
 {
 }
 
@@ -348,7 +358,7 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
 
     if (auto* port = manager.openMidiOutputPortWithID (deviceIdentifier.getIntValue()))
     {
-        std::unique_ptr<MidiOutput> midiOutput (new MidiOutput ({}, deviceIdentifier));
+        std::unique_ptr<MidiOutput> midiOutput (new MidiOutput ({}, deviceIdentifier, ump::PacketProtocol::MIDI_1_0));
         midiOutput->internal.reset (port);
         midiOutput->setName (port->getName());
 
@@ -356,6 +366,15 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     }
 
     return {};
+}
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifier,
+                                                    ump::PacketProtocol protocol)
+{
+    if (protocol != ump::PacketProtocol::MIDI_1_0)
+        return {};
+
+    return openDevice (deviceIdentifier);
 }
 
 MidiOutput::~MidiOutput()
@@ -379,6 +398,21 @@ void MidiOutput::sendMessageNow (const MidiMessage& message)
 
         androidMidi->send (content, (jint) 0, (jint) messageSize);
     }
+}
+
+void MidiOutput::sendMessageNow (const ump::View& message)
+{
+    ump::ToBytestreamConverter converter { 2048 };
+    converter.convert (message, 0.0, [&] (const MidiMessage& midiMessage)
+    {
+        sendMessageNow (midiMessage);
+    });
+}
+
+void MidiOutput::sendMessageNow (const ump::Packets& packets)
+{
+    for (auto it = packets.cbegin(); it != packets.cend(); ++it)
+        sendMessageNow (*it);
 }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> callback)

@@ -2,12 +2,12 @@
 #define _RIVE_ARTBOARD_HPP_
 
 #include "rive/advance_flags.hpp"
+#include "rive/resetting_component.hpp"
 #include "rive/animation/linear_animation.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/core_context.hpp"
-#include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind/data_context.hpp"
-#include "rive/data_bind/data_bind_context.hpp"
+#include "rive/data_bind/data_bind_container.hpp"
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 #include "rive/generated/artboard_base.hpp"
@@ -19,6 +19,10 @@
 #include "rive/audio/audio_engine.hpp"
 #include "rive/math/raw_path.hpp"
 #include "rive/typed_children.hpp"
+#include "rive/virtualizing_component.hpp"
+#include "rive/input/focus_node.hpp"
+#include "rive/semantic/semantic_node.hpp"
+#include "rive/lua/scripting_vm.hpp"
 
 #include <queue>
 #include <unordered_set>
@@ -26,6 +30,7 @@
 
 namespace rive
 {
+class KeyFrameInterpolator;
 class ArtboardComponentList;
 class ArtboardHost;
 class File;
@@ -46,12 +51,25 @@ class SMIBool;
 class SMIInput;
 class SMINumber;
 class SMITrigger;
+class DataBind;
+class DataBindContainer;
+class ScriptedObject;
+class FocusManager;
+class SemanticManager;
+class SemanticNode;
 
 #ifdef WITH_RIVE_TOOLS
 typedef void (*ArtboardCallback)(void*);
+typedef uint8_t (*TestBoundsCallback)(void*, float, float, bool);
+typedef uint8_t (*IsAncestorCallback)(void*, uint16_t);
+typedef float (*RootTransformCallback)(void*, float, float, bool);
 #endif
 
-class Artboard : public ArtboardBase, public CoreContext
+class Artboard : public ArtboardBase,
+                 public CoreContext,
+                 public Virtualizable,
+                 public ResettingComponent,
+                 public DataBindContainer
 {
     friend class File;
     friend class ArtboardImporter;
@@ -59,19 +77,24 @@ class Artboard : public ArtboardBase, public CoreContext
 
 private:
     std::vector<Core*> m_Objects;
+    std::vector<Core*> m_invalidObjects;
     std::vector<LinearAnimation*> m_Animations;
     std::vector<StateMachine*> m_StateMachines;
     std::vector<Component*> m_DependencyOrder;
     std::vector<Drawable*> m_Drawables;
+    std::vector<ClippingShape*> m_clippingShapes;
     std::vector<DrawTarget*> m_DrawTargets;
     std::vector<NestedArtboard*> m_NestedArtboards;
     std::vector<ArtboardComponentList*> m_ComponentLists;
     std::vector<ArtboardHost*> m_ArtboardHosts;
     std::vector<Joystick*> m_Joysticks;
-    std::vector<DataBind*> m_DataBinds;
-    std::vector<DataBind*> m_AllDataBinds;
-    DataContext* m_DataContext = nullptr;
-    bool m_ownsDataContext = false;
+    std::vector<ResettingComponent*> m_Resettables;
+    std::vector<ScriptedObject*> m_ScriptedObjects;
+    std::vector<AdvancingComponent*> m_advancingComponents;
+    rcp<DataContext> m_DataContext = nullptr;
+#ifdef WITH_RIVE_SCRIPTING
+    ScriptingVM* m_scriptingVM = nullptr;
+#endif
     bool m_JoysticksApplyBeforeUpdate = true;
 
     unsigned int m_DirtDepth = 0;
@@ -81,20 +104,35 @@ private:
     bool m_FrameOrigin = true;
     std::unordered_set<LayoutComponent*> m_dirtyLayout;
     bool m_isCleaningDirtyLayouts = false;
+    std::unique_ptr<KeyFrameInterpolator> m_ownedInheritedInterpolator;
     float m_originalWidth = 0;
     float m_originalHeight = 0;
     bool m_updatesOwnLayout = true;
+    bool m_hostTransformMarkedDirty = false;
+    bool m_didChange = true;
     Artboard* parentArtboard() const;
     ArtboardHost* m_host = nullptr;
+    FocusManager* m_activeFocusManager = nullptr;
+    SemanticManager* m_activeSemanticManager = nullptr;
+    rcp<SemanticNode> m_semanticBoundaryNode;
+#ifdef WITH_RIVE_TOOLS
+    rcp<FocusNode> m_externalParentFocusNode;
+#endif
+    static uint64_t sm_frameId;
     bool sharesLayoutWithHost() const;
     void cloneObjectDataBinds(const Core* object,
                               Core* clone,
                               Artboard* artboard) const;
+    void initScriptedObjects();
 
     // Variable that tracks whenever the draw order changes. It is used by the
     // state machine controllers to sort their hittable components when they are
     // out of sync
     uint8_t m_drawOrderChangeCounter = 0;
+#ifdef WITH_RIVE_TOOLS
+    uint16_t m_artboardId = 0;
+#endif
+    const Artboard* m_artboardSource = nullptr;
 
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
     rcp<AudioEngine> m_audioEngine;
@@ -102,19 +140,109 @@ private:
 
     void sortDependencies();
     void sortDrawOrder();
-    void updateDataBinds();
+    void clearRedundantOperations();
     void updateRenderPath() override;
     void update(ComponentDirt value) override;
 
 public:
+    static uint64_t frameId() { return sm_frameId; }
+#ifdef TESTING
+    static void incFrameId() { sm_frameId++; }
+#elif WITH_RIVE_TOOLS
+    static void incFrameId() { sm_frameId++; }
+#endif
+    void updateDataBinds(bool applyTargetToSource = true) override;
     void host(ArtboardHost* artboardHost);
     ArtboardHost* host() const;
+    void addedToHost() { m_justAddedToHost = true; }
+
+    /// Set the active FocusManager for this artboard. The FocusManager is
+    /// typically owned by a StateMachineInstance.
+    void setActiveFocusManager(FocusManager* manager)
+    {
+        m_activeFocusManager = manager;
+    }
+    /// Get the active FocusManager for this artboard.
+    FocusManager* focusManager() const { return m_activeFocusManager; }
+
+#ifdef WITH_RIVE_TOOLS
+    /// Set an external parent FocusNode for this artboard's root-level focus
+    /// nodes. This is used when the artboard is nested inside another artboard
+    /// that has a FocusData in its hierarchy. The external parent allows focus
+    /// nodes in this artboard to be children of a FocusData in the host
+    /// artboard.
+    void setExternalParentFocusNode(rcp<FocusNode> node);
+    /// Get the external parent FocusNode for this artboard.
+    rcp<FocusNode> externalParentFocusNode() const;
+    // collapseSingle is only used by the editor. Its purpose is to set the
+    // collapse value to the immediate artboard but not to its children
+    void collapseSingle(bool);
+#endif
+
+    /// Build the focus tree for this artboard, registering all FocusData nodes
+    /// with the given FocusManager.
+    /// @param focusManager The FocusManager to register nodes with
+    /// @param parentFocusNode Optional parent node for root-level focus nodes
+    ///        (used for nested artboards to connect to parent's focus tree)
+    void buildFocusTree(FocusManager* focusManager,
+                        rcp<FocusNode> parentFocusNode = nullptr);
+
+    /// Build the focus tree for this artboard using the parent node's manager.
+    /// This is a convenience overload for nested artboards - the FocusManager
+    /// is derived from the parent node's manager() reference.
+    /// @param parentFocusNode The parent node to attach this artboard's focus
+    ///        nodes under. Must have a valid manager() or this is a no-op.
+    void buildFocusTree(rcp<FocusNode> parentFocusNode);
+
+    /// Clean up the focus tree for this artboard, removing all FocusData nodes
+    /// from the FocusManager. This should be called before the artboard is
+    /// destroyed or recycled to prevent use-after-free when the FocusManager
+    /// still holds references to FocusNodes pointing to deleted FocusData.
+    void cleanupFocusTree();
+
+    /// Set the active SemanticManager for this artboard. The SemanticManager is
+    /// typically owned by a StateMachineInstance.
+    void setActiveSemanticManager(SemanticManager* manager)
+    {
+        m_activeSemanticManager = manager;
+    }
+    /// Get the active SemanticManager for this artboard.
+    SemanticManager* semanticManager() const { return m_activeSemanticManager; }
+
+    /// Build the semantic tree for this artboard, registering all SemanticData
+    /// nodes with the given SemanticManager.
+    void buildSemanticTree(SemanticManager* semanticManager,
+                           rcp<SemanticNode> parentSemanticNode = nullptr);
+
+    /// Clean up the semantic tree for this artboard, removing all SemanticData
+    /// nodes from the SemanticManager.
+    void cleanupSemanticTree();
+
+    // Semantic-only collapse for this artboard's semantic nodes.
+    // When collapsing, walks the boundary's semantic subtree (O(K) semantic
+    // nodes). When uncollapsing, falls back to m_Objects because
+    // SemanticData::collapse(false) re-parents nodes outside the boundary.
+    void collapseSemanticBoundary(bool value);
+
+    /// Mark bounds dirty for all semantic nodes under this artboard's
+    /// boundary node. Called when the host transform changes.
+    void markSemanticBoundaryTransformDirty();
+
+    /// Get the semantic boundary node for this artboard (null for root).
+    rcp<SemanticNode> semanticBoundaryNode() const
+    {
+        return m_semanticBoundaryNode;
+    }
 
     // Implemented for ShapePaintContainer.
     const Mat2D& shapeWorldTransform() const override
     {
         return worldTransform();
     }
+    Component* virtualizableComponent() override { return this; }
+    bool updatesOwnLayout() { return m_updatesOwnLayout; }
+    StatusCode onAddedClean(CoreContext* context) override;
+    void addDirtyDataBind(DataBind*) override;
 
 private:
 #ifdef TESTING
@@ -124,14 +252,30 @@ public:
     void addObject(Core* object);
     void addAnimation(LinearAnimation* object);
     void addStateMachine(StateMachine* object);
+    void buildDataContext(rcp<DataContext> value);
 
 public:
     Artboard();
     ~Artboard() override;
     bool validateObjects();
     StatusCode initialize();
+    bool didChange() { return m_didChange; }
 
     Core* resolve(uint32_t id) const override;
+#ifdef WITH_RIVE_TOOLS
+    void artboardId(uint16_t id) { m_artboardId = id; }
+    uint16_t artboardId() const { return m_artboardId; }
+#endif
+
+    void artboardSource(const Artboard* artboard)
+    {
+        m_artboardSource = artboard;
+    }
+    const Artboard* artboardSource() const
+    {
+        return isInstance() ? m_artboardSource : this;
+    }
+    bool isAncestor(const Artboard* artboard);
 
     /// Find the id of a component in the artboard the object in the artboard.
     /// The artboard itself has id 0 so we use that as a flag for not found.
@@ -142,6 +286,12 @@ public:
     // EXPERIMENTAL -- for internal testing only for now.
     // DO NOT RELY ON THIS as it may change/disappear in the future.
     Core* hitTest(HitInfo*, const Mat2D&) override;
+
+    bool hitTestPoint(const Vec2D& position,
+                      bool skipOnUnclipped,
+                      bool isPrimaryHit) override;
+
+    Vec2D rootTransform(const Vec2D&);
 
     void onComponentDirty(Component* component);
 
@@ -160,10 +310,17 @@ public:
     void updateWorldTransform() override {}
 
     void markLayoutDirty(LayoutComponent* layoutComponent);
+    void markHostTransformDirty();
     void cleanLayout(LayoutComponent* layoutComponent);
 
     LayoutData* takeLayoutData();
     bool syncStyleChanges() override;
+    void syncStyleChangesWithUpdate(bool forceUpdate = false);
+    std::unique_ptr<KeyFrameInterpolator>& ownedInheritedInterpolator()
+    {
+        return m_ownedInheritedInterpolator;
+    }
+    void calculateLayout();
     bool canHaveOverrides() override { return true; }
 
     bool advance(float elapsedSeconds,
@@ -174,19 +331,31 @@ public:
                          AdvanceFlags flags = AdvanceFlags::AdvanceNested |
                                               AdvanceFlags::Animate |
                                               AdvanceFlags::NewFrame);
+    void reset() override;
     uint8_t drawOrderChangeCounter() { return m_drawOrderChangeCounter; }
     Drawable* firstDrawable() { return m_FirstDrawable; };
+    void addScriptedObject(ScriptedObject* object);
 
-    enum class DrawOption
-    {
-        kNormal,
-        kHideBG,
-        kHideFG,
-    };
-    void draw(Renderer* renderer, DrawOption option);
+    void drawCanvases();
+    void internalDrawCanvases();
+
+    /// Poll async work (image decodes, etc.) so promises resolve before
+    /// script callbacks run. Called at the top of advance().
+    void pollAsyncWork();
+
+#ifdef WITH_RIVE_SCRIPTING
+    /// Returns the lua_State* (as void*) for the first drawCanvas scripted
+    /// object in this artboard or any nested artboard, recursively. Returns
+    /// nullptr if no drawCanvas scripts exist. Used by the Dart FFI layer to
+    /// open a GPU frame before calling drawCanvases().
+    void* findDrawCanvasLuauState() const;
+#endif
+    void drawInternal(Renderer* renderer);
     void draw(Renderer* renderer) override;
     void addToRenderPath(RenderPath* path, const Mat2D& transform);
+    void addToRawPath(RawPath& path, const Mat2D* transform);
 
+    void changed();
 #ifdef TESTING
     ShapePaintPath* clipPath() { return &m_worldPath; }
     ShapePaintPath* backgroundPath() { return &m_localPath; }
@@ -207,9 +376,14 @@ public:
     {
         return m_ComponentLists;
     }
-    const std::vector<DataBind*> dataBinds() const { return m_DataBinds; }
-    const std::vector<DataBind*> allDataBinds() const { return m_AllDataBinds; }
-    DataContext* dataContext() { return m_DataContext; }
+    rcp<DataContext> dataContext() { return m_DataContext; }
+#ifdef WITH_RIVE_SCRIPTING
+    void scriptingVM(ScriptingVM* value) { m_scriptingVM = value; }
+#endif
+    // Advances detached scripted view model instances (those with no parents),
+    // which are not reachable from the bound view model tree. No-op when
+    // scripting is disabled. Called at the end of each frame.
+    void advanceScriptedViewModels();
     NestedArtboard* nestedArtboard(const std::string& name) const;
     NestedArtboard* nestedArtboardAtPath(const std::string& path) const;
 
@@ -220,25 +394,31 @@ public:
     float layoutX() const;
     float layoutY() const;
     AABB bounds() const;
+    AABB worldBounds() const override;
     Vec2D origin() const;
+    void xChanged() override;
+    void yChanged() override;
+
+    void resetSize()
+    {
+        width(m_originalWidth);
+        height(m_originalHeight);
+    }
 
     // Can we hide these from the public? (they use playable)
     bool isTranslucent() const;
     bool isTranslucent(const LinearAnimation*) const;
     bool isTranslucent(const LinearAnimationInstance*) const;
-    void dataContext(DataContext* dataContext);
-    void internalDataContext(DataContext* dataContext, bool isRoot);
+    void dataContext(rcp<DataContext> dataContext);
+    void internalDataContext(rcp<DataContext> dataContext);
     void clearDataContext();
+    void unbind();
+    void rebind() override;
+    void relinkDataContext() override;
     void bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
-                               DataContext* parent);
-    void bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
-                               DataContext* parent,
-                               bool isRoot);
+                               rcp<DataContext> parent);
     void bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance);
-    void addDataBind(DataBind* dataBind);
-    void populateDataBinds(std::vector<DataBind*>* dataBinds);
-    void sortDataBinds();
-    void collectDataBinds();
+    void rebuildDataBind(DataBind*) override;
 
     bool hasAudio() const;
 
@@ -284,6 +464,20 @@ public:
         return nullptr;
     }
 
+    int objectIndex(Core* component) const
+    {
+        int count = 0;
+        for (auto object : m_Objects)
+        {
+            if (object == component)
+            {
+                return count;
+            }
+            count++;
+        }
+        return -1;
+    }
+
     template <typename T = Component> std::vector<T*> find()
     {
         std::vector<T*> results;
@@ -299,6 +493,15 @@ public:
 
     size_t animationCount() const { return m_Animations.size(); }
     std::string animationNameAt(size_t index) const;
+
+    /// Returns the count of FocusData objects that don't have a parent
+    /// FocusData within this artboard (i.e., "root" focus nodes from this
+    /// artboard's perspective).
+    size_t rootFocusDataCount() const;
+
+    /// Returns the FocusData at the given index among root FocusData objects.
+    /// Returns nullptr if index is out of bounds.
+    class FocusData* rootFocusDataAt(size_t index) const;
 
     size_t stateMachineCount() const { return m_StateMachines.size(); }
     std::string stateMachineNameAt(size_t index) const;
@@ -328,6 +531,11 @@ public:
         artboardClone->m_IsInstance = true;
         artboardClone->m_originalWidth = m_originalWidth;
         artboardClone->m_originalHeight = m_originalHeight;
+#ifdef WITH_RIVE_TOOLS
+        artboardClone->m_artboardId = m_artboardId;
+#endif
+        artboardClone->m_artboardSource =
+            isInstance() ? m_artboardSource : this;
         cloneObjectDataBinds(this, artboardClone.get(), artboardClone.get());
 
         std::vector<Core*>& cloneObjects = artboardClone->m_Objects;
@@ -418,6 +626,10 @@ private:
 #ifdef WITH_RIVE_TOOLS
     ArtboardCallback m_layoutChangedCallback = nullptr;
     ArtboardCallback m_layoutDirtyCallback = nullptr;
+    ArtboardCallback m_transformDirtyCallback = nullptr;
+    TestBoundsCallback m_testBoundsCallback = nullptr;
+    IsAncestorCallback m_isAncestorCallback = nullptr;
+    RootTransformCallback m_rootTransformCallback = nullptr;
 
 public:
     void* callbackUserData;
@@ -430,6 +642,23 @@ public:
         m_layoutDirtyCallback = callback;
         addDirt(ComponentDirt::Components);
     }
+    void onTransformDirty(ArtboardCallback callback)
+    {
+        m_transformDirtyCallback = callback;
+        addDirt(ComponentDirt::Components);
+    }
+    void onTestBounds(TestBoundsCallback callback)
+    {
+        m_testBoundsCallback = callback;
+    }
+    void onIsAncestor(IsAncestorCallback callback)
+    {
+        m_isAncestorCallback = callback;
+    }
+    void onRootTransform(RootTransformCallback callback)
+    {
+        m_rootTransformCallback = callback;
+    }
 #endif
 };
 
@@ -438,6 +667,10 @@ class ArtboardInstance : public Artboard
 public:
     ArtboardInstance();
     ~ArtboardInstance() override;
+
+    /// Holds a reference to the File that vended this instance so the File
+    /// outlives the instance.
+    void file(rcp<const File> file);
 
     std::unique_ptr<LinearAnimationInstance> animationAt(size_t index);
     std::unique_ptr<LinearAnimationInstance> animationNamed(
@@ -466,6 +699,9 @@ public:
     SMINumber* getNumber(const std::string& name, const std::string& path);
     SMITrigger* getTrigger(const std::string& name, const std::string& path);
     TextValueRun* getTextRun(const std::string& name, const std::string& path);
+
+private:
+    rcp<const File> m_file;
 };
 } // namespace rive
 

@@ -19,95 +19,53 @@
   ==============================================================================
 */
 
-#include "harfbuzz.h"
-
-#if defined(__GNUC__) || defined(__clang__)
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wempty-body"
+ #pragma clang diagnostic ignored "-Wunused-function"
+ #pragma clang diagnostic ignored "-Wunused-member-function"
+ #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+ #pragma clang diagnostic ignored "-Wformat"
+#elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wempty-body"
  #pragma GCC diagnostic ignored "-Wunused-function"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+ #pragma GCC diagnostic ignored "-Wformat"
+#elif _MSC_VER
+ #pragma warning(push)
+ #pragma warning(disable : 4244)
+ #pragma warning(disable : 4146)
 #endif
 
-#include "upstream/graph/gsubgpos-context.cc"
-//#include "upstream/harfbuzz-subset.cc"
-//#include "upstream/harfbuzz.cc"
-#include "upstream/hb-aat-layout.cc"
-#include "upstream/hb-aat-map.cc"
-#include "upstream/hb-blob.cc"
-#include "upstream/hb-buffer-serialize.cc"
-#include "upstream/hb-buffer-verify.cc"
-#include "upstream/hb-buffer.cc"
-#include "upstream/hb-cairo-utils.cc"
-#include "upstream/hb-cairo.cc"
-#include "upstream/hb-common.cc"
-#include "upstream/hb-coretext-font.cc"
-#include "upstream/hb-coretext-shape.cc"
-#include "upstream/hb-directwrite.cc"
-#include "upstream/hb-draw.cc"
-#include "upstream/hb-face-builder.cc"
-#include "upstream/hb-face.cc"
-#include "upstream/hb-fallback-shape.cc"
-#include "upstream/hb-font.cc"
-#include "upstream/hb-ft.cc"
-#include "upstream/hb-gdi.cc"
-#include "upstream/hb-glib.cc"
-#include "upstream/hb-gobject-structs.cc"
-#include "upstream/hb-graphite2.cc"
-#include "upstream/hb-icu.cc"
-#include "upstream/hb-map.cc"
-#include "upstream/hb-number.cc"
-#include "upstream/hb-ot-cff1-table.cc"
-#include "upstream/hb-ot-cff2-table.cc"
-#include "upstream/hb-ot-color.cc"
-#include "upstream/hb-ot-face.cc"
-#include "upstream/hb-ot-font.cc"
-#include "upstream/hb-ot-layout.cc"
-#include "upstream/hb-ot-map.cc"
-#include "upstream/hb-ot-math.cc"
-#include "upstream/hb-ot-meta.cc"
-#include "upstream/hb-ot-metrics.cc"
-#include "upstream/hb-ot-name.cc"
-#include "upstream/hb-ot-shape-fallback.cc"
-#include "upstream/hb-ot-shape-normalize.cc"
-#include "upstream/hb-ot-shape.cc"
-#include "upstream/hb-ot-shaper-arabic.cc"
-#include "upstream/hb-ot-shaper-default.cc"
-#include "upstream/hb-ot-shaper-hangul.cc"
-#include "upstream/hb-ot-shaper-hebrew.cc"
-#include "upstream/hb-ot-shaper-indic-table.cc"
-#include "upstream/hb-ot-shaper-indic.cc"
-#include "upstream/hb-ot-shaper-khmer.cc"
-#include "upstream/hb-ot-shaper-myanmar.cc"
-#include "upstream/hb-ot-shaper-syllabic.cc"
-#include "upstream/hb-ot-shaper-thai.cc"
-#include "upstream/hb-ot-shaper-use.cc"
-#include "upstream/hb-ot-shaper-vowel-constraints.cc"
-#include "upstream/hb-ot-tag.cc"
-#include "upstream/hb-ot-var.cc"
-#include "upstream/hb-outline.cc"
-#include "upstream/hb-paint-extents.cc"
-#include "upstream/hb-paint.cc"
-#include "upstream/hb-set.cc"
-#include "upstream/hb-shape-plan.cc"
-#include "upstream/hb-shape.cc"
-#include "upstream/hb-shaper.cc"
-#include "upstream/hb-static.cc"
-#include "upstream/hb-style.cc"
-#include "upstream/hb-subset-cff-common.cc"
-#include "upstream/hb-subset-cff1.cc"
-#include "upstream/hb-subset-cff2.cc"
-#include "upstream/hb-subset-input.cc"
-#include "upstream/hb-subset-instancer-iup.cc"
-#include "upstream/hb-subset-instancer-solver.cc"
-#include "upstream/hb-subset-plan.cc"
-#include "upstream/hb-subset-repacker.cc"
-#include "upstream/hb-subset.cc"
-#include "upstream/hb-ucd.cc"
-#include "upstream/hb-unicode.cc"
-#include "upstream/hb-uniscribe.cc"
-#include "upstream/hb-wasm-api.cc"
-#include "upstream/hb-wasm-shape.cc"
+#include "harfbuzz.h"
 
-#if defined(__GNUC__) || defined(__clang__)
+#if !defined(HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR)
+ #define YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR 1
+ #define HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR 1
+#endif
+
+#if !defined(HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING)
+ #define YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING 1
+ #define HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING 1
+#endif
+
+#include "upstream/harfbuzz.cc"
+
+#if defined(YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING)
+ #undef HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING
+ #undef YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_WARNING
+#endif
+
+#if defined(YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR)
+ #undef HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR
+ #undef YUP_HARFBUZZ_DEFINED_HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR
+#endif
+
+#if __clang__
+ #pragma clang diagnostic pop
+#elif __GNUC__
  #pragma GCC diagnostic pop
+#elif _MSC_VER 
+ #pragma warning(pop)
 #endif

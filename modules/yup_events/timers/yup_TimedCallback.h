@@ -52,15 +52,40 @@ namespace yup
 class TimedCallback final : private Timer
 {
 public:
-    /** Constructor. The passed in callback must be non-null. */
-    explicit TimedCallback (std::function<void()> callbackIn)
-        : callback (std::move (callbackIn))
+    /** Constructor.
+
+        The passed in callback won't be set but must be then set before starting the timer.
+
+        @see onTimer
+    */
+    TimedCallback() = default;
+
+    /** Constructor.
+
+        The passed in callback must be non-null.
+    */
+    explicit TimedCallback (std::function<void()> timerCallback)
+        : onTimer (std::move (timerCallback))
     {
-        jassert (callback);
+        jassert (onTimer != nullptr);
     }
 
+    /** Constructor.
+
+        The passed in callback can be null but must be then set before starting the timer.
+
+        @see onTimer
+    */
+    explicit TimedCallback (std::nullptr_t) = delete;
+
     /** Destructor. */
-    ~TimedCallback() noexcept override { stopTimer(); }
+    ~TimedCallback() noexcept override
+    {
+        stopTimer();
+    }
+
+    /** Timer callback. */
+    std::function<void()> onTimer;
 
     using Timer::getTimerInterval;
     using Timer::isTimerRunning;
@@ -69,9 +94,13 @@ public:
     using Timer::stopTimer;
 
 private:
-    void timerCallback() override { callback(); }
+    void timerCallback() override
+    {
+        jassert (onTimer != nullptr); // Did you forgot to set a timer callback before starting it ?
 
-    std::function<void()> callback;
+        if (onTimer)
+            onTimer();
+    }
 };
 
 } // namespace yup

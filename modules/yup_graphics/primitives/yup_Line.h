@@ -277,7 +277,12 @@ public:
     */
     constexpr bool contains (const Point<ValueType>& point, float tolerance) const noexcept
     {
-        return std::abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY())) < tolerance;
+        const auto lineLength = p1.distanceTo (p2);
+        if (lineLength == 0.0f)
+            return p1.distanceTo (point) <= tolerance;
+
+        const auto area = yup_abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY()));
+        return (area / lineLength) <= tolerance;
     }
 
     //==============================================================================
@@ -523,25 +528,41 @@ public:
     }
 
     //==============================================================================
-    // TODO - doxygen
+    /** Transforms the line by the specified affine transform.
+
+        This function applies the given affine transform to both the start and end points of the line,
+        effectively transforming the line's geometry.
+
+        @param t The affine transform to apply.
+
+        @return A reference to this line after transformation.
+    */
     constexpr Line& transform (const AffineTransform& t) noexcept
     {
-        auto x1 = static_cast<float> (p1.x);
-        auto y1 = static_cast<float> (p1.y);
-        auto x2 = static_cast<float> (p2.x);
-        auto y2 = static_cast<float> (p2.y);
+        auto x1 = static_cast<float> (p1.getX());
+        auto y1 = static_cast<float> (p1.getY());
+        auto x2 = static_cast<float> (p2.getX());
+        auto y2 = static_cast<float> (p2.getY());
 
         t.transformPoints (x1, y1, x2, y2);
 
-        p1.x = static_cast<ValueType> (x1);
-        p1.y = static_cast<ValueType> (y1);
-        p2.x = static_cast<ValueType> (x2);
-        p2.y = static_cast<ValueType> (y2);
+        p1.setX (static_cast<ValueType> (x1));
+        p1.setY (static_cast<ValueType> (y1));
+        p2.setX (static_cast<ValueType> (x2));
+        p2.setY (static_cast<ValueType> (y2));
 
         return *this;
     }
 
-    // TODO - doxygen
+    /** Transforms the line by the specified affine transform.
+
+        This function applies the given affine transform to both the start and end points of the line,
+        effectively transforming the line's geometry.
+
+        @param t The affine transform to apply.
+
+        @return A new `Line` object representing the transformed line.
+    */
     constexpr Line transformed (const AffineTransform& t) const noexcept
     {
         Line result (*this);
@@ -565,11 +586,28 @@ public:
         return { p1.template to<T>(), p2.template to<T>() };
     }
 
+    /** Round the coordinates of this line to integers
+
+        Rounds the coordinates of this line to integers and returns a new Line object with the rounded coordinates.
+
+        @tparam T The type of the coordinates, constrained to floating-point types.
+
+        @return A new Line object with the rounded coordinates.
+    */
     template <class T = ValueType>
     constexpr auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Line<int>>
     {
         return { p1.roundToInt(), p2.roundToInt() };
+    }
+
+    //==============================================================================
+
+    String toString() const
+    {
+        String result;
+        result << p1 << ", " << p2;
+        return result;
     }
 
     //==============================================================================
@@ -639,6 +677,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Line<ValueType>&
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 constexpr ValueType get (const Line<ValueType>& line) noexcept
 {
@@ -656,6 +703,7 @@ constexpr ValueType get (const Line<ValueType>& line) noexcept
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -672,3 +720,4 @@ struct tuple_element<I, yup::Line<ValueType>>
 };
 
 } // namespace std
+#endif

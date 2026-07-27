@@ -19,12 +19,14 @@
 #define YG_EXTERN_C_END
 #endif
 
+#if !defined(YG_DEPRECATED)
 #if defined(__cplusplus)
-#define YG_DEPRECATED(message) //[[deprecated(message)]]
+#define YG_DEPRECATED(message) [[deprecated(message)]]
 #elif defined(_MSC_VER)
-#define YG_DEPRECATED(message) //__declspec(deprecated(message))
+#define YG_DEPRECATED(message) __declspec(deprecated(message))
 #else
-#define YG_DEPRECATED(message) //__attribute__((deprecated(message)))
+#define YG_DEPRECATED(message) __attribute__((deprecated(message)))
+#endif
 #endif
 
 #ifdef _WINDLL

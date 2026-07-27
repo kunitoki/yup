@@ -40,7 +40,11 @@
 namespace yup
 {
 
-static SpinLock deletedAtShutdownLock; // use a spin lock because it can be statically initialised
+static SpinLock& getDeletedAtShutdownSpinLock()
+{
+    static SpinLock deletedAtShutdownLock;
+    return deletedAtShutdownLock;
+}
 
 static Array<DeletedAtShutdown*>& getDeletedAtShutdownObjects()
 {
@@ -50,13 +54,13 @@ static Array<DeletedAtShutdown*>& getDeletedAtShutdownObjects()
 
 DeletedAtShutdown::DeletedAtShutdown()
 {
-    const SpinLock::ScopedLockType sl (deletedAtShutdownLock);
+    const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
     getDeletedAtShutdownObjects().add (this);
 }
 
 DeletedAtShutdown::~DeletedAtShutdown()
 {
-    const SpinLock::ScopedLockType sl (deletedAtShutdownLock);
+    const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
     getDeletedAtShutdownObjects().removeFirstMatchingValue (this);
 }
 
@@ -71,7 +75,7 @@ void DeletedAtShutdown::deleteAll()
     Array<DeletedAtShutdown*> localCopy;
 
     {
-        const SpinLock::ScopedLockType sl (deletedAtShutdownLock);
+        const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
         localCopy = getDeletedAtShutdownObjects();
     }
 
@@ -83,7 +87,7 @@ void DeletedAtShutdown::deleteAll()
 
             // double-check that it's not already been deleted during another object's destructor.
             {
-                const SpinLock::ScopedLockType sl (deletedAtShutdownLock);
+                const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
 
                 if (! getDeletedAtShutdownObjects().contains (deletee))
                     deletee = nullptr;

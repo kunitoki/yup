@@ -571,6 +571,18 @@ TEST_F (StringTests, SignificantFigures)
     EXPECT_EQ (String::toDecimalStringWithSignificantFigures (2.8647, 6), String ("2.86470"));
 
     EXPECT_EQ (String::toDecimalStringWithSignificantFigures (-0.0000000000019, 1), String ("-0.000000000002"));
+
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (0.001, 7), String ("0.001000000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (0.01, 7), String ("0.01000000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (0.1, 7), String ("0.1000000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (1, 7), String ("1.000000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (10, 7), String ("10.00000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (100, 7), String ("100.0000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (1000, 7), String ("1000.000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (10000, 7), String ("10000.00"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (100000, 7), String ("100000.0"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (1000000, 7), String ("1000000"));
+    EXPECT_EQ (String::toDecimalStringWithSignificantFigures (10000000, 7), String ("10000000"));
 }
 
 TEST_F (StringTests, FloatTrimming)
@@ -677,4 +689,681 @@ TEST_F (StringTests, Loops)
 
     for (auto c : str)
         EXPECT_EQ (c, parts[index++]);
+}
+
+TEST_F (StringTests, LineManipulation)
+{
+    String multiline ("line1\nline2\n  line3\n\nline4");
+
+    // Test indentLines
+    String indented = multiline.indentLines ("  ");
+    EXPECT_EQ (indented, String ("  line1\n  line2\n    line3\n\n  line4"));
+
+    String indentedWithBlanks = multiline.indentLines (">>", true);
+    EXPECT_EQ (indentedWithBlanks, String (">>line1\n>>line2\n>>  line3\n>>\n>>line4"));
+
+    // Test dedentLines
+    String indentedText ("    line1\n    line2\n      line3\n    line4");
+    String dedented = indentedText.dedentLines();
+    EXPECT_EQ (dedented, String ("line1\nline2\n  line3\nline4"));
+
+    // Test dedentLines with mixed indentation
+    String mixedIndent ("  \tline1\n  \tline2\n  \t  line3");
+    String dedentedMixed = mixedIndent.dedentLines();
+    EXPECT_EQ (dedentedMixed, String ("line1\nline2\n  line3"));
+}
+
+TEST_F (StringTests, PaddingMethods)
+{
+    String short_str ("abc");
+
+    // Test paddedLeft
+    EXPECT_EQ (short_str.paddedLeft (' ', 10), String ("       abc"));
+    EXPECT_EQ (short_str.paddedLeft ('*', 5), String ("**abc"));
+    EXPECT_EQ (short_str.paddedLeft ('-', 3), String ("abc")); // No padding needed
+    EXPECT_EQ (short_str.paddedLeft ('0', 1), String ("abc")); // Shorter than minimum
+
+    // Test paddedRight
+    EXPECT_EQ (short_str.paddedRight (' ', 10), String ("abc       "));
+    EXPECT_EQ (short_str.paddedRight ('*', 5), String ("abc**"));
+    EXPECT_EQ (short_str.paddedRight ('-', 3), String ("abc")); // No padding needed
+    EXPECT_EQ (short_str.paddedRight ('0', 1), String ("abc")); // Shorter than minimum
+}
+
+TEST_F (StringTests, CharacterTrimming)
+{
+    String test_str ("...Hello World!!!");
+
+    // Test trimCharactersAtStart
+    EXPECT_EQ (test_str.trimCharactersAtStart ("."), String ("Hello World!!!"));
+    EXPECT_EQ (test_str.trimCharactersAtStart (".*"), String ("Hello World!!!"));
+    EXPECT_EQ (String ("  \t  text").trimCharactersAtStart (" \t"), String ("text"));
+
+    // Test trimCharactersAtEnd
+    EXPECT_EQ (test_str.trimCharactersAtEnd ("!"), String ("...Hello World"));
+    EXPECT_EQ (test_str.trimCharactersAtEnd ("!."), String ("...Hello World"));
+    EXPECT_EQ (String ("text  \t  ").trimCharactersAtEnd (" \t"), String ("text"));
+
+    // Test with empty string
+    EXPECT_EQ (String().trimCharactersAtStart ("abc"), String());
+    EXPECT_EQ (String().trimCharactersAtEnd ("abc"), String());
+}
+
+TEST_F (StringTests, SectionReplacement)
+{
+    String base ("Hello World");
+
+    // Test replaceSection
+    EXPECT_EQ (base.replaceSection (0, 5, "Hi"), String ("Hi World"));
+    EXPECT_EQ (base.replaceSection (6, 5, "Universe"), String ("Hello Universe"));
+    EXPECT_EQ (base.replaceSection (5, 1, ""), String ("HelloWorld"));
+    EXPECT_EQ (base.replaceSection (0, 0, "Well, "), String ("Well, Hello World"));
+
+    // Test replaceFirstOccurrenceOf
+    String repeated ("abc abc abc");
+    EXPECT_EQ (repeated.replaceFirstOccurrenceOf ("abc", "xyz"), String ("xyz abc abc"));
+    EXPECT_EQ (repeated.replaceFirstOccurrenceOf ("abc", "xyz", true), String ("xyz abc abc"));
+    EXPECT_EQ (repeated.replaceFirstOccurrenceOf ("ABC", "xyz", true), String ("xyz abc abc"));
+    EXPECT_EQ (repeated.replaceFirstOccurrenceOf ("ABC", "xyz", false), String ("abc abc abc"));
+    EXPECT_EQ (repeated.replaceFirstOccurrenceOf ("def", "xyz"), String ("abc abc abc"));
+}
+
+TEST_F (StringTests, StringReversing)
+{
+    // Test reversed with basic ASCII strings
+    EXPECT_EQ (String ("hello").reversed(), String ("olleh"));
+    EXPECT_EQ (String ("a").reversed(), String ("a"));
+    EXPECT_EQ (String().reversed(), String());
+    EXPECT_EQ (String ("12345").reversed(), String ("54321"));
+
+#if ! YUP_WINDOWS
+    // Test with Unicode characters - this is the critical test for UTF-8 handling
+    String unicode_str (L"café");
+    String reversed_unicode = unicode_str.reversed();
+    EXPECT_EQ (reversed_unicode, String (L"éfac")); // Should correctly reverse Unicode characters
+#endif
+
+    // Test with more complex Unicode strings
+    String unicode_complex (CharPointer_UTF8 ("Hello, 世界!"));
+    String reversed_complex = unicode_complex.reversed();
+    EXPECT_EQ (reversed_complex, String (CharPointer_UTF8 ("!界世 ,olleH")));
+
+    // Test with emojis and other complex Unicode
+    String emoji_str (CharPointer_UTF8 ("🌟⭐"));
+    String reversed_emoji = emoji_str.reversed();
+    EXPECT_EQ (reversed_emoji, String (CharPointer_UTF8 ("⭐🌟")));
+
+    // Test reversibility (reversing twice should give original)
+    String original (CharPointer_UTF8 ("Test string with UTF-8: café"));
+    String double_reversed = original.reversed().reversed();
+    EXPECT_EQ (double_reversed, original);
+
+    // Test with mixed ASCII and Unicode
+    String mixed (CharPointer_UTF8 ("abc世界def"));
+    String reversed_mixed = mixed.reversed();
+    EXPECT_EQ (reversed_mixed, String (CharPointer_UTF8 ("fed界世cba")));
+}
+
+TEST_F (StringTests, RepeatedString)
+{
+    // Test repeatedString
+    EXPECT_EQ (String::repeatedString ("abc", 3), String ("abcabcabc"));
+    EXPECT_EQ (String::repeatedString ("x", 5), String ("xxxxx"));
+    EXPECT_EQ (String::repeatedString ("hello", 0), String());
+    EXPECT_EQ (String::repeatedString ("", 10), String());
+    EXPECT_EQ (String::repeatedString ("test", 1), String ("test"));
+}
+
+TEST_F (StringTests, BufferCopyMethods)
+{
+    String test_str (L"Hello, 世界!");
+
+    // Test copyToUTF8
+    char utf8_buffer[100];
+    size_t utf8_bytes = test_str.copyToUTF8 (utf8_buffer, sizeof (utf8_buffer));
+    EXPECT_GT (utf8_bytes, 0);
+    EXPECT_EQ (String::fromUTF8 (utf8_buffer), test_str);
+
+    // Test getNumBytesAsUTF8
+    size_t required_bytes = test_str.getNumBytesAsUTF8();
+    EXPECT_GT (required_bytes, test_str.length()); // Should be more due to unicode chars
+
+    // Test copyToUTF16
+    CharPointer_UTF16::CharType utf16_buffer[100];
+    size_t utf16_bytes = test_str.copyToUTF16 (utf16_buffer, sizeof (utf16_buffer));
+    EXPECT_GT (utf16_bytes, 0);
+
+    // Test copyToUTF32
+    CharPointer_UTF32::CharType utf32_buffer[100];
+    size_t utf32_bytes = test_str.copyToUTF32 (utf32_buffer, sizeof (utf32_buffer));
+    EXPECT_GT (utf32_bytes, 0);
+
+    // Test with null buffer (should return required size)
+    size_t utf8_required = test_str.copyToUTF8 (nullptr, 0);
+    EXPECT_GT (utf8_required, 0);
+}
+
+TEST_F (StringTests, PreallocationAndReferenceCounting)
+{
+    String str1 ("test");
+    String str2 = str1; // This should share the same data
+
+    // Test getReferenceCount
+    EXPECT_EQ (str1.getReferenceCount(), str2.getReferenceCount());
+    EXPECT_GE (str1.getReferenceCount(), 2);
+
+    // Test preallocateBytes
+    String growing_str;
+    growing_str.preallocateBytes (1000);
+    // After preallocation, adding strings should be more efficient
+    for (int i = 0; i < 10; ++i)
+        growing_str += "some text ";
+    EXPECT_GT (growing_str.length(), 0);
+}
+
+TEST_F (StringTests, FormattedStrings)
+{
+    // Test formatted (basic cases)
+    String formatted_str = String::formatted ("Hello %s", "World");
+    EXPECT_TRUE (formatted_str.contains ("Hello"));
+    EXPECT_TRUE (formatted_str.contains ("World"));
+
+    String formatted_int = String::formatted ("Number: %d", 42);
+    EXPECT_TRUE (formatted_int.contains ("Number"));
+    EXPECT_TRUE (formatted_int.contains ("42"));
+
+    String formatted_float = String::formatted ("Value: %.2f", 3.14159);
+    EXPECT_TRUE (formatted_float.contains ("Value"));
+    EXPECT_TRUE (formatted_float.contains ("3.14"));
+}
+
+TEST_F (StringTests, StringCreationFromData)
+{
+    // Test createStringFromData
+    const char* ascii_data = "Hello World";
+    String from_ascii = String::createStringFromData (ascii_data, (int) strlen (ascii_data));
+    EXPECT_EQ (from_ascii, String ("Hello World"));
+
+    // Test with UTF-8 data
+    const char* utf8_data = "Hello, 世界!";
+    String from_utf8 = String::createStringFromData (utf8_data, (int) strlen (utf8_data));
+    EXPECT_TRUE (from_utf8.contains ("Hello"));
+    EXPECT_TRUE (from_utf8.contains ("世界"));
+
+    // Test with zero size
+    String empty_from_data = String::createStringFromData (ascii_data, 0);
+    EXPECT_TRUE (empty_from_data.isEmpty());
+}
+
+TEST_F (StringTests, CreateStringFromDataHandlesEncodings)
+{
+    const String expectedString (CharPointer_UTF8 ("glass \xc2\xbd full"));
+    const String emojiExpectedString (CharPointer_UTF8 ("hello JUCE \xf0\x9f\xa7\x83"));
+
+    {
+        SCOPED_TRACE ("createStringFromData reads LE UTF-16");
+        constexpr char buffer[] = "\xff\xfe\x67\x00\x6c\x00\x61\x00\x73\x00\x73\x00\x20\x00\xbd\x00\x20\x00\x66\x00\x75\x00\x6c\x00\x6c\x00";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "\xff\xfe\x68\x00\x65\x00\x6c\x00\x6c\x00\x6f\x00\x20\x00\x4a\x00\x55\x00\x43\x00\x45\x00\x20\x00\x3e\xd8\xc3\xdd";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads BE UTF-16");
+        constexpr char buffer[] = "\xfe\xff\x00\x67\x00\x6c\x00\x61\x00\x73\x00\x73\x00\x20\x00\xbd\x00\x20\x00\x66\x00\x75\x00\x6c\x00\x6c";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "\xfe\xff\x00\x68\x00\x65\x00\x6c\x00\x6c\x00\x6f\x00\x20\x00\x4a\x00\x55\x00\x43\x00\x45\x00\x20\xd8\x3e\xdd\xc3";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads UTF-8");
+        constexpr char buffer[] = "glass \xc2\xbd full";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+
+        constexpr char emojiBuffer[] = "hello JUCE \xf0\x9f\xa7\x83";
+        const auto emojiActualString = String::createStringFromData (emojiBuffer, static_cast<int> (sizeof (emojiBuffer)));
+        EXPECT_EQ (emojiExpectedString, emojiActualString);
+    }
+
+    {
+        SCOPED_TRACE ("createStringFromData reads Windows 1252");
+        constexpr char buffer[] = "glass \xBD full";
+        const auto actualString = String::createStringFromData (buffer, static_cast<int> (sizeof (buffer)));
+        EXPECT_EQ (expectedString, actualString);
+    }
+}
+
+TEST_F (StringTests, FromUTF8)
+{
+    // Test fromUTF8
+    const char* utf8_text = "Hello, 世界!";
+    String from_utf8 = String::fromUTF8 (utf8_text);
+    EXPECT_TRUE (from_utf8.contains ("Hello"));
+    EXPECT_TRUE (from_utf8.contains ("世界"));
+
+    // Test with explicit length
+    String partial_utf8 = String::fromUTF8 (utf8_text, 5);
+    EXPECT_EQ (partial_utf8, String ("Hello"));
+
+    // Test with null input
+    String null_utf8 = String::fromUTF8 (nullptr);
+    EXPECT_TRUE (null_utf8.isEmpty());
+}
+
+TEST_F (StringTests, NaturalComparison)
+{
+    // Test compareNatural
+    EXPECT_EQ (String ("file1.txt").compareNatural ("file1.txt"), 0);
+    EXPECT_LT (String ("file1.txt").compareNatural ("file10.txt"), 0);
+    EXPECT_GT (String ("file10.txt").compareNatural ("file2.txt"), 0);
+    EXPECT_EQ (String ("abc").compareNatural ("ABC", false), 0); // Case insensitive
+    EXPECT_NE (String ("abc").compareNatural ("ABC", true), 0);  // Case sensitive
+
+    // Test with numbers
+    EXPECT_LT (String ("version1.2").compareNatural ("version1.10"), 0);
+    EXPECT_GT (String ("version2.0").compareNatural ("version1.10"), 0);
+}
+
+TEST_F (StringTests, StandardLibraryIntegration)
+{
+    // Test std::string integration
+    std::string std_str = "Hello from std::string";
+    String yup_str (std_str);
+    EXPECT_EQ (yup_str.toStdString(), std_str);
+
+    // Test std::wstring integration
+    std::wstring wide_str = L"Hello from std::wstring";
+    String yup_wide_str (wide_str);
+    EXPECT_TRUE (yup_wide_str.contains ("Hello"));
+
+    // Test std::string_view integration
+    std::string_view string_view = "Hello from string_view";
+    String yup_view_str (string_view);
+    EXPECT_EQ (yup_view_str, String ("Hello from string_view"));
+
+    // Test std::wstring_view integration
+    std::wstring_view wide_view = L"Hello from wstring_view";
+    String yup_wide_view_str (wide_view);
+    EXPECT_TRUE (yup_wide_view_str.contains ("Hello"));
+}
+
+TEST_F (StringTests, CaseConversionEdgeCases)
+{
+#if ! YUP_WINDOWS
+    // Test toUpperCase with edge cases
+    String mixed_case (L"Hello, 世界! 123");
+    String upper_case = mixed_case.toUpperCase();
+    EXPECT_EQ (upper_case, String (L"HELLO, 世界! 123"));
+
+    // Test toLowerCase with edge cases
+    String lower_case = mixed_case.toLowerCase();
+    EXPECT_EQ (lower_case, String (L"hello, 世界! 123"));
+#endif
+
+    // Test with empty string
+    EXPECT_EQ (String().toUpperCase(), String());
+    EXPECT_EQ (String().toLowerCase(), String());
+
+    // Test with numbers only
+    String numbers ("12345");
+    EXPECT_EQ (numbers.toUpperCase(), String ("12345"));
+    EXPECT_EQ (numbers.toLowerCase(), String ("12345"));
+}
+
+TEST_F (StringTests, AdditionalUtilityMethods)
+{
+    // Test swapWith
+    String str1 ("Hello");
+    String str2 ("World");
+    String original1 = str1;
+    String original2 = str2;
+
+    str1.swapWith (str2);
+    EXPECT_EQ (str1, original2);
+    EXPECT_EQ (str2, original1);
+
+    // Test hash method
+    String hash_test ("test string");
+    size_t hash1 = hash_test.hash();
+    size_t hash2 = String ("test string").hash();
+    size_t hash3 = String ("different string").hash();
+
+    EXPECT_EQ (hash1, hash2); // Same strings should have same hash
+    EXPECT_NE (hash1, hash3); // Different strings should have different hashes
+
+    // Test begin/end iterators
+    String iter_test ("abc");
+    auto it = iter_test.begin();
+    EXPECT_EQ (*it, 'a');
+    ++it;
+    EXPECT_EQ (*it, 'b');
+    ++it;
+    EXPECT_EQ (*it, 'c');
+    ++it;
+    EXPECT_EQ (it, iter_test.end());
+}
+
+TEST_F (StringTests, EdgeCasesAndBoundaryConditions)
+{
+    // Test with very long strings
+    String long_str = String::repeatedString ("a", 10000);
+    EXPECT_EQ (long_str.length(), 10000);
+    EXPECT_TRUE (long_str.startsWith ("aaa"));
+    EXPECT_TRUE (long_str.endsWith ("aaa"));
+
+    // Test with single character
+    String single_char ("x");
+    EXPECT_EQ (single_char.length(), 1);
+    EXPECT_EQ (single_char[0], 'x');
+    EXPECT_EQ (single_char.getLastCharacter(), 'x');
+
+    // Test boundary conditions for substring
+    String boundary_test ("hello");
+    EXPECT_EQ (boundary_test.substring (-5, 10), String ("hello"));
+    EXPECT_EQ (boundary_test.substring (0, 0), String());
+    EXPECT_EQ (boundary_test.substring (5, 5), String());
+    EXPECT_EQ (boundary_test.substring (100, 200), String());
+
+    // Test with null characters
+    String null_char_test = String::charToString (0);
+    EXPECT_EQ (null_char_test, String());
+
+    // Test very large numbers
+    String large_num (std::numeric_limits<long long>::max());
+    EXPECT_GT (large_num.length(), 0);
+    EXPECT_EQ (large_num.getLargeIntValue(), std::numeric_limits<long long>::max());
+}
+
+TEST_F (StringTests, CharPointerUTF16ConstructorWithMaxChars)
+{
+    String original ("Hello World Test String");
+    CharPointer_UTF16 ptr (original.toUTF16());
+
+    String s (ptr, 5);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF32ConstructorWithMaxChars)
+{
+    String original ("Hello World Test String");
+    CharPointer_UTF32 ptr (original.toUTF32());
+
+    String s (ptr, 5);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF16ConstructorWithRange)
+{
+    String original ("Hello World");
+    CharPointer_UTF16 start (original.toUTF16());
+    CharPointer_UTF16 end = start + 5;
+
+    String s (start, end);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, CharPointerUTF32ConstructorWithRange)
+{
+    String original ("Hello World");
+    CharPointer_UTF32 start (original.toUTF32());
+    CharPointer_UTF32 end = start + 5;
+
+    String s (start, end);
+    EXPECT_EQ (s, "Hello");
+}
+
+TEST_F (StringTests, UnsignedShortConstructor)
+{
+    unsigned short num = 12345;
+    String s (num);
+    EXPECT_EQ (s, "12345");
+    EXPECT_EQ (s.getIntValue(), 12345);
+}
+
+TEST_F (StringTests, FloatConstructorWithDecimalPlaces)
+{
+    String s1 (3.14159f, 2, false);
+    EXPECT_TRUE (s1.startsWith ("3.14"));
+
+    String s2 (1234.5678f, 3, false);
+    EXPECT_TRUE (s2.contains ("1234"));
+    EXPECT_TRUE (s2.contains ("."));
+}
+
+TEST_F (StringTests, FloatConstructorWithScientificNotation)
+{
+    String s (0.00012345f, 2, true);
+    EXPECT_TRUE (s.containsIgnoreCase ("e"));
+}
+
+TEST_F (StringTests, ComparisonWithWideCharPointer)
+{
+    String s1 (L"test");
+    const wchar_t* s2 = L"test";
+    const wchar_t* s3 = L"different";
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF8)
+{
+    String s1 ("hello");
+    CharPointer_UTF8 s2 ("hello");
+    CharPointer_UTF8 s3 ("world");
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF16)
+{
+    String s1 ("hello");
+    String s2Str ("hello");
+    String s3Str ("world");
+    CharPointer_UTF16 s2 (s2Str.toUTF16());
+    CharPointer_UTF16 s3 (s3Str.toUTF16());
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, ComparisonWithCharPointerUTF32)
+{
+    String s1 ("hello");
+    String s2Str ("hello");
+    String s3Str ("world");
+    CharPointer_UTF32 s2 (s2Str.toUTF32());
+    CharPointer_UTF32 s3 (s3Str.toUTF32());
+
+    EXPECT_TRUE (s1 == s2);
+    EXPECT_FALSE (s1 == s3);
+    EXPECT_FALSE (s1 != s2);
+    EXPECT_TRUE (s1 != s3);
+}
+
+TEST_F (StringTests, EqualsIgnoreCaseWithWideChar)
+{
+    String s1 (L"Hello");
+    const wchar_t* s2 = L"HELLO";
+    const wchar_t* s3 = L"world";
+
+    EXPECT_TRUE (s1.equalsIgnoreCase (s2));
+    EXPECT_FALSE (s1.equalsIgnoreCase (s3));
+}
+
+TEST_F (StringTests, AppendLongNumber)
+{
+    String s ("Value: ");
+    long num = 123456789L;
+    s += num;
+
+    EXPECT_TRUE (s.contains ("123456789"));
+}
+
+TEST_F (StringTests, AppendUInt64Number)
+{
+    String s ("Value: ");
+    uint64 num = 9876543210ULL;
+    s += num;
+
+    EXPECT_TRUE (s.contains ("9876543210"));
+}
+
+TEST_F (StringTests, AddWideCharPointerToString)
+{
+    const wchar_t* s1 = L"Hello ";
+    String s2 ("World");
+    String result = s1 + s2;
+
+    EXPECT_EQ (result, "Hello World");
+}
+
+TEST_F (StringTests, AddCharToString)
+{
+    char c = 'X';
+    String s ("Test");
+    String result = c + s;
+
+    EXPECT_TRUE (result.startsWith ("X"));
+    EXPECT_TRUE (result.endsWith ("Test"));
+}
+
+TEST_F (StringTests, AddWideCharToString)
+{
+    wchar_t c = L'Y';
+    String s ("Test");
+    String result = c + s;
+
+    EXPECT_TRUE (result.startsWith ("Y"));
+    EXPECT_TRUE (result.endsWith ("Test"));
+}
+
+TEST_F (StringTests, AddStdStringToString)
+{
+    String s1 ("Hello ");
+    std::string s2 = "World";
+    String result = s1 + s2;
+
+    EXPECT_EQ (result, "Hello World");
+}
+
+TEST_F (StringTests, StreamWideCharToString)
+{
+    String s;
+    wchar_t c = L'A';
+    s << c;
+
+    EXPECT_EQ (s, "A");
+}
+
+TEST_F (StringTests, StreamLongToString)
+{
+    String s ("Value: ");
+    long num = 42L;
+    s << num;
+
+    EXPECT_TRUE (s.endsWith ("42"));
+}
+
+TEST_F (StringTests, StreamDoubleToString)
+{
+    String s ("Pi: ");
+    double num = 3.14;
+    s << num;
+
+    EXPECT_TRUE (s.contains ("3.14"));
+}
+
+TEST_F (StringTests, QuotedWithEmptyString)
+{
+    String s;
+    String quoted = s.quoted ('"');
+
+    EXPECT_EQ (quoted, "\"\"");
+}
+
+TEST_F (StringTests, RetainCharactersEmpty)
+{
+    String s;
+    String result = s.retainCharacters ("abc");
+
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST_F (StringTests, RemoveCharactersEmpty)
+{
+    String s;
+    String result = s.removeCharacters ("abc");
+
+    EXPECT_TRUE (result.isEmpty());
+}
+
+TEST_F (StringTests, ContainsAnyOfReturnsFalse)
+{
+    String s ("hello");
+    EXPECT_FALSE (s.containsAnyOf ("xyz"));
+}
+
+TEST_F (StringTests, FormattedRawBasic)
+{
+    String result = String::formatted ("Test %d %s", 42, "hello");
+
+    EXPECT_TRUE (result.contains ("42"));
+    EXPECT_TRUE (result.contains ("hello"));
+}
+
+TEST_F (StringTests, ToHexStringWithZeroSize)
+{
+    const char data[] = "test";
+    String hex = String::toHexString (data, 0, 0);
+
+    EXPECT_TRUE (hex.isEmpty());
+}
+
+TEST_F (StringTests, ToHexStringWithNegativeSize)
+{
+    const char data[] = "test";
+    String hex = String::toHexString (data, -5, 0);
+
+    EXPECT_TRUE (hex.isEmpty());
+}
+
+TEST_F (StringTests, IndentLinesEmpty)
+{
+    String s;
+    String indented = s.indentLines ("  ", false);
+
+    EXPECT_TRUE (indented.isEmpty());
+}
+
+TEST_F (StringTests, DedentLinesEmpty)
+{
+    String s;
+    String dedented = s.dedentLines();
+
+    EXPECT_TRUE (dedented.isEmpty());
+}
+
+TEST_F (StringTests, CompareNaturalWithLeadingZeros)
+{
+    String s1 ("file001");
+    String s2 ("file002");
+
+    EXPECT_LT (s1.compareNatural (s2, true), 0);
+    EXPECT_GT (s2.compareNatural (s1, true), 0);
 }

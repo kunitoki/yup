@@ -2,6 +2,7 @@
 #define _RIVE_DRAWABLE_HPP_
 #include "rive/generated/drawable_base.hpp"
 #include "rive/hit_info.hpp"
+#include "rive/lazy_vector.hpp"
 #include "rive/renderer.hpp"
 #include "rive/clip_result.hpp"
 #include "rive/drawable_flag.hpp"
@@ -20,22 +21,27 @@ class Drawable : public DrawableBase
     friend class StateMachineInstance;
 
 private:
-    std::vector<ClippingShape*> m_ClippingShapes;
+    LazyVector<ClippingShape*> m_ClippingShapes;
 
     /// Used exclusively by the artboard;
     DrawRules* flattenedDrawRules = nullptr;
     Drawable* prev = nullptr;
     Drawable* next = nullptr;
 
+protected:
+    bool m_needsSaveOperation = true;
+
 public:
     BlendMode blendMode() const { return (BlendMode)blendModeValue(); }
-    ClipResult applyClip(Renderer* renderer) const;
     virtual void draw(Renderer* renderer) = 0;
     virtual Core* hitTest(HitInfo*, const Mat2D&) = 0;
+    bool hitTestPoint(const Vec2D& position,
+                      bool skipOnUnclipped,
+                      bool isPrimaryHit) override;
     void addClippingShape(ClippingShape* shape);
     inline const std::vector<ClippingShape*>& clippingShapes() const
     {
-        return m_ClippingShapes;
+        return m_ClippingShapes.view();
     }
 
     virtual bool isHidden() const
@@ -45,19 +51,31 @@ public:
                hasDirt(ComponentDirt::Collapsed);
     }
 
-    inline bool isTargetOpaque() const
+    virtual bool isTargetOpaque()
     {
         return (static_cast<DrawableFlag>(drawableFlags()) &
                 DrawableFlag::Opaque) == DrawableFlag::Opaque;
     }
 
     virtual bool isProxy() { return false; }
+    virtual bool isClipStart() { return false; }
+    virtual bool isClipEnd() { return false; }
+    virtual bool willClip() { return false; }
+    virtual bool willDraw();
+    void needsSaveOperation(bool value) { m_needsSaveOperation = value; }
 
     bool isChildOfLayout(LayoutComponent* layout);
 
     StatusCode onAddedDirty(CoreContext* context) override;
 
     virtual Drawable* hittableComponent() { return this; }
+
+    virtual int emptyClipCount() { return 0; }
+
+    // Public accessors for the artboard's draw-order linked list.
+    // Order is back-to-front (firstDrawable() is bottom-most).
+    Drawable* nextDrawable() const { return next; }
+    Drawable* prevDrawable() const { return prev; }
 };
 
 class ProxyDrawing
@@ -84,7 +102,7 @@ public:
 
     Drawable* hittableComponent() override;
 
-    bool isTargetOpaque();
+    bool isTargetOpaque() override;
 
     Core* hitTest(HitInfo*, const Mat2D&) override { return nullptr; }
 

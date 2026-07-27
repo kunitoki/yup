@@ -122,3 +122,74 @@ TEST_F (LocalisedStringsTests, TranslateWithResultIfNotFound)
     EXPECT_EQ (translations.translate ("hello", "not found"), "hi");              // Found translation
     EXPECT_EQ (translations.translate ("nonexistent", "not found"), "not found"); // Not found
 }
+
+TEST_F (LocalisedStringsTests, ConstructFromFile)
+{
+    auto tempDir = File::getSpecialLocation (File::SpecialLocationType::tempDirectory);
+    auto testFile = tempDir.getChildFile ("test_translations.txt");
+
+    testFile.replaceWithText (validTranslationFile);
+
+    LocalisedStrings translations (testFile, false);
+
+    EXPECT_EQ (translations.getLanguageName(), "English");
+    EXPECT_EQ (translations.translate ("hello"), "hello");
+    EXPECT_EQ (translations.translate ("goodbye"), "goodbye");
+
+    testFile.deleteFile();
+}
+
+TEST_F (LocalisedStringsTests, CopyConstructor)
+{
+    LocalisedStrings original (validTranslationFile, false);
+    LocalisedStrings copy (original);
+
+    EXPECT_EQ (copy.getLanguageName(), original.getLanguageName());
+    EXPECT_EQ (copy.getCountryCodes(), original.getCountryCodes());
+    EXPECT_EQ (copy.translate ("hello"), "hello");
+    EXPECT_EQ (copy.translate ("goodbye"), "goodbye");
+}
+
+TEST_F (LocalisedStringsTests, AssignmentOperator)
+{
+    LocalisedStrings original (validTranslationFile, false);
+    LocalisedStrings assigned ("language: French\n", false);
+
+    assigned = original;
+
+    EXPECT_EQ (assigned.getLanguageName(), original.getLanguageName());
+    EXPECT_EQ (assigned.getCountryCodes(), original.getCountryCodes());
+    EXPECT_EQ (assigned.translate ("hello"), "hello");
+    EXPECT_EQ (assigned.translate ("goodbye"), "goodbye");
+}
+
+TEST_F (LocalisedStringsTests, TranslateWithCurrentMappingsStaticMethod)
+{
+    auto* translations = new LocalisedStrings (validTranslationFile, false);
+    LocalisedStrings::setCurrentMappings (translations);
+
+    EXPECT_EQ (LocalisedStrings::translateWithCurrentMappings ("hello"), "hello");
+    EXPECT_EQ (LocalisedStrings::translateWithCurrentMappings ("goodbye"), "goodbye");
+    EXPECT_EQ (LocalisedStrings::translateWithCurrentMappings ("nonexistent"), "nonexistent");
+}
+
+TEST_F (LocalisedStringsTests, GlobalTranslateFunctionWithCharPointerUTF8)
+{
+    auto* translations = new LocalisedStrings (validTranslationFile, false);
+    LocalisedStrings::setCurrentMappings (translations);
+
+    CharPointer_UTF8 text1 ("hello");
+    CharPointer_UTF8 text2 ("nonexistent");
+
+    EXPECT_EQ (yup::translate (text1), "hello");
+    EXPECT_EQ (yup::translate (text2), "nonexistent");
+}
+
+TEST_F (LocalisedStringsTests, TranslateUsesResultIfNotFoundWhenKeyMissing)
+{
+    LocalisedStrings translations ("language: English\n\"hello\" = \"hi\"\n", false);
+
+    // Test the fallback behavior when translation is not found
+    EXPECT_EQ (translations.translate ("missing", "fallback"), "fallback");
+    EXPECT_EQ (translations.translate ("another_missing", "custom fallback"), "custom fallback");
+}

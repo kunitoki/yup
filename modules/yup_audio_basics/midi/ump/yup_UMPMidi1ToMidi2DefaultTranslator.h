@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -48,7 +48,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Midi1ToMidi2DefaultTranslator
+class YUP_API Midi1ToMidi2DefaultTranslator
 {
 public:
     Midi1ToMidi2DefaultTranslator() = default;
@@ -210,6 +210,6 @@ private:
     std::array<ChannelBanks, 16> groupBanks;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

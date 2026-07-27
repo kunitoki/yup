@@ -1,6 +1,7 @@
 
 #include "rive/viewmodel/runtime/viewmodel_runtime.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
+#include "rive/viewmodel/viewmodel_property_asset_image.hpp"
 #include "rive/viewmodel/viewmodel_property_string.hpp"
 #include "rive/viewmodel/viewmodel_property_number.hpp"
 #include "rive/viewmodel/viewmodel_property_boolean.hpp"
@@ -10,7 +11,9 @@
 #include "rive/viewmodel/viewmodel_property_enum_custom.hpp"
 #include "rive/viewmodel/viewmodel_property_enum_system.hpp"
 #include "rive/viewmodel/viewmodel_property_trigger.hpp"
+#include "rive/viewmodel/viewmodel_property_symbol_list_index.hpp"
 #include "rive/viewmodel/viewmodel_property_viewmodel.hpp"
+#include "rive/viewmodel/viewmodel_property_artboard.hpp"
 #include "rive/file.hpp"
 #include "rive/refcnt.hpp"
 
@@ -71,6 +74,15 @@ std::vector<PropertyData> ViewModelRuntime::buildPropertiesData(
             case ViewModelPropertyViewModelBase::typeKey:
                 type = DataType::viewModel;
                 break;
+            case ViewModelPropertySymbolListIndex::typeKey:
+                type = DataType::symbolListIndex;
+                break;
+            case ViewModelPropertyAssetImage::typeKey:
+                type = DataType::assetImage;
+                break;
+            case ViewModelPropertyArtboard::typeKey:
+                type = DataType::artboard;
+                break;
             default:
                 break;
         }
@@ -96,7 +108,7 @@ std::vector<std::string> ViewModelRuntime::instanceNames() const
     return names;
 }
 
-ViewModelInstanceRuntime* ViewModelRuntime::createInstanceFromIndex(
+rcp<ViewModelInstanceRuntime> ViewModelRuntime::createInstanceFromIndex(
     const size_t index) const
 {
     auto viewModelInstance = m_viewModel->instance(index);
@@ -117,7 +129,7 @@ ViewModelInstanceRuntime* ViewModelRuntime::createInstanceFromIndex(
     return nullptr;
 }
 
-ViewModelInstanceRuntime* ViewModelRuntime::createInstanceFromName(
+rcp<ViewModelInstanceRuntime> ViewModelRuntime::createInstanceFromName(
     const std::string& name) const
 {
     auto viewModelInstance = m_viewModel->instance(name);
@@ -139,7 +151,7 @@ ViewModelInstanceRuntime* ViewModelRuntime::createInstanceFromName(
     return nullptr;
 }
 
-ViewModelInstanceRuntime* ViewModelRuntime::createDefaultInstance() const
+rcp<ViewModelInstanceRuntime> ViewModelRuntime::createDefaultInstance() const
 {
     auto viewModelInstance =
         m_file->createDefaultViewModelInstance(m_viewModel);
@@ -152,21 +164,20 @@ ViewModelInstanceRuntime* ViewModelRuntime::createDefaultInstance() const
     return createInstance();
 }
 
-ViewModelInstanceRuntime* ViewModelRuntime::createInstance() const
+rcp<ViewModelInstanceRuntime> ViewModelRuntime::createInstance() const
 {
     auto instance = m_file->createViewModelInstance(m_viewModel);
     return createRuntimeInstance(instance);
 }
 
-ViewModelInstanceRuntime* ViewModelRuntime::createRuntimeInstance(
+rcp<ViewModelInstanceRuntime> ViewModelRuntime::createRuntimeInstance(
     rcp<ViewModelInstance> instance) const
 {
     if (instance != nullptr)
     {
         auto viewModelInstanceRuntime = rcp<ViewModelInstanceRuntime>(
             new ViewModelInstanceRuntime(instance));
-        m_viewModelInstanceRuntimes.push_back(viewModelInstanceRuntime);
-        return viewModelInstanceRuntime.get();
+        return viewModelInstanceRuntime;
     }
     return nullptr;
 }

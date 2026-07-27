@@ -4,8 +4,6 @@
 
 #include "gradient.hpp"
 
-#include "rive/renderer/rive_render_image.hpp"
-
 namespace rive::gpu
 {
 // Ensure the given gradient stops are in a format expected by PLS.
@@ -188,6 +186,41 @@ bool Gradient::isOpaque() const
                                                    : gpu::TriState::no;
     }
     return m_isOpaque == gpu::TriState::yes;
+}
+
+rcp<Gradient> Gradient::getModulated(float opacity) const
+{
+    // Fast path: no modulation needed
+    if (opacity == 1.0f)
+    {
+        return ref_rcp(const_cast<Gradient*>(this));
+    }
+
+    // Check single-entry cache
+    if (m_lastModulatedOpacity == opacity && m_lastModulatedGradient)
+    {
+        return m_lastModulatedGradient;
+    }
+
+    // Create new modulated gradient
+    GradDataArray<ColorInt> newColors(m_count);
+    for (size_t i = 0; i < m_count; ++i)
+    {
+        newColors[i] = colorModulateOpacity(m_colors[i], opacity);
+    }
+
+    GradDataArray<float> newStops(m_stops.get(), m_count);
+
+    m_lastModulatedGradient = rcp(new Gradient(m_paintType,
+                                               std::move(newColors),
+                                               std::move(newStops),
+                                               m_count,
+                                               m_coeffs[0],
+                                               m_coeffs[1],
+                                               m_coeffs[2]));
+    m_lastModulatedOpacity = opacity;
+
+    return m_lastModulatedGradient;
 }
 
 } // namespace rive::gpu

@@ -105,7 +105,29 @@ public:
         uint32_t width,
         uint32_t height,
         uint32_t mipLevelCount,
-        const uint8_t imageDataRGBAPremul[]) override;
+        GPUTextureFormat format,
+        const uint8_t imageData[],
+        uint8_t blockWidth = 1,
+        uint8_t blockHeight = 1,
+        bool srgb = false,
+        bool generateRemainingMips = false) override;
+
+    rcp<Texture> adoptImageTexture(rcp<D3D12Texture> imageTexture);
+
+    // Wraps an externally-owned ID3D12Resource as a Rive Texture. Initial
+    // state is PIXEL_SHADER_RESOURCE; viewFormat overrides the SRV view
+    // format (UNKNOWN = auto-infer from the resource desc).
+    rcp<Texture> adoptImageTexture(
+        ID3D12Resource* resource,
+        uint32_t width,
+        uint32_t height,
+        DXGI_FORMAT viewFormat = DXGI_FORMAT_UNKNOWN);
+
+#ifdef RIVE_CANVAS
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height) override;
+    std::unique_ptr<rive::ore::Context> makeOreContext() override;
+#endif
 
 #define IMPLEMENT_RIVE_BUFFER(Name, m_buffer)                                  \
     void resize##Name(size_t sizeInBytes) override                             \
@@ -168,6 +190,14 @@ public:
 
     ComPtr<ID3D12Device> device() const { return m_device; }
 
+    // Set the command queue used by makeCommandBuffer(). Must be called
+    // before any ScriptedCanvas flush if canvas support is needed.
+    void setCommandQueue(ID3D12CommandQueue* queue) { m_canvasQueue = queue; }
+    ID3D12CommandQueue* commandQueue() const { return m_canvasQueue; }
+
+    void* makeCommandBuffer() override;
+    void commitCommandBuffer(void* commandBuffer) override;
+
     rcp<D3D12ResourceManager> manager() const { return m_resourceManager; }
 
     const D3DCapabilities& d3dCapabilities() const { return m_capabilities; }
@@ -186,7 +216,8 @@ public:
 private:
     RenderContextD3D12Impl(ComPtr<ID3D12Device>,
                            ID3D12GraphicsCommandList*,
-                           const D3DCapabilities&);
+                           const D3DCapabilities&,
+                           ShaderCompilationMode);
 
     void blitSubRect(ID3D12GraphicsCommandList* cmdList,
                      D3D12Texture* dst,
@@ -194,6 +225,7 @@ private:
                      const IAABB& rect);
 
     ComPtr<ID3D12Device> m_device;
+    ID3D12CommandQueue* m_canvasQueue = nullptr;
     const D3DCapabilities m_capabilities;
 
     rcp<D3D12Texture> m_gradientTexture;
@@ -273,5 +305,6 @@ private:
         std::chrono::steady_clock::now();
 
     bool m_isFirstFlushOfFrame = true;
+    bool m_usesCopyCommandList = false;
 };
 } // namespace rive::gpu

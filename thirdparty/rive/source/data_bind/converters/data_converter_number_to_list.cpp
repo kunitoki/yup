@@ -7,14 +7,6 @@
 
 using namespace rive;
 
-DataConverterNumberToList::~DataConverterNumberToList()
-{
-    for (auto& item : m_listItems)
-    {
-        item->unref();
-    }
-}
-
 DataValue* DataConverterNumberToList::convert(DataValue* input,
                                               DataBind* dataBind)
 {
@@ -32,12 +24,11 @@ DataValue* DataConverterNumberToList::convert(DataValue* input,
             auto viewModel = m_file->viewModel(viewModelId());
             if (count > m_listItems.size())
             {
-                auto defaultInstance = viewModel->defaultInstance();
                 while (m_listItems.size() < count)
                 {
-                    auto item = new ViewModelInstanceListItem();
-                    auto copy = rcp<ViewModelInstance>(
-                        defaultInstance->clone()->as<ViewModelInstance>());
+                    auto item = make_rcp<ViewModelInstanceListItem>();
+                    auto copy =
+                        m_file->createDefaultViewModelInstance(viewModel);
                     item->viewModelInstance(copy);
                     m_listItems.push_back(item);
                 }
@@ -46,9 +37,7 @@ DataValue* DataConverterNumberToList::convert(DataValue* input,
             {
                 while (m_listItems.size() > count)
                 {
-                    auto item = m_listItems.back();
                     m_listItems.pop_back();
-                    item->unref();
                 }
             }
         }

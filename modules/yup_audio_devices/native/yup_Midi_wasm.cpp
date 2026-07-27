@@ -26,8 +26,10 @@ class MidiInput::Pimpl
 {
 };
 
-MidiInput::MidiInput (const String& deviceName, const String& deviceID)
-    : deviceInfo (deviceName, deviceID)
+MidiInput::MidiInput (const String& deviceName,
+                      const String& deviceID,
+                      ump::PacketProtocol protocol)
+    : deviceInfo (deviceName, deviceID, protocol)
 {
 }
 
@@ -43,7 +45,21 @@ MidiDeviceInfo MidiInput::getDefaultDevice() { return {}; }
 
 std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*) { return {}; }
 
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&,
+                                                  ump::PacketProtocol,
+                                                  ump::Receiver*)
+{
+    return {};
+}
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
+
+std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&,
+                                                       ump::PacketProtocol,
+                                                       ump::Receiver*)
+{
+    return {};
+}
 
 class MidiOutput::Pimpl
 {
@@ -53,18 +69,28 @@ MidiOutput::~MidiOutput() {}
 
 void MidiOutput::sendMessageNow (const MidiMessage&) {}
 
+void MidiOutput::sendMessageNow (const ump::View&) {}
+
+void MidiOutput::sendMessageNow (const ump::Packets&) {}
+
 Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
 
 MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&, ump::PacketProtocol) { return {}; }
+
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&, ump::PacketProtocol) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {
-    auto& broadcaster = MidiDeviceListConnectionBroadcaster::get();
-    return { &broadcaster, broadcaster.add (std::move (cb)) };
+    // MIDI is not implemented for WASM, so we return a no-op connection
+    // to avoid thread assertion issues when AudioDeviceManager is created
+    // from non-message threads (e.g., in tests)
+    return { nullptr, 0 };
 }
 
 } // namespace yup

@@ -265,7 +265,7 @@ private:
             : object (object)
             , function (std::move (function))
         {
-            jassert (function != nullptr);
+            jassert (this->function != nullptr);
         }
 
         bool perform (UndoableActionState stateToPerform) override

@@ -24,10 +24,22 @@ namespace yup
 
 //==============================================================================
 
+#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
 const uint8_t RobotoFlexFont_data[] = {
 #include "RobotoFlexFont.inc"
 };
 
 const std::size_t RobotoFlexFont_size = sizeof (RobotoFlexFont_data);
+#endif
+
+//==============================================================================
+
+#if YUP_EMBED_DEFAULT_THEME_ICON_FONT
+const uint8_t FontAwesome7Font_data[] = {
+#include "FontAwesome7Font.inc"
+};
+
+const std::size_t FontAwesome7Font_size = sizeof (FontAwesome7Font_data);
+#endif
 
 } // namespace yup

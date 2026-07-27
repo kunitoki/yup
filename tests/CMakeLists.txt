@@ -17,7 +17,7 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.31)
 
 enable_testing()
 
@@ -49,40 +49,134 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
 # ==== Create executable
 set (target_name yup_tests)
-set (target_version "1.0.0")
+set (target_version "2.0.0")
+set (target_console OFF)
+set (target_gtest_modules "")
+set (target_preloaded "")
 set (target_modules
     yup_core
+    yup_simd
     yup_audio_basics
     yup_audio_devices
+    yup_audio_formats
+    yup_audio_processors
+    yup_audio_graph
+    yup_dsp
     yup_events
     yup_data_model
-    yup_graphics)
+    yup_graphics
+    yup_animation
+    yup_shading
+    dr_libs
+    pffft_library
+    opus_library
+    flac_library
+    hmp3_library
+    bungee_library
+    sqlite3_library
+    libpng
+    libwebp
+    libjpeg
+    libgif
+    libtiff
+    glslang
+    spirv_cross)
+
+set (target_gtest_modules
+    GTest::gtest
+    GTest::gmock)
+
+if (YUP_PLATFORM_DESKTOP)
+    list (APPEND target_modules yup_audio_plugin_host)
+endif()
+
+if (NOT YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND target_modules yup_gui yup_audio_gui)
+    if (YUP_PLATFORM_DESKTOP AND NOT YUP_PLATFORM_WINDOWS)
+        list (APPEND target_modules yup_python)
+    endif()
+else()
+    set (target_console ON)
+
+    file (GLOB_RECURSE data_files "${CMAKE_CURRENT_LIST_DIR}/data/*")
+    foreach (data_file ${data_files})
+        file (RELATIVE_PATH rel_path "${CMAKE_CURRENT_LIST_DIR}" "${data_file}")
+        list (APPEND target_preloaded "${data_file}@${rel_path}")
+    endforeach()
+endif()
+
+if (YUP_PLATFORM_MAC) # OR YUP_PLATFORM_WINDOWS)
+    set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
+    set (python_target_name "${target_name}_python_stdlib")
+
+    yup_prepare_python_stdlib (${python_target_name} ${python_tools_path} python_standard_library)
+
+    yup_add_embedded_binary_resources (
+        ${target_name}_python_stdlib_binary
+        OUT_DIR PythonStandardLibrary
+        HEADER PythonStandardLibrary.h
+        NAMESPACE yup
+        RESOURCE_NAMES
+            PythonStandardLibrary
+        RESOURCES
+            ${python_standard_library})
+
+    list (APPEND target_modules "${target_name}_python_stdlib_binary")
+endif()
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
-    TARGET_CONSOLE ON
+    TARGET_CONSOLE ${target_console}
+    INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
+    MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
+    STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
+    EMSCRIPTEN_LINK_OPTIONS
+        $<$<CONFIG:Debug>:-sERROR_ON_WASM_CHANGES_AFTER_LINK>
+        $<$<CONFIG:Debug>:-sWASM_BIGINT>
+        $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
         YUP_USE_CURL=0
+        YUP_MODAL_LOOPS_PERMITTED=1
+    PRELOAD_FILES
+        ${target_preloaded}
     MODULES
         ${target_modules}
-        GTest::gtest_main
-        GTest::gmock_main)
+        ${target_gtest_modules})
+
+# ==== (Only For Manual Testing) Setup FFTW3
+# _yup_find_fftw3 (${target_name})
 
 # ==== Setup sources
-file (GLOB_RECURSE sources
-      "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
-      "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+set (sources "")
+set (imported_sources "")
+foreach (module ${target_modules})
+    file (GLOB module_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.cpp")
+    list (APPEND sources ${module_sources})
 
-if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
-    file (GLOB_RECURSE apple_sources
-        "${CMAKE_CURRENT_LIST_DIR}/*.mm")
-    list (APPEND sources ${apple_sources})
-endif()
+    file (GLOB module_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
+    list (APPEND imported_sources ${module_imported_sources})
 
+    if (YUP_PLATFORM_APPLE)
+        file (GLOB_RECURSE apple_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.mm")
+        list (APPEND sources ${apple_sources})
+
+        file (GLOB_RECURSE apple_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
+        list (APPEND imported_sources ${apple_imported_sources})
+    endif()
+endforeach()
+
+list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
+
+target_sources (${target_name} PRIVATE ${sources} ${imported_sources})
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name} PRIVATE ${sources})
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
+set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
+
+target_compile_options (${target_name} PRIVATE
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-subobject-linkage>)
+
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")

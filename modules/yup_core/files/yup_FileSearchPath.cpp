@@ -138,7 +138,7 @@ void FileSearchPath::removeRedundantPaths()
     {
         const auto checkedIsChildOf = [&] (const auto& a, const auto& b)
         {
-            return File::isAbsolutePath (a) && File::isAbsolutePath (b) && File (a).isAChildOf (b);
+            return File::isAbsolutePath (a) && File::isAbsolutePath (b) && File (a).isAChildOf (File (b));
         };
 
         const auto fContainsDirectory = [&] (const auto& f)
@@ -178,9 +178,10 @@ Array<File> FileSearchPath::findChildFiles (int whatToLookFor, bool recurse, con
 int FileSearchPath::findChildFiles (Array<File>& results, int whatToLookFor, bool recurse, const String& wildcard) const
 {
     int total = 0;
+    auto followSymlinks = recurse ? File::FollowSymlinks::noCycles : File::FollowSymlinks::yes;
 
     for (auto& d : directories)
-        total += File (d).findChildFiles (results, whatToLookFor, recurse, wildcard);
+        total += File (d).findChildFiles (results, whatToLookFor, recurse, wildcard, followSymlinks);
 
     return total;
 }
@@ -204,58 +205,5 @@ bool FileSearchPath::isFileInPath (const File& fileToCheck,
 
     return false;
 }
-
-//==============================================================================
-//==============================================================================
-#if YUP_UNIT_TESTS
-
-class FileSearchPathTests final : public UnitTest
-{
-public:
-    FileSearchPathTests()
-        : UnitTest ("FileSearchPath", UnitTestCategories::files)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("removeRedundantPaths");
-        {
-#if YUP_WINDOWS
-            const String prefix = "C:";
-#else
-            const String prefix = "";
-#endif
-
-            {
-                FileSearchPath fsp { prefix + "/a/b/c/d;" + prefix + "/a/b/c/e;" + prefix + "/a/b/c" };
-                fsp.removeRedundantPaths();
-                expectEquals (fsp.toString(), prefix + "/a/b/c");
-            }
-
-            {
-                FileSearchPath fsp { prefix + "/a/b/c;" + prefix + "/a/b/c/d;" + prefix + "/a/b/c/e" };
-                fsp.removeRedundantPaths();
-                expectEquals (fsp.toString(), prefix + "/a/b/c");
-            }
-
-            {
-                FileSearchPath fsp { prefix + "/a/b/c/d;" + prefix + "/a/b/c;" + prefix + "/a/b/c/e" };
-                fsp.removeRedundantPaths();
-                expectEquals (fsp.toString(), prefix + "/a/b/c");
-            }
-
-            {
-                FileSearchPath fsp { "%FOO%;" + prefix + "/a/b/c;%FOO%;" + prefix + "/a/b/c/d" };
-                fsp.removeRedundantPaths();
-                expectEquals (fsp.toString(), "%FOO%;" + prefix + "/a/b/c");
-            }
-        }
-    }
-};
-
-static FileSearchPathTests fileSearchPathTests;
-
-#endif
 
 } // namespace yup

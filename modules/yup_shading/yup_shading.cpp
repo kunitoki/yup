@@ -1,0 +1,53 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#ifdef YUP_SHADING_H_INCLUDED
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
+   already included any other headers - just put it inside a file on its own, possibly with your config
+   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
+   header files that the compiler may be using.
+*/
+#error "Incorrect use of YUP cpp file"
+#endif
+
+#include "yup_shading.h"
+
+//==============================================================================
+#include "shading/yup_ShaderBundle.cpp"
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+#include <glslang/glslang.h>
+#include <glslang/upstream/StandAlone/DirStackFileIncluder.h>
+#include <spirv_cross/spirv_cross.h>
+
+#include "wgsl/yup_GlslAst.h"
+#include "wgsl/yup_GlslParser.h"
+#include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslEmitter.h"
+#include "wgsl/yup_GlslParser.cpp"
+#include "wgsl/yup_WgslLowering.cpp"
+#include "wgsl/yup_WgslEmitter.cpp"
+
+#include "shading/yup_WgslTranspiler.cpp"
+#include "shading/yup_ShaderTranspiler.cpp"
+#include "shading/yup_ShaderCache.cpp"
+#include "shading/yup_ShaderBundleCompiler.cpp"
+#endif

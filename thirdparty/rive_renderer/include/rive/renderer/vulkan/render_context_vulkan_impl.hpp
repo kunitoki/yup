@@ -4,30 +4,71 @@
 
 #pragma once
 
+#ifdef RIVE_VULKAN
+
+#include <chrono>
+#include <vulkan/vulkan.h>
 #include "rive/renderer/render_context_impl.hpp"
 #include "rive/renderer/vulkan/vulkan_context.hpp"
-#include <chrono>
-#include <unordered_map>
-#include <vulkan/vulkan.h>
-#include "rive/shapes/paint/image_sampler.hpp"
 
 namespace rive::gpu
 {
+class DrawPipelineLayoutVulkan;
+class RenderTargetVulkan;
 class RenderTargetVulkanImpl;
-class DrawShaderVulkan;
+class PipelineManagerVulkan;
+enum class RenderPassOptionsVulkan;
 
 class RenderContextVulkanImpl : public RenderContextImpl
 {
 public:
+    struct ContextOptions
+    {
+        bool forceAtomicMode = false;
+
+        // Dithering does better when we evaluate our blend equations in medium
+        // precision from the fragment shader, vs letting it happen in the blend
+        // unit (which, presumably, must be lower precision). For this reason,
+        // an app may wish to disable "fixed function" rendering for clockwise
+        // mode.
+        bool disableClockwiseFixedFunctionMode = false;
+
+        ShaderCompilationMode shaderCompilationMode =
+            ShaderCompilationMode::standard;
+    };
+
+    static std::unique_ptr<RenderContext> MakeContext(VkInstance,
+                                                      VkPhysicalDevice,
+                                                      VkDevice,
+                                                      const VulkanFeatures&,
+                                                      PFN_vkGetInstanceProcAddr,
+                                                      const ContextOptions&);
+
     static std::unique_ptr<RenderContext> MakeContext(
-        VkInstance,
-        VkPhysicalDevice,
-        VkDevice,
-        const VulkanFeatures&,
-        PFN_vkGetInstanceProcAddr);
+        VkInstance instance,
+        VkPhysicalDevice physicalDevice,
+        VkDevice device,
+        const VulkanFeatures& vulkanFeatures,
+        PFN_vkGetInstanceProcAddr fp_vkGetInstanceProcAddr)
+    {
+        return MakeContext(instance,
+                           physicalDevice,
+                           device,
+                           vulkanFeatures,
+                           fp_vkGetInstanceProcAddr,
+                           ContextOptions{});
+    }
+
     ~RenderContextVulkanImpl();
 
     VulkanContext* vulkanContext() const { return m_vk.get(); }
+
+    // Set the queue and queue family index used by makeCommandBuffer().
+    // Must be called before any ScriptedCanvas flush.
+    void setCanvasQueue(VkQueue queue, uint32_t queueFamilyIndex);
+
+    void* makeCommandBuffer() override;
+    void commitCommandBuffer(void* commandBuffer) override;
 
     rcp<RenderTargetVulkanImpl> makeRenderTarget(
         uint32_t width,
@@ -42,16 +83,53 @@ public:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
-                                  const uint8_t imageDataRGBAPremul[]) override;
+                                  GPUTextureFormat format,
+                                  const uint8_t imageData[],
+                                  uint8_t blockWidth = 1,
+                                  uint8_t blockHeight = 1,
+                                  bool srgb = false,
+                                  bool generateRemainingMips = false) override;
+
+    // Adopts an externally-owned VkImage as a Rive Texture. Caller owns the
+    // VkImage and must leave it in SHADER_READ_ONLY_OPTIMAL before the next
+    // Rive sample; the first barrier is suppressed accordingly.
+    rcp<Texture> adoptImageTexture(VkImage image,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   VkFormat format);
+
+#ifdef RIVE_CANVAS
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height) override;
+    std::unique_ptr<rive::ore::Context> makeOreContext() override;
+#endif
 
     void hotloadShaders(rive::Span<const uint32_t> spirvData);
 
+    void startAsyncPipelineCreation(InterlockMode,
+                                    VkFormat framebufferFormat,
+                                    VkImageUsageFlags framebufferUsage,
+                                    LoadAction colorLoadAction);
+
+    void startAsyncPipelineCreation(InterlockMode,
+                                    RenderTargetVulkan& renderTarget,
+                                    LoadAction);
+
+    void waitForAsyncPipelineCreation();
+
 private:
-    RenderContextVulkanImpl(rcp<VulkanContext>,
-                            const VkPhysicalDeviceProperties&);
+    RenderContextVulkanImpl(rcp<VulkanContext>, const ContextOptions&);
 
     // Called outside the constructor so we can use virtual methods.
-    void initGPUObjects();
+    void initGPUObjects(ShaderCompilationMode);
+
+    bool wantsManualRenderPassResolve(
+        gpu::InterlockMode,
+        const RenderTarget*,
+        const IAABB& renderTargetUpdateBounds,
+        uint32_t virtualTileWidth,
+        uint32_t virtualTileHeight,
+        gpu::DrawContents combinedDrawContents) const override;
 
     void prepareToFlush(uint64_t nextFrameNumber,
                         uint64_t safeFrameNumber) override;
@@ -107,7 +185,47 @@ private:
     void resizeGradientTexture(uint32_t width, uint32_t height) override;
     void resizeTessellationTexture(uint32_t width, uint32_t height) override;
     void resizeAtlasTexture(uint32_t width, uint32_t height) override;
+    void resizeTransientPLSBacking(uint32_t width,
+                                   uint32_t height,
+                                   uint32_t planeCount) override;
+    void resizeAtomicCoverageBacking(uint32_t width, uint32_t height) override;
     void resizeCoverageBuffer(size_t sizeInBytes) override;
+
+    // Lazy accessors for PLS backing resources. These are lazy because our
+    // Vulkan backend needs different allocations based on interlock mode and
+    // other factors.
+    vkutil::Image* plsTransientImageArray();
+    vkutil::ImageView* plsTransientCoverageView();
+    vkutil::ImageView* plsTransientClipView();
+    rcp<vkutil::ImageView> makePLSTransientImageView(VkFormat,
+                                                     uint32_t index,
+                                                     const char* debugName);
+    // Used by rasterOrdering to stash the original dst color before overwriting
+    // it, and by atomic as the clip buffer.
+    vkutil::Texture2D* plsTransientScratchColorTexture();
+    // Used by clockwise and clockwiseAtomic to save an intermediate RGB blend
+    // color across overlapping fragments.
+    vkutil::Texture2D* plsBlendStorageTexture_RGB10_A2();
+    // Used by clockwiseAtomic as the clip buffer.
+    vkutil::Texture2D* plsTransientClipTexture_R16F();
+
+    // The offscreen color texture is not transient and supports PLS. It is used
+    // in place of the renderTarget (via copying in and out) when the
+    // renderTarget doesn't support PLS.
+    vkutil::Texture2D* accessPLSOffscreenColorTexture(
+        VkCommandBuffer,
+        const vkutil::ImageAccess&,
+        vkutil::ImageAccessAction =
+            vkutil::ImageAccessAction::preserveContents);
+    vkutil::Texture2D* clearPLSOffscreenColorTexture(
+        VkCommandBuffer,
+        ColorInt,
+        const vkutil::ImageAccess& dstAccessAfterClear);
+    vkutil::Texture2D* copyRenderTargetToPLSOffscreenColorTexture(
+        VkCommandBuffer,
+        RenderTargetVulkan*,
+        const IAABB& copyBounds,
+        const vkutil::ImageAccess& dstAccessAfterCopy);
 
     // Wraps a VkDescriptorPool created specifically for a PLS flush, and tracks
     // its allocated descriptor sets.
@@ -124,7 +242,113 @@ private:
         VkDescriptorPool m_vkDescriptorPool;
     };
 
+    // Pool of DescriptorSetPool instances.
+    class DescriptorSetPoolPool : public GPUResourcePool
+    {
+    public:
+        constexpr static size_t MAX_POOL_SIZE = 64;
+        DescriptorSetPoolPool(rcp<GPUResourceManager> manager) :
+            GPUResourcePool(std::move(manager), MAX_POOL_SIZE)
+        {}
+
+        rcp<DescriptorSetPool> acquire();
+    };
+
+    // High-level allocator of VkDescriptorSets. These are intended to be scoped
+    // to a single flush.
+    class DescriptorSetAllocator
+    {
+    public:
+        DescriptorSetAllocator(RenderContextVulkanImpl*);
+        ~DescriptorSetAllocator();
+
+        const VkDescriptorSet& perFlushDescriptorSet() const
+        {
+            return m_perFlushDescriptorSet;
+        }
+
+        VkDescriptorSet allocatePerDrawDescriptorSet();
+        VkDescriptorSet allocateDescriptorSet(VkDescriptorSetLayout);
+
+    private:
+        const rcp<DescriptorSetPoolPool> m_descriptorSetPoolPool;
+        rcp<DescriptorSetPool> m_descriptorSetPool;
+        const VkDescriptorSet m_perFlushDescriptorSet;
+        const VkDescriptorSetLayout m_perDrawDescriptorSetLayout;
+        // Image textures are the only binding that can be updated multiple
+        // times per flush, and a VkDescriptorSetPool can only update a fixed
+        // number of image bindings, so we track this in order to know when it's
+        // time to allocate a new pool.
+        uint32_t m_imageTextureUpdateCount = 0;
+    };
+
+    // Encapsulates state for the main "draw" render pass, providing mechanisms
+    // to restart and interrupt if needed.
+    class DrawRenderPass
+    {
+    public:
+        DrawRenderPass(RenderContextVulkanImpl*,
+                       const FlushDescriptor&,
+                       gpu::LoadAction overrideColorLoadAction,
+                       const IAABB& drawBounds,
+                       VkImageView colorImageView,
+                       VkImageView msaaColorSeedImageView,
+                       VkImageView msaaResolveImageView,
+                       RenderPassOptionsVulkan,
+                       const IAABB& scissor);
+
+        const IAABB& drawBounds() const { return m_drawBounds; }
+        const IAABB& scissor() const { return m_scissor; }
+
+        const DrawPipelineLayoutVulkan& pipelineLayout() const
+        {
+            return m_pipelineLayout;
+        }
+
+        RenderPassOptionsVulkan renderPassOptions() const
+        {
+            return m_renderPassOptions;
+        }
+
+        // Ends the current render pass and starts a new one with the given
+        // properties.
+        void restart(gpu::LoadAction colorLoadAction,
+                     RenderPassOptionsVulkan renderPassOptions,
+                     const IAABB& scissor);
+
+        // Some early Android tilers are known to crash when a render pass is
+        // too complex. This is a mechanism to interrupt and begin a new render
+        // pass on affected devices after a pre-set, internal complexity is
+        // reached.
+        void interruptIfNeeded(uint32_t nextTessPatchCount,
+                               uint32_t pendingTessPatchCount);
+
+    private:
+        const DrawPipelineLayoutVulkan& begin(
+            gpu::LoadAction overrideColorLoadAction,
+            RenderPassOptionsVulkan,
+            const IAABB& scissor);
+
+        RenderContextVulkanImpl* const m_impl;
+        const FlushDescriptor& m_desc;
+        const IAABB m_drawBounds;
+        const VkImageView m_colorImageView;
+        const VkImageView m_msaaColorSeedImageView;
+        const VkImageView m_msaaResolveImageView;
+        const DrawPipelineLayoutVulkan& m_pipelineLayout;
+
+        // Initialized by beginDrawRenderPass().
+        RenderPassOptionsVulkan m_renderPassOptions;
+        IAABB m_scissor;
+        uint32_t m_patchCountInCurrentDrawPass;
+    };
+
     void flush(const FlushDescriptor&) override;
+
+    void submitDrawList(const FlushDescriptor&,
+                        DescriptorSetAllocator*,
+                        DrawRenderPass*,
+                        uint32_t pendingTessPatchCount);
 
     void postFlush(const RenderContext::FlushResources&) override;
 
@@ -135,8 +359,36 @@ private:
     }
 
     const rcp<VulkanContext> m_vk;
-    const uint32_t m_vendorID;
-    const VkFormat m_atlasFormat;
+
+    // Canvas command buffer support (set via setCanvasQueue).
+    VkQueue m_canvasQueue = VK_NULL_HANDLE;
+    uint32_t m_canvasQueueFamilyIndex = 0;
+    VkCommandPool m_canvasCommandPool = VK_NULL_HANDLE;
+
+    struct DriverWorkarounds
+    {
+        // Some early Android tilers are known to crash when a render pass is
+        // too complex. On these devices, we limit the maximum number of
+        // instances that can be issued in a single render pass.
+        uint32_t maxInstancesPerRenderPass = UINT32_MAX;
+        bool needsInterruptibleRenderPasses() const
+        {
+            // If we have a limit on maxInstancesPerRenderPass, then our render
+            // passes need to be interruptible so we can close them off and
+            // start new ones in case we encounter too many instances.
+            return maxInstancesPerRenderPass != UINT32_MAX;
+        }
+        // Early Xclipse drivers struggle with our manual msaa resolve, so we
+        // always do automatic fullscreen resolves on that GPU family.
+        bool avoidManualMSAAResolves = false;
+        // Some Android drivers (some Android 12 and earlier Adreno drivers)
+        // have issues with having both a self-dependency for dst reads and
+        // resolve attachments. For now we just always manually resolve these
+        // render passes that use advanced blend on Qualcomm.
+        bool needsManualMSAAResolveAfterDstRead = true;
+    };
+
+    const DriverWorkarounds m_workarounds;
 
     // Rive buffer pools. These don't need to be rcp<> because the destructor of
     // RenderContextVulkanImpl is already synchronized.
@@ -165,26 +417,12 @@ private:
     std::chrono::steady_clock::time_point m_localEpoch =
         std::chrono::steady_clock::now();
 
-    // Samplers.
-    VkSampler m_linearSampler;
-    VkSampler m_imageSamplers[ImageSampler::MAX_SAMPLER_PERMUTATIONS];
-
     // Bound when there is not an image paint.
     rcp<vkutil::Texture2D> m_nullImageTexture;
 
-    // With the exception of PLS texture bindings, which differ by interlock
-    // mode, all other shaders use the same shared descriptor set layouts.
-    VkDescriptorSetLayout m_perFlushDescriptorSetLayout;
-    VkDescriptorSetLayout m_perDrawDescriptorSetLayout;
-    VkDescriptorSetLayout m_immutableSamplerDescriptorSetLayout;
-    VkDescriptorSetLayout m_emptyDescriptorSetLayout; // For when a set isn't
-                                                      // used by a shader.
-    VkDescriptorPool m_staticDescriptorPool; // For descriptorSets that never
-                                             // change between frames.
-    VkDescriptorSet m_nullImageDescriptorSet;
-    VkDescriptorSet m_immutableSamplerDescriptorSet; // Empty since samplers are
-                                                     // immutable, but also
-                                                     // required by Vulkan.
+    // Common base class for a pipeline that renders a texture resource at the
+    // beginning of a flush, which is then read during the main draw pass.
+    class ResourceTexturePipeline;
 
     // Renders color ramps to the gradient texture.
     class ColorRampPipeline;
@@ -197,6 +435,7 @@ private:
     std::unique_ptr<TessellatePipeline> m_tessellatePipeline;
     rcp<vkutil::Buffer> m_tessSpanIndexBuffer;
     rcp<vkutil::Texture2D> m_tessTexture;
+    rcp<vkutil::Texture2D> m_tesselationSyncIssueWorkaroundTexture;
     rcp<vkutil::Framebuffer> m_tessTextureFramebuffer;
 
     // Renders feathers to the atlas.
@@ -205,59 +444,21 @@ private:
     rcp<vkutil::Texture2D> m_atlasTexture;
     rcp<vkutil::Framebuffer> m_atlasFramebuffer;
 
+    // Pixel local storage backing resources.
+    VkImageUsageFlags m_plsTransientUsageFlags;
+    VkExtent3D m_plsExtent = {0, 0, 1};
+    uint32_t m_plsTransientPlaneCount = 0;
+    rcp<vkutil::Image> m_plsTransientImageArray;
+    rcp<vkutil::ImageView> m_plsTransientCoverageView;
+    rcp<vkutil::ImageView> m_plsTransientClipView;
+    rcp<vkutil::Texture2D> m_plsTransientScratchColorTexture;
+    rcp<vkutil::Texture2D> m_plsBlendStorageTexture_RGB10_A2;
+    rcp<vkutil::Texture2D> m_plsTransientClipTexture_R16F;
+    rcp<vkutil::Texture2D> m_plsOffscreenColorTexture;
+    rcp<vkutil::Texture2D> m_plsAtomicCoverageTexture;
+
     // Coverage buffer used by shaders in clockwiseAtomic mode.
     rcp<vkutil::Buffer> m_coverageBuffer;
-
-    // Rive-specific options for configuring a flush's VkPipelineLayout.
-    enum class DrawPipelineLayoutOptions
-    {
-        none = 0,
-
-        // No need to attach the COLOR texture as an input attachment. There are
-        // no advanced blend modes so we can use built-in hardware blending.
-        fixedFunctionColorOutput = 1 << 0,
-
-        // Use an offscreen texture to render color, but also attach the real
-        // target texture at the COALESCED_ATOMIC_RESOLVE index, and render to
-        // it directly in the atomic resolve step.
-        coalescedResolveAndTransfer = 1 << 1,
-    };
-    constexpr static int DRAW_PIPELINE_LAYOUT_OPTION_COUNT = 2;
-
-    // A VkPipelineLayout for each
-    // interlockMode x [all DrawPipelineLayoutOptions permutations].
-    constexpr static uint32_t DrawPipelineLayoutIdx(
-        gpu::InterlockMode interlockMode,
-        DrawPipelineLayoutOptions options)
-    {
-        return (static_cast<int>(interlockMode)
-                << DRAW_PIPELINE_LAYOUT_OPTION_COUNT) |
-               static_cast<int>(options);
-    }
-    constexpr static int DRAW_PIPELINE_LAYOUT_COUNT =
-        gpu::kInterlockModeCount * (1 << DRAW_PIPELINE_LAYOUT_OPTION_COUNT);
-    constexpr static int DRAW_PIPELINE_LAYOUT_BIT_COUNT =
-        DRAW_PIPELINE_LAYOUT_OPTION_COUNT + 2;
-    static_assert((1 << DRAW_PIPELINE_LAYOUT_BIT_COUNT) >=
-                  DRAW_PIPELINE_LAYOUT_COUNT);
-    static_assert((1 << (DRAW_PIPELINE_LAYOUT_BIT_COUNT - 1)) <
-                  DRAW_PIPELINE_LAYOUT_COUNT);
-    RIVE_DECL_ENUM_BITSET_FRIENDS(DrawPipelineLayoutOptions);
-
-    // VkPipelineLayout wrapper for Rive flushes.
-    class DrawPipelineLayout;
-    std::array<std::unique_ptr<DrawPipelineLayout>, DRAW_PIPELINE_LAYOUT_COUNT>
-        m_drawPipelineLayouts;
-
-    // VkRenderPass wrapper for Rive flushes.
-    class RenderPass;
-    std::unordered_map<uint32_t, std::unique_ptr<RenderPass>> m_renderPasses;
-
-    // VkPipeline wrapper for Rive draw calls.
-    class DrawPipeline;
-    std::unordered_map<uint32_t, std::unique_ptr<DrawShaderVulkan>>
-        m_drawShaders;
-    std::unordered_map<uint64_t, std::unique_ptr<DrawPipeline>> m_drawPipelines;
 
     // Gaussian integral table for feathering.
     rcp<vkutil::Texture2D> m_featherTexture;
@@ -267,19 +468,10 @@ private:
     rcp<vkutil::Buffer> m_imageRectVertexBuffer;
     rcp<vkutil::Buffer> m_imageRectIndexBuffer;
 
-    // Pool of DescriptorSetPool instances for flushing.
-    class DescriptorSetPoolPool : public GPUResourcePool
-    {
-    public:
-        constexpr static size_t MAX_POOL_SIZE = 64;
-        DescriptorSetPoolPool(rcp<GPUResourceManager> manager) :
-            GPUResourcePool(std::move(manager), MAX_POOL_SIZE)
-        {}
-
-        rcp<DescriptorSetPool> acquire();
-    };
-
     rcp<DescriptorSetPoolPool> m_descriptorSetPoolPool;
+
+    std::unique_ptr<PipelineManagerVulkan> m_pipelineManager;
 };
-RIVE_MAKE_ENUM_BITSET(RenderContextVulkanImpl::DrawPipelineLayoutOptions);
 } // namespace rive::gpu
+
+#endif

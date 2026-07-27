@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -53,7 +53,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Packets
+class YUP_API Packets
 {
 public:
     /** Adds a single packet to the collection.
@@ -110,6 +110,6 @@ private:
     std::vector<uint32_t> storage;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

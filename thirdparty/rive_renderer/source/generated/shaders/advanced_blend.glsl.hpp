@@ -1,12 +1,12 @@
 #pragma once
 
-#include "advanced_blend.exports.h"
+#include "advanced_blend.glsl.exports.h"
 
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char advanced_blend[] = R"===(#ifdef HB
-#ifdef KD
+const char advanced_blend[] = R"===(#ifdef FB
+#ifdef ZD
 layout(
 #ifdef XB
 blend_support_all_equations
@@ -15,15 +15,15 @@ blend_support_multiply,blend_support_screen,blend_support_overlay,blend_support_
 #endif
 )out;
 #endif
-#ifdef FB
+#ifdef GB
 #ifdef XB
-g V7(A B0){return min(min(B0.x,B0.y),B0.z);}g N9(A B0){return max(max(B0.x,B0.y),B0.z);}g W7(A B0){return dot(B0,K0(.30,.59,.11));}g O9(A B0){return N9(B0)-V7(B0);}A kc(A j){g p3=W7(j);g P9=V7(j);g Q9=N9(j);if(P9<.0)j=p3+((j-p3)*p3)/(p3-P9);if(Q9>1.)j=p3+((j-p3)*(1.-p3))/(Q9-p3);return j;}A X7(A L4,A Y7){g lc=W7(L4);g mc=W7(Y7);g nc=mc-lc;A j=L4+K0(nc);return kc(j);}A R9(A L4,A oc,A Y7){g pc=V7(L4);g S9=O9(L4);g qc=O9(oc);A j;if(S9>.0){j=(L4-pc)*qc/S9;}else{j=K0(.0);}return X7(j,Y7);}
+d lb(r I1){return dot(I1,T0(.30,.59,.11));}r j9(r mb,r k9){d l9=lb(k9);r m9=mb-lb(mb);D nb=A2(l9,1.0-l9)/max(A2(n9),A2(-g3(m9),I5(m9)));d ge=min(G0(1.0),min(nb.x,nb.y));return m9*ge+l9;}r ob(r Q7,r pb,r k9){float he=I5(pb)-g3(pb);Q7-=g3(Q7);float ie=I5(Q7);float B2=he/max(n9,ie);return j9(Q7*B2,k9);}
 #endif
-A rc(A e0,i X0,a0 Z7){A h0=Y3(X0);A L0;switch(Z7){case sc:L0=e0.xyz*h0.xyz;break;case tc:L0=e0.xyz+h0.xyz-e0.xyz*h0.xyz;break;case uc:{for(int C=0;C<3;++C){if(h0[C]<=.5)L0[C]=2.*e0[C]*h0[C];else L0[C]=1.-2.*(1.-e0[C])*(1.-h0[C]);}break;}case vc:L0=min(e0.xyz,h0.xyz);break;case wc:L0=max(e0.xyz,h0.xyz);break;case xc:{X0.xyz=clamp(X0.xyz,K0(.0),X0.www);A T9=clamp(1.-e0,K0(.0),K0(1.))*X0.w;L0=mix(min(K0(1.),X0.xyz/T9),sign(X0.xyz),equal(T9,K0(.0)));break;}case zc:{e0=clamp(e0,K0(.0),K0(1.));X0.xyz=clamp(X0.xyz,K0(.0),X0.www);if(X0.w==.0)X0.w=1.;A U9=X0.w-X0.xyz;L0=1.-mix(min(K0(1.),U9/(e0*X0.w)),sign(U9),equal(e0,K0(.0)));break;}case Ac:{for(int C=0;C<3;++C){if(e0[C]<=.5)L0[C]=2.*e0[C]*h0[C];else L0[C]=1.-2.*(1.-e0[C])*(1.-h0[C]);}break;}case Bc:{for(int C=0;C<3;++C){if(e0[C]<=0.5)L0[C]=h0[C]-(1.-2.*e0[C])*h0[C]*(1.-h0[C]);else if(h0[C]<=.25)L0[C]=h0[C]+(2.*e0[C]-1.)*h0[C]*((16.*h0[C]-12.)*h0[C]+3.);else L0[C]=h0[C]+(2.*e0[C]-1.)*(sqrt(h0[C])-h0[C]);}break;}case Cc:L0=abs(h0.xyz-e0.xyz);break;case Dc:L0=e0.xyz+h0.xyz-2.*e0.xyz*h0.xyz;break;
+r je(r j0,i z1,X o9){r n0=B6(z1);r c1;switch(o9){case ke:c1=j0.xyz*n0.xyz;break;case le:c1=j0.xyz+n0.xyz-j0.xyz*n0.xyz;break;case me:{r C6=j0*n0;c1=2.0*mix(C6,j0+n0-C6-0.5,greaterThan(n0,T0(0.5)));break;}case ne:c1=min(j0.xyz,n0.xyz);break;case oe:c1=max(j0.xyz,n0.xyz);break;case pe:{z1.xyz=clamp(z1.xyz,T0(.0),z1.www);r qb=clamp(1.-j0,T0(.0),T0(1.))*z1.w;c1=mix(min(T0(1.),z1.xyz/qb),sign(z1.xyz),equal(qb,T0(.0)));break;}case re:{j0=clamp(j0,T0(.0),T0(1.));z1.xyz=clamp(z1.xyz,T0(.0),z1.www);if(z1.w==.0)z1.w=1.;r rb=z1.w-z1.xyz;c1=1.-mix(min(T0(1.),rb/(j0*z1.w)),sign(rb),equal(j0,T0(.0)));break;}case se:{r C6=j0*n0;c1=2.0*mix(C6,j0+n0-C6-0.5,greaterThan(j0,T0(0.5)));break;}case te:{for(int D0=0;D0<3;++D0){if(j0[D0]<=0.5)c1[D0]=(1.0-n0[D0]);else if(n0[D0]<=0.25)c1[D0]=((16.0*n0[D0]-12.0)*n0[D0]+3.0);else c1[D0]=(inversesqrt(n0[D0])-1.0);}c1=n0+n0*(2.0*j0-1.0)*c1;break;}case ue:c1=abs(n0.xyz-j0.xyz);break;case ve:c1=j0.xyz+n0.xyz-2.*j0.xyz*n0.xyz;break;
 #ifdef XB
-case Ec:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=R9(e0.xyz,h0.xyz,h0.xyz);}break;case Fc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=R9(h0.xyz,e0.xyz,h0.xyz);}break;case Gc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=X7(e0.xyz,h0.xyz);}break;case Hc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=X7(h0.xyz,e0.xyz);}break;
+case we:if(XB){j0.xyz=clamp(j0.xyz,T0(.0),T0(1.));c1=ob(j0.xyz,n0.xyz,n0.xyz);}break;case xe:if(XB){j0.xyz=clamp(j0.xyz,T0(.0),T0(1.));c1=ob(n0.xyz,j0.xyz,n0.xyz);}break;case ye:if(XB){j0.xyz=clamp(j0.xyz,T0(.0),T0(1.));c1=j9(j0.xyz,n0.xyz);}break;case ze:if(XB){j0.xyz=clamp(j0.xyz,T0(.0),T0(1.));c1=j9(n0.xyz,j0.xyz);}break;
 #endif
-}return L0;}d A M4(A e0,i X0,a0 Z7){A L0=rc(e0,X0,Z7);G z5=Z3(X0.w,1.-X0.w);return C0(Ic(L0,e0),z5);}
+}return c1;}e r Q4(r j0,i z1,X o9){r c1=je(j0,z1,o9);return mix(j0,c1,T0(z1.w));}
 #endif
 #endif
 )===";

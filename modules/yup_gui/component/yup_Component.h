@@ -24,13 +24,21 @@ namespace yup
 
 //==============================================================================
 
+#ifndef DOXYGEN
+/** @internal Test-only accessor, specialized by unit tests to reach private Component state. */
+template <class T>
+class ComponentTestHelper;
+#endif
+
+//==============================================================================
+
 /**
     The Component class is the base class for all GUI components.
 
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class YUP_API Component
+class YUP_API Component : public MouseListener
 {
 public:
     //==============================================================================
@@ -139,6 +147,16 @@ public:
     void setPosition (const Point<float>& newPosition);
 
     /**
+        Get the position of the component in absolute screen coordinates.
+
+        This method traverses up the parent hierarchy to calculate the component's
+        absolute position on the screen.
+
+        @return The absolute screen position of the component.
+     */
+    Point<float> getScreenPosition() const;
+
+    /**
         Get the x position of the component relative to its parent.
 
         @return The x position of the component relative to its parent.
@@ -180,25 +198,102 @@ public:
      */
     float getBottom() const;
 
+    /**
+        Get the top left position of the component relative to its parent.
+
+        @return The top left position of the component relative to its parent.
+     */
     Point<float> getTopLeft() const;
+
+    /**
+        Set the top left position of the component relative to its parent.
+
+        @param newTopLeft The new top left position of the component relative to its parent.
+     */
     void setTopLeft (const Point<float>& newTopLeft);
 
+    /**
+        Get the bottom left position of the component relative to its parent.
+
+        @return The bottom left position of the component relative to its parent.
+     */
     Point<float> getBottomLeft() const;
+
+    /**
+        Set the bottom left position of the component relative to its parent.
+
+        @param newBottomLeft The new bottom left position of the component relative to its parent.
+     */
     void setBottomLeft (const Point<float>& newBottomLeft);
 
+    /**
+        Get the top right position of the component relative to its parent.
+
+        @return The top right position of the component relative to its parent.
+     */
     Point<float> getTopRight() const;
+
+    /**
+        Set the top right position of the component relative to its parent.
+
+        @param newTopRight The new top right position of the component relative to its parent.
+     */
     void setTopRight (const Point<float>& newTopRight);
 
+    /**
+        Get the bottom right position of the component relative to its parent.
+
+        @return The bottom right position of the component relative to its parent.
+     */
     Point<float> getBottomRight() const;
+
+    /**
+        Set the bottom right position of the component relative to its parent.
+
+        @param newBottomRight The new bottom right position of the component relative to its parent.
+     */
     void setBottomRight (const Point<float>& newBottomRight);
 
+    /**
+        Get the center position of the component relative to its parent.
+
+        @return The center position of the component relative to its parent.
+     */
     Point<float> getCenter() const;
+
+    /**
+        Set the center position of the component relative to its parent.
+
+        @param newCenter The new center position of the component relative to its parent.
+     */
     void setCenter (const Point<float>& newCenter);
 
+    /**
+        Get the center x position of the component relative to its parent.
+
+        @return The center x position of the component relative to its parent.
+     */
     float getCenterX() const;
+
+    /**
+        Set the center x position of the component relative to its parent.
+
+        @param newCenterX The new center x position of the component relative to its parent.
+     */
     void setCenterX (float newCenterX);
 
+    /**
+        Get the center y position of the component relative to its parent.
+
+        @return The center y position of the component relative to its parent.
+     */
     float getCenterY() const;
+
+    /**
+        Set the center y position of the component relative to its parent.
+
+        @param newCenterY The new center y position of the component relative to its parent.
+     */
     void setCenterY (float newCenterY);
 
     /**
@@ -211,6 +306,14 @@ public:
         Get the size of the component.
      */
     Size<float> getSize() const;
+
+    /**
+        Set the size of the component.
+
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setSize (float width, float height);
 
     /**
         Set the size of the component.
@@ -260,6 +363,16 @@ public:
     /**
         Set the bounds of the component.
 
+        @param x The new x position of the component.
+        @param y The new y position of the component.
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setBounds (float x, float y, float width, float height);
+
+    /**
+        Set the bounds of the component.
+
         @param newBounds The new bounds of the component.
      */
     void setBounds (const Rectangle<float>& newBounds);
@@ -272,28 +385,189 @@ public:
     Rectangle<float> getBounds() const;
 
     /**
-        Get the local bounds of the component, with zero position.
+        Get the local bounds of the component.
+
+        The local bounds is the same as getBounds() but with the position set to (0, 0).
 
         @return The local bounds of the component.
      */
     Rectangle<float> getLocalBounds() const;
 
     /**
-        Get the bounds of the component relative to its top level component.
+        Get the bounds of the component relative to the top level component.
 
-        @return The bounds of the component relative to its top most component (on desktop).
+        @return The bounds of the component relative to the top level component.
      */
     Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
 
+    /**
+        Get the bounds of the component in screen coordinates.
+
+        @return The bounds of the component in screen coordinates.
+     */
+    Rectangle<float> getScreenBounds() const;
+
+    /**
+        Get the area of the component that is safe for interactive content.
+
+        On mobile devices the window may extend under display cutouts (notch), the
+        status bar or rounded corners: this returns the portion of the component that
+        is guaranteed to be fully visible and touchable. On desktop platforms this
+        usually matches the local bounds.
+
+        @return The safe area bounds, in local component coordinates.
+     */
+    Rectangle<float> getSafeAreaBounds() const;
+
+    /**
+        Called when the safe area of the component changes.
+
+        This can happen on mobile devices when the device is rotated, or when system
+        bars are shown or hidden.
+
+        @see getSafeAreaBounds
+     */
+    virtual void safeAreaChanged();
+
     //==============================================================================
 
+    /**
+        Convert a point from local coordinates to screen coordinates.
+
+        @param localPoint The point to convert.
+
+        @return The point in screen coordinates.
+     */
+    Point<float> localToScreen (const Point<float>& localPoint) const;
+
+    /**
+        Convert a point from screen coordinates to local coordinates.
+
+        @param screenPoint The point to convert.
+
+        @return The point in local coordinates.
+     */
+    Point<float> screenToLocal (const Point<float>& screenPoint) const;
+
+    /**
+        Convert a rectangle from local coordinates to screen coordinates.
+
+        @param localRectangle The rectangle to convert.
+
+        @return The rectangle in screen coordinates.
+     */
+    Rectangle<float> localToScreen (const Rectangle<float>& localRectangle) const;
+
+    /**
+        Convert a rectangle from screen coordinates to local coordinates.
+
+        @param screenRectangle The rectangle to convert.
+
+        @return The rectangle in local coordinates.
+     */
+    Rectangle<float> screenToLocal (const Rectangle<float>& screenRectangle) const;
+
+    //==============================================================================
+
+    /**
+        Convert a point from another component's coordinate system to this component's local coordinates.
+        This method handles all transforms in the component hierarchy.
+
+        @param sourceComponent  The component whose coordinate system the point is in
+        @param pointInSource    The point in the source component's coordinate system
+
+        @return The point converted to this component's local coordinate system
+     */
+    Point<float> getLocalPoint (const Component* sourceComponent, Point<float> pointInSource) const;
+
+    /**
+        Convert a rectangle from another component's coordinate system to this component's local coordinates.
+        This method handles all transforms in the component hierarchy.
+
+        @param sourceComponent      The component whose coordinate system the rectangle is in
+        @param rectangleInSource    The rectangle in the source component's coordinate system
+
+        @return The rectangle converted to this component's local coordinate system
+     */
+    Rectangle<float> getLocalArea (const Component* sourceComponent, Rectangle<float> rectangleInSource) const;
+
+    /**
+        Convert a point from this component's local coordinates to another component's coordinate system.
+        This method handles all transforms in the component hierarchy.
+
+        @param targetComponent  The component whose coordinate system to convert to
+        @param localPoint       The point in this component's local coordinate system
+
+        @return The point converted to the target component's coordinate system
+     */
+    Point<float> getRelativePoint (const Component* targetComponent, Point<float> localPoint) const;
+
+    /**
+        Convert a rectangle from this component's local coordinates to another component's coordinate system.
+        This method handles all transforms in the component hierarchy.
+
+        @param targetComponent  The component whose coordinate system to convert to
+        @param localRectangle   The rectangle in this component's local coordinate system
+
+        @return The rectangle converted to the target component's coordinate system
+     */
+    Rectangle<float> getRelativeArea (const Component* targetComponent, Rectangle<float> localRectangle) const;
+
+    //==============================================================================
+    /**
+        Set the transform of the component.
+
+        @param transform The new transform of the component.
+     */
     void setTransform (const AffineTransform& transform);
 
+    /**
+        Get the transform of the component.
+
+        @return The transform of the component.
+     */
     AffineTransform getTransform() const;
 
+    /**
+        Check if the component is transformed.
+
+        @return True if the component is transformed, false otherwise.
+     */
     bool isTransformed() const;
 
+    /**
+        Called when the transform of the component changes.
+     */
     virtual void transformChanged();
+
+    //==============================================================================
+    /**
+        Get the transform from this component's coordinate system to another component's coordinate system.
+        This calculates the combined transform needed to convert coordinates from this component to the target.
+
+        @param targetComponent  The component to get the transform to
+
+        @return The combined transform from this component to the target component
+     */
+    AffineTransform getTransformToComponent (const Component* targetComponent) const;
+
+    /**
+        Get the transform from another component's coordinate system to this component's coordinate system.
+        This calculates the combined transform needed to convert coordinates from the source to this component.
+
+        @param sourceComponent  The component to get the transform from
+
+        @return The combined transform from the source component to this component
+     */
+    AffineTransform getTransformFromComponent (const Component* sourceComponent) const;
+
+    /**
+        Get the transform from this component's coordinate system to screen coordinates.
+        This calculates the combined transform needed to convert coordinates from this component to screen space.
+
+        @return The combined transform from this component to screen coordinates
+     */
+    AffineTransform getTransformToScreen() const;
 
     //==============================================================================
     /**
@@ -346,6 +620,25 @@ public:
 
     //==============================================================================
     /**
+        Check if the component is opaque.
+
+        An opaque component fully covers its background, allowing for rendering optimizations.
+        When an area is fully covered by an opaque component (and its children), rendering
+        can start from that component instead of from the root.
+
+        @return True if the component is opaque, false otherwise.
+     */
+    bool isOpaque() const;
+
+    /**
+        Set the opaque state of the component.
+
+        @param shouldBeOpaque True if the component should be opaque, false otherwise.
+     */
+    void setOpaque (bool shouldBeOpaque);
+
+    //==============================================================================
+    /**
         Enable or disable unclipped rendering for the component.
 
         @param shouldBeEnabled True if the component should be rendered unclipped, false otherwise.
@@ -359,6 +652,19 @@ public:
      */
     bool isRenderingUnclipped() const;
 
+    //==============================================================================
+    /** Enables or disables paint measurement suppression for this component.
+
+        When suppression is enabled, component paint listeners will not receive
+        paint measurement callbacks for this component, even if they request paint
+        measurements.
+    */
+    void setPaintProfilingDisabled (bool shouldBeDisabled);
+
+    /** Returns true if paint measurement is suppressed for this component. */
+    bool isPaintProfilingDisabled() const;
+
+    //==============================================================================
     /**
         Repaint the component.
      */
@@ -370,6 +676,11 @@ public:
         @param rect The rectangle to repaint.
      */
     void repaint (const Rectangle<float>& rect);
+
+    /**
+        Repaint the component.
+     */
+    void repaint (float x, float y, float width, float height);
 
     //==============================================================================
     /**
@@ -490,6 +801,32 @@ public:
     void setWantsKeyboardFocus (bool wantsFocus);
 
     /**
+        Check whether this component wants keyboard focus.
+
+        @return True if this component wants keyboard focus, false otherwise.
+     */
+    bool getWantsKeyboardFocus() const;
+
+    /**
+        Set whether clicking this component can make it grab keyboard focus.
+
+        When a component is clicked, focus handling walks from the clicked
+        component up through its parents until it finds a component that both
+        wants keyboard focus and has this flag enabled. This is enabled by
+        default.
+
+        @param shouldGrabFocus True if mouse clicks can grab keyboard focus.
+     */
+    void setClickingGrabFocus (bool shouldGrabFocus);
+
+    /**
+        Check whether clicking this component can make it grab keyboard focus.
+
+        @return True if mouse clicks can grab keyboard focus.
+     */
+    bool getClickingGrabFocus() const;
+
+    /**
         Take the focus.
      */
     void takeKeyboardFocus();
@@ -517,6 +854,13 @@ public:
     virtual void focusLost();
 
     //==============================================================================
+    /**
+        Check if the component has a parent component.
+
+        @return Wheter the component has a parent.
+     */
+    bool hasParent() const;
+
     /**
         Get the parent of the component.
 
@@ -644,7 +988,7 @@ public:
 
         @param index The index of the child component to get.
      */
-    Component* getComponentAt (int index) const;
+    Component* getChildComponent (int index) const;
 
     /**
         Returns the index of a child component, or -1 if not found.
@@ -703,53 +1047,76 @@ public:
 
     //==============================================================================
     /**
+        Set if the component wants mouse events.
+
+        @param allowSelfMouseEvents True if the component wants mouse events on itself, false otherwise.
+        @param allowChildrenMouseEvents True if the component wants mouse events on its children, false otherwise.
+     */
+    void setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents);
+
+    /**
+        Check if the component wants mouse events on itself.
+
+        @return True if the component wants mouse events on itself, false otherwise.
+     */
+    bool doesWantSelfMouseEvents() const;
+
+    /**
+        Check if the component wants mouse events on its children.
+
+        @return True if the component wants mouse events on its children, false otherwise.
+     */
+    bool doesWantChildrenMouseEvents() const;
+
+    //==============================================================================
+    /**
         Called when the mouse enters the component.
 
         @param event The mouse event.
      */
-    virtual void mouseEnter (const MouseEvent& event);
+    void mouseEnter (const MouseEvent& event) override;
 
     /**
         Called when the mouse exits the component.
 
         @param event The mouse event.
      */
-    virtual void mouseExit (const MouseEvent& event);
+    void mouseExit (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is pressed.
 
         @param event The mouse event.
      */
-    virtual void mouseDown (const MouseEvent& event);
+    void mouseDown (const MouseEvent& event) override;
 
     /**
         Called when the mouse is moved.
 
         @param event The mouse event.
      */
-    virtual void mouseMove (const MouseEvent& event);
+    void mouseMove (const MouseEvent& event) override;
 
     /**
         Called when the mouse is dragged.
 
         @param event The mouse event.
      */
-    virtual void mouseDrag (const MouseEvent& event);
+    void mouseDrag (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is released.
 
         @param event The mouse event.
      */
-    virtual void mouseUp (const MouseEvent& event);
+    void mouseUp (const MouseEvent& event) override;
 
     /**
         Called when the mouse button is double clicked.
 
         @param event The mouse event.
      */
-    virtual void mouseDoubleClick (const MouseEvent& event);
+    void mouseDoubleClick (const MouseEvent& event) override;
 
     /**
         Called when the mouse wheel is scrolled.
@@ -757,7 +1124,77 @@ public:
         @param event The mouse event.
         @param wheelData The mouse wheel data.
      */
-    virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
+
+    //==============================================================================
+    /**
+        Called to determine whether the component is interested in a drag-and-drop payload.
+
+        This acts as the opt-in gate for drag-and-drop handling. It defaults to returning false,
+        so a component must override this and return true to receive itemsDropped, itemDragEnter,
+        itemDragMove, and itemDragExit calls.
+
+        @param data The payload that would be dropped.
+
+        @return true if the component wants to handle the payload.
+
+        @see itemsDropped, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool isInterestedInDrag (const DragAndDropData& data);
+
+    /**
+        Called when a drag-and-drop payload is dropped onto the component.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events. If the component does not handle
+        the drop it should return false, allowing the payload to bubble up to parents.
+
+        @param position The drop position, in component-local coordinates.
+        @param data     The dropped payload.
+
+        @return true if the component handled the drop.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove, itemDragExit
+     */
+    virtual bool itemsDropped (const Point<float>& position, const DragAndDropData& data);
+
+    //==============================================================================
+    /**
+        Called when a drag-and-drop payload enters the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragMove, itemDragExit
+     */
+    virtual void itemDragEnter (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload moves within the component's area.
+
+        This is only called if isInterestedInDrag returned true. The position is
+        component-local, consistent with mouse events.
+
+        @param data     The drag-and-drop payload.
+        @param position The cursor position, in component-local coordinates.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragExit
+     */
+    virtual void itemDragMove (const DragAndDropData& data, const Point<float>& position);
+
+    /**
+        Called when a drag-and-drop payload exits the component's area.
+
+        This is only called if isInterestedInDrag returned true.
+
+        @param data The drag-and-drop payload.
+
+        @see isInterestedInDrag, itemDragEnter, itemDragMove
+     */
+    virtual void itemDragExit (const DragAndDropData& data);
 
     //==============================================================================
     /**
@@ -773,6 +1210,12 @@ public:
         @param listener The mouse listener to remove.
      */
     void removeMouseListener (MouseListener* listener);
+
+    /** Add a component listener to this component. */
+    void addComponentListener (ComponentListener* listener);
+
+    /** Remove a component listener from this component. */
+    void removeComponentListener (ComponentListener* listener);
 
     //==============================================================================
     /**
@@ -841,6 +1284,100 @@ public:
     std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
+
+    /** Set a metric value for the component.
+
+        Metrics are numeric values like corner radius, padding, or spacing that
+        can be themed globally and overridden per-component, following the same
+        pattern as component colors.
+
+        @param metricId The identifier of the metric to set.
+        @param metric The metric value to set. Pass std::nullopt to remove the override.
+    */
+    void setMetric (const Identifier& metricId, const std::optional<float>& metric);
+
+    /** Get the metric override for this component (does not walk parents).
+
+        @param metricId The identifier of the metric to get.
+
+        @return The metric value, or std::nullopt if not set on this specific component.
+    */
+    std::optional<float> getMetric (const Identifier& metricId) const;
+
+    /** Find the metric value, walking up the parent hierarchy.
+
+        Checks this component first, then walks up the parent chain. If no override
+        is found, falls back to the value registered in the global ApplicationTheme.
+
+        @param metricId The identifier of the metric to find.
+
+        @return The metric value, or std::nullopt if not found anywhere.
+    */
+    std::optional<float> findMetric (const Identifier& metricId) const;
+
+    //==============================================================================
+    /** Sets a component effect that is applied after the component and its children are rendered.
+
+        The component subtree is first rendered to an offscreen GPU texture, then the effect's
+        apply() method is called to composite the result back onto the main Graphics context.
+        Pass nullptr to remove the effect.
+
+        @param effect The effect to apply, or nullptr to remove.
+        @see ComponentEffect
+     */
+    void setComponentEffect (ComponentEffect::Ptr effect);
+
+    /** Returns the current component effect, or nullptr if none is set. */
+    ComponentEffect::Ptr getComponentEffect() const;
+
+    //==============================================================================
+    /** Enables or disables cached-to-texture rendering for this component and its subtree.
+
+        When enabled, the component subtree is rendered once into an offscreen GPU texture that
+        is reused across subsequent frames. The cache is automatically invalidated when the component
+        is repainted, resized, or its children change.
+
+        This improves performance for complex components whose content changes infrequently.
+
+        @param shouldCache Whether to enable cached-to-texture rendering.
+     */
+    void setCachedToTexture (bool shouldCache);
+
+    /** Returns true if cached-to-texture rendering is enabled. */
+    bool isCachedToTexture() const;
+
+    //==============================================================================
+    /** Creates a CPU-side Image containing a snapshot of this component's current
+        appearance, including all visible children.
+
+        The component tree is rendered offscreen, then the GPU pixels are read back to
+        CPU memory. The returned Image has both GPU texture and CPU pixel data populated.
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot. When false, the raw subtree
+                              rendering is captured.
+        @return An Image containing the rendered snapshot, or an empty Image on failure.
+        @see snapshotToTexture
+     */
+    Image snapshotToImage (GraphicsContext& ctx, bool includeEffects = true);
+
+    /** Creates a GPU texture snapshot of this component's current appearance,
+        including all visible children.
+
+        Like snapshotToImage but returns a GPU texture without reading pixels back to
+        CPU memory. This is faster when the snapshot is only needed for on-screen
+        compositing (e.g. via Graphics::drawTexture).
+
+        @param ctx            The GraphicsContext to use for offscreen rendering.
+        @param includeEffects When true and a component effect is active, the effect is
+                              applied to the snapshot.
+        @return A GpuTexture containing the rendered snapshot, or nullptr on failure.
+        @see snapshotToImage
+     */
+    GpuTexture::Ptr snapshotToTexture (GraphicsContext& ctx, bool includeEffects = true);
+
+    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {
@@ -873,8 +1410,32 @@ public:
         WeakReference<Component> componentWeak;
     };
 
+protected:
+    /** @internal This is used by subclasses to simplify sending notifications. */
+    template <class F>
+    void sendChangeNotification (NotificationType notification, F&& function)
+    {
+        if (notification == dontSendNotification)
+            return;
+
+        auto notificationSender = [function = std::forward<F> (function), bailOutChecker = BailOutChecker (this)]
+        {
+            if (bailOutChecker.shouldBailOut())
+                return;
+
+            function();
+        };
+
+        if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
+            MessageManager::callAsync (std::move (notificationSender));
+        else
+            notificationSender();
+    }
+
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void internalRepaint();
+    void internalRepaint (const Rectangle<float>& rect);
     void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
@@ -884,22 +1445,46 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+    bool internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition);
+    void internalItemDragExit (const DragAndDropData& data);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
-    void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
+    void internalMoved (int xpos, int ypos);
+    void internalFocusChanged (bool gotFocus);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
+    void internalSafeAreaChanged();
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalVisibilityChanged();
+    void internalAttachedToNative();
+    void internalDetachedFromNative();
+
+    void handleKeyboardFocusFromClick();
 
     void updateMouseCursor();
 
+    void sendMoved();
+    void sendResized();
+
+    bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
+    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous);
+    void paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous);
+    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
+
     friend class ComponentNative;
-    friend class SDL2ComponentNative;
+    friend class SDLComponentNative;
     friend class WeakReference<Component>;
 
+    template <class T>
+    friend class ComponentTestHelper;
+
+    using ComponentListenerList = ListenerList<ComponentListener, Array<WeakReference<ComponentListener>>>;
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
 
     String componentID, componentTitle;
@@ -907,12 +1492,16 @@ private:
     Array<Component*> children;
     Rectangle<float> boundsInParent;
     AffineTransform transform;
-    std::unique_ptr<ComponentNative> native;
+    ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentListenerList componentListeners;
     ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
+    ComponentEffect::Ptr componentEffect;
+    GpuCanvas::Ptr cachedTextureCanvas;
+    float contentScale = 1.0f;
     uint8 opacity = 255;
 
     struct Options
@@ -922,18 +1511,25 @@ private:
         bool hasFrame : 1;
         bool onDesktop : 1;
         bool isFullScreen : 1;
+        bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool clickingDoesNotGrabFocus : 1;
         bool isRepainting : 1;
+        bool blockSelfMouseEvents : 1;
+        bool blockChildrenMouseEvents : 1;
+        bool paintProfilingDisabled : 1;
+        bool cachedToTexture : 1;
+        bool paintAsOffscreenRoot : 1;
     };
 
     union
     {
-        uint32 optionsValue;
+        uint64 optionsValue;
         Options options;
     };
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     Color debugColor = Color::opaqueRandom();
     int counter = 2;
 #endif

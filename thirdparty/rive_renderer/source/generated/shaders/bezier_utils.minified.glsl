@@ -1,13 +1,13 @@
-#ifndef fa
-#define fa f
+#ifndef Hb
+#define Hb g
 #endif
-#ifndef J5
-#define J5 c
+#ifndef J6
+#define J6 c
 #endif
-d float C8(c k,c b){float Qc=dot(k,b);float ga=dot(k,k)*dot(b,b);return(ga==.0)?1.:clamp(Qc*inversesqrt(ga),-1.,1.);}d void Rc(c o0,c p0,c x0,c z0,k1(c)o,k1(c)r,k1(c)L1){L1=p0-o0;c K5=x0-p0;c X6=z0-o0;r=K5-L1;o=-3.*K5+X6;}d S D8(c o0,c p0,c x0,c z0){S t;t[0]=(any(notEqual(o0,p0))?p0:any(notEqual(p0,x0))?x0:z0)-o0;t[1]=z0-(any(notEqual(z0,x0))?x0:any(notEqual(x0,p0))?p0:o0);return t;}d float Sc(c o0,c p0,c x0,c z0,float c1,float Tc){c o,r,L1;Rc(o0,p0,x0,z0,o,r,L1);c L5=3.*(((o*c1)+2.*r)*c1+L1);float ha=length(L5);if(ha==.0){return.0;}L5*=1./ha;float Y6=2.*dot(o,L5);float M5=3.*(Y6*c1+4.*dot(r,L5))*c1+6.*dot(L1,L5);float E8=min(c1,1.-c1);float Uc=(Y6*E8*E8+M5)*E8;float ia=min(Tc,Uc*.9999);float A2;if(Y6==.0){A2=ia/M5;}else{float d0=1./Y6;float b=M5*d0,B0=-ia*d0;float N5=(-1./3.)*b,O5=.5*B0;float ja=O5*O5-N5*N5*N5;if(ja<.0){float Z6=sqrt(N5);float O0=acos(O5/(Z6*Z6*Z6));A2=-2.*Z6*cos(O0*(1./3.)+(-O2*2./3.));}else{float o=pow(abs(O5)+sqrt(ja),1./3.);if(O5<.0)o=-o;A2=o!=.0?o+N5/o:.0;}}A2=abs(A2);f t0011=c1+fa(-A2,-A2,A2,A2);f ka=(o.xyxy*t0011+2.*r.xyxy)*t0011+L1.xyxy;S d2=D8(o0,p0,x0,z0);c Vc=t0011.x<1e-3?d2[0]:ka.xy;c Wc=t0011.z>1.-1e-3?d2[1]:ka.zw;return acos(C8(Vc,Wc));}d float a7(float k,float b){k=b<.0?-k:k;b=abs(b);return k>.0?(k<b?k/b:1.):.0;}float Xc(c o0,c p0,c x0,c z0,k1(float)F8){c la=z0-o0;float ma=length(z0-o0);if(ma==.0){F8=.5;return.0;}c B2=J5(-la.y,la.x)/ma;float na=dot(B2,x0-o0);float C3=dot(B2,p0-o0);float D3=C3-na;
+e float K9(c o,c b){float Le=dot(o,b);float Ib=dot(o,o)*dot(b,b);return(Ib==.0)?1.:clamp(Le*inversesqrt(Ib),-1.,1.);}e void Me(c w0,c x0,c E0,c I0,e1(c)A,e1(c)F,e1(c)d2){d2=x0-w0;c K6=E0-x0;c h8=I0-w0;F=K6-d2;A=-3.*K6+h8;}e Z L9(c w0,c x0,c E0,c I0){Z t;t[0]=(any(notEqual(w0,x0))?x0:any(notEqual(x0,E0))?E0:I0)-w0;t[1]=I0-(any(notEqual(I0,E0))?E0:any(notEqual(E0,x0))?x0:w0);return t;}e float Ne(c w0,c x0,c E0,c I0,float w1,float Oe){c A,F,d2;Me(w0,x0,E0,I0,A,F,d2);c L6=3.*(((A*w1)+2.*F)*w1+d2);float Jb=length(L6);if(Jb==.0){return.0;}L6*=1./Jb;float i8=2.*dot(A,L6);float M6=3.*(i8*w1+4.*dot(F,L6))*w1+6.*dot(d2,L6);float M9=min(w1,1.-w1);float Pe=(i8*M9*M9+M6)*M9;float Kb=min(Oe,Pe*.9999);float V2;if(i8==.0){V2=Kb/M6;}else{float H=1./i8;float b=M6*H,I1=-Kb*H;float N6=(-1./3.)*b,O6=.5*I1;float Lb=O6*O6-N6*N6*N6;if(Lb<.0){float j8=sqrt(N6);float h1=acos(O6/(j8*j8*j8));V2=-2.*j8*cos(h1*(1./3.)+(-A3*2./3.));}else{float A=pow(abs(O6)+sqrt(Lb),1./3.);if(O6<.0)A=-A;V2=A!=.0?A+N6/A:.0;}}V2=abs(V2);g t0011=w1+Hb(-V2,-V2,V2,V2);g Mb=(A.xyxy*t0011+2.*F.xyxy)*t0011+d2.xyxy;Z F2=L9(w0,x0,E0,I0);c Qe=t0011.x<1e-3?F2[0]:Mb.xy;c Re=t0011.z>1.-1e-3?F2[1]:Mb.zw;return acos(K9(Qe,Re));}e float k8(float o,float b){o=b<.0?-o:o;b=abs(b);return o>.0?(o<b?o/b:1.):.0;}float Se(c w0,c x0,c E0,c I0,e1(float)N9){c Nb=I0-w0;float Ob=length(I0-w0);if(Ob==.0){N9=.5;return.0;}c W2=J6(-Nb.y,Nb.x)/Ob;float Pb=dot(W2,E0-w0);float y4=dot(W2,x0-w0);float z4=y4-Pb;
 #if 0
-float k=3.*D3;float oa=D3+C3;float B0=C3;float V1=sqrt(max(D3*D3+na*C3,.0));if(oa<.0)V1=-V1;V1+=oa;c P5=J5(a7(V1,k),a7(B0,V1));c X4=3.*(P5*(P5*(P5*D3-(C3+D3))+C3));X4=abs(X4);F8=X4.x>X4.y?P5.x:P5.y;return max(X4.x,X4.y);
+float o=3.*z4;float Qb=z4+y4;float I1=y4;float q2=sqrt(max(z4*z4+Pb*y4,.0));if(Qb<.0)q2=-q2;q2+=Qb;c P6=J6(k8(q2,o),k8(I1,q2));c T5=3.*(P6*(P6*(P6*z4-(y4+z4))+y4));T5=abs(T5);N9=T5.x>T5.y?P6.x:P6.y;return max(T5.x,T5.y);
 #else
-float pa=3.*D3;float r=-C3-D3;float L1=C3;float t=.5;for(int C=0;C<3;++C){float qa=pa*t;t=a7(qa*t-L1,2.*(qa+r));}F8=t;return abs(t*(t*(t*pa+3.*r)+3.*L1));
+float Rb=3.*z4;float F=-y4-z4;float d2=y4;float t=.5;for(int D0=0;D0<3;++D0){float Sb=Rb*t;t=k8(Sb*t-d2,2.*(Sb+F));}N9=t;return abs(t*(t*(t*Rb+3.*F)+3.*d2));
 #endif
 }

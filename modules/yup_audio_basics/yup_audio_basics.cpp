@@ -48,44 +48,27 @@
 
 #include "yup_audio_basics.h"
 
-#if YUP_USE_SSE_INTRINSICS
-#include <emmintrin.h>
-#endif
-
 #if YUP_MAC || YUP_IOS
-#ifndef YUP_USE_VDSP_FRAMEWORK
-#define YUP_USE_VDSP_FRAMEWORK 1
-#endif
-
-#if YUP_USE_VDSP_FRAMEWORK
-#include <Accelerate/Accelerate.h>
-#endif
+#include <os/workgroup.h>
 
 #include "native/yup_AudioWorkgroup_apple.h"
-
-#elif YUP_USE_VDSP_FRAMEWORK
-#undef YUP_USE_VDSP_FRAMEWORK
 #endif
 
-#if YUP_USE_ARM_NEON
-#include <arm_neon.h>
-#endif
-
-#include "buffers/yup_AudioDataConverters.cpp"
-#include "buffers/yup_FloatVectorOperations.cpp"
 #include "buffers/yup_AudioChannelSet.cpp"
 #include "buffers/yup_AudioProcessLoadMeasurer.cpp"
 #include "utilities/yup_IIRFilter.cpp"
 #include "utilities/yup_LagrangeInterpolator.cpp"
 #include "utilities/yup_WindowedSincInterpolator.cpp"
-#include "utilities/yup_Interpolators.cpp"
-#include "utilities/yup_SmoothedValue.cpp"
 #include "midi/yup_MidiBuffer.cpp"
 #include "midi/yup_MidiFile.cpp"
 #include "midi/yup_MidiKeyboardState.cpp"
 #include "midi/yup_MidiMessage.cpp"
 #include "midi/yup_MidiMessageSequence.cpp"
 #include "midi/yup_MidiRPN.cpp"
+#include "midi/ump/yup_UMPPacketBuffer.cpp"
+#include "midi/ump/yup_UMPKeyboardState.cpp"
+#include "midi/ump/yup_UMPMidi1ByteStream.cpp"
+#include "midi/ump/yup_UMPJitterReductionTimestamps.cpp"
 #include "mpe/yup_MPEValue.cpp"
 #include "mpe/yup_MPENote.cpp"
 #include "mpe/yup_MPEZoneLayout.cpp"
@@ -106,16 +89,8 @@
 #include "sources/yup_PositionableAudioSource.cpp"
 #include "synthesisers/yup_Synthesiser.cpp"
 #include "audio_play_head/yup_AudioPlayHead.cpp"
-#include "midi/yup_MidiDataConcatenator.h"
-#include "midi/ump/yup_UMP.h"
 #include "midi/ump/yup_UMPUtils.cpp"
 #include "midi/ump/yup_UMPView.cpp"
-#include "midi/ump/yup_UMPSysEx7.cpp"
 #include "midi/ump/yup_UMPMidi1ToMidi2DefaultTranslator.cpp"
 #include "midi/ump/yup_UMPIterator.cpp"
 #include "utilities/yup_AudioWorkgroup.cpp"
-
-#if YUP_UNIT_TESTS
-#include "utilities/yup_ADSR_test.cpp"
-#include "midi/ump/yup_UMP_test.cpp"
-#endif

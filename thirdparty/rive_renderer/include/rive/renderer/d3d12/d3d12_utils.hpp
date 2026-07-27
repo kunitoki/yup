@@ -65,6 +65,13 @@ public:
                         UINT numElements,
                         UINT elementByteStride,
                         UINT64 firstElement);
+    void markSrvToIndex(ID3D12Device* device,
+                        D3D12Buffer* resource,
+                        UINT index,
+                        UINT numElements,
+                        UINT elementByteStride,
+                        UINT gpuByteStride,
+                        UINT64 firstElement);
     void markUavToIndex(ID3D12Device* device,
                         D3D12Buffer* resource,
                         DXGI_FORMAT format,
@@ -77,6 +84,17 @@ public:
     void markSrvToIndex(ID3D12Device* device,
                         D3D12TextureArray* resource,
                         UINT index);
+    // Write a null-resource SRV descriptor at `index` so the slot is valid for
+    // SetGraphicsRootDescriptorTable even when the source resource isn't
+    // currently allocated. Without this, recycled cpu-heap slots can retain
+    // descriptors pointing at released resources and trip GPU-Based Validation
+    // (id=1042) when the SRV table is bound.
+    void markNullTexture2DSrvToIndex(ID3D12Device* device,
+                                     UINT index,
+                                     DXGI_FORMAT format);
+    void markNullStructuredBufferSrvToIndex(ID3D12Device* device,
+                                            UINT index,
+                                            UINT elementByteStride);
     void markUavToIndex(ID3D12Device* device,
                         D3D12Texture* resource,
                         DXGI_FORMAT format,
@@ -127,6 +145,7 @@ public:
 
     ID3D12Resource* resource() const { return m_resource.Get(); }
     const D3D12_RESOURCE_DESC& desc() const { return m_desc; }
+    D3D12_RESOURCE_STATES lastState() const { return m_lastState; }
 
 #if DEBUG
     LPCWSTR m_name = L"";
@@ -213,6 +232,16 @@ public:
     UINT64 height() const { return m_desc.Height; }
     DXGI_FORMAT format() const { return m_desc.Format; }
 
+    // Optional SRV format override for externally-adopted textures whose
+    // typed view is not derivable from desc().Format (e.g. TYPELESS storage
+    // or picking the sRGB variant). UNKNOWN = auto-infer.
+    void setSrvViewFormat(DXGI_FORMAT format) { m_srvViewFormat = format; }
+    DXGI_FORMAT srvViewFormat() const { return m_srvViewFormat; }
+
+private:
+    DXGI_FORMAT m_srvViewFormat = DXGI_FORMAT_UNKNOWN;
+
+public:
     // USE WITH CAUTION !! this force release the ID3D12Resource held by this
     // texture. Be sure that it is no longer needed or in any active command
     // list
@@ -446,10 +475,13 @@ public:
         D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COMMON,
         D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE);
 
+    // D3D12 requires buffers on the UPLOAD heap to be created in
+    // D3D12_RESOURCE_STATE_GENERIC_READ and to remain in that state for their
+    // lifetime; the runtime returns E_INVALIDARG otherwise.
     rcp<D3D12Buffer> makeUploadBuffer(
         UINT size,
         D3D12_RESOURCE_FLAGS bindFlags = D3D12_RESOURCE_FLAG_NONE,
-        D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_COPY_SOURCE,
+        D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_GENERIC_READ,
         D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAG_NONE);
 
     rcp<D3D12VolatileBuffer> makeVolatileBuffer(
@@ -465,7 +497,7 @@ public:
         rcp<D3D12Buffer> uploadBuffer =
             makeUploadBuffer(sizeInBytes,
                              D3D12_RESOURCE_FLAG_NONE,
-                             D3D12_RESOURCE_STATE_COPY_SOURCE);
+                             D3D12_RESOURCE_STATE_GENERIC_READ);
         rcp<D3D12Buffer> constBuffer = makeBuffer(sizeInBytes,
                                                   D3D12_RESOURCE_FLAG_NONE,
                                                   D3D12_RESOURCE_STATE_COMMON);

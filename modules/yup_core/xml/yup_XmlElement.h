@@ -270,24 +270,34 @@ public:
 
     /** Returns the value of a named attribute as an integer.
 
-        This will try to find the attribute and convert it to an integer (using
-        the String::getIntValue() method).
+        This will try to find the attribute and convert it to an integer (using the String::getIntValue() method).
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
         @see setAttribute
     */
     int getIntAttribute (StringRef attributeName, int defaultReturnValue = 0) const;
 
-    /** Returns the value of a named attribute as floating-point.
+    /** Returns the value of a named attribute as single floating-point.
 
-        This will try to find the attribute and convert it to a double (using
-        the String::getDoubleValue() method).
+        This will try to find the attribute and convert it to a double (using the String::getDoubleValue() method
+        casted to a float).
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
+        @see setAttribute
+    */
+    float getFloatAttribute (StringRef attributeName, float defaultReturnValue = 0.0f) const;
+
+    /** Returns the value of a named attribute as double floating-point.
+
+        This will try to find the attribute and convert it to a double (using the String::getDoubleValue() method).
+
+        @param attributeName        the name of the attribute to look up
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
+
         @see setAttribute
     */
     double getDoubleAttribute (StringRef attributeName, double defaultReturnValue = 0.0) const;
@@ -299,8 +309,7 @@ public:
         values.
 
         @param attributeName        the name of the attribute to look up
-        @param defaultReturnValue   a value to return if the element doesn't have an attribute
-                                    with this name
+        @param defaultReturnValue   a value to return if the element doesn't have an attribute with this name
     */
     bool getBoolAttribute (StringRef attributeName, bool defaultReturnValue = false) const;
 
@@ -800,61 +809,5 @@ private:
 
     YUP_LEAK_DETECTOR (XmlElement)
 };
-
-//==============================================================================
-#ifndef DOXYGEN
-
-/** DEPRECATED: A handy macro to make it easy to iterate all the child elements in an XmlElement.
-
-    New code should avoid this macro, and instead use getChildIterator directly.
-
-    The parentXmlElement should be a reference to the parent XML, and the childElementVariableName
-    will be the name of a pointer to each child element.
-
-    E.g. @code
-    XmlElement* myParentXml = createSomeKindOfXmlDocument();
-
-    forEachXmlChildElement (*myParentXml, child)
-    {
-        if (child->hasTagName ("FOO"))
-            doSomethingWithXmlElement (child);
-    }
-
-    @endcode
-
-    @see forEachXmlChildElementWithTagName
-*/
-#define forEachXmlChildElement(parentXmlElement, childElementVariableName) \
-    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
-
-/** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
-    which have a specified tag.
-
-    New code should avoid this macro, and instead use getChildWithTagNameIterator directly.
-
-    This does the same job as the forEachXmlChildElement macro, but only for those
-    elements that have a particular tag name.
-
-    The parentXmlElement should be a reference to the parent XML, and the childElementVariableName
-    will be the name of a pointer to each child element. The requiredTagName is the
-    tag name to match.
-
-    E.g. @code
-    XmlElement* myParentXml = createSomeKindOfXmlDocument();
-
-    forEachXmlChildElementWithTagName (*myParentXml, child, "MYTAG")
-    {
-        // the child object is now guaranteed to be a <MYTAG> element..
-        doSomethingWithMYTAGElement (child);
-    }
-
-    @endcode
-
-    @see forEachXmlChildElement
-*/
-#define forEachXmlChildElementWithTagName(parentXmlElement, childElementVariableName, requiredTagName) \
-    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
-
-#endif
 
 } // namespace yup

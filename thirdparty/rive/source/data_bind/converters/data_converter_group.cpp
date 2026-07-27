@@ -63,6 +63,7 @@ Core* DataConverterGroup::clone() const
 void DataConverterGroup::bindFromContext(DataContext* dataContext,
                                          DataBind* dataBind)
 {
+    DataConverter::bindFromContext(dataContext, dataBind);
     for (auto& item : m_items)
     {
         auto converter = item->converter();
@@ -93,6 +94,18 @@ void DataConverterGroup::update()
         if (converter != nullptr)
         {
             converter->update();
+        }
+    }
+}
+
+void DataConverterGroup::reset()
+{
+    for (auto& item : m_items)
+    {
+        auto converter = item->converter();
+        if (converter != nullptr)
+        {
+            converter->reset();
         }
     }
 }

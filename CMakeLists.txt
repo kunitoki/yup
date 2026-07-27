@@ -17,36 +17,78 @@
 #
 # ==============================================================================
 
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required (VERSION 3.31)
 
 include (cmake/yup.cmake)
-_yup_setup_platform()
+_yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
+_yup_message (STATUS "Building project version ${yup_version}")
 
-if (YUP_PLATFORM_OSX)
+set (CMAKE_CXX_SCAN_FOR_MODULES 0)
+
+if (YUP_PLATFORM_MAC)
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
     set (CMAKE_XCODE_GENERATE_SCHEME OFF)
 endif()
 
-project (yup VERSION 1.0)
+set (yup_languages C CXX)
+if (YUP_PLATFORM_APPLE)
+    list (APPEND yup_languages OBJC OBJCXX)
+endif()
 
+project (yup VERSION ${yup_version} LANGUAGES ${yup_languages})
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Options
 option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_EXPORT_MODULES "Export the modules to the parent project" ON)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_ENABLE_COVERAGE "Enable code coverage collection for tests" OFF)
+option (YUP_ENABLE_VST3_VALIDATOR "Enable the Steinberg VST3 validator for VST3 plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_CLAP_VALIDATOR "Enable clap-validator validation for CLAP plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_AUVAL_VALIDATOR "Enable auval validation for AU plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_PLUGINVAL "Enable pluginval validation for VST3/AU plugins" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_ENABLE_STATIC_PYTHON_LIBS "Use static Python libraries" OFF)
 option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_BUILD_PLUGINS "Build the plugins" ${PROJECT_IS_TOP_LEVEL})
 option (YUP_BUILD_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
+option (YUP_BUILD_WHEEL "Build the wheel" OFF)
+option (YUP_FETCH_UPSTREAM_MODULES "Fetch missing upstream sources for modules" ON)
 
 # Dependencies modules
-_yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
+if (YUP_EXPORT_MODULES)
+    _yup_message (STATUS "Exporting modules")
+
+    if (YUP_PLATFORM_DESKTOP)
+        _yup_message (STATUS "Enabling python module support")
+        set (enable_python ON)
+        if (YUP_PLATFORM_LINUX)
+            set (YUP_ENABLE_STATIC_PYTHON_LIBS OFF)
+        endif()
+    else()
+        _yup_message (STATUS "Disabling python module support")
+        set (enable_python OFF)
+    endif()
+
+    yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR} ENABLE_PYTHON ${enable_python})
+endif()
 
 # Enable profiling
 if (YUP_ENABLE_PROFILING)
     _yup_message (STATUS "Enabling profiling")
     _yup_fetch_perfetto()
+endif()
+
+# Setup validation tools
+if (YUP_ENABLE_PLUGINVAL)
+    _yup_message (STATUS "Setting up pluginval")
+    yup_setup_pluginval()
+endif()
+
+if (YUP_ENABLE_CLAP_VALIDATOR)
+    _yup_message (STATUS "Setting up clap-validator")
+    yup_setup_clap_validator()
 endif()
 
 # Targets
@@ -55,13 +97,20 @@ if (YUP_BUILD_EXAMPLES)
     add_subdirectory (examples/console)
     add_subdirectory (examples/app)
     add_subdirectory (examples/graphics)
-    add_subdirectory (examples/render)
     if (YUP_PLATFORM_DESKTOP)
-        add_subdirectory (examples/plugin)
+        if (YUP_BUILD_PLUGINS)
+            add_subdirectory (examples/plugin)
+        endif()
+        add_subdirectory (examples/audiograph)
     endif()
 endif()
 
 if (YUP_BUILD_TESTS AND NOT YUP_PLATFORM_MOBILE)
     _yup_message (STATUS "Building tests")
     add_subdirectory (tests)
+endif()
+
+if (YUP_BUILD_WHEEL)
+    _yup_message (STATUS "Building wheel")
+    add_subdirectory (python)
 endif()

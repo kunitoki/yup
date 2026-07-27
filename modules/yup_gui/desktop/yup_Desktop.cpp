@@ -28,12 +28,12 @@ YUP_IMPLEMENT_SINGLETON (Desktop)
 
 //==============================================================================
 
-Desktop::Desktop()
-{
-}
+Desktop::Desktop() = default;
 
 Desktop::~Desktop()
 {
+    // jassert (globalMouseListeners.isEmpty());
+
     clearSingletonInstance();
 }
 
@@ -88,11 +88,122 @@ Screen::Ptr Desktop::getScreenContaining (const Point<float>& location) const
     return ! screens.isEmpty() ? getScreen (0) : nullptr;
 }
 
+Screen::Ptr Desktop::getScreenContaining (const Rectangle<float>& bounds) const
+{
+    Screen::Ptr foundScreen;
+    float maxArea = 0.0f;
+    auto intBounds = bounds.to<int>();
+
+    for (auto& screen : screens)
+    {
+        auto intersection = screen->workArea.intersection (intBounds);
+        if (auto computedArea = intersection.area(); computedArea > maxArea)
+        {
+            maxArea = computedArea;
+            foundScreen = screen;
+        }
+    }
+
+    if (foundScreen == nullptr)
+        return ! screens.isEmpty() ? getScreen (0) : nullptr;
+
+    return foundScreen;
+}
+
+Screen::Ptr Desktop::getScreenContaining (Component* component) const
+{
+    return getScreenContaining (component->getScreenBounds());
+}
+
 //==============================================================================
 
 MouseCursor Desktop::getMouseCursor() const
 {
     return currentMouseCursor.value_or (MouseCursor (MouseCursor::Default));
+}
+
+//==============================================================================
+
+void Desktop::addGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    if (sendingMouseEvent)
+        pendingMouseListeners.addIfNotAlreadyThere (listener);
+    else
+        globalMouseListeners.add (listener);
+}
+
+void Desktop::removeGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    pendingMouseListeners.removeFirstMatchingValue (listener);
+    globalMouseListeners.remove (listener);
+}
+
+void Desktop::handleGlobalMouseDown (const MouseEvent& event)
+{
+    {
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseDown, event);
+    }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::handleGlobalMouseUp (const MouseEvent& event)
+{
+    {
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseUp, event);
+    }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::handleGlobalMouseMove (const MouseEvent& event)
+{
+    {
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseMove, event);
+    }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
+{
+    {
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseDrag, event);
+    }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    {
+        ScopedValueSetter setter (sendingMouseEvent, true);
+        globalMouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
+    }
+
+    addPendingMouseListeners();
+}
+
+void Desktop::addPendingMouseListeners()
+{
+    for (auto listener : pendingMouseListeners)
+        globalMouseListeners.add (listener);
+
+    pendingMouseListeners.clear();
 }
 
 //==============================================================================
@@ -115,6 +226,32 @@ void Desktop::handleScreenMoved (int screenIndex)
 void Desktop::handleScreenOrientationChanged (int screenIndex)
 {
     updateScreens();
+}
+
+//==============================================================================
+
+void Desktop::registerNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents[nativeComponent] = nativeComponent;
+}
+
+void Desktop::unregisterNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents.erase (nativeComponent);
+}
+
+ComponentNative::Ptr Desktop::getNativeComponent (void* userdata) const
+{
+    if (userdata == nullptr)
+        return nullptr;
+
+    auto it = nativeComponents.find (userdata);
+    if (it != nativeComponents.end())
+        return ComponentNative::Ptr { it->second };
+
+    return nullptr;
 }
 
 } // namespace yup

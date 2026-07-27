@@ -14,8 +14,8 @@
 
 namespace rive::gpu
 {
-// Defines a job to compile a "draw" shader -- either draw_path.glsl or
-// draw_image_mesh.glsl, with a specific set of features enabled.
+// Defines a job to compile a "draw" shader, with a specific set of features
+// enabled.
 struct BackgroundCompileJob
 {
     gpu::DrawType drawType;
@@ -24,13 +24,13 @@ struct BackgroundCompileJob
     gpu::ShaderMiscFlags shaderMiscFlags;
     id<MTLLibrary> compiledLibrary = nil;
 #ifdef WITH_RIVE_TOOLS
-    bool synthesizeCompilationFailure = false;
+    gpu::SynthesizedFailureType synthesizedFailureType =
+        gpu::SynthesizedFailureType::none;
 #endif
 };
 
-// Compiles "draw" shaders in a background thread. A "draw" shaders is either
-// draw_path.glsl or draw_image_mesh.glsl, with a specific set of features
-// enabled.
+// Compiles "draw" shaders in a background thread, with a specific set of
+// features enabled.
 class BackgroundShaderCompiler
 {
 public:

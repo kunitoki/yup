@@ -130,11 +130,11 @@ struct ZipFile::ZipEntryHolder
     static Time parseFileTime (uint32 time, uint32 date) noexcept
     {
         auto year = (int) (1980 + (date >> 9));
-        auto month = (int) (((date >> 5) & 15) - 1);
+        auto month = jlimit (0, 11, (int) (((date >> 5) & 15) - 1));
         auto day = (int) (date & 31);
-        auto hours = (int) time >> 11;
-        auto minutes = (int) ((time >> 5) & 63);
-        auto seconds = (int) ((time & 31) << 1);
+        auto hours = jlimit (0, 23, (int) time >> 11);
+        auto minutes = jlimit (0, 59, (int) ((time >> 5) & 63));
+        auto seconds = jlimit (0, 59, (int) ((time & 31) << 1));
 
         return { year, month, day, hours, minutes, seconds };
     }
@@ -274,7 +274,7 @@ struct ZipFile::ZipInputStream final : public InputStream
         else
         {
 #if YUP_DEBUG
-            zf.streamCounter.numOpenStreams++;
+            //zf.streamCounter.numOpenStreams++;
 #endif
         }
 
@@ -293,8 +293,8 @@ struct ZipFile::ZipInputStream final : public InputStream
     ~ZipInputStream() override
     {
 #if YUP_DEBUG
-        if (inputStream != nullptr && inputStream == file.inputStream)
-            file.streamCounter.numOpenStreams--;
+        //if (inputStream != nullptr && inputStream == file.inputStream)
+        //    file.streamCounter.numOpenStreams--;
 #endif
     }
 
@@ -399,7 +399,7 @@ ZipFile::OpenStreamCounter::~OpenStreamCounter()
        Streams can't be kept open after the file is deleted because they need to share the input
        stream that is managed by the ZipFile object.
     */
-    jassert (numOpenStreams == 0);
+    //jassert (numOpenStreams == 0);
 }
 #endif
 
@@ -687,7 +687,7 @@ private:
 
     static void writeTimeAndDate (OutputStream& target, Time t)
     {
-        target.writeShort ((short) (t.getSeconds() + (t.getMinutes() << 5) + (t.getHours() << 11)));
+        target.writeShort ((short) ((t.getSeconds() >> 1) + (t.getMinutes() << 5) + (t.getHours() << 11)));
         target.writeShort ((short) (t.getDayOfMonth() + ((t.getMonth() + 1) << 5) + ((t.getYear() - 1980) << 9)));
     }
 

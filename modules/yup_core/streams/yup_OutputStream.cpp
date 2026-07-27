@@ -267,8 +267,14 @@ bool OutputStream::writeText (const String& text, bool asUTF16, bool writeUTF16B
                 continue;
             }
 
-            if (! writeShort ((short) c))
-                return false;
+            CharPointer_UTF16::CharType buffer[2]{};
+            CharPointer_UTF16 begin { buffer };
+            auto end = begin;
+            end.write (c);
+
+            for (const auto unit : makeRange (begin.getAddress(), end.getAddress()))
+                if (! writeShort ((short) unit))
+                    return false;
         }
     }
     else
@@ -429,3 +435,4 @@ YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const NewLi
 }
 
 } // namespace yup
+

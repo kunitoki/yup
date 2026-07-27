@@ -9,12 +9,51 @@
 using namespace rive;
 
 #ifdef WITH_RIVE_AUDIO
+// Both of these should be make_rcp but it is currently getting refed directy
+// somewhere else so until we refactor that we have to not ref here.
+rcp<AudioSource> AudioSource::MakeAudioSource(rive::Span<uint8_t> fileBytes)
+{
+    ma_decoder decoder;
+    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
+    if (ma_decoder_init_memory(fileBytes.data(),
+                               fileBytes.size(),
+                               &config,
+                               &decoder) != MA_SUCCESS)
+    {
+        return nullptr;
+    }
+    ma_decoder_uninit(&decoder);
+    return rcp<AudioSource>(new AudioSource(std::move(fileBytes)));
+}
+
+rcp<AudioSource> AudioSource::MakeAudioSource(
+    rive::SimpleArray<uint8_t> fileBytes)
+{
+    ma_decoder decoder;
+    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 0, 0);
+    auto result = ma_decoder_init_memory(fileBytes.data(),
+                                         fileBytes.size(),
+                                         &config,
+                                         &decoder);
+    if (result != MA_SUCCESS)
+    {
+        fprintf(stderr,
+                "Failed to decode audio with error %s\n",
+                ma_result_description(result));
+        return nullptr;
+    }
+
+    ma_decoder_uninit(&decoder);
+    return rcp<AudioSource>(new AudioSource(std::move(fileBytes)));
+}
+
 AudioSource::AudioSource(rive::Span<float> samples,
                          uint32_t numChannels,
                          uint32_t sampleRate) :
     m_isBuffered(true),
     m_channels(numChannels),
     m_sampleRate(sampleRate),
+    m_duration(-1.0f),
     m_ownedBytes((uint8_t*)samples.data(), samples.size() * sizeof(float))
 {
     assert(numChannels != 0);
@@ -22,13 +61,18 @@ AudioSource::AudioSource(rive::Span<float> samples,
 }
 
 AudioSource::AudioSource(rive::Span<uint8_t> fileBytes) :
-    m_isBuffered(false), m_channels(0), m_sampleRate(0), m_fileBytes(fileBytes)
+    m_isBuffered(false),
+    m_channels(0),
+    m_sampleRate(0),
+    m_duration(-1.0f),
+    m_fileBytes(fileBytes)
 {}
 
 AudioSource::AudioSource(rive::SimpleArray<uint8_t> fileBytes) :
     m_isBuffered(false),
     m_channels(0),
     m_sampleRate(0),
+    m_duration(-1.0f),
     m_fileBytes(fileBytes.data(), fileBytes.size()),
     m_ownedBytes(std::move(fileBytes))
 {}
@@ -62,6 +106,17 @@ public:
 
     uint32_t sampleRate() { return (uint32_t)m_decoder.outputSampleRate; }
 
+    uint64_t lengthInFrames()
+    {
+        ma_uint64 length;
+        if (ma_data_source_get_length_in_pcm_frames(&m_decoder, &length) !=
+            MA_SUCCESS)
+        {
+            return 0;
+        }
+        return (uint64_t)length;
+    }
+
 private:
     ma_decoder m_decoder;
 };
@@ -84,6 +139,31 @@ uint32_t AudioSource::sampleRate()
     }
     AudioSourceDecoder audioDecoder(m_fileBytes);
     return m_sampleRate = audioDecoder.sampleRate();
+}
+
+float AudioSource::duration()
+{
+    if (m_duration >= 0.0f)
+    {
+        return m_duration;
+    }
+    if (m_isBuffered)
+    {
+        uint32_t ch = channels();
+        uint32_t sr = sampleRate();
+        if (ch == 0 || sr == 0)
+        {
+            return m_duration = 0.0f;
+        }
+        return m_duration = (float)bufferedSamples().size() / (float)(ch * sr);
+    }
+    AudioSourceDecoder audioDecoder(m_fileBytes);
+    uint32_t sr = audioDecoder.sampleRate();
+    if (sr == 0)
+    {
+        return m_duration = 0.0f;
+    }
+    return m_duration = (float)audioDecoder.lengthInFrames() / (float)sr;
 }
 
 AudioFormat AudioSource::format() const
@@ -161,6 +241,16 @@ rcp<AudioReader> AudioSource::makeReader(uint32_t numChannels,
     return reader;
 }
 #else
+rcp<AudioSource> AudioSource::MakeAudioSource(rive::Span<uint8_t> fileBytes)
+{
+    return nullptr;
+}
+
+rcp<AudioSource> AudioSource::MakeAudioSource(
+    rive::SimpleArray<uint8_t> fileBytes)
+{
+    return nullptr;
+}
 AudioSource::AudioSource(rive::Span<uint8_t> fileBytes) {}
 AudioSource::AudioSource(rive::SimpleArray<uint8_t> fileBytes) {}
 AudioSource::AudioSource(rive::Span<float> samples,

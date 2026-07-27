@@ -25,14 +25,13 @@
 
     ID:                 yup_data_model
     vendor:             yup
-    version:            1.0.0
+    version:            2.0.0
     name:               YUP Data Model
     description:        The essential set of basic YUP data model classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
     dependencies:       yup_events
-    enableARC:          1
 
   END_YUP_MODULE_DECLARATION
 
@@ -44,5 +43,21 @@
 #include <yup_events/yup_events.h>
 
 //==============================================================================
+#include <atomic>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <type_traits>
+#include <vector>
+
+//==============================================================================
 #include "undo/yup_UndoableAction.h"
 #include "undo/yup_UndoManager.h"
+#include "tree/yup_DataTree.h"
+#include "tree/yup_DataTreeSchema.h"
+#include "tree/yup_DataTreeObjectList.h"
+#include "tree/yup_CachedValue.h"
+#include "tree/yup_AtomicCachedValue.h"
+#include "tree/yup_DataTreeQuery.h"

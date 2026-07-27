@@ -37,6 +37,7 @@
 #define float2x2 $float2x2
 #define half3x3 $half3x3
 #define half2x3 $half2x3
+#define half4x4 $half4x4
 #endif
 
 $typedef float3 packed_float3;
@@ -128,19 +129,20 @@ $typedef float3 packed_float3;
 #define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME)                                  \
     uniform $Texture1DArray<half> NAME : $register($t##IDX)
 
-// SAMPLER_LINEAR and SAMPLER_MIPMAP are the same because in d3d11, sampler
+// SAMPLER_LINEAR is the same as SAMPLER because in d3d11, sampler
 // parameters are defined at the API level.
-#define SAMPLER(TEXTURE_IDX, NAME)                                             \
-    $SamplerState NAME : $register($s##TEXTURE_IDX);
+#define SAMPLER(IDX, NAME) $SamplerState NAME : $register($s##IDX);
 #define SAMPLER_LINEAR SAMPLER
-#define SAMPLER_MIPMAP SAMPLER
-#define SAMPLER_DYNAMIC SAMPLER
+#define SAMPLER_DYNAMIC(SET, IDX, NAME) SAMPLER(IDX, NAME)
+#define SAMPLER_DYNAMIC_IMAGE(NAME) SAMPLER(IMAGE_TEXTURE_IDX, NAME)
 
 #define TEXEL_FETCH(NAME, COORD) NAME[COORD]
 #define TEXTURE_SAMPLE(NAME, SAMPLER_NAME, COORD)                              \
     NAME.$Sample(SAMPLER_NAME, COORD)
 #define TEXTURE_SAMPLE_LOD(NAME, SAMPLER_NAME, COORD, LOD)                     \
     NAME.$SampleLevel(SAMPLER_NAME, COORD, LOD)
+#define TEXTURE_SAMPLE_LODBIAS(NAME, SAMPLER_NAME, COORD, LODBIAS)             \
+    NAME.$SampleBias(SAMPLER_NAME, COORD, LODBIAS)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     NAME.$SampleGrad(SAMPLER_NAME, COORD, DDX, DDY)
 #define TEXTURE_GATHER(NAME, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)        \
@@ -157,7 +159,8 @@ $typedef float3 packed_float3;
     TEXTURE_SAMPLE(TEXTURE, SAMPLER_NAME, COORD)
 #define TEXTURE_SAMPLE_DYNAMIC_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)          \
     TEXTURE_SAMPLE_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)
-
+#define TEXTURE_SAMPLE_DYNAMIC_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)  \
+    TEXTURE_SAMPLE_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)
 #define PLS_INTERLOCK_BEGIN
 #define PLS_INTERLOCK_END
 
@@ -176,9 +179,9 @@ $typedef float3 packed_float3;
 #endif
 #define PLS_DECL4F_READONLY PLS_DECL4F
 #define PLS_DECLUI(IDX, NAME) uniform PLS_TEX2D<uint> NAME : $register($u##IDX)
-#define PLS_DECLUI_ATOMIC PLS_DECLUI
-#define PLS_LOADUI_ATOMIC PLS_LOADUI
-#define PLS_STOREUI_ATOMIC PLS_STOREUI
+#define PLS_DECLUI_UAV PLS_DECLUI
+#define PLS_LOADUI_UAV PLS_LOADUI
+#define PLS_STOREUI_UAV PLS_STOREUI
 #define PLS_BLOCK_END
 
 #ifdef @ENABLE_TYPED_UAV_LOAD_STORE
@@ -221,6 +224,9 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
 #define TEXTURE_CONTEXT_DECL
 #define TEXTURE_CONTEXT_FORWARD
 
+#define CLIP_CONTEXT_FORWARD
+#define CLIP_CONTEXT_UNPACK
+
 #define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
     $cbuffer DrawUniforms                                                      \
         : UNIFORM_BUFFER_REGISTER(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)       \
@@ -230,9 +236,9 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
         uint NAME##_pad1;                                                      \
         uint NAME##_pad2;                                                      \
     }                                                                          \
-    Varyings main(Attrs attrs, uint _vertexID                                  \
-                  : $SV_VertexID, uint _instanceIDWithoutBase                  \
-                  : $SV_InstanceID)                                            \
+    Varyings main(Attrs attrs,                                                 \
+                  uint _vertexID : $SV_VertexID,                               \
+                  uint _instanceIDWithoutBase : $SV_InstanceID)                \
     {                                                                          \
         uint _instanceID = _instanceIDWithoutBase + baseInstance;              \
         Varyings _varyings;
@@ -249,8 +255,9 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
                                UVAttr,                                         \
                                uv,                                             \
                                _vertexID)                                      \
-    Varyings main(PositionAttr position, UVAttr uv, uint _vertexID             \
-                  : $SV_VertexID)                                              \
+    Varyings main(PositionAttr position,                                       \
+                  UVAttr uv,                                                   \
+                  uint _vertexID : $SV_VertexID)                               \
     {                                                                          \
         Varyings _varyings;                                                    \
         float4 _pos;
@@ -262,6 +269,11 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
 
 #define FRAG_DATA_MAIN(DATA_TYPE, NAME)                                        \
     DATA_TYPE main(Varyings _varyings) : $SV_Target                            \
+    {
+
+#define FRAG_DATA_MAIN_WITH_CLOCKWISE(DATA_TYPE, NAME)                         \
+    DATA_TYPE main(Varyings _varyings, bool _clockwise : $SV_IsFrontFace) :    \
+        $SV_Target                                                             \
     {
 
 #define EMIT_FRAG_DATA(VALUE)                                                  \
@@ -362,6 +374,18 @@ INLINE float2x2 inverse(float2x2 m)
     return adjoint * (1. / determinant(m));
 }
 
+// mix() with a boolean type in glsl maps to the hlsl ternary operator
+
+INLINE float mix(float x, float y, bool s) { return s ? y : x; }
+INLINE float2 mix(float2 x, float2 y, bool2 s) { return s ? y : x; }
+INLINE float3 mix(float3 x, float3 y, bool3 s) { return s ? y : x; }
+INLINE float4 mix(float4 x, float4 y, bool4 s) { return s ? y : x; }
+
+INLINE half mix(half x, half y, bool s) { return s ? y : x; }
+INLINE half2 mix(half2 x, half2 y, bool2 s) { return s ? y : x; }
+INLINE half3 mix(half3 x, half3 y, bool3 s) { return s ? y : x; }
+INLINE half4 mix(half4 x, half4 y, bool4 s) { return s ? y : x; }
+
 // Redirects for intrinsics that have different names in HLSL
 
 INLINE float mix(float x, float y, float s) { return $lerp(x, y, s); }
@@ -369,10 +393,10 @@ INLINE float2 mix(float2 x, float2 y, float2 s) { return $lerp(x, y, s); }
 INLINE float3 mix(float3 x, float3 y, float3 s) { return $lerp(x, y, s); }
 INLINE float4 mix(float4 x, float4 y, float4 s) { return $lerp(x, y, s); }
 
-INLINE half mix(half x, half y, half s) { return x + s * (y - x); }
-INLINE half2 mix(half2 x, half2 y, half2 s) { return x + s * (y - x); }
-INLINE half3 mix(half3 x, half3 y, half3 s) { return x + s * (y - x); }
-INLINE half4 mix(half4 x, half4 y, half4 s) { return x + s * (y - x); }
+INLINE half mix(half x, half y, half s) { return $lerp(x, y, s); }
+INLINE half2 mix(half2 x, half2 y, half2 s) { return $lerp(x, y, s); }
+INLINE half3 mix(half3 x, half3 y, half3 s) { return $lerp(x, y, s); }
+INLINE half4 mix(half4 x, half4 y, half4 s) { return $lerp(x, y, s); }
 
 INLINE float fract(float x) { return $frac(x); }
 INLINE float2 fract(float2 x) { return $frac(x); }

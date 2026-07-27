@@ -121,9 +121,9 @@ private:
     // a block of memory here that's big enough to be used internally as a windows
     // CRITICAL_SECTION structure.
 #if YUP_64BIT
-    std::aligned_storage_t<44, 8> lock;
+    alignas(8) std::byte lock[44];
 #else
-    std::aligned_storage_t<24, 8> lock;
+    alignas(8) std::byte lock[24];
 #endif
 #else
     mutable pthread_mutex_t lock;

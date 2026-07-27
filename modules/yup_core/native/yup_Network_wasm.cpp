@@ -37,7 +37,7 @@ bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmai
 }
 
 //==============================================================================
-#if YUP_EMSCRIPTEN && ! YUP_USE_CURL
+#if YUP_EMSCRIPTEN
 class WebInputStream::Pimpl
 {
 public:

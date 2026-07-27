@@ -22,6 +22,7 @@
 #if YUP_RIVE_USE_METAL
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
+#include "rive/renderer/ore/ore_context_metal.hpp"
 
 #if YUP_MAC
 #include "yup_RenderShader_mac.c"
@@ -34,6 +35,8 @@
 #endif
 
 #import <simd/simd.h>
+
+#include <vector>
 
 namespace yup
 {
@@ -79,15 +82,14 @@ public:
     LowLevelRenderContextMetal (Options fiddleOptions)
         : m_fiddleOptions (fiddleOptions)
     {
-        rive::gpu::RenderContextMetalImpl::ContextOptions metalOptions;
-
         if (m_fiddleOptions.synchronousShaderCompilations)
-            metalOptions.synchronousShaderCompilations = true;
+            m_renderContextOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
 
         if (m_fiddleOptions.disableRasterOrdering)
-            metalOptions.disableFramebufferReads = true;
+            m_renderContextOptions.disableFramebufferReads = true;
 
-        m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, m_renderContextOptions);
+        m_oreContext = rive::ore::ContextMetal::Make (m_gpu, m_queue);
 
         NSError* error = nil;
 
@@ -137,17 +139,7 @@ public:
 
     //==============================================================================
 
-    float dpiScale (void* window) const override
-    {
-#if YUP_IOS
-        UIWindow* uiWindow = (__bridge UIWindow*) window;
-        UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
-        return screen.nativeScale;
-#else
-        NSWindow* nsWindow = (__bridge NSWindow*) window;
-        return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
-#endif
-    }
+    Api getApi() const noexcept override { return Api::Metal; }
 
     //==============================================================================
 
@@ -157,44 +149,49 @@ public:
 
     rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
+    rive::ore::Context* gpuContext() const noexcept override { return m_oreContext.get(); }
+
     //==============================================================================
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
 #if YUP_MAC
         NSWindow* nsWindow = (__bridge NSWindow*) window;
-        NSView* view = [nsWindow contentView];
-        view.wantsLayer = YES;
+        NSView* nsView = [nsWindow contentView];
 #endif
 
-        m_swapchain = [CAMetalLayer layer];
-        m_swapchain.device = m_gpu;
-        m_swapchain.opaque = YES;
-        m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
-        m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
-        m_swapchain.contentsScale = dpiScale (window);
-        m_swapchain.drawableSize = CGSizeMake (width, height);
+        if (m_swapchain == nil)
+        {
 #if YUP_MAC
-        m_swapchain.displaySyncEnabled = NO;
+            nsView.wantsLayer = YES;
+#endif
+
+            m_swapchain = [CAMetalLayer layer];
+            m_swapchain.device = m_gpu;
+            m_swapchain.opaque = YES;
+            m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
+            m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
+#if YUP_MAC
+            m_swapchain.displaySyncEnabled = NO;
 #endif
 
 #if YUP_IOS
-        UIView* view = (__bridge UIView*) window;
-        m_swapchain.frame = view.bounds;
-        [view.layer addSublayer:m_swapchain];
+            UIView* view = (__bridge UIView*) window;
+            m_swapchain.frame = view.bounds;
+            [view.layer addSublayer:m_swapchain];
 #else
-        view.layer = m_swapchain;
+            nsView.layer = m_swapchain;
 #endif
+        }
+
+        m_swapchain.contentsScale = dpiScale;
+        m_swapchain.drawableSize = CGSizeMake (width, height);
 
         auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
         m_renderTarget = renderContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
 
         if (m_currentTexture != nil)
-        {
-            [m_currentTexture setPurgeableState:MTLPurgeableStateEmpty];
-            [m_currentTexture release];
             m_currentTexture = nil;
-        }
 
         MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(MTLPixelFormatBGRA8Unorm)
                                                                                               width:width
@@ -272,9 +269,218 @@ public:
         m_renderTarget->setTargetTexture (nil);
     }
 
+    //==============================================================================
+
+    struct OffscreenContextSlot
+    {
+        std::unique_ptr<rive::gpu::RenderContext> renderContext;
+        bool frameActive = false;
+    };
+
+    struct OffscreenTargetMetal : public RenderableTarget
+    {
+        int width = 0;
+        int height = 0;
+        id<MTLTexture> stagingTexture = nil;
+        rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
+        rive::gpu::RenderContext* renderContext = nullptr;
+        OffscreenContextSlot* contextSlot = nullptr;
+
+        int getWidth() const noexcept override { return width; }
+
+        int getHeight() const noexcept override { return height; }
+
+        rive::gpu::RenderTarget* getRenderTarget() noexcept override
+        {
+            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
+        }
+
+        rive::gpu::RenderContext* getRenderContext() noexcept override
+        {
+            return renderContext;
+        }
+
+        rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override
+        {
+            return renderCanvas;
+        }
+
+        rive::rcp<rive::gpu::Texture> adoptAsTexture() override
+        {
+            if (renderCanvas == nullptr)
+                return nullptr;
+
+            return renderCanvas->renderImage()->refTexture();
+        }
+
+        id<MTLTexture> targetTexture() const
+        {
+            if (renderCanvas == nullptr)
+                return nil;
+
+            if (auto* target = static_cast<rive::gpu::RenderTargetMetal*> (renderCanvas->renderTarget()))
+                return target->targetTexture();
+
+            return nil;
+        }
+    };
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetMetal>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = nullptr;
+        target->contextSlot = nullptr;
+        target->renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                  static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
+    {
+        if (width <= 0 || height <= 0)
+            return nullptr;
+
+        auto* contextSlot = acquireOffscreenContext();
+        if (contextSlot == nullptr)
+            return nullptr;
+
+        auto target = std::make_unique<OffscreenTargetMetal>();
+        target->width = width;
+        target->height = height;
+        target->renderContext = contextSlot->renderContext.get();
+        target->contextSlot = contextSlot;
+        target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                        static_cast<uint32_t> (height));
+        if (target->renderCanvas == nullptr)
+            return nullptr;
+
+        return target;
+    }
+
+    void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
+
+        if (renderContext == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
+            return;
+
+        renderContext->beginFrame (frameDesc);
+        target.contextSlot->frameActive = true;
+    }
+
+    void endOffscreen (OffscreenTarget& baseTarget) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+        auto* renderContext = target.getRenderContext();
+
+        if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
+            return;
+
+        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+        renderContext->flush ({ .renderTarget = target.getRenderTarget(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        [commandBuffer commit];
+        target.contextSlot->frameActive = false;
+    }
+
+    bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+
+        if (dst == nullptr)
+            return false;
+
+        id<MTLTexture> srcTexture = target.targetTexture();
+        if (srcTexture == nil)
+            return false;
+
+        if (target.stagingTexture == nil)
+        {
+            MTLTextureDescriptor* stagingDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                                                                                                   width:static_cast<NSUInteger> (target.width)
+                                                                                                  height:static_cast<NSUInteger> (target.height)
+                                                                                               mipmapped:NO];
+            stagingDesc.usage = MTLTextureUsageShaderRead;
+#if YUP_IOS
+            stagingDesc.storageMode = MTLStorageModeShared;
+#else
+            stagingDesc.storageMode = MTLStorageModeManaged;
+#endif
+            target.stagingTexture = [m_gpu newTextureWithDescriptor:stagingDesc];
+            if (target.stagingTexture == nil)
+                return false;
+        }
+
+        const auto w = static_cast<NSUInteger> (target.width);
+        const auto h = static_cast<NSUInteger> (target.height);
+        const size_t bytesPerRow = w * 4u;
+
+        if (dstSize < bytesPerRow * h)
+            return false;
+
+        // Copy the rendered target into a CPU-readable staging texture and block
+        // until the GPU is done. This is the only path that requires a CPU/GPU
+        // sync, so the stall is paid only when pixels are actually read back.
+        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+
+        id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+        [blitEncoder copyFromTexture:srcTexture
+                         sourceSlice:0
+                         sourceLevel:0
+                        sourceOrigin:MTLOriginMake (0, 0, 0)
+                          sourceSize:MTLSizeMake (w, h, 1)
+                           toTexture:target.stagingTexture
+                    destinationSlice:0
+                    destinationLevel:0
+                   destinationOrigin:MTLOriginMake (0, 0, 0)];
+#if YUP_MAC
+        [blitEncoder synchronizeResource:target.stagingTexture];
+#endif
+        [blitEncoder endEncoding];
+
+        [commandBuffer commit];
+        [commandBuffer waitUntilCompleted];
+
+        [target.stagingTexture getBytes:dst
+                            bytesPerRow:bytesPerRow
+                             fromRegion:MTLRegionMake2D (0, 0, w, h)
+                            mipmapLevel:0];
+
+        return true;
+    }
+
 private:
+    OffscreenContextSlot* acquireOffscreenContext()
+    {
+        for (const auto& slot : m_offscreenContextPool)
+        {
+            if (! slot->frameActive)
+                return slot.get();
+        }
+
+        auto slot = std::make_unique<OffscreenContextSlot>();
+        slot->renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, m_renderContextOptions);
+        if (slot->renderContext == nullptr)
+            return nullptr;
+
+        auto* result = slot.get();
+        m_offscreenContextPool.push_back (std::move (slot));
+        return result;
+    }
+
     const Options m_fiddleOptions;
+    rive::gpu::RenderContextMetalImpl::ContextOptions m_renderContextOptions;
     std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
+    std::unique_ptr<rive::ore::ContextMetal> m_oreContext;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     CAMetalLayer* m_swapchain = nil;

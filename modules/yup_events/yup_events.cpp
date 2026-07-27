@@ -71,14 +71,12 @@
 
 #elif YUP_EMSCRIPTEN
 #include <emscripten.h>
-
 #include <deque>
 #include <mutex>
 
 #elif YUP_ANDROID
 #include <jni.h>
-
-#include <SDL2/SDL_system.h>
+#include <SDL3/SDL_system.h>
 
 #endif
 
@@ -120,7 +118,7 @@
 #include "native/yup_EventLoopInternal_linux.h"
 #include "native/yup_Messaging_linux.cpp"
 
-#elif YUP_WASM && YUP_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
 #include "native/yup_Messaging_emscripten.cpp"
 
 #elif YUP_ANDROID

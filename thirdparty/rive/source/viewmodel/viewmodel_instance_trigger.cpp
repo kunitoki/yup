@@ -16,10 +16,18 @@ void ViewModelInstanceTrigger::propertyValueChanged()
         m_changedCallback(this, propertyValue());
     }
 #endif
+    onValueChanged();
 }
 
 void ViewModelInstanceTrigger::advanced()
 {
+    SuppressDelegation suppress(this);
     propertyValue(0);
-    m_usedLayers.clear();
+
+    ViewModelInstanceValue::advanced();
+}
+
+void ViewModelInstanceTrigger::applyValue(DataValueInteger* dataValue)
+{
+    propertyValue(dataValue->value());
 }

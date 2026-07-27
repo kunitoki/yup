@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include "rive/enum_bitset.hpp"
+#include "rive/enums.hpp"
 #include "rive/math/aabb.hpp"
+#include "rive/math/bitwise.hpp"
 #include "rive/math/mat2d.hpp"
 #include "rive/math/vec2d.hpp"
 #include "rive/math/simd.hpp"
@@ -13,6 +14,12 @@
 #include "rive/shapes/paint/color.hpp"
 #include "rive/renderer/trivial_block_allocator.hpp"
 #include "rive/shapes/paint/image_sampler.hpp"
+
+#include <functional>
+#include <optional>
+
+// Use the define to run the feather LUT code
+// #define RIVE_GENERATE_FEATHER_LUT
 
 namespace rive
 {
@@ -38,6 +45,11 @@ class Gradient;
 class RenderContextImpl;
 class RenderTarget;
 class Texture;
+enum class DitherMode;
+
+// Global MipMap LOD Bias to apply to samplers. Going lower leads to sharper
+// filtering at the expense of potential shimmering.
+constexpr static float MIP_MAP_LOD_BIAS = -.5f;
 
 // Tessellate in parametric space until each segment is within 1/4 pixel of the
 // true curve.
@@ -108,19 +120,23 @@ constexpr static uint32_t kGradTextureWidthInSimpleRamps =
 // Depth/stencil parameters
 constexpr static float DEPTH_MIN = 0.0f;
 constexpr static float DEPTH_MAX = 1.0f;
-constexpr static uint32_t STENCIL_CLEAR = 0u;
+constexpr static uint8_t STENCIL_CLEAR = 0u;
 
-// Backend-specific capabilities/workarounds and fine tunin// g.
+// Backend-specific capabilities/workarounds and fine tuning.
 struct PlatformFeatures
 {
-    // InterlockMode::rasterOrdering.
-    bool supportsRasterOrdering = false;
-    // InterlockMode::atomics.
-    bool supportsFragmentShaderAtomics = false;
-    // Experimental rendering mode selected by InterlockMode::clockwiseAtomic.
-    bool supportsClockwiseAtomicRendering = false;
+    // Supported InterlockModes.
+    // FIXME: MSAA is implicit even though it isn't implemented on all backends.
+    bool supportsRasterOrderingMode = false;
+    bool supportsAtomicMode = false;
+    bool supportsClockwiseMode = false;
+    // InterlockMode::Clockwise with fixedFunctionColorOutput and srcOver blend.
+    // (Only viable for frames that don't use advanced blend.)
+    bool supportsClockwiseFixedFunctionMode = false;
+    bool supportsClockwiseAtomicMode = false;
     // Use KHR_blend_equation_advanced in msaa mode?
-    bool supportsKHRBlendEquations = false;
+    bool supportsBlendAdvancedKHR = false;
+    bool supportsBlendAdvancedCoherentKHR = false;
     // Required for @ENABLE_CLIP_RECT in msaa mode.
     bool supportsClipPlanes = false;
     bool avoidFlatVaryings = false;
@@ -183,8 +199,18 @@ struct PlatformFeatures
     bool clipSpaceBottomUp = false;
     bool framebufferBottomUp = false;
     // Backend cannot initialize PLS with typical clear/load APIs in atomic
-    // mode. Issue a "DrawType::atomicInitialize" draw instead.
-    bool atomicPLSMustBeInitializedAsDraw = false;
+    // mode. Issue a "DrawType::renderPassInitialize" draw instead.
+    bool atomicPLSInitNeedsDraw = false;
+    // Backend API does not support initializing our (transient) MSAA color
+    // buffer with the existing (non-MSAA) target texture at the beginning of a
+    // render pass. Draw the previous renderTarget contents into it manually via
+    // DrawType::renderPassInitialize when LoadAction::preserveRenderTarget is
+    // specified.
+    bool msaaColorPreserveNeedsDraw = false;
+    // Workaround for Qualcomm. Framebuffer reads on Qualcomm seem to not work
+    // in clockwiseAtomic mode unless we issue a simple, 1-pixel draw that reads
+    // the framebuffer between borrowed coverage and the main draws.
+    bool clockwiseAtomicBorrowedCoverageBarrierNeedsRenderPassInit = false;
     // Workaround for precision issues. Determines how far apart we space unique
     // path IDs when they will be bit-casted to fp16.
     uint8_t pathIDGranularity = 1;
@@ -194,6 +220,17 @@ struct PlatformFeatures
     // clockwiseFill/atomic mode. 2^27 bytes is the minimum storage buffer size
     // requirement in the Vulkan, GL, and D3D11 specs. Metal guarantees 256 MB.
     size_t maxCoverageBufferLength = (1 << 27) / sizeof(uint32_t);
+
+    // True when the backend supports using the scissor rectangle for reducing
+    // the draw bounds of clip reads and writes.
+    // TODO: This should be possible to implement across all backends - at which
+    // point this bool could go away.
+    bool supportsClipScissor = false;
+
+    // GPU compressed texture format support (queried per backend at init).
+    bool supportsTextureCompressionBC = false;   // BC1/BC2/BC3/BC7
+    bool supportsTextureCompressionASTC = false; // ASTC LDR (any block size)
+    bool supportsTextureCompressionETC2 = false; // ETC2 RGB8 / RGBA8
 };
 
 // Gradient color stops are implemented as a horizontal span of pixels in a
@@ -616,12 +653,6 @@ enum class DrawType : uint8_t
     imageRect,
     imageMesh,
 
-    // Clear/init PLS data when we can't do it with existing clear/load APIs.
-    atomicInitialize,
-
-    // Resolve PLS data to the final renderTarget color in atomic mode.
-    atomicResolve,
-
     // MSAA strokes can't be merged with fills because they require their own
     // dedicated stencil settings.
     msaaStrokes,
@@ -639,8 +670,20 @@ enum class DrawType : uint8_t
     // type is included in order to support the "retrofittedcubictriangles" GM.
     msaaOuterCubics,
 
-    // Clear or intersect (based on DrawContents) the stencil clip bit.
-    msaaStencilClipReset,
+    // Clear or intersect (based on DrawContents) the clip value.
+    clipReset,
+
+    // Clear/init render pass data with a fullscreen draw when we can't do it
+    // with existing clear/load APIs. (e.g., for pixel local storage in buffers
+    // that don't have copy/clear commands, or preserving existing color data in
+    // a transient MSAA arrachment).
+    renderPassInitialize,
+
+    // Resolve render pass data (e.g., by applying the final deferred color in
+    // atomic mode, or copying an offscreen attachment to the final
+    // renderTarget).
+    renderPassResolve,
+
 };
 
 constexpr static bool DrawTypeIsImageDraw(DrawType drawType)
@@ -655,8 +698,6 @@ constexpr static bool DrawTypeIsImageDraw(DrawType drawType)
         case DrawType::outerCurvePatches:
         case DrawType::interiorTriangulation:
         case DrawType::atlasBlit:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
         case DrawType::msaaStrokes:
         case DrawType::msaaMidpointFanBorrowedCoverage:
         case DrawType::msaaMidpointFans:
@@ -664,7 +705,9 @@ constexpr static bool DrawTypeIsImageDraw(DrawType drawType)
         case DrawType::msaaMidpointFanPathsStencil:
         case DrawType::msaaMidpointFanPathsCover:
         case DrawType::msaaOuterCubics:
-        case DrawType::msaaStencilClipReset:
+        case DrawType::clipReset:
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
             return false;
     }
     RIVE_UNREACHABLE();
@@ -696,9 +739,9 @@ constexpr static uint32_t PatchIndexCount(DrawType drawType)
         case DrawType::atlasBlit:
         case DrawType::imageRect:
         case DrawType::imageMesh:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
-        case DrawType::msaaStencilClipReset:
+        case DrawType::clipReset:
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
             RIVE_UNREACHABLE();
     }
     RIVE_UNREACHABLE();
@@ -728,9 +771,9 @@ constexpr static uint32_t PatchBaseIndex(DrawType drawType)
         case DrawType::atlasBlit:
         case DrawType::imageRect:
         case DrawType::imageMesh:
-        case DrawType::atomicInitialize:
-        case DrawType::atomicResolve:
-        case DrawType::msaaStencilClipReset:
+        case DrawType::clipReset:
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
             RIVE_UNREACHABLE();
     }
     RIVE_UNREACHABLE();
@@ -749,6 +792,11 @@ enum class InterlockMode
 {
     rasterOrdering,
     atomics,
+    // Overrides every path's fill rule with clockwise, and implements the
+    // clockwise algorithm using raster ordering hardware.
+    // TODO: Once polished, this mode can be mixed into "rasterOrdering" and
+    // used selectively for clockwise paths.
+    clockwise,
     // Use an experimental path rendering algorithm that utilizes atomics
     // without barriers. This requires that we override all paths' fill rules
     // (winding or even/odd) with a "clockwise" fill rule, where only regions
@@ -756,12 +804,16 @@ enum class InterlockMode
     clockwiseAtomic,
     msaa,
 };
-constexpr static size_t kInterlockModeCount = 4;
+constexpr static size_t INTERLOCK_MODE_COUNT = 5;
+// # of bits required to contain an InterlockMode.
+constexpr static size_t INTERLOCK_MODE_BIT_COUNT = 3;
+static_assert(INTERLOCK_MODE_COUNT <= (1 << INTERLOCK_MODE_BIT_COUNT));
+static_assert(INTERLOCK_MODE_COUNT > (1 << (INTERLOCK_MODE_BIT_COUNT - 1)));
 
 // Low-level batch of scissored geometry for rendering to the offscreen atlas.
 struct AtlasDrawBatch
 {
-    TAABB<uint16_t> scissor;
+    AABBu16 scissor;
     uint32_t patchCount;
     uint32_t basePatch;
 };
@@ -785,14 +837,20 @@ enum class ShaderFeatures
     ENABLE_EVEN_ODD = 1 << 4,
     ENABLE_NESTED_CLIPPING = 1 << 5,
     ENABLE_HSL_BLEND_MODES = 1 << 6,
+    ENABLE_DITHER = 1 << 7,
 };
-RIVE_MAKE_ENUM_BITSET(ShaderFeatures)
-constexpr static size_t kShaderFeatureCount = 7;
+
+constexpr static size_t kShaderFeatureCount = 8;
 constexpr static ShaderFeatures kAllShaderFeatures =
     static_cast<gpu::ShaderFeatures>((1 << kShaderFeatureCount) - 1);
 constexpr static ShaderFeatures kVertexShaderFeaturesMask =
     ShaderFeatures::ENABLE_CLIPPING | ShaderFeatures::ENABLE_CLIP_RECT |
     ShaderFeatures::ENABLE_ADVANCED_BLEND | ShaderFeatures::ENABLE_FEATHER;
+
+// These shader features change the way atomic pipelines are set up (or cause
+//  validation failures when enabled but not used)
+constexpr static ShaderFeatures kExclusiveAtomicUbershaderFeaturesMask =
+    ShaderFeatures::ENABLE_ADVANCED_BLEND;
 
 constexpr static ShaderFeatures ShaderFeaturesMaskFor(
     InterlockMode interlockMode)
@@ -803,14 +861,21 @@ constexpr static ShaderFeatures ShaderFeaturesMaskFor(
             return kAllShaderFeatures;
         case InterlockMode::atomics:
             return kAllShaderFeatures & ~ShaderFeatures::ENABLE_NESTED_CLIPPING;
+        case InterlockMode::clockwise:
+            return kAllShaderFeatures & ~ShaderFeatures::ENABLE_EVEN_ODD;
         case InterlockMode::clockwiseAtomic:
-            // TODO: shader features aren't fully implemented yet in
-            // clockwiseAtomic mode.
-            return ShaderFeatures::ENABLE_FEATHER;
+            return kAllShaderFeatures &
+                   // clockwiseAtomic never supports even/odd fill rule.
+                   ~ShaderFeatures::ENABLE_EVEN_ODD &
+                   // clockwiseAtomic requires special blend state for nested
+                   // clip updates, so they need their own draw anyway and the
+                   // ENABLE_NESTED_CLIPPING feature isn't necessary.
+                   ~ShaderFeatures::ENABLE_NESTED_CLIPPING;
         case InterlockMode::msaa:
             return ShaderFeatures::ENABLE_CLIP_RECT |
                    ShaderFeatures::ENABLE_ADVANCED_BLEND |
-                   ShaderFeatures::ENABLE_HSL_BLEND_MODES;
+                   ShaderFeatures::ENABLE_HSL_BLEND_MODES |
+                   ShaderFeatures::ENABLE_DITHER;
     }
     RIVE_UNREACHABLE();
 }
@@ -832,29 +897,47 @@ enum class ShaderMiscFlags : uint32_t
     // get filled.
     clockwiseFill = 1 << 1,
 
-    // clockwiseAtomic mode only. This shader is a prepass that only subtracts
-    // (counterclockwise) borrowed coverage from the coverage buffer. It doesn't
-    // output color or clip.
-    borrowedCoveragePrepass = 1 << 2,
+    // clockwise and clockwiseAtomic only: This is a specialized shader that
+    // only renders to the clip buffer. It doesn't output color.
+    clipUpdateOnly = 1 << 2,
 
-    // DrawType::atomicInitialize only. Also store the color clear value to PLS
-    // when drawing a clear, in addition to clearing the other PLS planes.
-    storeColorClear = 1 << 3,
+    // clockwiseAtomic only: This is a specialized shader that only subtracts
+    // coverage from the existing clip contents (i.e., nested clip updates).
+    // It doesn't output color.
+    nestedClipUpdateOnly = 1 << 3,
 
-    // DrawType::atomicInitialize only. Swizzle the existing framebuffer
+    // clockwise and clockwiseAtomic modes only. This shader renders a pass that
+    // only subtracts (counterclockwise) borrowed coverage from the coverage
+    // buffer. It doesn't output color or clip.
+    // If drawing interior triangulations, every fragment will be the first of
+    // the path at its pixel, so it can blindly overwrite coverage without
+    // reading the buffer and subtracting.
+    borrowedCoveragePass = 1 << 4,
+
+    // DrawType::renderPassInitialize only. Also store the color clear value to
+    // PLS when drawing a clear, in addition to clearing the other PLS planes.
+    storeColorClear = 1 << 5,
+
+    // DrawType::renderPassInitialize only. Seed the color PLS plane by
+    // sampling the framebuffer contents (previously copied into a dst color
+    // texture bound at IMAGE_TEXTURE_IDX). Used for
+    // LoadAction::preserveRenderTarget on backends that can't directly copy
+    // a texture into a storage buffer (e.g. WebGPU).
+    loadColorFromDstTexture = 1 << 6,
+
+    // DrawType::renderPassInitialize only. Swizzle the existing framebuffer
     // contents from BGRA to RGBA. (For when this data had to get copied from a
     // BGRA target.)
-    swizzleColorBGRAToRGBA = 1 << 4,
+    swizzleColorBGRAToRGBA = 1 << 7,
 
-    // DrawType::atomicResolve only. Optimization for when rendering to an
+    // DrawType::renderPassResolve only. Optimization for when rendering to an
     // offscreen texture.
     //
     // It renders the final "resolve" operation directly to the renderTarget in
     // a single pass, instead of (1) resolving the offscreen texture, and then
     // (2) copying the offscreen texture to back the renderTarget.
-    coalescedResolveAndTransfer = 1 << 5,
+    coalescedResolveAndTransfer = 1 << 8,
 };
-RIVE_MAKE_ENUM_BITSET(ShaderMiscFlags)
 
 constexpr static ShaderFeatures ShaderFeaturesMaskFor(
     DrawType drawType,
@@ -866,12 +949,13 @@ constexpr static ShaderFeatures ShaderFeaturesMaskFor(
         case DrawType::imageRect:
         case DrawType::imageMesh:
         case DrawType::atlasBlit:
-            if (interlockMode != gpu::InterlockMode::atomics)
+            if (interlockMode != InterlockMode::atomics)
             {
                 mask = ShaderFeatures::ENABLE_CLIPPING |
                        ShaderFeatures::ENABLE_CLIP_RECT |
                        ShaderFeatures::ENABLE_ADVANCED_BLEND |
-                       ShaderFeatures::ENABLE_HSL_BLEND_MODES;
+                       ShaderFeatures::ENABLE_HSL_BLEND_MODES |
+                       ShaderFeatures::ENABLE_DITHER;
                 break;
             }
             // Since atomic mode has to resolve previous draws, images need to
@@ -888,19 +972,102 @@ constexpr static ShaderFeatures ShaderFeaturesMaskFor(
         case DrawType::msaaMidpointFanPathsStencil:
         case DrawType::msaaMidpointFanPathsCover:
         case DrawType::msaaOuterCubics:
-        case DrawType::atomicResolve:
             mask = kAllShaderFeatures;
             break;
-        case DrawType::atomicInitialize:
-            assert(interlockMode == gpu::InterlockMode::atomics);
-            mask = ShaderFeatures::ENABLE_CLIPPING |
-                   ShaderFeatures::ENABLE_ADVANCED_BLEND;
+        case DrawType::clipReset:
+            mask = ShaderFeatures::ENABLE_DITHER;
             break;
-        case DrawType::msaaStencilClipReset:
-            mask = ShaderFeatures::NONE;
+        case DrawType::renderPassInitialize:
+            if (interlockMode == InterlockMode::atomics)
+            {
+                // Atomic mode initializes clipping and color (when advanced
+                // blend is active).
+                mask = ShaderFeatures::ENABLE_CLIPPING |
+                       ShaderFeatures::ENABLE_ADVANCED_BLEND |
+                       ShaderFeatures::ENABLE_DITHER;
+            }
+            else if (interlockMode == InterlockMode::msaa)
+            {
+                // MSAA mode only needs to initialize color, and only when
+                // preserving the render target but using a transient MSAA
+                // attachment.
+                mask = ShaderFeatures::ENABLE_DITHER;
+            }
+            else
+            {
+                // The renderPassInitialize draw in clockwiseAtomic mode is just
+                // a simple workaround that draws a single pixel. No Rive
+                // ShaderFeatures needed.
+                assert(interlockMode == InterlockMode::clockwiseAtomic);
+                mask = ShaderFeatures::NONE;
+            }
+            break;
+        case DrawType::renderPassResolve:
+            if (interlockMode == InterlockMode::atomics)
+            {
+                mask = kAllShaderFeatures;
+            }
+            else
+            {
+                assert(interlockMode == InterlockMode::rasterOrdering ||
+                       interlockMode == InterlockMode::msaa);
+                mask = ShaderFeatures::ENABLE_DITHER;
+            }
             break;
     }
     return mask & ShaderFeaturesMaskFor(interlockMode);
+}
+
+// Returns the flags that are valid for an ubershader version of the currently-
+//  requested shader feature set. There are some shader features that change
+//  how the render passes are set up in atomic mode that need to be accounted
+//  for beyond just using ShaderFeaturesMaskFor.
+constexpr static ShaderFeatures UbershaderFeaturesMaskFor(
+    ShaderFeatures requestedFeatures,
+    DrawType drawType,
+    InterlockMode interlockMode,
+    ShaderMiscFlags shaderMiscFlags,
+    const PlatformFeatures& platformFeatures)
+{
+    ShaderFeatures outFeatures = ShaderFeaturesMaskFor(drawType, interlockMode);
+    if (interlockMode == InterlockMode::atomics)
+    {
+        // Turn off the exclusive atomic features unless they're set in our
+        //  requested feature flags.
+        outFeatures &=
+            (requestedFeatures | ~kExclusiveAtomicUbershaderFeaturesMask);
+    }
+
+    // Ensure that we haven't dropped features we care about somehow
+    assert((requestedFeatures & outFeatures) == requestedFeatures);
+
+    // ENABLE_CLIP_RECT shouldn't be set if we're in MSAA mode without clip
+    // plane support.
+    if (interlockMode == InterlockMode::msaa &&
+        !platformFeatures.supportsClipPlanes)
+    {
+        outFeatures &= ~ShaderFeatures::ENABLE_CLIP_RECT;
+    }
+
+    // Borrowed coverage and anything with fixedFunctionColorOutput cannot
+    // coexist with ENABLE_ADVANCED_BLEND
+    if (enums::any_flag_set(shaderMiscFlags,
+                            ShaderMiscFlags::borrowedCoveragePass |
+                                ShaderMiscFlags::fixedFunctionColorOutput))
+    {
+        outFeatures &= ~ShaderFeatures::ENABLE_ADVANCED_BLEND;
+    }
+
+    // in atomic mode, coalescedResolveAndTransfer currently implies advanced
+    // blend.
+    if (interlockMode == InterlockMode::atomics &&
+        enums::is_flag_set(shaderMiscFlags,
+                           ShaderMiscFlags::coalescedResolveAndTransfer))
+    {
+        outFeatures |= ShaderFeatures::ENABLE_ADVANCED_BLEND;
+    }
+
+    return outFeatures;
 }
 
 // Returns a unique value that can be used to key a shader.
@@ -910,6 +1077,11 @@ uint32_t ShaderUniqueKey(DrawType,
                          ShaderMiscFlags);
 
 extern const char* GetShaderFeatureGLSLName(ShaderFeatures feature);
+
+void ForEachUbershaderPermutation(
+    InterlockMode,
+    const PlatformFeatures&,
+    const std::function<bool(DrawType, ShaderFeatures, ShaderMiscFlags)>&);
 
 // Flags indicating the contents of a draw. These don't affect shaders, but in
 // msaa mode they are needed to break up batching. (msaa needs different
@@ -929,10 +1101,43 @@ enum class DrawContents
     nonZeroFill = 1 << 4,
     evenOddFill = 1 << 5,
     activeClip = 1 << 6,
-    clipUpdate = 1 << 7,
-    advancedBlend = 1 << 8,
+    advancedBlend = 1 << 7,
+    // Put clip updates last because they use an entirely different shader in
+    // clockwise mode.
+    clipUpdate = 1 << 8,
+
 };
-RIVE_MAKE_ENUM_BITSET(DrawContents)
+
+// These are the only draw contents flags that apply to the pipeline state (and
+// they only matter for MSAA)
+constexpr static DrawContents DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE =
+    DrawContents::activeClip | DrawContents::clipUpdate |
+    DrawContents::clockwiseFill | DrawContents::evenOddFill |
+    DrawContents::opaquePaint;
+
+enum class StencilType
+{
+    disabled,
+    activeStencilClip,
+    borrowedCoverage,
+    forwardClippedByBackward,
+    backwardTriangleCleanup,
+    stencilNestedOrEvenOdd,
+    evenOddDrawAndReset,
+    nestedClipReset,
+    clipReset,
+};
+
+constexpr uint32_t STENCIL_TYPE_BIT_COUNT = 4;
+
+struct StencilInfo
+{
+    StencilType stencilType;
+    DrawContents drawContentsMask;
+    bool areDrawContentsValid = true;
+};
+
+StencilInfo get_stencil_info(InterlockMode, DrawType, DrawContents);
 
 // A nestedClip draw updates the clip buffer while simultaneously clipping
 // against the outerClip that is currently in the clip buffer.
@@ -947,32 +1152,39 @@ enum class BarrierFlags : uint8_t
     // Pixel-local dependency in the PLS planes. (Atomic mode only.) Ensure
     // prior draws complete at each pixel before beginning new ones.
     plsAtomic = 1 << 0,
-    plsAtomicPostInit = 1 << 1,   // Once after the initial clear/load.
-    plsAtomicPreResolve = 1 << 2, // Once before the final resolve.
+    plsAtomicPreResolve = 1 << 1, // Once before the final resolve.
+
+    // MSAA needs a special barrier (e.g., subpass transition) after manually
+    // loading the render target into the transient MSAA attachment.
+    msaaPostInit = 1 << 2,
 
     // Pixel-local dependency in the coverage buffer. (clockwiseAtomic mode
     // only.) All "borrowed coverage" draws have now been issued. Ensure they
     // complete at each pixel before beginning the "forward coverage" draws.
     clockwiseBorrowedCoverage = 1 << 3,
 
-    // The next DrawBatch needs to perform an advanced blend, but on the current
-    // hardware, we can only fetch the dst color via a separate texture. (MSAA
-    // mode only.) Prepare a dstColorTexture with the current framebuffer
-    // contents. If we're lucky, this will be a Vulkan input attachment. On GL,
-    // this is a literal MSAA resolve & blit to a separate texture.
-    dstColorTexture = 1 << 4,
+    // The next DrawBatch needs to perform an advanced blend, but the current
+    // hardware requires an implementation-dependent barrier before reading the
+    // dstColor (pipeline barrier for input attachments, KHR blend barrier, or
+    // even a full MSAA resolve & blit into a separate texture.)
+    dstBlend = 1 << 4,
+
+    // Special barrier (e.g., subpass transition) issued prior to a manual
+    // render pass resolve. (Only applicable with
+    // FlushDescriptor::manuallyResolved.)
+    preManualResolve = 1 << 5,
 
     // Only prevent future DrawBatches from being combined with the current
     // drawList. (No GPU dependencies.)
-    drawBatchBreak = 1 << 5,
+    drawBatchBreak = 1 << 6,
 };
-RIVE_MAKE_ENUM_BITSET(BarrierFlags);
 
 // Low-level batch of geometry to submit to the GPU.
 struct DrawBatch
 {
     DrawBatch(DrawType drawType_,
-              gpu::ShaderMiscFlags shaderMiscFlags_,
+              ShaderMiscFlags shaderMiscFlags_,
+              DrawContents drawContents_,
               uint32_t elementCount_,
               uint32_t baseElement_,
               rive::BlendMode blendMode_,
@@ -980,6 +1192,7 @@ struct DrawBatch
               BarrierFlags barrierFlags_) :
         drawType(drawType_),
         shaderMiscFlags(shaderMiscFlags_),
+        drawContents(drawContents_),
         elementCount(elementCount_),
         baseElement(baseElement_),
         firstBlendMode(blendMode_),
@@ -988,13 +1201,14 @@ struct DrawBatch
     {}
 
     const DrawType drawType;
-    const ShaderMiscFlags shaderMiscFlags;
+    ShaderMiscFlags shaderMiscFlags;
+    DrawContents drawContents;
     uint32_t elementCount; // Vertex, index, or instance count.
     uint32_t baseElement;  // Base vertex, index, or instance.
     rive::BlendMode firstBlendMode;
     BarrierFlags barriers; // Barriers to execute before drawing this batch.
+    std::optional<AABBu16> scissorRect;
 
-    DrawContents drawContents = DrawContents::none;
     ShaderFeatures shaderFeatures = ShaderFeatures::NONE;
 
     // DrawType::imageRect and DrawType::imageMesh.
@@ -1012,6 +1226,17 @@ struct DrawBatch
     // bounding boxes needs to be blitted to the "dstRead" texture before
     // drawing.
     const Draw* dstReadList = nullptr;
+
+    // Pointer to the next DrawBatchatch in the list that has a
+    // "BarrierFlags::dstBlend" barrier.
+    // When we need advanced blend but the underlying graphics API doesn't
+    // support reading the framebuffer, this can be helpful for breaking up the
+    // drawList into multiple render passes with framebuffer copies in between.
+    const DrawBatch* nextDstBlendBarrier = nullptr;
+    // Link to the next batch to render in the drawList. DrawBatch always exists
+    // in a linked list.
+
+    const DrawBatch* next = nullptr;
 };
 
 // Simple gradients only have 2 texels, so we write them to mapped texture
@@ -1021,6 +1246,18 @@ struct TwoTexelRamp
     ColorInt color0, color1;
 };
 static_assert(sizeof(TwoTexelRamp) == 8 * sizeof(uint8_t));
+
+#ifdef WITH_RIVE_TOOLS
+
+enum class SynthesizedFailureType
+{
+    none,
+    ubershaderLoad,
+    shaderCompilation,
+    pipelineCreation,
+};
+
+#endif
 
 // Detailed description of exactly how a RenderContextImpl should bind its
 // buffers and draw a flush. A typical flush is done in 4 steps:
@@ -1043,19 +1280,41 @@ struct FlushDescriptor
     RenderTarget* renderTarget = nullptr;
     ShaderFeatures combinedShaderFeatures = ShaderFeatures::NONE;
     InterlockMode interlockMode = InterlockMode::rasterOrdering;
-    // Atomic mode only: there a no advanced blend modes, so we can render
-    // directly to the main target with fixed function (src-over) blending.
-    bool atomicFixedFunctionColorOutput = false;
     int msaaSampleCount = 0; // (0 unless interlockMode is msaa.)
 
     LoadAction colorLoadAction = LoadAction::clear;
     ColorInt colorClearValue = 0; // When loadAction == LoadAction::clear.
     uint32_t coverageClearValue = 0;
     float depthClearValue = DEPTH_MAX;
-    ColorInt stencilClearValue = STENCIL_CLEAR;
+    uint8_t stencilClearValue = STENCIL_CLEAR;
 
     IAABB renderTargetUpdateBounds; // drawBounds, or renderTargetBounds if
                                     // loadAction == LoadAction::clear.
+
+    // If nonzero, frames are split up into virtual tiles of this size.
+    //
+    // As of now, each tile gets drawn in a separate render pass. The purpose of
+    // these virtual tiles, for now, is to break the frame up into smaller
+    // chunks so that Rive can be pre-empted by other rendering processes. This
+    // is only supported on Vulkan/non-msaa.
+    //
+    // TODO: We could also explore a different type of virtual tiling that
+    // reduces barriers in atomic mode, but that is not how this feature works
+    // currently.
+    uint32_t virtualTileWidth = 0;
+    uint32_t virtualTileHeight = 0;
+
+    // True if the drawList ends with a "renderPassResolve" draw, in which case
+    // the backend may need to perform special setup for a custom resolve.
+    bool manuallyResolved = false;
+
+    // True if shaders will never read the color buffer, meaning, the render
+    // pass can use a more efficient setup that renders to a standard color
+    // attachment and handles all blending via built-in blend state.
+    // NOTE: This may be false even if all paints use srcOver because some
+    // rendering modes (e.g., rasterOrdering with evenOdd/nonZero) always read
+    // the color buffer, regardless of blend mode.
+    bool fixedFunctionColorOutput = false;
 
     // Physical size of the atlas texture.
     uint16_t atlasTextureWidth;
@@ -1098,12 +1357,14 @@ struct FlushDescriptor
     bool clockwiseFillOverride = false;
     bool hasTriangleVertices = false;
     bool wireframe = false;
+    DitherMode ditherMode;
 #ifdef WITH_RIVE_TOOLS
     // Synthesize compilation failures to make sure the device handles them
     // gracefully. (e.g., by falling back on an uber shader or at least not
     // crashing.) Valid compilations may fail in the real world if the device is
     // pressed for resources or in a bad state.
-    bool synthesizeCompilationFailures = false;
+    SynthesizedFailureType synthesizedFailureType =
+        SynthesizedFailureType::none;
 #endif
 
     // Command buffer that rendering commands will be added to.
@@ -1125,6 +1386,13 @@ struct FlushDescriptor
     // List of draws in the main render pass. These are rendered directly to the
     // renderTarget.
     const BlockAllocatedLinkedList<DrawBatch>* drawList = nullptr;
+    const DrawBatch* firstDstBlendBarrier = nullptr;
+
+    // This tracks any barriers that will not be handled by DrawBatches (e.g.,
+    // renderpass-specific barriers that won't be handled because the batch list
+    // is empty). The backend may need to issue these barriers before finishing
+    // the render pass.
+    BarrierFlags unresolvedBarriers = BarrierFlags::none;
 };
 
 // Returns the area of the (potentially non-rectangular) quadrilateral that
@@ -1201,12 +1469,27 @@ private:
     // significant "32 - CLOCKWISE_COVERAGE_BIT_COUNT" bits of coverage buffer
     // values. (clockwiseAtomic mode only.)
     WRITEONLY uint32_t m_coverageBufferPrefix;
+    // GLSL doesn't appear to provide a lightweight, region-local barrier for
+    // memory ordering outside of memoryBarrier*(), which have severe
+    // consequences for tiling. When we are already relying on other API level
+    // barriers and only need to guard against instruction reordering, we can
+    // multiply by a tiny epsilon instead, and introduce artifical dependencies
+    // that enforce ordering but don't actually have an effect on the final
+    // outcome.
+    WRITEONLY float m_epsilonForPseudoMemoryBarrier;
     // Spacing between adjacent path IDs (1 if IEEE compliant).
     WRITEONLY uint32_t m_pathIDGranularity;
     WRITEONLY float m_vertexDiscardValue;
+    WRITEONLY float m_mipMapLODBias;
+    WRITEONLY uint32_t m_maxPathId;
+    WRITEONLY float m_ditherScale;
+    WRITEONLY float m_ditherBias;
+    // Amount by which to multiply a computed dither value when storing as
+    // RGB10 (as opposed to writing it out to the framebuffer).
+    WRITEONLY float m_ditherConversionToRGB10;
     WRITEONLY uint32_t m_wireframeEnabled; // Forces coverage to solid.
     // Uniform blocks must be multiples of 256 bytes in size.
-    WRITEONLY uint8_t m_padTo256Bytes[256 - 80];
+    WRITEONLY uint8_t m_padTo256Bytes[256 - 104];
 };
 static_assert(sizeof(FlushUniforms) == 256);
 
@@ -1471,11 +1754,11 @@ size_t StorageTextureBufferSize(size_t bufferSizeInBytes,
 // winding, or both?
 enum class WindingFaces
 {
+    none = 0,
     negative = 1 << 0,
     positive = 1 << 1,
     all = negative | positive,
 };
-RIVE_MAKE_ENUM_BITSET(WindingFaces)
 
 // Represents a block of mapped GPU memory. Since it can be extremely expensive
 // to read mapped memory, we use this class to enforce the write-only nature of
@@ -1500,13 +1783,19 @@ public:
 
     using MapResourceBufferFn =
         void* (RenderContextImpl::*)(size_t mapSizeInBytes);
-    void mapElements(RenderContextImpl* impl,
-                     MapResourceBufferFn mapFn,
-                     size_t elementCount)
+    [[nodiscard]] bool mapElements(RenderContextImpl* impl,
+                                   MapResourceBufferFn mapFn,
+                                   size_t elementCount)
     {
         assert(m_mappedMemory == nullptr);
         void* ptr = (impl->*mapFn)(elementCount * sizeof(T));
+        if (ptr == nullptr)
+        {
+            return false;
+        }
+
         reset(reinterpret_cast<T*>(ptr), elementCount);
+        return true;
     }
 
     using UnmapResourceBufferFn =
@@ -1515,10 +1804,12 @@ public:
                        UnmapResourceBufferFn unmapFn,
                        size_t elementCount)
     {
-        assert(m_mappedMemory != nullptr);
-        assert(m_mappingEnd - m_mappedMemory == elementCount);
-        (impl->*unmapFn)(elementCount * sizeof(T));
-        reset();
+        if (m_mappedMemory != nullptr)
+        {
+            assert(m_mappingEnd - m_mappedMemory == elementCount);
+            (impl->*unmapFn)(elementCount * sizeof(T));
+            reset();
+        }
     }
 
     operator bool() const { return m_mappedMemory; }
@@ -1609,10 +1900,10 @@ enum class StencilCompareOp : uint8_t
 
 struct StencilFaceOps
 {
-    StencilOp failOp;
-    StencilOp passOp;
-    StencilOp depthFailOp;
-    StencilCompareOp compareOp;
+    StencilOp failOp = StencilOp::keep;
+    StencilOp passOp = StencilOp::keep;
+    StencilOp depthFailOp = StencilOp::keep;
+    StencilCompareOp compareOp = StencilCompareOp::always;
 };
 
 enum class CullFace : uint8_t
@@ -1621,6 +1912,8 @@ enum class CullFace : uint8_t
     clockwise,
     counterclockwise,
 };
+
+constexpr uint32_t CULL_FACE_BIT_COUNT = 2;
 
 // Blend equation to select for the fixed-function GPU pipeline (not our own
 // in-shader blending). For now, the backend is free to decide whether it will
@@ -1633,7 +1926,8 @@ enum class BlendEquation : uint8_t
     // Core hardware blend equations supported on all platforms.
     srcOver = static_cast<int>(rive::BlendMode::srcOver),
     plus = srcOver + 1,
-    max = plus + 1,
+    min = srcOver + 2,
+    max = srcOver + 3,
 
     // "Advanced" hardware blend equations.
     // PlatformFeatures::supportsKHRBlendEquations is required.
@@ -1654,57 +1948,93 @@ enum class BlendEquation : uint8_t
     luminosity = static_cast<int>(rive::BlendMode::luminosity),
 };
 
-// Common pipeline state that applies to every low-level draw and every backend.
-struct PipelineState
+struct DepthState
 {
     bool depthTestEnabled;
     bool depthWriteEnabled;
-    bool stencilTestEnabled;
-    bool stencilDoubleSided;
-    uint8_t stencilCompareMask;
-    uint8_t stencilWriteMask;
-    uint8_t stencilReference;
+};
+
+DepthState get_depth_state(InterlockMode interlockMode,
+                           DrawType drawType,
+                           DrawContents drawContents);
+
+CullFace get_cull_face(DrawType drawType);
+bool get_color_write_enable(DrawType drawType,
+                            InterlockMode interlockMode,
+                            ShaderMiscFlags shaderMiscFlags,
+                            bool fixedFunctionColorOutput,
+                            DrawContents drawContents);
+
+// Common pipeline state that applies to every Rive draw and every backend.
+struct PipelineState
+{
+    // Depth.
+    bool depthTestEnabled = false;
+    bool depthWriteEnabled = true;
+
+    // Stencil.
+    bool stencilTestEnabled = false;
+    uint8_t stencilCompareMask = 0xff;
+    uint8_t stencilWriteMask = 0xff;
+    uint8_t stencilReference = 0;
     StencilFaceOps stencilFrontOps;
     StencilFaceOps stencilBackOps;
-    CullFace cullFace;
-    BlendEquation blendEquation;
-    bool colorWriteEnabled;
+    bool stencilDoubleSided = false; // Use stencilFrontOps for both faces?
+
+    CullFace cullFace = CullFace::none;
+    BlendEquation blendEquation = BlendEquation::none;
+    bool colorWriteEnabled = true;
 };
+
+// Returns a unique value that can be used to key a whole pipeline.
+uint64_t pipeline_unique_key(DrawType,
+                             ShaderFeatures,
+                             InterlockMode,
+                             ShaderMiscFlags,
+                             DrawContents,
+                             bool fixedFunctionColorOutput,
+                             rive::BlendMode,
+                             const PlatformFeatures&);
+
+PipelineState get_pipeline_state(DrawType,
+                                 InterlockMode,
+                                 ShaderMiscFlags,
+                                 DrawContents,
+                                 bool fixedFunctionColorOutput,
+                                 rive::BlendMode,
+                                 const PlatformFeatures&);
 
 void get_pipeline_state(const DrawBatch&,
                         const FlushDescriptor&,
                         const PlatformFeatures&,
                         PipelineState*);
 
-constexpr static PipelineState COLOR_ONLY_PIPELINE_STATE = {
-    .depthTestEnabled = false,
-    .depthWriteEnabled = false,
-    .stencilTestEnabled = false,
-    .stencilWriteMask = 0,
-    .cullFace = CullFace::none,
-    .blendEquation = BlendEquation::none,
-    .colorWriteEnabled = true,
-};
+// Default PipelineState values as specified in OpenGL.
+constexpr static PipelineState GL_DEFAULT_PIPELINE_STATE = {};
 
-constexpr static PipelineState ATLAS_FILL_PIPELINE_STATE = {
-    .depthTestEnabled = false,
-    .depthWriteEnabled = false,
-    .stencilTestEnabled = false,
-    .stencilWriteMask = 0,
-    .cullFace = CullFace::counterclockwise,
-    .blendEquation = BlendEquation::plus,
-    .colorWriteEnabled = true,
-};
+// Helper to create PipelineState with no depth/stencil and custom blend/cull.
+constexpr inline PipelineState make_flat_pipeline_state(CullFace cull,
+                                                        BlendEquation blend)
+{
+    PipelineState s{};
+    s.depthTestEnabled = false;
+    s.depthWriteEnabled = false;
+    s.stencilTestEnabled = false;
+    s.stencilWriteMask = 0;
+    s.cullFace = cull;
+    s.blendEquation = blend;
+    s.colorWriteEnabled = true;
+    return s;
+}
 
-constexpr static PipelineState ATLAS_STROKE_PIPELINE_STATE = {
-    .depthTestEnabled = false,
-    .depthWriteEnabled = false,
-    .stencilTestEnabled = false,
-    .stencilWriteMask = 0,
-    .cullFace = CullFace::counterclockwise,
-    .blendEquation = BlendEquation::max,
-    .colorWriteEnabled = true,
-};
+constexpr static PipelineState COLOR_ONLY_PIPELINE_STATE =
+    make_flat_pipeline_state(CullFace::none, BlendEquation::none);
+
+constexpr static PipelineState ATLAS_FILL_PIPELINE_STATE =
+    make_flat_pipeline_state(CullFace::none, BlendEquation::plus);
+
+constexpr static PipelineState ATLAS_STROKE_PIPELINE_STATE =
+    make_flat_pipeline_state(CullFace::counterclockwise, BlendEquation::max);
 
 float4 cast_f16_to_f32(uint16x4 x);
 uint16x4 cast_f32_to_f16(float4);
@@ -1718,7 +2048,7 @@ extern const uint16_t g_inverseGaussianIntegralTableF16[GAUSSIAN_TABLE_SIZE];
 // Code to generate g_gaussianIntegralTableF16 and
 // g_inverseGaussianIntegralTableF32. This is left in the codebase but #ifdef'd
 // out in case we ever want to change any parameters of the built-in tables.
-#if 0
+#ifdef RIVE_GENERATE_FEATHER_LUT
 void generate_gausian_integral_table(float (&)[GAUSSIAN_TABLE_SIZE]);
 void generate_inverse_gausian_integral_table(float (&)[GAUSSIAN_TABLE_SIZE]);
 #endif

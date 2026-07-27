@@ -9,12 +9,13 @@ Core* NestedArtboardLeaf::clone() const
 {
     NestedArtboardLeaf* nestedArtboard =
         static_cast<NestedArtboardLeaf*>(NestedArtboardLeafBase::clone());
-    if (m_Artboard == nullptr)
+    nestedArtboard->file(file());
+    if (m_referencedArtboard == nullptr)
     {
         return nestedArtboard;
     }
-    auto ni = m_Artboard->instance();
-    nestedArtboard->nest(ni.release());
+    auto ni = m_referencedArtboard->instance();
+    nestedArtboard->referencedArtboard(ni.release());
     return nestedArtboard;
 }
 

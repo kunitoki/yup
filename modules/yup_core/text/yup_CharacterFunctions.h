@@ -789,9 +789,6 @@ public:
 
         return text;
     }
-
-private:
-    static double mulexp10 (double value, int exponent) noexcept;
 };
 
 } // namespace yup

@@ -64,10 +64,15 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
+    for (const auto& func : shutdownCallbacks)
+        func();
+
     if (!SystemStats::isRunningInAppExtensionSandbox())
         [[[UIApplication sharedApplication] delegate] applicationWillTerminate:[UIApplication sharedApplication]];
 
+#if YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
     exit(0); // iOS apps get no mercy..
+#endif
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED

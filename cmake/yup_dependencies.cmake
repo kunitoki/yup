@@ -19,60 +19,90 @@
 
 #==============================================================================
 
-macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_tag)
-    FetchContent_Declare(
-		"${name}"
-		GIT_REPOSITORY "${git_repository}"
-        GIT_TAG "${git_tag}"
-        GIT_SUBMODULES_RECURSE ON
-        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
+macro (_yup_fetchcontent_declare name)
+    cmake_parse_arguments (YUP_ARG "" "GIT_REPOSITORY;GIT_TAG" "GIT_SUBMODULES" ${ARGN})
 
-    #if (NOT DEFINED FETCHCONTENT_BASE_DIR)
-    #    set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
-    #endif()
-    #FetchContent_Declare(
-	#	"${name}"
-	#	DOWNLOAD_COMMAND
-	#		cd "${FETCHCONTENT_BASE_DIR}/${name}-src" &&
-	#		git init &&
-	#		git fetch --depth=1 --progress "${git_repository}" "${git_tag}" &&
-	#		git reset --hard FETCH_HEAD)
+    set (submodules_args "")
+    if (DEFINED YUP_ARG_GIT_SUBMODULES)
+        set (submodules_args GIT_SUBMODULES ${YUP_ARG_GIT_SUBMODULES})
+    endif()
+
+    # Shallow clones (--depth 1) only work with branch or tag names, not commit hashes
+    set (shallow ON)
+    if (YUP_ARG_GIT_TAG MATCHES "^[0-9a-fA-F]{7,40}$")
+        set (shallow OFF)
+    endif()
+
+    FetchContent_Declare(
+        "${name}"
+        GIT_REPOSITORY "${YUP_ARG_GIT_REPOSITORY}"
+        GIT_TAG        "${YUP_ARG_GIT_TAG}"
+        GIT_SHALLOW    ${shallow}
+        GIT_SUBMODULES_RECURSE ON
+        UPDATE_DISCONNECTED ON
+        ${submodules_args}
+        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
 endmacro()
 
 #==============================================================================
 
-function (_yup_fetch_sdl2)
-    if (TARGET sdl2::sdl2)
+function (_yup_fetch_sdl)
+    if (TARGET sdl::sdl)
         return()
     endif()
 
-    _yup_fetchcontent_declare (SDL2
+    _yup_message (STATUS "Fetching SDL3")
+
+    _yup_fetchcontent_declare (SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-2.32.8)
+        GIT_TAG release-3.4.12)
 
     set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)
     set (SDL_STATIC ON CACHE BOOL "" FORCE)
     set (SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
+    set (SDL_TEST_LIBRARYS OFF CACHE BOOL "" FORCE)
     set (SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set (SDL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+    set (SDL_DISABLE_INSTALL_DOCS ON CACHE BOOL "" FORCE)
+    set (SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set (SDL_INSTALL_EXAMPLES OFF CACHE BOOL "" FORCE)
     set (SDL_AUDIO_ENABLED_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+    set (SDL_ALSA OFF CACHE BOOL "" FORCE)
+    set (SDL_ALSA_SHARED OFF CACHE BOOL "" FORCE)
+    set (SDL_CAMERA OFF CACHE BOOL "" FORCE)
+    set (SDL_DUMMYAUDIO OFF CACHE BOOL "" FORCE)
+    set (SDL_DISKAUDIO OFF CACHE BOOL "" FORCE)
+    set (SDL_JACK OFF CACHE BOOL "" FORCE)
+    set (SDL_JACK_SHARED OFF CACHE BOOL "" FORCE)
+    set (SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+    set (SDL_HAPTIC OFF CACHE BOOL "" FORCE)
+    set (SDL_HIDAPI_LIBUSB OFF CACHE BOOL "" FORCE)
+    set (SDL_RENDER_GPU OFF CACHE BOOL "" FORCE)
+    #set (SDL_RENDER_VULKAN OFF CACHE BOOL "" FORCE)
+    #set (SDL_VULKAN OFF CACHE BOOL "" FORCE)
+    set (SDL_X11_XSCRNSAVER OFF CACHE BOOL "" FORCE)
+    set (SDL_X11_XTEST OFF CACHE BOOL "" FORCE)
 
-    FetchContent_MakeAvailable (SDL2)
+    FetchContent_MakeAvailable (SDL3)
 
-    if (APPLE)
-        target_compile_options (SDL2-static PRIVATE -Wno-deprecated-declarations)
+    if (YUP_PLATFORM_MAC OR YUP_PLATFORM_IOS)
+        target_compile_options (SDL3-static PRIVATE
+            -Wno-deprecated-declarations
+            -Wno-gnu-folding-constant)
+        set_target_properties (SDL3-static PROPERTIES
+            XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-no_warning_for_no_symbols")
+    elseif (YUP_PLATFORM_EMSCRIPTEN)
+        target_compile_options (SDL3-static PRIVATE -pthread)
     endif()
 
-    set_target_properties (SDL2-static PROPERTIES
+    set_target_properties (SDL3-static PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
 
-    set_target_properties (SDL2main PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (SDL2_test PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (sdl_headers_copy PROPERTIES FOLDER "Thirdparty")
-    set_target_properties (uninstall PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (SDL3_test PROPERTIES FOLDER "Tests")
 
-    add_library (sdl2::sdl2 ALIAS SDL2-static)
+    add_library (sdl::sdl ALIAS SDL3-static)
 endfunction()
 
 #==============================================================================
@@ -82,6 +112,8 @@ function (_yup_fetch_perfetto)
         return()
     endif()
 
+    _yup_message (STATUS "Fetching Perfetto")
+
     _yup_fetchcontent_declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
         GIT_TAG v49.0)
@@ -89,7 +121,7 @@ function (_yup_fetch_perfetto)
     FetchContent_MakeAvailable (Perfetto)
 
     add_library (perfetto STATIC)
-    target_compile_features (perfetto PUBLIC cxx_std_17)
+    target_compile_features (perfetto PUBLIC cxx_std_20)
 
     target_sources (perfetto
         PRIVATE "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.cc>"
@@ -110,4 +142,93 @@ function (_yup_fetch_perfetto)
     endif()
 
     add_library (perfetto::perfetto ALIAS perfetto)
+endfunction()
+
+#==============================================================================
+
+macro (_yup_fetch_python use_static_libs modules)
+    if (TARGET Python::Python OR TARGET Python::Module)
+        return()
+    endif()
+
+    set (Python_USE_STATIC_LIBS "${use_static_libs}")
+
+    find_package (Python QUIET COMPONENTS ${modules})
+
+    if (NOT Python_FOUND)
+        string (REPLACE "Development.Module" "Development" fallback_modules "${modules}")
+        if (NOT "${fallback_modules}" STREQUAL "${modules}")
+            find_package (Python QUIET COMPONENTS ${fallback_modules})
+        endif()
+
+        if (NOT Python_FOUND)
+            find_package (Python QUIET COMPONENTS Interpreter Development)
+        endif()
+
+        if (NOT Python_FOUND)
+            find_package (Python QUIET COMPONENTS Interpreter)
+        endif()
+    endif()
+
+    if (NOT Python_FOUND)
+        find_package (Python REQUIRED COMPONENTS ${modules})
+    endif()
+endmacro()
+
+#==============================================================================
+
+function (_yup_find_fftw3 target_name)
+    if (TARGET PkgConfig::FFTW AND TARGET FFTW::Float)
+    else()
+        find_package (PkgConfig REQUIRED)
+        pkg_check_modules (FFTW IMPORTED_TARGET REQUIRED fftw3)
+        find_library (FFTWF_LIB NAMES "fftw3f" PATHS ${PKG_FFTW_LIBRARY_DIRS} ${LIB_INSTALL_DIR})
+
+        if (FFTWF_LIB)
+            add_library (FFTW::Float INTERFACE IMPORTED)
+            set_target_properties (FFTW::Float
+                PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${FFTW_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${FFTWF_LIB}")
+        else()
+            _yup_message (FATAL_ERROR "FFTW3 library not found")
+        endif()
+    endif()
+
+    target_include_directories (${target_name} PRIVATE PkgConfig::FFTW)
+    target_link_libraries (${target_name} PRIVATE FFTW::Float)
+endfunction()
+
+#==============================================================================
+
+function (_yup_collect_audio_plugin_host_dependencies definitions output_variable)
+    set (dependencies "")
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_CLAP enable_clap)
+    if (enable_clap)
+        _yup_fetch_clap()
+        list (APPEND dependencies clap)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_VST3 enable_vst3)
+    if (enable_vst3)
+        _yup_fetch_vst3sdk()
+        list (APPEND dependencies yup_audio_plugin_host_vst3sdk)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_LV2 enable_lv2)
+    if (enable_lv2)
+        _yup_fetch_lv2()
+        list (APPEND dependencies lv2-headers lilv-static)
+    endif()
+
+    _yup_definitions_enable ("${definitions}" YUP_AUDIO_PLUGIN_HOST_ENABLE_AU enable_au)
+    if (enable_au AND YUP_PLATFORM_MAC)
+        list (APPEND dependencies
+            "-framework AudioUnit"
+            "-framework AudioToolbox"
+            "-framework CoreAudio"
+            "-framework CoreFoundation")
+    endif()
+
+    set (${output_variable} "${dependencies}" PARENT_SCOPE)
 endfunction()

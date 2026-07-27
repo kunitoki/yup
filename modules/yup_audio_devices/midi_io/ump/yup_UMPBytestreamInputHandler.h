@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -165,6 +165,6 @@ struct BytestreamToUMPHandler : public BytestreamInputHandler
     BytestreamToUMPDispatcher dispatcher;
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

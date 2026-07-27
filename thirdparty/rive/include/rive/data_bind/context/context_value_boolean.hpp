@@ -10,15 +10,8 @@ public:
     DataBindContextValueBoolean(DataBind* m_dataBind);
     void apply(Core* component,
                uint32_t propertyKey,
-               bool isMainDirection) override;
-    bool syncTargetValue(Core* target, uint32_t propertyKey) override;
-
-private:
-    bool m_previousValue = false;
-    DataValueBoolean m_targetDataValue;
-
-protected:
-    DataValue* targetValue() override { return &m_targetDataValue; }
+               bool isMainDirection,
+               DataBind* dataBind) override;
 };
 } // namespace rive
 

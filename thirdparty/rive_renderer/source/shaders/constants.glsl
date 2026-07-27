@@ -32,6 +32,9 @@
 // need at least one segment, thus a minimum of 2 (plus helper vertices).
 #define FEATHER_JOIN_MIN_SEGMENT_COUNT (2u + FEATHER_JOIN_HELPER_SEGMENT_COUNT)
 
+#define MIN_FEATHER float(0.0)
+#define MAX_FEATHER float(1.0)
+
 // Width to use for a texture that emulates a storage buffer.
 //
 // Minimize width since the texture needs to be updated in entire rows from the
@@ -96,6 +99,9 @@
 #define RIGHT_JOIN_CONTOUR_FLAG (1u << 19u)
 #define CONTOUR_ID_MASK 0xffffu
 
+// This is guaranteed to not collide with any path IDs being rendered.
+#define INVALID_PATH_ID .0
+
 // This is guaranteed to not collide with a neighboring contour ID.
 #define INVALID_CONTOUR_ID_WITH_FLAGS 0u
 
@@ -143,22 +149,27 @@
 #define FEATHER_TEXTURE_IDX 10
 #define ATLAS_TEXTURE_IDX 11
 #define IMAGE_TEXTURE_IDX 12
-#define IMAGE_SAMPLER_IDX 13
-#define DST_COLOR_TEXTURE_IDX 14
-#define DEFAULT_BINDINGS_SET_SIZE 15
+#define DST_COLOR_TEXTURE_IDX 13
+#define DEFAULT_BINDINGS_SET_SIZE 14
+
+// WebGPU needs image sampler index as a separate value.
+#define WEBGPU_IMAGE_SAMPLER_IDX 14
+#define WEBGPU_BINDINGS_SET_SIZE 15
 
 // Metal doesn't allow us to bind buffers index 0 or 1. Offset them by 2.
 #define METAL_BUFFER_IDX(IDX) (2 + IDX)
 
-// Samplers are accessed at the same index as their corresponding texture, so we
-// put them in a separate binding set.
-#define IMMUTABLE_SAMPLER_BINDINGS_SET 2
-
 // PLS textures are accessed at the same index as their PLS planes, so we put
 // them in a separate binding set.
-#define PLS_TEXTURE_BINDINGS_SET 3
+#define PLS_TEXTURE_BINDINGS_SET 2
 
-#define BINDINGS_SET_COUNT 4
+// In WebGPU there needs to be an additional binding set for samplers, because
+// there is no way to bind a texture and sampler to the same binding index in
+// the same binding set like there is in Vulkan.
+#define WEBGPU_SAMPLER_BINDINGS_SET 3
+
+#define VULKAN_BINDINGS_SET_COUNT 3
+#define WEBGPU_BINDINGS_SET_COUNT 4
 
 // Index of each pixel local storage plane.
 #define COLOR_PLANE_IDX 0
@@ -166,7 +177,19 @@
 #define SCRATCH_COLOR_PLANE_IDX 2
 #define COVERAGE_PLANE_IDX 3
 #define PLS_PLANE_COUNT 4
-#define DEPTH_STENCIL_IDX PLS_PLANE_COUNT
+
+// This is the framebuffer attachment index of the final color output during the
+// "coalesced" atomic resolve. (Currently only used by Vulkan.)
+// NOTE: This attachment is still referenced as color attachment 0 by the
+// resolve subpass, so the shader doesn't need to know about it.
+// NOTE: Atomic mode does not use SCRATCH_COLOR_PLANE_IDX, which is why we chose
+// to alias this one.
+#define COALESCED_ATOMIC_RESOLVE_IDX SCRATCH_COLOR_PLANE_IDX
+
+// MSAA attaches different resources to the framebuffer instead of PLS planes.
+#define MSAA_DEPTH_STENCIL_IDX 1u
+#define MSAA_RESOLVE_IDX 2u
+#define MSAA_COLOR_SEED_IDX 3u
 
 // Rive has a hard-coded miter limit of 4 in the editor and all runtimes.
 #define RIVE_MITER_LIMIT float(4)
@@ -177,6 +200,11 @@
 // (1-based) path IDs by this value in order to avoid denorms, which have been
 // empirically unreliable on Android as ID values.
 #define MAX_DENORM_F16 1023u
+
+// The minimum non-denormalized fp16 value is ~6.10e-5. So steer safely within
+// this value (and outside of denormals, which may not be respected by GPUs), by
+// using using 6.2e-5.
+#define EPSILON_FP16_NON_DENORM 6.2e-5
 
 // Blend modes. Mirrors rive::BlendMode, but 0-based and contiguous for tighter
 // packing.
@@ -210,22 +238,30 @@
 #define FIXED_COVERAGE_MASK 0x1ffffu
 
 // Fixed-point coverage values for clockwiseAtomic mode.
-// clockwiseAtomic mode uses 6:11 fixed point, so the winding number breaks if a
-// shape has more than 32 levels of self overlap in either winding direction at
-// any point.
-#define CLOCKWISE_COVERAGE_BIT_COUNT 17u
-#define CLOCKWISE_COVERAGE_MASK 0x1ffffu
-#define CLOCKWISE_COVERAGE_PRECISION float(2048)
-#define CLOCKWISE_COVERAGE_INVERSE_PRECISION float(0.00048828125)
-#define CLOCKWISE_FILL_ZERO_VALUE (1u << 16)
-
-// Vendor IDs for driver workarounds.
-#define VULKAN_VENDOR_AMD 0x1002u
-#define VULKAN_VENDOR_IMG_TEC 0x1010u
-#define VULKAN_VENDOR_NVIDIA 0x10DEu
-#define VULKAN_VENDOR_ARM 0x13B5u
-#define VULKAN_VENDOR_QUALCOMM 0x5143u
-#define VULKAN_VENDOR_INTEL 0x8086u
+//
+// The coverage buffer is laid out as:
+//
+//   prefix(12) : blendColorValid(1) : coverageInt(9) : coverageFract(10)
+//
+// The prefix is a monotonically increasing token that instructs the shader to
+// treat coverage as "cleared to zero" when it doesn't match the expectation,
+// effectively allowing us to clear the coverage buffer by incrementing the
+// token.
+//
+// The "blendColorValid" bit is used by shaders to signal once the blend color
+// has become valid (and before overwriting the framebuffer), indicating that
+// fragments should use that value instead of reading the framebuffer.
+//
+// NOTE: Coverage uses 9:10 fixed point, so the entire coverage buffer breaks if
+// a shape has more than 2^8 levels of self overlap in either winding direction
+// at any point. This impacts future paths as well.
+#define CLOCKWISE_COVERAGE_PRECISION float(1024)
+#define CLOCKWISE_COVERAGE_INVERSE_PRECISION float(0.0009765625)
+#define CLOCKWISE_COVERAGE_BIT_COUNT 19u
+#define CLOCKWISE_FILL_ZERO_VALUE (1u << (CLOCKWISE_COVERAGE_BIT_COUNT - 1u))
+#define CLOCKWISE_COVERAGE_MASK ((1u << CLOCKWISE_COVERAGE_BIT_COUNT) - 1u)
+#define BLEND_COLOR_VALID_BIT (1u << CLOCKWISE_COVERAGE_BIT_COUNT)
+#define CLOCKWISE_COVERAGE_PREFIX_ONE_VALUE (BLEND_COLOR_VALID_BIT << 1u)
 
 // Indices for SPIRV specialization constants (used in lieu of #defines in
 // Vulkan.)
@@ -236,7 +272,32 @@
 #define EVEN_ODD_SPECIALIZATION_IDX 4
 #define NESTED_CLIPPING_SPECIALIZATION_IDX 5
 #define HSL_BLEND_MODES_SPECIALIZATION_IDX 6
-#define CLOCKWISE_FILL_SPECIALIZATION_IDX 7
-#define BORROWED_COVERAGE_PREPASS_SPECIALIZATION_IDX 8
-#define VULKAN_VENDOR_ID_SPECIALIZATION_IDX 9
-#define SPECIALIZATION_COUNT 10
+#define DITHER_SPECIALIZATION_IDX 7
+#define CLOCKWISE_FILL_SPECIALIZATION_IDX 8
+#define NESTED_CLIP_UPDATE_ONLY_IDX 9
+#define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 10
+#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 11
+#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 12
+#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 13
+#define SPECIALIZATION_COUNT 14
+
+// When rendering to an r32i feather atlas, use 16:16 fixed point.
+#define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
+
+// When we have to fall back on an 8-bit color buffer to render the feather
+// atlas, sacrifice precision to lessen overflows.
+// Throwing away the bottom 3 bits seems to be the best tradeoff, based on our
+// golden image suite.
+#define ATLAS_UNORM8_COVERAGE_SCALE_FACTOR 8.
+
+// Buffers used to back PLS images are swizzled into square tiles for better
+// cache locality.
+// Buffer sizes must be rounded up to a multiples of BUFFER_IMAGE_TILE_SIZE in
+// both width and height.
+#define BUFFER_IMAGE_TILE_SIZE 32u
+#define BUFFER_IMAGE_TILE_SIZE_LOG2 5u
+#ifdef __cplusplus
+#if __cplusplus >= 201703
+static_assert(BUFFER_IMAGE_TILE_SIZE == 1u << BUFFER_IMAGE_TILE_SIZE_LOG2);
+#endif
+#endif

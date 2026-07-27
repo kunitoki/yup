@@ -117,7 +117,9 @@ template <size_t len, typename Ret, typename... Args>
 class FixedSizeFunction<len, Ret (Args...)>
 {
 private:
-    using Storage = std::aligned_storage_t<len>;
+    using Storage = struct {
+        alignas (alignof (std::max_align_t)) std::byte data[len];
+    };
 
     template <typename Item>
     using Decay = std::decay_t<Item>;

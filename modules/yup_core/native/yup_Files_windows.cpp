@@ -91,6 +91,12 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 //==============================================================================
 yup::String toLongPath (const yup::String& path)
 {
+    if (path.startsWith (String (L"\\\\?\\")))
+        return path;
+
+    if (path.startsWith (String (L"\\\\")))
+        return L"\\\\?\\UNC" + path.substring (1);
+
     return L"\\\\?\\" + path;
 }
 
@@ -687,7 +693,7 @@ void File::findFileSystemRoots (Array<File>& destArray)
     roots.sort (true);
 
     for (int i = 0; i < roots.size(); ++i)
-        destArray.add (roots[i]);
+        destArray.add (File (roots[i]));
 }
 
 //==============================================================================

@@ -985,14 +985,6 @@ bool operator<= (const var& v1, const var& v2) { return canCompare (v1, v2) && c
 
 bool operator>= (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) >= 0; }
 
-bool operator== (const var& v1, const String& v2) { return v1.toString() == v2; }
-
-bool operator!= (const var& v1, const String& v2) { return v1.toString() != v2; }
-
-bool operator== (const var& v1, const char* v2) { return v1.toString() == v2; }
-
-bool operator!= (const var& v1, const char* v2) { return v1.toString() != v2; }
-
 //==============================================================================
 var var::clone() const noexcept
 {
@@ -1237,6 +1229,11 @@ var var::readFromStream (InputStream& input)
     }
 
     return {};
+}
+
+var::NativeFunctionArgs::NativeFunctionArgs (const var& t) noexcept
+    : NativeFunctionArgs (t, nullptr, 0)
+{
 }
 
 var::NativeFunctionArgs::NativeFunctionArgs (const var& t, const var* args, int numArgs) noexcept

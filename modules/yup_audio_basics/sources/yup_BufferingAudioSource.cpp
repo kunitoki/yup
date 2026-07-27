@@ -84,8 +84,7 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
 
         const ScopedLock sl (bufferRangeLock);
 
-        bufferValidStart = 0;
-        bufferValidEnd = 0;
+        invalidateBufferRange();
 
         backgroundThread.addTimeSliceClient (this);
 
@@ -107,16 +106,12 @@ void BufferingAudioSource::releaseResources()
 
     buffer.setSize (numberOfChannels, 0);
 
-    // MSVC2017 seems to need this if statement to not generate a warning during linking.
-    // As source is set in the constructor, there is no way that source could
-    // ever equal this, but it seems to make MSVC2017 happy.
-    if (source != this)
-        source->releaseResources();
+    source->releaseResources();
 }
 
 void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 {
-    const auto bufferRange = getValidBufferRange (info.numSamples);
+    auto [playPos, bufferRange] = getValidBufferRangeAndAdvance (info.numSamples);
 
     if (bufferRange.isEmpty())
     {
@@ -143,8 +138,8 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
         {
             jassert (buffer.getNumSamples() > 0);
 
-            const auto startBufferIndex = (int) ((validStart + nextPlayPos) % buffer.getNumSamples());
-            const auto endBufferIndex = (int) ((validEnd + nextPlayPos) % buffer.getNumSamples());
+            const auto startBufferIndex = (int) ((validStart + playPos) % buffer.getNumSamples());
+            const auto endBufferIndex = (int) ((validEnd + playPos) % buffer.getNumSamples());
 
             if (startBufferIndex < endBufferIndex)
             {
@@ -155,13 +150,10 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
                 const auto initialSize = buffer.getNumSamples() - startBufferIndex;
 
                 info.buffer->copyFrom (chan, info.startSample + validStart, buffer, chan, startBufferIndex, initialSize);
-
                 info.buffer->copyFrom (chan, info.startSample + validStart + initialSize, buffer, chan, 0, (validEnd - validStart) - initialSize);
             }
         }
     }
-
-    nextPlayPos += info.numSamples;
 }
 
 bool BufferingAudioSource::waitForNextAudioBlockReady (const AudioSourceChannelInfo& info, uint32 timeout)
@@ -217,6 +209,25 @@ int64 BufferingAudioSource::getNextReadPosition() const
              : pos;
 }
 
+void BufferingAudioSource::setLooping (bool shouldLoop)
+{
+    {
+        const ScopedLock sl (bufferRangeLock);
+
+        source->setLooping (shouldLoop);
+
+        const auto isSourceLooping = source->isLooping();
+
+        if (wasSourceLooping != isSourceLooping)
+        {
+            wasSourceLooping = isSourceLooping;
+            invalidateBufferRange();
+        }
+    }
+
+    backgroundThread.moveToFrontOfQueue (this);
+}
+
 void BufferingAudioSource::setNextReadPosition (int64 newPosition)
 {
     const ScopedLock sl (bufferRangeLock);
@@ -235,9 +246,29 @@ Range<int> BufferingAudioSource::getValidBufferRange (int numSamples) const
              (int) (jlimit (bufferValidStart, bufferValidEnd, pos + numSamples) - pos) };
 }
 
+std::tuple<int64, Range<int>> BufferingAudioSource::getValidBufferRangeAndAdvance (int numSamples)
+{
+    const ScopedLock sl (bufferRangeLock);
+
+    const auto pos = nextPlayPos.load();
+
+    nextPlayPos = pos + numSamples;
+
+    return std::make_tuple (
+        pos, Range<int> { (int) (jlimit (bufferValidStart, bufferValidEnd, pos) - pos), (int) (jlimit (bufferValidStart, bufferValidEnd, pos + numSamples) - pos) });
+}
+
+void BufferingAudioSource::invalidateBufferRange()
+{
+    bufferValidStart = 0;
+    bufferValidEnd = 0;
+    ++bufferRangeGeneration;
+}
+
 bool BufferingAudioSource::readNextBufferChunk()
 {
     int64 newBVS, newBVE, sectionToReadStart, sectionToReadEnd;
+    uint64 readGeneration;
 
     {
         const ScopedLock sl (bufferRangeLock);
@@ -245,8 +276,7 @@ bool BufferingAudioSource::readNextBufferChunk()
         if (wasSourceLooping != isLooping())
         {
             wasSourceLooping = isLooping();
-            bufferValidStart = 0;
-            bufferValidEnd = 0;
+            invalidateBufferRange();
         }
 
         newBVS = jmax ((int64) 0, nextPlayPos.load());
@@ -263,8 +293,7 @@ bool BufferingAudioSource::readNextBufferChunk()
             sectionToReadStart = newBVS;
             sectionToReadEnd = newBVE;
 
-            bufferValidStart = 0;
-            bufferValidEnd = 0;
+            invalidateBufferRange();
         }
         else if (std::abs ((int) (newBVS - bufferValidStart)) > 512
                  || std::abs ((int) (newBVE - bufferValidEnd)) > 512)
@@ -277,6 +306,8 @@ bool BufferingAudioSource::readNextBufferChunk()
             bufferValidStart = newBVS;
             bufferValidEnd = jmin (bufferValidEnd, newBVE);
         }
+
+        readGeneration = bufferRangeGeneration;
     }
 
     if (sectionToReadStart == sectionToReadEnd)
@@ -308,6 +339,9 @@ bool BufferingAudioSource::readNextBufferChunk()
 
     {
         const ScopedLock sl2 (bufferRangeLock);
+
+        if (readGeneration != bufferRangeGeneration)
+            return true;
 
         bufferValidStart = newBVS;
         bufferValidEnd = newBVE;

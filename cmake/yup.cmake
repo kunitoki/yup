@@ -50,8 +50,8 @@ function (_yup_setup_platform)
         list (APPEND platforms "emscripten" "posix" "web")
 
     elseif (APPLE)
-        set (platform "osx")
-        list (APPEND platforms "osx" "apple" "posix" "desktop")
+        set (platform "mac")
+        list (APPEND platforms "mac" "apple" "posix" "desktop")
 
     elseif (WIN32)
         if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
@@ -74,22 +74,42 @@ function (_yup_setup_platform)
     _yup_message (STATUS "Setting up for ${platform} platform")
     _yup_message (STATUS "Running on cmake ${CMAKE_VERSION}")
 
-    set (YUP_PLATFORM "${platform}" PARENT_SCOPE)
+    set (YUP_PLATFORM "${platform}" CACHE STRING INTERNAL)
 
     foreach (platform_name ${platforms})
         string (TOUPPER "${platform_name}" platform_name_upper)
-        set (YUP_PLATFORM_${platform_name_upper} ON PARENT_SCOPE)
+        set (YUP_PLATFORM_${platform_name_upper} ON CACHE BOOL INTERNAL)
     endforeach()
 
 endfunction()
 
 #==============================================================================
 
+# Initialize platform settings
+_yup_setup_platform()
+
+#==============================================================================
+
+# Common includes
 include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
-include (${CMAKE_CURRENT_LIST_DIR}/yup_platforms.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_dependencies.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_args.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_clap.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_vst3.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_standalone.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_au.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_auv3.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_aax.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/plugins/yup_plugin_lv2.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_modules.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_codesign.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_sdl.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_pluginval.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
-include (${CMAKE_CURRENT_LIST_DIR}/yup_android_java.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_shader_bundler.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
+
+# Platform specific includes
+include ("${CMAKE_CURRENT_LIST_DIR}/platforms/yup_${YUP_PLATFORM}.cmake")

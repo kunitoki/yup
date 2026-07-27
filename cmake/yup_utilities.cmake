@@ -94,6 +94,17 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_get_project_version_string modules_path output_variable)
+    get_filename_component (root_modules_path "${modules_path}" ABSOLUTE)
+    file (STRINGS "${root_modules_path}/yup_core/system/yup_StandardHeader.h" YUP_CORE_MODULE)
+    string (REGEX REPLACE "(.*)(YUP_MAJOR_VERSION )([0-9]+)(.*)" "\\3" MAJOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_MINOR_VERSION )([0-9]+)(.*)" "\\3" MINOR_NUMBER ${YUP_CORE_MODULE})
+    string (REGEX REPLACE "(.*)(YUP_BUILDNUMBER )([0-9]+)(.*)" "\\3" BUILD_NUMBER ${YUP_CORE_MODULE})
+    set (${output_variable} "${MAJOR_NUMBER}.${MINOR_NUMBER}.${BUILD_NUMBER}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_boolean_property input_bool output_variable)
     string (STRIP "${input_bool}" ${input_bool})
     string (TOLOWER "${input_bool}" ${input_bool})
@@ -137,7 +148,7 @@ function (_yup_file_to_byte_array file_path output_variable)
     file (READ "${file_path}" hex_contents HEX)
     string (REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" separated_hex ${hex_contents})
 
-    list (JOIN separated_hex ", 0x" formatted_hex)
+    list (JOIN separated_hex ",0x" formatted_hex)
     string (PREPEND formatted_hex "0x")
     string (APPEND formatted_hex "")
 
@@ -159,11 +170,11 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_get_package_config_libs package_name output_variable)
+macro (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
-    set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
-endfunction()
+    set (${output_variable} "PkgConfig::${package_name}")
+endmacro()
 
 #==============================================================================
 
@@ -192,6 +203,56 @@ function (_yup_resolve_variable_path input_path output_variable)
     set (${output_variable} "${input_path}" PARENT_SCOPE)
 endfunction()
 
+#==============================================================================
+
+function (_yup_collect_upstream_candidate_paths module_name module_path output_variable)
+    set (candidate_paths
+        "${module_path}/upstream"
+        "${CMAKE_SOURCE_DIR}/build/externals/${module_name}")
+
+    get_filename_component (parent_candidate_path "${CMAKE_SOURCE_DIR}/../build/externals/${module_name}" REALPATH)
+    list (APPEND candidate_paths "${parent_candidate_path}")
+
+    set (candidate_root "${CMAKE_BINARY_DIR}")
+    set (max_depth 10)
+    while (max_depth GREATER 0)
+        list (APPEND candidate_paths "${candidate_root}/externals/${module_name}")
+
+        get_filename_component (candidate_parent "${candidate_root}" DIRECTORY)
+        if ("${candidate_parent}" STREQUAL "${candidate_root}")
+            break()
+        endif()
+
+        set (candidate_root "${candidate_parent}")
+        math (EXPR max_depth "${max_depth} - 1")
+    endwhile()
+
+    set (${output_variable} "${candidate_paths}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_target_list_contains target_list target_name output_variable)
+    foreach (target IN LISTS target_list)
+        if ("${target}" STREQUAL "${target_name}" OR "${target}" STREQUAL "yup::${target_name}")
+            set (${output_variable} ON PARENT_SCOPE)
+            return()
+        endif()
+
+        if (TARGET "${target}")
+            get_target_property (aliased_target "${target}" ALIASED_TARGET)
+            if ("${aliased_target}" STREQUAL "${target_name}")
+                set (${output_variable} ON PARENT_SCOPE)
+                return()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} OFF PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_resolve_variable_paths input_list output_list)
     set (resolved_list "")
 
@@ -201,6 +262,37 @@ function (_yup_resolve_variable_paths input_list output_list)
     endforeach()
 
     set (${output_list} "${resolved_list}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_definitions_enable definitions definition_name output_variable)
+    set (enabled OFF)
+
+    foreach (definition IN LISTS definitions)
+        string (REGEX REPLACE "^-D" "" normalized_definition "${definition}")
+
+        if (normalized_definition MATCHES "^${definition_name}($|=)")
+            set (enabled ON)
+
+            if (normalized_definition MATCHES "^${definition_name}=")
+                string (REGEX REPLACE "^${definition_name}=(.*)$" "\\1" definition_value "${normalized_definition}")
+                string (STRIP "${definition_value}" definition_value)
+                string (REGEX REPLACE "^\"(.*)\"$" "\\1" definition_value "${definition_value}")
+                string (REGEX REPLACE "^'(.*)'$" "\\1" definition_value "${definition_value}")
+                string (TOUPPER "${definition_value}" definition_value)
+
+                if ("${definition_value}" STREQUAL "0"
+                    OR "${definition_value}" STREQUAL "OFF"
+                    OR "${definition_value}" STREQUAL "FALSE"
+                    OR "${definition_value}" STREQUAL "NO")
+                    set (enabled OFF)
+                endif()
+            endif()
+        endif()
+    endforeach()
+
+    set (${output_variable} "${enabled}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
@@ -237,7 +329,7 @@ function (_yup_execute_process_or_fail)
         OUTPUT_QUIET)
 
     if (NOT result EQUAL 0)
-        _yup_join_list_with_separator ("${command}" " " "" "" command_string)
+        _yup_join_list_with_separator ("${ARGN}" " " "" "" command_string)
         message (FATAL_ERROR "Failed to execute command '${command_string}': ${error_message}")
     endif()
 endfunction()
@@ -251,16 +343,9 @@ function (_yup_convert_png_to_icns png_path icons_path output_variable)
     file (REMOVE_RECURSE "${temp_iconset_path}")
     file (MAKE_DIRECTORY "${temp_iconset_path}")
 
-    _yup_execute_process_or_fail (/usr/bin/sips -z 16 16 "${png_path}" --out "${temp_iconset_path}/icon_16x16.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32 "${png_path}" --out "${temp_iconset_path}/icon_32x32.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32 "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 64 64 "${png_path}" --out "${temp_iconset_path}/icon_32x32@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 128 128 "${png_path}" --out "${temp_iconset_path}/icon_128x128.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256 "${png_path}" --out "${temp_iconset_path}/icon_128x128@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256 "${png_path}" --out "${temp_iconset_path}/icon_256x256.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512 "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512 "${png_path}" --out "${temp_iconset_path}/icon_512x512.png")
-    _yup_execute_process_or_fail (/usr/bin/sips -z 1024 1024 "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png")
+    foreach (size IN ITEMS 16 32 128 256 512)
+        _yup_execute_process_or_fail (/usr/bin/sips -z ${size} ${size} "${png_path}" --out "${temp_iconset_path}/icon_${size}x${size}.png")
+    endforeach()
     _yup_execute_process_or_fail (/usr/bin/iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}")
 
     file (REMOVE_RECURSE "${temp_iconset_path}")
@@ -278,8 +363,10 @@ function (_yup_setup_coverage_flags target_name)
             --coverage
             -fprofile-arcs
             -fprofile-update=atomic
-            -ftest-coverage
-            -fno-elide-constructors)
+            -ftest-coverage)
+
+        target_compile_options (${target_name} INTERFACE
+            "$<$<COMPILE_LANGUAGE:CXX>:-fno-elide-constructors>")
 
         target_link_options (${target_name} INTERFACE --coverage)
 

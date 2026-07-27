@@ -9,11 +9,13 @@
 #include "rive/math/math_types.hpp"
 #include "rive/math/simd.hpp"
 #include "rive/renderer/rive_render_image.hpp"
+#include "rive/profiler/profiler_macros.h"
 
 namespace rive
 {
 bool RiveRenderer::IsAABB(const RawPath& path, AABB* result)
 {
+    RIVE_PROF_SCOPE_L(3)
     // Any quadrilateral begins with a move plus 3 lines.
     constexpr static size_t kAABBVerbCount = 4;
     constexpr static PathVerb aabbVerbs[kAABBVerbCount] = {PathVerb::move,
@@ -106,8 +108,15 @@ void RiveRenderer::transform(const Mat2D& matrix)
     m_stack.back().matrix = m_stack.back().matrix * matrix;
 }
 
+void RiveRenderer::modulateOpacity(float opacity)
+{
+    m_stack.back().modulatedOpacity =
+        std::max(0.0f, m_stack.back().modulatedOpacity * opacity);
+}
+
 void RiveRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
 {
+    RIVE_PROF_SCOPE_L(2)
     LITE_RTTI_CAST_OR_RETURN(path, RiveRenderPath*, renderPath);
     LITE_RTTI_CAST_OR_RETURN(paint, RiveRenderPaint*, renderPaint);
 
@@ -158,6 +167,7 @@ void RiveRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
                                                     matrixMaxScale),
                 path->getFillRule(),
                 paint,
+                m_stack.back().modulatedOpacity,
                 &m_scratchPath));
             return;
         }
@@ -168,19 +178,14 @@ void RiveRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
                                         ref_rcp(path),
                                         path->getFillRule(),
                                         paint,
+                                        m_stack.back().modulatedOpacity,
                                         &m_scratchPath));
 }
 
 void RiveRenderer::clipPath(RenderPath* renderPath)
 {
+    RIVE_PROF_SCOPE_L(2)
     LITE_RTTI_CAST_OR_RETURN(path, RiveRenderPath*, renderPath);
-
-    if (m_context->frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic)
-    {
-        // Just discard clips in clockwiseAtomic mode for now.
-        // TODO: Implement clipping in clockwiseAtomic mode.
-        return;
-    }
 
     if (m_stack.back().clipIsEmpty)
     {
@@ -247,6 +252,7 @@ static bool transform_rect_to_new_space(AABB* rect,
 
 void RiveRenderer::clipRectImpl(AABB rect, const RiveRenderPath* originalPath)
 {
+    RIVE_PROF_SCOPE_L(3)
     bool hasClipRect = m_stack.back().clipRectInverseMatrix != nullptr;
     if (rect.isEmptyOrNaN())
     {
@@ -293,6 +299,7 @@ void RiveRenderer::clipRectImpl(AABB rect, const RiveRenderPath* originalPath)
 
 void RiveRenderer::clipPathImpl(const RiveRenderPath* path)
 {
+    RIVE_PROF_SCOPE_L(3)
     if (path->getBounds().isEmptyOrNaN())
     {
         m_stack.back().clipIsEmpty = true;
@@ -325,6 +332,7 @@ void RiveRenderer::drawImage(const RenderImage* renderImage,
                              BlendMode blendMode,
                              float opacity)
 {
+    RIVE_PROF_SCOPE_L(2)
     LITE_RTTI_CAST_OR_RETURN(image, const RiveRenderImage*, renderImage);
 
     rcp<gpu::Texture> imageTexture = image->refTexture();
@@ -335,6 +343,10 @@ void RiveRenderer::drawImage(const RenderImage* renderImage,
         // just don't draw anything.
         return;
     }
+
+    // Apply modulated opacity (clamp to prevent negative values)
+    float finalOpacity =
+        std::max(0.0f, opacity * m_stack.back().modulatedOpacity);
 
     // Scale the view matrix so we can draw this image as the rect [0, 0, 1, 1].
     save();
@@ -355,7 +367,7 @@ void RiveRenderer::drawImage(const RenderImage* renderImage,
                     blendMode,
                     std::move(imageTexture),
                     imageSampler,
-                    opacity)));
+                    finalOpacity)));
         }
     }
     else
@@ -371,7 +383,7 @@ void RiveRenderer::drawImage(const RenderImage* renderImage,
         }
 
         RiveRenderPaint paint;
-        paint.image(std::move(imageTexture), opacity);
+        paint.image(std::move(imageTexture), finalOpacity);
         paint.blendMode(blendMode);
         paint.imageSampler(imageSampler);
         drawPath(m_unitRectPath.get(), &paint);
@@ -390,6 +402,7 @@ void RiveRenderer::drawImageMesh(const RenderImage* renderImage,
                                  BlendMode blendMode,
                                  float opacity)
 {
+    RIVE_PROF_SCOPE_L(2)
     LITE_RTTI_CAST_OR_RETURN(image, const RiveRenderImage*, renderImage);
 
     rcp<gpu::Texture> imageTexture = image->refTexture();
@@ -410,6 +423,10 @@ void RiveRenderer::drawImageMesh(const RenderImage* renderImage,
         return;
     }
 
+    // Apply modulated opacity (clamp to prevent negative values)
+    float finalOpacity =
+        std::max(0.0f, opacity * m_stack.back().modulatedOpacity);
+
     clipAndPushDraw(gpu::DrawUniquePtr(
         m_context->make<gpu::ImageMeshDraw>(gpu::Draw::FULLSCREEN_PIXEL_BOUNDS,
                                             m_stack.back().matrix,
@@ -420,11 +437,12 @@ void RiveRenderer::drawImageMesh(const RenderImage* renderImage,
                                             std::move(uvCoords_f32),
                                             std::move(indices_u16),
                                             indexCount,
-                                            opacity)));
+                                            finalOpacity)));
 }
 
 void RiveRenderer::clipAndPushDraw(gpu::DrawUniquePtr draw)
 {
+    RIVE_PROF_SCOPE_L(3)
     assert(!m_stack.back().clipIsEmpty);
     if (draw.get() == nullptr)
     {
@@ -498,8 +516,68 @@ void RiveRenderer::clipAndPushDraw(gpu::DrawUniquePtr draw)
             "are too complex.\n");
 }
 
+// Used by clipping in clockwiseAtomic mode.
+//
+// Returns the inverse of a path, meaning, regions that were filled in the old
+// path are now empty, and empty regions in the old path are now filled.
+//
+// NOTE: A true inverse path would expand infinitely in all directions, but this
+// function limits it by the provided "bounds".
+//
+// NOTE: The returned path is always clockwise, even if the given path was not.
+// If the given path is not clockwise, we attempt to convert it to clockwise
+// based on its dominant winding direction. This may or may not be accurate.
+rcp<RiveRenderPath> invert_clockwise_path(const RiveRenderPath* path,
+                                          FillRule pathFillRule,
+                                          const Mat2D& viewMatrix,
+                                          IAABB bounds)
+{
+    auto inversePath = make_rcp<RiveRenderPath>();
+    inversePath->fillRule(FillRule::clockwise);
+    Mat2D viewInverseMatrix;
+    if (viewMatrix.invert(&viewInverseMatrix))
+    {
+        // Add the pre-viewMatrix "bounds" rect to the new path.
+        std::array<Vec2D, 4> boundsVertices = {
+            Vec2D(bounds.left, bounds.top),
+            Vec2D(bounds.right, bounds.top),
+            Vec2D(bounds.right, bounds.bottom),
+            Vec2D(bounds.left, bounds.bottom),
+        };
+        viewInverseMatrix.mapPoints(boundsVertices.data(),
+                                    boundsVertices.data(),
+                                    4);
+        inversePath->move(boundsVertices[0]);
+        if (const float viewMatrixDeterminant =
+                viewMatrix[0] * viewMatrix[3] - viewMatrix[2] * viewMatrix[1];
+            viewMatrixDeterminant >= 0)
+        {
+            inversePath->line(boundsVertices[1]);
+            inversePath->line(boundsVertices[2]);
+            inversePath->line(boundsVertices[3]);
+        }
+        else
+        {
+            inversePath->line(boundsVertices[3]);
+            inversePath->line(boundsVertices[2]);
+            inversePath->line(boundsVertices[1]);
+        }
+        // Subtract the given path out of the bounds rect.
+        if (pathFillRule == FillRule::clockwise || path->getCoarseArea() >= 0)
+        {
+            inversePath->addRenderPathBackwards(path, Mat2D());
+        }
+        else
+        {
+            inversePath->addRenderPath(path, Mat2D());
+        }
+    }
+    return inversePath;
+}
+
 RiveRenderer::ApplyClipResult RiveRenderer::applyClip(gpu::Draw* draw)
 {
+    RIVE_PROF_SCOPE_L(3)
     if (m_stack.back().clipIsEmpty)
     {
         return ApplyClipResult::clipEmpty;
@@ -530,22 +608,24 @@ RiveRenderer::ApplyClipResult RiveRenderer::applyClip(gpu::Draw* draw)
 
     // Draw the necessary updates to the clip buffer (i.e., draw every clip
     // element after clipIdxCurrentlyInClipBuffer).
-    uint32_t lastClipID =
+    uint32_t parentClipID =
         clipIdxCurrentlyInClipBuffer == -1
             ? 0 // The next clip to be drawn is not nested.
             : m_clipStack[clipIdxCurrentlyInClipBuffer].clipID;
-    if (m_context->frameInterlockMode() == gpu::InterlockMode::msaa)
+    if (m_context->frameInterlockMode() ==
+            gpu::InterlockMode::clockwiseAtomic ||
+        m_context->frameInterlockMode() == gpu::InterlockMode::msaa)
     {
-        if (lastClipID == 0 && m_context->getClipContentID() != 0)
+        if (parentClipID == 0 && m_context->getClipContentID() != 0)
         {
             // Time for a new stencil clip! Erase the clip currently in the
             // stencil buffer before we draw the new one.
             auto stencilClipClear =
-                gpu::DrawUniquePtr(m_context->make<gpu::StencilClipReset>(
+                gpu::DrawUniquePtr(m_context->make<gpu::ClipReset>(
                     m_context,
                     m_context->getClipContentID(),
                     gpu::DrawContents::none,
-                    gpu::StencilClipReset::ResetAction::clearPreviousClip));
+                    gpu::ClipReset::ResetAction::clearPreviousClip));
             if (!m_context->isOutsideCurrentFrame(
                     stencilClipClear->pixelBounds()))
             {
@@ -561,25 +641,71 @@ RiveRenderer::ApplyClipResult RiveRenderer::applyClip(gpu::Draw* draw)
 
         IAABB clipDrawBounds;
         RiveRenderPaint clipUpdatePaint;
-        clipUpdatePaint.clipUpdate(/*clip THIS clipDraw against:*/ lastClipID);
+        clipUpdatePaint.clipUpdate(
+            /*clip THIS clipDraw against:*/ parentClipID);
 
-        gpu::DrawUniquePtr clipDraw = gpu::PathDraw::Make(m_context,
-                                                          clip.matrix,
-                                                          clip.path,
-                                                          clip.fillRule,
-                                                          &clipUpdatePaint,
-                                                          &m_scratchPath);
+        rcp clipPath = clip.path;
+        FillRule clipFillRule = clip.fillRule;
+        if (m_context->frameInterlockMode() ==
+                gpu::InterlockMode::clockwiseAtomic &&
+            parentClipID != 0)
+        {
+            // clockwiseAtomic implements nested clips by erasing the inverse
+            // of the inner path from the outer clip.
+            clipPath = invert_clockwise_path(
+                clipPath.get(),
+                clipFillRule,
+                clip.matrix,
+                m_context->getClipContentBounds(parentClipID));
+            clipFillRule = FillRule::clockwise;
+        }
+
+        gpu::DrawUniquePtr clipDraw =
+            gpu::PathDraw::Make(m_context,
+                                clip.matrix,
+                                std::move(clipPath),
+                                clipFillRule,
+                                &clipUpdatePaint,
+                                1.0f, // no opacity modulation for clips
+                                &m_scratchPath);
 
         if (clipDraw == nullptr)
         {
             return ApplyClipResult::clipEmpty;
         }
+
         clipDrawBounds = clipDraw->pixelBounds();
 
         // Generate a new clipID every time we (re-)render an element to the
         // clip buffer. (Each embodiment of the element needs its own
         // separate readBounds.)
-        clip.clipID = m_context->generateClipID(clipDrawBounds);
+        {
+            // if we have a parent, use its current adjusted write bounds as its
+            // outer bounds, otherwise limit it to the screen area.
+            // TODO: This should take into account any clip rect that might be
+            // applied.
+            const auto outerBounds =
+                (parentClipID != 0)
+                    ? m_context->getTightenedClipBounds(parentClipID)
+                    : AABBu16::MakeWH(
+                          m_context->frameDescriptor().renderTargetWidth,
+                          m_context->frameDescriptor().renderTargetHeight);
+
+            // Trim the draw bounds to the outer bounds as the initial minimal
+            // clip bounds (we shouldn't need to write to or read from anywhere
+            // that is outside of the screen or a parent clip's box, if one
+            // exists).
+            const auto tightenedBounds = outerBounds.intersect(clipDrawBounds);
+
+            // If there is a parent clip, the next element up the clip stack
+            // should have its ID.
+            assert(parentClipID == 0 ||
+                   (i != 0 && m_clipStack[i - 1].clipID == parentClipID));
+
+            clip.clipID = m_context->generateClipID(clipDrawBounds,
+                                                    parentClipID,
+                                                    tightenedBounds);
+        }
         assert(clip.clipID != m_context->getClipContentID());
         if (clip.clipID == 0)
         {
@@ -595,21 +721,19 @@ RiveRenderer::ApplyClipResult RiveRenderer::applyClip(gpu::Draw* draw)
             m_internalDrawBatch.push_back(std::move(clipDraw));
         }
 
-        if (lastClipID != 0)
+        if (parentClipID != 0)
         {
-            m_context->addClipReadBounds(lastClipID, clipDrawBounds);
             if (m_context->frameInterlockMode() == gpu::InterlockMode::msaa)
             {
                 // When drawing nested stencil clips, we need to intersect them,
                 // which involves erasing the region of the current clip in the
                 // stencil buffer that is outside the the one we just drew.
                 auto stencilClipIntersect =
-                    gpu::DrawUniquePtr(m_context->make<gpu::StencilClipReset>(
+                    gpu::DrawUniquePtr(m_context->make<gpu::ClipReset>(
                         m_context,
-                        lastClipID,
+                        parentClipID,
                         clipDrawContents,
-                        gpu::StencilClipReset::ResetAction::
-                            intersectPreviousClip));
+                        gpu::ClipReset::ResetAction::intersectPreviousClip));
                 if (!m_context->isOutsideCurrentFrame(
                         stencilClipIntersect->pixelBounds()))
                 {
@@ -619,13 +743,14 @@ RiveRenderer::ApplyClipResult RiveRenderer::applyClip(gpu::Draw* draw)
             }
         }
 
-        lastClipID = clip.clipID; // Nest the next clip (if any) inside the one
-                                  // we just rendered.
+        parentClipID = clip.clipID; // Nest the next clip (if any) inside the
+                                    // one we just rendered.
     }
-    assert(lastClipID == m_clipStack[clipStackHeight - 1].clipID);
-    draw->setClipID(lastClipID);
-    m_context->addClipReadBounds(lastClipID, draw->pixelBounds());
-    m_context->setClipContentID(lastClipID);
+
+    assert(parentClipID == m_clipStack[clipStackHeight - 1].clipID);
+    draw->setClipID(parentClipID);
+    m_context->setClipContentID(parentClipID);
+
     return ApplyClipResult::success;
 }
 } // namespace rive

@@ -131,8 +131,8 @@ void MessageManager::runDispatchLoop()
 
         auto* messageManager = static_cast<MessageManager*> (arg);
         jassert (messageManager != nullptr);
-        jassert (messageManager->loopCallback != nullptr);
-        messageManager->loopCallback();
+        if (messageManager != nullptr && messageManager->loopCallback != nullptr)
+            messageManager->loopCallback();
 
         InternalMessageQueue::getInstance()->deliverNextMessages();
     };
@@ -145,7 +145,11 @@ void MessageManager::runDispatchLoop()
 void MessageManager::stopDispatchLoop()
 {
     quitMessagePosted = true;
+
     emscripten_cancel_main_loop();
+
+    for (const auto& func : shutdownCallbacks)
+        func();
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED

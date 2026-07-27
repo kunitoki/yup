@@ -52,7 +52,7 @@ namespace yup
 
     @tags{Core}
 */
-struct ArgumentList
+struct YUP_API ArgumentList
 {
     /** Creates an argument list for a given executable. */
     ArgumentList (String executable, StringArray arguments);
@@ -249,7 +249,7 @@ struct ArgumentList
 
     @tags{Core}
 */
-struct ConsoleApplication
+struct YUP_API ConsoleApplication
 {
     //==============================================================================
     /**

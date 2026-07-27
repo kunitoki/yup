@@ -22,18 +22,86 @@
 #include "ExamplePlugin.h"
 #include "ExampleEditor.h"
 
+#include <memory>
+
+//==============================================================================
+
+namespace
+{
+
+constexpr char examplePluginStateMagic[] = { 'Y', 'U', 'P', 'S' };
+constexpr int examplePluginStateVersion = 1;
+
+const char* getPluginFormatName()
+{
+#if YUP_AUDIO_PLUGIN_ENABLE_AU
+    return "au";
+#elif YUP_AUDIO_PLUGIN_ENABLE_CLAP
+    return "clap";
+#elif YUP_AUDIO_PLUGIN_ENABLE_VST3
+    return "vst3";
+#elif YUP_AUDIO_PLUGIN_ENABLE_LV2
+    return "lv2";
+#elif YUP_AUDIO_PLUGIN_ENABLE_AAX
+    return "aax";
+#elif YUP_AUDIO_PLUGIN_ENABLE_STANDALONE
+    return "standalone";
+#else
+    return "unknown";
+#endif
+}
+
+class ExamplePluginLogger final
+{
+public:
+    ExamplePluginLogger()
+    {
+        const auto logFileName = yup::String (YupPlugin_Name) + "_" + getPluginFormatName() + ".log";
+        logger.reset (new yup::FileLogger (yup::FileLogger::getSystemLogFileFolder().getChildFile (logFileName),
+                                           yup::String (YupPlugin_Name) + " " + getPluginFormatName() + " log"));
+
+        yup::Logger::setCurrentLogger (logger.get());
+        yup::Logger::writeToLog ("Logger initialised: " + logger->getLogFile().getFullPathName());
+    }
+
+    void setAsCurrentLogger()
+    {
+        yup::Logger::setCurrentLogger (logger.get());
+    }
+
+    ~ExamplePluginLogger()
+    {
+        if (yup::Logger::getCurrentLogger() == logger.get())
+            yup::Logger::setCurrentLogger (nullptr);
+    }
+
+private:
+    std::unique_ptr<yup::FileLogger> logger;
+};
+
+void initialiseExamplePluginLogger()
+{
+    static ExamplePluginLogger logger;
+    logger.setAsCurrentLogger();
+}
+
+} // namespace
+
 //==============================================================================
 
 ExamplePlugin::ExamplePlugin()
     : yup::AudioProcessor ("MyPlugin",
                            yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
 {
+    initialiseExamplePluginLogger();
+
     addParameter (gainParameter = yup::AudioParameterBuilder()
                                       .withID ("volume")
                                       .withName ("Volume")
                                       .withRange (0.0f, 1.0f)
                                       .withDefault (0.5f)
                                       .withSmoothing (20.0f)
+                                      .withModulatable (true)
                                       .build());
 }
 
@@ -44,11 +112,11 @@ ExamplePlugin::~ExamplePlugin()
 
 //==============================================================================
 
-void ExamplePlugin::prepareToPlay (float sampleRate, int maxBlockSize)
+void ExamplePlugin::prepareToPlay (const yup::AudioSpec& spec)
 {
-    this->sampleRate = sampleRate;
+    this->sampleRate = spec.sampleRate;
 
-    gainHandle = yup::AudioParameterHandle (*gainParameter, sampleRate);
+    gainHandle = yup::AudioParameterHandle (*gainParameter, spec.sampleRate);
 }
 
 void ExamplePlugin::releaseResources()
@@ -56,8 +124,11 @@ void ExamplePlugin::releaseResources()
     voices.free();
 }
 
-void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer)
+void ExamplePlugin::processBlock (yup::AudioProcessContext<float>& context)
 {
+    auto& audioBuffer = context.audio;
+    auto& midiBuffer = context.midi;
+
     int numSamples = audioBuffer.getNumSamples();
     float* outputL = audioBuffer.getWritePointer (0);
     float* outputR = audioBuffer.getWritePointer (1);
@@ -65,10 +136,12 @@ void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::Midi
     int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
     auto midiIterator = midiBuffer.begin();
 
-    gainHandle.updateNextAudioBlock();
+    gainHandle.prepareBlock (context.params, gainParameter->getIndexInContainer());
 
     for (int currentSample = 0; currentSample < numSamples;)
     {
+        gainHandle.advanceToSample (currentSample);
+
         while (midiIterator != midiBuffer.end() && nextEventSample == currentSample)
         {
             const auto& event = *midiIterator;
@@ -122,7 +195,9 @@ void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::Midi
                 }
             }
 
-            // TODO - clap supports per voice modulations: clap_event_param_mod_t
+            // Per-voice (polyphonic) modulation is not yet supported; global modulation
+            // via CLAP_EVENT_PARAM_MOD is handled by the plugin wrapper and already
+            // reflected in the value returned by gainHandle.getNextValue().
         }
 
         if (midiIterator == midiBuffer.end())
@@ -188,7 +263,10 @@ void ExamplePlugin::setCurrentPreset (int index) noexcept
         return;
 
     if (yup::isPositiveAndBelow (index, yup::numElementsInArray (presets)))
+    {
+        currentPreset = index;
         gainParameter->setValue (presets[index].gainValue);
+    }
 }
 
 int ExamplePlugin::getNumPresets() const
@@ -214,12 +292,51 @@ void ExamplePlugin::setPresetName (int index, yup::StringRef newName)
 
 yup::Result ExamplePlugin::loadStateFromMemory (const yup::MemoryBlock& memoryBlock)
 {
-    return yup::Result::fail ("Not implemented");
+    constexpr size_t expectedSize = sizeof (examplePluginStateMagic) + (sizeof (int) * 2) + sizeof (float);
+
+    if (memoryBlock.getSize() != expectedSize)
+        return yup::Result::fail ("Invalid example plugin state size");
+
+    yup::MemoryInputStream stream (memoryBlock, false);
+
+    char magic[sizeof (examplePluginStateMagic)] {};
+    if (stream.read (magic, sizeof (magic)) != static_cast<int> (sizeof (magic)))
+        return yup::Result::fail ("Invalid example plugin state header");
+
+    for (size_t i = 0; i < sizeof (examplePluginStateMagic); ++i)
+        if (magic[i] != examplePluginStateMagic[i])
+            return yup::Result::fail ("Invalid example plugin state header");
+
+    const auto version = stream.readInt();
+    if (version != examplePluginStateVersion)
+        return yup::Result::fail ("Unsupported example plugin state version");
+
+    const auto presetIndex = stream.readInt();
+    if (! yup::isPositiveAndBelow (presetIndex, yup::numElementsInArray (presets)))
+        return yup::Result::fail ("Invalid example plugin preset index");
+
+    const auto gainValue = stream.readFloat();
+    if (! (gainValue >= gainParameter->getMinimumValue() && gainValue <= gainParameter->getMaximumValue()))
+        return yup::Result::fail ("Invalid example plugin gain value");
+
+    currentPreset = presetIndex;
+    gainParameter->setValue (gainValue);
+
+    return yup::Result::ok();
 }
 
 yup::Result ExamplePlugin::saveStateIntoMemory (yup::MemoryBlock& memoryBlock)
 {
-    return yup::Result::fail ("Not implemented");
+    yup::MemoryOutputStream stream (memoryBlock, false);
+
+    if (! stream.write (examplePluginStateMagic, sizeof (examplePluginStateMagic))
+        || ! stream.writeInt (examplePluginStateVersion)
+        || ! stream.writeInt (currentPreset)
+        || ! stream.writeFloat (gainParameter->getValue()))
+        return yup::Result::fail ("Failed to write example plugin state");
+
+    stream.flush();
+    return yup::Result::ok();
 }
 
 //==============================================================================

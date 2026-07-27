@@ -1,0 +1,998 @@
+{
+  "metadata_path": "thirdparty/rive_vendor_versions.json",
+  "global_exclude_globs": [
+    ".DS_Store",
+    "**/.DS_Store",
+    ".git/**",
+    ".github/**",
+    ".gitignore",
+    ".gitattributes",
+    ".editorconfig",
+    "CMakeLists.txt",
+    "**/CMakeLists.txt",
+    "BUILD*",
+    "WORKSPACE*",
+    "Makefile.in",
+    "Makefile.am",
+    "meson.build",
+    "meson_options.txt",
+    "**/meson.build",
+    "**/meson_options.txt",
+    "test/**",
+    "tests/**",
+    "example/**",
+    "examples/**",
+    "docs/**",
+    "doc/**",
+    "benchmark/**",
+    "benchmarks/**",
+    "fuzz/**",
+    "fuzzer/**",
+    "perf/**",
+    "script/**",
+    "scripts/**",
+    "**/*.md"
+  ],
+  "dependencies": [
+    {
+      "name": "rive",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive",
+      "license": "MIT",
+      "module_header": "thirdparty/rive/rive.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.mm"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rive_renderer",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive_renderer",
+      "license": "MIT",
+      "module_header": "thirdparty/rive_renderer/rive_renderer.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "renderer/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "renderer/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.m",
+            "**/*.mm",
+            "**/*.glsl",
+            "**/*.metal",
+            "**/*.hlsl",
+            "**/*.sig",
+            "**/*.frag",
+            "**/*.vert",
+            "**/*.main",
+            "**/*.py",
+            "**/Makefile"
+          ],
+          "preserve_globs": [
+            "generated/shaders/**"
+          ],
+          "exclude_globs": [
+            "out/**"
+          ]
+        }
+      ],
+      "patches": [
+        {
+          "path": "include/rive/renderer/ore/ore_context_wgpu.hpp",
+          "note": "ContextWGPU owned-encoder mode: add m_ownsCommandEncoder flag",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    uint64_t m_frameSerial = 0;"
+            ],
+            "to": [
+              "    wgpu::CommandEncoder m_wgpuCommandEncoder;",
+              "    bool m_ownsCommandEncoder = false;",
+              "    uint64_t m_frameSerial = 0;"
+            ]
+          }
+        },
+        {
+          "path": "source/ore/wgpu/ore_context_wgpu.cpp",
+          "note": "ContextWGPU owned-encoder mode: create/submit own encoder when beginFrame has no external one (fixes GpuFrame on Emscripten WebGPU)",
+          "already_contains": "m_ownsCommandEncoder",
+          "replace": {
+            "from": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    assert(desc.externalCommandBuffer != nullptr);",
+              "    m_wgpuCommandEncoder = std::move(",
+              "        *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    // Host owns Finish()/Submit() and the frame fence; just drop our",
+              "    // reference to the shared encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ],
+            "to": [
+              "void ContextWGPU::beginFrame(const FrameDescriptor& desc)",
+              "{",
+              "    if (desc.externalCommandBuffer != nullptr)",
+              "    {",
+              "        // External-encoder mode: record into the host's encoder; the host",
+              "        // owns Finish()/Submit().",
+              "        m_wgpuCommandEncoder = std::move(",
+              "            *static_cast<wgpu::CommandEncoder*>(desc.externalCommandBuffer));",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "    else",
+              "    {",
+              "        // Owned-encoder mode (matches the Metal/GL/D3D11 self-managed frame",
+              "        // model): create our own encoder; endFrame() finishes and submits it,",
+              "        // preserving the one-submit-per-frame-serial contract that",
+              "        // BufferWGPU::acquireFreshBacking() relies on.",
+              "        m_wgpuCommandEncoder = m_wgpuDevice.CreateCommandEncoder();",
+              "        m_ownsCommandEncoder = true;",
+              "    }",
+              "    ++m_frameSerial;",
+              "}",
+              "",
+              "void ContextWGPU::waitForGPU() {} // WGPU submit is synchronous for Dawn.",
+              "",
+              "void ContextWGPU::endFrame()",
+              "{",
+              "    assert(m_wgpuCommandEncoder != nullptr);",
+              "",
+              "    if (m_ownsCommandEncoder)",
+              "    {",
+              "        wgpu::CommandBuffer commands = m_wgpuCommandEncoder.Finish();",
+              "        m_wgpuQueue.Submit(1, &commands);",
+              "        m_ownsCommandEncoder = false;",
+              "    }",
+              "",
+              "    // In external-encoder mode the host owns Finish()/Submit() and the frame",
+              "    // fence; in both modes just drop our reference to the encoder.",
+              "    m_wgpuCommandEncoder = nullptr;",
+              "}"
+            ]
+          }
+        }
+      ],
+      "shader_generation": {
+        "source_dir": "renderer/src/shaders",
+        "output_dir": "out/generated",
+        "destination": "thirdparty/rive_renderer/source/generated/shaders",
+        "python_package": "ply",
+        "required_tools": {
+          "minify": [
+            "make"
+          ],
+          "rive_pls_macosx_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_pls_ios_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_pls_ios_simulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_xros_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_xros_simulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_appletvos_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "rive_renderer_appletvsimulator_metallib": [
+            "make",
+            "xcrun",
+            "xxd"
+          ],
+          "spirv": [
+            "make",
+            "glslangValidator"
+          ],
+          "spirv-binary": [
+            "make",
+            "glslangValidator"
+          ],
+          "d3d": [
+            "make",
+            "fxc"
+          ],
+          "wgsl": [
+            "make",
+            "naga"
+          ]
+        },
+        "targets": [
+          "minify",
+          "rive_pls_macosx_metallib",
+          "rive_pls_ios_metallib",
+          "rive_pls_ios_simulator_metallib",
+          "rive_renderer_xros_metallib",
+          "rive_renderer_xros_simulator_metallib",
+          "rive_renderer_appletvos_metallib",
+          "rive_renderer_appletvsimulator_metallib",
+          "spirv",
+          "spirv-binary",
+          "d3d",
+          "wgsl"
+        ],
+        "optional_targets": [
+          "d3d"
+        ]
+      }
+    },
+    {
+      "name": "glad",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/glad",
+      "license": "MIT",
+      "module_header": "thirdparty/glad/glad.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "renderer/glad/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h"
+          ],
+          "preserve_globs": [
+            "glad_custom.h"
+          ]
+        },
+        {
+          "from": "renderer/glad",
+          "to": "include",
+          "include_globs": [
+            "glad_custom.h"
+          ],
+          "preserve_globs": [
+            "EGL/**",
+            "KHR/**",
+            "glad/**"
+          ]
+        },
+        {
+          "from": "renderer/glad/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c"
+          ],
+          "preserve_globs": [
+            "glad_custom.c"
+          ]
+        },
+        {
+          "from": "renderer/glad",
+          "to": "source",
+          "include_globs": [
+            "glad_custom.c"
+          ],
+          "preserve_globs": [
+            "egl.c",
+            "gles2.c"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rive_decoders",
+      "repo": "https://github.com/rive-app/rive-runtime.git",
+      "ref": "main",
+      "destination": "thirdparty/rive_decoders",
+      "license": "MIT",
+      "module_header": "thirdparty/rive_decoders/rive_decoders.h",
+      "module_version_from_ref": true,
+      "follow_rive_ref": true,
+      "copies": [
+        {
+          "from": "decoders/include",
+          "to": "include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "decoders/src",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.m",
+            "**/*.mm"
+          ]
+        }
+      ],
+      "namespace_wraps": [
+        {
+          "path": "include/rive/decoders/bitmap_decoder.hpp",
+          "namespace": "rive",
+          "close_before": "\n#endif\n"
+        },
+        { "path": "source/bitmap_decoder.cpp", "namespace": "rive" },
+        { "path": "source/bitmap_decoder_thirdparty.cpp", "namespace": "rive" },
+        { "path": "source/decode_astc_texture.cpp", "namespace": "rive" },
+        { "path": "source/decode_bc_texture.cpp", "namespace": "rive" },
+        {
+          "path": "source/decode_etc_texture.cpp",
+          "namespace": "rive",
+          "start_after": "                                  int channels);\n"
+        },
+        { "path": "source/decode_jpeg.cpp", "namespace": "rive" },
+        { "path": "source/decode_png.cpp", "namespace": "rive" },
+        { "path": "source/decode_webp.cpp", "namespace": "rive" },
+        { "path": "source/texture_decoder.cpp", "namespace": "rive" }
+      ]
+    },
+    {
+      "name": "luau",
+      "repo": "https://github.com/luigi-rosso/luau.git",
+      "rive_dependency_premake": {
+        "file": "scripting/premake5.lua",
+        "project": "luigi-rosso/luau"
+      },
+      "destination": "thirdparty/luau",
+      "license": "MIT",
+      "module_header": "thirdparty/luau/luau.h",
+      "module_version_from_ref": true,
+      "copies": [
+        {
+          "from": "Common/include",
+          "to": "upstream/Common/include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "Common/src",
+          "to": "upstream/Common/src",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "VM/include",
+          "to": "upstream/VM/include",
+          "include_globs": [
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        },
+        {
+          "from": "VM/src",
+          "to": "upstream/VM/src",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "libhydrogen",
+      "repo": "https://github.com/luigi-rosso/libhydrogen.git",
+      "rive_dependency_premake": {
+        "file": "scripting/premake5.lua",
+        "project": "luigi-rosso/libhydrogen"
+      },
+      "destination": "thirdparty/libhydrogen",
+      "license": "ISC",
+      "module_header": "thirdparty/libhydrogen/libhydrogen.h",
+      "module_version_from_ref": true,
+      "copies": [
+        {
+          "from": ".",
+          "to": "upstream",
+          "include_globs": [
+            "libhydrogen.c",
+            "libhydrogen.h",
+            "impl/**"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "harfbuzz",
+      "repo": "https://github.com/rive-app/harfbuzz.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_harfbuzz_v2.lua",
+        "project": "rive-app/harfbuzz"
+      },
+      "destination": "thirdparty/harfbuzz",
+      "license": "MIT",
+      "copies": [
+        {
+          "from": "src",
+          "to": "upstream",
+          "include_globs": [
+            "**/*.c",
+            "**/*.cc",
+            "**/*.h",
+            "**/*.hh",
+            "**/*.rl"
+          ],
+          "exclude_globs": [
+            "harfbuzz-subset.cc",
+            "*-test*",
+            "test.cc",
+            "test-*",
+            "main.cc",
+            "graph/test-*.cc",
+            "wasm/sample/**"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sheenbidi_library",
+      "repo": "https://github.com/Tehreer/SheenBidi.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_sheenbidi_v2.lua",
+        "project": "Tehreer/SheenBidi"
+      },
+      "destination": "thirdparty/sheenbidi_library",
+      "license": "Apache-2.0",
+      "copies": [
+        {
+          "from": "Headers",
+          "to": "include",
+          "include_globs": [
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "Source",
+          "to": "source",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "yoga_library",
+      "repo": "https://github.com/rive-app/yoga.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_yoga_v2.lua",
+        "project": "rive-app/yoga"
+      },
+      "destination": "thirdparty/yoga_library",
+      "license": "MIT",
+      "copies": [
+        {
+          "from": "yoga",
+          "to": "upstream/yoga",
+          "include_globs": [
+            "**/*.cpp",
+            "**/*.h"
+          ],
+          "exclude_globs": [
+            "tests/**"
+          ]
+        }
+      ],
+      "patches": [
+        {
+          "path": "upstream/yoga/YGMacros.h",
+          "note": "patched YG_DEPRECATED override guard",
+          "already_contains": "#if !defined(YG_DEPRECATED)",
+          "replace": {
+            "from": [
+              "#if defined(__cplusplus)",
+              "#define YG_DEPRECATED(message) [[deprecated(message)]]",
+              "#elif defined(_MSC_VER)",
+              "#define YG_DEPRECATED(message) __declspec(deprecated(message))",
+              "#else",
+              "#define YG_DEPRECATED(message) __attribute__((deprecated(message)))",
+              "#endif",
+              "",
+              "#ifdef _WINDLL"
+            ],
+            "to": [
+              "#if !defined(YG_DEPRECATED)",
+              "#if defined(__cplusplus)",
+              "#define YG_DEPRECATED(message) [[deprecated(message)]]",
+              "#elif defined(_MSC_VER)",
+              "#define YG_DEPRECATED(message) __declspec(deprecated(message))",
+              "#else",
+              "#define YG_DEPRECATED(message) __attribute__((deprecated(message)))",
+              "#endif",
+              "#endif",
+              "",
+              "#ifdef _WINDLL"
+            ]
+          }
+        },
+        {
+          "path": "upstream/yoga/Yoga.cpp",
+          "note": "patched YGConfigGetDefault to use a proper RAII wrapper with cleanup",
+          "already_contains": "struct YogaWrapperWithCleanup",
+          "replace": {
+            "from": [
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static YGConfigRef defaultConfig = YGConfigNew();",
+              "  return defaultConfig;",
+              "}"
+            ],
+            "to": [
+              "namespace {",
+              "struct YogaWrapperWithCleanup {",
+              "  YogaWrapperWithCleanup()",
+              "    : defaultConfig (YGConfigNew())",
+              "  {",
+              "  }",
+              "",
+              "  ~YogaWrapperWithCleanup() {",
+              "    if (defaultConfig != nullptr) {",
+              "      YGConfigFree (defaultConfig);",
+              "      defaultConfig = nullptr;",
+              "    }",
+              "  }",
+              "",
+              "  YGConfigRef defaultConfig = nullptr;",
+              "};",
+              "} // namespace",
+              "",
+              "YOGA_EXPORT YGConfigRef YGConfigGetDefault() {",
+              "  static auto defaultWrapper = YogaWrapperWithCleanup();",
+              "  return defaultWrapper.defaultConfig;",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "libpng",
+      "repo": "https://github.com/glennrp/libpng.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libpng_v2.lua",
+        "project": "glennrp/libpng"
+      },
+      "destination": "thirdparty/libpng",
+      "license": "PNG-2.0",
+      "copies": [
+        {
+          "from": ".",
+          "to": "upstream",
+          "include_globs": [
+            "*.c",
+            "*.h",
+            "LICENSE",
+            "arm/*.c",
+            "arm/*.h",
+            "intel/*.c",
+            "intel/*.h"
+          ],
+          "exclude_globs": [
+            "pngtest.c",
+            "arm/filter_neon.S"
+          ],
+          "preserve_globs": [
+            "pnglibconf.h"
+          ]
+        }
+      ],
+      "patches": [
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "convert anti-double-include guard to a standard include guard for unity builds",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": [
+              "#  define PNGPRIV_H",
+              "#else",
+              "#  error Duplicate inclusion of pngpriv.h; please check the libpng source files",
+              "#endif",
+              "",
+              "#if defined(PNG_H) || defined(PNGCONF_H) || defined(PNGLCONF_H)",
+              "#  error This file must not be included by applications; please include <png.h>",
+              "#endif"
+            ],
+            "to": [
+              "#  define PNGPRIV_H"
+            ]
+          }
+        },
+        {
+          "path": "upstream/pngpriv.h",
+          "note": "add closing endif for PNGPRIV_H include guard",
+          "already_contains": "#endif /* PNGPRIV_H */",
+          "replace": {
+            "from": "#endif /* PNG_VERSION_INFO_ONLY */",
+            "to": "#endif /* PNG_VERSION_INFO_ONLY */\n\n#endif /* PNGPRIV_H */"
+          }
+        }
+      ]
+    },
+    {
+      "name": "libwebp",
+      "repo": "https://github.com/webmproject/libwebp.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libwebp_v2.lua",
+        "project": "webmproject/libwebp"
+      },
+      "destination": "thirdparty/libwebp",
+      "license": "BSD-3-Clause",
+      "copies": [
+        {
+          "from": "src",
+          "to": "upstream/src",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        },
+        {
+          "from": "sharpyuv",
+          "to": "upstream/src/sharpyuv",
+          "include_globs": [
+            "**/*.c",
+            "**/*.h"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "zlib",
+      "repo": "https://github.com/madler/zlib.git",
+      "rive_dependency_premake": {
+        "file": "dependencies/premake5_libpng_v2.lua",
+        "project": "madler/zlib"
+      },
+      "destination": "thirdparty/zlib",
+      "license": "Zlib",
+      "copies": [
+        {
+          "from": ".",
+          "to": "src",
+          "include_globs": [
+            "*.c",
+            "*.h",
+            "README"
+          ],
+          "exclude_globs": [
+            "example.c",
+            "minigzip.c"
+          ]
+        }
+      ]
+    }
+  ],
+  "generated_files": [
+    {
+      "path": "thirdparty/libwebp/upstream/src/webp/config.h",
+      "file_header": "yup_c",
+      "lines": [
+        "#ifndef WEBP_CONFIG_H_",
+        "#define WEBP_CONFIG_H_",
+        "",
+        "/*",
+        "   libwebp expects this generated header when HAVE_CONFIG_H is defined. The YUP",
+        "   unity wrapper defines the actual feature macros before including upstream",
+        "   sources, so this file only provides the include target expected by upstream.",
+        "*/",
+        "",
+        "#endif /* WEBP_CONFIG_H_ */"
+      ]
+    }
+  ],
+  "include_blocks": [
+    {
+      "path": "thirdparty/rive/rive.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE INCLUDES",
+      "insert_after": "#if !defined(_RIVE_INTERNAL_)\n#define _RIVE_INTERNAL_ 1\n#endif",
+      "insert_before": "#if __clang__",
+      "root": "thirdparty/rive/source",
+      "prefix": "source",
+      "include_globs": [
+        "**/*.c",
+        "**/*.cc",
+        "**/*.cpp"
+      ],
+      "exclude_globs": [
+        "**/*_test.*"
+      ],
+      "include_overrides": {
+        "source/animation/nested_bool.cpp": [
+          "#define StateMachineInstance YUPRiveNestedBoolStateMachineInstance",
+          "#include \"source/animation/nested_bool.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/animation/nested_number.cpp": [
+          "#define StateMachineInstance YUPRiveNestedNumberStateMachineInstance",
+          "#include \"source/animation/nested_number.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/animation/nested_trigger.cpp": [
+          "#define StateMachineInstance YUPRiveNestedTriggerStateMachineInstance",
+          "#include \"source/animation/nested_trigger.cpp\"",
+          "#undef StateMachineInstance"
+        ],
+        "source/constraints/constraint.cpp": [
+          "#define identity yup_rive_constraint_identity",
+          "#include \"source/constraints/constraint.cpp\"",
+          "#undef identity"
+        ],
+        "source/core/binary_data_reader.cpp": [
+          "#define is_big_endian yup_rive_binary_data_reader_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_data_reader_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_data_reader_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_data_reader_decode_string",
+          "#define decode_double yup_rive_binary_data_reader_decode_double",
+          "#define decode_float yup_rive_binary_data_reader_decode_float",
+          "#define decode_uint_8 yup_rive_binary_data_reader_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_data_reader_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_data_reader_decode_uint_32",
+          "#include \"source/core/binary_data_reader.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/core/binary_reader.cpp": [
+          "#define is_big_endian yup_rive_binary_reader_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_reader_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_reader_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_reader_decode_string",
+          "#define decode_double yup_rive_binary_reader_decode_double",
+          "#define decode_float yup_rive_binary_reader_decode_float",
+          "#define decode_uint_8 yup_rive_binary_reader_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_reader_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_reader_decode_uint_32",
+          "#include \"source/core/binary_reader.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/core/binary_writer.cpp": [
+          "#define is_big_endian yup_rive_binary_writer_is_big_endian",
+          "#define decode_uint_leb yup_rive_binary_writer_decode_uint_leb",
+          "#define decode_uint_leb32 yup_rive_binary_writer_decode_uint_leb32",
+          "#define decode_string yup_rive_binary_writer_decode_string",
+          "#define decode_double yup_rive_binary_writer_decode_double",
+          "#define decode_float yup_rive_binary_writer_decode_float",
+          "#define decode_uint_8 yup_rive_binary_writer_decode_uint_8",
+          "#define decode_uint_16 yup_rive_binary_writer_decode_uint_16",
+          "#define decode_uint_32 yup_rive_binary_writer_decode_uint_32",
+          "#include \"source/core/binary_writer.cpp\"",
+          "#undef is_big_endian",
+          "#undef decode_uint_leb",
+          "#undef decode_uint_leb32",
+          "#undef decode_string",
+          "#undef decode_double",
+          "#undef decode_float",
+          "#undef decode_uint_8",
+          "#undef decode_uint_16",
+          "#undef decode_uint_32"
+        ],
+        "source/lua/lua_data_context.cpp": [
+          "#define data_value_namecall yup_rive_lua_data_context_namecall",
+          "#include \"source/lua/lua_data_context.cpp\"",
+          "#undef data_value_namecall"
+        ],
+        "source/lua/lua_data_value.cpp": [
+          "#define data_value_namecall yup_rive_lua_data_value_namecall",
+          "#include \"source/lua/lua_data_value.cpp\"",
+          "#undef data_value_namecall"
+        ],
+        "source/math/hit_test.cpp": [
+          "#include \"rive/math/hit_test.hpp\"",
+          "#include \"rive/math/mat2d.hpp\"",
+          "#define graphics_roundf yup_rive_hit_test_graphics_roundf",
+          "#define graphics_round yup_rive_hit_test_graphics_round",
+          "#define lerp yup_rive_hit_test_lerp",
+          "#include \"source/math/hit_test.cpp\"",
+          "#undef graphics_roundf",
+          "#undef graphics_round",
+          "#undef lerp"
+        ],
+        "source/shapes/clipping_shape.cpp": [
+          "#define identity yup_rive_clipping_shape_identity",
+          "#include \"source/shapes/clipping_shape.cpp\"",
+          "#undef identity"
+        ]
+      }
+    },
+    {
+      "path": "thirdparty/rive_renderer/rive_renderer.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE RENDERER INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE RENDERER INCLUDES",
+      "insert_after": "#include \"rive_renderer.h\"",
+      "insert_before": "#if __clang__",
+      "root": "thirdparty/rive_renderer/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c",
+        "*.cc",
+        "*.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/rive_decoders/rive_decoders.cpp",
+      "start_marker": "// BEGIN YUP GENERATED RIVE DECODER INCLUDES",
+      "end_marker": "// END YUP GENERATED RIVE DECODER INCLUDES",
+      "insert_after": "#include \"rive_decoders.h\"",
+      "insert_before": "#if RIVE_JPEG",
+      "root": "thirdparty/rive_decoders/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c",
+        "*.cc",
+        "*.cpp"
+      ],
+      "exclude_globs": [
+        "decode_astc_texture.cpp",
+        "decode_bc_texture.cpp",
+        "decode_etc_texture.cpp",
+        "decode_jpeg.cpp",
+        "decode_ktx2.cpp",
+        "decode_png.cpp",
+        "decode_webp.cpp",
+        "texture_decoder.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/harfbuzz/harfbuzz.cpp",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/harfbuzz"
+      ]
+    },
+    {
+      "path": "thirdparty/sheenbidi_library/sheenbidi_library.c",
+      "start_marker": "// BEGIN YUP GENERATED SHEENBIDI INCLUDES",
+      "end_marker": "// END YUP GENERATED SHEENBIDI INCLUDES",
+      "insert_after": "#if defined(__GNUC__) && !defined(__clang__)\n #pragma GCC diagnostic push\n #pragma GCC diagnostic ignored \"-Wpragmas\"\n #pragma GCC diagnostic ignored \"-Wstringop-overflow\"\n #pragma GCC diagnostic ignored \"-Wnonportable-include-path\"\n#endif",
+      "insert_before": "#if defined(__GNUC__) && !defined(__clang__)",
+      "root": "thirdparty/sheenbidi_library/source",
+      "prefix": "source",
+      "include_globs": [
+        "*.c"
+      ]
+    },
+    {
+      "path": "thirdparty/yoga_library/yoga_library.cpp",
+      "start_marker": "// BEGIN YUP GENERATED YOGA INCLUDES",
+      "end_marker": "// END YUP GENERATED YOGA INCLUDES",
+      "insert_after": "#include \"yoga_library.h\"",
+      "root": "thirdparty/yoga_library/upstream",
+      "prefix": "upstream",
+      "include_globs": [
+        "**/*.cpp"
+      ],
+      "exclude_globs": [
+        "**/*Test.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/libpng/libpng.c",
+      "validate_existing_includes": true
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp_decode.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/libwebp/libwebp_encode.c",
+      "validate_existing_includes": true,
+      "search_roots": [
+        "thirdparty/libwebp",
+        "thirdparty/libwebp/upstream"
+      ]
+    },
+    {
+      "path": "thirdparty/luau/luau.cpp",
+      "validate_existing_includes": true
+    },
+    {
+      "path": "thirdparty/luau/luau_split.cpp",
+      "start_marker": "// BEGIN YUP GENERATED LUAU COMMON INCLUDES",
+      "end_marker": "// END YUP GENERATED LUAU COMMON INCLUDES",
+      "insert_after": "#include \"luau.h\"",
+      "root": "thirdparty/luau/upstream/Common/src",
+      "prefix": "upstream/Common/src",
+      "include_globs": [
+        "**/*.cpp"
+      ]
+    },
+    {
+      "path": "thirdparty/libhydrogen/libhydrogen.c",
+      "validate_existing_includes": true
+    },
+    {
+      "path": "thirdparty/zlib/zlib.c",
+      "validate_existing_includes": true
+    }
+  ]
+}

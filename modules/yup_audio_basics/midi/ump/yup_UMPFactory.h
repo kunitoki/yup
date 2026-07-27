@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -434,6 +434,6 @@ struct Factory
     }
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

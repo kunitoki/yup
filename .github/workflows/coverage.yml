@@ -9,12 +9,21 @@ on:
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
+      - "!**/native/*_curl.*"
+      - "!**/native/*_dawn*.*"
+      - "!**/native/*_d3d.*"
       - "!**/native/*_emscripten.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
+      - "!**/native/*_metal.*"
+      - "!**/native/*_opengl.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - "**"
@@ -26,12 +35,21 @@ on:
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
+      - "!**/native/*_curl.*"
+      - "!**/native/*_dawn*.*"
+      - "!**/native/*_d3d.*"
       - "!**/native/*_emscripten.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
+      - "!**/native/*_metal.*"
+      - "!**/native/*_opengl.*"
+      - "!**/native/*_sdl.*"
       - "!**/native/*_wasm.*"
+      - "!**/native/*_webgpu.*"
       - "!**/native/*_windows.*"
     branches:
       - main
@@ -45,22 +63,21 @@ env:
   INSTALL_DEPS: >-
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
-    libxrandr-dev libxrender-dev libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev lcov
+    libxrandr-dev libxrender-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev
+    libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev lcov
+  IGNORE_ERRORS: "mismatch,gcov,source,negative,unused,empty,format,corrupt"
 
 jobs:
-  coverage:
+  cpp-coverage:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Setup Ninja
-      uses: seanmiddleditch/gha-setup-ninja@master
-
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-
     - name: Configure CMake with Coverage
       run: |
         cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build \
@@ -69,34 +86,43 @@ jobs:
           -DYUP_BUILD_EXAMPLES=OFF \
           -DYUP_ENABLE_COVERAGE=ON \
           -DCMAKE_BUILD_TYPE=Debug
-
     - name: Build Tests
       working-directory: ${{ runner.workspace }}/build
-      run: cmake --build . --config Debug --parallel 4 --target yup_tests
-
+      run: cmake --build . --config Debug --target yup_tests
     - name: Clean Coverage Data
       working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
-
-    - name: Run Tests
+    - name: Run C++ Tests
       working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: ./yup_tests --gtest_output=xml:test_results.xml
-
-    - name: Generate Combined Coverage Report
+      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_output=xml:test_results.xml
+    - name: Generate C++ Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |
-        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source,negative,unused,empty
+        mkdir -p coverage
+        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors ${IGNORE_ERRORS}
         lcov --remove coverage/coverage.info \
+          "*/pybind11/*" \
           "*/thirdparty/*" \
           "*/build/*" \
           "*/tests/*" \
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
-          --output-file coverage/coverage_final.info --ignore-errors mismatch,gcov,source,negative,unused,empty
+          "*/native/*_android.*" \
+          "*/native/*_apple.*" \
+          "*/native/*_curl.*" \
+          "*/native/*_emscripten.*" \
+          "*/native/*_ios.*" \
+          "*/native/*_mac.*" \
+          "*/native/*_wasm.*" \
+          "*/native/*_windows.*" \
+          "*/native/*_sdl.*" \
+          "*/native/*_dawn*.*" \
+          "*/native/*_webgpu.*" \
+          "*/native/*_opengl.*" \
+          --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}
         lcov --list coverage/coverage_final.info
-
-    - name: Upload Overall Coverage to Codecov
+    - name: Upload Coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -104,16 +130,14 @@ jobs:
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
-
     - name: Upload Test Results
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: test-results
         path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
-
     - name: Upload Coverage Reports
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: coverage-reports

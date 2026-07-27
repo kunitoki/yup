@@ -26,7 +26,7 @@
 
     ID:               glad
     vendor:           glad
-    version:          1.0.0
+    version:          0.1.155
     name:             Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator
     description:      Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specifications for multiple languages..
     website:          https://glad.dav1d.de/
@@ -41,6 +41,8 @@
 
 #pragma once
 
-#include "include/glad.h"
+#include "include/EGL/eglplatform.h"
+#include "include/KHR/khrplatform.h"
+#include "include/glad/egl.h"
+#include "include/glad/gles2.h"
 #include "include/glad_custom.h"
-#include "include/khrplatform.h"

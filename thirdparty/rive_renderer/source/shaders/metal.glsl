@@ -40,6 +40,7 @@
 #define float2x2 $float2x2
 #define half3x3 $half3x3
 #define half2x3 $half2x3
+#define half4x4 $half4x4
 #endif
 
 #define INLINE $inline
@@ -147,15 +148,16 @@
 
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     $constexpr $sampler NAME($filter::$linear, $mip_filter::$none);
-#define SAMPLER_MIPMAP(TEXTURE_IDX, NAME)                                      \
-    $constexpr $sampler NAME($filter::$linear, $mip_filter::$linear);
-#define SAMPLER_DYNAMIC(SAMPLER_IDX, NAME)                                     \
-    [[$sampler(SAMPLER_IDX)]] $sampler NAME;
+#define SAMPLER_DYNAMIC(SET, IDX, NAME) [[$sampler(IDX)]] $sampler NAME;
+#define SAMPLER_DYNAMIC_IMAGE(NAME)                                            \
+    [[$sampler(IMAGE_TEXTURE_IDX)]] $sampler NAME;
 #define TEXEL_FETCH(TEXTURE, COORD) _textures.TEXTURE.$read(uint2(COORD))
 #define TEXTURE_SAMPLE(TEXTURE, SAMPLER_NAME, COORD)                           \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD)
 #define TEXTURE_SAMPLE_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)                  \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $level(LOD))
+#define TEXTURE_SAMPLE_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)          \
+    _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $bias(LODBIAS))
 #define TEXTURE_SAMPLE_GRAD(TEXTURE, SAMPLER_NAME, COORD, DDX, DDY)            \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $gradient2d(DDX, DDY))
 #define TEXTURE_GATHER(TEXTURE, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)     \
@@ -164,6 +166,10 @@
     _textures.TEXTURE.$sample(_dynamicSampler.SAMPLER_NAME, COORD)
 #define TEXTURE_SAMPLE_DYNAMIC_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)          \
     _textures.TEXTURE.$sample(_dynamicSampler.SAMPLER_NAME, COORD, $level(LOD))
+#define TEXTURE_SAMPLE_DYNAMIC_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)  \
+    _textures.TEXTURE.$sample(_dynamicSampler.SAMPLER_NAME,                    \
+                              COORD,                                           \
+                              $bias(LODBIAS))
 #define TEXTURE_SAMPLE_LOD_1D_ARRAY(TEXTURE,                                   \
                                     SAMPLER_NAME,                              \
                                     X,                                         \
@@ -247,6 +253,13 @@
         FragmentTextures _textures)                                            \
     {
 
+#define FRAG_DATA_MAIN_WITH_CLOCKWISE(DATA_TYPE, NAME)                         \
+    DATA_TYPE $__attribute__(($visibility("default"))) $fragment NAME(         \
+        Varyings _varyings [[$stage_in]],                                      \
+        FragmentTextures _textures,                                            \
+        bool _clockwise [[$front_facing]])                                     \
+    {
+
 #define EMIT_FRAG_DATA(VALUE)                                                  \
     return VALUE;                                                              \
     }
@@ -259,6 +272,9 @@
 
 #define TEXTURE_CONTEXT_DECL , FragmentTextures _textures
 #define TEXTURE_CONTEXT_FORWARD , _textures
+
+#define CLIP_CONTEXT_FORWARD
+#define CLIP_CONTEXT_UNPACK
 
 #ifdef @PLS_IMPL_DEVICE_BUFFER
 
@@ -278,7 +294,7 @@
     $device uint* NAME                                                         \
         [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE)),          \
           $raster_order_group(0)]]
-#define PLS_DECLUI_ATOMIC(IDX, NAME)                                           \
+#define PLS_DECLUI_UAV(IDX, NAME)                                              \
     $device $atomic_uint* NAME                                                 \
         [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE)),          \
           $raster_order_group(0)]]
@@ -291,7 +307,7 @@
 #define PLS_DECLUI(IDX, NAME)                                                  \
     $device uint* NAME                                                         \
         [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE))]]
-#define PLS_DECLUI_ATOMIC(IDX, NAME)                                           \
+#define PLS_DECLUI_UAV(IDX, NAME)                                              \
     $device $atomic_uint* NAME                                                 \
         [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE))]]
 #endif // @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED
@@ -303,12 +319,12 @@
 
 #define PLS_LOAD4F(PLANE) unpackUnorm4x8(_pls.PLANE[_plsIdx])
 #define PLS_LOADUI(PLANE) _pls.PLANE[_plsIdx]
-#define PLS_LOADUI_ATOMIC(PLANE)                                               \
+#define PLS_LOADUI_UAV(PLANE)                                                  \
     $atomic_load_explicit(&_pls.PLANE[_plsIdx],                                \
                           $memory_order::$memory_order_relaxed)
 #define PLS_STORE4F(PLANE, VALUE) _pls.PLANE[_plsIdx] = packUnorm4x8(VALUE)
 #define PLS_STOREUI(PLANE, VALUE) _pls.PLANE[_plsIdx] = (VALUE)
-#define PLS_STOREUI_ATOMIC(PLANE, VALUE)                                       \
+#define PLS_STOREUI_UAV(PLANE, VALUE)                                          \
     $atomic_store_explicit(&_pls.PLANE[_plsIdx],                               \
                            VALUE,                                              \
                            $memory_order::$memory_order_relaxed)
@@ -385,7 +401,7 @@
     {
 #define PLS_DECL4F(IDX, NAME) [[$color(IDX)]] half4 NAME
 #define PLS_DECLUI(IDX, NAME) [[$color(IDX)]] uint NAME
-#define PLS_DECLUI_ATOMIC PLS_DECLUI
+#define PLS_DECLUI_UAV PLS_DECLUI
 #define PLS_BLOCK_END                                                          \
     }                                                                          \
     ;
@@ -394,10 +410,10 @@
 
 #define PLS_LOAD4F(PLANE) _inpls.PLANE
 #define PLS_LOADUI(PLANE) _inpls.PLANE
-#define PLS_LOADUI_ATOMIC(PLANE) PLS_LOADUI
+#define PLS_LOADUI_UAV(PLANE) PLS_LOADUI
 #define PLS_STORE4F(PLANE, VALUE) _pls.PLANE = (VALUE)
 #define PLS_STOREUI(PLANE, VALUE) _pls.PLANE = (VALUE)
-#define PLS_STOREUI_ATOMIC(PLANE) PLS_STOREUI
+#define PLS_STOREUI_UAV(PLANE) PLS_STOREUI
 #define PLS_PRESERVE_4F(PLANE) _pls.PLANE = _inpls.PLANE
 #define PLS_PRESERVE_UI(PLANE) _pls.PLANE = _inpls.PLANE
 
@@ -442,6 +458,8 @@ INLINE uint pls_atomic_add($thread uint& dst, uint x)
     PLS_METAL_MAIN(                                                            \
         NAME,                                                                  \
         PLS _inpls,                                                            \
+        $constant @FlushUniforms& uniforms                                     \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         Varyings _varyings [[$stage_in]],                                      \
         FragmentTextures _textures,                                            \
         FragmentStorageBuffers _buffers,                                       \
@@ -467,16 +485,21 @@ INLINE uint pls_atomic_add($thread uint& dst, uint x)
         PLS _pls;
 
 #define PLS_FRAG_COLOR_MAIN(NAME)                                              \
-    PLS_FRAG_COLOR_METAL_MAIN(NAME,                                            \
-                              PLS _inpls,                                      \
-                              Varyings _varyings [[$stage_in]],                \
-                              FragmentTextures _textures,                      \
-                              FragmentStorageBuffers _buffers)
+    PLS_FRAG_COLOR_METAL_MAIN(                                                 \
+        NAME,                                                                  \
+        PLS _inpls,                                                            \
+        $constant @FlushUniforms& uniforms                                     \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
+        Varyings _varyings [[$stage_in]],                                      \
+        FragmentTextures _textures,                                            \
+        FragmentStorageBuffers _buffers)
 
 #define PLS_FRAG_COLOR_MAIN_WITH_IMAGE_UNIFORMS(NAME)                          \
     PLS_FRAG_COLOR_METAL_MAIN(                                                 \
         NAME,                                                                  \
         PLS _inpls,                                                            \
+        $constant @FlushUniforms& uniforms                                     \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         Varyings _varyings [[$stage_in]],                                      \
         FragmentTextures _textures,                                            \
         FragmentStorageBuffers _buffers,                                       \

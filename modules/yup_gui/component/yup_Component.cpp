@@ -37,6 +37,8 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+    componentListeners.call (&ComponentListener::componentBeingDeleted, *this);
+
     if (options.onDesktop)
         removeFromDesktop();
 
@@ -75,9 +77,7 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (options.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
-    if (options.isDisabled && hasKeyboardFocus())
-
-        enablementChanged();
+    enablementChanged();
 }
 
 void Component::enablementChanged() {}
@@ -94,14 +94,25 @@ void Component::setVisible (bool shouldBeVisible)
     if (options.isVisible == shouldBeVisible)
         return;
 
+    const bool wasShowing = isShowing();
+
     options.isVisible = shouldBeVisible;
+
+    auto bailOutChecker = BailOutChecker (this);
 
     if (options.onDesktop && native != nullptr)
         native->setVisible (shouldBeVisible);
 
-    visibilityChanged();
+    if (bailOutChecker.shouldBailOut())
+        return;
 
-    repaint();
+    if (wasShowing != isShowing())
+        internalVisibilityChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    internalRepaint();
 }
 
 bool Component::isShowing() const
@@ -134,7 +145,7 @@ void Component::setTitle (const String& title)
 {
     componentTitle = title;
 
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         native->setTitle (title);
 }
 
@@ -152,7 +163,7 @@ void Component::setPosition (const Point<float>& newPosition)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newPosition.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getX() const
@@ -197,7 +208,7 @@ void Component::setTopLeft (const Point<float>& newTopLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopLeft.to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomLeft() const
@@ -212,7 +223,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getTopRight() const
@@ -227,7 +238,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getBottomRight() const
@@ -242,7 +253,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 Point<float> Component::getCenter() const
@@ -257,7 +268,7 @@ void Component::setCenter (const Point<float>& newCenter)
     if (options.onDesktop && native != nullptr)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterX() const
@@ -275,7 +286,7 @@ void Component::setCenterX (float newCenterX)
         native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 float Component::getCenterY() const
@@ -293,21 +304,40 @@ void Component::setCenterY (float newCenterY)
         native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
     }
 
-    moved();
+    sendMoved();
 }
 
 void Component::moved() {}
 
+void Component::sendMoved()
+{
+    moved();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentMoved (*this);
+    });
+}
+
 //==============================================================================
+
+void Component::setSize (float width, float height)
+{
+    setSize ({ width, height });
+}
 
 void Component::setSize (const Size<float>& newSize)
 {
+    auto areaToRepaint = boundsInParent;
     boundsInParent = boundsInParent.withSize (newSize);
+    areaToRepaint = areaToRepaint.unionWith (boundsInParent);
 
     if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
-    resized();
+    sendResized();
+
+    repaint (areaToRepaint);
 }
 
 Size<float> Component::getSize() const
@@ -330,15 +360,28 @@ float Component::getHeight() const
 
 //==============================================================================
 
+void Component::setBounds (float x, float y, float width, float height)
+{
+    setBounds ({ x, y, width, height });
+}
+
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    repaint();
+
     boundsInParent = newBounds;
 
     if (options.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());
 
-    resized();
-    moved();
+    auto bailOutChecker = BailOutChecker (this);
+
+    sendResized();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    sendMoved();
 }
 
 Rectangle<float> Component::getBounds() const
@@ -354,11 +397,11 @@ Rectangle<float> Component::getLocalBounds() const
 Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
 {
     auto bounds = boundsInParent;
-    if (options.onDesktop)
+    if (options.onDesktop || options.paintAsOffscreenRoot)
         return bounds.withZeroPosition();
 
     auto parent = getParentComponent();
-    while (parent != nullptr && ! parent->options.onDesktop)
+    while (parent != nullptr && ! parent->options.onDesktop && ! parent->options.paintAsOffscreenRoot)
     {
         bounds.translate (parent->getPosition());
         parent = parent->getParentComponent();
@@ -379,6 +422,16 @@ float Component::proportionOfHeight (float proportion) const
 
 void Component::resized() {}
 
+void Component::sendResized()
+{
+    resized();
+
+    componentListeners.call ([this] (ComponentListener& listener)
+    {
+        listener.componentResized (*this);
+    });
+}
+
 //==============================================================================
 
 void Component::setTransform (const AffineTransform& newTransform)
@@ -398,7 +451,7 @@ AffineTransform Component::getTransform() const
 
 bool Component::isTransformed() const
 {
-    return transform.isIdentity();
+    return ! transform.isIdentity();
 }
 
 void Component::transformChanged()
@@ -431,7 +484,7 @@ void Component::displayChanged() {}
 
 float Component::getScaleDpi() const
 {
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         return native->getScaleDpi();
 
     if (parentComponent == nullptr)
@@ -450,13 +503,25 @@ void Component::setOpacity (float newOpacity)
 
     opacity = static_cast<uint8> (newOpacity * 255);
 
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
 }
 
 float Component::getOpacity() const
 {
     return opacity / 255.0f;
+}
+
+//==============================================================================
+
+bool Component::isOpaque() const
+{
+    return ! options.isTransparent;
+}
+
+void Component::setOpaque (bool shouldBeOpaque)
+{
+    options.isTransparent = ! shouldBeOpaque;
 }
 
 //==============================================================================
@@ -471,26 +536,36 @@ bool Component::isRenderingUnclipped() const
     return options.unclippedRendering;
 }
 
+void Component::setPaintProfilingDisabled (bool shouldBeDisabled)
+{
+    options.paintProfilingDisabled = shouldBeDisabled;
+}
+
+bool Component::isPaintProfilingDisabled() const
+{
+    return options.paintProfilingDisabled;
+}
+
 void Component::repaint()
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    repaint (getLocalBounds());
+}
 
-    if (getBounds().isEmpty())
-        return;
-
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBoundsRelativeToTopLevelComponent());
+void Component::repaint (float x, float y, float width, float height)
+{
+    repaint ({ x, y, width, height });
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty())
+    cachedTextureCanvas = nullptr;
+
+    if (rect.isEmpty() || ! isShowing())
         return;
 
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    internalRepaint (rect);
 }
 
 //==============================================================================
@@ -555,7 +630,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
-    attachedToNative();
+    internalAttachedToNative();
 
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
@@ -571,13 +646,16 @@ void Component::removeFromDesktop()
 
     native.reset();
 
-    detachedFromNative();
+    internalDetachedFromNative();
 }
 
 //==============================================================================
 
 void Component::toFront (bool shouldGainKeyboardFocus)
 {
+    if (options.onDesktop && native != nullptr)
+        native->toFront();
+
     if (parentComponent == nullptr)
         return;
 
@@ -646,6 +724,11 @@ void Component::lowerBy (int indexToLower)
 
 //==============================================================================
 
+bool Component::hasParent() const
+{
+    return parentComponent != nullptr;
+}
+
 Component* Component::getParentComponent()
 {
     return parentComponent;
@@ -677,12 +760,34 @@ void Component::addChildComponent (Component* component, int index)
         {
             children.move (currentIndex, index);
 
+            auto bailOutChecker = BailOutChecker (this);
+
+            component->internalHierarchyChanged();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+
             childrenChanged();
         }
     }
     else
     {
         children.insert (index, component);
+
+        auto bailOutChecker = BailOutChecker (this);
+
+        if (getNativeComponent() != nullptr)
+        {
+            component->internalAttachedToNative();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+        }
+
+        component->internalHierarchyChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
 
         childrenChanged();
     }
@@ -719,9 +824,26 @@ void Component::removeChildComponent (int index)
         return;
 
     auto component = children.removeAndReturn (index);
+
+    if (component->isShowing())
+        repaint (component->getBounds());
+
     component->parentComponent = nullptr;
 
+    auto bailOutChecker = BailOutChecker (this);
+
+    if (getNativeComponent() != nullptr)
+    {
+        component->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+
     component->internalHierarchyChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     childrenChanged();
 }
@@ -736,13 +858,13 @@ void Component::internalHierarchyChanged()
 {
     parentHierarchyChanged();
 
-    auto checker = BailOutChecker (this);
+    auto bailOutChecker = BailOutChecker (this);
 
     for (int index = children.size(); --index >= 0;)
     {
         auto child = children.getUnchecked (index);
 
-        if (checker.shouldBailOut())
+        if (bailOutChecker.shouldBailOut())
         {
             jassertfalse; // Deleting a parent component when notifying its children!
             return;
@@ -765,7 +887,7 @@ int Component::getNumChildComponents() const
     return children.size();
 }
 
-Component* Component::getComponentAt (int index) const
+Component* Component::getChildComponent (int index) const
 {
     return children.getUnchecked (index);
 }
@@ -833,9 +955,24 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
     options.wantsKeyboardFocus = wantsFocus;
 }
 
+bool Component::getWantsKeyboardFocus() const
+{
+    return options.wantsKeyboardFocus;
+}
+
+void Component::setClickingGrabFocus (bool shouldGrabFocus)
+{
+    options.clickingDoesNotGrabFocus = ! shouldGrabFocus;
+}
+
+bool Component::getClickingGrabFocus() const
+{
+    return ! options.clickingDoesNotGrabFocus;
+}
+
 void Component::takeKeyboardFocus()
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
@@ -853,7 +990,7 @@ void Component::leaveKeyboardFocus()
 
 bool Component::hasKeyboardFocus() const
 {
-    if (! options.wantsKeyboardFocus)
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return false;
 
     if (auto nativeComponent = getNativeComponent())
@@ -865,6 +1002,20 @@ bool Component::hasKeyboardFocus() const
 void Component::focusGained() {}
 
 void Component::focusLost() {}
+
+//==============================================================================
+
+void Component::handleKeyboardFocusFromClick()
+{
+    for (auto* component = this; component != nullptr; component = component->parentComponent)
+    {
+        if (component->options.wantsKeyboardFocus && ! component->options.clickingDoesNotGrabFocus)
+        {
+            component->takeKeyboardFocus();
+            return;
+        }
+    }
+}
 
 //==============================================================================
 
@@ -880,11 +1031,32 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g) {}
+void Component::paint (Graphics& g)
+{
+    jassert (! isOpaque()); // If your component is opaque, you need to paint it !
+}
 
 void Component::paintOverChildren (Graphics& g) {}
 
 void Component::refreshDisplay (double lastFrameTimeSeconds) {}
+
+//==============================================================================
+
+void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
+{
+    options.blockSelfMouseEvents = ! allowSelfMouseEvents;
+    options.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
+}
+
+bool Component::doesWantSelfMouseEvents() const
+{
+    return ! options.blockSelfMouseEvents;
+}
+
+bool Component::doesWantChildrenMouseEvents() const
+{
+    return ! options.blockChildrenMouseEvents;
+}
 
 //==============================================================================
 
@@ -903,6 +1075,16 @@ void Component::mouseUp (const MouseEvent& event) {}
 void Component::mouseDoubleClick (const MouseEvent& event) {}
 
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
+
+bool Component::isInterestedInDrag (const DragAndDropData& data) { return false; }
+
+bool Component::itemsDropped (const Point<float>& position, const DragAndDropData& data) { return false; }
+
+void Component::itemDragEnter (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragMove (const DragAndDropData& data, const Point<float>& position) {}
+
+void Component::itemDragExit (const DragAndDropData& data) {}
 
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
@@ -924,6 +1106,18 @@ void Component::removeMouseListener (MouseListener* listener)
 
 //==============================================================================
 
+void Component::addComponentListener (ComponentListener* listener)
+{
+    componentListeners.add (listener);
+}
+
+void Component::removeComponentListener (ComponentListener* listener)
+{
+    componentListeners.remove (listener);
+}
+
+//==============================================================================
+
 void Component::setStyle (ComponentStyle::Ptr newStyle)
 {
     if (style == newStyle)
@@ -931,7 +1125,12 @@ void Component::setStyle (ComponentStyle::Ptr newStyle)
 
     style = std::move (newStyle);
 
+    auto bailOutChecker = BailOutChecker (this);
+
     styleChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint();
 }
@@ -951,6 +1150,8 @@ void Component::setColor (const Identifier& colorId, const std::optional<Color>&
         properties.set (colorId, static_cast<int64> (color->getARGB()));
     else
         properties.remove (colorId);
+
+    styleChanged();
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
@@ -972,9 +1173,133 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
     return std::nullopt;
 }
 
+//==============================================================================
+
+void Component::setMetric (const Identifier& metricId, const std::optional<float>& metric)
+{
+    if (metric)
+        properties.set (metricId, static_cast<double> (*metric));
+    else
+        properties.remove (metricId);
+
+    styleChanged();
+}
+
+std::optional<float> Component::getMetric (const Identifier& metricId) const
+{
+    if (auto value = properties.getVarPointer (metricId); value != nullptr && value->isDouble())
+        return static_cast<float> (static_cast<double> (*value));
+
+    return std::nullopt;
+}
+
+std::optional<float> Component::findMetric (const Identifier& metricId) const
+{
+    if (auto metric = getMetric (metricId))
+        return metric;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findMetric (metricId);
+
+    return std::nullopt;
+}
+
+//==============================================================================
+
+//==============================================================================
+
+void Component::setComponentEffect (ComponentEffect::Ptr effect)
+{
+    componentEffect = std::move (effect);
+    repaint();
+}
+
+ComponentEffect::Ptr Component::getComponentEffect() const
+{
+    return componentEffect;
+}
+
+void Component::setCachedToTexture (bool shouldCache)
+{
+    if (options.cachedToTexture == shouldCache)
+        return;
+
+    options.cachedToTexture = shouldCache;
+    cachedTextureCanvas = nullptr;
+    repaint();
+}
+
+bool Component::isCachedToTexture() const
+{
+    return options.cachedToTexture;
+}
+
+GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects)
+{
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return nullptr;
+
+    auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
+    if (canvas == nullptr)
+        return nullptr;
+
+    if (! includeEffects || componentEffect == nullptr)
+        return canvas;
+
+    auto texture = canvas->asTexture();
+
+    auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+    if (effectCanvas == nullptr)
+        return canvas;
+
+    auto& g = effectCanvas->beginDraw();
+    auto localBounds = getLocalBounds();
+    g.setDrawingArea (localBounds);
+    componentEffect->apply (g, texture, localBounds);
+
+    return effectCanvas;
+}
+
+Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return {};
+
+    return canvas->asImage();
+}
+
+GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool includeEffects)
+{
+    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+    if (canvas == nullptr)
+        return nullptr;
+
+    return canvas->asTexture();
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
+
+bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
+{
+    // Check only direct children - no recursive hierarchy traversal
+    for (int childIndex = children.size(); --childIndex >= 0;)
+    {
+        auto child = children.getUnchecked (childIndex);
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+            continue;
+
+        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
+        if (childBounds.contains (area))
+            return true;
+    }
+
+    return false;
+}
 
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
@@ -986,9 +1311,143 @@ void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 
 //==============================================================================
 
+void Component::internalRepaint()
+{
+    internalRepaint (getLocalBounds());
+}
+
+void Component::internalRepaint (const Rectangle<float>& rect)
+{
+    if (rect.isEmpty())
+        return;
+
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+}
+
+//==============================================================================
+
+void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous)
+{
+    for (auto child : children)
+        child->internalPaint (g, clipArea, renderContinuous);
+
+    paintOverChildren (g);
+}
+
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous)
+{
+    if (getWidth() <= 0.0f || getHeight() <= 0.0f)
+        return nullptr;
+
+    const auto w = static_cast<int> (getWidth());
+    const auto h = static_cast<int> (getHeight());
+
+    auto canvas = GpuCanvas::create (ctx, w, h);
+    if (canvas == nullptr)
+        return nullptr;
+
+    auto& offscreenG = canvas->beginDraw();
+
+    options.paintAsOffscreenRoot = true;
+
+    auto localBounds = getLocalBounds();
+    paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
+
+    options.paintAsOffscreenRoot = false;
+
+    canvas->commit();
+    return canvas;
+}
+
+//==============================================================================
+
+void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
+{
+    options.isRepainting = true;
+
+    {
+        const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+
+        ComponentPaintMetrics metrics;
+        int64 totalStartTicks = 0;
+        int64 selfStartTicks = 0;
+
+        if (shouldMeasurePaint)
+        {
+            totalStartTicks = Time::getHighResolutionTicks();
+            metrics.repaintArea = drawingArea;
+            metrics.componentBounds = drawingArea;
+            metrics.renderContinuous = renderContinuous;
+        }
+
+        const auto globalState = g.saveState();
+
+        g.setOpacity (opacity);
+        g.setDrawingArea (drawingArea);
+        if (! options.unclippedRendering)
+            g.setClipPath (clipArea);
+        g.setTransform (transform);
+
+        bool canSkipPaint = false;
+        if (! options.unclippedRendering && ! isTransformed())
+            canSkipPaint = hasOpaqueChildCoveringArea (clipArea);
+
+        if (! canSkipPaint)
+        {
+            const auto paintState = g.saveState();
+
+            if (shouldMeasurePaint)
+            {
+                selfStartTicks = Time::getHighResolutionTicks();
+                paint (g);
+                metrics.selfTicks += Time::getHighResolutionTicks() - selfStartTicks;
+            }
+            else
+            {
+                paint (g);
+            }
+        }
+        else
+        {
+            if (shouldMeasurePaint)
+                metrics.selfPaintSkipped = true;
+        }
+
+        if (shouldMeasurePaint)
+        {
+            const int64 childrenStartTicks = Time::getHighResolutionTicks();
+
+            for (auto child : children)
+                child->internalPaint (g, clipArea, renderContinuous);
+
+            metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
+
+            selfStartTicks = Time::getHighResolutionTicks();
+
+            paintOverChildren (g);
+
+            const int64 selfEndTicks = Time::getHighResolutionTicks();
+
+            metrics.selfTicks += selfEndTicks - selfStartTicks;
+            metrics.totalTicks = selfEndTicks - totalStartTicks;
+
+            componentListeners.call (&ComponentListener::componentPaintCompleted, *this, metrics);
+        }
+        else
+        {
+            paintChildrenAndOverChildren (g, clipArea, renderContinuous);
+        }
+    }
+
+    options.isRepainting = false;
+}
+
+//==============================================================================
+
 void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
 {
-    if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
+    if (! isVisible() || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
 
     auto bounds = getBoundsRelativeToTopLevelComponent();
@@ -1001,37 +1460,84 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
+    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto opacity = g.getOpacity() * selfOpacity;
     if (opacity <= 0.0f)
         return;
 
-    options.isRepainting = true;
-
+    // Effect path: render full subtree offscreen, apply effect, composite
+    if (componentEffect != nullptr)
     {
-        const auto globalState = g.saveState();
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous);
+        if (canvas == nullptr)
+            return;
 
-        g.setOpacity (opacity);
-        g.setDrawingArea (bounds);
-        if (! options.unclippedRendering)
-            g.setClipPath (boundsToRedraw);
-
-        g.setTransform (transform);
+        auto texture = canvas->asTexture();
 
         {
-            const auto paintState = g.saveState();
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
 
-            paint (g);
+            componentEffect->apply (g, texture, getLocalBounds());
         }
 
-        for (auto child : children)
-            child->internalPaint (g, boundsToRedraw, renderContinuous);
+        if (options.cachedToTexture)
+            cachedTextureCanvas = canvas;
 
-        paintOverChildren (g);
+        return;
     }
 
-    options.isRepainting = false;
+    // Cache path: cache own paint(), children paint on top
+    if (options.cachedToTexture)
+    {
+        if (cachedTextureCanvas == nullptr)
+        {
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(),
+                                             static_cast<int> (getWidth()),
+                                             static_cast<int> (getHeight()));
+            if (canvas != nullptr)
+            {
+                auto& offscreenG = canvas->beginDraw();
+                auto localBounds = getLocalBounds();
+                offscreenG.setOpacity (opacity);
+                offscreenG.setDrawingArea (localBounds);
+                offscreenG.setTransform (transform);
+                paint (offscreenG);
+                canvas->commit();
+                cachedTextureCanvas = canvas;
+            }
+        }
 
-#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+        options.isRepainting = true;
+
+        {
+            const auto saved = g.saveState();
+            g.setOpacity (opacity);
+            g.setDrawingArea (bounds);
+            if (! options.unclippedRendering)
+                g.setClipPath (boundsToRedraw);
+            g.setTransform (transform);
+
+            if (cachedTextureCanvas != nullptr)
+                g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());
+            else
+                paint (g);
+        }
+
+        options.isRepainting = false;
+
+        paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
+        return;
+    }
+
+    // Normal paint path
+    paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
+
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     g.setFillColor (debugColor);
     g.setOpacity (0.2f);
     g.fillAll();
@@ -1053,9 +1559,14 @@ void Component::internalMouseEnter (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseEnter (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseEnter, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseEnter, event);
 }
 
 //==============================================================================
@@ -1067,9 +1578,14 @@ void Component::internalMouseExit (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseExit (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseExit, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseExit, event);
 }
 
 //==============================================================================
@@ -1081,9 +1597,19 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
+    handleKeyboardFocusFromClick();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     mouseDown (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDown, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
 }
 
 //==============================================================================
@@ -1095,9 +1621,14 @@ void Component::internalMouseMove (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseMove (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseMove, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseMove, event);
 }
 
 //==============================================================================
@@ -1109,9 +1640,14 @@ void Component::internalMouseDrag (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDrag (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDrag, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDrag, event);
 }
 
 //==============================================================================
@@ -1123,9 +1659,14 @@ void Component::internalMouseUp (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseUp (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseUp, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseUp, event);
 }
 
 //==============================================================================
@@ -1135,9 +1676,14 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDoubleClick (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDoubleClick, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDoubleClick, event);
 }
 
 //==============================================================================
@@ -1147,16 +1693,90 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseWheel (event, wheelData);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseWheel, event, wheelData);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
+}
+
+//==============================================================================
+
+bool Component::internalItemsDropped (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    // Convert the window (root) position into this component's local coordinates,
+    // mirroring MouseEvent::withRelativePositionTo.
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+        {
+            if (current->itemsDropped (localPosition, data))
+                return true;
+        }
+
+        // Ascend to the parent: the parent-local position adds back this component's offset.
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+void Component::internalItemDragEnter (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragEnter (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragMove (const DragAndDropData& data, const Point<float>& windowPosition)
+{
+    auto localPosition = windowPosition;
+    for (Component* current = this; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
+        localPosition = localPosition - current->getBounds().getPosition();
+
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragMove (data, localPosition);
+
+        if (current->getParentComponent() != nullptr)
+            localPosition = localPosition + current->getBounds().getPosition();
+    }
+}
+
+void Component::internalItemDragExit (const DragAndDropData& data)
+{
+    for (Component* current = this; current != nullptr; current = current->getParentComponent())
+    {
+        if (current->isVisible() && current->isEnabled() && current->isInterestedInDrag (data))
+            current->itemDragExit (data);
+    }
 }
 
 //==============================================================================
 
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyDown (keys, position);
@@ -1166,7 +1786,7 @@ void Component::internalKeyDown (const KeyPress& keys, const Point<float>& posit
 
 void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    if (! isVisible())
+    if (! isVisible() || ! isEnabled())
         return;
 
     keyUp (keys, position);
@@ -1176,7 +1796,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! options.wantsKeyboardFocus || ! isVisible())
+    if (! options.wantsKeyboardFocus || ! isVisible() || ! isEnabled())
         return;
 
     textInput (text);
@@ -1186,18 +1806,38 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
+    const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
-    resized();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendResized();
+    }
 }
 
 //==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
+    const auto newBounds = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
-    moved();
+    if (newBounds != boundsInParent)
+    {
+        boundsInParent = newBounds;
+
+        sendMoved();
+    }
+}
+
+//==============================================================================
+
+void Component::internalFocusChanged (bool gotFocus)
+{
+    if (gotFocus)
+        focusGained();
+    else
+        focusLost();
 }
 
 //==============================================================================
@@ -1208,7 +1848,32 @@ void Component::internalDisplayChanged() {}
 
 void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged (dpiScale);
+    if (contentScale != dpiScale)
+    {
+        contentScale = dpiScale;
+
+        contentScaleChanged (dpiScale);
+    }
+}
+
+//==============================================================================
+
+void Component::internalSafeAreaChanged()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    safeAreaChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalSafeAreaChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 //==============================================================================
@@ -1220,9 +1885,233 @@ void Component::internalUserTriedToCloseWindow()
 
 //==============================================================================
 
+void Component::internalAttachedToNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    attachedToNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalAttachedToNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+void Component::internalDetachedFromNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    detachedFromNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
+void Component::internalVisibilityChanged()
+{
+    visibilityChanged();
+
+    auto bailOutChecker = BailOutChecker (this);
+
+    for (int index = children.size(); --index >= 0;)
+    {
+        auto child = children.getUnchecked (index);
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        if (child->isVisible())
+            child->internalVisibilityChanged();
+
+        index = jmin (index, children.size());
+    }
+}
+
+//==============================================================================
+
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
+}
+
+//==============================================================================
+
+Point<float> Component::getScreenPosition() const
+{
+    return localToScreen (getPosition());
+}
+
+//==============================================================================
+
+Rectangle<float> Component::getScreenBounds() const
+{
+    return localToScreen (getLocalBounds());
+}
+
+//==============================================================================
+
+Rectangle<float> Component::getSafeAreaBounds() const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getSafeAreaBounds().to<float>();
+
+    if (parentComponent == nullptr)
+        return getLocalBounds();
+
+    return parentComponent->getSafeAreaBounds()
+        .translated (-getPosition())
+        .intersection (getLocalBounds());
+}
+
+void Component::safeAreaChanged() {}
+
+//==============================================================================
+
+Point<float> Component::localToScreen (const Point<float>& localPoint) const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getPosition().to<float>() + localPoint;
+
+    auto screenPos = localPoint + getPosition();
+    auto parent = getParentComponent();
+
+    while (parent != nullptr)
+    {
+        if (parent->options.onDesktop && parent->native != nullptr)
+        {
+            screenPos += parent->native->getPosition().to<float>();
+            break;
+        }
+        else
+        {
+            screenPos += parent->getPosition();
+        }
+
+        parent = parent->getParentComponent();
+    }
+
+    return screenPos;
+}
+
+Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
+{
+    return screenPoint - localToScreen (Point<float> (0.0f, 0.0f));
+}
+
+Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
+{
+    return Rectangle<float> (localToScreen (localRectangle.getPosition()), localRectangle.getSize());
+}
+
+Rectangle<float> Component::screenToLocal (const Rectangle<float>& screenRectangle) const
+{
+    return Rectangle<float> (screenToLocal (screenRectangle.getPosition()), screenRectangle.getSize());
+}
+
+//==============================================================================
+
+Point<float> Component::getLocalPoint (const Component* sourceComponent, Point<float> pointInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return pointInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (pointInSource));
+}
+
+Rectangle<float> Component::getLocalArea (const Component* sourceComponent, Rectangle<float> rectangleInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return rectangleInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (rectangleInSource));
+}
+
+//==============================================================================
+
+Point<float> Component::getRelativePoint (const Component* targetComponent, Point<float> localPoint) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localPoint;
+
+    return targetComponent->screenToLocal (localToScreen (localPoint));
+}
+
+Rectangle<float> Component::getRelativeArea (const Component* targetComponent, Rectangle<float> localRectangle) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localRectangle;
+
+    return targetComponent->screenToLocal (localToScreen (localRectangle));
+}
+
+//==============================================================================
+
+AffineTransform Component::getTransformToComponent (const Component* targetComponent) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return AffineTransform();
+
+    AffineTransform transform;
+
+    auto thisToScreen = getTransformToScreen();
+    auto targetToScreen = targetComponent->getTransformToScreen();
+
+    transform = thisToScreen.followedBy (targetToScreen.inverted());
+
+    return transform;
+}
+
+AffineTransform Component::getTransformFromComponent (const Component* sourceComponent) const
+{
+    if (sourceComponent == nullptr)
+        return AffineTransform();
+
+    return sourceComponent->getTransformToComponent (this);
+}
+
+AffineTransform Component::getTransformToScreen() const
+{
+    AffineTransform transform;
+    const Component* comp = this;
+
+    while (comp != nullptr)
+    {
+        if (comp->isTransformed())
+            transform = transform.followedBy (comp->getTransform());
+
+        transform = transform.translated (comp->getPosition());
+
+        if (comp->options.onDesktop)
+        {
+            if (comp->native != nullptr)
+            {
+                auto nativePos = comp->native->getPosition().to<float>();
+                transform = transform.translated (nativePos);
+            }
+
+            break;
+        }
+
+        comp = comp->getParentComponent();
+    }
+
+    return transform;
 }
 
 } // namespace yup

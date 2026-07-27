@@ -24,15 +24,30 @@ LinearAnimation::~LinearAnimation()
 
 StatusCode LinearAnimation::onAddedDirty(CoreContext* context)
 {
-    StatusCode code;
-    for (const auto& object : m_KeyedObjects)
+    StatusCode status = StatusCode::Ok;
+    std::vector<size_t> failedKeyedObjects;
+    for (size_t i = 0; i < m_KeyedObjects.size(); ++i)
     {
-        if ((code = object->onAddedDirty(context)) != StatusCode::Ok)
+        StatusCode code = m_KeyedObjects[i]->onAddedDirty(context);
+        if (code != StatusCode::Ok)
         {
-            return code;
+            failedKeyedObjects.push_back(i);
+            if (status == StatusCode::Ok || status == StatusCode::MissingObject)
+            {
+                status = code;
+            }
         }
     }
-    return StatusCode::Ok;
+
+    // Failed keyed objects should not be applied later in animation playback.
+    for (auto it = failedKeyedObjects.rbegin(); it != failedKeyedObjects.rend();
+         ++it)
+    {
+        m_KeyedObjects.erase(m_KeyedObjects.begin() + *it);
+    }
+
+    // Missing keyed objects are non-fatal at artboard init time.
+    return status == StatusCode::MissingObject ? StatusCode::Ok : status;
 }
 
 StatusCode LinearAnimation::onAddedClean(CoreContext* context)
@@ -53,7 +68,10 @@ void LinearAnimation::addKeyedObject(std::unique_ptr<KeyedObject> object)
     m_KeyedObjects.push_back(std::move(object));
 }
 
-void LinearAnimation::apply(Artboard* artboard, float time, float mix) const
+void LinearAnimation::apply(Artboard* artboard,
+                            float time,
+                            float mix,
+                            const LinearAnimationInstance* context) const
 {
     if (quantize())
     {
@@ -62,7 +80,7 @@ void LinearAnimation::apply(Artboard* artboard, float time, float mix) const
     }
     for (const auto& object : m_KeyedObjects)
     {
-        object->apply(artboard, time, mix);
+        object->apply(artboard, time, mix, context);
     }
 }
 

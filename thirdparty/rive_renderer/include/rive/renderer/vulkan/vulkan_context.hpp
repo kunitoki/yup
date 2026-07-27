@@ -16,15 +16,27 @@ namespace rive::gpu
 // supported.
 struct VulkanFeatures
 {
-    uint32_t apiVersion = VK_API_VERSION_1_0;
+    uint32_t apiVersion = VK_API_VERSION_1_1;
 
     // VkPhysicalDeviceFeatures.
     bool independentBlend = false;
     bool fillModeNonSolid = false;
     bool fragmentStoresAndAtomics = false;
+    bool shaderClipDistance = false;
 
     // EXT_rasterization_order_attachment_access.
     bool rasterizationOrderColorAttachmentAccess = false;
+
+    // VK_EXT_fragment_shader_interlock.
+    bool fragmentShaderPixelInterlock = false;
+
+    // Indicates a nonconformant driver, like MoltenVK.
+    bool VK_KHR_portability_subset = false;
+
+    // VkPhysicalDeviceFeatures – texture compression.
+    bool textureCompressionBC = false;       // BC1/BC2/BC3/BC7
+    bool textureCompressionASTC_LDR = false; // ASTC LDR
+    bool textureCompressionETC2 = false;     // ETC2
 };
 
 // Wraps a VkDevice, function dispatch table, and VMA library instance.
@@ -54,10 +66,14 @@ public:
 #define RIVE_VULKAN_INSTANCE_COMMANDS(F)                                       \
     F(GetDeviceProcAddr)                                                       \
     F(GetPhysicalDeviceFormatProperties)                                       \
-    F(GetPhysicalDeviceProperties)
+    F(GetPhysicalDeviceProperties)                                             \
+    F(GetPhysicalDeviceFeatures)                                               \
+    F(SetDebugUtilsObjectNameEXT)
 
 #define RIVE_VULKAN_DEVICE_COMMANDS(F)                                         \
+    F(AllocateCommandBuffers)                                                  \
     F(AllocateDescriptorSets)                                                  \
+    F(BeginCommandBuffer)                                                      \
     F(CmdBeginRenderPass)                                                      \
     F(CmdBindDescriptorSets)                                                   \
     F(CmdBindIndexBuffer)                                                      \
@@ -65,6 +81,8 @@ public:
     F(CmdBindVertexBuffers)                                                    \
     F(CmdBlitImage)                                                            \
     F(CmdClearColorImage)                                                      \
+    F(CmdSetStencilReference)                                                  \
+    F(CmdSetBlendConstants)                                                    \
     F(CmdCopyBufferToImage)                                                    \
     F(CmdDraw)                                                                 \
     F(CmdDrawIndexed)                                                          \
@@ -74,17 +92,21 @@ public:
     F(CmdPipelineBarrier)                                                      \
     F(CmdSetScissor)                                                           \
     F(CmdSetViewport)                                                          \
+    F(CreateCommandPool)                                                       \
     F(CreateDescriptorPool)                                                    \
     F(CreateDescriptorSetLayout)                                               \
     F(CreateFramebuffer)                                                       \
+    F(CreateFence)                                                             \
     F(CreateGraphicsPipelines)                                                 \
     F(CreateImageView)                                                         \
     F(CreatePipelineLayout)                                                    \
     F(CreateRenderPass)                                                        \
     F(CreateSampler)                                                           \
     F(CreateShaderModule)                                                      \
+    F(DestroyCommandPool)                                                      \
     F(DestroyDescriptorPool)                                                   \
     F(DestroyDescriptorSetLayout)                                              \
+    F(DestroyFence)                                                            \
     F(DestroyFramebuffer)                                                      \
     F(DestroyImageView)                                                        \
     F(DestroyPipeline)                                                         \
@@ -92,8 +114,16 @@ public:
     F(DestroyRenderPass)                                                       \
     F(DestroySampler)                                                          \
     F(DestroyShaderModule)                                                     \
+    F(EndCommandBuffer)                                                        \
+    F(FreeCommandBuffers)                                                      \
+    F(FreeDescriptorSets)                                                      \
+    F(QueueSubmit)                                                             \
+    F(QueueWaitIdle)                                                           \
+    F(ResetCommandBuffer)                                                      \
     F(ResetDescriptorPool)                                                     \
-    F(UpdateDescriptorSets)
+    F(ResetFences)                                                             \
+    F(UpdateDescriptorSets)                                                    \
+    F(WaitForFences)
 
 #define DECLARE_VULKAN_COMMAND(CMD) const PFN_vk##CMD CMD;
     RIVE_VULKAN_INSTANCE_COMMANDS(DECLARE_VULKAN_COMMAND)
@@ -102,18 +132,33 @@ public:
 
     VmaAllocator allocator() const { return m_vmaAllocator; }
 
+    const VkPhysicalDeviceProperties& physicalDeviceProperties() const
+    {
+        return m_physicalDeviceProperties;
+    }
+
     bool isFormatSupportedWithFeatureFlags(VkFormat, VkFormatFeatureFlagBits);
     bool supportsD24S8() const { return m_supportsD24S8; }
 
     // Resource allocation.
     rcp<vkutil::Buffer> makeBuffer(const VkBufferCreateInfo&,
                                    vkutil::Mappability);
-    rcp<vkutil::Image> makeImage(const VkImageCreateInfo&);
-    rcp<vkutil::ImageView> makeImageView(rcp<vkutil::Image>);
+    rcp<vkutil::Image> makeImage(const VkImageCreateInfo&, const char* name);
+    // Adopts an externally-owned VkImage; does not free it on destruction.
+    rcp<vkutil::Image> makeExternalImage(VkImage existingImage,
+                                         const VkImageCreateInfo&,
+                                         const char* name);
+    rcp<vkutil::ImageView> makeImageView(rcp<vkutil::Image>, const char* name);
     rcp<vkutil::ImageView> makeImageView(rcp<vkutil::Image>,
-                                         const VkImageViewCreateInfo&);
-    rcp<vkutil::ImageView> makeExternalImageView(const VkImageViewCreateInfo&);
-    rcp<vkutil::Texture2D> makeTexture2D(const VkImageCreateInfo&);
+                                         const VkImageViewCreateInfo&,
+                                         const char* name);
+    rcp<vkutil::ImageView> makeExternalImageView(const VkImageViewCreateInfo&,
+                                                 const char* name);
+    rcp<vkutil::Texture2D> makeTexture2D(const VkImageCreateInfo&,
+                                         const char* name);
+    // Builds a Texture2D over a pre-allocated (typically external) Image.
+    rcp<vkutil::Texture2D> makeTexture2D(rcp<vkutil::Image> existingImage,
+                                         const char* name);
     rcp<vkutil::Framebuffer> makeFramebuffer(const VkFramebufferCreateInfo&);
 
     // Helpers.
@@ -167,13 +212,23 @@ public:
                              VkDependencyFlags,
                              VkBufferMemoryBarrier);
 
+    void clearColorImage(VkCommandBuffer, ColorInt, VkImage, VkImageLayout);
+
     void blitSubRect(VkCommandBuffer commandBuffer,
-                     VkImage src,
-                     VkImage dst,
+                     VkImage srcImage,
+                     VkImageLayout srcImageLayout,
+                     VkImage dstImage,
+                     VkImageLayout dstImageLayout,
                      const IAABB&);
+
+    void setDebugNameIfEnabled(uint64_t handle,
+                               VkObjectType objectType,
+                               const char* name);
 
 private:
     const VmaAllocator m_vmaAllocator;
+
+    VkPhysicalDeviceProperties m_physicalDeviceProperties;
 
     // Vulkan spec: must support one of D24S8 and D32S8.
     bool m_supportsD24S8 = false;

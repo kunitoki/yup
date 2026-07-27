@@ -64,16 +64,13 @@
 
 #include "audio_io/yup_SampleRateHelpers.cpp"
 #include "midi_io/yup_MidiDevices.cpp"
+#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
+#include "midi_io/ump/yup_UMPU32InputHandler.h"
 
 //==============================================================================
 #if YUP_MAC || YUP_IOS
 #include <yup_audio_basics/native/yup_CoreAudioTimeConversions_apple.h>
 #include <yup_audio_basics/native/yup_AudioWorkgroup_apple.h>
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
-#include <yup_audio_basics/midi/ump/yup_UMP.h>
-
-#include "midi_io/ump/yup_UMPBytestreamInputHandler.h"
-#include "midi_io/ump/yup_UMPU32InputHandler.h"
 #endif
 
 #if YUP_MAC
@@ -140,7 +137,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #endif
 // clang-format on
 
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_windows.cpp"
 
 // clang-format off
@@ -167,7 +163,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <iasiodrv.h>
 #include "native/yup_ASIO_windows.cpp"
 #endif
-// clang-format oon
+// clang-format on
 
 //==============================================================================
 #elif YUP_LINUX || YUP_BSD
@@ -194,7 +190,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 */
 #include <Bela.h>
 #include <Midi.h>
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Bela_linux.cpp"
 #endif
 // clang-format on
@@ -202,7 +197,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #undef SIZEOF
 
 #if ! YUP_BELA
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_linux.cpp"
 #endif
 
@@ -217,7 +211,6 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 
 #include "native/yup_Audio_android.cpp"
 
-#include <yup_audio_basics/midi/yup_MidiDataConcatenator.h>
 #include "native/yup_Midi_android.cpp"
 
 #if YUP_USE_ANDROID_OPENSLES || YUP_USE_ANDROID_OBOE
@@ -319,5 +312,6 @@ bool YUP_CALLTYPE SystemAudioVolume::setMuted (bool)
 #include "audio_io/yup_AudioIODevice.cpp"
 #include "audio_io/yup_AudioIODeviceType.cpp"
 #include "midi_io/yup_MidiMessageCollector.cpp"
+#include "midi_io/ump/yup_UMPPacketCollector.cpp"
 #include "sources/yup_AudioSourcePlayer.cpp"
 #include "sources/yup_AudioTransportSource.cpp"

@@ -74,6 +74,11 @@ public:
     */
     virtual const var& getProperty (const Identifier& propertyName) const;
 
+    /** Returns a named property.
+        This returns defaultValue if no such property exists.
+    */
+    virtual const var& getProperty (const Identifier& propertyName, const var& defaultValue) const;
+
     /** Sets a named property. */
     virtual void setProperty (const Identifier& propertyName, const var& newValue);
 

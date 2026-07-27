@@ -42,44 +42,17 @@ float defaultFromString (const String& string)
 //==============================================================================
 
 AudioParameter::AudioParameter (const String& id,
-                                const String& name,
-                                float minValue,
-                                float maxValue,
-                                float defaultValue,
+                                Metadata metadata,
                                 ValueToString valueToString,
-                                StringToValue stringToValue,
-                                bool smoothingEnabled,
-                                float smoothingTimeMs)
+                                StringToValue stringToValue)
     : paramID (id)
-    , paramName (name)
-    , valueRange (minValue, maxValue)
-    , defaultValue (defaultValue)
+    , metadata (std::move (metadata))
     , valueToString (valueToString ? valueToString : defaultToString)
     , stringToValue (stringToValue ? stringToValue : defaultFromString)
-    , smoothingEnabled (smoothingEnabled)
-    , smoothingTimeMs (smoothingTimeMs)
 {
-    setValue (defaultValue);
-}
+    jassert (this->metadata.hostParameterID == invalidHostParameterID || this->metadata.hostParameterID <= maximumHostParameterID);
 
-AudioParameter::AudioParameter (const String& id,
-                                const String& name,
-                                NormalisableRange<float> valueRange,
-                                float defaultValue,
-                                ValueToString valueToString,
-                                StringToValue stringToValue,
-                                bool smoothingEnabled,
-                                float smoothingTimeMs)
-    : paramID (id)
-    , paramName (name)
-    , valueRange (std::move (valueRange))
-    , defaultValue (defaultValue)
-    , valueToString (valueToString ? valueToString : defaultToString)
-    , stringToValue (stringToValue ? stringToValue : defaultFromString)
-    , smoothingEnabled (smoothingEnabled)
-    , smoothingTimeMs (smoothingTimeMs)
-{
-    setValue (defaultValue);
+    setValue (this->metadata.defaultValue);
 }
 
 AudioParameter::~AudioParameter()
@@ -91,19 +64,23 @@ AudioParameter::~AudioParameter()
 
 void AudioParameter::beginChangeGesture()
 {
-    ++isInsideGesture;
+    const auto newGestureDepth = isInsideGesture.fetch_add (1) + 1;
 
-    if (isInsideGesture == 1)
+    if (newGestureDepth == 1)
         listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
 }
 
 void AudioParameter::endChangeGesture()
 {
-    jassert (isInsideGesture > 0); // Unbalanced calls to begin and end change gesture found!
+    const auto currentGestureDepth = isInsideGesture.load();
 
-    --isInsideGesture;
+    jassert (currentGestureDepth > 0); // Unbalanced calls to begin and end change gesture found!
+    if (currentGestureDepth <= 0)
+        return;
 
-    if (isInsideGesture == 0)
+    const auto newGestureDepth = isInsideGesture.fetch_sub (1) - 1;
+
+    if (newGestureDepth == 0)
         listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
 }
 

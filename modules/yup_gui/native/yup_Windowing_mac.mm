@@ -26,7 +26,7 @@ namespace yup
 
 Rectangle<int> getNativeWindowPosition(void* nativeWindow)
 {
-    NSView* view = reinterpret_cast<NSView*>(nativeWindow);
+    NSView* view = (__bridge NSView*) nativeWindow;
     NSWindow* window = [view window];
 
     // Convert view bounds to window coordinates
@@ -50,6 +50,20 @@ Rectangle<int> getNativeWindowPosition(void* nativeWindow)
         static_cast<int>(windowRect.origin.y),
         static_cast<int>(NSWidth(windowRect)),
         static_cast<int>(NSHeight(windowRect))};
+}
+
+void focusNativeWindow (void* nativeWindow)
+{
+    if (nativeWindow == nullptr)
+        return;
+
+    id nativeObject = (__bridge id) nativeWindow;
+    NSWindow* window = [nativeObject isKindOfClass:[NSWindow class]]
+                         ? (NSWindow*) nativeObject
+                         : [nativeObject window];
+
+    [NSApp activateIgnoringOtherApps:YES];
+    [window makeKeyAndOrderFront:nil];
 }
 
 } // namespace yup

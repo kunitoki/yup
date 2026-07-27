@@ -26,9 +26,9 @@
 class VariableFontsExample : public yup::Component
 {
 public:
-    VariableFontsExample (const yup::Font& font)
+    VariableFontsExample()
         : Component ("VariableFontsExample")
-        , font (font)
+        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont())
     {
         text =
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non aliquam risus, eu molestie sem. "
@@ -59,15 +59,15 @@ public:
             label->setFont (font);
             addAndMakeVisible (label);
 
-            auto slider = sliders.add (std::make_unique<yup::Slider> (axisInfo->tagName));
+            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, axisInfo->tagName));
             slider->setDefaultValue (axisInfo->defaultValue);
             slider->setRange ({ axisInfo->minimumValue, axisInfo->maximumValue });
             slider->setValue (axisInfo->defaultValue);
-            slider->onValueChanged = [this, index, offsetIndex] (float value)
+            slider->onValueChanged = [this, index, offsetIndex] (double value)
             {
                 updateLabel (index + offsetIndex);
 
-                this->font = this->font.withAxisValue (index, value);
+                this->font = this->font.withAxisValue (index, static_cast<float> (value));
 
                 resized();
                 repaint (textBounds);
@@ -92,12 +92,12 @@ public:
             modifier.setOverflow (yup::StyledText::visible);
             modifier.setWrap (yup::StyledText::wrap);
             modifier.clear();
-            modifier.appendText (text, font.getFont(), fontSize);
+            modifier.appendText (text, font.withHeight (fontSize));
         }
 
         bounds = bounds.reduced (10);
 
-        int slidersPerRow = 6;
+        int slidersPerRow = 8;
         int sliderWidth = bounds.getWidth() / slidersPerRow;
         int labelHeight = 16;
         int sliderIndex = 0;
@@ -125,7 +125,10 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setTransform (yup::AffineTransform::rotation (
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
+        g.addTransform (yup::AffineTransform::rotation (
             yup::degreesToRadians (-rotation), getLocalBounds().getCenterX(), 100.0f));
 
         if (feather > 0.0f)
@@ -161,15 +164,15 @@ private:
         label->setFont (font);
         addAndMakeVisible (label);
 
-        auto slider = sliders.add (std::make_unique<yup::Slider> (name));
+        auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, name));
         slider->setDefaultValue (defaultValue);
         slider->setRange ({ minValue, maxValue });
         slider->setValue (defaultValue);
-        slider->onValueChanged = [this, index, &valueToSet] (float value)
+        slider->onValueChanged = [this, index, &valueToSet] (double value)
         {
             updateLabel (index);
 
-            valueToSet = value;
+            valueToSet = static_cast<float> (value);
 
             resized();
             repaint (textBounds);

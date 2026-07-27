@@ -191,10 +191,7 @@ public:
                                                      PLSRenderContextWebGPUImpl::ContextOptions());
     }
 
-    float dpiScale (void* window) const override
-    {
-        return GetDawnWindowBackingScaleFactor (window, m_options.retinaDisplay);
-    }
+    Api getApi() const noexcept override { return Api::WebGPU; }
 
     Factory* factory() override { return m_plsContext.get(); }
 
@@ -202,7 +199,7 @@ public:
 
     rive::pls::PLSRenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
-    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         DawnProcTable backendProcs = dawn::native::GetProcs();
 
@@ -261,6 +258,16 @@ public:
     {
         m_device.Tick();
     }
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
+
+    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override {}
+
+    void endOffscreen (OffscreenTarget&) override {}
+
+    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
 
 private:
     const LowLevelRenderContext::Options m_options;

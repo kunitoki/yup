@@ -7,7 +7,6 @@ namespace rive
 {
 class ViewModel;
 class ViewModelProperty;
-class ViewModelInstance;
 
 class ViewModelImporter : public ImportStackObject
 {
@@ -17,7 +16,6 @@ private:
 public:
     ViewModelImporter(ViewModel* viewModel);
     void addProperty(ViewModelProperty* property);
-    void addInstance(ViewModelInstance* value);
     StatusCode resolve() override;
 };
 } // namespace rive

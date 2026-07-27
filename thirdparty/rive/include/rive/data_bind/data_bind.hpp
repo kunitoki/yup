@@ -6,17 +6,18 @@
 #include "rive/data_bind/data_context.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/data_values/data_type.hpp"
-#include "rive/dirtyable.hpp"
+#include "rive/viewmodel/viewmodel_value_dependent.hpp"
 #include <stdio.h>
 namespace rive
 {
-class File;
 class DataBindContextValue;
+class DataBindContainer;
+class File;
 #ifdef WITH_RIVE_TOOLS
 class DataBind;
 typedef void (*DataBindChanged)();
 #endif
-class DataBind : public DataBindBase, public Dirtyable
+class DataBind : public DataBindBase, public ViewModelValueDependent
 {
 public:
     ~DataBind();
@@ -24,8 +25,9 @@ public:
     StatusCode import(ImportStack& importStack) override;
     virtual void updateSourceBinding(bool invalidate = false);
     virtual void update(ComponentDirt value);
+    void updateDependents();
     Core* target() const { return m_target; };
-    void target(Core* value) { m_target = value; };
+    void target(Core* value);
     virtual void bind();
     virtual void unbind();
     ComponentDirt dirt() { return m_Dirt; };
@@ -33,25 +35,88 @@ public:
     void addDirt(ComponentDirt value, bool recurse) override;
     DataConverter* converter() const { return m_dataConverter; };
     void converter(DataConverter* value) { m_dataConverter = value; };
-    ViewModelInstanceValue* source() const { return m_Source; };
-    void source(ViewModelInstanceValue* value);
+    ViewModelInstanceValue* source() const { return m_Source.get(); };
+    void source(rcp<ViewModelInstanceValue> value);
     void clearSource();
     bool toSource();
     bool toTarget();
+    bool targetSupportsPush() const;
+    bool isNameBased();
+    bool canSkip();
+    bool isMainToSource();
+    bool sourceToTargetRunsFirst();
     bool advance(float elapsedTime);
-    void suppressDirt(bool value) { m_suppressDirt = value; };
-    void file(File* value) { m_file = value; };
-    File* file() const { return m_file; };
+    void suppressDirt(bool value) { setFlag(Flag::SuppressDirt, value); };
+    void file(File* value);
+    File* file() const;
+    DataType outputType();
+    DataType sourceOutputType();
+    void container(DataBindContainer*);
+    DataBindContainer* m_container = nullptr;
+    void collapse(bool collapsed);
+    void initialize();
+    void relinkDataBind() override;
+    bool inDirtyList() const { return hasFlag(Flag::InDirtyList); }
+    void inDirtyList(bool value) { setFlag(Flag::InDirtyList, value); }
+    bool inPersistingList() const { return hasFlag(Flag::InPersistingList); }
+    void inPersistingList(bool value)
+    {
+        setFlag(Flag::InPersistingList, value);
+    }
+
+    // Intrusive observer-list linkage. Used by Core to chain DataBinds that
+    // have subscribed to push notifications for a given (target, propertyKey).
+    DataBind* nextObserver() const { return m_nextObserver; }
+    void setNextObserver(DataBind* next) { m_nextObserver = next; }
+    DataBind*& nextObserverRef() { return m_nextObserver; }
+    // Called by ~Core() when the target is destroyed out from under us.
+    // Clears m_target, the list linkage, AND the Observing flag so
+    // subsequent unbind()/target() calls don't try to unsubscribe from the
+    // dead Core (which would deref freed memory in removePropertyObserver).
+    void onTargetDestroyed()
+    {
+        m_nextObserver = nullptr;
+        m_target = nullptr;
+        setFlag(Flag::Observing, false);
+    }
+
+private:
+    // Four state bits packed into one byte. Each bool used to live in its own
+    // 1B slot with up to 7B of padding between fields, costing ~16B per
+    // DataBind across the four flags. Packed they fit in one byte.
+    enum class Flag : uint8_t
+    {
+        Collapsed = 1 << 0,
+        InDirtyList = 1 << 1,
+        InPersistingList = 1 << 2,
+        SuppressDirt = 1 << 3,
+        Observing = 1 << 4,
+    };
+    uint8_t m_flags = 0;
+    bool hasFlag(Flag f) const
+    {
+        return (m_flags & static_cast<uint8_t>(f)) != 0;
+    }
+    void setFlag(Flag f, bool value)
+    {
+        if (value)
+        {
+            m_flags |= static_cast<uint8_t>(f);
+        }
+        else
+        {
+            m_flags &= static_cast<uint8_t>(~static_cast<uint8_t>(f));
+        }
+    }
+    DataBind* m_nextObserver = nullptr;
 
 protected:
-    ComponentDirt m_Dirt = ComponentDirt::Filthy;
+    ComponentDirt m_Dirt = ComponentDirt::None;
     Core* m_target = nullptr;
-    ViewModelInstanceValue* m_Source = nullptr;
+    rcp<ViewModelInstanceValue> m_Source = nullptr;
     DataBindContextValue* m_ContextValue = nullptr;
     DataConverter* m_dataConverter = nullptr;
-    DataType outputType();
     bool bindsOnce();
-    bool m_suppressDirt = false;
     File* m_file;
 #ifdef WITH_RIVE_TOOLS
 public:

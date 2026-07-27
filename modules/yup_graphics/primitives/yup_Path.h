@@ -39,6 +39,74 @@ class YUP_API Path
 {
 public:
     //==============================================================================
+    /** Represents the type of operation in a path segment. */
+    enum class Verb
+    {
+        MoveTo,  /**< Move to a point without drawing. */
+        LineTo,  /**< Draw a line to a point. */
+        QuadTo,  /**< Draw a quadratic Bezier curve. */
+        CubicTo, /**< Draw a cubic Bezier curve. */
+        Close    /**< Close the current sub-path. */
+    };
+
+    /** Boolean operations for closed filled paths.
+
+        These operations are intended for closed filled paths, clip paths, and Lottie-style
+        mask composition. Curves are flattened before clipping because the underlying
+        clipping engine operates on polygon contours.
+    */
+    enum class BooleanOperation
+    {
+        Union,     /**< Fills the area covered by either path. */
+        Intersect, /**< Fills the area shared by both paths. */
+        Subtract,  /**< Fills this path with the other path removed. */
+        Xor        /**< Fills areas covered by exactly one of the paths. */
+    };
+
+    //==============================================================================
+    /** Represents a segment in a path with its verb and associated points. */
+    struct Segment
+    {
+        Verb verb;                  /**< The type of path operation. */
+        Point<float> point;         /**< The main point (end point for most operations). */
+        Point<float> controlPoint1; /**< First control point for curves. */
+        Point<float> controlPoint2; /**< Second control point for cubic curves. */
+
+        /** Creates a MoveTo or LineTo segment. */
+        Segment (Verb v, Point<float> p)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (0.0f, 0.0f)
+            , controlPoint2 (0.0f, 0.0f)
+        {
+        }
+
+        /** Creates a QuadTo segment. */
+        Segment (Verb v, Point<float> p, Point<float> c1)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (c1)
+            , controlPoint2 (0.0f, 0.0f)
+        {
+        }
+
+        /** Creates a CubicTo segment. */
+        Segment (Verb v, Point<float> p, Point<float> c1, Point<float> c2)
+            : verb (v)
+            , point (p)
+            , controlPoint1 (c1)
+            , controlPoint2 (c2)
+        {
+        }
+
+        /** Creates a Close segment. */
+        static Segment close()
+        {
+            return Segment (Verb::Close, Point<float> (0.0f, 0.0f));
+        }
+    };
+
+    //==============================================================================
     /** Constructs an empty path. */
     Path();
 
@@ -86,6 +154,8 @@ public:
         @return The number of segments in the path.
     */
     int size() const;
+
+    bool isEmpty() const { return size() == 0; }
 
     //==============================================================================
     /** Clears all the segments from the path.
@@ -161,25 +231,26 @@ public:
     Path& quadTo (const Point<float>& p, float x1, float y1);
 
     //==============================================================================
-    /** Draws a cubic Bezier curve to specified coordinates with two control points.
+    /** Draws a cubic Bezier curve with two control points and an endpoint.
 
-        This method draws a cubic Bezier curve from the current point to the point (x, y), using
-        (x1, y1) and (x2, y2) as the control points. The current point is then updated to (x, y).
+        This method draws a cubic Bezier curve from the current point using (x, y) as the first
+        control point, (x1, y1) as the second control point, and (x2, y2) as the endpoint. The
+        current point is then updated to (x2, y2).
 
-        @param x The x-coordinate of the endpoint.
-        @param y The y-coordinate of the endpoint.
-        @param x1 The x-coordinate of the first control point.
-        @param y1 The y-coordinate of the first control point.
-        @param x2 The x-coordinate of the second control point.
-        @param y2 The y-coordinate of the second control point.
+        @param x The x-coordinate of the first control point.
+        @param y The y-coordinate of the first control point.
+        @param x1 The x-coordinate of the second control point.
+        @param y1 The y-coordinate of the second control point.
+        @param x2 The x-coordinate of the endpoint.
+        @param y2 The y-coordinate of the endpoint.
     */
     Path& cubicTo (float x, float y, float x1, float y1, float x2, float y2);
 
-    /** Draws a cubic Bezier curve to specified coordinates with two control points.
+    /** Draws a cubic Bezier curve with two control points and an endpoint.
 
-        This method draws a cubic Bezier curve from the current point to the endpoint (x1, y1),
-        using the given point p and (x2, y2) as the control points. The current point is then updated
-        to (x1, y1).
+        This method draws a cubic Bezier curve from the current point using p as the first control
+        point, (x1, y1) as the second control point, and (x2, y2) as the endpoint. The current point
+        is then updated to (x2, y2).
 
         @param p The first control point.
         @param x1 The x-coordinate of the second control point.
@@ -428,6 +499,59 @@ public:
     Path& addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     //==============================================================================
+    /** Adds a triangle to the path.
+
+        This method appends a triangle with the specified vertices to the path.
+
+        @param x1 The x-coordinate of the first vertex.
+        @param y1 The y-coordinate of the first vertex.
+        @param x2 The x-coordinate of the second vertex.
+        @param y2 The y-coordinate of the second vertex.
+        @param x3 The x-coordinate of the third vertex.
+        @param y3 The y-coordinate of the third vertex.
+    */
+    void addTriangle (float x1, float y1, float x2, float y2, float x3, float y3);
+
+    /** Adds a triangle to the path.
+
+        This method appends a triangle with the specified vertices to the path.
+
+        @param p1 The first vertex of the triangle.
+        @param p2 The second vertex of the triangle.
+        @param p3 The third vertex of the triangle.
+    */
+    void addTriangle (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3);
+
+    //==============================================================================
+    /** Adds a quadrilateral to the path.
+
+        This method appends a quadrilateral with the specified vertices to the path.
+        The vertices should be provided in order (clockwise or counter-clockwise).
+
+        @param x1 The x-coordinate of the first vertex.
+        @param y1 The y-coordinate of the first vertex.
+        @param x2 The x-coordinate of the second vertex.
+        @param y2 The y-coordinate of the second vertex.
+        @param x3 The x-coordinate of the third vertex.
+        @param y3 The y-coordinate of the third vertex.
+        @param x4 The x-coordinate of the fourth vertex.
+        @param y4 The y-coordinate of the fourth vertex.
+    */
+    void addQuadrilateral (float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4);
+
+    /** Adds a quadrilateral to the path.
+
+        This method appends a quadrilateral with the specified vertices to the path.
+        The vertices should be provided in order (clockwise or counter-clockwise).
+
+        @param p1 The first vertex of the quadrilateral.
+        @param p2 The second vertex of the quadrilateral.
+        @param p3 The third vertex of the quadrilateral.
+        @param p4 The fourth vertex of the quadrilateral.
+    */
+    void addQuadrilateral (const Point<float>& p1, const Point<float>& p2, const Point<float>& p3, const Point<float>& p4);
+
+    //==============================================================================
     /** Adds a regular polygon to the path.
 
         This method appends a regular polygon with the specified number of sides, centered at the given point
@@ -438,7 +562,7 @@ public:
         @param radius The radius from the center to each vertex.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    Path& addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle = 0.0f);
+    Path& addPolygon (const Point<float>& centre, int numberOfSides, float radius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a star shape to the path.
@@ -452,7 +576,7 @@ public:
         @param outerRadius The radius from the center to the outer vertices.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    Path& addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
+    Path& addStar (const Point<float>& centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a speech bubble shape to the path.
@@ -466,7 +590,7 @@ public:
         @param cornerSize The radius of the rounded corners.
         @param arrowBaseWidth The width of the arrow at its base.
     */
-    Path& addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth);
+    Path& addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth);
 
     //==============================================================================
     /** Converts the path to a stroke polygon with specified width.
@@ -491,6 +615,92 @@ public:
         @return A new Path with rounded corners applied.
     */
     Path withRoundedCorners (float cornerRadius) const;
+
+    //==============================================================================
+
+    /** Starts a new sub-path at the specified point.
+
+        This method starts a new sub-path at the given point, which becomes the current point.
+        Sub-paths are used to create multiple disconnected shapes within a single path.
+
+        @param x The x-coordinate of the starting point.
+        @param y The y-coordinate of the starting point.
+    */
+    void startNewSubPath (float x, float y);
+
+    /** Starts a new sub-path at the specified point.
+
+        This method starts a new sub-path at the given point, which becomes the current point.
+        Sub-paths are used to create multiple disconnected shapes within a single path.
+
+        @param p The starting point of the sub-path.
+    */
+    void startNewSubPath (const Point<float>& p);
+
+    /** Closes the current sub-path.
+
+        This method closes the current sub-path by adding a line segment from the current point
+        to the starting point of the sub-path. The current point is updated to the starting point.
+    */
+    void closeSubPath();
+
+    //==============================================================================
+    /** Checks if the current sub-path is closed.
+
+        This method checks if the current sub-path is closed by comparing the current point
+        to the starting point of the sub-path.
+
+        @param tolerance The tolerance for the comparison.
+    */
+    bool isClosed (float tolerance = 0.001f) const;
+
+    /** Checks if the current sub-path is explicitly closed.
+
+        This method checks if the current sub-path is explicitly closed by checking if the
+        last segment is a Close segment.
+    */
+    bool isExplicitlyClosed() const;
+
+    //==============================================================================
+    /** Sets whether the path should use the non-zero winding fill rule.
+
+        This method sets the fill rule for the path. When set to true, the path uses the
+        non-zero winding rule for determining which areas are inside the path ("nonzero").
+        When set to false, the path uses the even-odd rule ("evenodd").
+
+        The non-zero winding rule is the default.
+
+        @param shouldUseNonZeroWinding True for non-zero winding rule, false for even-odd rule.
+    */
+    void setUsingNonZeroWinding (bool shouldUseNonZeroWinding);
+
+    /** Returns whether the path is using the non-zero winding fill rule.
+
+        @return True if using non-zero winding rule, false if using even-odd rule.
+    */
+    bool isUsingNonZeroWinding() const;
+
+    //==============================================================================
+    /** Combines this path with another path using a boolean-style operation.
+
+        The returned path contains closed line contours produced by clipping flattened
+        versions of the input paths.
+
+        @param other      The path to combine with this path.
+        @param operation  The boolean-style operation to apply.
+
+        @return A new composed path.
+    */
+    [[nodiscard]] Path combinedWith (const Path& other, BooleanOperation operation) const;
+
+    /** Replaces this path with the result of combining it with another path.
+
+        @param other      The path to combine with this path.
+        @param operation  The boolean-style operation to apply.
+
+        @return A reference to this path.
+    */
+    Path& combineWith (const Path& other, BooleanOperation operation);
 
     //==============================================================================
     /** Appends another path to this one.
@@ -519,6 +729,10 @@ public:
         @param other The path to swap with.
     */
     void swapWithPath (Path& other) noexcept;
+
+    //==============================================================================
+    /** */
+    Path createCopy() const;
 
     //==============================================================================
     /** Transforms the path by applying an affine transformation.
@@ -582,65 +796,145 @@ public:
     */
     Point<float> getPointAlongPath (float distance) const;
 
+    /** Calculates the approximate arc length of this path.
+
+        Curved segments are measured with adaptive Gaussian quadrature. Smaller
+        tolerances produce more accurate lengths at a higher CPU cost.
+
+        @param tolerance Maximum numerical integration error in path units.
+        @return The approximate total length of all drawable path contours.
+    */
+    float getLength (float tolerance = 0.5f) const;
+
+    /** Returns a path containing a normalized arc-length range of this path.
+
+        @p start and @p end are normalized positions on the path, where 0.0 is the
+        beginning and 1.0 is the end. If @p start is greater than @p end, the range
+        wraps around the end of the path. @p offset is also normalized and is added
+        to both endpoints before trimming.
+
+        Curved segments are split with De Casteljau subdivision, so the returned
+        path preserves line, quadratic, and cubic segment types where possible.
+
+        @param start Normalized start position.
+        @param end Normalized end position.
+        @param offset Normalized offset added to start and end.
+        @param tolerance Maximum numerical integration error in path units.
+        @return A new path containing the trimmed section.
+    */
+    Path getTrimmedPath (float start, float end, float offset = 0.0f, float tolerance = 0.5f) const;
+
+    /** Replaces this path with a normalized arc-length range of itself.
+
+        This is the mutating counterpart of getTrimmedPath().
+
+        @param start Normalized start position.
+        @param end Normalized end position.
+        @param offset Normalized offset added to start and end.
+        @param tolerance Maximum numerical integration error in path units.
+        @return A reference to this path after trimming.
+    */
+    Path& trim (float start, float end, float offset = 0.0f, float tolerance = 0.5f);
+
     //==============================================================================
+    /** Converts the path to an SVG path data string.
+
+        This method converts the path to a string representation using SVG path data format.
+        The resulting string can be used with fromString() to recreate the path.
+
+        @return A string containing the SVG path data representation of this path.
+    */
+    String toString() const;
+
     /** Parses the path data from a string.
 
-        This method parses the path data from a string and updates the path accordingly.
+        This method parses the path data from a string in SVG path data format and updates the path accordingly.
 
-        @param pathData The string containing the path data.
+        @param pathData The string containing the SVG path data.
 
         @return True if the path data was parsed successfully, false otherwise.
     */
-    bool parsePathData (const String& pathData);
+    bool fromString (const String& pathData);
 
     //==============================================================================
+    /** A forward iterator for iterating through path segments. */
+    class Iterator
+    {
+    public:
+        /** Creates an iterator for the given path. */
+        Iterator (const rive::RawPath& rawPath, bool atEnd = false);
+
+        /** Copy constructor. */
+        Iterator (const Iterator& other) = default;
+
+        /** Assignment operator. */
+        Iterator& operator= (const Iterator& other) = default;
+
+        /** Dereference operator to get the current segment. */
+        Segment operator*() const;
+
+        /** Pre-increment operator. */
+        Iterator& operator++();
+
+        /** Post-increment operator. */
+        Iterator operator++ (int);
+
+        /** Equality comparison. */
+        bool operator== (const Iterator& other) const;
+
+        /** Inequality comparison. */
+        bool operator!= (const Iterator& other) const;
+
+    private:
+        void updateToValidPosition();
+        Segment createCurrentSegment() const;
+
+        const rive::RawPath* rawPath;
+        size_t verbIndex;
+        size_t pointIndex;
+        bool isAtEnd;
+    };
+
     /** Provides an iterator to the beginning of the path data.
 
-        This method returns an iterator pointing to the first segment in the path's internal data.
+        This method returns an iterator pointing to the first segment in the path's data.
         It allows for iteration over the path's segments from the beginning to the end.
 
-        @return An iterator to the beginning of the path data.
+        @return A PathIterator to the beginning of the path data.
     */
-    auto begin()
-    {
-        return path->getRawPath().begin();
-    }
+    Iterator begin();
 
     /** Provides a constant iterator to the beginning of the path data.
 
         This method returns a constant iterator pointing to the first segment in the path's
-        internal data. It ensures that the path data cannot be modified during the iteration.
+        data. It ensures that the path data cannot be modified during the iteration.
 
-        @return A constant iterator to the beginning of the path data.
+        @return A constant PathIterator to the beginning of the path data.
     */
-    auto begin() const
-    {
-        return path->getRawPath().begin();
-    }
+    Iterator begin() const;
 
     /** Provides an iterator to the end of the path data.
 
-        This method returns an iterator pointing just past the last segment in the path's internal data.
+        This method returns an iterator pointing just past the last segment in the path's data.
         It is used in conjunction with begin() for range-based iteration over the path's segments.
 
-        @return An iterator to the end of the path data.
+        @return A PathIterator to the end of the path data.
     */
-    auto end()
-    {
-        return path->getRawPath().end();
-    }
+    Iterator end();
 
     /** Provides a constant iterator to the end of the path data.
 
         This method returns a constant iterator pointing just past the last segment in the path's
-        internal data. It ensures safe iteration over the path segments without modifying them.
+        data. It ensures safe iteration over the path segments without modifying them.
 
-        @return A constant iterator to the end of the path data.
+        @return A constant PathIterator to the end of the path data.
     */
-    auto end() const
-    {
-        return path->getRawPath().end();
-    }
+    Iterator end() const;
+
+    //==============================================================================
+
+    friend bool operator== (const Path& lhs, const Path& rhs) noexcept;
+    friend bool operator!= (const Path& lhs, const Path& rhs) noexcept;
 
     //==============================================================================
     /** @internal Constructs a path from a raw render path. */

@@ -99,8 +99,40 @@ private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YUPApplication)
 };
 
-/** These are called automatically by the YUPApplication class but must be called by plugins. */
-void initialiseYup_Windowing();
-void shutdownYup_Windowing();
+//==============================================================================
+
+/** Initialises YUP's Windowing classes.
+
+    @see shutdownYup_Windowing()
+*/
+YUP_API void YUP_CALLTYPE initialiseYup_Windowing();
+
+/** Clears up any static data being used by YUP's Windowing classes.
+
+    @see initialiseYup_Windowing()
+*/
+YUP_API void YUP_CALLTYPE shutdownYup_Windowing();
+
+//==============================================================================
+/** A utility object that helps you initialise and shutdown YUP Windowing correctly
+    using an RAII pattern.
+
+    @note initialiseYup_GUI() or ScopedYupInitialiser_GUI must be called before this.
+*/
+class YUP_API ScopedYupInitialiser_Windowing final
+{
+public:
+    /** The constructor simply calls initialiseYup_Windowing(). */
+    ScopedYupInitialiser_Windowing();
+
+    /** The destructor simply calls shutdownYup_Windowing(). */
+    ~ScopedYupInitialiser_Windowing();
+
+    YUP_DECLARE_NON_COPYABLE (ScopedYupInitialiser_Windowing)
+    YUP_DECLARE_NON_MOVEABLE (ScopedYupInitialiser_Windowing)
+
+private:
+    static std::atomic_int numScopedInitInstances;
+};
 
 } // namespace yup

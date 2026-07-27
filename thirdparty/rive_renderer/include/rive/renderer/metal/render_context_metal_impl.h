@@ -5,6 +5,7 @@
 #pragma once
 
 #include "rive/renderer/render_context_helper_impl.hpp"
+#include "rive/rive_types.hpp"
 #include "rive/shapes/paint/image_sampler.hpp"
 #include <unordered_map>
 #include <mutex>
@@ -94,12 +95,18 @@ public:
         // Wait for shaders to compile inline with rendering (causing jank),
         // instead of compiling asynchronously in a background thread.
         // (Primarily for testing.)
-        bool synchronousShaderCompilations = false;
+        ShaderCompilationMode shaderCompilationMode =
+            ShaderCompilationMode::standard;
 
         // (macOS only -- ignored on iOS). Override
         // m_platformFeatures.supportsRasterOrdering to false, forcing us to
         // always render in atomic mode.
         bool disableFramebufferReads = false;
+
+#ifdef WITH_RIVE_TOOLS
+        SynthesizedFailureType synthesizedFailureType =
+            SynthesizedFailureType::none;
+#endif
     };
 
     static std::unique_ptr<RenderContext> MakeContext(id<MTLDevice>,
@@ -114,6 +121,13 @@ public:
 
     id<MTLDevice> gpu() const { return m_gpu; }
 
+    // Set the command queue used by makeCommandBuffer(). Must be called
+    // before any ScriptedCanvas flush if canvas support is needed.
+    void setCommandQueue(id<MTLCommandQueue> queue) { m_commandQueue = queue; }
+
+    void* makeCommandBuffer() override;
+    void commitCommandBuffer(void* commandBuffer) override;
+
     rcp<RenderTargetMetal> makeRenderTarget(MTLPixelFormat,
                                             uint32_t width,
                                             uint32_t height);
@@ -125,7 +139,24 @@ public:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
-                                  const uint8_t imageDataRGBAPremul[]) override;
+                                  GPUTextureFormat format,
+                                  const uint8_t imageData[],
+                                  uint8_t blockWidth = 1,
+                                  uint8_t blockHeight = 1,
+                                  bool srgb = false,
+                                  bool generateRemainingMips = false) override;
+
+    // Wrap an externally-owned MTLTexture as a Rive Texture for sampling.
+    // No upload, no allocation; the wrapper retains the MTLTexture via ARC.
+    rcp<Texture> adoptImageTexture(id<MTLTexture> texture,
+                                   uint32_t width,
+                                   uint32_t height);
+
+#ifdef RIVE_CANVAS
+    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
+                                       uint32_t height) override;
+    std::unique_ptr<rive::ore::Context> makeOreContext() override;
+#endif
 
     // Atomic mode requires a barrier between overlapping draws. We have to
     // implement this barrier in various different ways, depending on which
@@ -203,6 +234,7 @@ private:
 
     const ContextOptions m_contextOptions;
     const id<MTLDevice> m_gpu;
+    id<MTLCommandQueue> m_commandQueue = nil;
 
     MetalFeatures m_metalFeatures;
     std::unique_ptr<BackgroundShaderCompiler> m_backgroundShaderCompiler;

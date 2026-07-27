@@ -26,8 +26,10 @@ function (yup_add_embedded_binary_resources library_name)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    set (binary_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
-    set (binary_header_path "${binary_path}/${YUP_ARG_HEADER}")
+    set (binary_output_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
+    set (binary_scratch_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/scratch")
+    set (binary_header_path "${binary_output_path}/${YUP_ARG_HEADER}")
+    set (binary_scratch_header_path "${binary_scratch_path}/${YUP_ARG_HEADER}")
     set (binary_sources "")
 
     add_library (${library_name} OBJECT)
@@ -38,7 +40,9 @@ function (yup_add_embedded_binary_resources library_name)
     set_target_properties (${library_name} PROPERTIES
         POSITION_INDEPENDENT_CODE ON)
 
-    file (WRITE "${binary_header_path}"
+    file (MAKE_DIRECTORY "${binary_scratch_path}")
+
+    file (WRITE "${binary_scratch_header_path}"
         "#pragma once\n"
         "\n"
         "#include <cstddef>\n"
@@ -46,68 +50,76 @@ function (yup_add_embedded_binary_resources library_name)
         "\n")
 
     if (DEFINED YUP_ARG_NAMESPACE)
-        file (APPEND "${binary_header_path}"
+        file (APPEND "${binary_scratch_header_path}"
             "namespace ${YUP_ARG_NAMESPACE}\n"
             "{\n"
             "\n")
     endif()
 
     foreach (resource_name resource IN ZIP_LISTS YUP_ARG_RESOURCE_NAMES YUP_ARG_RESOURCES)
-        set (full_resource_unit_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/${resource_name}.cpp")
-        set (full_resource_hex_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/${resource_name}.inc")
+        set (full_resource_unit_path "${binary_output_path}/${resource_name}.cpp")
+        set (full_resource_hex_path "${binary_output_path}/${resource_name}.inc")
+        set (scratch_resource_unit_path "${binary_scratch_path}/${resource_name}.cpp")
+        set (scratch_resource_hex_path "${binary_scratch_path}/${resource_name}.inc")
 
         # Add symbol to header
-        file (APPEND "${binary_header_path}"
+        file (APPEND "${binary_scratch_header_path}"
             "extern const uint8_t ${resource_name}_data[];\n"
             "extern const std::size_t ${resource_name}_size;\n"
             "\n")
 
         # Write .cpp
-        file (WRITE "${full_resource_unit_path}"
+        file (WRITE "${scratch_resource_unit_path}"
             "#include \"${YUP_ARG_HEADER}\"\n"
             "\n"
             "#include <cstdint>\n"
             "\n")
 
         if (DEFINED YUP_ARG_NAMESPACE)
-            file (APPEND "${full_resource_unit_path}"
+            file (APPEND "${scratch_resource_unit_path}"
                 "namespace ${YUP_ARG_NAMESPACE}\n"
                 "{\n"
                 "\n")
         endif()
 
-        file (APPEND "${full_resource_unit_path}"
+        file (APPEND "${scratch_resource_unit_path}"
             "const uint8_t ${resource_name}_data[] = \n"
             "{\n"
-            "#include \"${resource_name}.inc\"\n"
+            "    #include \"${resource_name}.inc\"\n"
             "};\n"
             "\n"
             "const std::size_t ${resource_name}_size = sizeof (${resource_name}_data);\n"
             "\n")
 
         if (DEFINED YUP_ARG_NAMESPACE)
-            file (APPEND "${full_resource_unit_path}"
+            file (APPEND "${scratch_resource_unit_path}"
                 "\n"
                 "} // namespace ${YUP_ARG_NAMESPACE}\n")
         endif()
 
         _yup_file_to_byte_array (${resource} resource_byte_array)
-        file (WRITE "${full_resource_hex_path}" "${resource_byte_array}")
+        file (WRITE "${scratch_resource_hex_path}" "${resource_byte_array}")
+
+        # Copy only if content differs, to avoid recompilation
+        configure_file ("${scratch_resource_unit_path}" "${full_resource_unit_path}" COPYONLY)
+        configure_file ("${scratch_resource_hex_path}" "${full_resource_hex_path}" COPYONLY)
 
         list (APPEND binary_sources "${full_resource_unit_path}")
         list (APPEND resources_hex_files "${full_resource_hex_path}")
     endforeach()
 
     if (DEFINED YUP_ARG_NAMESPACE)
-        file (APPEND "${binary_header_path}"
+        file (APPEND "${binary_scratch_header_path}"
             "} // namespace ${YUP_ARG_NAMESPACE}\n")
     endif()
+
+    configure_file ("${binary_scratch_header_path}" "${binary_header_path}" COPYONLY)
 
     target_sources (${library_name}
         PUBLIC "${binary_header_path}"
         PRIVATE "${binary_sources}")
 
-    target_include_directories (${library_name} PUBLIC "${binary_path}")
+    target_include_directories (${library_name} PUBLIC "${binary_output_path}")
 
     add_custom_target ("${library_name}_content" DEPENDS "${resources_hex_files}")
     add_dependencies (${library_name} "${library_name}_content")

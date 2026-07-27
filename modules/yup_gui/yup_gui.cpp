@@ -49,9 +49,12 @@
 
 //==============================================================================
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
-#include <SDL2/SDL_main.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_system.h>
+#include <SDL3/SDL_video.h>
+#define SDL_MAIN_HANDLED
+#include <SDL3/SDL_main.h>
 
 //==============================================================================
 
@@ -125,28 +128,49 @@
 
 //==============================================================================
 
+#include "profiling/yup_PaintProfileStats.cpp"
+#include "profiling/yup_PaintProfiler.cpp"
+
+//==============================================================================
+
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
+#include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
+#include "component/yup_DragAndDropData.cpp"
 #include "component/yup_Component.cpp"
-#include "widgets/yup_Button.cpp"
-#include "widgets/yup_TextButton.cpp"
+#include "menus/yup_PopupMenu.cpp"
+#include "buttons/yup_Button.cpp"
+#include "buttons/yup_TextButton.cpp"
+#include "buttons/yup_ToggleButton.cpp"
+#include "buttons/yup_ImageButton.cpp"
+#include "buttons/yup_SwitchButton.cpp"
 #include "widgets/yup_TextEditor.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
+#include "widgets/yup_ComboBox.cpp"
+#include "widgets/yup_ScrollBar.cpp"
+#include "widgets/yup_ProgressBar.cpp"
+#include "widgets/yup_ListBoxItem.cpp"
+#include "widgets/yup_ListBox.cpp"
 #include "artboard/yup_ArtboardFile.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
 #include "dialogs/yup_FileChooser.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
+
+//==============================================================================
+
 #include "themes/theme_v1/yup_ThemeVersion1.cpp"
 #include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
 
 //==============================================================================
 
-#include "native/yup_WindowingUtilities_sdl2.cpp"
-#include "native/yup_Windowing_sdl2.h"
-#include "native/yup_Windowing_sdl2.cpp"
+#include "native/yup_WindowingUtilities_sdl.cpp"
+#include "native/yup_Windowing_sdl.h"
+#include "native/yup_Windowing_sdl.cpp"
+#include "native/yup_Desktop_sdl.cpp"
+#include "native/yup_Initialisation_sdl.cpp"

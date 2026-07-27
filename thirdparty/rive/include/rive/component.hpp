@@ -3,6 +3,8 @@
 #include "rive/component_dirt.hpp"
 #include "rive/generated/component_base.hpp"
 #include "rive/dependency_helper.hpp"
+#include "rive/lazy_vector.hpp"
+#include "rive/math/vec2d.hpp"
 
 #include <vector>
 #include <functional>
@@ -11,8 +13,10 @@ namespace rive
 {
 class ContainerComponent;
 class Artboard;
+class DataBind;
 
-class Component : public ComponentBase
+class Component : public ComponentBase,
+                  public DependencyHelper<Artboard, Component, Component>
 {
     friend class Artboard;
 
@@ -21,23 +25,23 @@ private:
 
     unsigned int m_GraphOrder;
     Artboard* m_Artboard = nullptr;
+    LazyVector<DataBind*> m_collapsables;
 
 protected:
     ComponentDirt m_Dirt = ComponentDirt::Filthy;
+    void updateCollapsables();
 
 public:
-    DependencyHelper<Artboard, Component> m_DependencyHelper;
+    // Required by DependencyHelper's CRTP base — the artboard IS the
+    // dependency root for component graphs.
+    Artboard* dependencyRoot() const { return m_Artboard; }
+
     virtual bool collapse(bool value);
     inline Artboard* artboard() const { return m_Artboard; }
     bool validate(CoreContext* context) override;
     StatusCode onAddedDirty(CoreContext* context) override;
     inline ContainerComponent* parent() const { return m_Parent; }
-    const std::vector<Component*>& dependents() const
-    {
-        return m_DependencyHelper.dependents();
-    }
-
-    void addDependent(Component* component);
+    void addCollapsable(DataBind* collapsable);
 
     // TODO: re-evaluate when more of the lib is complete...
     // These could be pure virtual but we define them empty here to avoid
@@ -64,6 +68,12 @@ public:
     {
         return (m_Dirt & ComponentDirt::Collapsed) == ComponentDirt::Collapsed;
     }
+    virtual bool hitTestPoint(const Vec2D& position,
+                              bool skipOnUnclipped,
+                              bool isPrimaryHit);
+#ifdef TESTING
+    ComponentDirt dirt() { return m_Dirt; }
+#endif
 };
 } // namespace rive
 

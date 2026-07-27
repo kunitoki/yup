@@ -115,7 +115,14 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <sys/stat.h>
 #include <sys/time.h>
 
+#if __has_include(<sys/sysmacros.h>)
+#include <sys/sysmacros.h>
+#endif
+
 #if YUP_USE_CURL
+#if ! __has_include(<curl/curl.h>)
+#error "YUP_USE_CURL is explicitly enabled but <curl/curl.h> is not available"
+#endif
 #include <curl/curl.h>
 #endif
 #endif
@@ -209,13 +216,14 @@ extern char** environ;
 #include "text/yup_TextDiff.cpp"
 #include "text/yup_Base64.cpp"
 #include "threads/yup_ReadWriteLock.cpp"
+#include "threads/yup_SpinLock.cpp"
+#include "threads/yup_RecursiveSpinLock.cpp"
 #include "threads/yup_Thread.cpp"
 #include "threads/yup_ThreadPool.cpp"
 #include "threads/yup_TimeSliceThread.cpp"
 #include "time/yup_PerformanceCounter.cpp"
 #include "time/yup_RelativeTime.cpp"
 #include "time/yup_Time.cpp"
-#include "unit_tests/yup_UnitTest.cpp"
 #include "containers/yup_Variant.cpp"
 #include "javascript/yup_JSON.cpp"
 #include "javascript/yup_JSONUtils.cpp"
@@ -303,7 +311,7 @@ extern char** environ;
 
 //==============================================================================
 #elif YUP_WASM
-#include "native/yup_WebAssemblyHelpers.h"
+#include "native/yup_WebAssemblyHelpers_wasm.h"
 #include "native/yup_SystemStats_wasm.cpp"
 #include "native/yup_Files_wasm.cpp"
 #include "native/yup_Network_wasm.cpp"
@@ -318,16 +326,11 @@ extern char** environ;
 #include "threads/yup_HighResolutionTimer.cpp"
 #include "threads/yup_WaitableEvent.cpp"
 #include "network/yup_URL.cpp"
+#include "network/yup_WebInputStream.cpp"
+#include "streams/yup_URLInputSource.cpp"
 
 #if ! YUP_WASM
 #include "threads/yup_ChildProcess.cpp"
-#include "network/yup_WebInputStream.cpp"
-#include "streams/yup_URLInputSource.cpp"
-#endif
-
-//==============================================================================
-#if YUP_UNIT_TESTS
-#include "maths/yup_MathsFunctions_test.cpp"
 #endif
 
 //==============================================================================
@@ -339,6 +342,11 @@ extern char** environ;
 
 //==============================================================================
 #include "files/yup_Watchdog.cpp"
+
+//==============================================================================
+#if YUP_MODULE_AVAILABLE_sqlite3_library
+#include "database/yup_SqliteDatabase.cpp"
+#endif
 
 //==============================================================================
 namespace yup

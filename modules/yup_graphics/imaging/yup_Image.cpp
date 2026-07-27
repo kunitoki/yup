@@ -22,25 +22,33 @@
 namespace yup
 {
 
+//==============================================================================
 Image::Image (int w, int h, PixelFormat fmt)
-    : bitmapData (new BitmapData (w, h, fmt))
+    : pixelData (new ImagePixelData (w, h, fmt))
 {
 }
 
 Image::Image (const Image& other)
-    : bitmapData (other.bitmapData)
+    : pixelData (other.pixelData)
+    , metadata (other.metadata)
 {
 }
 
 Image::Image (Image&& other) noexcept
-    : bitmapData (std::exchange (other.bitmapData, {}))
+    : pixelData (std::exchange (other.pixelData, {}))
+    , gpuTexture (std::exchange (other.gpuTexture, {}))
+    , metadata (std::exchange (other.metadata, {}))
 {
 }
 
 Image& Image::operator= (const Image& other)
 {
     if (this != &other)
-        bitmapData = other.bitmapData;
+    {
+        pixelData = other.pixelData;
+        gpuTexture = nullptr;
+        metadata = other.metadata;
+    }
 
     return *this;
 }
@@ -48,7 +56,11 @@ Image& Image::operator= (const Image& other)
 Image& Image::operator= (Image&& other) noexcept
 {
     if (this != &other)
-        bitmapData = std::exchange (other.bitmapData, {});
+    {
+        pixelData = std::exchange (other.pixelData, {});
+        gpuTexture = std::exchange (other.gpuTexture, {});
+        metadata = std::exchange (other.metadata, {});
+    }
 
     return *this;
 }
@@ -56,110 +68,169 @@ Image& Image::operator= (Image&& other) noexcept
 //==============================================================================
 bool Image::isValid() const noexcept
 {
-    return bitmapData != nullptr;
+    return pixelData != nullptr;
 }
 
 //==============================================================================
 int Image::getWidth() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getWidth();
+    return pixelData->getWidth();
 }
 
 int Image::getHeight() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getHeight();
+    return pixelData->getHeight();
 }
 
 PixelFormat Image::getPixelFormat() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getPixelFormat();
+    return pixelData->getPixelFormat();
 }
 
 int Image::getPixelStride() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getPixelStride();
+    return pixelData->getPixelStride();
 }
 
 //==============================================================================
-void Image::setPixel (int x, int y, uint32_t color)
+void Image::setPixel (int x, int y, uint32 color)
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    bitmapData->setPixel (x, y, color);
+    pixelData->setPixel (x, y, color);
 }
 
-uint32_t Image::getPixel (int x, int y) const
+void Image::setPixelColor (int x, int y, Color color)
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getPixel (x, y);
+    pixelData->setPixelColor (x, y, color);
 }
 
-void Image::fill (uint32_t color)
+uint32 Image::getPixel (int x, int y) const
 {
-    bitmapData->fill (color);
+    jassert (pixelData != nullptr);
+
+    return pixelData->getPixel (x, y);
+}
+
+Color Image::getPixelColor (int x, int y) const
+{
+    jassert (pixelData != nullptr);
+
+    return pixelData->getPixelColor (x, y);
+}
+
+void Image::fill (uint32 color)
+{
+    pixelData->fill (color);
+}
+
+void Image::fillColor (Color color)
+{
+    pixelData->fillColor (color);
 }
 
 void Image::clear()
 {
-    bitmapData->clear();
+    pixelData->clear();
 }
 
-const BitmapData& Image::getBitmapData() const noexcept
+const ImagePixelData& Image::getPixelData() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return *bitmapData;
+    return *pixelData;
 }
 
-BitmapData& Image::getBitmapData() noexcept
+ImagePixelData& Image::getPixelData() noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return *bitmapData;
+    return *pixelData;
 }
 
 Span<const uint8> Image::getRawData() const noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getRawData();
+    return pixelData->getRawData();
 }
 
 Span<uint8> Image::getRawData() noexcept
 {
-    jassert (bitmapData != nullptr);
+    jassert (pixelData != nullptr);
 
-    return bitmapData->getRawData();
+    return pixelData->getRawData();
 }
 
 //==============================================================================
-/*
 Image Image::duplicate() const
 {
     Image result;
 
-    if (bitmapData != nullptr)
-        result.bitmapData = new BitmapData (*bitmapData);
+    if (pixelData != nullptr)
+    {
+        result.pixelData = new ImagePixelData (
+            pixelData->getWidth(),
+            pixelData->getHeight(),
+            pixelData->getPixelFormat(),
+            pixelData->getRawData());
+    }
 
+    result.metadata = metadata;
     return result;
 }
-*/
 
+//==============================================================================
+
+Image Image::fromTexture (GpuTexture::Ptr tex)
+{
+    if (tex == nullptr || ! tex->isValid())
+        return {};
+
+    Image image (tex->getWidth(), tex->getHeight());
+    image.gpuTexture = std::move (tex);
+    return image;
+}
+
+//==============================================================================
+
+ResultValue<Image> Image::loadFromData (Span<const uint8> imageData,
+                                        const ImageFormat::Options& options)
+{
+    auto stream = std::make_unique<MemoryInputStream> (imageData.data(), imageData.size(), false);
+
+    ImageFormatManager manager;
+    manager.registerDefaultFormats();
+
+    auto reader = manager.createReaderFor (stream.release(), options);
+    if (reader == nullptr || reader->width <= 0 || reader->height <= 0)
+        return makeResultValueFail ("Unable to decode image");
+
+    auto image = reader->readImage();
+    if (! image.isValid())
+        return makeResultValueFail ("Unable to decode image");
+
+    image.metadata = reader->metadata;
+    return makeResultValueOk (image);
+}
+
+//==============================================================================
 bool Image::createTextureIfNotPresent (GraphicsContext& context) const
 {
-    if (texture != nullptr)
+    if (getTexture() != nullptr)
         return true;
 
-    if (bitmapData == nullptr)
+    if (pixelData == nullptr)
         return false;
 
     auto width = getWidth();
@@ -169,39 +240,51 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (renderContext == nullptr || renderContext->impl() == nullptr)
         return false;
 
-    texture = renderContext->impl()->makeImageTexture (
+    const auto texturePixels = pixelData->toRGBA (true);
+
+    auto riveTex = renderContext->impl()->makeImageTexture (
         width,
         height,
         rive::math::msb (width | height),
-        getRawData().data());
+        rive::GPUTextureFormat::rgba32,
+        texturePixels.data(),
+        1,     /* blockWidth */
+        1,     /* blockHeight */
+        false, /* srgb */
+        true); /* generateRemainingMips */
 
+    if (riveTex == nullptr)
+        return false;
+
+    gpuTexture = GpuTexture::fromGpuTexture (std::move (riveTex), width, height);
     return true;
 }
 
-rive::rcp<rive::gpu::Texture> Image::getTexture() const
+void Image::invalidateTexture()
 {
-    return texture;
+    gpuTexture = nullptr;
 }
 
 //==============================================================================
 
-ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
+void Image::setGpuTexture (GpuTexture::Ptr tex)
 {
-    auto bitmap = rive::Bitmap::decode (imageData.data(), imageData.size());
-    if (bitmap == nullptr)
-        return ResultValue<Image>::fail ("Unable to decode image");
+    gpuTexture = std::move (tex);
+}
 
-    Image result;
+GpuTexture::Ptr Image::getGpuTexture() const
+{
+    return gpuTexture;
+}
 
-    result.bitmapData = new BitmapData (
-        bitmap->width(),
-        bitmap->height(),
-        (bitmap->pixelFormat() == rive::Bitmap::PixelFormat::RGB)
-            ? PixelFormat::RGB
-            : PixelFormat::RGBA,
-        bitmap->detachBytes());
+//==============================================================================
 
-    return ResultValue<Image>::ok (result);
+rive::rcp<rive::gpu::Texture> Image::getTexture() const
+{
+    if (gpuTexture != nullptr)
+        return gpuTexture->getOrAdoptGpuTexture();
+
+    return nullptr;
 }
 
 } // namespace yup

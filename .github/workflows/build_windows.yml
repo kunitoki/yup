@@ -8,13 +8,16 @@ on:
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
+      - "**/python/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
-      - "!**/native/*_ios.*"
+      - "!**/native/*_ios*.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_posix.*"
       - "!**/native/*_wasm.*"
@@ -26,58 +29,72 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_tests:
+  build_tests_debug:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests.exe
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+      shell: bash
+
+  build_tests_release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: ./yup_tests.exe
+      shell: bash
 
   build_console:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_console
 
   build_app:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_app
 
   build_graphics:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
-
-  build_render:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-    - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_graphics
 
   build_plugin:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
     - run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_clap_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
-    #- run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_clap_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_clap_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_vst3_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_vst3_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --target example_plugin_standalone_plugin

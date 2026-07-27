@@ -128,7 +128,7 @@ public:
 
         isDeviceOpen = true;
         isRunning = false;
-        callback = nullptr;
+        callback.store (nullptr, std::memory_order_release);
         underruns = 0;
 
         emscripten_start_wasm_audio_worklet_thread_async (
@@ -143,12 +143,18 @@ public:
 
         if (isDeviceOpen)
         {
-            EM_ASM ({ emscriptenGetAudioObject ($0).disconnect();
-            }, audioWorkletNode);
+            emscripten_set_click_callback ("canvas", nullptr, 0, nullptr);
+
+            if (audioWorkletNode != 0)
+            {
+                EM_ASM ({ emscriptenGetAudioObject ($0).disconnect();
+                }, audioWorkletNode);
+            }
+
             audioWorkletNode = {};
 
             isDeviceOpen = false;
-            callback = nullptr;
+            callback.store (nullptr, std::memory_order_release);
             underruns = 0;
 
             actualBufferSize = 0;
@@ -171,23 +177,22 @@ public:
 
         if (isRunning)
         {
-            if (newCallback != callback)
+            auto* oldCallback = callback.load (std::memory_order_acquire);
+
+            if (newCallback != oldCallback)
             {
                 if (newCallback != nullptr)
                     newCallback->audioDeviceAboutToStart (this);
 
-                {
-                    ScopedLock lock (callbackLock);
-                    std::swap (callback, newCallback);
-                }
+                callback.store (newCallback, std::memory_order_release);
 
-                if (newCallback != nullptr)
-                    newCallback->audioDeviceStopped();
+                if (oldCallback != nullptr)
+                    oldCallback->audioDeviceStopped();
             }
         }
         else
         {
-            callback = newCallback;
+            callback.store (newCallback, std::memory_order_release);
             isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
 
             if (! isRunning && hasBeenActivatedAlreadyByUser)
@@ -198,23 +203,17 @@ public:
 
             firstCallback = true;
 
-            if (callback != nullptr)
+            if (newCallback != nullptr)
             {
                 if (isRunning)
-                    callback->audioDeviceAboutToStart (this);
+                    newCallback->audioDeviceAboutToStart (this);
             }
         }
     }
 
     void stop() override
     {
-        AudioIODeviceCallback* oldCallback = nullptr;
-
-        if (callback != nullptr)
-        {
-            ScopedLock lock (callbackLock);
-            std::swap (callback, oldCallback);
-        }
+        auto* oldCallback = callback.exchange (nullptr, std::memory_order_acq_rel);
 
         isRunning = false;
 
@@ -270,6 +269,9 @@ private:
 
     void audioThreadInitialized()
     {
+        if (! isDeviceOpen)
+            return;
+
         WebAudioWorkletProcessorCreateOptions opts = {
             .name = audioWorkletTypeName
         };
@@ -280,6 +282,9 @@ private:
 
     void audioWorkletProcessorCreated()
     {
+        if (! isDeviceOpen)
+            return;
+
         int outputChannelCounts[1] = { actualNumberOfOutputs };
         EmscriptenAudioWorkletNodeCreateOptions options = {
             .numberOfInputs = actualNumberOfInputs,
@@ -301,6 +306,9 @@ private:
 
     EM_BOOL renderAudio (int numInputs, const AudioSampleFrame* inputs, int numOutputs, AudioSampleFrame* outputs, int numParams, const AudioParamFrame* params)
     {
+        if (! isDeviceOpen)
+            return EM_TRUE;
+
         const int samplesPerChannel = [&]
         {
             if (numOutputs > 0)
@@ -315,9 +323,9 @@ private:
         // check for xruns
         calculateXruns (samplesPerChannel);
 
-        ScopedLock lock (callbackLock);
+        auto* currentCallback = callback.load (std::memory_order_acquire);
 
-        if (callback != nullptr)
+        if (currentCallback != nullptr)
         {
             // Setup channelInBuffers
             for (int ch = 0; ch < actualNumberOfInputs; ++ch)
@@ -327,12 +335,12 @@ private:
             for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
                 channelOutBuffer[ch] = &(outputs[0].data[ch * samplesPerChannel]);
 
-            callback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
-                                                        actualNumberOfInputs,
-                                                        channelOutBuffer.getData(),
-                                                        actualNumberOfOutputs,
-                                                        samplesPerChannel,
-                                                        {});
+            currentCallback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
+                                                               actualNumberOfInputs,
+                                                               channelOutBuffer.getData(),
+                                                               actualNumberOfOutputs,
+                                                               samplesPerChannel,
+                                                               {});
 
             audioFramesElapsed += samplesPerChannel;
         }
@@ -342,6 +350,9 @@ private:
 
     void canvasClick()
     {
+        if (! isDeviceOpen || context == 0)
+            return;
+
         if (emscripten_audio_context_state (context) != AUDIO_CONTEXT_STATE_RUNNING)
         {
             emscripten_resume_audio_context_sync (context);
@@ -349,10 +360,8 @@ private:
             isRunning = true;
             hasBeenActivatedAlreadyByUser = true;
 
-            ScopedLock lock (callbackLock);
-
-            if (callback != nullptr)
-                callback->audioDeviceAboutToStart (this);
+            if (auto* currentCallback = callback.load (std::memory_order_acquire))
+                currentCallback->audioDeviceAboutToStart (this);
         }
     }
 
@@ -420,8 +429,7 @@ private:
     bool isRunning = false;
     bool hasBeenActivatedAlreadyByUser = false;
 
-    CriticalSection callbackLock;
-    AudioIODeviceCallback* callback = nullptr;
+    std::atomic<AudioIODeviceCallback*> callback { nullptr };
 
     String lastError;
     uint32 actualBufferSize = 0;
@@ -431,7 +439,8 @@ private:
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
 
-    alignas (16) uint8 audioThreadStack[4096] = {};
+    static constexpr size_t audioThreadStackSize = 128 * 1024;
+    alignas (16) uint8 audioThreadStack[audioThreadStackSize] = {};
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioWorkletAudioIODevice)
 };

@@ -1,12 +1,13 @@
 #include "rive/decoders/bitmap_decoder.hpp"
-
-#include <libwebp/libwebp.h>
-
+#include "webp/decode.h"
+#include "webp/demux.h"
 #include <stdio.h>
 #include <vector>
 #include <memory>
+#include <cassert>
 
-namespace rive {
+namespace rive
+{
 
 std::unique_ptr<Bitmap> DecodeWebP(const uint8_t bytes[], size_t byteCount)
 {
@@ -68,8 +69,10 @@ std::unique_ptr<Bitmap> DecodeWebP(const uint8_t bytes[], size_t byteCount)
     WebPDemuxReleaseIterator(&currentFrame);
     WebPDemuxDelete(demuxer);
 
+    assert(pixelBufferSize == height * width * 4);
     return std::make_unique<Bitmap>(width,
                                     height,
+                                    pixelBufferSize,
                                     Bitmap::PixelFormat::RGBA,
                                     std::move(pixelBuffer));
 }

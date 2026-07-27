@@ -24,27 +24,8 @@ namespace yup
 
 //==============================================================================
 class GraphicsContext;
-
-//==============================================================================
-enum class BlendMode : uint8
-{
-    SrcOver,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Multiply,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity
-};
+class GpuCanvas;
+class GpuTexture;
 
 //==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
@@ -83,8 +64,64 @@ public:
         /** Destroys the SavedState, potentially restoring the Graphics state. */
         ~SavedState();
 
+        /** Restore state. */
+        void restore();
+
     private:
         Graphics* g = nullptr;
+    };
+
+    //==============================================================================
+    /** Represents an isolated transparency layer.
+
+        A transparency layer renders into an offscreen GPU target first, then
+        composites the completed result back to the parent Graphics with the layer opacity.
+        This is required for correct group opacity when the layer contents overlap.
+
+        The Graphics returned by getGraphics() uses layer-local coordinates: the
+        target area's top-left corner is (0, 0), and the target area's size is the
+        drawing area.
+    */
+    class YUP_API TransparencyLayer
+    {
+    public:
+        /** Creates an invalid transparency layer. */
+        TransparencyLayer() noexcept = default;
+
+        /** Move constructor and assignment operator. */
+        TransparencyLayer (TransparencyLayer&&) noexcept;
+        TransparencyLayer& operator= (TransparencyLayer&&) noexcept;
+
+        /** Deleted copy constructor/assignment operators to avoid unintentional copying. */
+        TransparencyLayer (const TransparencyLayer&) = delete;
+        TransparencyLayer& operator= (const TransparencyLayer&) = delete;
+
+        /** Destroys the layer without committing it. */
+        ~TransparencyLayer();
+
+        /** Returns true when this layer has a valid offscreen Graphics target. */
+        bool isValid() const noexcept;
+
+        /** Returns the offscreen Graphics target used to draw this layer's contents. */
+        Graphics& getGraphics() const noexcept;
+
+        /** Commits the offscreen contents and composites them back to the parent Graphics.
+
+            Returns false if the layer is invalid, has already been committed, or the
+            offscreen target could not be finalized.
+        */
+        bool commit();
+
+    private:
+        friend class Graphics;
+
+        TransparencyLayer (Graphics& parent, Rectangle<float> targetArea, float opacity);
+
+        Graphics* parent = nullptr;
+        Rectangle<float> targetArea;
+        float opacity = 1.0f;
+        std::unique_ptr<Graphics> graphics;
+        bool committed = false;
     };
 
     //==============================================================================
@@ -95,12 +132,78 @@ public:
     */
     Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale = 1.0f) noexcept;
 
+    /** Constructs a Graphics object for rendering into an Image on the GPU to be able to fetch it back on the CPU.
+
+        The image must have valid dimensions. Begins the offscreen GPU frame immediately.
+
+        @param context      Reference to the GraphicsContext to use for offscreen rendering.
+        @param targetImage  Reference to the Image that will receive the rendered result.
+        @param clearColor   ARGB clear color applied at the start of the offscreen frame.
+    */
+    Graphics (GraphicsContext& context, Image& targetImage, uint32_t clearColor = 0) noexcept;
+
+    /** Constructs a Graphics object for rendering into an Image on the GPU. */
+    Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> target, uint32_t clearColor = 0) noexcept;
+
+    /** Constructs a Graphics object rendering into an externally-owned renderable target.
+
+        The target is not owned by this Graphics and must outlive it. Begins the
+        offscreen GPU frame immediately. Used by GpuCanvas, which owns the target.
+
+        @param context      Reference to the GraphicsContext to use for offscreen rendering.
+        @param target       Reference to the externally-owned renderable target.
+        @param clearColor   ARGB clear color applied at the start of the offscreen frame.
+    */
+    Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor = 0) noexcept;
+
+    /** Finalizes an uncommitted offscreen frame without retaining its result. */
+    ~Graphics();
+
     //==============================================================================
     /** Saves the current state of the Graphics object.
 
         @return A SavedState object that can be used to restore the state later.
     */
     [[nodiscard]] SavedState saveState();
+
+    //==============================================================================
+    /** Sets the feather for subsequent drawing operations.
+
+        @param feather The new feather level.
+    */
+    void setFeather (float feather);
+
+    /** Retrieves the current feather setting.
+
+       @return The current feather level.
+    */
+    float getFeather() const;
+
+    //==============================================================================
+    /** Sets the opacity for subsequent drawing operations.
+
+       @param opacity The new opacity level (0.0-1.0).
+    */
+    void setOpacity (float opacity);
+
+    /** Retrieves the current opacity setting.
+
+       @return The current opacity level.
+    */
+    float getOpacity() const;
+
+    /** Begins an isolated transparency layer.
+
+        Drawing into the returned layer's Graphics happens offscreen in layer-local
+        coordinates. Calling TransparencyLayer::commit() composites the completed
+        layer back into this Graphics using the current transform and clip state.
+
+        @param targetArea The area, in this Graphics' current coordinate space, where
+                          the completed layer will be composited.
+        @param opacity    The opacity used when compositing the completed layer.
+        @return A TransparencyLayer. Check isValid() before drawing into it.
+    */
+    [[nodiscard]] TransparencyLayer beginTransparencyLayer (Rectangle<float> targetArea, float opacity = 1.0f);
 
     //==============================================================================
     /** Sets the current drawing fill color.
@@ -115,20 +218,6 @@ public:
     */
     Color getFillColor() const;
 
-    //==============================================================================
-    /** Sets the current drawing stroke color.
-
-        @param color The new color to use for subsequent stroke drawing operations.
-    */
-    void setStrokeColor (Color color);
-
-    /** Retrieves the current drawing stroke color.
-
-        @return The current color for stroke drawing.
-    */
-    Color getStrokeColor() const;
-
-    //==============================================================================
     /** Sets the current color gradient for fills.
 
         @param gradient The new color gradient to use for subsequent fill drawing operations.
@@ -142,6 +231,18 @@ public:
     ColorGradient getFillColorGradient() const;
 
     //==============================================================================
+    /** Sets the current drawing stroke color.
+
+        @param color The new color to use for subsequent stroke drawing operations.
+    */
+    void setStrokeColor (Color color);
+
+    /** Retrieves the current drawing stroke color.
+
+        @return The current color for stroke drawing.
+    */
+    Color getStrokeColor() const;
+
     /** Sets the current color gradient for strokes.
 
         @param gradient The new color gradient to use for subsequent stroke drawing operations.
@@ -155,33 +256,30 @@ public:
     ColorGradient getStrokeColorGradient() const;
 
     //==============================================================================
-    // TODO - doxygen
+    /** Sets the stroke type for subsequent drawing operations.
+
+        @param strokeType The new stroke type.
+    */
+    void setStrokeType (StrokeType strokeType);
+
+    /** Retrieves the current stroke type.
+
+        @return The current stroke type.
+    */
+    StrokeType getStrokeType() const;
+
+    /** Sets the stroke width for subsequent drawing operations.
+
+        @param strokeWidth The new stroke width.
+    */
     void setStrokeWidth (float strokeWidth);
 
-    // TODO - doxygen
+    /** Retrieves the current stroke width.
+
+        @return The current stroke width.
+    */
     float getStrokeWidth() const;
 
-    //==============================================================================
-    // TODO - doxygen
-    void setFeather (float feather);
-
-    // TODO - doxygen
-    float getFeather() const;
-
-    //==============================================================================
-    /** Sets the opacity for subsequent drawing operations.
-
-        @param opacity The new opacity level (0.0-1.0).
-    */
-    void setOpacity (float opacity);
-
-    /** Retrieves the current opacity setting.
-
-        @return The current opacity level.
-    */
-    float getOpacity() const;
-
-    //==============================================================================
     /** Sets the stroke join style for drawing lines and paths.
 
         @param join The join style to use.
@@ -194,7 +292,6 @@ public:
     */
     StrokeJoin getStrokeJoin() const;
 
-    //==============================================================================
     /** Sets the stroke cap style for drawing lines and paths.
 
         @param cap The cap style to use.
@@ -207,13 +304,23 @@ public:
     */
     StrokeCap getStrokeCap() const;
 
+    /** Sets the miter limit used when drawing stroked paths with miter joins.
+        The miter limit controls when miter joins are clipped to bevel joins.
+        The SVG default is 4.0. The value is clamped to a minimum of 1.0.
+    */
+    void setStrokeMiterLimit (float limit);
+
     //==============================================================================
-    /**
-     */
+    /** Sets the blend mode for subsequent drawing operations.
+
+        @param blendMode The new blend mode.
+    */
     void setBlendMode (BlendMode blendMode);
 
-    /**
-     */
+    /** Retrieves the current blend mode.
+
+        @return The current blend mode.
+    */
     BlendMode getBlendMode() const;
 
     //==============================================================================
@@ -236,6 +343,13 @@ public:
     */
     void setTransform (const AffineTransform& transform);
 
+    /** Adds a transformation to the current transformation matrix.
+        The new transform is applied on top of the existing transform.
+
+        @param transform The transformation to add to the current transform.
+    */
+    void addTransform (const AffineTransform& transform);
+
     /** Retrieves the current affine transformation.
 
         @return The current affine transformation.
@@ -243,8 +357,22 @@ public:
     AffineTransform getTransform() const;
 
     //==============================================================================
+    /** Sets the clip path for subsequent drawing operations.
+
+        @param clipRect The rectangle to clip to.
+    */
     void setClipPath (const Rectangle<float>& clipRect);
+
+    /** Sets the clip path for subsequent drawing operations.
+
+        @param clipPath The path to clip to.
+    */
     void setClipPath (const Path& clipPath);
+
+    /** Retrieves the current clip path.
+
+        @return The current clip path.
+    */
     Path getClipPath() const;
 
     //==============================================================================
@@ -267,8 +395,7 @@ public:
     void strokeLine (const Point<float>& p1, const Point<float>& p2);
 
     //==============================================================================
-    /** Fills the entire drawing area with the current color or gradient.
-    */
+    /** Fills the entire drawing area with the current color or gradient. */
     void fillAll();
 
     //==============================================================================
@@ -390,6 +517,29 @@ public:
     void strokeRoundedRect (const Rectangle<float>& r, float radius);
 
     //==============================================================================
+    /** Fills an ellipse with the current color or gradient.
+
+        @param r The rectangle that defines the ellipse.
+    */
+    void fillEllipse (const Rectangle<float>& r);
+
+    void fillEllipse (float x, float y, float width, float height);
+
+    /** Stroke an ellipse with the current color or gradient.
+
+        @param r The rectangle that defines the ellipse.
+    */
+    void strokeEllipse (const Rectangle<float>& r);
+
+    void strokeEllipse (float x, float y, float width, float height);
+
+    //==============================================================================
+    /** Fills a path with the current color or gradient.
+
+        @param path The path to fill.
+    */
+    void fillPath (const Path& path);
+
     /** Draws a path with a specified thickness.
 
         @param path The path to draw.
@@ -397,40 +547,99 @@ public:
     */
     void strokePath (const Path& path);
 
-    /** Fills a path with the current color or gradient.
-
-        @param path The path to fill.
-    */
-    void fillPath (const Path& path);
-
     //==============================================================================
+    /** Draws an image at a specific position.
 
+        @param image The image to draw.
+        @param pos The position to draw the image at.
+    */
     void drawImageAt (const Image& image, const Point<float>& pos);
+
+    /** Draws an image into a target rectangle.
+
+        @param image The image to draw.
+        @param targetArea The destination rectangle in the current coordinate space.
+    */
+    void drawImage (const Image& image, const Rectangle<float>& targetArea);
+
+    /** Draws a GPU texture directly into a target rectangle, without materialising an Image.
+
+        This avoids the CPU-side ImagePixelData allocation that Image::fromTexture() requires.
+        Obtain a GpuTexture::Ptr from GpuCanvas::asTexture() or keep one alive from a
+        previous GpuCanvas render.
+
+        @param texture    The texture to draw. Must be valid (non-null).
+        @param targetArea The destination rectangle in the current coordinate space.
+    */
+    void drawTexture (const GpuTexture::Ptr& texture, const Rectangle<float>& targetArea);
 
     //==============================================================================
     /** Draws an attributed text.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
     */
     void fillFittedText (const StyledText& text, const Rectangle<float>& rect);
+
+    /** Fills a text with a specified font and size.
+
+        @param text The text to fill.
+        @param rect The rectangle that defines the text.
+        @param font The font to use.
+        @param fontSize The size of the font.
+        @param justification The justification of the text.
+    */
+    void fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
+
+    /** Draws an attributed text.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
+    */
     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
 
+    /** Draws a text with a specified font and size.
+
+        @param text The text to draw.
+        @param rect The rectangle that defines the text.
+        @param font The font to use.
+        @param fontSize The size of the font.
+        @param justification The justification of the text.
+    */
+    void strokeFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification = Justification::center);
+
     //==============================================================================
-    /** Clips the drawing area to the specified rectangle.
+    /** Returns true if this Graphics renders to an offscreen Image target. */
+    bool isOffscreen() const noexcept;
 
-        @param r The rectangle to clip to.
+    /** Flushes the offscreen GPU frame. */
+    bool commitOffscreenTarget();
+
+    /** Flushes the offscreen GPU frame and sets the rendered GPU texture on the target Image.
+
+        After this call, the Image can be passed to drawImage() without any CPU round-trip.
+
+        Returns false if not an offscreen context or already committed.
     */
-    void clipPath (const Rectangle<float>& r);
+    bool commitToImage();
 
-    /** Clips the drawing area to the specified path.
+    /** Reads the rendered pixels back to the Image's CPU pixel buffer.
 
-        @param path The path to clip to.
+        Implicitly calls commitToImage() first if not yet done.
+        After this call, Image::getRawData() contains the rendered content.
+        
+        Returns false if not an offscreen context.
     */
-    void clipPath (const Path& path);
+    bool readPixelsToImage();
 
     //==============================================================================
     /** Retrieves the global context scale, the one used to construct the graphics instance. */
     float getContextScale() const;
 
     //==============================================================================
+    /** Retrieves the graphics context this object was created with. */
+    GraphicsContext& getGraphicsContext();
+
     /** Retrieves the factory used for creating graphical objects.
 
         @return Pointer to a rive::Factory object.
@@ -460,12 +669,12 @@ private:
 
         Color getFillColor() const noexcept
         {
-            return fillColor.withMultipliedAlpha (opacity);
+            return fillColor;
         }
 
         Color getStrokeColor() const noexcept
         {
-            return strokeColor.withMultipliedAlpha (opacity);
+            return strokeColor;
         }
 
         bool isFillColorGradient() const noexcept
@@ -475,17 +684,17 @@ private:
 
         bool isStrokeColorGradient() const noexcept
         {
-            return ! isCurrentFillColor;
+            return ! isCurrentStrokeColor;
         }
 
         ColorGradient getFillColorGradient() const noexcept
         {
-            return fillGradient.withMultipliedAlpha (opacity);
+            return fillGradient;
         }
 
         ColorGradient getStrokeColorGradient() const noexcept
         {
-            return strokeGradient.withMultipliedAlpha (opacity);
+            return strokeGradient;
         }
 
         float getStrokeWidth() const noexcept
@@ -525,14 +734,15 @@ private:
 
         AffineTransform getTransform (float offsetX, float offsetY) const noexcept
         {
-            return transform
-                .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
+            return AffineTransform::translation (offsetX, offsetY)
+                .followedBy (transform)
+                .translated (drawingArea.getX(), drawingArea.getY())
                 .scaled (scale);
         }
 
         float scale = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
-        StrokeCap cap = StrokeCap::Square;
+        StrokeCap cap = StrokeCap::Butt;
         Color fillColor = 0xff000000;
         Color strokeColor = 0xff000000;
         ColorGradient fillGradient;
@@ -557,14 +767,22 @@ private:
 
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
+    bool renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea);
 
     void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
 
     GraphicsContext& context;
 
+    std::unique_ptr<RenderableTarget> ownedOffscreenTarget;
+    RenderableTarget* offscreenTarget = nullptr;
+
     rive::Factory& factory;
+    std::unique_ptr<rive::Renderer> ownedRenderer;
     rive::Renderer& renderer;
     float contextScale = 1.0f;
+
+    Image* offscreenTargetImage = nullptr;
+    bool committed = false;
 
     std::vector<RenderOptions> renderOptions;
 };

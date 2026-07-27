@@ -26,17 +26,19 @@
 
     ID:                   yup_gui
     vendor:               yup
-    version:              1.0.0
+    version:              2.0.0
     name:                 YUP Graphical User Interface
     description:          The essential set of basic YUP user interface.
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
     dependencies:         yup_events yup_data_model yup_graphics rive
+    optionalDeps:         yup_audio_gui
     appleFrameworks:      Metal
+    iosFrameworks:        CoreMotion
+    iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
-    enableARC:            1
 
   END_YUP_MODULE_DECLARATION
 
@@ -53,23 +55,78 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+
+    Select if the default theme text fonts should be embedded in the binary. If set to 0, the
+    default theme text fonts will be loaded from the system fonts. If set to 1, the default
+    theme text fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 0
+#endif
+
+/** Config: YUP_EMBED_DEFAULT_THEME_ICON_FONT
+
+    Select if the default theme icon fonts should be embedded in the binary. If set to 0, the
+    default theme icon fonts will be loaded from the system fonts. If set to 1, the default
+    theme icon fonts will be embedded in the binary. The default is 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_ICON_FONT
+#define YUP_EMBED_DEFAULT_THEME_ICON_FONT 1
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
 
     Enable repaint debugging for components.
 */
-#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
-#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#ifndef YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_PAINT_DEBUGGING 0
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_GUI_WINDOWING_LOGGING
+
+    Enable logging of windowing events like movement, resizes, mouse interactions.
+*/
+#ifndef YUP_ENABLE_GUI_WINDOWING_LOGGING
+#define YUP_ENABLE_GUI_WINDOWING_LOGGING 0
+#endif
+
+//==============================================================================
+/** Config: YUP_ENABLE_GUI_POPUPMENU_LOGGING
+
+    Enable logging of PopupMenu events like hover, submenu show/hide, mouse enter/exit.
+    Set to 1 to enable, 0 to disable. Off by default.
+*/
+#ifndef YUP_ENABLE_GUI_POPUPMENU_LOGGING
+#define YUP_ENABLE_GUI_POPUPMENU_LOGGING 0
 #endif
 
 //==============================================================================
 
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT && YUP_EMSCRIPTEN
+#undef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 1
+#endif
+
+//==============================================================================
+
+#include <optional>
 #include <tuple>
+#include <unordered_map>
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfileSample.h"
+#include "profiling/yup_PaintProfileStats.h"
 
 //==============================================================================
 
 #include "application/yup_Application.h"
 #include "keyboard/yup_KeyModifiers.h"
 #include "keyboard/yup_KeyPress.h"
+#include "keyboard/yup_TextInputTarget.h"
 #include "mouse/yup_MouseEvent.h"
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
@@ -78,17 +135,34 @@
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
+#include "effects/yup_ComponentEffect.h"
 #include "component/yup_ComponentStyle.h"
+#include "component/yup_ComponentPaintMetrics.h"
+#include "component/yup_ComponentListener.h"
+#include "component/yup_DragAndDropData.h"
 #include "component/yup_Component.h"
-#include "widgets/yup_Button.h"
-#include "widgets/yup_TextButton.h"
+#include "menus/yup_PopupMenu.h"
+#include "buttons/yup_Button.h"
+#include "buttons/yup_TextButton.h"
+#include "buttons/yup_ToggleButton.h"
+#include "buttons/yup_SwitchButton.h"
+#include "buttons/yup_ImageButton.h"
+#include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
-#include "widgets/yup_TextEditor.h"
+#include "widgets/yup_ComboBox.h"
+#include "widgets/yup_ScrollBar.h"
+#include "widgets/yup_ProgressBar.h"
+#include "widgets/yup_ListBoxItem.h"
+#include "widgets/yup_ListBox.h"
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 #include "dialogs/yup_FileChooser.h"
+
+//==============================================================================
+
+#include "profiling/yup_PaintProfiler.h"
 
 //==============================================================================
 
@@ -98,3 +172,4 @@
 
 #include "themes/yup_ApplicationTheme.h"
 #include "themes/theme_v1/yup_ThemeVersion1.h"
+#include "themes/theme_v1/yup_ThemeVersion1_Icons.h"

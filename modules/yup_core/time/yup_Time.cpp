@@ -64,36 +64,6 @@ static std::tm millisToLocal (int64 millis) noexcept
 #endif
 }
 
-static std::tm millisToUTC (int64 millis) noexcept
-{
-#if YUP_WINDOWS
-    std::tm result;
-    millis /= 1000;
-
-    if (_gmtime64_s (&result, &millis) != 0)
-        zerostruct (result);
-
-    return result;
-
-#else
-    std::tm result;
-    auto now = (time_t) (millis / 1000);
-
-    if (gmtime_r (&now, &result) == nullptr)
-        zerostruct (result);
-
-    return result;
-#endif
-}
-
-static int getUTCOffsetSeconds (const int64 millis) noexcept
-{
-    auto utc = millisToUTC (millis);
-    utc.tm_isdst = -1; // Treat this UTC time as local to find the offset
-
-    return (int) ((millis / 1000) - (int64) mktime (&utc));
-}
-
 static int extendedModulo (const int64 value, const int modulo) noexcept
 {
     return (int) (value >= 0 ? (value % modulo)
@@ -175,6 +145,21 @@ static int64 daysFrom1970 (int year, int month) noexcept
     return daysFrom1970 (year) + daysFromJan1 (year, month);
 }
 
+static int64 mktime_local (const std::tm& t) noexcept
+{
+    auto t1 = t;
+    const auto result = mktime (&t1);
+
+    jassert (t.tm_year == t1.tm_year
+        && t.tm_mon  == t1.tm_mon
+        && t.tm_mday == t1.tm_mday
+        && t.tm_hour == t1.tm_hour
+        && t.tm_min  == t1.tm_min
+        && t.tm_sec  == t1.tm_sec);
+
+    return (int64) result;
+}
+
 // There's no posix function that does a UTC version of mktime,
 // so annoyingly we need to implement this manually..
 static int64 mktime_utc (const std::tm& t) noexcept
@@ -218,10 +203,11 @@ Time::Time (int year, int month, int day, int hours, int minutes, int seconds, i
     t.tm_hour = hours;
     t.tm_min = minutes;
     t.tm_sec = seconds;
-    t.tm_isdst = -1;
+    t.tm_isdst = useLocalTime ? -1 : 0;
 
-    millisSinceEpoch = 1000 * (useLocalTime ? (int64) mktime (&t) : TimeHelpers::mktime_utc (t))
-                     + milliseconds;
+    millisSinceEpoch = milliseconds + 1000 * (useLocalTime
+        ? TimeHelpers::mktime_local (t)
+        : TimeHelpers::mktime_utc (t));
 }
 
 //==============================================================================
@@ -434,7 +420,8 @@ String Time::getTimeZone() const
 
 int Time::getUTCOffsetSeconds() const noexcept
 {
-    return TimeHelpers::getUTCOffsetSeconds (millisSinceEpoch);
+    const auto local = TimeHelpers::millisToLocal (millisSinceEpoch);
+    return (int) (TimeHelpers::mktime_utc (local) - (millisSinceEpoch / 1000));
 }
 
 String Time::getUTCOffsetString (bool includeSemiColon) const

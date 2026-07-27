@@ -1,0 +1,1180 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2025 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#pragma once
+
+#include <yup_dsp/yup_dsp.h>
+#include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_audio_basics/yup_audio_basics.h>
+
+#include <array>
+#include <cmath>
+#include <vector>
+
+//==============================================================================
+
+class SignalGenerator
+{
+public:
+    enum class SignalType
+    {
+        singleTone,
+        frequencySweep,
+        whiteNoise,
+        pinkNoise,
+        brownNoise
+    };
+
+    enum class SweepPlaybackMode
+    {
+        direct,
+        resampled,
+        resampledOversampled2x,
+        resampledOversampled4x,
+        resampledOversampled8x
+    };
+
+    SignalGenerator()
+        : sampleRate (44100.0)
+        , sourceSampleRate (sampleRate * resamplerSourceRateMultiplier)
+        , frequency (440.0)
+        , phase (0.0)
+        , amplitude (0.5f)
+        , signalType (SignalType::frequencySweep)
+        , sweepPlaybackMode (SweepPlaybackMode::resampled)
+        , sweepStartFreq (20.0)
+        , sweepEndFreq (22000.0)
+        , sweepDurationSeconds (10.0)
+        , sweepProgress (0.0)
+        , pinkState (0.0)
+        , brownState (0.0)
+        , smoothedFrequency (440.0)
+        , smoothedAmplitude (0.5f)
+    {
+        initialiseSineTable();
+
+        // Initialize pink noise filter state
+        for (int i = 0; i < 7; ++i)
+            pinkFilters[i] = 0.0;
+
+        // Set default smoothing time (50ms)
+        smoothedFrequency.reset (sampleRate, 0.05);
+        smoothedAmplitude.reset (sampleRate, 0.05);
+
+        prepareResampling (defaultMaxBlockSize);
+    }
+
+    void prepare (double newSampleRate, int maxBlockSize)
+    {
+        setSampleRate (newSampleRate);
+        prepareResampling (maxBlockSize);
+    }
+
+    void setSampleRate (double newSampleRate)
+    {
+        sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
+        sourceSampleRate = sampleRate * resamplerSourceRateMultiplier;
+        updatePhaseIncrement();
+
+        // Update smoothing times with new sample rate
+        smoothedFrequency.reset (sampleRate, 0.05);
+        smoothedAmplitude.reset (sampleRate, 0.05);
+    }
+
+    void setFrequency (double newFrequency)
+    {
+        frequency = newFrequency;
+        smoothedFrequency.setTargetValue (newFrequency);
+        updatePhaseIncrement();
+    }
+
+    void setAmplitude (float newAmplitude)
+    {
+        amplitude = newAmplitude;
+        smoothedAmplitude.setTargetValue (newAmplitude);
+    }
+
+    void setSignalType (SignalType type)
+    {
+        signalType = type;
+        if (type == SignalType::frequencySweep)
+            resetSweepPlaybackState();
+    }
+
+    void setSweepPlaybackMode (SweepPlaybackMode mode)
+    {
+        if (sweepPlaybackMode == mode)
+            return;
+
+        sweepPlaybackMode = mode;
+        resetSweepPlaybackState();
+    }
+
+    void setSweepParameters (double startFreq, double endFreq, double durationSeconds)
+    {
+        sweepStartFreq = startFreq;
+        sweepEndFreq = endFreq;
+        sweepDurationSeconds = yup::jmax (0.001, durationSeconds);
+        resetSweepPlaybackState();
+    }
+
+    void setSmoothingTime (float timeInSeconds)
+    {
+        smoothedFrequency.reset (sampleRate, timeInSeconds);
+        smoothedAmplitude.reset (sampleRate, timeInSeconds);
+    }
+
+    void renderNextBlock (float* output, int numSamples)
+    {
+        if (output == nullptr || numSamples <= 0)
+            return;
+
+        if (signalType == SignalType::frequencySweep && sweepPlaybackMode != SweepPlaybackMode::direct)
+        {
+            renderResampledSweepBlock (output, numSamples);
+            return;
+        }
+
+        for (int sample = 0; sample < numSamples; ++sample)
+            output[sample] = getNextSample();
+    }
+
+    float getNextSample()
+    {
+        // Get smoothed parameter values for this sample
+        double currentFreq = smoothedFrequency.getNextValue();
+        float currentAmp = smoothedAmplitude.getNextValue();
+
+        float sample = 0.0f;
+
+        switch (signalType)
+        {
+            case SignalType::singleTone:
+                sample = generateSine (currentFreq);
+                break;
+            case SignalType::frequencySweep:
+                sample = generateSweep();
+                break;
+            case SignalType::whiteNoise:
+                sample = generateWhiteNoise();
+                break;
+            case SignalType::pinkNoise:
+                sample = generatePinkNoise();
+                break;
+            case SignalType::brownNoise:
+                sample = generateBrownNoise();
+                break;
+        }
+
+        return sample * currentAmp;
+    }
+
+private:
+    static constexpr int wavetableSize = 2048;
+    static constexpr int defaultMaxBlockSize = 512;
+    static constexpr double resamplerSourceRateMultiplier = 2.0;
+
+    void initialiseSineTable()
+    {
+        for (int i = 0; i <= wavetableSize; ++i)
+        {
+            const double phaseInRadians = yup::MathConstants<double>::twoPi * static_cast<double> (i) / static_cast<double> (wavetableSize);
+            sineTable[static_cast<std::size_t> (i)] = static_cast<float> (std::sin (phaseInRadians));
+        }
+    }
+
+    void prepareResampling (int maxBlockSize)
+    {
+        maxOutputBlockSize = yup::jmax (1, maxBlockSize);
+        sourceBlockCapacity = maxOutputBlockSize * static_cast<int> (resamplerSourceRateMultiplier) + 64;
+        resampledBlockCapacity = maxOutputBlockSize + 64;
+
+        sourceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
+        silenceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
+        resampledBuffer.assign (static_cast<std::size_t> (resampledBlockCapacity), 0.0f);
+
+        resampler.prepare (sourceSampleRate, sampleRate, 1, sourceBlockCapacity);
+        oversampler2x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+        oversampler4x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+        oversampler8x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+
+        resetSweepPlaybackState();
+    }
+
+    void ensurePreparedForBlock (int numSamples)
+    {
+        if (numSamples > maxOutputBlockSize)
+            prepareResampling (numSamples);
+    }
+
+    void resetSweepPlaybackState()
+    {
+        phase = 0.0;
+        sweepProgress = 0.0;
+        pendingOutputSamples = 0;
+        pendingReadPosition = 0;
+
+        resampler.reset();
+        oversampler2x.reset();
+        oversampler4x.reset();
+        oversampler8x.reset();
+    }
+
+    void renderResampledSweepBlock (float* output, int numSamples)
+    {
+        ensurePreparedForBlock (numSamples);
+
+        int outputPosition = 0;
+
+        while (outputPosition < numSamples)
+        {
+            if (pendingReadPosition >= pendingOutputSamples)
+            {
+                const int remainingOutputSamples = numSamples - outputPosition;
+                const int sourceSamplesNeeded = yup::jmin (sourceBlockCapacity,
+                                                           yup::jmax (1, remainingOutputSamples * static_cast<int> (resamplerSourceRateMultiplier) + 32));
+
+                renderSourceSweepBlock (sourceSamplesNeeded);
+
+                const float* inputPtrs[] = { sourceBuffer.data() };
+                float* outputPtrs[] = { resampledBuffer.data() };
+
+                pendingOutputSamples = resampler.resample (inputPtrs, outputPtrs, 1, sourceSamplesNeeded);
+                pendingReadPosition = 0;
+
+                if (pendingOutputSamples <= 0)
+                {
+                    while (outputPosition < numSamples)
+                        output[outputPosition++] = 0.0f;
+
+                    return;
+                }
+            }
+
+            const int samplesToCopy = yup::jmin (numSamples - outputPosition, pendingOutputSamples - pendingReadPosition);
+
+            for (int i = 0; i < samplesToCopy; ++i)
+            {
+                const float currentAmp = smoothedAmplitude.getNextValue();
+                output[outputPosition++] = resampledBuffer[static_cast<std::size_t> (pendingReadPosition++)] * currentAmp;
+            }
+        }
+    }
+
+    void renderSourceSweepBlock (int numSamples)
+    {
+        switch (sweepPlaybackMode)
+        {
+            case SweepPlaybackMode::direct:
+            case SweepPlaybackMode::resampled:
+                renderWavetableSweepBlock (sourceBuffer.data(), numSamples, sourceSampleRate);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled2x:
+                renderOversampledSourceBlock (oversampler2x, 2, numSamples);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled4x:
+                renderOversampledSourceBlock (oversampler4x, 4, numSamples);
+                break;
+
+            case SweepPlaybackMode::resampledOversampled8x:
+                renderOversampledSourceBlock (oversampler8x, 8, numSamples);
+                break;
+        }
+    }
+
+    template <typename OversamplerType>
+    void renderOversampledSourceBlock (OversamplerType& oversampler, int oversampleFactor, int numSamples)
+    {
+        const float* inputPtrs[] = { silenceBuffer.data() };
+        oversampler.upsample (inputPtrs, 1, numSamples);
+
+        auto* oversampledData = oversampler.getOversampledChannelData (0);
+        renderWavetableSweepBlock (oversampledData, oversampler.getOversampledNumSamples(), sourceSampleRate * static_cast<double> (oversampleFactor));
+
+        float* outputPtrs[] = { sourceBuffer.data() };
+        oversampler.downsample (outputPtrs, 1, numSamples);
+    }
+
+    void renderWavetableSweepBlock (float* output, int numSamples, double generationSampleRate)
+    {
+        for (int i = 0; i < numSamples; ++i)
+            output[i] = generateSweepAtRate (generationSampleRate);
+    }
+
+    float readSineTable() const
+    {
+        const double tablePosition = phase * static_cast<double> (wavetableSize);
+        const int index = static_cast<int> (tablePosition);
+        const float fraction = static_cast<float> (tablePosition - static_cast<double> (index));
+
+        const float sample0 = sineTable[static_cast<std::size_t> (index)];
+        const float sample1 = sineTable[static_cast<std::size_t> (index + 1)];
+
+        return sample0 + (sample1 - sample0) * fraction;
+    }
+
+    void advancePhase (double freq, double generationSampleRate)
+    {
+        phase += freq / generationSampleRate;
+
+        while (phase >= 1.0)
+            phase -= 1.0;
+    }
+
+    float generateSine (double freq)
+    {
+        float sample = readSineTable();
+        advancePhase (freq, sampleRate);
+
+        return sample;
+    }
+
+    float generateSweep()
+    {
+        return generateSweepAtRate (sampleRate);
+    }
+
+    float generateSweepAtRate (double generationSampleRate)
+    {
+        // Linear frequency sweep
+        double currentFreq = sweepStartFreq + (sweepEndFreq - sweepStartFreq) * sweepProgress;
+        float sample = readSineTable();
+        advancePhase (currentFreq, generationSampleRate);
+
+        // Update sweep progress
+        sweepProgress += 1.0 / (sweepDurationSeconds * generationSampleRate);
+        if (sweepProgress >= 1.0)
+            sweepProgress = 0.0; // Loop the sweep
+
+        return sample;
+    }
+
+    float generateWhiteNoise()
+    {
+        return yup::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+    }
+
+    float generatePinkNoise()
+    {
+        // Paul Kellett's refined method for pink noise
+        float white = yup::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+
+        pinkFilters[0] = 0.99886f * pinkFilters[0] + white * 0.0555179f;
+        pinkFilters[1] = 0.99332f * pinkFilters[1] + white * 0.0750759f;
+        pinkFilters[2] = 0.96900f * pinkFilters[2] + white * 0.1538520f;
+        pinkFilters[3] = 0.86650f * pinkFilters[3] + white * 0.3104856f;
+        pinkFilters[4] = 0.55000f * pinkFilters[4] + white * 0.5329522f;
+        pinkFilters[5] = -0.7616f * pinkFilters[5] - white * 0.0168980f;
+
+        float pink = pinkFilters[0] + pinkFilters[1] + pinkFilters[2] + pinkFilters[3] + pinkFilters[4] + pinkFilters[5] + pinkFilters[6] + white * 0.5362f;
+        pinkFilters[6] = white * 0.115926f;
+
+        return pink * 0.11f; // Scale down
+    }
+
+    float generateBrownNoise()
+    {
+        float white = yup::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+        brownState = (brownState + (0.02f * white)) / 1.02f;
+        brownState *= 3.5f; // Scale up
+        return brownState;
+    }
+
+    void updatePhaseIncrement()
+    {
+        phaseIncrement = frequency / sampleRate;
+    }
+
+    std::array<float, wavetableSize + 1> sineTable;
+
+    double sampleRate;
+    double sourceSampleRate;
+    double frequency;
+    double phase;
+    double phaseIncrement = 0.0;
+    float amplitude;
+
+    SignalType signalType;
+    SweepPlaybackMode sweepPlaybackMode;
+
+    // Sweep parameters
+    double sweepStartFreq, sweepEndFreq, sweepDurationSeconds;
+    double sweepProgress;
+
+    // Noise filter states
+    double pinkFilters[7];
+    double pinkState;
+    double brownState;
+
+    // Smoothed parameter values
+    yup::SmoothedValue<double> smoothedFrequency;
+    yup::SmoothedValue<float> smoothedAmplitude;
+
+    // Resampling state
+    yup::ResamplerFloat resampler;
+    yup::Oversampler2xFloat oversampler2x;
+    yup::Oversampler4xFloat oversampler4x;
+    yup::Oversampler8xFloat oversampler8x;
+    std::vector<float> sourceBuffer;
+    std::vector<float> silenceBuffer;
+    std::vector<float> resampledBuffer;
+    int maxOutputBlockSize = 0;
+    int sourceBlockCapacity = 0;
+    int resampledBlockCapacity = 0;
+    int pendingOutputSamples = 0;
+    int pendingReadPosition = 0;
+};
+
+//==============================================================================
+
+class SpectrumAnalyzerDemo
+    : public yup::Component
+    , public yup::AudioIODeviceCallback
+    , public yup::Timer
+{
+public:
+    enum class ViewMode
+    {
+        spectrumFilled,
+        spectrumLines,
+        spectrogram
+    };
+
+    SpectrumAnalyzerDemo()
+        : Component ("SpectrumAnalyzerDemo")
+        , analyzerComponent (analyzerState)
+        , spectrogramComponent (analyzerState)
+    {
+        setupUI();
+        setupAudio();
+    }
+
+    ~SpectrumAnalyzerDemo() override
+    {
+        deviceManager.removeAudioCallback (this);
+        deviceManager.closeAudioDevice();
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+    }
+
+    void resized() override
+    {
+        auto bounds = getLocalBounds();
+        const int margin = 10;
+
+        // Title area with proper spacing
+        auto titleBounds = bounds.removeFromTop (40);
+        titleLabel->setBounds (titleBounds.reduced (margin, 8));
+
+        // Control panel
+        auto controlHeight = 220;
+        auto controlPanel = bounds.removeFromTop (controlHeight);
+        layoutControlPanel (controlPanel.reduced (margin));
+
+        // Small gap before display
+        bounds.removeFromTop (5);
+
+        // Display area takes the rest
+        auto displayBounds = bounds.reduced (margin);
+
+        const bool showingSpectrogram = (currentViewMode == ViewMode::spectrogram);
+        analyzerComponent.setVisible (! showingSpectrogram);
+        spectrogramComponent.setVisible (showingSpectrogram);
+
+        if (showingSpectrogram)
+            spectrogramComponent.setBounds (displayBounds);
+        else
+            analyzerComponent.setBounds (displayBounds);
+    }
+
+    void visibilityChanged() override
+    {
+        if (! isVisible())
+        {
+            deviceManager.removeAudioCallback (this);
+            stopTimer();
+        }
+        else
+        {
+            deviceManager.addAudioCallback (this);
+            startTimer (100); // Update UI every 100ms
+        }
+    }
+
+    void timerCallback() override
+    {
+        // Update frequency display
+        if (frequencyLabel)
+        {
+            yup::String freqText = "Frequency: " + yup::String (static_cast<int> (currentFrequency)) + " Hz";
+            frequencyLabel->setText (freqText, yup::dontSendNotification);
+        }
+
+        // Update amplitude display
+        if (amplitudeLabel)
+        {
+            yup::String ampText = "Amplitude: " + yup::String (currentAmplitude * 100, 0) + "%";
+            amplitudeLabel->setText (ampText, yup::dontSendNotification);
+        }
+
+        // Update FFT info display
+        if (fftInfoLabel)
+        {
+            yup::String fftText = "FFT: " + yup::String (currentFFTSize);
+            fftInfoLabel->setText (fftText, yup::dontSendNotification);
+        }
+    }
+
+    // AudioIODeviceCallback methods
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int numInputChannels,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const yup::AudioIODeviceCallbackContext& context) override
+    {
+        if (monoOutputBuffer.size() < static_cast<std::size_t> (numSamples))
+            monoOutputBuffer.resize (static_cast<std::size_t> (numSamples), 0.0f);
+
+        signalGenerator.renderNextBlock (monoOutputBuffer.data(), numSamples);
+
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const float audioSample = monoOutputBuffer[static_cast<std::size_t> (sample)];
+
+            // Output to all channels
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+                outputChannelData[channel][sample] = audioSample;
+
+            // Feed to spectrum analyzer
+            analyzerState.pushSample (audioSample);
+        }
+    }
+
+    void audioDeviceAboutToStart (yup::AudioIODevice* device) override
+    {
+        double sampleRate = device->getCurrentSampleRate();
+        const int maxBlockSize = yup::jmax (1, device->getCurrentBufferSizeSamples());
+
+        {
+            const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+
+            // Setup signal generator
+            signalGenerator.prepare (sampleRate, maxBlockSize);
+            signalGenerator.setFrequency (currentFrequency);
+            signalGenerator.setAmplitude (currentAmplitude);
+            signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
+            monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
+        }
+
+        // Configure spectrum analyzer
+        analyzerComponent.setSampleRate (sampleRate);
+    }
+
+    void audioDeviceStopped() override
+    {
+    }
+
+private:
+    void setupUI()
+    {
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+
+        // Title
+        titleLabel = std::make_unique<yup::Label> ("Title");
+        titleLabel->setText ("Real-Time Spectrum Analyzer Demo");
+        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
+        titleLabel->setFont (font);
+        addAndMakeVisible (*titleLabel);
+
+        // Signal type selector
+        signalTypeCombo = std::make_unique<yup::ComboBox> ("SignalType");
+        signalTypeCombo->addItem ("Single Tone", 1);
+        signalTypeCombo->addItem ("Sweep Direct", 2);
+        signalTypeCombo->addItem ("Sweep Resampler", 3);
+        signalTypeCombo->addItem ("Sweep 2x", 4);
+        signalTypeCombo->addItem ("Sweep 4x", 5);
+        signalTypeCombo->addItem ("Sweep 8x", 6);
+        signalTypeCombo->addItem ("White Noise", 7);
+        signalTypeCombo->addItem ("Pink Noise", 8);
+        signalTypeCombo->addItem ("Brown Noise", 9);
+        signalTypeCombo->setSelectedId (3);
+        signalTypeCombo->onSelectedItemChanged = [this]
+        {
+            updateSignalType();
+        };
+        addAndMakeVisible (*signalTypeCombo);
+
+        // Frequency control
+        frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency");
+        frequencySlider->setRange ({ 20.0, 22000.0 });
+        frequencySlider->setSkewFactorFromMidpoint (440.0);
+        frequencySlider->setValue (440.0);
+        frequencySlider->onValueChanged = [this] (double value)
+        {
+            currentFrequency = (float) value;
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setFrequency ((float) value);
+            });
+        };
+        addAndMakeVisible (*frequencySlider);
+
+        // Amplitude control
+        amplitudeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Amplitude");
+        amplitudeSlider->setRange ({ 0.0, 1.0 });
+        amplitudeSlider->setValue (0.5);
+        amplitudeSlider->onValueChanged = [this] (double value)
+        {
+            currentAmplitude = (float) value;
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setAmplitude ((float) value);
+            });
+        };
+        addAndMakeVisible (*amplitudeSlider);
+
+        // Sweep duration control
+        sweepDurationSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Sweep Duration");
+        sweepDurationSlider->setRange ({ 1.0, 60.0 });
+        sweepDurationSlider->setValue (10.0);
+        sweepDurationSlider->onValueChanged = [this] (double value)
+        {
+            sweepDurationSeconds = (float) value;
+            updateSignalGenerator ([value] (SignalGenerator& generator)
+            {
+                generator.setSweepParameters (20.0, 22000.0, (float) value);
+            });
+        };
+        addAndMakeVisible (*sweepDurationSlider);
+
+        // FFT size selector
+        fftSizeCombo = std::make_unique<yup::ComboBox> ("FFTSize");
+        int fftSizeId = 1;
+        for (int size = 64; size <= 16384; size *= 2)
+            fftSizeCombo->addItem (yup::String (size), fftSizeId++);
+        fftSizeCombo->setSelectedId (7);
+        fftSizeCombo->onSelectedItemChanged = [this]
+        {
+            updateFFTSize();
+        };
+        addAndMakeVisible (*fftSizeCombo);
+
+        // Window type selector
+        windowTypeCombo = std::make_unique<yup::ComboBox> ("WindowType");
+        windowTypeCombo->addItem ("Rectangular", 1);
+        windowTypeCombo->addItem ("Hann", 2);
+        windowTypeCombo->addItem ("Hamming", 3);
+        windowTypeCombo->addItem ("Blackman", 4);
+        windowTypeCombo->addItem ("B-Harris", 5);
+        windowTypeCombo->addItem ("Kaiser", 6);
+        windowTypeCombo->addItem ("Gaussian", 7);
+        windowTypeCombo->addItem ("Tukey", 8);
+        windowTypeCombo->addItem ("Bartlett", 9);
+        windowTypeCombo->addItem ("Welch", 10);
+        windowTypeCombo->addItem ("Flat-top", 11);
+        windowTypeCombo->setSelectedId (4);
+        windowTypeCombo->onSelectedItemChanged = [this]
+        {
+            updateWindowType();
+        };
+        addAndMakeVisible (*windowTypeCombo);
+
+        // Display type selector
+        displayTypeCombo = std::make_unique<yup::ComboBox> ("DisplayType");
+        displayTypeCombo->addItem ("Filled", 1);
+        displayTypeCombo->addItem ("Lines", 2);
+        displayTypeCombo->setSelectedId (1);
+        displayTypeCombo->onSelectedItemChanged = [this]
+        {
+            updateDisplayType();
+        };
+        addAndMakeVisible (*displayTypeCombo);
+
+        // Level mode selector
+        levelModeCombo = std::make_unique<yup::ComboBox> ("LevelMode");
+        levelModeCombo->addItem ("Peak dBFS", 1);
+        levelModeCombo->addItem ("RMS dBFS", 2);
+        levelModeCombo->addItem ("Power dBFS", 3);
+        levelModeCombo->addItem ("PSD dBFS/Hz", 4);
+        levelModeCombo->setSelectedId (1);
+        levelModeCombo->onSelectedItemChanged = [this]
+        {
+            updateLevelMode();
+        };
+        addAndMakeVisible (*levelModeCombo);
+
+        // Release control
+        releaseSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Release");
+        releaseSlider->setRange ({ 0.0, 5.0 });
+        releaseSlider->setValue (1.0);
+        releaseSlider->onValueChanged = [this] (double value)
+        {
+            analyzerComponent.setReleaseTimeSeconds ((float) value);
+        };
+        addAndMakeVisible (*releaseSlider);
+
+        // Overlap control for responsiveness
+        overlapSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Overlap");
+        overlapSlider->setRange ({ 0.0, 0.95 });
+        overlapSlider->setValue (0.75);
+        overlapSlider->onValueChanged = [this] (double value)
+        {
+            analyzerComponent.setOverlapFactor ((float) value);
+        };
+        addAndMakeVisible (*overlapSlider);
+
+        // Smoothing time control
+        smoothingSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Smoothing");
+        smoothingSlider->setRange ({ 0.001, 0.5 });
+        smoothingSlider->setValue (0.05);
+        smoothingSlider->onValueChanged = [this] (double value)
+        {
+            setSmoothingTime ((float) value);
+        };
+        addAndMakeVisible (*smoothingSlider);
+
+        // View mode selector
+        viewModeCombo = std::make_unique<yup::ComboBox> ("ViewMode");
+        viewModeCombo->addItem ("Spectrum Filled", 1);
+        viewModeCombo->addItem ("Spectrum Lines", 2);
+        viewModeCombo->addItem ("Spectrogram", 3);
+        viewModeCombo->setSelectedId (1);
+        viewModeCombo->onSelectedItemChanged = [this]
+        {
+            updateViewMode();
+        };
+        addAndMakeVisible (*viewModeCombo);
+
+        // Color map selector (for spectrogram)
+        colorMapCombo = std::make_unique<yup::ComboBox> ("ColorMap");
+        colorMapCombo->addItem ("Heatmap", 1);
+        colorMapCombo->addItem ("Grayscale", 2);
+        colorMapCombo->addItem ("Cool", 3);
+        colorMapCombo->addItem ("Warm", 4);
+        colorMapCombo->addItem ("Viridis", 5);
+        colorMapCombo->setSelectedId (1);
+        colorMapCombo->onSelectedItemChanged = [this]
+        {
+            updateColorMap();
+        };
+        addAndMakeVisible (*colorMapCombo);
+
+        // Status labels with appropriate font size
+        auto statusFont = font.withHeight (11.0f);
+
+        frequencyLabel = std::make_unique<yup::Label> ("FrequencyLabel");
+        frequencyLabel->setText ("Frequency: 440 Hz");
+        frequencyLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+        frequencyLabel->setFont (statusFont);
+        addAndMakeVisible (*frequencyLabel);
+
+        amplitudeLabel = std::make_unique<yup::Label> ("AmplitudeLabel");
+        amplitudeLabel->setText ("Amplitude: 50%");
+        amplitudeLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+        amplitudeLabel->setFont (statusFont);
+        addAndMakeVisible (*amplitudeLabel);
+
+        fftInfoLabel = std::make_unique<yup::Label> ("FFTInfoLabel");
+        fftInfoLabel->setText ("FFT: 2048");
+        fftInfoLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+        fftInfoLabel->setFont (statusFont);
+        addAndMakeVisible (*fftInfoLabel);
+
+        // Configure spectrum analyzer
+        analyzerComponent.setWindowType (yup::WindowType::hann);
+        analyzerComponent.setFrequencyRange (20.0f, 22000.0f);
+        analyzerComponent.setDecibelRange (-100.0f, 10.0f);
+        analyzerComponent.setUpdateRate (30);
+        analyzerComponent.setSampleRate (44100.0);
+        analyzerComponent.setOverlapFactor (0.75f); // 75% overlap for better responsiveness
+        addAndMakeVisible (analyzerComponent);
+
+        // Configure spectrogram
+        spectrogramComponent.setWindowType (yup::WindowType::hann);
+        spectrogramComponent.setFrequencyRange (20.0f, 22000.0f);
+        spectrogramComponent.setDecibelRange (-100.0f, 10.0f);
+        spectrogramComponent.setUpdateRate (25);
+        spectrogramComponent.setSampleRate (44100.0);
+        spectrogramComponent.setOverlapFactor (0.75f);
+        spectrogramComponent.setColorMap (yup::SpectrogramColorMap::Type::heatmap);
+        spectrogramComponent.setVisible (false);
+        addAndMakeVisible (spectrogramComponent);
+
+        // Create parameter labels with proper font sizing
+        auto labelFont = font.withHeight (12.0f);
+
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:" })
+        {
+            auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
+            label->setText (labelText);
+            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
+            label->setFont (labelFont);
+            addAndMakeVisible (*label);
+        }
+
+        updateSignalType();
+    }
+
+    template <typename Callback>
+    void updateSignalGenerator (Callback&& callback)
+    {
+        const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+        callback (signalGenerator);
+    }
+
+    void setupAudio()
+    {
+        // Initialize audio device
+        deviceManager.initialiseWithDefaultDevices (0, 2);
+    }
+
+    void layoutControlPanel (yup::Rectangle<float> bounds)
+    {
+        const int margin = 8;
+        const int labelHeight = 18;
+        const int controlHeight = 32;
+        const int rowHeight = labelHeight + controlHeight + margin;
+        const int colWidth = bounds.getWidth() / 5 - margin;
+
+        // First row: Signal controls
+        auto row1 = bounds.removeFromTop (rowHeight);
+        auto signalTypeSection = row1.removeFromLeft (colWidth);
+        auto freqSection = row1.removeFromLeft (colWidth);
+        auto ampSection = row1.removeFromLeft (colWidth);
+        auto sweepSection = row1.removeFromLeft (colWidth);
+        auto smoothingParamSection = row1.removeFromLeft (colWidth);
+
+        parameterLabels[0]->setBounds (signalTypeSection.removeFromTop (labelHeight));
+        signalTypeCombo->setBounds (signalTypeSection.removeFromTop (controlHeight));
+
+        parameterLabels[1]->setBounds (freqSection.removeFromTop (labelHeight));
+        frequencySlider->setBounds (freqSection.removeFromTop (controlHeight));
+
+        parameterLabels[2]->setBounds (ampSection.removeFromTop (labelHeight));
+        amplitudeSlider->setBounds (ampSection.removeFromTop (controlHeight));
+
+        parameterLabels[3]->setBounds (sweepSection.removeFromTop (labelHeight));
+        sweepDurationSlider->setBounds (sweepSection.removeFromTop (controlHeight));
+
+        parameterLabels[11]->setBounds (smoothingParamSection.removeFromTop (labelHeight));
+        smoothingSlider->setBounds (smoothingParamSection.removeFromTop (controlHeight));
+
+        // Second row: FFT and view mode controls
+        auto row2 = bounds.removeFromTop (rowHeight);
+        auto fftSizeSection = row2.removeFromLeft (colWidth);
+        auto windowSection = row2.removeFromLeft (colWidth);
+        auto displaySection = row2.removeFromLeft (colWidth);
+        auto viewModeSection = row2.removeFromLeft (colWidth);
+        auto colorMapSection = row2.removeFromLeft (colWidth);
+
+        parameterLabels[4]->setBounds (fftSizeSection.removeFromTop (labelHeight));
+        fftSizeCombo->setBounds (fftSizeSection.removeFromTop (controlHeight));
+
+        parameterLabels[5]->setBounds (windowSection.removeFromTop (labelHeight));
+        windowTypeCombo->setBounds (windowSection.removeFromTop (controlHeight));
+
+        parameterLabels[6]->setBounds (displaySection.removeFromTop (labelHeight));
+        displayTypeCombo->setBounds (displaySection.removeFromTop (controlHeight));
+
+        parameterLabels[7]->setBounds (viewModeSection.removeFromTop (labelHeight));
+        viewModeCombo->setBounds (viewModeSection.removeFromTop (controlHeight));
+
+        parameterLabels[8]->setBounds (colorMapSection.removeFromTop (labelHeight));
+        colorMapCombo->setBounds (colorMapSection.removeFromTop (controlHeight));
+
+        // Third row: Release and overlap controls
+        auto row3 = bounds.removeFromTop (rowHeight);
+        auto releaseSection = row3.removeFromLeft (colWidth);
+        auto overlapSection = row3.removeFromLeft (colWidth);
+        auto levelModeSection = row3.removeFromLeft (colWidth);
+
+        parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
+        releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
+
+        parameterLabels[10]->setBounds (overlapSection.removeFromTop (labelHeight));
+        overlapSlider->setBounds (overlapSection.removeFromTop (controlHeight));
+
+        parameterLabels[12]->setBounds (levelModeSection.removeFromTop (labelHeight));
+        levelModeCombo->setBounds (levelModeSection.removeFromTop (controlHeight));
+
+        // Fourth row: Status labels
+        auto row4 = bounds.removeFromTop (30);
+        auto freqStatus = row4.removeFromLeft (bounds.getWidth() / 3);
+        auto ampStatus = row4.removeFromLeft (bounds.getWidth() / 3);
+        auto fftStatus = row4.removeFromLeft (bounds.getWidth() / 3);
+
+        frequencyLabel->setBounds (freqStatus);
+        amplitudeLabel->setBounds (ampStatus);
+        fftInfoLabel->setBounds (fftStatus);
+    }
+
+    void updateSignalType()
+    {
+        SignalGenerator::SignalType signalType = SignalGenerator::SignalType::singleTone;
+        auto sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampled;
+
+        switch (signalTypeCombo->getSelectedId())
+        {
+            case 1:
+                signalType = SignalGenerator::SignalType::singleTone;
+                break;
+            case 2:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::direct;
+                break;
+            case 3:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampled;
+                break;
+            case 4:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled2x;
+                break;
+            case 5:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled4x;
+                break;
+            case 6:
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled8x;
+                break;
+            case 7:
+                signalType = SignalGenerator::SignalType::whiteNoise;
+                break;
+            case 8:
+                signalType = SignalGenerator::SignalType::pinkNoise;
+                break;
+            case 9:
+                signalType = SignalGenerator::SignalType::brownNoise;
+                break;
+        }
+
+        updateSignalGenerator ([signalType, sweepPlaybackMode] (SignalGenerator& generator)
+        {
+            generator.setSignalType (signalType);
+            generator.setSweepPlaybackMode (sweepPlaybackMode);
+        });
+
+        // Enable/disable frequency and sweep controls based on signal type
+        frequencySlider->setEnabled (signalType == SignalGenerator::SignalType::singleTone);
+        sweepDurationSlider->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep);
+    }
+
+    void updateFFTSize()
+    {
+        int selectedId = fftSizeCombo->getSelectedId();
+        currentFFTSize = 64 << (selectedId - 1); // 64, 128, 256, ..., 16384
+
+        // Update the analyzer component (which will update the state)
+        analyzerComponent.setFFTSize (currentFFTSize);
+    }
+
+    void updateWindowType()
+    {
+        yup::WindowType windowType = yup::WindowType::hann;
+
+        switch (windowTypeCombo->getSelectedId())
+        {
+            case 1:
+                windowType = yup::WindowType::rectangular;
+                break;
+            case 2:
+                windowType = yup::WindowType::hann;
+                break;
+            case 3:
+                windowType = yup::WindowType::hamming;
+                break;
+            case 4:
+                windowType = yup::WindowType::blackman;
+                break;
+            case 5:
+                windowType = yup::WindowType::blackmanHarris;
+                break;
+            case 6:
+                windowType = yup::WindowType::kaiser;
+                break;
+            case 7:
+                windowType = yup::WindowType::gaussian;
+                break;
+            case 8:
+                windowType = yup::WindowType::tukey;
+                break;
+            case 9:
+                windowType = yup::WindowType::bartlett;
+                break;
+            case 10:
+                windowType = yup::WindowType::welch;
+                break;
+            case 11:
+                windowType = yup::WindowType::flattop;
+                break;
+        }
+
+        analyzerComponent.setWindowType (windowType);
+    }
+
+    void updateDisplayType()
+    {
+        yup::SpectrumAnalyzerComponent::DisplayType displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled;
+
+        switch (displayTypeCombo->getSelectedId())
+        {
+            case 1:
+                displayType = yup::SpectrumAnalyzerComponent::DisplayType::filled;
+                break;
+            case 2:
+                displayType = yup::SpectrumAnalyzerComponent::DisplayType::lines;
+                break;
+        }
+
+        analyzerComponent.setDisplayType (displayType);
+    }
+
+    void updateLevelMode()
+    {
+        auto levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+
+        switch (levelModeCombo->getSelectedId())
+        {
+            case 1:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::peakDecibels;
+                break;
+            case 2:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::rmsDecibels;
+                break;
+            case 3:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerDecibels;
+                break;
+            case 4:
+                levelMode = yup::SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity;
+                break;
+        }
+
+        analyzerComponent.setLevelMode (levelMode);
+    }
+
+    void updateViewMode()
+    {
+        switch (viewModeCombo->getSelectedId())
+        {
+            case 1:
+                currentViewMode = ViewMode::spectrumFilled;
+                analyzerComponent.setDisplayType (yup::SpectrumAnalyzerComponent::DisplayType::filled);
+                break;
+            case 2:
+                currentViewMode = ViewMode::spectrumLines;
+                analyzerComponent.setDisplayType (yup::SpectrumAnalyzerComponent::DisplayType::lines);
+                break;
+            case 3:
+                currentViewMode = ViewMode::spectrogram;
+                break;
+        }
+
+        resized();
+    }
+
+    void updateColorMap()
+    {
+        yup::SpectrogramColorMap::Type colorMapType = yup::SpectrogramColorMap::Type::heatmap;
+
+        switch (colorMapCombo->getSelectedId())
+        {
+            case 1:
+                colorMapType = yup::SpectrogramColorMap::Type::heatmap;
+                break;
+            case 2:
+                colorMapType = yup::SpectrogramColorMap::Type::grayscale;
+                break;
+            case 3:
+                colorMapType = yup::SpectrogramColorMap::Type::cool;
+                break;
+            case 4:
+                colorMapType = yup::SpectrogramColorMap::Type::warm;
+                break;
+            case 5:
+                colorMapType = yup::SpectrogramColorMap::Type::viridis;
+                break;
+        }
+
+        spectrogramComponent.setColorMap (colorMapType);
+    }
+
+    void setSmoothingTime (float timeInSeconds)
+    {
+        updateSignalGenerator ([timeInSeconds] (SignalGenerator& generator)
+        {
+            generator.setSmoothingTime (timeInSeconds);
+        });
+    }
+
+    // Audio components
+    yup::AudioDeviceManager deviceManager;
+    SignalGenerator signalGenerator;
+
+    // Spectrum analyzer
+    yup::SpectrumAnalyzerState analyzerState;
+    yup::SpectrumAnalyzerComponent analyzerComponent;
+    yup::SpectrogramComponent spectrogramComponent;
+
+    // UI components
+    std::unique_ptr<yup::Label> titleLabel;
+
+    // Signal controls
+    std::unique_ptr<yup::ComboBox> signalTypeCombo;
+    std::unique_ptr<yup::Slider> frequencySlider;
+    std::unique_ptr<yup::Slider> amplitudeSlider;
+    std::unique_ptr<yup::Slider> sweepDurationSlider;
+
+    // FFT controls
+    std::unique_ptr<yup::ComboBox> fftSizeCombo;
+    std::unique_ptr<yup::ComboBox> windowTypeCombo;
+    std::unique_ptr<yup::ComboBox> displayTypeCombo;
+    std::unique_ptr<yup::ComboBox> levelModeCombo;
+    std::unique_ptr<yup::Slider> releaseSlider;
+    std::unique_ptr<yup::Slider> overlapSlider;
+    std::unique_ptr<yup::Slider> smoothingSlider;
+
+    // View mode controls
+    std::unique_ptr<yup::ComboBox> viewModeCombo;
+    std::unique_ptr<yup::ComboBox> colorMapCombo;
+    ViewMode currentViewMode = ViewMode::spectrumFilled;
+
+    // Status labels
+    std::unique_ptr<yup::Label> frequencyLabel;
+    std::unique_ptr<yup::Label> amplitudeLabel;
+    std::unique_ptr<yup::Label> fftInfoLabel;
+
+    yup::OwnedArray<yup::Label> parameterLabels;
+    std::vector<float> monoOutputBuffer;
+
+    // Parameters
+    double currentFrequency = 440.0;
+    float currentAmplitude = 0.5f;
+    double sweepDurationSeconds = 10.0;
+    int currentFFTSize = 4096;
+};

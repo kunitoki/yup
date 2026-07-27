@@ -543,7 +543,7 @@ void FileInputStream::openHandle()
             permission |= S_IWGRP;
     }
 
-    auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT, permission);
+    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY, permission);
     if (f != -1)
     {
         fchmod (f, permission);
@@ -993,10 +993,10 @@ public:
         return { scheduler, param.sched_priority };
     }
 
-    static PosixSchedulerPriority getNativeSchedulerAndPriority (const Optional<Thread::RealtimeOptions>& rt,
+    static PosixSchedulerPriority getNativeSchedulerAndPriority (const std::optional<Thread::RealtimeOptions>& rt,
                                                                  [[maybe_unused]] Thread::Priority prio)
     {
-        const auto isRealtime = rt.hasValue();
+        const auto isRealtime = rt.has_value();
 
         const auto priority = [&]
         {

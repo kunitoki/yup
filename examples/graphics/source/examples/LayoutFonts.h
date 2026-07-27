@@ -26,9 +26,9 @@
 class LayoutFontsExample : public yup::Component
 {
 public:
-    LayoutFontsExample (const yup::Font& font)
+    LayoutFontsExample()
         : Component ("LayoutFontsExample")
-        , font (font)
+        , font (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (16.0f))
     {
     }
 
@@ -50,6 +50,9 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         const int numTexts = yup::numElementsInArray (text);
         for (int i = 0; i < numTexts; ++i)
         {
@@ -123,7 +126,7 @@ private:
             modifier.setWrap (wrap);
 
             modifier.clear();
-            modifier.appendText (text, nullptr, font.getFont(), fontSize);
+            modifier.appendText (text, nullptr, font.withHeight (fontSize));
         }
     };
 

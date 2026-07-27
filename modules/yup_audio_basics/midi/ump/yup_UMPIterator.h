@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 /**
@@ -51,7 +51,7 @@ namespace yup::universal_midi_packets
 
     @tags{Audio}
 */
-class Iterator
+class YUP_API Iterator
 {
 public:
     /** Creates an invalid (singular) iterator. */
@@ -132,6 +132,6 @@ private:
 #endif
 };
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump
 
 #endif

@@ -19,306 +19,20 @@
   ==============================================================================
 */
 
+#pragma once
+
 namespace yup
 {
 
+class Color;
 class GraphicsContext;
-
-//==============================================================================
-/** Supported pixel formats. */
-enum class PixelFormat
-{
-    Grayscale, /**< 8-bit grayscale. */
-    RGB,       /**< 24-bit RGB. */
-    RGBA       /**< 32-bit RGBA. */
-};
+class GpuTexture;
 
 //==============================================================================
 /**
-    Represents bitmap pixel data with accessors.
+    Represents an image using ImagePixelData.
 
-    Supports different pixel formats and provides methods to manipulate individual pixels.
-
-    @tags{Core}
-*/
-class YUP_API BitmapData : public ReferenceCountedObject
-{
-public:
-    using Ptr = ReferenceCountedObjectPtr<BitmapData>;
-
-    //==============================================================================
-    /** Default constructor. Creates empty bitmap data. */
-    BitmapData() = default;
-
-    /** Constructs bitmap data with specified dimensions and pixel format.
-        @param w        The width of the bitmap in pixels.
-        @param h        The height of the bitmap in pixels.
-        @param fmt      The pixel format of the bitmap.
-    */
-    BitmapData (int w, int h, PixelFormat fmt)
-        : width (w)
-        , height (h)
-        , format (fmt)
-    {
-        if (w <= 0 || h <= 0)
-            throw std::invalid_argument ("Width and Height must be positive integers.");
-
-        pixelBuffer = std::make_unique<uint8[]> (getTotalSizeBytes());
-    }
-
-    BitmapData (int w, int h, PixelFormat fmt, std::unique_ptr<const uint8[]> pixelData)
-        : width (w)
-        , height (h)
-        , format (fmt)
-    {
-        if (w <= 0 || h <= 0)
-            throw std::invalid_argument ("Width and Height must be positive integers.");
-
-        pixelBuffer = std::unique_ptr<uint8[]> (const_cast<uint8*> (pixelData.release()));
-    }
-
-    /** Copy constructor. */
-    BitmapData (const BitmapData& other) = delete;
-
-    /** Move constructor. */
-    BitmapData (BitmapData&& other) noexcept
-        : width (std::exchange (other.width, 0))
-        , height (std::exchange (other.height, 0))
-        , format (other.format)
-        , pixelBuffer (std::exchange (other.pixelBuffer, {}))
-    {
-    }
-
-    /** Copy assignment operator. */
-    BitmapData& operator= (const BitmapData& other) = delete;
-
-    /** Move assignment operator. */
-    BitmapData& operator= (BitmapData&& other) noexcept
-    {
-        if (this != &other)
-        {
-            width = std::exchange (other.width, 0);
-            height = std::exchange (other.height, 0);
-            format = other.format;
-            pixelBuffer = std::exchange (other.pixelBuffer, {});
-        }
-
-        return *this;
-    }
-
-    /** Destructor. */
-    ~BitmapData() = default;
-
-    //==============================================================================
-    /** Returns the width of the bitmap in pixels. */
-    int getWidth() const noexcept
-    {
-        return width;
-    }
-
-    /** Returns the height of the bitmap in pixels. */
-    int getHeight() const noexcept
-    {
-        return height;
-    }
-
-    /** Returns the pixel format of the bitmap. */
-    PixelFormat getPixelFormat() const noexcept
-    {
-        return format;
-    }
-
-    /** Returns the pixel stride. */
-    int getPixelStride() const noexcept
-    {
-        return static_cast<int> (getBytesPerPixel (format));
-    }
-
-    //==============================================================================
-    /** Sets the pixel at (x, y) with the specified color.
-        @param x        The x-coordinate of the pixel.
-        @param y        The y-coordinate of the pixel.
-        @param color    The color value to set.
-    */
-    void setPixel (int x, int y, uint32_t color)
-    {
-        validateCoordinates (x, y);
-
-        size_t index = (y * width + x) * getBytesPerPixel (format);
-
-        switch (format)
-        {
-            case PixelFormat::Grayscale:
-                pixelBuffer[index] = static_cast<uint8> (color & 0xFF);
-                break;
-
-            case PixelFormat::RGB:
-                pixelBuffer[index] = static_cast<uint8> ((color >> 16) & 0xFF);    // R
-                pixelBuffer[index + 1] = static_cast<uint8> ((color >> 8) & 0xFF); // G
-                pixelBuffer[index + 2] = static_cast<uint8> (color & 0xFF);        // B
-                break;
-
-            case PixelFormat::RGBA:
-                pixelBuffer[index] = static_cast<uint8> ((color >> 24) & 0xFF);     // R
-                pixelBuffer[index + 1] = static_cast<uint8> ((color >> 16) & 0xFF); // G
-                pixelBuffer[index + 2] = static_cast<uint8> ((color >> 8) & 0xFF);  // B
-                pixelBuffer[index + 3] = static_cast<uint8> (color & 0xFF);         // A
-                break;
-
-            default:
-                throw std::runtime_error ("Unsupported pixel format.");
-        }
-    }
-
-    /** Gets the pixel color at (x, y).
-        @param x    The x-coordinate of the pixel.
-        @param y    The y-coordinate of the pixel.
-        @return     The color value of the pixel.
-    */
-    uint32_t getPixel (int x, int y) const
-    {
-        validateCoordinates (x, y);
-
-        size_t index = (y * width + x) * getBytesPerPixel (format);
-        uint32_t color = 0;
-
-        switch (format)
-        {
-            case PixelFormat::Grayscale:
-                return pixelBuffer[index];
-
-            case PixelFormat::RGB:
-                return (pixelBuffer[index] << 16) | (pixelBuffer[index + 1] << 8) | pixelBuffer[index + 2];
-
-            case PixelFormat::RGBA:
-                return (pixelBuffer[index] << 24) | (pixelBuffer[index + 1] << 16) | (pixelBuffer[index + 2] << 8) | pixelBuffer[index + 3];
-
-            default:
-                throw std::runtime_error ("Unsupported pixel format.");
-        }
-
-        return 0;
-    }
-
-    /** Fills the entire bitmap with the specified color.
-        @param color    The color value to fill the bitmap with.
-    */
-    void fill (uint32_t color)
-    {
-        size_t totalBytes = getTotalSizeBytes();
-
-        switch (format)
-        {
-            case PixelFormat::Grayscale:
-            {
-                uint8 gray = static_cast<uint8> (color & 0xFF);
-
-                std::memset (pixelBuffer.get(), gray, totalBytes);
-
-                break;
-            }
-
-            case PixelFormat::RGB:
-            {
-                uint8 r = static_cast<uint8> ((color >> 16) & 0xFF);
-                uint8 g = static_cast<uint8> ((color >> 8) & 0xFF);
-                uint8 b = static_cast<uint8> (color & 0xFF);
-
-                for (int i = 0; i < width * height; ++i)
-                {
-                    pixelBuffer[i * 3] = r;
-                    pixelBuffer[i * 3 + 1] = g;
-                    pixelBuffer[i * 3 + 2] = b;
-                }
-
-                break;
-            }
-
-            case PixelFormat::RGBA:
-            {
-                uint8 r = static_cast<uint8> ((color >> 24) & 0xFF);
-                uint8 g = static_cast<uint8> ((color >> 16) & 0xFF);
-                uint8 b = static_cast<uint8> ((color >> 8) & 0xFF);
-                uint8 a = static_cast<uint8> (color & 0xFF);
-
-                for (int i = 0; i < width * height; ++i)
-                {
-                    pixelBuffer[i * 4] = r;
-                    pixelBuffer[i * 4 + 1] = g;
-                    pixelBuffer[i * 4 + 2] = b;
-                    pixelBuffer[i * 4 + 3] = a;
-                }
-
-                break;
-            }
-
-            default:
-                throw std::runtime_error ("Unsupported pixel format.");
-        }
-    }
-
-    /** Clears the bitmap by setting all pixels to zero. */
-    void clear()
-    {
-        std::fill (pixelBuffer.get(), pixelBuffer.get() + getTotalSizeBytes(), 0);
-    }
-
-    /** Returns a pointer to the raw pixel data. */
-    Span<const uint8> getRawData() const noexcept
-    {
-        return { pixelBuffer.get(), getTotalSizeBytes() };
-    }
-
-    /** Returns a mutable pointer to the raw pixel data. */
-    Span<uint8> getRawData() noexcept
-    {
-        return { pixelBuffer.get(), getTotalSizeBytes() };
-    }
-
-private:
-    //==============================================================================
-    /** Returns the number of bytes per pixel for the given format. */
-    static size_t getBytesPerPixel (PixelFormat fmt)
-    {
-        switch (fmt)
-        {
-            case PixelFormat::Grayscale:
-                return 1;
-
-            case PixelFormat::RGB:
-                return 3;
-
-            case PixelFormat::RGBA:
-                return 4;
-
-            default:
-                throw std::runtime_error ("Unsupported pixel format.");
-        }
-    }
-
-    size_t getTotalSizeBytes() const
-    {
-        return width * height * getBytesPerPixel (format);
-    }
-
-    /** Validates the (x, y) coordinates. */
-    void validateCoordinates (int x, int y) const
-    {
-        if (x < 0 || x >= width || y < 0 || y >= height)
-            throw std::out_of_range ("Pixel coordinates out of range.");
-    }
-
-    int width = 0;
-    int height = 0;
-    PixelFormat format = PixelFormat::RGB;
-    std::unique_ptr<uint8[]> pixelBuffer;
-};
-
-//==============================================================================
-/**
-    Represents an image using BitmapData.
-
-    Provides methods to manipulate and access pixel data through BitmapData.
+    Provides methods to manipulate and access pixel data through ImagePixelData.
 
     @tags{Core}
 */
@@ -336,13 +50,17 @@ public:
     */
     Image (int w, int h, PixelFormat fmt = PixelFormat::RGBA);
 
-    /** Copy constructor. */
+    /** Copy constructor.
+        Shares the pixel data and metadata via reference counting.
+    */
     Image (const Image& other);
 
     /** Move constructor. */
     Image (Image&& other) noexcept;
 
-    /** Copy assignment operator. */
+    /** Copy assignment operator.
+        Shares the pixel data and metadata via reference counting.
+    */
     Image& operator= (const Image& other);
 
     /** Move assignment operator. */
@@ -352,6 +70,7 @@ public:
     ~Image() = default;
 
     //==============================================================================
+    /** Returns true if the image contains valid bitmap data. */
     bool isValid() const noexcept;
 
     //==============================================================================
@@ -368,33 +87,48 @@ public:
     int getPixelStride() const noexcept;
 
     //==============================================================================
-    /** Sets the pixel at (x, y) with the specified color.
+    /** Sets the pixel at (x, y) with the specified ARGB color.
+
+        PixelFormat controls the raw byte layout used in storage. The color
+        value passed here is always packed as `0xAARRGGBB`.
+
         @param x        The x-coordinate of the pixel.
         @param y        The y-coordinate of the pixel.
-        @param color    The color value to set.
+        @param color    The ARGB color value to set.
     */
-    void setPixel (int x, int y, uint32_t color);
+    void setPixel (int x, int y, uint32 color);
 
-    /** Gets the pixel color at (x, y).
+    /** Sets the pixel at (x, y) with the specified color. */
+    void setPixelColor (int x, int y, Color color);
+
+    /** Gets the pixel color at (x, y) as an ARGB value.
+
         @param x    The x-coordinate of the pixel.
         @param y    The y-coordinate of the pixel.
-        @return     The color value of the pixel.
+        @return     The ARGB color value of the pixel.
     */
-    uint32_t getPixel (int x, int y) const;
+    uint32 getPixel (int x, int y) const;
 
-    /** Fills the entire image with the specified color.
-        @param color    The color value to fill the image with.
+    /** Gets the pixel color at (x, y). */
+    Color getPixelColor (int x, int y) const;
+
+    /** Fills the entire image with the specified ARGB color.
+
+        @param color    The ARGB color value to fill the image with.
     */
-    void fill (uint32_t color);
+    void fill (uint32 color);
+
+    /** Fills the entire image with the specified color. */
+    void fillColor (Color color);
 
     /** Clears the image by setting all pixels to zero. */
     void clear();
 
-    /** Returns a const reference to BitmapData. */
-    const BitmapData& getBitmapData() const noexcept;
+    /** Returns a const reference to ImagePixelData. */
+    const ImagePixelData& getPixelData() const noexcept;
 
-    /** Returns a mutable reference to BitmapData. */
-    BitmapData& getBitmapData() noexcept;
+    /** Returns a mutable reference to ImagePixelData. */
+    ImagePixelData& getPixelData() noexcept;
 
     /** Returns a pointer to the raw pixel data. */
     Span<const uint8> getRawData() const noexcept;
@@ -403,22 +137,78 @@ public:
     Span<uint8> getRawData() noexcept;
 
     //==============================================================================
-    /*
-    Image duplicate() const;
-    */
+    /** Duplicate the image.
 
+        This will duplicate the image on the CPU and copy the metadata reference
+        (metadata is shared via ref-counting). It won't duplicate the GPU texture
+        if it exists.
+
+        Use this method to create a new image with the same pixel data.
+
+        @return A new Image object that is a duplicate of the current image.
+    */
+    Image duplicate() const;
+
+    //==============================================================================
+    /** Returns the metadata attached to this image, or nullptr if none. */
+    const ImageMetadata::Ptr& getMetadata() const noexcept { return metadata; }
+
+    /** Returns true if this image has metadata attached. */
+    bool hasMetadata() const noexcept { return metadata != nullptr; }
+
+    /** Attaches metadata to this image (replaces any existing metadata). */
+    void setMetadata (ImageMetadata::Ptr newMetadata) { metadata = std::move (newMetadata); }
+
+    //==============================================================================
+    /** Loads an image from raw data.
+
+        @param imageData    The raw image data.
+        @param options      Controls which metadata categories are extracted.
+                            Defaults to no metadata extraction.
+        @return             A ResultValue containing the loaded image or an error message.
+    */
+    static ResultValue<Image> loadFromData (Span<const uint8> imageData,
+                                            const ImageFormat::Options& options = {});
+
+    /** Creates an Image that wraps an existing GPU Texture without allocating new ImagePixelData.
+
+        The returned Image has no CPU-side pixel data. It is suitable for passing to
+        Graphics::drawImage(); CPU pixel access (getPixel, getRawData) will jassert.
+
+        Returns an empty (invalid) Image if tex is null or invalid.
+
+        @param tex  A GPU texture obtained from GpuCanvas::asTexture().
+    */
+    static Image fromTexture (GpuTexture::Ptr tex);
+
+    //==============================================================================
+    /** Creates a texture on the GPU for the image if it doesn't already exist.
+
+        @param context    The graphics context to use for texture creation.
+        @return           True if the texture was created or already exists, false otherwise.
+    */
     bool createTextureIfNotPresent (GraphicsContext& context) const;
 
+    /** Invalidates the existing texture, forcing a new texture to be created on the next request. */
+    void invalidateTexture();
+
+    //==============================================================================
+    /** Get the GPU texture associated with this image, or nullptr if no texture exists. */
+    GpuTexture::Ptr getGpuTexture() const;
+
+    /** Sets the GPU texture, replacing any existing GPU backing. */
+    void setGpuTexture (GpuTexture::Ptr tex);
+
+private:
+    friend class Graphics;
+
+    //==============================================================================
     rive::rcp<rive::gpu::Texture> getTexture() const;
 
     //==============================================================================
-
-    static ResultValue<Image> loadFromData (Span<const uint8> imageData);
-
-private:
-    //==============================================================================
-    BitmapData::Ptr bitmapData;
-    mutable rive::rcp<rive::gpu::Texture> texture;
+    ImagePixelData::Ptr pixelData;
+    mutable GpuTexture::Ptr gpuTexture;
+    ImageMetadata::Ptr metadata;
 };
 
 } // namespace yup

@@ -8,14 +8,46 @@
 #include "rive/simple_array.hpp"
 #include "rive/text/glyph_lookup.hpp"
 #include "rive/text/text_interface.hpp"
+#include "rive/data_bind/data_bind_list_item_consumer.hpp"
+#include "rive/viewmodel/symbol_type.hpp"
+#include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/viewmodel/viewmodel_instance_value.hpp"
+#include "rive/viewmodel/property_symbol_dependent.hpp"
+#include "rive/dirtyable.hpp"
 
+#include <functional>
 #include <unordered_map>
 #include <vector>
 
 namespace rive
 {
 
+class Factory;
+class Renderer;
 class TextModifierGroup;
+class TextStylePaint;
+
+// A draw command for interleaving monochrome style paths and color glyphs.
+struct TextDrawCommand
+{
+    enum Type
+    {
+        kStylePath,
+        kColorGlyph
+    };
+    Type type;
+    TextStylePaint* style = nullptr; // for kStylePath
+
+    struct ColorGlyphInfo
+    {
+        rcp<Font> font;
+        GlyphID glyphId;
+        Mat2D transform;
+        ColorInt foregroundColor;
+        float opacity;
+    };
+    ColorGlyphInfo colorGlyph; // for kColorGlyph
+};
 
 class StyledText
 {
@@ -47,6 +79,11 @@ struct TextBoundsInfo
     float totalHeight;
     int ellipsisLine;
     bool isEllipsisLineLast;
+    // Vertical trim removed from the top (ascent above the first line's cap- or
+    // x-height) and bottom (descent below the last line's baseline / natural
+    // descent). Both are zero when trim is disabled (TextTrimTop/Bottom::none).
+    float topTrim;
+    float bottomTrim;
 };
 
 enum class LineIter : uint8_t
@@ -56,11 +93,82 @@ enum class LineIter : uint8_t
     yOutOfBounds
 };
 
-class TextStylePaint;
-class Text : public TextBase, public TextInterface
+class Text;
+
+#ifdef WITH_RIVE_TEXT
+class TextValueRunListener;
+
+class TextValueRunProperty : public PropertySymbolDependentSingle
+{
+public:
+    TextValueRunProperty(Core* textValueRun,
+                         TextValueRunListener* textValueRunListener,
+                         ViewModelInstanceValue* instanceValue,
+                         uint16_t propertyKey,
+                         SymbolType symbolType);
+
+    void writeValue() override;
+
+private:
+    SymbolType m_symbolType = SymbolType::none;
+};
+
+class TextValueRunListener : public CoreObjectListener
+{
+public:
+    TextValueRunListener(TextValueRun* textValueRun,
+                         rcp<ViewModelInstance> instance,
+                         Text* text);
+
+    void markDirty() override;
+    Text* text() { return m_text; }
+    TextValueRun* textValueRun()
+    {
+        if (m_core)
+        {
+            return m_core->as<TextValueRun>();
+        }
+        return nullptr;
+    }
+
+protected:
+    void createProperties() override;
+
+private:
+    Text* m_text = nullptr;
+    void createPropertyListener(SymbolType symbolType);
+    TextValueRunProperty* createSinglePropertyListener(SymbolType symbolType);
+};
+#endif
+
+struct ColorGlyphCacheKey
+{
+    const Font* font;
+    GlyphID glyphId;
+    bool operator==(const ColorGlyphCacheKey& o) const
+    {
+        return font == o.font && glyphId == o.glyphId;
+    }
+};
+
+struct ColorGlyphCacheHash
+{
+    size_t operator()(const ColorGlyphCacheKey& k) const
+    {
+        size_t h = std::hash<const void*>()(k.font);
+        h ^=
+            std::hash<uint16_t>()(k.glyphId) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+class Text : public TextBase,
+             public TextInterface,
+             public DataBindListItemConsumer
 {
 public:
     // Implements TextInterface
+    ~Text();
     void markShapeDirty() override;
     void markPaintDirty() override;
 
@@ -81,6 +189,14 @@ public:
     TextSizing effectiveSizing() const;
     TextOverflow overflow() const { return (TextOverflow)overflowValue(); }
     TextOrigin textOrigin() const { return (TextOrigin)originValue(); }
+    TextTrimTop verticalTrimTop() const
+    {
+        return textTrimTop(verticalTrimValue());
+    }
+    TextTrimBottom verticalTrimBottom() const
+    {
+        return textTrimBottom(verticalTrimValue());
+    }
     TextWrap wrap() const { return (TextWrap)wrapValue(); }
     VerticalTextAlign verticalAlign() const
     {
@@ -92,6 +208,7 @@ public:
     const TextStylePaint* styleFromShaperId(uint16_t id) const;
     bool modifierRangesNeedShape() const;
     AABB localBounds() const override;
+    AABB constraintBounds() const override { return localBounds(); }
     void originXChanged() override;
     void originYChanged() override;
 
@@ -113,13 +230,18 @@ public:
     }
     float computedWidth() override { return localBounds().width(); };
     float computedHeight() override { return localBounds().height(); };
+    void updateList(std::vector<rcp<ViewModelInstanceListItem>>* list) override;
 #ifdef WITH_RIVE_TEXT
-    const std::vector<TextValueRun*>& runs() const { return m_runs; }
+    const std::vector<TextValueRun*>& runs() const { return m_allRuns; }
     static SimpleArray<SimpleArray<GlyphLine>> BreakLines(
         const SimpleArray<Paragraph>& paragraphs,
         float width,
         TextAlign align,
         TextWrap wrap);
+    const std::vector<TextStylePaint*>& textStylePaints()
+    {
+        return m_textStylePaints;
+    }
 #endif
 
     bool haveModifiers() const
@@ -153,14 +275,19 @@ protected:
     void widthChanged() override;
     void heightChanged() override;
     void paragraphSpacingChanged() override;
-    bool makeStyled(StyledText& styledText, bool withModifiers = true) const;
+    bool makeStyled(StyledText& styledText,
+                    bool withModifiers = true,
+                    float fontScale = 1.0f) const;
     void originValueChanged() override;
+    void verticalTrimValueChanged() override;
 
 private:
 #ifdef WITH_RIVE_TEXT
     void updateOriginWorldTransform();
     std::vector<TextValueRun*> m_runs;
+    std::vector<TextValueRun*> m_allRuns;
     std::vector<TextStylePaint*> m_renderStyles;
+    std::vector<TextDrawCommand> m_drawCommands;
     SimpleArray<Paragraph> m_shape;
     SimpleArray<Paragraph> m_modifierShape;
     SimpleArray<SimpleArray<GlyphLine>> m_lines;
@@ -176,10 +303,23 @@ private:
     StyledText m_styledText;
     StyledText m_modifierStyledText;
     GlyphLookup m_glyphLookup;
+    std::vector<TextStylePaint*> m_textStylePaints;
 
     void clearRenderStyles();
+    void drawColorGlyph(Renderer* renderer,
+                        const TextDrawCommand::ColorGlyphInfo& info,
+                        const Mat2D& worldTransform);
+    std::
+        unordered_map<ColorGlyphCacheKey, rcp<RenderImage>, ColorGlyphCacheHash>
+            m_emojiImageCache;
     TextBoundsInfo computeBoundsInfo();
+    // For TextOverflow::fitFontSize: binary-searches the largest integer font
+    // size that fits the bounds and returns it as a multiplier of the authored
+    // font size(s). Returns 1.0f when no fitting is needed/possible.
+    float fitFontScale();
     LineIter shouldDrawLine(float y, float totalHeight, const GlyphLine& line);
+    void buildTextStylePaints();
+    std::vector<TextValueRunListener*> m_valueRunListeners;
 
 #endif
     float m_layoutWidth = NAN;

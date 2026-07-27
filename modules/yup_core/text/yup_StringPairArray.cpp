@@ -45,6 +45,25 @@ StringPairArray::StringPairArray (bool shouldIgnoreCase)
 {
 }
 
+StringPairArray::StringPairArray (const std::initializer_list<KeyValuePair>& stringPairs)
+{
+    for (const auto& item : stringPairs)
+    {
+        keys.add (item.key);
+        values.add (item.value);
+    }
+}
+
+StringPairArray::StringPairArray (bool shouldIgnoreCase, const std::initializer_list<KeyValuePair>& stringPairs)
+    : ignoreCase (shouldIgnoreCase)
+{
+    for (const auto& item : stringPairs)
+    {
+        keys.add (item.key);
+        values.add (item.value);
+    }
+}
+
 StringPairArray::StringPairArray (const StringPairArray& other)
     : keys (other.keys)
     , values (other.values)

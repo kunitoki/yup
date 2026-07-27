@@ -6,36 +6,43 @@ using namespace rive;
 
 DataBindContextValueEnum::DataBindContextValueEnum(DataBind* dataBind) :
     DataBindContextValue(dataBind)
-{
-    auto source = m_dataBind->source();
-    auto viewmodelInstanceEnum = source->as<ViewModelInstanceEnum>();
-    auto viewModelPropertyEnum =
-        viewmodelInstanceEnum->viewModelProperty()->as<ViewModelPropertyEnum>();
-    m_targetDataValue.dataEnum(viewModelPropertyEnum->dataEnum());
-}
+{}
 
 void DataBindContextValueEnum::apply(Core* target,
                                      uint32_t propertyKey,
-                                     bool isMainDirection)
+                                     bool isMainDirection,
+                                     DataBind* dataBind)
 {
 
-    syncSourceValue();
+    syncSourceValue(dataBind);
     auto value = calculateValue<DataValueEnum, uint32_t>(m_dataValue,
                                                          isMainDirection,
-                                                         m_dataBind);
-    CoreRegistry::setUint(target, propertyKey, value);
-}
-
-bool DataBindContextValueEnum::syncTargetValue(Core* target,
-                                               uint32_t propertyKey)
-{
-    auto value = CoreRegistry::getUint(target, propertyKey);
-
-    if (m_previousValue != value)
+                                                         dataBind);
+    switch (CoreRegistry::propertyFieldId(propertyKey))
     {
-        m_previousValue = value;
-        m_targetDataValue.value(value);
-        return true;
+        case CoreUintType::id:
+        {
+            if (target && target->is<Solo>())
+            {
+                if (m_dataValue->is<DataValueEnum>())
+                {
+                    auto dataValueEnum = m_dataValue->as<DataValueEnum>();
+                    auto dataEnum = dataValueEnum->dataEnum();
+                    if (dataEnum)
+                    {
+                        auto valueString = dataEnum->value(value);
+                        target->as<Solo>()->updateByName(valueString);
+                    }
+                }
+            }
+            else
+            {
+                CoreRegistry::setUint(target, propertyKey, value);
+            }
+            break;
+        }
+        default:
+            CoreRegistry::setUint(target, propertyKey, value);
+            break;
     }
-    return false;
 }

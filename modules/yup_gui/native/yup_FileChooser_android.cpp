@@ -121,9 +121,8 @@ static StringArray createMimeTypes (const String& filters)
 class FileChooser::FileChooserImpl
 {
 public:
-    FileChooserImpl (FileChooser& owner, CompletionCallback cb)
-        : fileChooser (owner)
-        , callback (std::move (cb))
+    FileChooserImpl (CompletionCallback cb)
+        : callback (std::move (cb))
     {
     }
 
@@ -183,9 +182,6 @@ public:
 
         // Invoke callback with results
         invokeCallback (resultCode == -1, results);
-
-        // Clean up - remove this impl from the FileChooser
-        fileChooser.impl.reset();
     }
 
     void invokeCallback (bool result, const Array<File>& results)
@@ -195,7 +191,6 @@ public:
     }
 
 private:
-    FileChooser& fileChooser;
     CompletionCallback callback;
 };
 
@@ -214,7 +209,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     }
 
     // Create the implementation that will stay alive until the result comes back
-    impl = std::make_unique<FileChooserImpl> (*this, std::move (callback));
+    impl = std::make_unique<FileChooserImpl> (std::move (callback));
 
     LocalRef<jobject> intent;
 
@@ -279,19 +274,30 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
         // Use YUP's non-blocking activity result handler
         const int requestCode = 12345;
-        startAndroidActivityForResult (intent, requestCode, [this] (int activityRequestCode, int resultCode, LocalRef<jobject> data)
+        WeakReference<FileChooser> weakThis (this);
+
+        startAndroidActivityForResult (intent, requestCode, [weakThis] (int activityRequestCode, int resultCode, LocalRef<jobject> data)
         {
-            if (impl != nullptr)
-                impl->processActivityResult (activityRequestCode, resultCode, data);
+            if (auto* chooser = weakThis.get())
+            {
+                FileChooser::Ptr retainedChooser (chooser);
+
+                if (chooser->impl != nullptr)
+                {
+                    chooser->impl->processActivityResult (activityRequestCode, resultCode, data);
+                    chooser->impl.reset();
+                }
+            }
         });
     }
     else
     {
         // Failed to create intent, cleanup and call callback
         if (impl != nullptr)
+        {
             impl->invokeCallback (false, {});
-
-        impl.reset();
+            impl.reset();
+        }
     }
 }
 

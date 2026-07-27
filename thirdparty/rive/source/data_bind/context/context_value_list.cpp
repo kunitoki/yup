@@ -11,27 +11,21 @@ DataBindContextValueList::DataBindContextValueList(DataBind* dataBind) :
 
 void DataBindContextValueList::apply(Core* target,
                                      uint32_t propertyKey,
-                                     bool isMainDirection)
+                                     bool isMainDirection,
+                                     DataBind* dataBind)
 {
-    syncSourceValue();
-    auto value =
-        calculateValue<DataValueList, std::vector<ViewModelInstanceListItem*>*>(
-            m_dataValue,
-            isMainDirection,
-            m_dataBind);
+    syncSourceValue(dataBind);
+    auto value = calculateValue<DataValueList,
+                                std::vector<rcp<ViewModelInstanceListItem>>*>(
+        m_dataValue,
+        isMainDirection,
+        dataBind);
     if (target != nullptr)
     {
         auto consumer = DataBindListItemConsumer::from(target);
         if (consumer != nullptr)
         {
-            consumer->updateList(m_dataBind->propertyKey(), value);
+            consumer->updateList(value);
         }
     }
-}
-
-void DataBindContextValueList::applyToSource(Core* target,
-                                             uint32_t propertyKey,
-                                             bool isMainDirection)
-{
-    // TODO: @hernan does applyToSource make sense? Should we block it somehow?
 }

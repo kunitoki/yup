@@ -37,17 +37,29 @@ class Component;
 
     @see Component
 */
-class YUP_API ComponentNative
+class YUP_API ComponentNative : public ReferenceCountedObject
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
+    struct temporaryWindowTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
+    struct captureMouseTag;
 
 public:
     //==============================================================================
+    /** The pointer defintion for this native component. */
+    using Ptr = ReferenceCountedObjectPtr<ComponentNative>;
+
+    //==============================================================================
     /** Type definition for window configuration flags. */
-    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
+    using Flags = FlagSet<uint32,
+                          decoratedWindowTag,
+                          resizableWindowTag,
+                          temporaryWindowTag,
+                          renderContinuousTag,
+                          allowHighDensityDisplayTag,
+                          captureMouseTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -55,10 +67,14 @@ public:
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     /** Flag to enable window resizing by the user. */
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
+    /** Flag to mark the native window as a temporary popup/menu-style window. */
+    static inline constexpr Flags temporaryWindow = Flags::declareValue<temporaryWindowTag>();
     /** Flag to enable continuous rendering mode. */
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     /** Flag to enable high-density display support. */
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
+    /** Flag to capture mouse input outside the native window while the component is on the desktop. */
+    static inline constexpr Flags captureMouse = Flags::declareValue<captureMouseTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
     static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
@@ -114,6 +130,22 @@ public:
             @return Reference to this Options object for method chaining.
         */
         Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept;
+
+        /** Sets whether the native window should capture mouse input outside its bounds.
+
+            @param shouldCaptureMouse True to capture mouse input, false to use normal window-local input.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withMouseCapture (bool shouldCaptureMouse) noexcept;
+
+        /** Sets whether the window should be treated as a temporary popup/menu window.
+
+            @param shouldBeTemporary True for popup/menu-style windows, false for regular windows.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withTemporaryWindow (bool shouldBeTemporary) noexcept;
 
         /** Sets the graphics API to be used for rendering.
 
@@ -208,6 +240,9 @@ public:
     virtual bool isVisible() const = 0;
 
     //==============================================================================
+    virtual void toFront() = 0;
+
+    //==============================================================================
     /** Sets the size of the window.
 
         @param newSize The new size to set.
@@ -249,6 +284,17 @@ public:
         @param newBounds The new bounds to set.
     */
     virtual void setBounds (const Rectangle<int>& newBounds) = 0;
+
+    //==============================================================================
+    /** Gets the area of the window that is safe for interactive content.
+
+        On mobile devices this excludes areas covered by display cutouts (notch), the
+        status bar or rounded corners. On desktop platforms this usually matches the
+        full window bounds.
+
+        @return The safe area bounds, in window coordinates.
+    */
+    virtual Rectangle<int> getSafeAreaBounds() const = 0;
 
     //==============================================================================
     /** Sets whether the window should be in fullscreen mode.
@@ -350,6 +396,25 @@ public:
     virtual const RectangleList<float>& getRepaintAreas() const = 0;
 
     //==============================================================================
+    /** Starts text input for the specified component.
+
+        @param component The component to start text input for.
+    */
+    virtual void startTextInput (Component& component) = 0;
+
+    /** Stops text input for the specified component.
+
+        @param component The component to stop text input for.
+    */
+    virtual void stopTextInput (Component& component) = 0;
+
+    /** Updates the native text input rectangle for the specified component.
+
+        @param component The component whose text input rectangle has changed.
+    */
+    virtual void updateTextInputRect (Component& component) = 0;
+
+    //==============================================================================
     /** Gets the DPI scale factor.
 
         @return The current DPI scale factor.
@@ -383,6 +448,12 @@ public:
     */
     virtual rive::Factory* getFactory() = 0;
 
+    /** Gets the graphics context associated with this component.
+
+        @return Pointer to the GraphicsContext, or nullptr if unavailable.
+    */
+    virtual GraphicsContext* getGraphicsContext() = 0;
+
     //==============================================================================
     /** Creates a platform-specific ComponentNative instance.
 
@@ -393,11 +464,11 @@ public:
         @param options The options to configure the native component.
         @param parent Optional pointer to a parent native window, or nullptr for a top-level window.
 
-        @return A unique_ptr to the created ComponentNative instance.
+        @return A reference counted pointer to the created ComponentNative instance.
     */
-    static std::unique_ptr<ComponentNative> createFor (Component& component,
-                                                       const Options& options,
-                                                       void* parent);
+    static ComponentNative::Ptr createFor (Component& component,
+                                           const Options& options,
+                                           void* parent);
 
 protected:
     /** The Component associated with this native component. */

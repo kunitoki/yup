@@ -73,6 +73,9 @@ struct DefaultHashFunctions
 
     /** Generates a simple hash from a UUID. */
     static int generateHash (const Uuid& key, int upperLimit) noexcept { return generateHash (key.hash(), upperLimit); }
+
+    /** Generates a simple hash from a Identifier. */
+    static int generateHash (const Identifier& key, int upperLimit) noexcept { return generateHash ((uint64) (*reinterpret_cast<uintptr_t*> (key.getCharPointer().getAddress())), upperLimit); }
 };
 
 //==============================================================================
@@ -132,17 +135,34 @@ private:
 public:
     //==============================================================================
     /** Creates an empty hash-map.
+    */
+    HashMap()
+        : HashMap (defaultHashTableSize, HashFunctionType())
+    {
+    }
+
+    /** Creates an empty hash-map.
+
+        @param numberOfSlots Specifies the number of hash entries the map will use. This will be
+                            the "upperLimit" parameter that is passed to your generateHash()
+                            function. The number of hash slots will grow automatically if necessary,
+                            or it can be remapped manually using remapTable().
+    */
+    explicit HashMap (int numberOfSlots)
+        : HashMap (numberOfSlots, HashFunctionType())
+    {
+    }
+
+    /** Creates an empty hash-map.
 
         @param numberOfSlots Specifies the number of hash entries the map will use. This will be
                             the "upperLimit" parameter that is passed to your generateHash()
                             function. The number of hash slots will grow automatically if necessary,
                             or it can be remapped manually using remapTable().
         @param hashFunction An instance of HashFunctionType, which will be copied and
-                            stored to use with the HashMap. This parameter can be omitted
-                            if HashFunctionType has a default constructor.
+                            stored to use with the HashMap.
     */
-    explicit HashMap (int numberOfSlots = defaultHashTableSize,
-                      HashFunctionType hashFunction = HashFunctionType())
+    HashMap (int numberOfSlots, HashFunctionType hashFunction)
         : hashFunctionToUse (hashFunction)
     {
         hashSlots.insertMultiple (0, nullptr, numberOfSlots);
@@ -235,6 +255,12 @@ public:
 
     //==============================================================================
     /** Returns the current number of items in the map. */
+    inline bool isEmpty() const noexcept
+    {
+        return totalNumItems == 0;
+    }
+
+    /** Returns the current number of items in the map. */
     inline int size() const noexcept
     {
         return totalNumItems;
@@ -277,6 +303,17 @@ public:
             remapTable (getNumSlots() * 2);
 
         return entry->value;
+    }
+
+    /** Returns a pointer to the value corresponding to a given key, or nullptr if not found. */
+    inline ValueType* getPointer (KeyTypeParameter keyToLookFor) const
+    {
+        const ScopedLockType sl (getLock());
+
+        if (auto* entry = getEntry (getSlot (keyToLookFor), keyToLookFor))
+            return std::addressof (entry->value);
+
+        return nullptr;
     }
 
     //==============================================================================

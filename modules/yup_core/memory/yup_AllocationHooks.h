@@ -60,32 +60,6 @@ private:
     ListenerList<Listener> listenerList;
 };
 
-//==============================================================================
-/** Scoped checker which will cause a unit test failure if any new/delete calls
-    are made during the lifetime of the UnitTestAllocationChecker.
-*/
-class UnitTestAllocationChecker : private AllocationHooks::Listener
-{
-public:
-    /** Create a checker which will log a failure to the passed test if
-        any calls to new/delete are made.
-
-        Remember to call `UnitTest::beginTest` before constructing this checker!
-    */
-    explicit UnitTestAllocationChecker (UnitTest& test);
-
-    /** Will add a failure to the test if the number of new/delete calls during
-        this object's lifetime was greater than zero.
-    */
-    ~UnitTestAllocationChecker() noexcept override;
-
-private:
-    void newOrDeleteCalled() noexcept override;
-
-    UnitTest& unitTest;
-    size_t calls = 0;
-};
-
 } // namespace yup
 
 #endif

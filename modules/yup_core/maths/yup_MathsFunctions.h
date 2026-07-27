@@ -176,19 +176,34 @@ struct MathConstants
     static_assert (std::is_floating_point_v<FloatType>, "FloatType can only be a floating point type.");
 
     /** A predefined value for Pi */
-    static constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
+    static inline constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
 
     /** A predefined value for 2 * Pi */
-    static constexpr FloatType twoPi = static_cast<FloatType> (2.0L * 3.141592653589793238L);
+    static inline constexpr FloatType twoPi = static_cast<FloatType> (2.0L * 3.141592653589793238L);
 
     /** A predefined value for Pi / 2 */
-    static constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2.0L);
+    static inline constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2.0L);
 
     /** A predefined value for Euler's number */
-    static constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
+    static inline constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
+
+    /** A predefined value for Pi / 4 */
+    static inline constexpr FloatType quarterPi = static_cast<FloatType> (3.141592653589793238L / 4.0L);
 
     /** A predefined value for sqrt (2) */
-    static constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+    static inline constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
+
+    /** A predefined value for 1 / sqrt (2) */
+    static inline constexpr FloatType invSqrt2 = static_cast<FloatType> (1.0L / 1.4142135623730950488L);
+
+    /** A predefined value for natural logarithm of 2 */
+    static inline constexpr FloatType ln2 = static_cast<FloatType> (0.693147180559945309417232121458176568075500134360255254120680L);
+
+    /** A predefined value for natural logarithm of 10 */
+    static inline constexpr FloatType ln10 = static_cast<FloatType> (2.302585092994045684017991454684364207601101488628772976033327L);
+
+    /** A predefined value for 0.5 */
+    static inline constexpr FloatType half = static_cast<FloatType> (0.5L);
 };
 
 /** Converts an angle in degrees to radians. */
@@ -617,9 +632,6 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
 //==============================================================================
 #if YUP_MSVC
 #pragma optimize("t", off)
-#ifndef __INTEL_COMPILER
-#pragma float_control(precise, on, push)
-#endif
 #endif
 
 /** Fast floating-point-to-integer conversion.
@@ -633,36 +645,37 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
     even numbers will be rounded up or down differently.
 */
 template <typename FloatType>
-int roundToInt (const FloatType value) noexcept
+constexpr auto roundToInt (const FloatType value) noexcept
+    -> std::enable_if_t<std::is_floating_point_v<FloatType>, int>
 {
-#ifdef __INTEL_COMPILER
-#pragma float_control(precise, on, push)
-#endif
-
-    union
+    if (isConstantEvaluated())
     {
-        int asInt[2];
-        double asDouble;
-    } n;
-
-    n.asDouble = ((double) value) + 6755399441055744.0;
+        return static_cast<int> (value > 0
+                                     ? value + MathConstants<FloatType>::half
+                                     : value - MathConstants<FloatType>::half);
+    }
+    else
+    {
+        union
+        {
+            double asDouble;
+            int asInt[2];
+        } n = { ((double) value) + 6755399441055744.0 };
 
 #if YUP_BIG_ENDIAN
-    return n.asInt[1];
+        return n.asInt[1];
 #else
-    return n.asInt[0];
+        return n.asInt[0];
 #endif
+    }
 }
 
-inline int roundToInt (int value) noexcept
+constexpr int roundToInt (int value) noexcept
 {
     return value;
 }
 
 #if YUP_MSVC
-#ifndef __INTEL_COMPILER
-#pragma float_control(pop)
-#endif
 #pragma optimize("", on) // resets optimisations to the project defaults
 #endif
 
@@ -671,12 +684,8 @@ inline int roundToInt (int value) noexcept
     This is a slightly slower and slightly more accurate version of roundToInt(). It works
     fine for values above zero, but negative numbers are rounded the wrong way.
 */
-inline int roundToIntAccurate (double value) noexcept
+constexpr int roundToIntAccurate (double value) noexcept
 {
-#ifdef __INTEL_COMPILER
-#pragma float_control(pop)
-#endif
-
     return roundToInt (value + 1.5e-8);
 }
 
@@ -698,22 +707,51 @@ constexpr unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
 }
 
 //==============================================================================
+/** Returns the next even integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextEven (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextEven requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) == 0 ? value : value + 1;
+    else
+        return (value + 1) & ~IntegerType (1);
+}
+
+/** Returns the next odd integer greater than or equal to `value`. Works with all integral types using integer math. */
+template <typename IntegerType>
+constexpr IntegerType nextOdd (IntegerType value) noexcept
+{
+    static_assert (std::is_integral_v<IntegerType>, "nextOdd requires an integral type");
+
+    if constexpr (std::is_signed_v<IntegerType>)
+        return (value & 1) != 0 ? value : value + 1;
+    else
+        return value | IntegerType (1);
+}
+
+//==============================================================================
 /** Returns true if the specified integer is a power-of-two. */
 template <typename IntegerType>
 constexpr bool isPowerOfTwo (IntegerType value)
 {
-    return (value & (value - 1)) == 0;
+    return value != 0 && (value & (value - 1)) == 0;
 }
 
 /** Returns the smallest power-of-two which is equal to or greater than the given integer. */
 constexpr int nextPowerOfTwo (int n) noexcept
 {
+    if (n <= 0)
+        return 1;
+
     --n;
     n |= (n >> 1);
     n |= (n >> 2);
     n |= (n >> 4);
     n |= (n >> 8);
     n |= (n >> 16);
+
     return n + 1;
 }
 

@@ -37,11 +37,17 @@ public:
     static const uint16_t assetIdPropertyKey = 206;
     static const uint16_t originXPropertyKey = 380;
     static const uint16_t originYPropertyKey = 381;
+    static const uint16_t fitPropertyKey = 974;
+    static const uint16_t alignmentXPropertyKey = 975;
+    static const uint16_t alignmentYPropertyKey = 976;
 
 protected:
     uint32_t m_AssetId = -1;
     float m_OriginX = 0.5f;
     float m_OriginY = 0.5f;
+    uint32_t m_Fit = 0;
+    float m_AlignmentX = 0.0f;
+    float m_AlignmentY = 0.0f;
 
 public:
     inline uint32_t assetId() const { return m_AssetId; }
@@ -53,6 +59,7 @@ public:
         }
         m_AssetId = value;
         assetIdChanged();
+        notifyPropertyChanged(assetIdPropertyKey);
     }
 
     inline float originX() const { return m_OriginX; }
@@ -64,6 +71,7 @@ public:
         }
         m_OriginX = value;
         originXChanged();
+        notifyPropertyChanged(originXPropertyKey);
     }
 
     inline float originY() const { return m_OriginY; }
@@ -75,6 +83,43 @@ public:
         }
         m_OriginY = value;
         originYChanged();
+        notifyPropertyChanged(originYPropertyKey);
+    }
+
+    inline uint32_t fit() const { return m_Fit; }
+    void fit(uint32_t value)
+    {
+        if (m_Fit == value)
+        {
+            return;
+        }
+        m_Fit = value;
+        fitChanged();
+        notifyPropertyChanged(fitPropertyKey);
+    }
+
+    inline float alignmentX() const { return m_AlignmentX; }
+    void alignmentX(float value)
+    {
+        if (m_AlignmentX == value)
+        {
+            return;
+        }
+        m_AlignmentX = value;
+        alignmentXChanged();
+        notifyPropertyChanged(alignmentXPropertyKey);
+    }
+
+    inline float alignmentY() const { return m_AlignmentY; }
+    void alignmentY(float value)
+    {
+        if (m_AlignmentY == value)
+        {
+            return;
+        }
+        m_AlignmentY = value;
+        alignmentYChanged();
+        notifyPropertyChanged(alignmentYPropertyKey);
     }
 
     Core* clone() const override;
@@ -83,6 +128,9 @@ public:
         m_AssetId = object.m_AssetId;
         m_OriginX = object.m_OriginX;
         m_OriginY = object.m_OriginY;
+        m_Fit = object.m_Fit;
+        m_AlignmentX = object.m_AlignmentX;
+        m_AlignmentY = object.m_AlignmentY;
         Drawable::copy(object);
     }
 
@@ -99,6 +147,15 @@ public:
             case originYPropertyKey:
                 m_OriginY = CoreDoubleType::deserialize(reader);
                 return true;
+            case fitPropertyKey:
+                m_Fit = CoreUintType::deserialize(reader);
+                return true;
+            case alignmentXPropertyKey:
+                m_AlignmentX = CoreDoubleType::deserialize(reader);
+                return true;
+            case alignmentYPropertyKey:
+                m_AlignmentY = CoreDoubleType::deserialize(reader);
+                return true;
         }
         return Drawable::deserialize(propertyKey, reader);
     }
@@ -107,6 +164,9 @@ protected:
     virtual void assetIdChanged() {}
     virtual void originXChanged() {}
     virtual void originYChanged() {}
+    virtual void fitChanged() {}
+    virtual void alignmentXChanged() {}
+    virtual void alignmentYChanged() {}
 };
 } // namespace rive
 

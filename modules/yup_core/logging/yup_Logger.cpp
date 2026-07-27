@@ -69,6 +69,10 @@ void YUP_API YUP_CALLTYPE logAssertion (const char* const filename, const int li
     String m ("YUP Assertion failure in ");
     m << File::createFileWithoutCheckingPath (CharPointer_UTF8 (filename)).getFileName() << ':' << lineNum;
 
+#if YUP_ASSERT_INCLUDE_STACKTRACE
+    m << newLine << SystemStats::getStackBacktrace();
+#endif
+
 #if YUP_LOG_ASSERTIONS
     Logger::writeToLog (m);
 #else
@@ -80,6 +84,10 @@ void YUP_API YUP_CALLTYPE logAssertion (const wchar_t* const filename, const int
 {
     String m ("YUP Assertion failure in ");
     m << File::createFileWithoutCheckingPath (filename).getFileName() << ':' << lineNum;
+
+#if YUP_ASSERT_INCLUDE_STACKTRACE
+    m << newLine << SystemStats::getStackBacktrace();
+#endif
 
 #if YUP_LOG_ASSERTIONS
     Logger::writeToLog (m);

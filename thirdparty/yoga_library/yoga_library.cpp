@@ -21,6 +21,7 @@
 
 #include "yoga_library.h"
 
+// BEGIN YUP GENERATED YOGA INCLUDES
 #include "upstream/yoga/event/event.cpp"
 #include "upstream/yoga/log.cpp"
 #include "upstream/yoga/Utils.cpp"
@@ -32,3 +33,5 @@
 #include "upstream/yoga/YGStyle.cpp"
 #include "upstream/yoga/YGValue.cpp"
 #include "upstream/yoga/Yoga.cpp"
+// END YUP GENERATED YOGA INCLUDES
+

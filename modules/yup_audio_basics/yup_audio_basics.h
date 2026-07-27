@@ -44,14 +44,13 @@
 
     ID:                 yup_audio_basics
     vendor:             yup
-    version:            7.0.12
+    version:            2.0.0
     name:               YUP audio and MIDI data classes
     description:        Classes for audio buffer manipulation, midi message handling, synthesis, etc.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core
-    appleFrameworks:    Accelerate
+    dependencies:       yup_core yup_simd
 
   END_YUP_MODULE_DECLARATION
 
@@ -62,37 +61,20 @@
 #define YUP_AUDIO_BASICS_H_INCLUDED
 
 #include <yup_core/yup_core.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 #undef Complex // apparently some C libraries actually define these symbols (!)
 #undef Factor
 
 //==============================================================================
-#ifndef YUP_USE_SSE_INTRINSICS
-#define YUP_USE_SSE_INTRINSICS 1
-#endif
-
-#if ! YUP_INTEL
-#undef YUP_USE_SSE_INTRINSICS
-#endif
-
-#if __ARM_NEON__ && ! (YUP_USE_VDSP_FRAMEWORK || defined(YUP_USE_ARM_NEON))
-#define YUP_USE_ARM_NEON 1
-#endif
-
-#if TARGET_IPHONE_SIMULATOR
-#ifdef YUP_USE_ARM_NEON
-#undef YUP_USE_ARM_NEON
-#endif
-#define YUP_USE_ARM_NEON 0
-#endif
+#include <chrono>
+#include <type_traits>
 
 //==============================================================================
 #include "buffers/yup_AudioDataConverters.h"
-YUP_BEGIN_IGNORE_WARNINGS_MSVC (4661)
-#include "buffers/yup_FloatVectorOperations.h"
-YUP_END_IGNORE_WARNINGS_MSVC
 #include "buffers/yup_AudioSampleBuffer.h"
+#include "buffers/yup_AudioSpectralBuffer.h"
 #include "buffers/yup_AudioChannelSet.h"
 #include "buffers/yup_AudioProcessLoadMeasurer.h"
 #include "utilities/yup_Decibels.h"
@@ -108,6 +90,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "midi/yup_MidiFile.h"
 #include "midi/yup_MidiKeyboardState.h"
 #include "midi/yup_MidiRPN.h"
+#include "midi/yup_MidiDataConcatenator.h"
 #include "mpe/yup_MPEValue.h"
 #include "mpe/yup_MPENote.h"
 #include "mpe/yup_MPEZoneLayout.h"
@@ -117,6 +100,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "mpe/yup_MPESynthesiserVoice.h"
 #include "mpe/yup_MPESynthesiser.h"
 #include "mpe/yup_MPEUtils.h"
+#include "midi/ump/yup_UMP.h"
 #include "sources/yup_AudioSource.h"
 #include "sources/yup_PositionableAudioSource.h"
 #include "sources/yup_BufferingAudioSource.h"
@@ -130,10 +114,3 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "synthesisers/yup_Synthesiser.h"
 #include "audio_play_head/yup_AudioPlayHead.h"
 #include "utilities/yup_AudioWorkgroup.h"
-#include "midi/ump/yup_UMPBytesOnGroup.h"
-#include "midi/ump/yup_UMPDeviceInfo.h"
-
-namespace yup
-{
-namespace ump = universal_midi_packets;
-} // namespace yup

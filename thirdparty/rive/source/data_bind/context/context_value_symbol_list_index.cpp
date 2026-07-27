@@ -11,13 +11,14 @@ DataBindContextValueSymbolListIndex::DataBindContextValueSymbolListIndex(
 
 void DataBindContextValueSymbolListIndex::apply(Core* target,
                                                 uint32_t propertyKey,
-                                                bool isMainDirection)
+                                                bool isMainDirection,
+                                                DataBind* dataBind)
 {
-    syncSourceValue();
+    syncSourceValue(dataBind);
     auto value =
         calculateValue<DataValueSymbolListIndex, uint32_t>(m_dataValue,
                                                            isMainDirection,
-                                                           m_dataBind);
+                                                           dataBind);
     switch (CoreRegistry::propertyFieldId(propertyKey))
     {
         case CoreDoubleType::id:
@@ -27,18 +28,4 @@ void DataBindContextValueSymbolListIndex::apply(Core* target,
             CoreRegistry::setUint(target, propertyKey, value);
             break;
     }
-}
-
-bool DataBindContextValueSymbolListIndex::syncTargetValue(Core* target,
-                                                          uint32_t propertyKey)
-{
-    auto value = CoreRegistry::getUint(target, propertyKey);
-
-    if (m_previousValue != value)
-    {
-        m_previousValue = value;
-        m_targetDataValue.value(value);
-        return true;
-    }
-    return false;
 }

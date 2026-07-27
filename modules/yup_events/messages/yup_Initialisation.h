@@ -93,6 +93,9 @@ class YUP_API ScopedYupInitialiser_GUI final
 
     YUP_DECLARE_NON_COPYABLE(ScopedYupInitialiser_GUI)
     YUP_DECLARE_NON_MOVEABLE(ScopedYupInitialiser_GUI)
+
+   private:
+    static std::atomic_int numScopedInitInstances;
 };
 
 //==============================================================================
@@ -112,7 +115,7 @@ class YUP_API ScopedYupInitialiser_GUI final
         YUP_END_IGNORE_WARNINGS_MSVC
 #define YUP_MAIN_FUNCTION_ARGS
 #elif YUP_ANDROID && YUP_MODULE_AVAILABLE_yup_gui
-#define YUP_MAIN_FUNCTION extern "C" int SDL_main(int argc, char* argv[])
+#define YUP_MAIN_FUNCTION extern "C" __attribute__((visibility("default"))) int SDL_main(int argc, char* argv[])
 #define YUP_MAIN_FUNCTION_ARGS argc, (const char**)argv
 #else
 #define YUP_MAIN_FUNCTION int main(int argc, char* argv[])
@@ -212,7 +215,6 @@ class YUP_API ScopedYupInitialiser_GUI final
    -(void) dealloc
    {
        [yupDelegate release];
-       [super dealloc];
    }
 
    - (void) forwardInvocation: (NSInvocation*) anInvocation

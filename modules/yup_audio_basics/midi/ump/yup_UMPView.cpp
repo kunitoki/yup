@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace yup::universal_midi_packets
+namespace yup::ump
 {
 
 uint32_t View::size() const noexcept
@@ -46,4 +46,4 @@ uint32_t View::size() const noexcept
     return Utils::getNumWordsForMessageType (*ptr);
 }
 
-} // namespace yup::universal_midi_packets
+} // namespace yup::ump

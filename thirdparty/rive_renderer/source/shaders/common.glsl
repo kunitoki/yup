@@ -37,6 +37,15 @@
 #define TESSDATA_AS_UINT(X) X
 #endif
 
+// Gathers a 4xN matrix of texels, in the same order as the textureGather() API.
+// clang-format off
+#define TEXTURE_GATHER_MATRIX(NAME, COORD, COMPONENTS)                         \
+    TEXEL_FETCH(NAME, int2(COORD) + int2(-1, 0))COMPONENTS,                    \
+        TEXEL_FETCH(NAME, int2(COORD) + int2(0, 0))COMPONENTS,                 \
+        TEXEL_FETCH(NAME, int2(COORD) + int2(0, -1))COMPONENTS,                \
+        TEXEL_FETCH(NAME, int2(COORD) + int2(-1, -1))COMPONENTS
+// clang-format on
+
 // This is a macro because we can't (at least for now) forward texture refs to a
 // function in a way that works in all the languages we support.
 // This is a macro because we can't (at least for now) forward texture refs to a
@@ -138,6 +147,8 @@ INLINE half4 make_half4(half x)
     return ret;
 }
 
+INLINE half4 make_half4(half4 x) { return x; }
+
 INLINE bool2 make_bool2(bool b) { return bool2(b, b); }
 
 INLINE half3x3 make_half3x3(half3 a, half3 b, half3 c)
@@ -157,14 +168,19 @@ INLINE half2x3 make_half2x3(half3 a, half3 b)
     return ret;
 }
 
+INLINE half4x4 make_half4x4(half4 a, half4 b, half4 c, half4 d)
+{
+    half4x4 ret;
+    ret[0] = a;
+    ret[1] = b;
+    ret[2] = c;
+    ret[3] = d;
+    return ret;
+}
+
 INLINE float2x2 make_float2x2(float4 x) { return float2x2(x.xy, x.zw); }
 
 INLINE uint make_uint(ushort x) { return x; }
-
-INLINE uint contour_data_idx(uint contourIDWithFlags)
-{
-    return (contourIDWithFlags & CONTOUR_ID_MASK) - 1u;
-}
 
 INLINE float2 unchecked_mix(float2 a, float2 b, float t)
 {
@@ -199,36 +215,114 @@ INLINE half3 unmultiply_rgb(half4 premul)
     return premul.rgb * (premul.a != .0 ? 1. / premul.a : .0);
 }
 
-INLINE half min_value(half4 min4)
+INLINE half min_component(half2 min2) { return min(min2.x, min2.y); }
+
+INLINE half min_component(half3 min3)
+{
+    return min(min_component(min3.xy), min3.z);
+}
+
+INLINE half min_component(half4 min4)
 {
     half2 min2 = min(min4.xy, min4.zw);
     half min1 = min(min2.x, min2.y);
     return min1;
 }
 
+INLINE half max_component(half2 max2) { return max(max2.x, max2.y); }
+
+INLINE half max_component(half3 max3)
+{
+    return max(max_component(max3.xy), max3.z);
+}
+
+INLINE half max_component(half4 max4)
+{
+    half2 max2 = max(max4.xy, max4.zw);
+    half max1 = max(max2.x, max2.y);
+    return max1;
+}
+
 INLINE float manhattan_width(float2 x) { return abs(x.x) + abs(x.y); }
 
-#ifndef $UNIFORM_DEFINITIONS_AUTO_GENERATED
-UNIFORM_BLOCK_BEGIN(FLUSH_UNIFORM_BUFFER_IDX, @FlushUniforms)
-float gradInverseViewportY;
-float tessInverseViewportY;
-float renderTargetInverseViewportX;
-float renderTargetInverseViewportY;
-uint renderTargetWidth;
-uint renderTargetHeight;
-uint colorClearValue;           // Only used if clears are implemented as draws.
-uint coverageClearValue;        // Only used if clears are implemented as draws.
-int4 renderTargetUpdateBounds;  // drawBounds, or renderTargetBounds if there is
-                                // a clear. (LTRB.)
-float2 atlasTextureInverseSize; // 1 / [atlasWidth, atlasHeight]
-float2 atlasContentInverseViewport; // 2 / atlasContentBounds
-uint coverageBufferPrefix;
-uint pathIDGranularity; // Spacing between adjacent path IDs (1 if IEEE
-                        // compliant).
-float vertexDiscardValue;
-// Debugging.
-uint wireframeEnabled;
-UNIFORM_BLOCK_END(uniforms)
+// ARM Mali has experienced multiple errors for us when calling clamp(), in both
+// GL and Vulkan.
+INLINE half safe_clamp_for_mali(half x, half lo, half hi)
+{
+#if defined(@GL_RENDERER_MALI) || defined(@VULKAN_VENDOR_ARM)
+#ifdef @VULKAN_VENDOR_ARM
+    if (@VULKAN_VENDOR_ARM)
+#endif
+    {
+        if (x < hi)
+            if (x > lo)
+                return x;
+            else
+                return lo;
+        else
+            return hi;
+    }
+#endif // @GL_RENDERER_MALI || @VULKAN_VENDOR_ARM
+    return clamp(x, lo, hi);
+}
+
+INLINE half interleaved_gradient_noise(float2 fragCoord, half scale, half bias)
+{
+    half v1 = fract(0.06711056 * fragCoord.x + 0.00583715 * fragCoord.y);
+    half v2 = fract(52.9829189 * v1);
+    return (v2 * scale) + bias;
+}
+
+#if 0
+// Bayer 4x4 and Bayer 2x2 variants included for reference,
+// but not currently used.
+INLINE half bayer4x4f(float2 fragCoord, float scale, float bias)
+{
+    int x = int(fragCoord.x);
+    int y = int(fragCoord.y);
+
+    int xxory = (x ^ y);
+    int b = (y >> 1) & 1;
+    b |= (xxory & 2);
+    b |= (y & 1) << 2;
+    b |= (xxory & 1) << 3;
+    float fb = float(b);
+    half hb = cast_float_to_half(fb) / 16.0;
+    return (hb * scale) + bias;
+}
+
+INLINE half bayer2x2f(float2 fragCoord, float scale, float bias)
+{
+    fragCoord.y *= 0.5;
+    fragCoord.x = fract(fragCoord.x * 0.5 + fragCoord.y);
+    fragCoord.y = fract(fragCoord.y);
+    float n = (fragCoord.y * 0.5 + fragCoord.x);
+    return (n * scale) + bias;
+}
+#endif
+
+#ifdef @ENABLE_DITHER
+INLINE half get_dither(float2 fragCoord, half scale, half bias)
+{
+    return @ENABLE_DITHER ? interleaved_gradient_noise(fragCoord, scale, bias)
+                          : .0;
+}
+
+INLINE half3 add_dither(half3 color, float2 fragCoord, half scale, half bias)
+{
+    return @ENABLE_DITHER
+               ? (interleaved_gradient_noise(fragCoord, scale, bias) + color)
+               : color;
+}
+
+#else
+
+INLINE half get_dither(float2 fragCoord, float scale, float bias) { return 0.; }
+
+INLINE half3 add_dither(half3 color, float2 fragCoord, half scale, half bias)
+{
+    return color;
+}
 #endif
 
 #ifdef @VERTEX
@@ -275,7 +369,7 @@ INLINE float4 find_clip_rect_coverage_distances(float2x2 clipRectInverseMatrix,
     }
 }
 
-#else // RENDER_MODE_MSAA
+#else // !@RENDER_MODE_MSAA => @RENDER_MODE_MSAA
 
 INLINE float normalize_z_index(uint zIndex)
 {
@@ -285,9 +379,17 @@ INLINE float normalize_z_index(uint zIndex)
 #ifdef @ENABLE_CLIP_RECT
 INLINE void set_clip_rect_plane_distances(float2x2 clipRectInverseMatrix,
                                           float2 clipRectInverseTranslate,
-                                          float2 pixelPosition)
+                                          float2 pixelPosition
+                                              CLIP_CONTEXT_FORWARD)
 {
-    if (clipRectInverseMatrix != float2x2(0))
+// MSAA uses gl_ClipDistance when ENABLE_CLIP_RECT is set, but since SPIRV uses
+// specialization constants (as opposed to compile-time flags), it means that
+// the usage of them is in the compiled shader even if that codepath is not
+// going to be taken, which ends up as a validation failure on systems that do
+// not support that extension. In those cases, we compile separate SPIRV
+// binaries with gl_ClipDistance explicitly disabled.
+#ifndef @DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
+    if (any(notEqual(float4(clipRectInverseMatrix), float4(.0, .0, .0, .0))))
     {
         float2 clipRectCoord = MUL(clipRectInverseMatrix, pixelPosition) +
                                clipRectInverseTranslate.xy;
@@ -304,25 +406,58 @@ INLINE void set_clip_rect_plane_distances(float2x2 clipRectInverseMatrix,
         gl_ClipDistance[0] = gl_ClipDistance[1] = gl_ClipDistance[2] =
             gl_ClipDistance[3] = clipRectInverseTranslate.x - .5;
     }
+#endif // !@DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
 }
 #endif // ENABLE_CLIP_RECT
-#endif // RENDER_MODE_MSAA
+
+#endif // @RENDER_MODE_MSAA
 #endif // VERTEX
 
-#ifdef @DRAW_IMAGE
-#ifndef $UNIFORM_DEFINITIONS_AUTO_GENERATED
-UNIFORM_BLOCK_BEGIN(IMAGE_DRAW_UNIFORM_BUFFER_IDX, @ImageDrawUniforms)
-float4 viewMatrix;
-float2 translate;
-float opacity;
-float padding;
-// clipRectInverseMatrix transforms from pixel coordinates to a space where the
-// clipRect is the normalized rectangle: [-1, -1, 1, 1].
-float4 clipRectInverseMatrix;
-float2 clipRectInverseTranslate;
-uint clipID;
-uint blendMode;
-uint zIndex;
-UNIFORM_BLOCK_END(imageDrawUniforms)
-#endif
-#endif
+#ifdef @FRAGMENT
+#ifdef @NEEDS_GAMMA_CORRECTION
+INLINE half gamma_to_linear(half color)
+{
+    return (color <= 0.04045) ? color / 12.92
+                              : pow(abs((color + 0.055) / 1.055), 2.4);
+}
+
+INLINE half3 gamma_to_linear(half3 color)
+{
+    return make_half3(gamma_to_linear(color.r),
+                      gamma_to_linear(color.g),
+                      gamma_to_linear(color.b));
+}
+
+INLINE half4 gamma_to_linear(half4 color)
+{
+    return make_half4(gamma_to_linear(color.rgb), color.a);
+}
+#endif // NEEDS_GAMMA_CORRECTION
+#endif // FRAGMENT
+
+// The Qualcomm compiler can't handle line breaks in #ifs.
+// clang-format off
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
+// clang-format on
+INLINE half4 dst_color_fetch(half4x4 dstSamples, int sampleMask)
+{
+    if (sampleMask == 0xf)
+    {
+        // Average together all samples for this fragment.
+        return (dstSamples[0] + dstSamples[1] + dstSamples[2] + dstSamples[3]) *
+               .25;
+    }
+    else
+    {
+        // Average together only the samples that are inside the sample mask.
+        half4 mask = float4(notEqual(sampleMask & int4(1, 2, 4, 8), int4(0)));
+        half4 ret = MUL(dstSamples, mask);
+        // Since the sample mask can only have 4 bits, counting them is faster
+        // this way on Galaxy S24 than calling bitCount().
+        int numSamples = (sampleMask & 5) + ((sampleMask >> 1) & 5);
+        numSamples = (numSamples & 3) + (numSamples >> 2);
+        ret *= 1. / float(numSamples);
+        return ret;
+    }
+}
+#endif // @FRAGMENT && @RENDER_MODE_MSAA && !@FIXED_FUNCTION_COLOR_OUTPUT

@@ -39,13 +39,6 @@ public:
 
 //==============================================================================
 
-class NoOpRenderShader : public rive::RenderShader
-{
-public:
-};
-
-//==============================================================================
-
 class NoOpRenderImage : public rive::RenderImage
 {
 public:
@@ -86,7 +79,7 @@ public:
 
     void addPath (rive::CommandPath*, const rive::Mat2D&) override {}
 
-    void addRenderPath (rive::RenderPath*, const rive::Mat2D&) override {}
+    void addRenderPath (const rive::RenderPath*, const rive::Mat2D&) override {}
 
     void moveTo (float, float) override {}
 
@@ -123,7 +116,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return rive::make_rcp<NoOpRenderShader>();
+        return nullptr;
     }
 
     rive::rcp<rive::RenderShader> makeRadialGradient (
@@ -134,7 +127,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return rive::make_rcp<NoOpRenderShader>();
+        return nullptr;
     }
 
     rive::rcp<rive::RenderPath> makeRenderPath (rive::RawPath&, rive::FillRule) override
@@ -186,6 +179,8 @@ public:
                         uint32_t indexCount,
                         rive::BlendMode,
                         float) override {}
+
+    void modulateOpacity (float) override {}
 };
 
 //==============================================================================
@@ -195,10 +190,7 @@ class NoOpGraphicsContext : public GraphicsContext
 public:
     NoOpGraphicsContext() = default;
 
-    float dpiScale (void*) const override
-    {
-        return 1.0f;
-    }
+    Api getApi() const noexcept override { return Api::Headless; }
 
     rive::Factory* factory() override
     {
@@ -220,7 +212,7 @@ public:
         return std::make_unique<NoOpRenderer>();
     }
 
-    void onSizeChanged (void*, int, int, uint32_t) override
+    void onSizeChanged (void*, int, int, float, uint32_t) override
     {
     }
 
@@ -230,6 +222,29 @@ public:
 
     void end (void*) override
     {
+    }
+
+    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override
+    {
+        return nullptr;
+    }
+
+    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override
+    {
+        return nullptr;
+    }
+
+    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override
+    {
+    }
+
+    void endOffscreen (OffscreenTarget&) override
+    {
+    }
+
+    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override
+    {
+        return false;
     }
 
 private:

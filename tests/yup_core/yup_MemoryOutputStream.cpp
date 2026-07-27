@@ -1,0 +1,131 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include <gtest/gtest.h>
+
+#include <yup_core/yup_core.h>
+
+using namespace yup;
+
+TEST (MemoryOutputStreamTests, WriteTextUtf16SupportsFullUnicodeCodepoints)
+{
+    static constexpr yup_wchar stringA[] { 0x1F600, 0x00 };               // Grinning face emoji
+    static constexpr yup_wchar stringB[] { 0xA, 0xB, 0xC, 0x0 };          // ASCII
+    static constexpr yup_wchar stringC[] { 0xAAAA, 0xBBBB, 0xCCCC, 0x0 }; // two-byte characters
+
+    CharPointer_UTF32 pointers[] { CharPointer_UTF32 (stringA),
+                                   CharPointer_UTF32 (stringB),
+                                   CharPointer_UTF32 (stringC) };
+
+    for (auto originalPtr : pointers)
+    {
+        MemoryOutputStream stream;
+        EXPECT_TRUE (stream.writeText (String (originalPtr), true, false, "\n"));
+        EXPECT_NE (stream.getDataSize(), (size_t) 0);
+
+        CharPointer_UTF16 writtenPtr { reinterpret_cast<const CharPointer_UTF16::CharType*> (stream.getData()) };
+
+        for (auto currentOriginal = originalPtr; ! currentOriginal.isEmpty(); ++currentOriginal, ++writtenPtr)
+            EXPECT_EQ (*currentOriginal, *writtenPtr);
+    }
+}
+
+TEST (MemoryOutputStreamTests, DefaultConstructedIsEmpty)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+    EXPECT_NE (stream.getData(), nullptr);
+}
+
+TEST (MemoryOutputStreamTests, WriteBytesIncreasesSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x01, 0x02, 0x03 };
+    EXPECT_TRUE (stream.write (data, sizeof (data)));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}
+
+TEST (MemoryOutputStreamTests, WriteRepeatedByteProducesCorrectSize)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeRepeatedByte (0xFF, 10));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 10);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    for (size_t i = 0; i < 10; ++i)
+        EXPECT_EQ (bytes[i], 0xFF);
+}
+
+TEST (MemoryOutputStreamTests, ResetClearsDataSize)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 1, 2, 3, 4, 5 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+
+    stream.reset();
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+}
+
+TEST (MemoryOutputStreamTests, GetPositionTracksWrittenBytes)
+{
+    MemoryOutputStream stream;
+    EXPECT_EQ (stream.getPosition(), (int64) 0);
+
+    const uint8 data[] = { 0xAA, 0xBB, 0xCC };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 3);
+
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getPosition(), (int64) 6);
+}
+
+TEST (MemoryOutputStreamTests, GetMemoryBlockMatchesWrittenData)
+{
+    MemoryOutputStream stream;
+    const uint8 data[] = { 0x11, 0x22, 0x33, 0x44 };
+    stream.write (data, sizeof (data));
+
+    MemoryBlock block = stream.getMemoryBlock();
+    EXPECT_EQ (block.getSize(), sizeof (data));
+    EXPECT_EQ (memcmp (block.getData(), data, sizeof (data)), 0);
+}
+
+TEST (MemoryOutputStreamTests, WriteByteProducesOneByte)
+{
+    MemoryOutputStream stream;
+    EXPECT_TRUE (stream.writeByte ('Z'));
+    EXPECT_EQ (stream.getDataSize(), (size_t) 1);
+
+    const auto* bytes = static_cast<const uint8*> (stream.getData());
+    EXPECT_EQ (bytes[0], static_cast<uint8> ('Z'));
+}
+
+TEST (MemoryOutputStreamTests, PreallocateDoesNotAffectDataSize)
+{
+    MemoryOutputStream stream;
+    stream.preallocate (1024);
+    EXPECT_EQ (stream.getDataSize(), (size_t) 0);
+
+    const uint8 data[] = { 1, 2, 3 };
+    stream.write (data, sizeof (data));
+    EXPECT_EQ (stream.getDataSize(), sizeof (data));
+}

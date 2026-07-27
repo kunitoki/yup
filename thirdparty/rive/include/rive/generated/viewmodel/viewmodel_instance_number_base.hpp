@@ -20,6 +20,7 @@ public:
         {
             case ViewModelInstanceNumberBase::typeKey:
             case ViewModelInstanceValueBase::typeKey:
+            case ComponentBase::typeKey:
                 return true;
             default:
                 return false;
@@ -43,6 +44,7 @@ public:
         }
         m_PropertyValue = value;
         propertyValueChanged();
+        notifyPropertyChanged(propertyValuePropertyKey);
     }
 
     Core* clone() const override;

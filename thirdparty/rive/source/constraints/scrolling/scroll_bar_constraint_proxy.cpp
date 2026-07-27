@@ -4,18 +4,35 @@
 
 using namespace rive;
 
-void ThumbDraggableProxy::drag(Vec2D mousePosition)
+bool ThumbDraggableProxy::drag(Vec2D mousePosition, float timeStamp)
 {
-    m_constraint->dragThumb(mousePosition - m_lastPosition);
+    m_constraint->dragThumb(mousePosition - m_lastPosition, timeStamp);
     m_lastPosition = mousePosition;
+    return true;
 }
 
-void ThumbDraggableProxy::startDrag(Vec2D mousePosition)
+bool ThumbDraggableProxy::startDrag(Vec2D mousePosition, float timeStamp)
 {
     m_lastPosition = mousePosition;
+    auto scroll = m_constraint->scrollConstraint();
+    scroll->isScrollBarDragging(true);
+    if (scroll->physics() != nullptr)
+    {
+        scroll->physics()->accumulate(Vec2D(), timeStamp);
+    }
+    return true;
 }
 
-void TrackDraggableProxy::startDrag(Vec2D mousePosition)
+bool ThumbDraggableProxy::endDrag(Vec2D mousePosition, float timeStamp)
+{
+    auto scroll = m_constraint->scrollConstraint();
+    scroll->isScrollBarDragging(false);
+    scroll->clearVelocity();
+    return true;
+}
+
+bool TrackDraggableProxy::startDrag(Vec2D mousePosition, float timeStamp)
 {
     m_constraint->hitTrack(mousePosition);
+    return true;
 }

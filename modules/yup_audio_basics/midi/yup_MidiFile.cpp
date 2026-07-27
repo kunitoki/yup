@@ -79,7 +79,7 @@ struct ReadTrait<uint16>
 };
 
 template <typename Integral>
-Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
+std::optional<Integral> tryRead (const uint8*& data, size_t& remaining)
 {
     using Trait = ReadTrait<Integral>;
     constexpr auto size = sizeof (Integral);
@@ -87,7 +87,7 @@ Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
     if (remaining < size)
         return {};
 
-    const Optional<Integral> result { Trait::read (data) };
+    const std::optional<Integral> result { Trait::read (data) };
 
     data += size;
     remaining -= size;
@@ -103,15 +103,15 @@ struct HeaderDetails
     short numberOfTracks = 0;
 };
 
-static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
-                                                const size_t maxSize)
+static std::optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
+                                                     const size_t maxSize)
 {
     auto* data = initialData;
     auto remaining = maxSize;
 
     auto ch = tryRead<uint32> (data, remaining);
 
-    if (! ch.hasValue())
+    if (! ch.has_value())
         return {};
 
     if (*ch != ByteOrder::bigEndianInt ("MThd"))
@@ -124,7 +124,7 @@ static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
             {
                 ch = tryRead<uint32> (data, remaining);
 
-                if (! ch.hasValue())
+                if (! ch.has_value())
                     return {};
 
                 if (*ch == ByteOrder::bigEndianInt ("MThd"))
@@ -141,22 +141,22 @@ static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
 
     const auto bytesRemaining = tryRead<uint32> (data, remaining);
 
-    if (! bytesRemaining.hasValue() || *bytesRemaining > remaining)
+    if (! bytesRemaining.has_value() || *bytesRemaining > remaining)
         return {};
 
     const auto optFileType = tryRead<uint16> (data, remaining);
 
-    if (! optFileType.hasValue() || 2 < *optFileType)
+    if (! optFileType.has_value() || 2 < *optFileType)
         return {};
 
     const auto optNumTracks = tryRead<uint16> (data, remaining);
 
-    if (! optNumTracks.hasValue() || (*optFileType == 0 && *optNumTracks != 1))
+    if (! optNumTracks.has_value() || (*optFileType == 0 && *optNumTracks != 1))
         return {};
 
     const auto optTimeFormat = tryRead<uint16> (data, remaining);
 
-    if (! optTimeFormat.hasValue())
+    if (! optTimeFormat.has_value())
         return {};
 
     HeaderDetails result;
@@ -340,7 +340,22 @@ void MidiFile::setTicksPerQuarterNote (int ticks) noexcept
 
 void MidiFile::setSmpteTimeFormat (int framesPerSecond, int subframeResolution) noexcept
 {
-    timeFormat = (short) (((-framesPerSecond) << 8) | subframeResolution);
+    switch (framesPerSecond)
+    {
+        case 24:
+        case 25:
+        case 29:
+        case 30:
+            break;
+
+        default:
+            framesPerSecond = 25;
+            break;
+    }
+
+    const int8 smpteByte = static_cast<int8> (-framesPerSecond);
+
+    timeFormat = static_cast<int16> ((static_cast<uint8> (smpteByte) << 8) | static_cast<uint8> (subframeResolution));
 }
 
 //==============================================================================
@@ -388,7 +403,7 @@ bool MidiFile::readFrom (InputStream& sourceStream,
 
     const auto optHeader = MidiFileHelpers::parseMidiHeader (d, size);
 
-    if (! optHeader.hasValue())
+    if (! optHeader.has_value())
         return false;
 
     const auto header = *optHeader;
@@ -401,12 +416,12 @@ bool MidiFile::readFrom (InputStream& sourceStream,
     {
         const auto optChunkType = MidiFileHelpers::tryRead<uint32> (d, size);
 
-        if (! optChunkType.hasValue())
+        if (! optChunkType.has_value())
             return false;
 
         const auto optChunkSize = MidiFileHelpers::tryRead<uint32> (d, size);
 
-        if (! optChunkSize.hasValue())
+        if (! optChunkSize.has_value())
             return false;
 
         const auto chunkSize = *optChunkSize;
@@ -559,271 +574,5 @@ bool MidiFile::writeTrack (OutputStream& mainOut, const MidiMessageSequence& ms)
 
     return true;
 }
-
-//==============================================================================
-//==============================================================================
-#if YUP_UNIT_TESTS
-
-struct MidiFileTest final : public UnitTest
-{
-    MidiFileTest()
-        : UnitTest ("MidiFile", UnitTestCategories::midi)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("ReadTrack respects running status");
-        {
-            const auto sequence = parseSequence ([] (OutputStream& os)
-            {
-                MidiFileHelpers::writeVariableLengthInt (os, 100);
-                writeBytes (os, { 0x90, 0x40, 0x40 });
-                MidiFileHelpers::writeVariableLengthInt (os, 200);
-                writeBytes (os, { 0x40, 0x40 });
-                MidiFileHelpers::writeVariableLengthInt (os, 300);
-                writeBytes (os, { 0xff, 0x2f, 0x00 });
-            });
-
-            expectEquals (sequence.getNumEvents(), 3);
-            expect (sequence.getEventPointer (0)->message.isNoteOn());
-            expect (sequence.getEventPointer (1)->message.isNoteOn());
-            expect (sequence.getEventPointer (2)->message.isEndOfTrackMetaEvent());
-        }
-
-        beginTest ("ReadTrack returns available messages if input is truncated");
-        {
-            {
-                const auto sequence = parseSequence ([] (OutputStream& os)
-                {
-                    // Incomplete delta time
-                    writeBytes (os, { 0xff });
-                });
-
-                expectEquals (sequence.getNumEvents(), 0);
-            }
-
-            {
-                const auto sequence = parseSequence ([] (OutputStream& os)
-                {
-                    // Complete delta with no following event
-                    MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
-                });
-
-                expectEquals (sequence.getNumEvents(), 0);
-            }
-
-            {
-                const auto sequence = parseSequence ([] (OutputStream& os)
-                {
-                    // Complete delta with malformed following event
-                    MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
-                    writeBytes (os, { 0x90, 0x40 });
-                });
-
-                expectEquals (sequence.getNumEvents(), 1);
-                expect (sequence.getEventPointer (0)->message.isNoteOff());
-                expectEquals (sequence.getEventPointer (0)->message.getNoteNumber(), 0x40);
-                expectEquals (sequence.getEventPointer (0)->message.getVelocity(), (uint8) 0x00);
-            }
-        }
-
-        beginTest ("Header parsing works");
-        {
-            {
-                // No data
-                const auto header = parseHeader ([] (OutputStream&) {});
-                expect (! header.hasValue());
-            }
-
-            {
-                // Invalid initial byte
-                const auto header = parseHeader ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 0xff });
-                });
-
-                expect (! header.hasValue());
-            }
-
-            {
-                // Type block, but no header data
-                const auto header = parseHeader ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd' });
-                });
-
-                expect (! header.hasValue());
-            }
-
-            {
-                // We (ll-formed header, but track type is 0 and channels != 1
-                const auto header = parseHeader ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 16, 0, 1 });
-                });
-
-                expect (! header.hasValue());
-            }
-
-            {
-                // Well-formed header, but track type is 5
-                const auto header = parseHeader ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 5, 0, 16, 0, 1 });
-                });
-
-                expect (! header.hasValue());
-            }
-
-            {
-                // Well-formed header
-                const auto header = parseHeader ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 16, 0, 1 });
-                });
-
-                expect (header.hasValue());
-
-                expectEquals (header->fileType, (short) 1);
-                expectEquals (header->numberOfTracks, (short) 16);
-                expectEquals (header->timeFormat, (short) 1);
-                expectEquals ((int) header->bytesRead, 14);
-            }
-        }
-
-        beginTest ("Read from stream");
-        {
-            {
-                // Empty input
-                const auto file = parseFile ([] (OutputStream&) {});
-                expect (! file.hasValue());
-            }
-
-            {
-                // Malformed header
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd' });
-                });
-
-                expect (! file.hasValue());
-            }
-
-            {
-                // Header, no channels
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 0, 0, 1 });
-                });
-
-                expect (file.hasValue());
-                expectEquals (file->getNumTracks(), 0);
-            }
-
-            {
-                // Header, one malformed channel
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                    writeBytes (os, { 'M', 'T', 'r', '?' });
-                });
-
-                expect (! file.hasValue());
-            }
-
-            {
-                // Header, one channel with malformed message
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                    writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 1, 0xff });
-                });
-
-                expect (file.hasValue());
-                expectEquals (file->getNumTracks(), 1);
-                expectEquals (file->getTrack (0)->getNumEvents(), 0);
-            }
-
-            {
-                // Header, one channel with incorrect length message
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                    writeBytes (os, { 'M', 'T', 'r', 'k', 0x0f, 0, 0, 0, 0xff });
-                });
-
-                expect (! file.hasValue());
-            }
-
-            {
-                // Header, one channel, all well-formed
-                const auto file = parseFile ([] (OutputStream& os)
-                {
-                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                    writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 4 });
-
-                    MidiFileHelpers::writeVariableLengthInt (os, 0x0f);
-                    writeBytes (os, { 0x80, 0x00, 0x00 });
-                });
-
-                expect (file.hasValue());
-                expectEquals (file->getNumTracks(), 1);
-
-                auto& track = *file->getTrack (0);
-                expectEquals (track.getNumEvents(), 1);
-                expect (track.getEventPointer (0)->message.isNoteOff());
-                expectEquals (track.getEventPointer (0)->message.getTimeStamp(), (double) 0x0f);
-            }
-        }
-    }
-
-    template <typename Fn>
-    static MidiMessageSequence parseSequence (Fn&& fn)
-    {
-        MemoryOutputStream os;
-        fn (os);
-
-        return MidiFileHelpers::readTrack (reinterpret_cast<const uint8*> (os.getData()),
-                                           (int) os.getDataSize());
-    }
-
-    template <typename Fn>
-    static Optional<MidiFileHelpers::HeaderDetails> parseHeader (Fn&& fn)
-    {
-        MemoryOutputStream os;
-        fn (os);
-
-        return MidiFileHelpers::parseMidiHeader (reinterpret_cast<const uint8*> (os.getData()),
-                                                 os.getDataSize());
-    }
-
-    template <typename Fn>
-    static Optional<MidiFile> parseFile (Fn&& fn)
-    {
-        MemoryOutputStream os;
-        fn (os);
-
-        MemoryInputStream is (os.getData(), os.getDataSize(), false);
-        MidiFile mf;
-
-        int fileType = 0;
-
-        if (mf.readFrom (is, true, &fileType))
-            return mf;
-
-        return {};
-    }
-
-    static void writeBytes (OutputStream& os, const std::vector<uint8>& bytes)
-    {
-        for (const auto& byte : bytes)
-            os.writeByte ((char) byte);
-    }
-};
-
-static MidiFileTest midiFileTests;
-
-#endif
 
 } // namespace yup

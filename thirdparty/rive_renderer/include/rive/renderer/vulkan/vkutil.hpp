@@ -22,12 +22,27 @@ class VulkanContext;
 
 namespace rive::gpu::vkutil
 {
+// Vulkan vendor IDs.
+namespace vendors
+{
+constexpr static uint32_t AMD = 0x1002u;
+constexpr static uint32_t Imagination = 0x1010u;
+constexpr static uint32_t NVIDIA = 0x10DEu;
+constexpr static uint32_t ARM = 0x13B5u;
+constexpr static uint32_t Qualcomm = 0x5143u;
+constexpr static uint32_t Intel = 0x8086u;
+constexpr static uint32_t Samsung = 0x144d;
+}; // namespace vendors
+
+const char* string_from_vk_result(VkResult);
+
 inline static void vk_check(VkResult res, const char* file, int line)
 {
     if (res != VK_SUCCESS)
     {
         fprintf(stderr,
-                "Vulkan error %i at line: %i in file: %s\n",
+                "Vulkan error %s (%i) at line: %i in file: %s\n",
+                string_from_vk_result(res),
                 res,
                 line,
                 file);
@@ -112,6 +127,9 @@ class BufferPool : public GPUResourcePool
 public:
     BufferPool(rcp<VulkanContext>, VkBufferUsageFlags, VkDeviceSize size = 0);
 
+    BufferPool(const BufferPool&) = delete;
+    BufferPool& operator=(const BufferPool&) = delete;
+
     VkDeviceSize size() const { return m_targetSize; }
     void setTargetSize(VkDeviceSize size);
 
@@ -144,11 +162,18 @@ public:
 private:
     friend class ::rive::gpu::VulkanContext;
 
-    Image(rcp<VulkanContext>, const VkImageCreateInfo&);
+    Image(rcp<VulkanContext>, const VkImageCreateInfo&, const char* name);
+
+    // Adopts an externally-owned VkImage; destructor leaves it untouched
+    // (m_vmaAllocation stays null).
+    Image(rcp<VulkanContext>,
+          VkImage externalImage,
+          const VkImageCreateInfo&,
+          const char* name);
 
     VkImageCreateInfo m_info;
-    VmaAllocation m_vmaAllocation;
-    VkImage m_vkImage;
+    VmaAllocation m_vmaAllocation = VK_NULL_HANDLE;
+    VkImage m_vkImage = VK_NULL_HANDLE;
 };
 
 class ImageView : public Resource
@@ -166,7 +191,8 @@ private:
 
     ImageView(rcp<VulkanContext>,
               rcp<Image> textureRef,
-              const VkImageViewCreateInfo&);
+              const VkImageViewCreateInfo&,
+              const char* name);
 
     const rcp<Image> m_textureRefOrNull;
     VkImageViewCreateInfo m_info;
@@ -207,12 +233,23 @@ public:
         return m_imageView->vkImageViewAddressOf();
     }
     ImageAccess& lastAccess() { return m_lastAccess; }
+    void* nativeHandle() const override { return (void*)vkImage(); }
 
     // Deferred mechanism for uploading image data without a command buffer.
-    void stageContentsForUpload(const void* imageData,
-                                size_t imageDataSizeInBytes);
-    bool hasUpdates() const { return m_imageUploadBuffer != nullptr; }
-    void synchronize(VkCommandBuffer);
+    //
+    // Single-region upload: one VkBufferImageCopy covering mip 0 in full.
+    // If the texture has more than one mip level, generateMipmaps() is
+    // called on apply (suitable for the PNG/JPEG path).
+    void scheduleUpload(const void* imageDataRGBAPremul,
+                        size_t imageDataSizeInBytes);
+    void scheduleUpload(rcp<vkutil::Buffer> imageBufferRGBAPremul);
+
+    // Multi-region upload: caller hands over a staging buffer and the full
+    // list of VkBufferImageCopy regions (typically one per mip level).
+    // No automatic mipmap generation — the caller is responsible for
+    // supplying every level that exists in the texture.
+    void scheduleUpload(rcp<vkutil::Buffer> stagingBuffer,
+                        std::vector<VkBufferImageCopy> regions);
 
     void barrier(VkCommandBuffer,
                  const ImageAccess& dstAccess,
@@ -225,6 +262,44 @@ public:
     // a wrap mode of "repeat". We may want to add a "wrap" argument at some
     // point.
     void generateMipmaps(VkCommandBuffer, const ImageAccess& dstAccess);
+
+    // These methods are inlined intentionally, in order to avoid function calls
+    // in the common usecase.
+    inline void prepareForVertexOrFragmentShaderRead(
+        VkCommandBuffer commandBuffer)
+    {
+        if (m_imageUploadBuffer != nullptr)
+        {
+            applyImageUploadBuffer(commandBuffer);
+        }
+        constexpr static ImageAccess READ_ACCESS = {
+            .pipelineStages = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .accessMask = VK_ACCESS_SHADER_READ_BIT,
+            .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        if (m_lastAccess != READ_ACCESS)
+        {
+            barrier(commandBuffer, READ_ACCESS);
+        }
+    }
+
+    inline void prepareForFragmentShaderRead(VkCommandBuffer commandBuffer)
+    {
+        if (m_imageUploadBuffer != nullptr)
+        {
+            applyImageUploadBuffer(commandBuffer);
+        }
+        constexpr static ImageAccess READ_ACCESS = {
+            .pipelineStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .accessMask = VK_ACCESS_SHADER_READ_BIT,
+            .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        if (m_lastAccess != READ_ACCESS)
+        {
+            barrier(commandBuffer, READ_ACCESS);
+        }
+    }
 
     // Simple mechanism for caching and reusing a descriptor set for this
     // texture within a frame.
@@ -246,16 +321,29 @@ public:
         m_cachedDescriptorSetSampler = sampler;
     }
 
+    // Sets the cached layout/access for an externally-managed image whose
+    // current state is known (so Rive skips a redundant first barrier).
+    void overrideLastAccess(const ImageAccess& a) { m_lastAccess = a; }
+
 protected:
     friend class ::rive::gpu::VulkanContext;
 
-    Texture2D(rcp<VulkanContext> vk, VkImageCreateInfo);
+    void applyImageUploadBuffer(VkCommandBuffer);
+
+    Texture2D(rcp<VulkanContext> vk, VkImageCreateInfo, const char* name);
+
+    // Adopts an externally-allocated Image; owns only the derived ImageView.
+    Texture2D(rcp<VulkanContext> vk,
+              rcp<Image> existingImage,
+              const char* name);
 
     rcp<Image> m_image;
     rcp<ImageView> m_imageView;
     ImageAccess m_lastAccess;
 
     rcp<vkutil::Buffer> m_imageUploadBuffer;
+    // When non-empty, overrides the default single-region/auto-mip path.
+    std::vector<VkBufferImageCopy> m_imageUploadRegions;
 
     // Simple mechanism for caching and reusing a descriptor set for this
     // texture within a frame.
@@ -367,5 +455,14 @@ inline VkFormat get_preferred_depth_stencil_format(bool isD24S8Supported)
 {
     return isD24S8Supported ? VK_FORMAT_D24_UNORM_S8_UINT
                             : VK_FORMAT_D32_SFLOAT_S8_UINT;
+}
+
+inline VkRect2D rect2d(const IAABB& iaabb)
+{
+    return {
+        .offset = {iaabb.left, iaabb.top},
+        .extent = {static_cast<uint32_t>(iaabb.width()),
+                   static_cast<uint32_t>(iaabb.height())},
+    };
 }
 } // namespace rive::gpu::vkutil

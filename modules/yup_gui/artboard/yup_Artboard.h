@@ -31,6 +31,42 @@ class YUP_API Artboard : public Component
 {
 public:
     //==============================================================================
+    /** Describes how the artboard is fitted inside the component bounds. */
+    enum class Layout
+    {
+        /** Scale independently in X and Y to fill the bounds. */
+        fill,
+        /** Uniform scale to fit inside bounds while preserving aspect ratio. */
+        contain,
+        /** Uniform scale to cover bounds while preserving aspect ratio. */
+        cover,
+        /** Uniform scale so the content width matches the bounds. */
+        fitWidth,
+        /** Uniform scale so the content height matches the bounds. */
+        fitHeight,
+        /** No scaling or alignment. */
+        none,
+        /** Like contain, but never scale above 1.0. */
+        scaleDown,
+        /** Use the artboard's own layout constraints. */
+        layout
+    };
+
+    /** Describes the alignment used to position the artboard inside the bounds. */
+    enum class Alignment
+    {
+        topLeft,
+        topCenter,
+        topRight,
+        centerLeft,
+        center,
+        centerRight,
+        bottomLeft,
+        bottomCenter,
+        bottomRight
+    };
+
+    //==============================================================================
     /** Creates a new Rive artboard.
 
         @param componentID The ID of the component.
@@ -56,6 +92,27 @@ public:
     void clear();
 
     //==============================================================================
+    /** Sets how the artboard is fitted into the component bounds.
+
+        This affects the view transform used for rendering and input handling.
+
+        @param newLayout The new layout mode.
+    */
+    void setLayout (Layout newLayout);
+
+    /** Returns the current layout mode. */
+    Layout getLayout() const;
+
+    /** Sets the alignment used when positioning the artboard in the bounds.
+
+        @param newAlignment The new alignment value.
+    */
+    void setAlignment (Alignment newAlignment);
+
+    /** Returns the current alignment. */
+    Alignment getAlignment() const;
+
+    //==============================================================================
     /** Returns true if the Rive artboard is paused. */
     bool isPaused() const;
 
@@ -65,6 +122,16 @@ public:
     */
     void setPaused (bool shouldPause);
 
+    /** Returns true if the Rive artboard is pausing when hidden. */
+    bool isPausingWhenHidden() const;
+
+    /** Sets the Rive artboard to pause when hidden.
+
+        @param shouldPause True to pause the Rive artboard when hidden, false to not pause.
+    */
+    void shouldPauseWhenHidden (bool shouldPause);
+
+    //==============================================================================
     /** Advances the Rive artboard by a given number of seconds.
 
         @param elapsedSeconds The number of seconds to advance the Rive artboard by.
@@ -162,6 +229,7 @@ public:
 private:
     void updateSceneFromFile();
     void pullEventsFromStateMachines();
+    void updateViewTransform();
     Point<float> transformPoint (Point<float> point) const;
 
     std::shared_ptr<ArtboardFile> artboardFile;
@@ -173,8 +241,11 @@ private:
     HashMap<String, var> eventProperties;
 
     rive::Mat2D viewTransform;
+    Layout layout = Layout::contain;
+    Alignment alignment = Alignment::center;
 
     bool paused = false;
+    bool pauseWhenHidden = true;
 };
 
 } // namespace yup

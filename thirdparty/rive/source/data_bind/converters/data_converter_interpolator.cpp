@@ -1,40 +1,48 @@
 #include "rive/math/math_types.hpp"
 #include "rive/data_bind/converters/data_converter_interpolator.hpp"
 #include "rive/data_bind/data_values/data_value_number.hpp"
+#include "rive/data_bind/data_values/data_value_color.hpp"
 
 using namespace rive;
 
-void DataConverterInterpolator::copy(
-    const DataConverterInterpolatorBase& object)
+void InterpolatorAnimationData::copy(const InterpolatorAnimationData& source)
 {
-    interpolator(object.as<DataConverterInterpolator>()->interpolator());
-    DataConverterInterpolatorBase::copy(object);
+    source.from->copyValue(from);
+    source.to->copyValue(to);
+    elapsedSeconds = source.elapsedSeconds;
 }
 
-InterpolatorAnimationData* DataConverterInterpolator::currentAnimationData()
+void InterpolatorAdvancer::dispose()
+{
+    m_animationDataA.dispose();
+    m_animationDataB.dispose();
+    if (m_currentValue != nullptr)
+    {
+        delete m_currentValue;
+        m_currentValue = nullptr;
+    }
+}
+
+InterpolatorAnimationData* InterpolatorAdvancer::currentAnimationData()
 {
     return m_isSmoothingAnimation ? &m_animationDataB : &m_animationDataA;
 }
 
-void DataConverterInterpolator::interpolator(KeyFrameInterpolator* interpolator)
-{
-    m_interpolator = interpolator;
-}
-
-void DataConverterInterpolator::advanceAnimationData(float elapsedTime)
+void InterpolatorAdvancer::advanceAnimationData(float elapsedTime)
 {
     auto animationData = currentAnimationData();
     if (m_isSmoothingAnimation)
     {
         float f = std::fmin(1.0f,
-                            duration() > 0
-                                ? m_animationDataA.elapsedSeconds / duration()
+                            m_converter->duration() > 0
+                                ? m_animationDataA.elapsedSeconds /
+                                      m_converter->duration()
                                 : 1.0f);
-        if (m_interpolator != nullptr)
+        if (m_converter->interpolator() != nullptr)
         {
-            f = m_interpolator->transform(f);
+            f = m_converter->interpolator()->transform(f);
         }
-        m_animationDataB.from = m_animationDataA.interpolate(f);
+        m_animationDataA.interpolate(f, m_animationDataB.from);
         if (f == 1)
         {
             m_animationDataA.copy(m_animationDataB);
@@ -45,9 +53,9 @@ void DataConverterInterpolator::advanceAnimationData(float elapsedTime)
             m_animationDataA.elapsedSeconds += elapsedTime;
         }
     }
-    if (animationData->elapsedSeconds >= duration())
+    if (animationData->elapsedSeconds >= m_converter->duration())
     {
-        m_currentValue = animationData->to;
+        animationData->to->copyValue(m_currentValue);
 
         if (m_isSmoothingAnimation)
         {
@@ -62,77 +70,121 @@ void DataConverterInterpolator::advanceAnimationData(float elapsedTime)
         }
         return;
     }
-    float f = std::fmin(
-        1.0f,
-        duration() > 0 ? animationData->elapsedSeconds / duration() : 1.0f);
-    if (m_interpolator != nullptr)
-    {
-        f = m_interpolator->transform(f);
-    }
-    auto current = animationData->interpolate(f);
-    if (m_currentValue != current)
-    {
-        m_currentValue = current;
-    }
-
     animationData->elapsedSeconds += elapsedTime;
+    float f =
+        std::fmin(1.0f,
+                  m_converter->duration() > 0
+                      ? animationData->elapsedSeconds / m_converter->duration()
+                      : 1.0f);
+    if (m_converter->interpolator() != nullptr)
+    {
+        f = m_converter->interpolator()->transform(f);
+    }
+    animationData->interpolate(f, m_currentValue);
 }
 
-bool DataConverterInterpolator::advance(float elapsedTime)
+bool InterpolatorAdvancer::advance(float elapsedTime)
 {
     auto animationData = currentAnimationData();
-    if (animationData->to == m_currentValue)
+    if (animationData->to->compare(m_currentValue) || elapsedTime == 0)
     {
         return false;
     }
+    auto prevTime = animationData->elapsedSeconds;
     advanceAnimationData(elapsedTime);
-    if (animationData->elapsedSeconds < duration())
+
+    if (prevTime < m_converter->duration())
     {
-        markConverterDirty();
+        m_converter->markConverterDirty();
+    }
+    if (animationData->elapsedSeconds < m_converter->duration())
+    {
         return true;
     }
     return false;
 }
 
+DataConverterInterpolator::~DataConverterInterpolator()
+{
+    if (m_output != nullptr)
+    {
+        delete m_output;
+    }
+    m_advancer.dispose();
+}
+
+void DataConverterInterpolator::copy(
+    const DataConverterInterpolatorBase& object)
+{
+    interpolator(object.as<DataConverterInterpolator>()->interpolator());
+    DataConverterInterpolatorBase::copy(object);
+}
+
+void DataConverterInterpolator::interpolator(KeyFrameInterpolator* interpolator)
+{
+    m_interpolator = interpolator;
+}
+
+bool DataConverterInterpolator::advance(float elapsedTime)
+{
+    // Advance can be called multiple times in a single frame.
+    // We want to make sure that two advances with time > 0 have elapsed before
+    // considering the state as second frame.
+    if (m_advanceCount < 2 && elapsedTime > 0)
+    {
+        m_advanceCount++;
+    }
+    if (!m_advancer.initialized())
+    {
+        return true;
+    }
+    return m_advancer.advance(elapsedTime);
+}
+
 DataValue* DataConverterInterpolator::convert(DataValue* input,
                                               DataBind* dataBind)
 {
-    if (input->is<DataValueNumber>())
+    if (duration() == 0 && m_advancer.initialized())
     {
-        auto animationData = currentAnimationData();
-        auto numberInput = input->as<DataValueNumber>();
-        if (m_isFirstRun)
+        m_advancer.resetToStart(input);
+        return input;
+    }
+    if (!m_advancer.initialized())
+    {
+        if (input->is<DataValueNumber>())
         {
-            animationData->from = numberInput->value();
-            animationData->to = numberInput->value();
-            m_currentValue = numberInput->value();
-            m_isFirstRun = false;
+            startAdvancer<DataValueNumber>();
+        }
+        else if (input->is<DataValueColor>())
+        {
+            startAdvancer<DataValueColor>();
         }
         else
         {
-            if (animationData->to != numberInput->value())
-            {
-                if (animationData->elapsedSeconds != 0)
-                {
-                    if (m_isSmoothingAnimation)
-                    {
-                        m_animationDataA.copy(m_animationDataB);
-                    }
-                    m_isSmoothingAnimation = true;
-                }
-                else
-                {
-                    m_isSmoothingAnimation = false;
-                }
-                animationData = currentAnimationData();
-                animationData->from = m_currentValue;
-                animationData->to = numberInput->value();
-                animationData->elapsedSeconds = 0;
-            }
+            return input;
         }
-        m_output.value(m_currentValue);
     }
-    return &m_output;
+    if (m_output != nullptr &&
+        (input->is<DataValueNumber>() || input->is<DataValueColor>()))
+    {
+        if (isFirstRun())
+        {
+            m_advancer.resetValues(input);
+        }
+        else
+        {
+            m_advancer.updateValues(input);
+        }
+        m_advancer.copyCurrentValue(m_output);
+        return m_output;
+    }
+    return input;
+}
+
+void DataConverterInterpolator::reset()
+{
+    m_advanceCount = 0;
+    m_advancer.reset();
 }
 
 DataValue* DataConverterInterpolator::reverseConvert(DataValue* input,
@@ -142,10 +194,3 @@ DataValue* DataConverterInterpolator::reverseConvert(DataValue* input,
 }
 
 void DataConverterInterpolator::durationChanged() { markConverterDirty(); }
-
-void InterpolatorAnimationData::copy(const InterpolatorAnimationData& source)
-{
-    from = source.from;
-    to = source.to;
-    elapsedSeconds = source.elapsedSeconds;
-}

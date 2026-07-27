@@ -39,6 +39,8 @@ public:
     static const uint16_t computedLocalYPropertyKey = 807;
     static const uint16_t computedWorldXPropertyKey = 808;
     static const uint16_t computedWorldYPropertyKey = 809;
+    static const uint16_t computedRootXPropertyKey = 864;
+    static const uint16_t computedRootYPropertyKey = 865;
     static const uint16_t computedWidthPropertyKey = 810;
     static const uint16_t computedHeightPropertyKey = 811;
 
@@ -56,6 +58,7 @@ public:
         }
         m_X = value;
         xChanged();
+        notifyPropertyChanged(xPropertyKey);
     }
 
     inline float y() const override { return m_Y; }
@@ -67,6 +70,7 @@ public:
         }
         m_Y = value;
         yChanged();
+        notifyPropertyChanged(yPropertyKey);
     }
 
     virtual void setComputedLocalX(float value) = 0;
@@ -79,6 +83,7 @@ public:
         }
         setComputedLocalX(value);
         computedLocalXChanged();
+        notifyPropertyChanged(computedLocalXPropertyKey);
     }
 
     virtual void setComputedLocalY(float value) = 0;
@@ -91,6 +96,7 @@ public:
         }
         setComputedLocalY(value);
         computedLocalYChanged();
+        notifyPropertyChanged(computedLocalYPropertyKey);
     }
 
     virtual void setComputedWorldX(float value) = 0;
@@ -103,6 +109,7 @@ public:
         }
         setComputedWorldX(value);
         computedWorldXChanged();
+        notifyPropertyChanged(computedWorldXPropertyKey);
     }
 
     virtual void setComputedWorldY(float value) = 0;
@@ -115,6 +122,33 @@ public:
         }
         setComputedWorldY(value);
         computedWorldYChanged();
+        notifyPropertyChanged(computedWorldYPropertyKey);
+    }
+
+    virtual void setComputedRootX(float value) = 0;
+    virtual float computedRootX() = 0;
+    void computedRootX(float value)
+    {
+        if (computedRootX() == value)
+        {
+            return;
+        }
+        setComputedRootX(value);
+        computedRootXChanged();
+        notifyPropertyChanged(computedRootXPropertyKey);
+    }
+
+    virtual void setComputedRootY(float value) = 0;
+    virtual float computedRootY() = 0;
+    void computedRootY(float value)
+    {
+        if (computedRootY() == value)
+        {
+            return;
+        }
+        setComputedRootY(value);
+        computedRootYChanged();
+        notifyPropertyChanged(computedRootYPropertyKey);
     }
 
     virtual void setComputedWidth(float value) = 0;
@@ -127,6 +161,7 @@ public:
         }
         setComputedWidth(value);
         computedWidthChanged();
+        notifyPropertyChanged(computedWidthPropertyKey);
     }
 
     virtual void setComputedHeight(float value) = 0;
@@ -139,6 +174,7 @@ public:
         }
         setComputedHeight(value);
         computedHeightChanged();
+        notifyPropertyChanged(computedHeightPropertyKey);
     }
 
     Core* clone() const override;
@@ -170,6 +206,8 @@ protected:
     virtual void computedLocalYChanged() {}
     virtual void computedWorldXChanged() {}
     virtual void computedWorldYChanged() {}
+    virtual void computedRootXChanged() {}
+    virtual void computedRootYChanged() {}
     virtual void computedWidthChanged() {}
     virtual void computedHeightChanged() {}
 };

@@ -1,7 +1,18 @@
 #include "rive/artboard.hpp"
+#include "rive/file.hpp"
+#include "rive/animation/keyframe_interpolator.hpp"
 #include "rive/artboard_component_list.hpp"
 #include "rive/backboard.hpp"
+#include "rive/component.hpp"
+#include "rive/container_component.hpp"
+#include "rive/focus_data.hpp"
+#include "rive/input/focus_manager.hpp"
+#include "rive/semantic/semantic_data.hpp"
+#include "rive/semantic/semantic_manager.hpp"
+#include "rive/semantic/semantic_node.hpp"
+#include "rive/input/focusable.hpp"
 #include "rive/animation/linear_animation_instance.hpp"
+#include "rive/custom_property_trigger.hpp"
 #include "rive/dependency_sorter.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind/data_bind_context.hpp"
@@ -17,26 +28,41 @@
 #include "rive/importers/import_stack.hpp"
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/layout_component.hpp"
+#include "rive/node.hpp"
 #include "rive/foreground_layout_drawable.hpp"
 #include "rive/nested_artboard.hpp"
 #include "rive/nested_artboard_leaf.hpp"
 #include "rive/nested_artboard_layout.hpp"
+#include "rive/animation/nested_state_machine.hpp"
 #include "rive/joystick.hpp"
+#include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind_flags.hpp"
 #include "rive/animation/nested_bool.hpp"
 #include "rive/animation/nested_number.hpp"
 #include "rive/animation/nested_trigger.hpp"
+#include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/animation/state_machine_input_instance.hpp"
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/shapes/shape.hpp"
+#include "rive/shapes/clipping_shape.hpp"
 #include "rive/text/text_value_run.hpp"
 #include "rive/event.hpp"
 #include "rive/assets/audio_asset.hpp"
 #include "rive/layout/layout_data.hpp"
+#include "rive/profiler/profiler_macros.h"
+#include "rive/scripted/scripted_object.hpp"
+#ifdef WITH_RIVE_SCRIPTING
+#include "rive/lua/rive_lua_libs.hpp"
+#endif
+#include "rive/async/work_pool.hpp"
 
+#include <set>
 #include <unordered_map>
 
 using namespace rive;
+
+uint64_t Artboard::sm_frameId = 0;
 
 Artboard::Artboard()
 {
@@ -49,6 +75,11 @@ Artboard::Artboard()
 
 Artboard::~Artboard()
 {
+    // NOTE: Do NOT call cleanupFocusTree() here! The FocusManager is owned by
+    // StateMachineInstance which may already be destroyed before the Artboard.
+    // Focus cleanup should be done explicitly via cleanupFocusTree() before
+    // the artboard is recycled/destroyed (e.g., in ArtboardComponentList).
+
 #ifdef WITH_RIVE_AUDIO
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
     auto audioEngine = m_audioEngine;
@@ -60,21 +91,94 @@ Artboard::~Artboard()
         audioEngine->stop(this);
     }
 #endif
-    clearDataContext();
+    unbind();
+
+    // ViewModelInstance and ViewModelInstanceValue inherit from RefCnt.
+    //
+    // ViewModelInstance (VMI) ownership: the artboard releases every VMI in
+    // its m_Objects via unref(). NestedArtboard borrows its stateful child VMI
+    // without bumping the refcount; dynamically-created bound VMIs are not in
+    // m_Objects and are released by NestedArtboard itself.
+    //
+    // ViewModelInstanceValue (VMV) ownership: always owned by their parent
+    // ViewModelInstance via rcp<> in m_PropertyValues. When VMI is deleted,
+    // its destructor clears m_PropertyValues, which unrefs and deletes VMVs.
+    //
+    // Strategy:
+    // 1) Identify VMI/VMV objects by pointer (safe is<>() check BEFORE any
+    // deletions).
+    // 2) Delete everything else immediately, deferring VMI unref until after
+    // hierarchy components are gone.
+    std::set<Core*> vmObjects;
+    std::set<ViewModelInstance*> deferredVmiUnrefs;
+
+    // First pass: identify ViewModelInstance and ViewModelInstanceValue
+    // objects while memory is valid (before any deletions). Precompute which
+    // VMIs should be released so we never dereference pointers after deletes.
+    auto gatherVmObjects = [&](Core* object) {
+        if (object == nullptr || object == this)
+        {
+            return;
+        }
+        if (object->is<ViewModelInstance>())
+        {
+            vmObjects.insert(object);
+            deferredVmiUnrefs.insert(object->as<ViewModelInstance>());
+            return;
+        }
+        if (object->is<ViewModelInstanceValue>())
+        {
+            vmObjects.insert(object);
+        }
+    };
     for (auto object : m_Objects)
     {
-        // First object is artboard
-        if (object == this)
+        gatherVmObjects(object);
+    }
+    for (auto object : m_invalidObjects)
+    {
+        gatherVmObjects(object);
+    }
+
+    auto isVmObject = [&](Core* object) -> bool {
+        return vmObjects.count(object) != 0;
+    };
+
+    // Second pass: delete non-VM objects.
+    for (auto object : m_Objects)
+    {
+        if (object == nullptr || object == this)
+        {
+            continue;
+        }
+        if (isVmObject(object))
+        {
+            continue;
+        }
+        delete object;
+    }
+    for (auto object : m_invalidObjects)
+    {
+        if (object == nullptr)
+        {
+            continue;
+        }
+        if (isVmObject(object))
         {
             continue;
         }
         delete object;
     }
 
-    for (auto dataBind : m_DataBinds)
+    // Now release deferred ViewModelInstances after hierarchy components have
+    // been destroyed. Releasing via unref() keeps RefCnt ownership semantics
+    // intact and cascades to VMVs via m_PropertyValues rcps.
+    for (auto* vmi : deferredVmiUnrefs)
     {
-        delete dataBind;
+        vmi->unref();
     }
+
+    deleteDataBinds();
 
     // Instances reference back to the original artboard's animations and state
     // machines, so don't delete them here, they'll get cleaned up when the
@@ -92,11 +196,6 @@ Artboard::~Artboard()
         }
     }
     m_dirtyLayout.clear();
-    if (m_ownsDataContext && m_DataContext != nullptr)
-    {
-        delete m_DataContext;
-        m_DataContext = nullptr;
-    }
 }
 
 static bool canContinue(StatusCode code)
@@ -140,7 +239,13 @@ bool Artboard::validateObjects()
                 {
                     continue;
                 }
-                delete m_Objects[i];
+                // Instead of immediately deleting invalid objects, we keep them
+                // around in case other objects are referencing them. One
+                // example is the backboard_importer keeping a reference on its
+                // m_FileAssetReferencers. So the invalid objects are taken out
+                // of the objects list but only deleted when the artboard is
+                // destroyed.
+                m_invalidObjects.push_back(m_Objects[i]);
                 m_Objects[i] = nullptr;
             }
         }
@@ -202,6 +307,12 @@ StatusCode Artboard::initialize()
                 return code;
             }
         }
+        if (m_Animations.size() == 0 && m_StateMachines.size() == 0)
+        {
+            auto sm = new StateMachine();
+            sm->name("Auto Generated State Machine");
+            m_StateMachines.push_back(sm);
+        }
     }
 
     // Store a map of the drawRules to make it easier to lookup the matching
@@ -222,6 +333,14 @@ StatusCode Artboard::initialize()
         if (!canContinue(code = object->onAddedClean(this)))
         {
             return code;
+        }
+        if (object->is<Component>())
+        {
+            auto resettable = ResettingComponent::from(object->as<Component>());
+            if (resettable)
+            {
+                m_Resettables.push_back(resettable);
+            }
         }
         switch (object->coreType())
         {
@@ -265,6 +384,11 @@ StatusCode Artboard::initialize()
                 m_Joysticks.push_back(joystick);
                 break;
             }
+        }
+        auto advancingComponent = AdvancingComponent::from(object);
+        if (advancingComponent)
+        {
+            m_advancingComponents.push_back(advancingComponent);
         }
     }
 
@@ -332,6 +456,10 @@ StatusCode Artboard::initialize()
                     break;
                 }
             }
+        }
+        else if (object->is<ClippingShape>())
+        {
+            m_clippingShapes.push_back(object->as<ClippingShape>());
         }
     }
     // Iterate over the drawables in order to inject proxies for layouts
@@ -428,12 +556,16 @@ StatusCode Artboard::initialize()
     DependencySorter sorter;
     std::vector<Component*> drawTargetOrder;
     sorter.sort(&root, drawTargetOrder);
-    auto itr = drawTargetOrder.begin();
-    itr++;
-    while (itr != drawTargetOrder.end())
+    if (drawTargetOrder.size() > 0)
     {
-        m_DrawTargets.push_back(static_cast<DrawTarget*>(*itr++));
+        auto itr = drawTargetOrder.begin();
+        itr++;
+        while (itr != drawTargetOrder.end())
+        {
+            m_DrawTargets.push_back(static_cast<DrawTarget*>(*itr++));
+        }
     }
+    initScriptedObjects();
     return StatusCode::Ok;
 }
 
@@ -529,6 +661,183 @@ void Artboard::sortDrawOrder()
     }
 
     m_FirstDrawable = lastDrawable;
+
+    // Interleave clipping operations between drawables that share the same
+    // common clippings. Each clipping operation has a start and an end.
+    for (auto& clippingShape : m_clippingShapes)
+    {
+        clippingShape->resetDrawables();
+    }
+    Drawable* currentDrawable = m_FirstDrawable;
+    Drawable* nextDrawable = nullptr;
+    std::vector<ClippingShape*> _clippingStack;
+    while (currentDrawable)
+    {
+        currentDrawable->needsSaveOperation(true);
+        auto drawableClippingShapes = currentDrawable->clippingShapes();
+        // Remove all clippings that are not part of the current drawable. Since
+        // they are applied as a stack, if one clipping is removed, all
+        // subsequent clippings from the stack need to be removed as well
+        size_t removingIndex = _clippingStack.size();
+        for (size_t i = 0; i < _clippingStack.size(); ++i)
+        {
+            auto& cl = _clippingStack[i];
+            // Check if this clipping should stay (is in both stack and
+            // drawable's clippings)
+            bool shouldStay = std::find(drawableClippingShapes.begin(),
+                                        drawableClippingShapes.end(),
+                                        cl) != drawableClippingShapes.end();
+            if (!shouldStay)
+            {
+                removingIndex = i;
+                break;
+            }
+        }
+
+        // Remove all clippings from stack in the reverse order they were added
+        if (_clippingStack.size() > 0 && removingIndex < _clippingStack.size())
+        {
+
+            size_t i = _clippingStack.size() - 1;
+            while (i >= removingIndex)
+            {
+                auto& clippingShape = _clippingStack[i];
+                // Insert in the drawing list a clipEnd for each clipping that
+                // is removed
+                auto proxyDrawable =
+                    clippingShape->createProxyDrawable(&clippingShape->clipEnd);
+                if (nextDrawable)
+                {
+                    proxyDrawable->next = nextDrawable;
+                    nextDrawable->prev = proxyDrawable;
+                }
+                else
+                {
+                    fprintf(stderr,
+                            "Error - adding clip end as first operation\n");
+                }
+                proxyDrawable->prev = currentDrawable;
+                currentDrawable->next = proxyDrawable;
+                nextDrawable = proxyDrawable;
+                if (i == 0)
+                {
+                    break;
+                }
+                i--;
+            }
+            _clippingStack.erase(_clippingStack.begin() + removingIndex,
+                                 _clippingStack.end());
+        }
+        // Find clippings that are applied to the drawable but are not on the
+        // stack
+        for (auto& clippingShape : drawableClippingShapes)
+        {
+            auto itr = std::find(_clippingStack.begin(),
+                                 _clippingStack.end(),
+                                 clippingShape);
+            if (itr == _clippingStack.end())
+            {
+                auto proxyDrawable = clippingShape->createProxyDrawable(
+                    &clippingShape->clipStart);
+                if (nextDrawable)
+                {
+                    proxyDrawable->next = nextDrawable;
+                    nextDrawable->prev = proxyDrawable;
+                }
+                else
+                {
+                    m_FirstDrawable = proxyDrawable;
+                }
+                proxyDrawable->prev = currentDrawable;
+                currentDrawable->next = proxyDrawable;
+                nextDrawable = proxyDrawable;
+                _clippingStack.push_back(clippingShape);
+            }
+        }
+        nextDrawable = currentDrawable;
+        currentDrawable = currentDrawable->prev;
+    }
+    // Add closing calls to remaining clippings in the stack
+    if (_clippingStack.size() > 0)
+    {
+
+        for (int i = (int)(_clippingStack.size() - 1); i >= 0; i--)
+        {
+            auto& clippingShape = _clippingStack[i];
+            auto proxyDrawable =
+                clippingShape->createProxyDrawable(&clippingShape->clipEnd);
+            if (nextDrawable)
+            {
+                nextDrawable->prev = proxyDrawable;
+                proxyDrawable->next = nextDrawable;
+            }
+            proxyDrawable->prev = nullptr; // End of list
+            nextDrawable = proxyDrawable;
+        }
+    }
+    clearRedundantOperations();
+}
+
+// Look for drawables that are preceeding and succeeding drawables that call
+// save and restore. If found, the drawable does not need to call save and
+// restore itself.
+void Artboard::clearRedundantOperations()
+{
+    Drawable* currentDrawable = m_FirstDrawable;
+    bool prevAppliedSave = false;
+    // Keep a stack of clipStart operation results to apply the same operation
+    // to its clipEnd
+    std::vector<bool> appliedClippingSaveOperations;
+    while (currentDrawable)
+    {
+        currentDrawable->needsSaveOperation(true);
+        // If previous operation applied a save operation
+        if (prevAppliedSave)
+        {
+            // With consecutive clippings, we can skip the save and restore
+            // operation since the previous one has applied it
+            if (currentDrawable->isClipStart())
+            {
+                appliedClippingSaveOperations.push_back(false);
+                currentDrawable->needsSaveOperation(false);
+            }
+            else if (currentDrawable->isClipEnd())
+            {
+                // Apply or skip the clipEnd Restore operation matching its clip
+                // start counterpart
+                auto operationApplied = appliedClippingSaveOperations.back();
+                appliedClippingSaveOperations.pop_back();
+                currentDrawable->needsSaveOperation(operationApplied);
+            }
+            else
+            {
+                // Check if next is clip end, if it is, we can skip the drawable
+                // save/restore because it is tightly wrapped in a clipping
+                // operation
+                auto nextDrawable = currentDrawable->prev;
+                if (nextDrawable->isClipEnd())
+                {
+                    currentDrawable->needsSaveOperation(false);
+                }
+            }
+        }
+        else if (currentDrawable->isClipStart())
+        {
+            appliedClippingSaveOperations.push_back(true);
+        }
+        else if (currentDrawable->isClipEnd())
+        {
+            // Apply or skip the clipEnd Restore operation matching its clip
+            // start counterpart
+            auto operationApplied = appliedClippingSaveOperations.back();
+            currentDrawable->needsSaveOperation(operationApplied);
+            appliedClippingSaveOperations.pop_back();
+        }
+        prevAppliedSave = currentDrawable->isClipStart() &&
+                          (currentDrawable->willClip() || prevAppliedSave);
+        currentDrawable = currentDrawable->prev;
+    }
+    assert(appliedClippingSaveOperations.size() == 0);
 }
 
 void Artboard::sortDependencies()
@@ -555,6 +864,110 @@ void Artboard::addStateMachine(StateMachine* object)
     m_StateMachines.push_back(object);
 }
 
+void Artboard::addScriptedObject(ScriptedObject* object)
+{
+    m_ScriptedObjects.push_back(object);
+}
+
+void Artboard::initScriptedObjects()
+{
+    if (isInstance())
+    {
+        for (auto obj : m_ScriptedObjects)
+        {
+            if (obj->scriptAsset() != nullptr)
+            {
+                if (!obj->userLuaInitDone())
+                {
+                    obj->scriptAsset()->initScriptedObject(obj);
+                }
+                obj->hydrateScriptInputs();
+            }
+        }
+    }
+}
+
+void Artboard::pollAsyncWork() { rive_pollAsyncWork(); }
+
+void Artboard::drawCanvases()
+{
+#ifdef WITH_RIVE_SCRIPTING
+    if (m_scriptingVM)
+    {
+        auto* L = m_scriptingVM->state();
+        if (L != nullptr)
+        {
+            auto* context =
+                static_cast<ScriptingContext*>(lua_getthreaddata(L));
+            ScopedCanvasDrawingPhase phase(context);
+            internalDrawCanvases();
+            return;
+        }
+    }
+#endif
+    internalDrawCanvases();
+}
+
+void Artboard::advanceScriptedViewModels()
+{
+#ifdef WITH_RIVE_SCRIPTING
+    if (m_scriptingVM != nullptr)
+    {
+        if (auto* context = m_scriptingVM->context())
+        {
+            context->advanceDetachedViewModels();
+        }
+    }
+#endif
+}
+
+void Artboard::internalDrawCanvases()
+{
+    for (auto obj : m_ScriptedObjects)
+    {
+        obj->scriptDrawCanvas();
+    }
+    for (auto artboardHost : m_ArtboardHosts)
+    {
+        for (int i = 0; i < artboardHost->artboardCount(); i++)
+        {
+            auto* nested = artboardHost->artboardInstance(i);
+            if (nested != nullptr)
+            {
+                nested->internalDrawCanvases();
+            }
+        }
+    }
+}
+
+#ifdef WITH_RIVE_SCRIPTING
+void* Artboard::findDrawCanvasLuauState() const
+{
+    for (auto* obj : m_ScriptedObjects)
+    {
+        if (obj->drawsCanvas())
+        {
+            return obj->state();
+        }
+    }
+    for (auto* host : m_ArtboardHosts)
+    {
+        for (int i = 0; i < host->artboardCount(); i++)
+        {
+            auto* nested = host->artboardInstance(i);
+            if (nested != nullptr)
+            {
+                if (auto* state = nested->findDrawCanvasLuauState())
+                {
+                    return state;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+#endif
+
 Core* Artboard::resolve(uint32_t id) const
 {
     if (id >= static_cast<int>(m_Objects.size()))
@@ -580,6 +993,7 @@ uint32_t Artboard::idOf(Core* object) const
 
 void Artboard::onComponentDirty(Component* component)
 {
+    m_didChange = true;
     m_Dirt |= ComponentDirt::Components;
 
     /// If the order of the component is less than the current dirt
@@ -623,25 +1037,26 @@ void Artboard::cloneObjectDataBinds(const Core* object,
                                     Artboard* artboard) const
 {
 
-    for (auto dataBind : m_DataBinds)
+    for (auto dataBind : dataBinds())
     {
         if (dataBind->target() == object)
         {
             auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
             dataBindClone->target(clone);
             dataBindClone->file(dataBind->file());
+            dataBindClone->initialize();
             if (dataBind->converter() != nullptr)
             {
-
                 dataBindClone->converter(
                     dataBind->converter()->clone()->as<DataConverter>());
             }
-            artboard->m_DataBinds.push_back(dataBindClone);
+            artboard->addDataBind(dataBindClone);
         }
     }
 }
 void Artboard::host(ArtboardHost* artboardHost)
 {
+    addedToHost();
     m_host = artboardHost;
 #ifdef WITH_RIVE_LAYOUT
     if (!sharesLayoutWithHost())
@@ -658,6 +1073,18 @@ void Artboard::host(ArtboardHost* artboardHost)
 }
 
 ArtboardHost* Artboard::host() const { return m_host; }
+
+StatusCode Artboard::onAddedClean(CoreContext* context)
+{
+    auto code = Super::onAddedClean(context);
+    if (code != StatusCode::Ok)
+    {
+        return code;
+    }
+    NodeBase::x(0);
+    NodeBase::y(0);
+    return StatusCode::Ok;
+}
 
 Artboard* Artboard::parentArtboard() const
 {
@@ -732,6 +1159,10 @@ void Artboard::update(ComponentDirt value)
     {
         sortDrawOrder();
     }
+    if (hasDirt(value, ComponentDirt::Clipping))
+    {
+        clearRedundantOperations();
+    }
 #ifdef WITH_RIVE_LAYOUT
     if (hasDirt(value, ComponentDirt::LayoutStyle))
     {
@@ -745,30 +1176,25 @@ void Artboard::update(ComponentDirt value)
         // calling this twice. Although it is safe, because syncStyleChanges
         // checks for the list of dirty layouts that would be empty at this
         // point, it seems redundant.
-        if (syncStyleChanges() && (m_updatesOwnLayout || cascadeChanged))
-        {
-            calculateLayout();
-            updateLayoutBounds(
-                /*animation*/ true); // maybe use a static to allow
-                                     // the editor to set this.
-        }
+        syncStyleChangesWithUpdate(cascadeChanged);
     }
 #endif
+    m_hostTransformMarkedDirty = false;
 }
 
-void Artboard::updateDataBinds()
+void Artboard::addDirtyDataBind(DataBind* dataBind)
 {
-    for (auto dataBind : m_AllDataBinds)
+    onComponentDirty(dataBind->target()->as<Component>());
+    DataBindContainer::addDirtyDataBind(dataBind);
+}
+
+void Artboard::updateDataBinds(bool applyTargetToSource)
+{
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        dataBind->updateSourceBinding();
-        auto d = dataBind->dirt();
-        if (d == ComponentDirt::None)
-        {
-            continue;
-        }
-        dataBind->dirt(ComponentDirt::None);
-        dataBind->update(d);
+        artboardHost->updateDataBinds();
     }
+    DataBindContainer::updateDataBinds(applyTargetToSource);
 }
 
 bool Artboard::updateComponents()
@@ -870,11 +1296,45 @@ void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
     }
 #endif
     m_dirtyLayout.insert(layoutComponent);
-    if (sharesLayoutWithHost() && isInstance())
+    if (isInstance())
     {
-        m_host->markHostingLayoutDirty(this->as<ArtboardInstance>());
+        if (sharesLayoutWithHost())
+        {
+            m_host->markHostingLayoutDirty(this->as<ArtboardInstance>());
+        }
+        else
+        {
+            markHostTransformDirty();
+        }
     }
     addDirt(ComponentDirt::Components);
+}
+
+void Artboard::markHostTransformDirty()
+{
+#ifdef WITH_RIVE_TOOLS
+    if (!m_hostTransformMarkedDirty && m_transformDirtyCallback != nullptr)
+    {
+        m_transformDirtyCallback(callbackUserData);
+    }
+#endif
+    m_hostTransformMarkedDirty = true;
+    if (host())
+    {
+        host()->markHostTransformDirty();
+    }
+}
+
+void Artboard::syncStyleChangesWithUpdate(bool forceUpdate)
+{
+#ifdef WITH_RIVE_LAYOUT
+    if (syncStyleChanges() && (m_updatesOwnLayout || forceUpdate))
+    {
+        calculateLayout();
+        updateLayoutBounds(/*animation*/ true); // maybe use a static to allow
+                                                // the editor to set this.
+    }
+#endif
 }
 
 bool Artboard::syncStyleChanges()
@@ -902,7 +1362,10 @@ bool Artboard::syncStyleChanges()
                     else
                     {
                         // This is a nested artboard, sync its changes too.
-                        artboard->syncStyleChanges();
+                        if (!artboard->updatesOwnLayout())
+                        {
+                            artboard->syncStyleChanges();
+                        }
                     }
                     break;
                 }
@@ -920,17 +1383,41 @@ bool Artboard::syncStyleChanges()
     return updated;
 }
 
+void Artboard::calculateLayout()
+{
+    // Always pass NAN and let calculateLayoutInternal decide whether to use
+    // the intrinsic (hug) size or fall back to width()/height().
+    //
+    // This covers all cases:
+    // - Runtime:
+    //   - Top level artboards: intrinsically sized artboards get NAN so Yoga
+    //     computes from children; fixed-size artboards fall back to
+    //     width()/height() inside calculateLayoutInternal.
+    //   - Nested node/leaf artboards (m_updatesOwnLayout == true): same as
+    //     top-level, calculateLayoutInternal handles the distinction.
+    //   - Nested layout-mode artboards (NestedArtboardLayout): their layout
+    //     node is owned by the parent via takeLayoutData(), which sets
+    //     m_updatesOwnLayout = false. syncStyleChangesWithUpdate() gates on
+    //     that flag, so calculateLayout() is not reached for these.
+    // - Editor:
+    //   - Top level artboards: are handled on the Dart side so don't take
+    //     this code path
+    //   - Nested node/leaf artboards (m_updatesOwnLayout == true):
+    //     same as runtime, calculateLayoutInternal handles the distinction.
+    //   - Nested layout-mode artboards (NestedArtboardLayout): same
+    //     as runtime, their layout node is owned by the Dart parent
+    //     which sets m_updatesOwnLayout = false
+    calculateLayoutInternal(NAN, NAN);
+}
+
 bool Artboard::updatePass(bool isRoot)
 {
+    RIVE_PROF_SCOPE()
+    updateDataBinds();
     bool didUpdate = false;
-#ifdef WITH_RIVE_LAYOUT
-    if (syncStyleChanges() && m_updatesOwnLayout)
-    {
-        calculateLayout();
-        updateLayoutBounds(/*animation*/ true); // maybe use a static to allow
-                                                // the editor to set this.
-    }
-#endif
+    syncStyleChangesWithUpdate();
+    m_hostTransformMarkedDirty = false;
+
     if (m_JoysticksApplyBeforeUpdate)
     {
         for (auto joystick : m_Joysticks)
@@ -938,7 +1425,6 @@ bool Artboard::updatePass(bool isRoot)
             joystick->apply(this);
         }
     }
-    updateDataBinds();
     if (updateComponents())
     {
         didUpdate = true;
@@ -963,34 +1449,51 @@ bool Artboard::updatePass(bool isRoot)
             didUpdate = true;
         }
     }
+    if (didUpdate)
+    {
+        updateDataBinds();
+    }
     return didUpdate;
 }
 
 bool Artboard::advanceInternal(float elapsedSeconds, AdvanceFlags flags)
 {
+    RIVE_PROF_SCOPE()
     bool didUpdate = false;
 
-    for (auto dep : m_DependencyOrder)
+    for (auto adv : m_advancingComponents)
     {
-        auto adv = AdvancingComponent::from(dep);
-        if (adv != nullptr && adv->advanceComponent(elapsedSeconds, flags))
+        if (adv->advanceComponent(elapsedSeconds, flags))
         {
             didUpdate = true;
         }
     }
-    for (auto dataBind : m_AllDataBinds)
+    if (advanceDataBinds(elapsedSeconds))
     {
-        if (dataBind->advance(elapsedSeconds))
-        {
-            didUpdate = true;
-        }
+        didUpdate = true;
     }
 
     return didUpdate;
 }
 
+void Artboard::reset()
+{
+    if (m_Resettables.size() == 0)
+    {
+        return;
+    }
+    for (auto obj : m_Resettables)
+    {
+        obj->reset();
+    }
+}
+
 bool Artboard::advance(float elapsedSeconds, AdvanceFlags flags)
 {
+    // Poll async work (image decodes, etc.) so promises resolve before
+    // script advance() callbacks run.
+    pollAsyncWork();
+
     AdvanceFlags advancingFlags = flags;
     advancingFlags |= AdvanceFlags::IsRoot;
     bool didUpdate = advanceInternal(elapsedSeconds, advancingFlags);
@@ -1041,10 +1544,72 @@ Core* Artboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
     return nullptr;
 }
 
-void Artboard::draw(Renderer* renderer) { draw(renderer, DrawOption::kNormal); }
-
-void Artboard::draw(Renderer* renderer, DrawOption option)
+Vec2D Artboard::rootTransform(const Vec2D& point)
 {
+    if (host())
+    {
+        return host()->hostTransformPoint(point, this->as<ArtboardInstance>());
+    }
+#ifdef WITH_RIVE_TOOLS
+    // Editor artboards don't have a host, so we expose a function that calls
+    // the host in dart.
+    if (m_rootTransformCallback != nullptr)
+    {
+        auto x =
+            m_rootTransformCallback(callbackUserData, point.x, point.y, true);
+        auto y =
+            m_rootTransformCallback(callbackUserData, point.x, point.y, false);
+        return Vec2D(x, y);
+    }
+#endif
+    return point;
+}
+
+bool Artboard::hitTestPoint(const Vec2D& position,
+                            bool skipOnUnclipped,
+                            bool isPrimaryHit)
+{
+    if (host() != nullptr && isInstance())
+    {
+        if (!host()->hitTestHost(position,
+                                 skipOnUnclipped,
+                                 this->as<ArtboardInstance>()))
+        {
+            return false;
+        }
+    }
+#ifdef WITH_RIVE_TOOLS
+    // Editor artboards don't have a host, so we expose a function that calls
+    // the host in dart.
+    if (m_testBoundsCallback != nullptr)
+    {
+        // Dart can't return booleans to cpp, so we use a uint_8 instead
+        auto didHit = m_testBoundsCallback(callbackUserData,
+                                           position.x,
+                                           position.y,
+                                           skipOnUnclipped);
+        if (didHit == 0)
+        {
+            return false;
+        }
+    }
+#endif
+    return LayoutComponent::hitTestPoint(position,
+                                         skipOnUnclipped,
+                                         isPrimaryHit);
+}
+
+void Artboard::draw(Renderer* renderer)
+{
+    sm_frameId++;
+    drawCanvases();
+    drawInternal(renderer);
+}
+
+void Artboard::drawInternal(Renderer* renderer)
+{
+    RIVE_PROF_SCOPE_L(1)
+    m_didChange = false;
     if (renderOpacity() == 0)
     {
         return;
@@ -1067,34 +1632,61 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
         renderer->transform(artboardTransform);
     }
 
-    if (option != DrawOption::kHideBG)
+    for (auto shapePaint : m_ShapePaints)
     {
-        for (auto shapePaint : m_ShapePaints)
+        if (!shapePaint->shouldDraw())
         {
-            if (!shapePaint->shouldDraw())
-            {
-                continue;
-            }
-            auto shapePaintPath = shapePaint->pickPath(this);
-            if (shapePaintPath == nullptr)
-            {
-                continue;
-            }
-            shapePaint->draw(renderer, shapePaintPath, worldTransform());
+            continue;
         }
+        auto shapePaintPath = shapePaint->pickPath(this);
+        if (shapePaintPath == nullptr)
+        {
+            continue;
+        }
+        shapePaint->draw(renderer, shapePaintPath, worldTransform());
     }
-
-    if (option != DrawOption::kHideFG)
+    // Empty clips is a counter for clipping shapes that are empty, for
+    // example because they are hidden in a solo. If emptyClips > 0, the
+    // drawables should not be drawn.
+    int emptyClips = 0;
+    // We stack clip operations to avoid calling a save + clip + restore on
+    // clipping that don't have any drawables in between. this is a common
+    // case with drawables in solos where the drawables are not drawn.
+    std::vector<Drawable*> pendingClipOperations;
+    for (auto drawable = m_FirstDrawable; drawable != nullptr;
+         drawable = drawable->prev)
     {
-        for (auto drawable = m_FirstDrawable; drawable != nullptr;
-             drawable = drawable->prev)
+        auto prevClips = emptyClips;
+        emptyClips += drawable->emptyClipCount();
+        if (!drawable->willDraw() || emptyClips != prevClips || emptyClips > 0)
         {
-            if (drawable->isHidden())
+            continue;
+        }
+        if (drawable->isClipStart())
+        {
+            pendingClipOperations.push_back(drawable);
+            continue;
+        }
+        else if (pendingClipOperations.size() > 0)
+        {
+            // If there are clip operations pending and the next drawable is
+            // a clip end, the clipping operation does not clip anything and
+            // both can be skipped.
+            if (drawable->isClipEnd())
             {
+                pendingClipOperations.pop_back();
                 continue;
             }
-            drawable->draw(renderer);
+            else
+            {
+                for (auto& pendingClip : pendingClipOperations)
+                {
+                    pendingClip->draw(renderer);
+                }
+                pendingClipOperations.clear();
+            }
         }
+        drawable->draw(renderer);
     }
     if (save)
     {
@@ -1116,11 +1708,37 @@ void Artboard::addToRenderPath(RenderPath* path, const Mat2D& transform)
     }
 }
 
+void Artboard::addToRawPath(RawPath& path, const Mat2D* transform)
+{
+    for (auto drawable = m_FirstDrawable; drawable != nullptr;
+         drawable = drawable->prev)
+    {
+        if (drawable->isHidden() || !drawable->is<Shape>())
+        {
+            continue;
+        }
+        Shape* shape = drawable->as<Shape>();
+        shape->addToRawPath(path, transform);
+    }
+}
+
 Vec2D Artboard::origin() const
 {
     return m_FrameOrigin
                ? Vec2D(0.0f, 0.0f)
                : Vec2D(-layoutWidth() * originX(), -layoutHeight() * originY());
+}
+
+void Artboard::xChanged()
+{
+    Super::xChanged();
+    markHostTransformDirty();
+}
+
+void Artboard::yChanged()
+{
+    Super::yChanged();
+    markHostTransformDirty();
 }
 
 AABB Artboard::bounds() const
@@ -1130,6 +1748,14 @@ AABB Artboard::bounds() const
                                           -layoutHeight() * originY(),
                                           layoutWidth(),
                                           layoutHeight());
+}
+
+AABB Artboard::worldBounds() const
+{
+    return AABB::fromLTWH(NodeBase::x(),
+                          NodeBase::y(),
+                          m_layout.width(),
+                          m_layout.height());
 }
 
 bool Artboard::isTranslucent() const
@@ -1197,6 +1823,511 @@ std::string Artboard::animationNameAt(size_t index) const
 {
     auto la = this->animation(index);
     return la ? la->name() : "";
+}
+
+// Helper: check if a FocusData has a parent FocusData within the artboard
+// by walking up the component hierarchy
+static bool hasParentFocusData(const FocusData* focusData)
+{
+    // FocusData's parent is a ContainerComponent (likely a Node)
+    // Walk up to find if any ancestor Node has a FocusData child
+    auto* current = focusData->parent();
+    while (current != nullptr)
+    {
+        if (current->is<Node>())
+        {
+            auto* node = current->as<Node>();
+            for (auto child : node->children())
+            {
+                if (child->is<FocusData>() && child != focusData)
+                {
+                    return true;
+                }
+            }
+        }
+        current = current->parent();
+    }
+    return false;
+}
+
+size_t Artboard::rootFocusDataCount() const
+{
+    size_t count = 0;
+    for (auto* object : m_Objects)
+    {
+        if (object != nullptr && object->is<FocusData>())
+        {
+            if (!hasParentFocusData(object->as<FocusData>()))
+            {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+FocusData* Artboard::rootFocusDataAt(size_t index) const
+{
+    size_t count = 0;
+    for (auto* object : m_Objects)
+    {
+        if (object != nullptr && object->is<FocusData>())
+        {
+            if (!hasParentFocusData(object->as<FocusData>()))
+            {
+                if (count == index)
+                {
+                    return object->as<FocusData>();
+                }
+                count++;
+            }
+        }
+    }
+    return nullptr;
+}
+
+namespace
+{
+// Depth-first in scene (Container child) order so FocusManager child order
+// (tab) matches the hierarchy, not the flat m_Objects / grouped passes.
+// At most one FocusData is allowed as a direct child of a container; it is
+// registered in a first pass, then child traversal skips that FocusData.
+void buildFocusTreeVisit(FocusManager* focusManager,
+                         Component* component,
+                         rcp<FocusNode> focusNode)
+{
+    if (component == nullptr)
+    {
+        return;
+    }
+    if (component->is<NestedArtboard>())
+    {
+        auto* nestedHost = component->as<NestedArtboard>();
+        auto* nestedArtboard = nestedHost->artboardInstance(0);
+        if (nestedArtboard != nullptr &&
+            nestedArtboard->focusManager() != focusManager)
+        {
+            nestedArtboard->cleanupFocusTree();
+            nestedArtboard->buildFocusTree(focusManager, focusNode);
+        }
+        for (auto* animation : nestedHost->nestedAnimations())
+        {
+            if (animation->is<NestedStateMachine>())
+            {
+                auto* nsm = animation->as<NestedStateMachine>();
+                auto* smi = nsm->stateMachineInstance();
+                if (smi != nullptr && smi->focusManager() != focusManager)
+                {
+                    smi->setExternalFocusManager(focusManager);
+                }
+            }
+        }
+    }
+    else if (component->is<ArtboardComponentList>())
+    {
+        auto* list = component->as<ArtboardComponentList>();
+        list->ensureListScopeFocusNode(focusManager, focusNode);
+    }
+    if (component->is<ContainerComponent>())
+    {
+        auto* cc = component->as<ContainerComponent>();
+        FocusData* directFd = nullptr;
+        for (Component* ch : cc->children())
+        {
+            if (ch != nullptr && ch->is<FocusData>())
+            {
+                directFd = ch->as<FocusData>();
+                break;
+            }
+        }
+        rcp<FocusNode> recurseWith;
+        if (directFd != nullptr)
+        {
+            focusManager->addChild(focusNode, directFd->focusNode());
+            recurseWith = directFd->focusNode();
+        }
+        else
+        {
+            recurseWith = focusNode;
+        }
+        for (Component* ch : cc->children())
+        {
+            if (ch == nullptr || ch->is<FocusData>())
+            {
+                continue;
+            }
+            buildFocusTreeVisit(focusManager, ch, recurseWith);
+        }
+    }
+}
+} // namespace
+
+void Artboard::buildFocusTree(FocusManager* focusManager,
+                              rcp<FocusNode> parentFocusNode)
+{
+    if (focusManager == nullptr)
+    {
+        return;
+    }
+
+    // Store reference to the active focus manager
+    setActiveFocusManager(focusManager);
+
+#ifdef WITH_RIVE_TOOLS
+    // Store the parent focus node if provided (for later retrieval by tools)
+    if (parentFocusNode != nullptr)
+    {
+        m_externalParentFocusNode = parentFocusNode;
+    }
+    // Use explicit parent if provided, otherwise fall back to external parent
+    rcp<FocusNode> effectiveParent = parentFocusNode != nullptr
+                                         ? parentFocusNode
+                                         : m_externalParentFocusNode;
+#else
+    rcp<FocusNode> effectiveParent = parentFocusNode;
+#endif
+
+    if (as<ContainerComponent>() != nullptr)
+    {
+        buildFocusTreeVisit(focusManager, this, std::move(effectiveParent));
+    }
+}
+
+void Artboard::buildFocusTree(rcp<FocusNode> parentFocusNode)
+{
+    if (parentFocusNode == nullptr)
+    {
+        return;
+    }
+    auto* manager = parentFocusNode->manager();
+    if (manager == nullptr)
+    {
+        return;
+    }
+    buildFocusTree(manager, parentFocusNode);
+}
+
+void Artboard::cleanupFocusTree()
+{
+    if (m_activeFocusManager == nullptr)
+    {
+        return;
+    }
+
+    // Remove all FocusData's FocusNodes from the FocusManager
+    for (auto* obj : m_Objects)
+    {
+        if (obj != nullptr && obj->is<FocusData>())
+        {
+            auto* fd = obj->as<FocusData>();
+            // Only remove if the FocusNode was created (lazy initialization)
+            // and is still registered with THIS manager (defensive check for
+            // cases where auto-cleanup via FocusData destructor already ran)
+            auto node = fd->focusNode();
+            if (node != nullptr && node->manager() == m_activeFocusManager)
+            {
+                m_activeFocusManager->removeChild(node);
+            }
+        }
+    }
+
+    // Propagate cleanup to nested artboards that share our FocusManager
+    for (auto* nestedArtboardHost : m_NestedArtboards)
+    {
+        auto* nestedArtboard = nestedArtboardHost->artboardInstance(0);
+        if (nestedArtboard != nullptr &&
+            nestedArtboard->focusManager() == m_activeFocusManager)
+        {
+            nestedArtboard->cleanupFocusTree();
+        }
+    }
+
+    // Propagate cleanup to ArtboardComponentList items
+    for (auto* componentList : m_ComponentLists)
+    {
+        for (size_t i = 0; i < componentList->artboardCount(); i++)
+        {
+            auto* nestedArtboard =
+                componentList->artboardInstance(static_cast<int>(i));
+            if (nestedArtboard != nullptr &&
+                nestedArtboard->focusManager() == m_activeFocusManager)
+            {
+                nestedArtboard->cleanupFocusTree();
+            }
+        }
+    }
+
+    for (auto* componentList : m_ComponentLists)
+    {
+        componentList->removeListScopeFocusNode();
+    }
+
+    // Clear the active focus manager reference
+    m_activeFocusManager = nullptr;
+}
+
+#ifdef WITH_RIVE_TOOLS
+void Artboard::setExternalParentFocusNode(rcp<FocusNode> node)
+{
+    m_externalParentFocusNode = std::move(node);
+}
+
+rcp<FocusNode> Artboard::externalParentFocusNode() const
+{
+    return m_externalParentFocusNode;
+}
+
+void Artboard::collapseSingle(bool value) { Component::collapse(value); }
+#endif
+
+// Builds the semantic tree for this artboard. Iterates all objects,
+// registers each SemanticData's SemanticNode with the manager, then
+// propagates to nested artboards using findClosestSemanticNode() for
+// parent resolution across artboard boundaries.
+//
+// For nested artboards (those with a host), a boundary SemanticNode is
+// created and inserted as the parent of all semantic nodes within this
+// artboard. Boundary nodes are structural-only — skipped during
+// flattening — but enable better subtree collapse/uncollapse and
+// targeted bounds dirtying when the host transform changes.
+void Artboard::buildSemanticTree(SemanticManager* semanticManager,
+                                 rcp<SemanticNode> parentSemanticNode)
+{
+    if (semanticManager == nullptr)
+    {
+        return;
+    }
+
+    // Store reference to the active semantic manager
+    setActiveSemanticManager(semanticManager);
+
+    // For nested artboards, create a boundary node that acts as the
+    // structural root of this artboard's semantic subtree.
+    rcp<SemanticNode> effectiveParent = parentSemanticNode;
+    if (host() != nullptr)
+    {
+        if (m_semanticBoundaryNode == nullptr)
+        {
+            // Id is assigned by the SemanticManager on addChild() below.
+            m_semanticBoundaryNode = rcp<SemanticNode>(new SemanticNode());
+            m_semanticBoundaryNode->isBoundaryNode(true);
+            m_semanticBoundaryNode->boundaryArtboard(this);
+        }
+        semanticManager->addChild(parentSemanticNode, m_semanticBoundaryNode);
+        // Seed the boundary as dirty so the first drainDiff() resolves its
+        // bounds from the artboard rect even when semantics are enabled on
+        // an already-settled scene (no subsequent WorldTransform dirt to
+        // trigger this via the normal update cycle).
+        markSemanticBoundaryTransformDirty();
+        effectiveParent = m_semanticBoundaryNode;
+    }
+
+    // Register all SemanticData in this artboard
+    for (auto* obj : m_Objects)
+    {
+        if (obj != nullptr && obj->is<SemanticData>())
+        {
+            auto* sd = obj->as<SemanticData>();
+            auto* localParent = sd->findParentSemanticData();
+
+            rcp<SemanticNode> parentNode = localParent != nullptr
+                                               ? localParent->semanticNode()
+                                               : effectiveParent;
+
+            semanticManager->addChild(parentNode, sd->semanticNode());
+            sd->syncSemanticTreeVisibility();
+        }
+    }
+
+    // Propagate semantic registration to nested artboards that might have been
+    // created before this artboard's semanticManager was available.
+    //
+    // We check if the nested artboard's semanticManager is DIFFERENT from ours.
+    // If it is, that means it created its own internal semanticManager when it
+    // should be sharing the parent's. We rebuild its semantic tree with the
+    // correct shared semanticManager.
+
+    // Handle NestedArtboard instances
+    for (auto* nestedArtboardHost : m_NestedArtboards)
+    {
+        // Find closest semantic node (handles artboard boundaries)
+        auto hostParentNode =
+            SemanticData::findClosestSemanticNode(nestedArtboardHost);
+        if (hostParentNode == nullptr)
+        {
+            hostParentNode = effectiveParent;
+        }
+
+        auto* nestedArtboard = nestedArtboardHost->artboardInstance(0);
+        if (nestedArtboard != nullptr &&
+            nestedArtboard->semanticManager() != semanticManager)
+        {
+            // Clean up old semantic tree if it exists (with wrong
+            // semanticManager)
+            nestedArtboard->cleanupSemanticTree();
+            nestedArtboard->buildSemanticTree(semanticManager, hostParentNode);
+        }
+    }
+
+    // Handle ArtboardComponentList instances
+    for (auto* componentList : m_ComponentLists)
+    {
+        // Find closest semantic node (handles artboard boundaries)
+        auto hostParentNode =
+            SemanticData::findClosestSemanticNode(componentList);
+        if (hostParentNode == nullptr)
+        {
+            hostParentNode = effectiveParent;
+        }
+
+        for (size_t i = 0; i < componentList->artboardCount(); i++)
+        {
+            auto* nestedArtboard =
+                componentList->artboardInstance(static_cast<int>(i));
+            if (nestedArtboard != nullptr &&
+                nestedArtboard->semanticManager() != semanticManager)
+            {
+                // Clean up old semantic tree if it exists (with wrong
+                // semanticManager)
+                nestedArtboard->cleanupSemanticTree();
+                nestedArtboard->buildSemanticTree(semanticManager,
+                                                  hostParentNode);
+            }
+        }
+    }
+}
+
+void Artboard::cleanupSemanticTree()
+{
+    if (m_activeSemanticManager == nullptr)
+    {
+        return;
+    }
+
+    // Propagate cleanup to nested artboards that share our SemanticManager.
+    // Done FIRST so their boundary nodes are removed before we remove ours.
+    for (auto* nestedArtboardHost : m_NestedArtboards)
+    {
+        auto* nestedArtboard = nestedArtboardHost->artboardInstance(0);
+        if (nestedArtboard != nullptr &&
+            nestedArtboard->semanticManager() == m_activeSemanticManager)
+        {
+            nestedArtboard->cleanupSemanticTree();
+        }
+    }
+
+    // Propagate cleanup to ArtboardComponentList items
+    for (auto* componentList : m_ComponentLists)
+    {
+        for (size_t i = 0; i < componentList->artboardCount(); i++)
+        {
+            auto* nestedArtboard =
+                componentList->artboardInstance(static_cast<int>(i));
+            if (nestedArtboard != nullptr &&
+                nestedArtboard->semanticManager() == m_activeSemanticManager)
+            {
+                nestedArtboard->cleanupSemanticTree();
+            }
+        }
+    }
+
+    // Remove all SemanticData's SemanticNodes from the SemanticManager.
+    // Use hasSemanticNode() to avoid lazy-creating a node during cleanup.
+    for (auto* obj : m_Objects)
+    {
+        if (obj != nullptr && obj->is<SemanticData>())
+        {
+            auto* sd = obj->as<SemanticData>();
+            if (!sd->hasSemanticNode())
+            {
+                continue;
+            }
+            auto node = sd->semanticNode();
+            if (node != nullptr && node->manager() == m_activeSemanticManager)
+            {
+                m_activeSemanticManager->removeChild(node);
+            }
+        }
+    }
+
+    // Remove the boundary node for this artboard (if any).
+    if (m_semanticBoundaryNode != nullptr &&
+        m_semanticBoundaryNode->manager() == m_activeSemanticManager)
+    {
+        m_activeSemanticManager->removeChild(m_semanticBoundaryNode);
+    }
+    m_semanticBoundaryNode = nullptr;
+
+    // Clear the active semantic manager reference
+    m_activeSemanticManager = nullptr;
+}
+
+// Walk the semantic subtree under a boundary node and collapse each
+// SemanticData directly via the back-pointer. O(K) where K = semantic
+// nodes under this boundary.
+static void collapseBoundarySubtree(SemanticNode* node, bool value)
+{
+    // Copy children before iterating — collapse(true) calls
+    // removeChild which mutates the original vector.
+    std::vector<rcp<SemanticNode>> children(node->children());
+    for (const auto& child : children)
+    {
+        auto* sd = child->semanticData();
+        if (sd != nullptr && sd->isCollapsed() != value)
+        {
+            sd->collapse(value);
+        }
+        collapseBoundarySubtree(child.get(), value);
+    }
+}
+
+// Semantic-only collapse for this artboard's semantic nodes.
+// When collapsing, walks the boundary's semantic subtree (O(K) semantic
+// nodes). When uncollapsing, falls back to m_Objects because
+// SemanticData::collapse(false) re-parents nodes outside the boundary.
+void Artboard::collapseSemanticBoundary(bool value)
+{
+    if (m_activeSemanticManager == nullptr)
+    {
+        return;
+    }
+    if (value && m_semanticBoundaryNode != nullptr)
+    {
+        // Fast path: walk the boundary tree.
+        collapseBoundarySubtree(m_semanticBoundaryNode.get(), true);
+    }
+    else
+    {
+        // Uncollapse or no boundary: scan artboard objects.
+        for (auto* obj : m_Objects)
+        {
+            if (obj != nullptr && obj->is<SemanticData>())
+            {
+                auto* sd = obj->as<SemanticData>();
+                if (sd->isCollapsed() != value)
+                {
+                    sd->collapse(value);
+                }
+            }
+        }
+    }
+
+    if (!value)
+    {
+        markSemanticBoundaryTransformDirty();
+    }
+}
+
+// Recursively mark all semantic nodes under the boundary as bounds-dirty.
+// Called when the host transform changes so bounds are recalculated in
+// root artboard space.
+void Artboard::markSemanticBoundaryTransformDirty()
+{
+    if (m_semanticBoundaryNode == nullptr || m_activeSemanticManager == nullptr)
+    {
+        return;
+    }
+    m_activeSemanticManager->markBoundaryDirty(m_semanticBoundaryNode->id());
 }
 
 std::string Artboard::stateMachineNameAt(size_t index) const
@@ -1374,13 +2505,15 @@ StatusCode Artboard::import(ImportStack& importStack)
     return result;
 }
 
-void Artboard::internalDataContext(DataContext* value, bool isRoot)
+void Artboard::buildDataContext(rcp<DataContext> value) {}
+
+void Artboard::internalDataContext(rcp<DataContext> value)
 {
     m_DataContext = value;
-    for (auto artboardHost : m_NestedArtboards)
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        auto value = m_DataContext->getViewModelInstance(
-            artboardHost->dataBindPathIds());
+        auto value =
+            m_DataContext->getViewModelInstance(artboardHost->dataBindPath());
         if (value != nullptr && value->is<ViewModelInstance>())
         {
             artboardHost->bindViewModelInstance(value, m_DataContext);
@@ -1390,52 +2523,70 @@ void Artboard::internalDataContext(DataContext* value, bool isRoot)
             artboardHost->internalDataContext(m_DataContext);
         }
     }
-    for (auto dataBind : m_DataBinds)
+    bindDataBindsFromContext(m_DataContext.get());
+    sortDataBinds();
+    for (auto* scriptedObject : m_ScriptedObjects)
     {
-        if (dataBind->is<DataBindContext>())
-        {
-            dataBind->as<DataBindContext>()->bindFromContext(m_DataContext);
-        }
+        scriptedObject->dataContext(value);
     }
-    if (isRoot)
+    initScriptedObjects();
+}
+
+void Artboard::rebind() { internalDataContext(m_DataContext); }
+
+void Artboard::relinkDataContext()
+{
+    if (m_DataContext == nullptr)
     {
-        collectDataBinds();
+        return;
+    }
+    for (auto artboardHost : m_ArtboardHosts)
+    {
+        rcp<ViewModelInstance> value =
+            m_DataContext->getViewModelInstance(artboardHost->dataBindPath());
+        if (value == nullptr)
+        {
+            value = m_DataContext->viewModelInstance();
+        }
+        artboardHost->relinkDataContext(value);
+    }
+}
+
+void Artboard::rebuildDataBind(DataBind* dataBind)
+{
+    if (dataBind->is<DataBindContext>())
+    {
+        dataBind->as<DataBindContext>()->bindFromContext(m_DataContext.get());
+    }
+};
+
+void Artboard::unbind()
+{
+    clearDataContext();
+    unbindDataBinds();
+    for (auto artboardHost : m_ArtboardHosts)
+    {
+        artboardHost->unbind();
     }
 }
 
 void Artboard::clearDataContext()
 {
-    if (m_ownsDataContext && m_DataContext != nullptr)
+    if (m_DataContext)
     {
-        delete m_DataContext;
+        if (m_DataContext->viewModelInstance())
+        {
+            m_DataContext->viewModelInstance()->removeDependent(this);
+        }
+        m_DataContext = nullptr;
     }
-    m_DataContext = nullptr;
-    m_ownsDataContext = false;
     for (auto artboardHost : m_ArtboardHosts)
     {
         artboardHost->clearDataContext();
     }
-    for (auto& dataBind : m_DataBinds)
+    for (auto* scriptedObject : m_ScriptedObjects)
     {
-        dataBind->unbind();
-    }
-}
-
-void Artboard::sortDataBinds()
-{
-    size_t currentToSourceIndex = 0;
-    for (size_t i = 0; i < m_AllDataBinds.size(); i++)
-    {
-        if (m_AllDataBinds[i]->toSource())
-        {
-            if (i != currentToSourceIndex)
-            {
-
-                std::iter_swap(m_AllDataBinds.begin() + currentToSourceIndex,
-                               m_AllDataBinds.begin() + i);
-            }
-            currentToSourceIndex += 1;
-        }
+        scriptedObject->resetLuaInit();
     }
 }
 
@@ -1456,63 +2607,71 @@ void Artboard::volume(float value)
     }
 }
 
-void Artboard::populateDataBinds(std::vector<DataBind*>* dataBinds)
+void Artboard::dataContext(rcp<DataContext> value)
 {
-    for (auto dataBind : m_DataBinds)
-    {
-        dataBinds->push_back(dataBind);
-    }
-    for (auto artboardHost : m_ArtboardHosts)
-    {
-        artboardHost->populateDataBinds(dataBinds);
-    }
-}
-
-void Artboard::collectDataBinds()
-{
-    m_AllDataBinds.clear();
-    populateDataBinds(&m_AllDataBinds);
-    sortDataBinds();
-}
-
-void Artboard::addDataBind(DataBind* dataBind)
-{
-    m_DataBinds.push_back(dataBind);
-}
-
-void Artboard::dataContext(DataContext* value)
-{
-    internalDataContext(value, true);
+    internalDataContext(value);
 }
 
 void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance)
 {
-    bindViewModelInstance(viewModelInstance, nullptr, true);
+    bindViewModelInstance(viewModelInstance, nullptr);
 }
 
 void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
-                                     DataContext* parent)
+                                     rcp<DataContext> parent)
 {
-    bindViewModelInstance(viewModelInstance, parent, true);
-}
-
-void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
-                                     DataContext* parent,
-                                     bool isRoot)
-{
-    clearDataContext();
     if (viewModelInstance == nullptr)
     {
+        unbind();
         return;
     }
-    if (isRoot)
+    clearDataContext();
+    auto dataContext = make_rcp<DataContext>(viewModelInstance);
+    if (dataContext->viewModelInstance())
     {
-        viewModelInstance->setAsRoot(viewModelInstance);
+        dataContext->viewModelInstance()->addDependent(this);
     }
-    m_ownsDataContext = true;
-    auto dataContext = new DataContext(viewModelInstance);
     dataContext->parent(parent);
-    internalDataContext(dataContext, isRoot);
+    internalDataContext(dataContext);
+}
+
+bool Artboard::isAncestor(const Artboard* artboard)
+{
+    if (artboard != nullptr && m_artboardSource == artboard->artboardSource())
+    {
+        return true;
+    }
+    if (parentArtboard() != nullptr)
+    {
+        return parentArtboard()->isAncestor(artboard);
+    }
+#ifdef WITH_RIVE_TOOLS
+    // Editor artboards don't have a host, so we expose a function that calls
+    // the host in dart.
+    if (m_isAncestorCallback != nullptr)
+    {
+        // Dart can't return booleans to cpp, so we use a uint_8 instead
+        auto isAncestor =
+            m_isAncestorCallback(callbackUserData, artboard->artboardId());
+        if (isAncestor == 1)
+        {
+            return true;
+        }
+    }
+#endif
+    return false;
+}
+
+void Artboard::changed()
+{
+    if (!m_didChange)
+    {
+        m_didChange = true;
+        if (parentArtboard())
+        {
+            parentArtboard()->changed();
+        }
+    }
 }
 
 ////////// ArtboardInstance
@@ -1524,34 +2683,34 @@ ArtboardInstance::ArtboardInstance() {}
 
 ArtboardInstance::~ArtboardInstance() {}
 
+void ArtboardInstance::file(rcp<const File> file) { m_file = std::move(file); }
+
 std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationAt(
     size_t index)
 {
     auto la = this->animation(index);
-    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this)
-              : nullptr;
+    return la ? std::make_unique<LinearAnimationInstance>(la, this) : nullptr;
 }
 
 std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationNamed(
     const std::string& name)
 {
     auto la = this->animation(name);
-    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this)
-              : nullptr;
+    return la ? std::make_unique<LinearAnimationInstance>(la, this) : nullptr;
 }
 
 std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineAt(
     size_t index)
 {
     auto sm = this->stateMachine(index);
-    return sm ? rivestd::make_unique<StateMachineInstance>(sm, this) : nullptr;
+    return sm ? std::make_unique<StateMachineInstance>(sm, this) : nullptr;
 }
 
 std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineNamed(
     const std::string& name)
 {
     auto sm = this->stateMachine(name);
-    return sm ? rivestd::make_unique<StateMachineInstance>(sm, this) : nullptr;
+    return sm ? std::make_unique<StateMachineInstance>(sm, this) : nullptr;
 }
 
 std::unique_ptr<StateMachineInstance> ArtboardInstance::defaultStateMachine()

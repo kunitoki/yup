@@ -100,6 +100,8 @@ void Path::buildDependencies() { Super::buildDependencies(); }
 
 void Path::addVertex(PathVertex* vertex) { m_Vertices.push_back(vertex); }
 
+void Path::popVertex() { m_Vertices.pop_back(); }
+
 void Path::addFlags(PathFlags flags) { m_pathFlags |= flags; }
 bool Path::isFlagged(PathFlags flags) const
 {
@@ -124,6 +126,8 @@ bool Path::canDeferPathUpdate()
 }
 
 const Mat2D& Path::pathTransform() const { return worldTransform(); }
+
+AABB Path::localBounds() const { return m_rawPath.preciseBounds(); }
 
 void Path::buildPath(RawPath& rawPath) const
 {

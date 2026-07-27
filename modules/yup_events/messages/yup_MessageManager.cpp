@@ -105,6 +105,14 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 }
 
 //==============================================================================
+void MessageManager::registerShutdownCallback (std::function<void()> shutdownCallbackToAdd)
+{
+    jassert (isThisTheMessageThread()); // must only be called by the message thread
+
+    shutdownCallbacks.push_back (std::move (shutdownCallbackToAdd));
+}
+
+//==============================================================================
 #if ! (YUP_MAC || YUP_IOS || YUP_WASM)
 // implemented in platform-specific code (yup_Messaging_linux.cpp, yup_Messaging_android.cpp and yup_Messaging_windows.cpp)
 bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
@@ -138,12 +146,17 @@ void MessageManager::runDispatchLoop()
         }
         YUP_CATCH_EXCEPTION
     }
+
+    for (const auto& func : shutdownCallbacks)
+        func();
 }
 
 void MessageManager::stopDispatchLoop()
 {
-    (new QuitMessage())->post();
+    quitMessageReceived = true;
     quitMessagePosted = true;
+
+    (new QuitMessage())->post();
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED
@@ -564,7 +577,8 @@ YUP_API void YUP_CALLTYPE shutdownYup_GUI()
     }
 }
 
-static std::atomic_int numScopedInitInstances = 0;
+//==============================================================================
+std::atomic_int ScopedYupInitialiser_GUI::numScopedInitInstances = 0;
 
 ScopedYupInitialiser_GUI::ScopedYupInitialiser_GUI()
 {

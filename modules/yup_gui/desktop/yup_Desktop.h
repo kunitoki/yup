@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class ComponentNative;
+
 //==============================================================================
 /** Represents the desktop environment, providing access to screen information and management.
 
@@ -29,7 +31,7 @@ namespace yup
     access to multiple screens connected to the system. It allows querying and management
     of different screen properties through the `Screen` objects.
 */
-class YUP_API Desktop
+class YUP_API Desktop : private DeletedAtShutdown
 {
 public:
     //==============================================================================
@@ -74,9 +76,27 @@ public:
 
     /** Retries a pointer to the screen containing an absolute location.
 
+        @param location The point to check
+
         @return A pointer to the `Screen` object which contains the location.
     */
     Screen::Ptr getScreenContaining (const Point<float>& location) const;
+
+    /** Retries a pointer to the screen containing a rectangle.
+
+        @param location The rectangle to check
+
+        @return A pointer to the `Screen` object which contains the rectangle
+    */
+    Screen::Ptr getScreenContaining (const Rectangle<float>& area) const;
+
+    /** Retries a pointer to the screen containing a component.
+
+        @param component The component to check
+
+        @return A pointer to the `Screen` object which contains the component
+    */
+    Screen::Ptr getScreenContaining (Component* component) const;
 
     //==============================================================================
     /** Sets the mouse cursor to the specified cursor.
@@ -104,6 +124,27 @@ public:
     void setCurrentMouseLocation (const Point<float>& location);
 
     //==============================================================================
+    /** Adds a global mouse listener that will receive mouse events from anywhere on the desktop.
+
+        @param listener The mouse listener to add
+    */
+    void addGlobalMouseListener (MouseListener* listener);
+
+    /** Removes a global mouse listener.
+
+        @param listener The mouse listener to remove
+    */
+    void removeGlobalMouseListener (MouseListener* listener);
+
+    //==============================================================================
+    /** Gets a native component by its userdata pointer.
+
+        @param userdata The userdata pointer used to identify the component
+        @return The native component, or nullptr if not found
+    */
+    ReferenceCountedObjectPtr<ComponentNative> getNativeComponent (void* userdata) const;
+
+    //==============================================================================
     /** Updates the list of screens. */
     void updateScreens();
 
@@ -116,17 +157,39 @@ public:
     void handleScreenMoved (int screenIndex);
     /** @internal */
     void handleScreenOrientationChanged (int screenIndex);
+    /** @internal */
+    void handleGlobalMouseDown (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseUp (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseMove (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseDrag (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
     YUP_DECLARE_SINGLETON (Desktop, false)
 
 private:
     friend class YUPApplication;
+    friend class SDLComponentNative;
 
     Desktop();
 
+    void registerNativeComponent (ComponentNative* nativeComponent);
+    void unregisterNativeComponent (ComponentNative* nativeComponent);
+
+    void addPendingMouseListeners();
+
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
+
+    std::unordered_map<void*, ComponentNative*> nativeComponents;
+
+    ListenerList<MouseListener> globalMouseListeners;
+    Array<MouseListener*> pendingMouseListeners;
+    bool sendingMouseEvent = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

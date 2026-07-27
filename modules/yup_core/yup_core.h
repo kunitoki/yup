@@ -44,14 +44,15 @@
 
     ID:                 yup_core
     vendor:             yup
-    version:            7.0.12
+    version:            2.0.0
     name:               YUP core classes
     description:        The essential set of basic YUP classes, as required by all the other YUP modules.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
     dependencies:       zlib
-    osxFrameworks:      Cocoa Foundation IOKit Security
+    optionalDeps:       sqlite3_library yup_events
+    macFrameworks:      Cocoa Foundation IOKit Security
     iosFrameworks:      Foundation UIKit
     iosSimFrameworks:   Foundation UIKit
     linuxLibs:          rt dl pthread
@@ -71,9 +72,6 @@
 #pragma warning(push)
 // Disable warnings for long class names, padding, and undefined preprocessor definitions.
 #pragma warning(disable : 4251 4786 4668 4820)
-#ifdef __INTEL_COMPILER
-#pragma warning(disable : 1125)
-#endif
 #endif
 
 #include "system/yup_TargetPlatform.h"
@@ -109,6 +107,18 @@
 #endif
 
 //==============================================================================
+/** Config: YUP_ASSERT_INCLUDE_STACKTRACE
+
+    If this flag is enabled, the jassert and jassertfalse macros will include
+    a stack trace when an assertion happens.
+
+    @see YUP_LOG_ASSERTIONS, jassert, jassertfalse
+*/
+#ifndef YUP_ASSERT_INCLUDE_STACKTRACE
+#define YUP_ASSERT_INCLUDE_STACKTRACE 1
+#endif
+
+//==============================================================================
 /** Config: YUP_CHECK_MEMORY_LEAKS
 
     Enables a memory-leak check for certain objects when the app terminates. See the LeakedObjectDetector
@@ -135,7 +145,11 @@
     If you disable this then https/ssl support will not be available on Linux.
 */
 #ifndef YUP_USE_CURL
+#if __has_include(<curl/curl.h>)
 #define YUP_USE_CURL 1
+#else
+#define YUP_USE_CURL 0
+#endif
 #endif
 
 /** Config: YUP_LOAD_CURL_SYMBOLS_LAZILY
@@ -239,8 +253,8 @@ extern YUP_API void YUP_CALLTYPE logAssertion (const wchar_t* file, int line) no
 } // namespace yup
 
 #include "misc/yup_EnumHelpers.h"
-#include "memory/yup_Memory.h"
 #include "maths/yup_MathsFunctions.h"
+#include "memory/yup_Memory.h"
 #include "memory/yup_ByteOrder.h"
 #include "memory/yup_Atomic.h"
 #include "text/yup_CharacterFunctions.h"
@@ -267,7 +281,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "memory/yup_ReferenceCountedObject.h"
 #include "memory/yup_ScopedPointer.h"
 #include "memory/yup_OptionalScopedPointer.h"
-#include "containers/yup_Optional.h"
 #include "containers/yup_Enumerate.h"
 #include "containers/yup_ScopedValueSetter.h"
 #include "memory/yup_Singleton.h"
@@ -278,6 +291,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "maths/yup_NormalisableRange.h"
 #include "maths/yup_StatisticsAccumulator.h"
 #include "containers/yup_ElementComparator.h"
+#include "containers/yup_TypeErasedObject.h"
 #include "containers/yup_ArrayAllocationBase.h"
 #include "containers/yup_ArrayBase.h"
 #include "containers/yup_Array.h"
@@ -337,6 +351,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "logging/yup_FileLogger.h"
 #include "javascript/yup_JSONUtils.h"
 #include "serialisation/yup_Serialisation.h"
+#include "serialisation/yup_BinaryArchive.h"
 #include "javascript/yup_JSONSerialisation.h"
 #include "javascript/yup_Javascript.h"
 #include "maths/yup_BigInteger.h"
@@ -351,6 +366,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "threads/yup_SpinLock.h"
 #include "threads/yup_WaitableEvent.h"
 #include "threads/yup_Thread.h"
+#include "threads/yup_RecursiveSpinLock.h"
 #include "threads/yup_HighResolutionTimer.h"
 #include "threads/yup_ThreadLocalValue.h"
 #include "threads/yup_ThreadPool.h"
@@ -366,7 +382,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "network/yup_WebInputStream.h"
 #include "streams/yup_URLInputSource.h"
 #include "time/yup_PerformanceCounter.h"
-#include "unit_tests/yup_UnitTest.h"
 #include "xml/yup_XmlDocument.h"
 #include "xml/yup_XmlElement.h"
 #include "zip/yup_GZIPCompressorOutputStream.h"
@@ -379,6 +394,11 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "files/yup_AndroidDocument.h"
 #include "files/yup_Watchdog.h"
 #include "streams/yup_AndroidDocumentInputSource.h"
+
+#if YUP_MODULE_AVAILABLE_sqlite3_library
+#include "sqlite3_library/sqlite3_library.h"
+#include "database/yup_SqliteDatabase.h"
+#endif
 
 #include "detail/yup_CallbackListenerList.h"
 
@@ -394,10 +414,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #if YUP_CORE_INCLUDE_JNI_HELPERS && YUP_ANDROID
 #include <jni.h>
 #include "native/yup_JNIHelpers_android.h"
-#endif
-
-#if YUP_UNIT_TESTS
-#include "unit_tests/yup_UnitTestCategories.h"
 #endif
 
 #if YUP_ENABLE_PROFILING

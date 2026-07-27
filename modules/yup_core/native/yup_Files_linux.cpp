@@ -40,6 +40,9 @@
 namespace yup
 {
 
+namespace
+{
+//==============================================================================
 enum
 {
     U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
@@ -48,6 +51,37 @@ enum
     U_SMB_SUPER_MAGIC = 0x517B    // linux/smb_fs.h
 };
 
+#if YUP_LINUX
+static String getBlockDeviceName (dev_t dev)
+{
+    // Example sysfs entry: /sys/dev/block/8:16 -> ../../block/sdb/sdb1
+    char sysPath[128] = {};
+    std::snprintf (sysPath, sizeof (sysPath), "/sys/dev/block/%u:%u", static_cast<unsigned int> (major (dev)), static_cast<unsigned int> (minor (dev)));
+
+    char buf[4096 + 1] = {};
+    const ssize_t len = ::readlink (sysPath, buf, 4096);
+    if (len <= 0)
+        return {};
+
+    buf[len] = 0;
+    const String link = CharPointer_UTF8 (buf);
+
+    const int blockIndex = link.indexOf ("/block/");
+    if (blockIndex < 0)
+        return {};
+
+    String rest = link.substring (blockIndex + 7); // skip "/block/"
+
+    const int slash = rest.indexOfChar ('/');
+    if (slash >= 0)
+        rest = rest.substring (0, slash);
+
+    return rest; // e.g. "sdb"
+}
+#endif
+} // namespace
+
+//==============================================================================
 bool File::isOnCDRomDrive() const
 {
     struct statfs buf;
@@ -81,8 +115,25 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-    jassertfalse; // xxx not implemented for linux!
+#if YUP_LINUX
+    struct stat st {};
+    const auto path = getFullPathName();
+
+    if (::stat (path.toUTF8(), &st) != 0)
+        return false;
+
+    const auto devName = getBlockDeviceName (st.st_dev);
+    if (devName.isEmpty())
+        return false;
+
+    const File removableFlag ("/sys/block/" + devName + "/removable");
+    if (! removableFlag.existsAsFile())
+        return false;
+
+    return removableFlag.loadFileAsString().trim() == "1";
+#else
     return false;
+#endif
 }
 
 String File::getVersion() const
@@ -221,6 +272,11 @@ static bool isFileExecutable (const String& filename)
 
 static bool openDocumentExternally (const String& fileName, const String& parameters, const Array<char*>* environment = nullptr)
 {
+    const bool hasDisplay = std::getenv ("DISPLAY") != nullptr && std::strlen (std::getenv ("DISPLAY")) > 0;
+
+    if (! hasDisplay)
+        return false;
+
     const auto cmdString = [&]
     {
         if (fileName.startsWithIgnoreCase ("file:")

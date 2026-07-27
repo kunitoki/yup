@@ -44,13 +44,14 @@
 
     ID:                 yup_events
     vendor:             yup
-    version:            7.0.12
+    version:            2.0.0
     name:               YUP message and event handling classes
     description:        Classes for running an application's main event loop and sending/receiving messages, timers, etc.
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
     dependencies:       yup_core
+    optionalDeps:       yup_gui
 
   END_YUP_MODULE_DECLARATION
 
@@ -69,6 +70,15 @@
 */
 #ifndef YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
 #define YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK 0
+#endif
+
+//==============================================================================
+/** Config: YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
+
+    Will shutdown the application when the MessageManager is quit.
+*/
+#ifndef YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT
+#define YUP_SHUTDOWN_APP_ON_MESSAGEMANAGER_QUIT 1
 #endif
 
 #if YUP_WINDOWS && YUP_EVENTS_INCLUDE_WINRT_WRAPPER

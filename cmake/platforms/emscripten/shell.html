@@ -113,7 +113,23 @@
       var spinnerElement = document.getElementById('spinner');
 
       var Module = {
-        preRun: [],
+        preRun: [
+          function () {
+            if (typeof navigator === 'undefined' || !navigator.gpu)
+              return; // WebGL build or unsupported browser: nothing to do
+            addRunDependency('webgpu-device');
+            navigator.gpu.requestAdapter().then(function (adapter) {
+              if (adapter == null) throw new Error('WebGPU: no adapter');
+              return adapter.requestDevice();
+            }).then(function (device) {
+              Module.preinitializedWebGPUDevice = device;
+              removeRunDependency('webgpu-device');
+            }).catch(function (e) {
+              console.error('WebGPU initialization failed: ' + e);
+              removeRunDependency('webgpu-device');
+            });
+          }
+        ],
         postRun: [],
         print: (function() {
           return function(text) {

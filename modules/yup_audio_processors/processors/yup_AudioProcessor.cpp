@@ -25,63 +25,65 @@ namespace yup
 //==============================================================================
 
 AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
-    : processorName (name)
+    : BaseDomainProcessor (name)
     , busLayout (std::move (busLayout))
 {
 }
 
 //==============================================================================
 
-AudioProcessor::~AudioProcessor()
-{
-}
-
-//==============================================================================
-
-void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
-{
-    jassert (parameter != nullptr);
-
-    parameter->setIndexInContainer (static_cast<int> (parameters.size()));
-
-    auto [iterator, inserted] = parameterMap.try_emplace (parameter->getID(), parameter);
-    if (! inserted)
-        jassertfalse; // You added a parameter with the same id twice!
-
-    parameters.emplace_back (std::move (parameter));
-}
+AudioProcessor::~AudioProcessor() = default;
 
 //==============================================================================
 
 int AudioProcessor::getNumAudioOutputs() const
 {
-    return static_cast<int> (busLayout.getOutputBuses().size());
+    int count = 0;
+
+    for (const auto& bus : busLayout.getOutputBuses())
+        if (bus.getType() == AudioBus::Type::Audio)
+            ++count;
+
+    return count;
 }
 
 int AudioProcessor::getNumAudioInputs() const
 {
-    return static_cast<int> (busLayout.getInputBuses().size());
+    int count = 0;
+
+    for (const auto& bus : busLayout.getInputBuses())
+        if (bus.getType() == AudioBus::Type::Audio)
+            ++count;
+
+    return count;
 }
 
 //==============================================================================
 
-void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
+bool AudioProcessor::acceptsMidi() const noexcept
 {
-    this->playHead = playHead;
+    for (const auto& bus : busLayout.getInputBuses())
+        if (bus.getType() == AudioBus::Type::Midi)
+            return true;
+
+    return false;
+}
+
+bool AudioProcessor::producesMidi() const noexcept
+{
+    for (const auto& bus : busLayout.getOutputBuses())
+        if (bus.getType() == AudioBus::Type::Midi)
+            return true;
+
+    return false;
 }
 
 //==============================================================================
 
-void AudioProcessor::suspendProcessing (bool shouldSuspend)
+AudioProcessorEditor* AudioProcessor::createEditor()
 {
-    auto lock = CriticalSection::ScopedLockType (processLock);
-
-    processIsSuspended = shouldSuspend;
-}
-
-bool AudioProcessor::isSuspended() const
-{
-    return processIsSuspended;
+    jassert (hasEditor());
+    return nullptr;
 }
 
 //==============================================================================
@@ -90,10 +92,9 @@ void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerB
 {
     releaseResources();
 
-    this->sampleRate = sampleRate;
-    this->samplesPerBlock = samplesPerBlock;
+    AudioProcessorBase::setPlaybackConfiguration (sampleRate, samplesPerBlock);
 
-    prepareToPlay (sampleRate, samplesPerBlock);
+    prepareToPlay (AudioSpec (sampleRate, samplesPerBlock));
 }
 
 } // namespace yup
