@@ -37,7 +37,7 @@ jobs:
 
       - name: Build Sphinx
         run: |
-          python -m sphinx -T -j 1 -b html \
+          python -m sphinx -T -j auto -b html \
             -d docs/_build/doctrees \
             -D language=en \
             docs \
