@@ -19,6 +19,7 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
     "sphinxcontrib.mermaid",
+    "breathe",
 ]
 
 myst_enable_extensions = [
@@ -45,11 +46,24 @@ source_suffix = {
     ".md": "markdown",
 }
 
+# -- Breathe configuration ---------------------------------------------------
+# Breathe bridges Doxygen XML output into Sphinx, rendering C++ API docs.
+# Doxygen must be run before Sphinx (see .readthedocs.yaml).
+breathe_projects = {
+    "YUP": "docs/_doxygen/xml",
+}
+breathe_default_project = "YUP"
+breathe_domain_by_extension = {
+    "h": "cpp",
+    "cpp": "cpp",
+}
+
 # The root document of the documentation tree.
 root_doc = "index"
 
 exclude_patterns = [
     "_build",
+    "_doxygen",
     "Thumbs.db",
     ".DS_Store",
     "superpowers",

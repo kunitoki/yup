@@ -52,3 +52,7 @@ __pycache__/
 .cache/
 docs/superpowers/
 reasonix.toml
+
+# Documentation generated output
+docs/_build/
+docs/_doxygen/

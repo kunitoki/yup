@@ -1,3 +1,81 @@
 .sy-head-brand img+strong {
   display: inline !important;
 }
+
+/* -- Breathe / Doxygen API reference integration -----------------------------
+   Styles auto-generated Doxygen output (via Breathe) so it matches the
+   Shibuya theme's look and uses --sy-c-* variables for light/dark support.
+   -------------------------------------------------------------------------- */
+
+/* Section headers ("Public Types", "Public Functions", etc.) */
+.breathe-sectiondef-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--sy-c-border, #e0e0e0);
+}
+
+/* Signature blocks — make them visually distinct */
+dl.cpp dt.sig {
+  background: var(--sy-c-surface, #f5f5f5);
+  border-left: 3px solid var(--sy-c-accent, #5c6bc0);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: 0 4px 4px 0;
+  font-family: var(--sy-font-mono, "SF Mono", "Fira Code", monospace);
+  font-size: 0.9rem;
+}
+
+/* Override dark-mode background */
+html[data-theme="dark"] dl.cpp dt.sig,
+html.sy-dark dl.cpp dt.sig {
+  background: var(--sy-c-surface, #1e1e2e);
+}
+
+/* Descriptions below signatures */
+dl.cpp dd {
+  margin-left: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding-top: 0.25rem;
+}
+
+/* Parameter lists */
+.breatheparameterlist {
+  margin-top: 0.5rem;
+}
+
+/* Type references in signatures */
+.sig-prename {
+  color: var(--sy-c-dim, #888);
+}
+
+.sig-name {
+  font-weight: 700;
+  color: var(--sy-c-heading, #222);
+}
+
+/* Override dark-mode signature name */
+html[data-theme="dark"] .sig-name,
+html.sy-dark .sig-name {
+  color: var(--sy-c-heading, #eee);
+}
+
+/* Brief descriptions (the first line after the signature) */
+dl.cpp dd > p:first-child {
+  margin-top: 0.25rem;
+}
+
+/* Enum value tables */
+.breathe-sectiondef table.field-list {
+  margin-left: 0;
+  border-collapse: collapse;
+}
+
+.breathe-sectiondef table.field-list th,
+.breathe-sectiondef table.field-list td {
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}

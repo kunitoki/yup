@@ -9,6 +9,11 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.13"
+  apt_packages:
+    - doxygen
+  jobs:
+    pre_build:
+      - doxygen Doxyfile
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:

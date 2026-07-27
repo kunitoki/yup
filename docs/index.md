@@ -55,4 +55,5 @@ imaging/index
 ui/index
 audio/index
 scripting/index
+api-reference/index
 ```
