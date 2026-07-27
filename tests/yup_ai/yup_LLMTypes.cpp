@@ -37,6 +37,11 @@ public:
     {
     }
 
+    explicit TestLLMClient (Options optionsToUse)
+        : LLMClient (std::move (optionsToUse))
+    {
+    }
+
     LLMResponse complete (const Request&) override
     {
         LLMResponse response;
@@ -90,6 +95,76 @@ TEST (YupAiLLMMessage, SerializesToolCalls)
     EXPECT_EQ ("abc", parsed->toolCalls->front().arguments["query"].toString());
 }
 
+TEST (YupAiLLMMessage, CreatesToolResultMessage)
+{
+    auto message = LLMMessage::toolResult ("call_42", "done");
+
+    EXPECT_EQ (LLMMessage::Role::tool, message.role);
+    EXPECT_EQ ("done", message.content);
+    ASSERT_TRUE (message.toolCallId.has_value());
+    EXPECT_EQ ("call_42", *message.toolCallId);
+}
+
+TEST (YupAiLLMMessage, SerializesToolResultMessage)
+{
+    auto message = LLMMessage::toolResult ("call_42", "done");
+
+    auto parsed = LLMMessage::fromVar (message.toVar());
+
+    ASSERT_TRUE (parsed.has_value());
+    EXPECT_EQ (LLMMessage::Role::tool, parsed->role);
+    EXPECT_EQ ("done", parsed->content);
+    ASSERT_TRUE (parsed->toolCallId.has_value());
+    EXPECT_EQ ("call_42", *parsed->toolCallId);
+}
+
+TEST (YupAiLLMMessage, ParsesFlatToolCall)
+{
+    auto message = LLMMessage::fromVar (JSON::parse (R"({
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call_flat",
+                "type": "function",
+                "name": "lookup",
+                "arguments": { "query": "abc" }
+            }
+        ]
+    })"));
+
+    ASSERT_TRUE (message.has_value());
+    ASSERT_TRUE (message->toolCalls.has_value());
+    ASSERT_EQ (1u, message->toolCalls->size());
+    EXPECT_EQ ("lookup", message->toolCalls->front().name);
+}
+
+TEST (YupAiLLMMessage, FromVarRejectsNonObject)
+{
+    EXPECT_FALSE (LLMMessage::fromVar (var (42)).has_value());
+    EXPECT_FALSE (LLMMessage::fromVar (var ("string")).has_value());
+}
+
+TEST (YupAiLLMMessage, FromVarRejectsUnknownRole)
+{
+    EXPECT_FALSE (LLMMessage::fromVar (JSON::parse (R"({
+        "role": "bogus",
+        "content": "hello"
+    })"))
+                      .has_value());
+}
+
+TEST (YupAiLLMMessage, RoleFromStringReturnsNulloptForUnknown)
+{
+    EXPECT_FALSE (LLMMessage::roleFromString ("unknown").has_value());
+    EXPECT_FALSE (LLMMessage::roleFromString ("").has_value());
+}
+
+TEST (YupAiLLMToolCall, FromVarRejectsNonObject)
+{
+    EXPECT_FALSE (LLMToolCall::fromVar (var ("not an object")).has_value());
+}
+
 TEST (YupAiLLMTool, GeneratesOpenAiSchema)
 {
     LLMTool tool;
@@ -121,6 +196,94 @@ TEST (YupAiLLMTool, DispatchesHandlerAndReportsMissingHandler)
     LLMTool missing;
     missing.name = "missing";
     EXPECT_TRUE (static_cast<bool> (missing.execute (var())["error"]));
+}
+
+TEST (YupAiLLMTool, GeneratesSchemaWithDefaultValue)
+{
+    LLMTool tool;
+    tool.name = "counter";
+    tool.description = "Counts items";
+    tool.parameters.push_back ({ "count", "integer", "Number of items", true, std::nullopt, var (10) });
+
+    auto schema = tool.toJsonSchema();
+
+    EXPECT_EQ (10, static_cast<int> (schema["function"]["parameters"]["properties"]["count"]["default"]));
+}
+
+TEST (YupAiLLMTool, GeneratesSchemaWithNestedProperties)
+{
+    LLMTool tool;
+    tool.name = "set_color";
+    tool.description = "Sets color";
+
+    LLMTool::Parameter colorParam;
+    colorParam.name = "color";
+    colorParam.type = "object";
+    colorParam.description = "Color object";
+    colorParam.properties = std::vector<LLMTool::Parameter> {
+        { "r", "integer", "Red channel", true },
+        { "g", "integer", "Green channel", true },
+        { "b", "integer", "Blue channel", true },
+        { "a", "number", "Alpha channel", false }
+    };
+
+    tool.parameters.push_back (colorParam);
+
+    auto schema = tool.toJsonSchema();
+
+    auto& colorSchema = schema["function"]["parameters"]["properties"]["color"];
+    EXPECT_EQ ("object", colorSchema["type"].toString());
+
+    auto& nestedProps = colorSchema["properties"];
+    EXPECT_EQ ("integer", nestedProps["r"]["type"].toString());
+    EXPECT_EQ ("integer", nestedProps["g"]["type"].toString());
+    EXPECT_EQ ("integer", nestedProps["b"]["type"].toString());
+    EXPECT_EQ ("number", nestedProps["a"]["type"].toString());
+
+    auto& required = colorSchema["required"];
+    EXPECT_TRUE (required.isArray());
+    EXPECT_EQ (3, required.size());
+    EXPECT_EQ ("r", required[0].toString());
+    EXPECT_EQ ("g", required[1].toString());
+    EXPECT_EQ ("b", required[2].toString());
+}
+
+TEST (YupAiLLMToolRegistry, UnregistersAndFindsTools)
+{
+    LLMToolRegistry registry;
+
+    LLMTool tool;
+    tool.name = "double";
+    tool.setHandler ([] (const var& arguments)
+    {
+        return static_cast<int> (arguments["value"]) * 2;
+    });
+    registry.registerTool (std::move (tool));
+
+    EXPECT_TRUE (registry.contains ("double"));
+
+    registry.unregisterTool ("double");
+
+    EXPECT_FALSE (registry.contains ("double"));
+    EXPECT_EQ (nullptr, registry.findTool ("double"));
+}
+
+TEST (YupAiLLMToolRegistry, DispatchUnknownToolReturnsError)
+{
+    LLMToolRegistry registry;
+
+    auto result = registry.dispatchToolCall ("nonexistent", var());
+
+    ASSERT_TRUE (result.isObject());
+    EXPECT_TRUE (static_cast<bool> (result["error"]));
+    EXPECT_TRUE (result["message"].toString().contains ("Unknown tool"));
+}
+
+TEST (YupAiLLMToolRegistry, FindToolReturnsNullForMissing)
+{
+    LLMToolRegistry registry;
+
+    EXPECT_EQ (nullptr, registry.findTool ("missing"));
 }
 
 TEST (YupAiLLMToolRegistry, RegistersFindsAndDispatchesTools)
@@ -320,6 +483,181 @@ TEST (YupAiLLMResponse, AccumulatesStreamingToolCallArguments)
     EXPECT_EQ ("darkgreen", toolCalls.front().arguments["color"].toString());
 }
 
+TEST (YupAiLLMResponse, ParsesOpenAiErrorAsString)
+{
+    auto json = JSON::parse (R"({
+        "error": "unauthorized"
+    })");
+
+    auto response = LLMResponse::fromOpenAiJson (json);
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("unauthorized", *response.errorMessage);
+}
+
+TEST (YupAiLLMResponse, ParsesOpenAiErrorObjectWithoutMessage)
+{
+    auto json = JSON::parse (R"({
+        "error": {
+            "type": "invalid_request_error"
+        }
+    })");
+
+    auto response = LLMResponse::fromOpenAiJson (json);
+
+    EXPECT_FALSE (response.failed());
+    EXPECT_FALSE (response.errorMessage.has_value());
+}
+
+TEST (YupAiLLMResponse, ParsesVoidJsonReturnsError)
+{
+    auto response = LLMResponse::fromOpenAiJson (var());
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
+}
+
+TEST (YupAiLLMResponse, ParsesVoidStreamChunkReturnsError)
+{
+    auto response = LLMResponse::fromStreamChunk (var());
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_TRUE (response.errorMessage->containsIgnoreCase ("Unable to parse"));
+}
+
+TEST (YupAiLLMResponse, AppendsStreamChunkWithError)
+{
+    auto errorChunk = LLMResponse::fromError ("stream error");
+
+    LLMResponse accumulated;
+    accumulated.model = "test-model";
+    accumulated.appendStreamChunk (errorChunk);
+
+    EXPECT_TRUE (accumulated.failed());
+    ASSERT_TRUE (accumulated.errorMessage.has_value());
+    EXPECT_EQ ("stream error", *accumulated.errorMessage);
+}
+
+TEST (YupAiLLMResponse, AppendsStreamChunkNonAssistantRoleRetained)
+{
+    auto first = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": { "role": "system", "content": "system message" },
+                "finish_reason": null
+            }
+        ]
+    })"));
+
+    auto second = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": { "content": " more text" },
+                "finish_reason": "stop"
+            }
+        ]
+    })"));
+
+    LLMResponse accumulated;
+    accumulated.appendStreamChunk (first);
+    accumulated.appendStreamChunk (second);
+
+    ASSERT_EQ (1u, accumulated.choices.size());
+    EXPECT_EQ (LLMMessage::Role::system, accumulated.choices.front().message.role);
+    EXPECT_EQ ("system message more text", accumulated.choices.front().message.content);
+}
+
+TEST (YupAiLLMResponse, AppendsStreamChunkNegativeToolCallIndexSkipped)
+{
+    auto chunk = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "index": -1,
+                            "id": "call_bad",
+                            "type": "function",
+                            "function": { "name": "bad_tool", "arguments": "{}" }
+                        }
+                    ]
+                },
+                "finish_reason": null
+            }
+        ]
+    })"));
+
+    LLMResponse accumulated;
+    accumulated.appendStreamChunk (chunk);
+
+    EXPECT_FALSE (accumulated.hasToolCalls());
+}
+
+TEST (YupAiLLMResponse, AppendsStreamChunkEmptyMergedArguments)
+{
+    auto chunk = LLMResponse::fromStreamChunk (JSON::parse (R"({
+        "model": "test-model",
+        "choices": [
+            {
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_1",
+                            "type": "function",
+                            "function": { "name": "lookup", "arguments": "" }
+                        }
+                    ]
+                },
+                "finish_reason": null
+            }
+        ]
+    })"));
+
+    LLMResponse accumulated;
+    accumulated.appendStreamChunk (chunk);
+
+    ASSERT_TRUE (accumulated.hasToolCalls());
+    auto toolCalls = accumulated.getToolCalls();
+    ASSERT_EQ (1u, toolCalls.size());
+    EXPECT_EQ ("lookup", toolCalls.front().name);
+    EXPECT_EQ ("", toolCalls.front().arguments.toString());
+}
+
+TEST (YupAiLLMResponse, FromErrorWithEmptyString)
+{
+    auto response = LLMResponse::fromError ("");
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("Unknown AI response error", *response.errorMessage);
+}
+
+TEST (YupAiLLMResponse, ParsesErrorAsStringInStreamChunk)
+{
+    auto chunk = JSON::parse (R"({
+        "error": "rate limit exceeded"
+    })");
+
+    auto response = LLMResponse::fromStreamChunk (chunk);
+
+    EXPECT_TRUE (response.failed());
+    ASSERT_TRUE (response.errorMessage.has_value());
+    EXPECT_EQ ("rate limit exceeded", *response.errorMessage);
+}
+
 TEST (YupAiLLMClient, BuildsChatCompletionBody)
 {
     TestLLMClient client;
@@ -356,6 +694,153 @@ TEST (YupAiLLMClient, SerializesSpecificToolChoice)
 
     EXPECT_EQ ("function", body["tool_choice"]["type"].toString());
     EXPECT_EQ ("set_background_color", body["tool_choice"]["function"]["name"].toString());
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithAllOptions)
+{
+    TestLLMClient client;
+
+    LLMClient::Request request;
+    request.systemPrompt = "be brief";
+    request.messages.push_back (LLMMessage::user ("hello"));
+    request.temperature = 0.5f;
+    request.topP = 0.9f;
+    request.maxTokens = 64;
+    request.toolChoice = "none";
+    request.stopSequences = std::vector<String> { "\n\n", "END" };
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_NEAR (0.9, static_cast<double> (body["top_p"]), 1e-5);
+    EXPECT_EQ ("none", body["tool_choice"].toString());
+    ASSERT_TRUE (body["stop"].isArray());
+    EXPECT_EQ ("\n\n", body["stop"][0].toString());
+    EXPECT_EQ ("END", body["stop"][1].toString());
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithGrammarAndCache)
+{
+    LLMClient::Options opts;
+    opts.grammar = "root ::= ...";
+    opts.userAgent = "my-app";
+    opts.reasoningEffort = "high";
+    TestLLMClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_EQ ("high", body["reasoning_effort"].toString());
+    EXPECT_EQ ("root ::= ...", body["grammar"].toString());
+    EXPECT_EQ ("my-app", body["prompt_cache_key"].toString());
+    EXPECT_EQ ("24h", body["prompt_cache_retention"].toString());
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithPerRequestGrammar)
+{
+    LLMClient::Options opts;
+    opts.grammar = "default_grammar";
+    TestLLMClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+    request.grammar = "per_request_grammar";
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_EQ ("per_request_grammar", body["grammar"].toString());
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithJsonSchema)
+{
+    TestLLMClient client;
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+    request.schema = JSON::parse (R"({"type":"object","properties":{"name":{"type":"string"}}})");
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_EQ ("json_schema", body["response_format"]["type"].toString());
+    EXPECT_EQ ("response", body["response_format"]["json_schema"]["name"].toString());
+    EXPECT_TRUE (static_cast<bool> (body["response_format"]["json_schema"]["strict"]));
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithModel)
+{
+    LLMClient::Options opts;
+    opts.model = "gpt-4";
+    TestLLMClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_EQ ("gpt-4", body["model"].toString());
+}
+
+TEST (YupAiLLMClient, BuildsChatCompletionBodyWithNoTemperature)
+{
+    LLMClient::Options opts;
+    opts.noTemperature = true;
+    TestLLMClient client (opts);
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+    request.temperature = 0.5f;
+
+    auto body = JSON::parse (client.buildBody (request, false));
+
+    EXPECT_FALSE (body.hasProperty ("temperature"));
+}
+
+TEST (YupAiLLMClient, ChatMethodCreatesRequestAndReturnsResponse)
+{
+    TestLLMClient client;
+
+    auto response = client.chat ("hello");
+
+    ASSERT_EQ (1u, response.choices.size());
+    EXPECT_EQ ("done", response.choices.front().message.content);
+}
+
+TEST (YupAiLLMClient, ChatWithToolsCreatesRequestWithAllTools)
+{
+    TestLLMClient client;
+
+    LLMToolRegistry registry;
+    LLMTool tool;
+    tool.name = "echo";
+    tool.description = "Echoes";
+    registry.registerTool (std::move (tool));
+
+    auto response = client.chatWithTools ("hello", registry);
+
+    ASSERT_EQ (1u, response.choices.size());
+    EXPECT_EQ ("done", response.choices.front().message.content);
+}
+
+TEST (YupAiLLMClient, RunToolLoopCompletesWithoutToolCalls)
+{
+    TestLLMClient client;
+
+    LLMClient::Request request;
+    request.messages.push_back (LLMMessage::user ("hello"));
+    LLMToolRegistry registry;
+
+    auto response = client.runToolLoop (request, registry);
+
+    ASSERT_EQ (1u, response.choices.size());
+    EXPECT_EQ ("done", response.choices.front().message.content);
+}
+
+TEST (YupAiLLMClient, GetOptionsReturnsReference)
+{
+    TestLLMClient client;
+
+    EXPECT_TRUE (client.getOptions().model.isEmpty());
 }
 
 TEST (YupAiEmbeddingModel, ComputesCosineSimilarity)
