@@ -19,13 +19,28 @@
   ==============================================================================
 */
 
-#include "yup_audio_gui/yup_AudioPeakProfile.cpp"
-#include "yup_audio_gui/yup_AudioPeakProfileCache.cpp"
-#include "yup_audio_gui/yup_AudioThumbnail.cpp"
-#include "yup_audio_gui/yup_AudioGraphComponent.cpp"
-#include "yup_audio_gui/yup_AudioViewComponent.cpp"
-#include "yup_audio_gui/yup_CartesianPlane.cpp"
-#include "yup_audio_gui/yup_KMeterComponent.cpp"
-#include "yup_audio_gui/yup_SpectrumAnalyzerComponent.cpp"
-#include "yup_audio_gui/yup_SpectrogramComponent.cpp"
-#include "yup_audio_gui/yup_AudioDeviceManagerPanel.cpp"
+namespace yup
+{
+
+AudioDeviceManagerWindow::AudioDeviceManagerWindow (AudioDeviceManager& manager,
+                                                    const ComponentNative::Options& options)
+    : DocumentWindow (ComponentNative::Options (options).withResizableWindow (true))
+    , panel (std::make_unique<AudioDeviceManagerPanel> (manager))
+{
+    setTitle ("Audio Device Settings");
+    addAndMakeVisible (*panel);
+    midiDeviceListConnection = panel->makeMidiDeviceListConnection();
+    centreWithSize ({ 470, 680 });
+}
+
+void AudioDeviceManagerWindow::resized()
+{
+    panel->setBounds (getLocalBounds());
+}
+
+void AudioDeviceManagerWindow::userTriedToCloseWindow()
+{
+    setVisible (false);
+}
+
+} // namespace yup

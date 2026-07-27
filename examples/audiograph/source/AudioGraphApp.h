@@ -147,7 +147,10 @@ private:
     yup::TextButton openButton;
     yup::TextButton saveButton;
     yup::TextButton scanButton;
+    yup::TextButton settingsButton;
     yup::Label statusLabel;
+
+    std::unique_ptr<yup::AudioDeviceManagerWindow> deviceManagerWindow;
 
     bool audioCallbackRegistered = false;
 
