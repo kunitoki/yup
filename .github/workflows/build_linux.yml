@@ -45,6 +45,8 @@ jobs:
         fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Test OpenGL Version
+      run: xvfb-run glxinfo | grep "OpenGL version"
     - name: Configure
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - name: Build SDL
@@ -77,7 +79,9 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: xvfb-run -a ./yup_tests
+      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_filter=-GpuDeviceOpenGL*
+    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+      run: xvfb-run -a ./yup_tests --gtest_filter=GpuDeviceOpenGL*
 
   build_tests_release:
     runs-on: ubuntu-latest
@@ -98,7 +102,9 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: xvfb-run -a ./yup_tests
+      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_filter=-GpuDeviceOpenGL*
+    - working-directory: ${{ runner.workspace }}/build/tests/Release
+      run: xvfb-run -a ./yup_tests --gtest_filter=GpuDeviceOpenGL*
 
   build_console:
     runs-on: ubuntu-latest
