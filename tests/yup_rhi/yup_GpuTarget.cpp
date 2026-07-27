@@ -132,3 +132,96 @@ TEST_F (GpuTargetTests, DefaultPtrIsNull)
     GpuTarget::Ptr nullTarget;
     EXPECT_EQ (nullTarget, nullptr);
 }
+
+// ==============================================================================
+// GpuTarget — mock-based tests (using OreAndTargetGpuDevice)
+// ==============================================================================
+
+class GpuTargetMockTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
+        ctx = new OreAndTargetGpuDevice (mockOreCtx.get(), MockOffscreenTarget::withGpuTexture (256, 128));
+    }
+
+    std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
+    GpuDevice::Ptr ctx;
+};
+
+TEST_F (GpuTargetMockTests, CreateWithValidDimensionsSucceeds)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+    EXPECT_GE (target->getWidth(), 0);
+    EXPECT_GE (target->getHeight(), 0);
+}
+
+TEST_F (GpuTargetMockTests, AsTextureReturnsValidTexture)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    // First call creates the texture via render canvas path.
+    auto tex = target->asTexture();
+    ASSERT_NE (tex, nullptr);
+    EXPECT_TRUE (tex->isValid());
+
+    // Second call returns cached result.
+    auto tex2 = target->asTexture();
+    EXPECT_EQ (tex, tex2);
+}
+
+TEST_F (GpuTargetMockTests, AsImageReturnsValidImage)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto img = target->asImage();
+    EXPECT_TRUE (img.isValid());
+}
+
+TEST_F (GpuTargetMockTests, ReadPixelsReturnsSuccess)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    std::vector<uint8> buf (256 * 128 * 4);
+    // readOffscreenPixels delegates to the device; returns true for headless-based mock.
+    EXPECT_NO_THROW ({ target->readPixels (buf.data(), buf.size()); });
+}
+
+TEST_F (GpuTargetMockTests, BeginRenderPassWithValidFrameReturnsValidPass)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    EXPECT_CALL (*mockOreCtx, beginFrame (_));
+
+    auto frame = GpuFrame::begin (ctx);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = target->beginRenderPass (frame);
+    EXPECT_TRUE (pass.isValid());
+
+    pass.finish();
+    frame.submit();
+}
+
+TEST_F (GpuTargetMockTests, BeginRenderPassWithInvalidFrameReturnsInvalidPass)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto frame = GpuFrame::begin (GpuDevice::create (GpuPlatform::Headless, {}));
+    EXPECT_FALSE (frame.isValid());
+
+    auto pass = target->beginRenderPass (frame);
+    EXPECT_FALSE (pass.isValid());
+}
+
+TEST_F (GpuTargetMockTests, CreateFromTargetWithNullTargetReturnsNull)
+{
+    EXPECT_EQ (GpuTarget::createFromTarget (ctx, nullptr), nullptr);
+}

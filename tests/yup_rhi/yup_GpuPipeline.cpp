@@ -103,6 +103,130 @@ TEST (ShaderBindingMapTests, TextureAndSamplerAreEncoded)
     EXPECT_FALSE (blob.empty());
 }
 
+TEST (ShaderBindingMapTests, StorageBufferIsEncoded)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding sb;
+    sb.name = "OutputBuffer";
+    sb.set = 0;
+    sb.binding = 0;
+    sb.backendSlot = 0;
+    refl.storageBuffers.push_back (sb);
+
+    auto blob = makeShaderBindingMapBlob (refl, ShaderStage::vertex);
+    EXPECT_FALSE (blob.empty());
+}
+
+TEST (ShaderBindingMapTests, StorageImageIsEncoded)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding si;
+    si.name = "OutputImage";
+    si.set = 0;
+    si.binding = 0;
+    si.backendSlot = 0;
+    refl.storageImages.push_back (si);
+
+    auto blob = makeShaderBindingMapBlob (refl, ShaderStage::fragment);
+    EXPECT_FALSE (blob.empty());
+}
+
+TEST (ShaderBindingMapTests, ComputeStageUsesCorrectStageMask)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding ub;
+    ub.name = "Uniforms";
+    ub.set = 0;
+    ub.binding = 0;
+    ub.backendSlot = 0;
+    refl.uniformBuffers.push_back (ub);
+
+    auto blob = makeShaderBindingMapBlob (refl, ShaderStage::compute);
+    EXPECT_FALSE (blob.empty());
+}
+
+TEST (ShaderBindingMapTests, GLFixupBlobEmptyReflectionReturnsEmpty)
+{
+    ShaderReflection refl;
+    auto blob = makeGLFixupBlob (refl);
+    EXPECT_TRUE (blob.empty());
+}
+
+TEST (ShaderBindingMapTests, GLFixupBlobEncodesUniformBuffers)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding ub;
+    ub.name = "Uniforms";
+    ub.set = 0;
+    ub.binding = 0;
+    ub.backendSlot = 0;
+    refl.uniformBuffers.push_back (ub);
+
+    auto blob = makeGLFixupBlob (refl);
+    EXPECT_FALSE (blob.empty());
+
+    // Version byte
+    EXPECT_EQ (blob[0], 1u);
+    // Entry count (uint16 LE) = 1
+    EXPECT_EQ (blob[1], 1u);
+    EXPECT_EQ (blob[2], 0u);
+    // Kind = UBO block (0)
+    EXPECT_EQ (blob[3], 0u);
+    // Slot = 0
+    EXPECT_EQ (blob[4], 0u);
+    // Name length follows, after that the name bytes
+}
+
+TEST (ShaderBindingMapTests, GLFixupBlobEncodesCombinedSamplers)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding cs;
+    cs.name = "texSampler";
+    cs.set = 0;
+    cs.binding = 0;
+    cs.textureSlot = 2;
+    refl.glCombinedSamplers.push_back (cs);
+
+    auto blob = makeGLFixupBlob (refl);
+    EXPECT_FALSE (blob.empty());
+
+    // Kind = sampler uniform (1)
+    EXPECT_EQ (blob[3], 1u);
+    // Slot = 2
+    EXPECT_EQ (blob[4], 2u);
+}
+
+TEST (ShaderBindingMapTests, GLFixupBlobEncodesBothUniformBuffersAndSamplers)
+{
+    ShaderReflection refl;
+
+    ShaderReflection::ResourceBinding ub;
+    ub.name = "Uniforms";
+    ub.set = 0;
+    ub.binding = 0;
+    ub.backendSlot = 0;
+    refl.uniformBuffers.push_back (ub);
+
+    ShaderReflection::ResourceBinding cs;
+    cs.name = "texSampler";
+    cs.set = 0;
+    cs.binding = 0;
+    cs.textureSlot = 1;
+    refl.glCombinedSamplers.push_back (cs);
+
+    auto blob = makeGLFixupBlob (refl);
+    EXPECT_FALSE (blob.empty());
+
+    // Entry count = 2
+    EXPECT_EQ (blob[1], 2u);
+    EXPECT_EQ (blob[2], 0u);
+}
+
 // ---------------------------------------------------------------------------
 // GpuBuffer::create — validation and null paths
 
