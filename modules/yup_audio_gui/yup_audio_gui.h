@@ -32,7 +32,7 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_audio_basics yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
+    dependencies:         yup_audio_basics yup_audio_devices yup_audio_formats yup_audio_processors yup_audio_graph yup_dsp yup_gui
 
   END_YUP_MODULE_DECLARATION
 
@@ -47,6 +47,7 @@
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_audio_graph/yup_audio_graph.h>
 #include <yup_dsp/yup_dsp.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
@@ -62,3 +63,10 @@
 #include "metering/yup_KMeterComponent.h"
 #include "graph/yup_AudioGraphNodeView.h"
 #include "graph/yup_AudioGraphComponent.h"
+#include "device_manager/yup_DeviceTypeSelector.h"
+#include "device_manager/yup_DeviceIOSelector.h"
+#include "device_manager/yup_RateBufferSelector.h"
+#include "device_manager/yup_ChannelSection.h"
+#include "device_manager/yup_MidiSection.h"
+#include "device_manager/yup_AudioDeviceManagerPanel.h"
+#include "device_manager/yup_AudioDeviceManagerWindow.h"
