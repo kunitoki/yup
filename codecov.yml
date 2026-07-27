@@ -10,6 +10,7 @@ coverage:
     project:
       default:
         informational: true
+        if_ci_failed: error
         target: 80%
         threshold: 5%
         base: auto
@@ -35,6 +36,7 @@ coverage:
     patch:
       default:
         informational: true
+        if_ci_failed: error
         target: 80%
         threshold: 5%
 
