@@ -129,13 +129,15 @@ def setup(app):
     docutils Inliner has a fallback reporter so the build doesn't crash.
     """
     from docutils.parsers.rst.states import Inliner
-    from docutils.utils import Reporter
+    from docutils.utils import Reporter as _DocutilsReporter
 
     _orig_init = Inliner.__init__
 
     def _patched_init(self, *args, **kwargs):
         _orig_init(self, *args, **kwargs)
-        if not hasattr(self, "reporter"):
-            self.reporter = Reporter("", 0, 0)
+        if not hasattr(self, "reporter") or not hasattr(self.reporter, "get_source_and_line"):
+            r = _DocutilsReporter("", 0, 0)
+            r.get_source_and_line = lambda lineno: ("", lineno)
+            self.reporter = r
 
     Inliner.__init__ = _patched_init
