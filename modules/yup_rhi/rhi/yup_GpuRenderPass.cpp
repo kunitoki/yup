@@ -461,6 +461,28 @@ bool GpuRenderPass::finish()
     if (i == nullptr || i->finished)
         return false;
 
+    // When a clear was requested but no draw was submitted (no pipeline set),
+    // encode a clear-only render pass so the framebuffer is actually cleared.
+    if (i->options.clear && i->orePipeline == nullptr && i->oreCtx != nullptr && i->outputTexture != nullptr)
+    {
+        auto outputView = Impl::createView (*i->oreCtx, *i->outputTexture, true);
+        if (outputView != nullptr)
+        {
+            rive::ore::RenderPassDesc rpDesc;
+            rpDesc.colorCount = 1;
+            rpDesc.colorAttachments[0].view = outputView.get();
+            rpDesc.colorAttachments[0].loadOp = rive::ore::LoadOp::clear;
+            rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
+            rpDesc.colorAttachments[0].clearColor = { i->options.clearColor.red,
+                                                      i->options.clearColor.green,
+                                                      i->options.clearColor.blue,
+                                                      i->options.clearColor.alpha };
+
+            auto renderPass = i->oreCtx->beginRenderPass (rpDesc);
+            renderPass->finish();
+        }
+    }
+
     i->finished = true;
     return true;
 }
