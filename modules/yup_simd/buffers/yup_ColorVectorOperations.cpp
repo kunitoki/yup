@@ -74,6 +74,58 @@ void YUP_CALLTYPE ColorVectorOperations::convertARGBtoRGBA (const uint32* src, u
     }
 }
 
+//==============================================================================
+void YUP_CALLTYPE ColorVectorOperations::convertBGRAtoRGBA (uint8* pixels, int numPixels) noexcept
+{
+    if (numPixels <= 0)
+        return;
+
+#if YUP_USE_SSE_INTRINSICS
+    {
+        // 4 pixels (16 bytes) per iteration using pshufb.
+        // Mask: swap byte 0↔2, 4↔6, 8↔10, 12↔14 within each pixel quad.
+        // Lanes: [2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15]
+        // _mm_set_epi8 args go MSB→LSB (byte 15 → byte 0):
+        const __m128i shuffleMask = _mm_set_epi8 (15, 12, 13, 14, 11, 8, 9, 10, 7, 4, 5, 6, 3, 0, 1, 2);
+        const int simdPixels = numPixels & ~3; // round down to multiple of 4
+        auto* simdBytes = pixels;
+        for (int i = 0; i < simdPixels; i += 4)
+        {
+            const __m128i v = _mm_loadu_si128 ((const __m128i*) simdBytes);
+            _mm_storeu_si128 ((__m128i*) simdBytes, _mm_shuffle_epi8 (v, shuffleMask));
+            simdBytes += 16;
+        }
+
+        // Scalar tail for remaining < 4 pixels.
+        pixels = simdBytes;
+        numPixels &= 3;
+    }
+#elif YUP_USE_ARM_NEON
+    {
+        // Same byte-permute mask using vtbl.
+        const uint8x16_t shuffleMask = { 2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15 };
+        const int simdPixels = numPixels & ~3;
+        auto* simdBytes = pixels;
+        for (int i = 0; i < simdPixels; i += 4)
+        {
+            const uint8x16_t v = vld1q_u8 (simdBytes);
+            vst1q_u8 (simdBytes, vqtbl1q_u8 (v, shuffleMask));
+            simdBytes += 16;
+        }
+
+        pixels = simdBytes;
+        numPixels &= 3;
+    }
+#endif
+
+    // Scalar tail (or full loop when no SIMD is available).
+    for (int i = 0; i < numPixels; ++i)
+    {
+        std::swap (pixels[0], pixels[2]);
+        pixels += 4;
+    }
+}
+
 void YUP_CALLTYPE ColorVectorOperations::convertGrayscaleToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept
 {
     for (int i = 0; i < numPixels; ++i)

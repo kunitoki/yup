@@ -355,3 +355,197 @@ TEST (ColorVectorOpsTests, LerpRowsMultiplePixels)
     for (int i = 0; i < 16; ++i)
         EXPECT_NEAR (dst[i], rowA[i] + (rowB[i] - rowA[i]) * 0.5f, 1.0e-4f);
 }
+
+// ==============================================================================
+// convertBGRAtoRGBA tests
+// ==============================================================================
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBASwapsRedAndBlue)
+{
+    uint8 pixels[] = { 10, 20, 30, 40, 50, 60, 70, 80 };
+    // After swap:  R↔B, G and A unchanged
+    // pixel 0: {30, 20, 10, 40}
+    // pixel 1: {70, 60, 50, 80}
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 2);
+
+    EXPECT_EQ (pixels[0], 30);
+    EXPECT_EQ (pixels[1], 20);
+    EXPECT_EQ (pixels[2], 10);
+    EXPECT_EQ (pixels[3], 40);
+    EXPECT_EQ (pixels[4], 70);
+    EXPECT_EQ (pixels[5], 60);
+    EXPECT_EQ (pixels[6], 50);
+    EXPECT_EQ (pixels[7], 80);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBASinglePixel)
+{
+    uint8 pixels[] = { 1, 2, 3, 255 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 1);
+
+    EXPECT_EQ (pixels[0], 3);
+    EXPECT_EQ (pixels[1], 2);
+    EXPECT_EQ (pixels[2], 1);
+    EXPECT_EQ (pixels[3], 255);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBAAllChannelsEqual)
+{
+    // When R == B, the swap is a no-op.
+    uint8 pixels[] = { 100, 200, 100, 255 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 1);
+
+    EXPECT_EQ (pixels[0], 100);
+    EXPECT_EQ (pixels[1], 200);
+    EXPECT_EQ (pixels[2], 100);
+    EXPECT_EQ (pixels[3], 255);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBAAllZero)
+{
+    uint8 pixels[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 2);
+
+    EXPECT_EQ (pixels[0], 0);
+    EXPECT_EQ (pixels[1], 0);
+    EXPECT_EQ (pixels[2], 0);
+    EXPECT_EQ (pixels[3], 0);
+    EXPECT_EQ (pixels[4], 0);
+    EXPECT_EQ (pixels[5], 0);
+    EXPECT_EQ (pixels[6], 0);
+    EXPECT_EQ (pixels[7], 0);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBAAllOnes)
+{
+    uint8 pixels[] = { 255, 255, 255, 255, 255, 255, 255, 255 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 2);
+
+    for (int i = 0; i < 8; ++i)
+        EXPECT_EQ (pixels[i], 255);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBAZeroPixels)
+{
+    uint8 pixels[] = { 99, 98, 97, 96 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 0);
+
+    EXPECT_EQ (pixels[0], 99);
+    EXPECT_EQ (pixels[1], 98);
+    EXPECT_EQ (pixels[2], 97);
+    EXPECT_EQ (pixels[3], 96);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBANegativeCount)
+{
+    uint8 pixels[] = { 1, 2, 3, 4 };
+
+    // Should no-op gracefully.
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, -1);
+
+    EXPECT_EQ (pixels[0], 1);
+    EXPECT_EQ (pixels[1], 2);
+    EXPECT_EQ (pixels[2], 3);
+    EXPECT_EQ (pixels[3], 4);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBALargePixelCount)
+{
+    // Exercise SIMD path with 100 pixels (400 bytes) — well past any
+    // scalar tail boundary.
+    constexpr int kCount = 100;
+    uint8 pixels[kCount * 4];
+    for (int i = 0; i < kCount; ++i)
+    {
+        pixels[i * 4 + 0] = (uint8) (i & 0xff);       // R = i
+        pixels[i * 4 + 1] = (uint8) ((i * 2) & 0xff); // G
+        pixels[i * 4 + 2] = (uint8) ((i * 3) & 0xff); // B
+        pixels[i * 4 + 3] = (uint8) ((i * 5) & 0xff); // A
+    }
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, kCount);
+
+    for (int i = 0; i < kCount; ++i)
+    {
+        EXPECT_EQ (pixels[i * 4 + 0], (uint8) ((i * 3) & 0xff)); // was B
+        EXPECT_EQ (pixels[i * 4 + 1], (uint8) ((i * 2) & 0xff)); // G unchanged
+        EXPECT_EQ (pixels[i * 4 + 2], (uint8) (i & 0xff));       // was R
+        EXPECT_EQ (pixels[i * 4 + 3], (uint8) ((i * 5) & 0xff)); // A unchanged
+    }
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGBAOddPixelCount)
+{
+    // 5 pixels = 20 bytes — not a multiple of 4 (SIMD) pixels.
+    // The scalar tail path handles the last pixel.
+    uint8 pixels[] = {
+        1, 2, 10, 255, // R=1, G=2, B=10, A=255
+        3,
+        4,
+        20,
+        128, // R=3, G=4, B=20, A=128
+        5,
+        6,
+        30,
+        64, // R=5, G=6, B=30, A=64
+        7,
+        8,
+        40,
+        32, // R=7, G=8, B=40, A=32
+        9,
+        11,
+        50,
+        16 // R=9, G=11, B=50, A=16
+    };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 5);
+
+    EXPECT_EQ (pixels[0], 10); // was B of pixel 0
+    EXPECT_EQ (pixels[1], 2);
+    EXPECT_EQ (pixels[2], 1); // was R of pixel 0
+    EXPECT_EQ (pixels[3], 255);
+
+    EXPECT_EQ (pixels[4], 20);
+    EXPECT_EQ (pixels[5], 4);
+    EXPECT_EQ (pixels[6], 3);
+    EXPECT_EQ (pixels[7], 128);
+
+    EXPECT_EQ (pixels[8], 30);
+    EXPECT_EQ (pixels[9], 6);
+    EXPECT_EQ (pixels[10], 5);
+    EXPECT_EQ (pixels[11], 64);
+
+    EXPECT_EQ (pixels[12], 40);
+    EXPECT_EQ (pixels[13], 8);
+    EXPECT_EQ (pixels[14], 7);
+    EXPECT_EQ (pixels[15], 32);
+
+    EXPECT_EQ (pixels[16], 50);
+    EXPECT_EQ (pixels[17], 11);
+    EXPECT_EQ (pixels[18], 9);
+    EXPECT_EQ (pixels[19], 16);
+}
+
+TEST (ColorVectorOpsTests, ConvertBGRAtoRGRADoubleSwapIsIdentity)
+{
+    // Two swaps should restore the original values.
+    uint8 pixels[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120 };
+
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 3);
+    ColorVectorOperations::convertBGRAtoRGBA (pixels, 3);
+
+    EXPECT_EQ (pixels[0], 10);
+    EXPECT_EQ (pixels[1], 20);
+    EXPECT_EQ (pixels[2], 30);
+    EXPECT_EQ (pixels[3], 40);
+    EXPECT_EQ (pixels[8], 90);
+    EXPECT_EQ (pixels[9], 100);
+    EXPECT_EQ (pixels[10], 110);
+    EXPECT_EQ (pixels[11], 120);
+}

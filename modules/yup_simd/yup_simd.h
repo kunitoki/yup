@@ -118,6 +118,7 @@
 
 #if YUP_USE_SSE_INTRINSICS
 #include <emmintrin.h>
+#include <tmmintrin.h>
 #endif
 
 #if YUP_USE_ARM_NEON

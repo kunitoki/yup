@@ -24,6 +24,7 @@
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/ore/ore_context_gl.hpp"
+
 #include <vector>
 #include <cstring>
 
@@ -398,14 +399,7 @@ public:
 
         auto* bytes = static_cast<uint8_t*> (dst);
         if (needsSwizzle)
-        {
-            for (int y = 0; y < target.height; ++y)
-            {
-                uint8_t* row = bytes + static_cast<size_t> (y) * bytesPerRow;
-                for (int x = 0; x < target.width; ++x)
-                    std::swap (row[x * 4u + 0u], row[x * 4u + 2u]); // R ↔ B
-            }
-        }
+            ColorVectorOperations::convertBGRAtoRGBA (bytes, target.width * target.height);
 
         // Flip vertically: OpenGL framebuffer origin is bottom-left.
         std::vector<uint8_t> rowBuffer (bytesPerRow);

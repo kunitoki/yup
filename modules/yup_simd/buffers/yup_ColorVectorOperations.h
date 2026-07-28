@@ -40,6 +40,17 @@ public:
     */
     static void YUP_CALLTYPE convertARGBtoRGBA (const uint32* src, uint32* dst, int numPixels) noexcept;
 
+    /** Swaps the R and B channels of packed RGBA byte pixels in place.
+
+        On platforms with SIMD support (SSE/NEON) this processes 16 bytes
+        (4 pixels) per iteration using byte-shuffle instructions; otherwise
+        it falls back to a scalar R ↔ B swap loop.
+
+        The pixel count must accurately reflect the number of complete
+        RGBA quads in `pixels`.
+    */
+    static void YUP_CALLTYPE convertBGRAtoRGBA (uint8* pixels, int numPixels) noexcept;
+
     /** Expands 8-bit grayscale pixels to RGBA byte pixels with opaque alpha. */
     static void YUP_CALLTYPE convertGrayscaleToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept;
 
