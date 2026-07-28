@@ -2,8 +2,14 @@ name: Docs
 
 on:
   push:
+    paths:
+      - "**/workflows/docs.yml"
+      - "**/docs/**"
     branches: [main]
   pull_request:
+    paths:
+      - "**/workflows/docs.yml"
+      - "**/docs/**"
     branches: [main]
 
 permissions:
