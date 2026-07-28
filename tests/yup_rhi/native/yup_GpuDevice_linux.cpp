@@ -102,7 +102,7 @@ struct GLContext
     {
         GpuDevice::Options opts;
         opts.loaderFunction = (GpuDevice::LoaderFunction) SDL_GL_GetProcAddress;
-        opts.enableReadPixels = true;
+        opts.readableFramebuffer = true;
 
         auto device = GpuDevice::create (GpuPlatform::OpenGL, opts);
         if (device == nullptr)

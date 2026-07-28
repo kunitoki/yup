@@ -142,7 +142,7 @@ public:
 
         rive::gpu::RenderTarget* getRenderTarget() noexcept override
         {
-            return renderCanvas != nullptr ? renderCanvas->getRenderTarget() : nullptr;
+            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
         }
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
