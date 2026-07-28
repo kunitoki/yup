@@ -54,6 +54,8 @@ struct GLContext
         setenv ("GALLIUM_DRIVER", "llvmpipe", 0);
 #endif
 
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
+
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGL_MAJOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGL_MINOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
