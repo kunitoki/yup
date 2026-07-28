@@ -54,7 +54,7 @@ GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
 {
     GpuFrame frame;
 
-    auto* oreCtx = ctx->gpuContext();
+    auto* oreCtx = ctx->getGpuContext();
     if (oreCtx == nullptr)
         return frame;
 

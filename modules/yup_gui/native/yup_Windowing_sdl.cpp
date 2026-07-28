@@ -719,7 +719,7 @@ Point<float> SDLComponentNative::getCursorPosition() const
 
 rive::Factory* SDLComponentNative::getFactory()
 {
-    return context ? context->factory() : nullptr;
+    return context ? context->getFactory() : nullptr;
 }
 
 //==============================================================================
@@ -836,7 +836,7 @@ void SDLComponentNative::handleAsyncUpdate()
     if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
 
-    renderContext();
+    getRenderContext();
 
     renderEvent.signal();
 }
@@ -863,12 +863,12 @@ void SDLComponentNative::timerCallback()
     pollCapturedMouseState();
 #endif
 
-    renderContext();
+    getRenderContext();
 }
 
 //==============================================================================
 
-void SDLComponentNative::renderContext()
+void SDLComponentNative::getRenderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
 

@@ -194,7 +194,7 @@ rive::Factory* getOffscreenFactory (GraphicsContext& context, RenderableTarget* 
         if (auto* renderContext = target->getRenderContext())
             return renderContext;
 
-    return context.factory();
+    return context.getFactory();
 }
 
 std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context, RenderableTarget* target, int width, int height)
@@ -240,7 +240,7 @@ void Graphics::SavedState::restore()
 Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale) noexcept
     : context (context)
     , offscreenTarget (nullptr)
-    , factory (*context.factory())
+    , factory (*context.getFactory())
     , ownedRenderer (nullptr)
     , renderer (renderer)
     , contextScale (scale)
@@ -939,7 +939,7 @@ void Graphics::drawTexture (const GpuTexture::Ptr& texture, const Rectangle<floa
 
 bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Rectangle<float>& targetArea)
 {
-    auto renderContext = context.renderContext();
+    auto renderContext = context.getRenderContext();
     if (renderContext == nullptr || texture == nullptr)
         return false;
 

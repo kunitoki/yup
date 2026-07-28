@@ -28,44 +28,43 @@
 namespace yup
 {
 
-class LowLevelRenderContextD3D : public GraphicsContext
+class GraphicsContextD3D : public GraphicsContext
 {
 public:
-    LowLevelRenderContextD3D (ComPtr<IDXGIFactory2> d3dFactory,
-                              ComPtr<ID3D11Device> gpu,
-                              ComPtr<ID3D11DeviceContext> gpuContext,
-                              bool isHeadless,
-                              const rive::gpu::D3DContextOptions& contextOptions,
-                              Options options,
-                              GpuDevice::Ptr existingGpu = {})
-        : m_isHeadless (isHeadless)
-        , m_options (options)
-        , m_d3dFactory (std::move (d3dFactory))
-        , m_gpu (std::move (gpu))
-        , m_gpuContext (std::move (gpuContext))
-        , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
+    GraphicsContextD3D (ComPtr<IDXGIFactory2> d3dFactory,
+                        ComPtr<ID3D11Device> device,
+                        ComPtr<ID3D11DeviceContext> deviceContext,
+                        bool isHeadless,
+                        const rive::gpu::D3DContextOptions& contextOptions,
+                        Options options,
+                        GpuDevice::Ptr existingGpu = {})
+        : isHeadless (isHeadless)
+        , options (options)
+        , d3dFactory (std::move (d3dFactory))
+        , device (std::move (device))
+        , deviceContext (std::move (deviceContext))
     {
         if (existingGpu != nullptr)
-            m_gpuContextPtr = std::move (existingGpu);
+            gpuDevice = std::move (existingGpu);
         else
-            m_gpuContextPtr = GpuDevice::create (GpuPlatform::Direct3D, options);
+            gpuDevice = GpuDevice::create (GpuPlatform::Direct3D, options);
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Direct3D; }
 
-    GpuDevice::Ptr getGpuDevice() const noexcept override { return m_gpuContextPtr; }
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
 
-    rive::Factory* factory() override { return m_renderContext.get(); }
+    rive::Factory* getFactory() override { return gpuDevice->getRenderContext(); }
 
-    rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() override { return gpuDevice->getRenderContext(); }
 
-    rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
-        if (! m_isHeadless)
+        if (! isHeadless)
         {
-            m_swapchain.Reset();
+            swapchain.Reset();
             DXGI_SWAP_CHAIN_DESC1 scd {};
             scd.Width = width;
             scd.Height = height;
@@ -75,12 +74,12 @@ public:
             scd.BufferCount = 2;
             scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-            VERIFY_OK (m_d3dFactory->CreateSwapChainForHwnd (m_gpu.Get(),
-                                                             (HWND) window,
-                                                             &scd,
-                                                             nullptr,
-                                                             nullptr,
-                                                             m_swapchain.ReleaseAndGetAddressOf()));
+            VERIFY_OK (d3dFactory->CreateSwapChainForHwnd (device.Get(),
+                                                           (HWND) window,
+                                                           &scd,
+                                                           nullptr,
+                                                           nullptr,
+                                                           swapchain.ReleaseAndGetAddressOf()));
         }
         else
         {
@@ -95,55 +94,55 @@ public:
             desc.BindFlags = D3D11_BIND_RENDER_TARGET;
             desc.CPUAccessFlags = 0;
             desc.MiscFlags = 0;
-            VERIFY_OK (m_gpu->CreateTexture2D (&desc, nullptr, &m_headlessDrawTexture));
+            VERIFY_OK (device->CreateTexture2D (&desc, nullptr, &headlessDrawTexture));
         }
 
-        auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
-        m_renderTarget = renderContextImpl->makeRenderTarget (width, height);
-        m_readbackTexture = nullptr;
+        auto renderContextImpl = getRenderContext()->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
+        renderTarget = renderContextImpl->makeRenderTarget (width, height);
+        readbackTexture = nullptr;
     }
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<rive::RiveRenderer> (m_renderContext.get());
+        return std::make_unique<rive::RiveRenderer> (getRenderContext());
     }
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_renderContext->beginFrame (frameDescriptor);
+        getRenderContext()->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
-        if (m_renderTarget->targetTexture() == nullptr)
+        if (renderTarget->targetTexture() == nullptr)
         {
-            if (m_isHeadless)
-                m_renderTarget->setTargetTexture (m_headlessDrawTexture);
+            if (isHeadless)
+                renderTarget->setTargetTexture (headlessDrawTexture);
             else
             {
                 ComPtr<ID3D11Texture2D> backbuffer;
-                HRESULT hr = m_swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf()));
+                HRESULT hr = swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf()));
                 if (FAILED (hr))
                 {
-                    auto reason = m_gpu->GetDeviceRemovedReason();
+                    auto reason = device->GetDeviceRemovedReason();
                     fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
-                    m_renderTarget->setTargetTexture (nullptr);
+                    renderTarget->setTargetTexture (nullptr);
                     return;
                 }
-                m_renderTarget->setTargetTexture (backbuffer);
+                renderTarget->setTargetTexture (backbuffer);
             }
         }
 
         rive::gpu::RenderContext::FlushResources flushDesc;
-        flushDesc.renderTarget = m_renderTarget.get();
-        m_renderContext->flush (flushDesc);
+        flushDesc.renderTarget = renderTarget.get();
+        getRenderContext()->flush (flushDesc);
 
-        if (! m_isHeadless)
+        if (! isHeadless)
         {
-            HRESULT hr = m_swapchain->Present (0, 0);
+            HRESULT hr = swapchain->Present (0, 0);
             if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
             {
-                auto reason = m_gpu->GetDeviceRemovedReason();
+                auto reason = device->GetDeviceRemovedReason();
                 fprintf (stderr, "D3D: Present returned device removed/reset: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
             }
             else if (FAILED (hr))
@@ -152,24 +151,23 @@ public:
             }
         }
 
-        m_renderTarget->setTargetTexture (nullptr);
+        renderTarget->setTargetTexture (nullptr);
     }
 
 private:
-    const bool m_isHeadless;
-    Options m_options;
-    ComPtr<IDXGIFactory2> m_d3dFactory;
-    ComPtr<ID3D11Device> m_gpu;
-    ComPtr<ID3D11DeviceContext> m_gpuContext;
-    ComPtr<IDXGISwapChain1> m_swapchain;
-    ComPtr<ID3D11Texture2D> m_readbackTexture;
-    ComPtr<ID3D11Texture2D> m_headlessDrawTexture;
-    GpuDevice::Ptr m_gpuContextPtr;
-    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
+    const bool isHeadless;
+    Options options;
+    GpuDevice::Ptr gpuDevice;
+    ComPtr<IDXGIFactory2> d3dFactory;
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> deviceContext;
+    ComPtr<IDXGISwapChain1> swapchain;
+    ComPtr<ID3D11Texture2D> readbackTexture;
+    ComPtr<ID3D11Texture2D> headlessDrawTexture;
+    rive::rcp<rive::gpu::RenderTargetD3D> renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice::Options fiddleOptions, GpuDevice::Ptr existingGpu)
+std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)
 {
     ComPtr<IDXGIFactory2> factory;
     VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
@@ -178,7 +176,7 @@ std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice
     DXGI_ADAPTER_DESC adapterDesc {};
     rive::gpu::D3DContextOptions contextOptions;
 
-    if (fiddleOptions.disableRasterOrdering)
+    if (options.disableRasterOrdering)
     {
         contextOptions.disableRasterizerOrderedViews = true;
         contextOptions.disableTypedUAVLoadStore = true;
@@ -191,8 +189,8 @@ std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice
         break;
     }
 
-    ComPtr<ID3D11Device> gpu;
-    ComPtr<ID3D11DeviceContext> gpuContext;
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> deviceContext;
     D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1 };
 
     UINT creationFlags = 0;
@@ -200,15 +198,15 @@ std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice
     creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    VERIFY_OK (D3D11CreateDevice (adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, creationFlags, featureLevels, std::size (featureLevels), D3D11_SDK_VERSION, gpu.ReleaseAndGetAddressOf(), nullptr, gpuContext.ReleaseAndGetAddressOf()));
+    VERIFY_OK (D3D11CreateDevice (adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, creationFlags, featureLevels, std::size (featureLevels), D3D11_SDK_VERSION, device.ReleaseAndGetAddressOf(), nullptr, deviceContext.ReleaseAndGetAddressOf()));
 
-    if (! gpu || ! gpuContext)
+    if (! device || ! deviceContext)
         return nullptr;
 
     printf ("D3D device: %S\n", adapterDesc.Description);
 
-    return std::make_unique<LowLevelRenderContextD3D> (
-        std::move (factory), std::move (gpu), std::move (gpuContext), fiddleOptions.allowHeadlessRendering, contextOptions, fiddleOptions, std::move (existingGpu));
+    return std::make_unique<GraphicsContextD3D> (
+        std::move (factory), std::move (device), std::move (deviceContext), options.allowHeadlessRendering, contextOptions, options, std::move (existingGpu));
 }
 
 } // namespace yup

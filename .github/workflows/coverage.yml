@@ -96,10 +96,7 @@ jobs:
       run: cmake --build . --target coverage_clean
     - name: Run C++ Tests
       working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_output=xml:test_results.xml --gtest_filter=-GpuDeviceOpenGL*
-    - name: Run GPU Tests (OpenGL)
-      working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: xvfb-run -a ./yup_tests --gtest_filter=GpuDeviceOpenGL*
+      run: xvfb-run -a ./yup_tests
     - name: Generate C++ Coverage Report
       working-directory: ${{ runner.workspace }}/build
       run: |

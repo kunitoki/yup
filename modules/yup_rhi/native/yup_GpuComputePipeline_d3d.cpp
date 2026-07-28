@@ -31,17 +31,17 @@ class GpuComputePipelineD3D11 final : public GpuComputePipeline
 public:
     GpuComputePipelineD3D11 (ComPtr<ID3D11ComputeShader> shader, GpuWorkgroupSize wgs)
         : computeShader (std::move (shader))
-        , workgroupSize_ (wgs)
+        , workgroupSize (wgs)
     {
     }
 
-    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize_; }
+    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize; }
 
     ID3D11ComputeShader* getComputeShader() const noexcept { return computeShader.Get(); }
 
 private:
     ComPtr<ID3D11ComputeShader> computeShader;
-    GpuWorkgroupSize workgroupSize_;
+    GpuWorkgroupSize workgroupSize;
 };
 
 //==============================================================================

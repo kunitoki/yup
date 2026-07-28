@@ -66,17 +66,17 @@ class GpuDeviceDawn : public GpuDevice
 {
 public:
     GpuDeviceDawn (Options options)
-        : m_options (options)
+        : options (options)
     {
         WGPUInstanceDescriptor instanceDescriptor {};
         instanceDescriptor.features.timedWaitAnyEnable = true;
-        m_instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
+        instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
 
         wgpu::RequestAdapterOptions adapterOptions = {
             .powerPreference = wgpu::PowerPreference::HighPerformance,
         };
 
-        auto adapters = m_instance->EnumerateAdapters (&adapterOptions);
+        auto adapters = instance->EnumerateAdapters (&adapterOptions);
 
         wgpu::DawnAdapterPropertiesPowerPreference power_props {};
         wgpu::AdapterProperties adapterProperties {};
@@ -118,20 +118,22 @@ public:
             .requiredFeatures = requiredFeatures.data(),
         };
 
-        m_backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
+        backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
 
         DawnProcTable backendProcs = dawn::native::GetProcs();
         dawnProcSetProcs (&backendProcs);
-        backendProcs.deviceSetUncapturedErrorCallback (m_backendDevice, print_device_error, nullptr);
-        backendProcs.deviceSetDeviceLostCallback (m_backendDevice, device_lost_callback, nullptr);
+        backendProcs.deviceSetUncapturedErrorCallback (backendDevice, print_device_error, nullptr);
+        backendProcs.deviceSetDeviceLostCallback (backendDevice, device_lost_callback, nullptr);
 
-        m_device = wgpu::Device::Acquire (m_backendDevice);
-        m_queue = m_device.GetQueue();
+        device = wgpu::Device::Acquire (backendDevice);
+        queue = device.GetQueue();
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
-    rive::ore::Context* gpuContext() const noexcept override { return nullptr; }
+    rive::gpu::RenderContext* getRenderContext() const override { return nullptr; }
+
+    rive::ore::Context* getGpuContext() const noexcept override { return nullptr; }
 
     bool isComputeAvailable() const noexcept override { return true; }
 
@@ -148,11 +150,11 @@ public:
             bufDesc.size = byteSize;
             bufDesc.label = "GpuBuffer storage";
 
-            wgpu::Buffer wgpuBuffer = m_device.CreateBuffer (&bufDesc);
+            wgpu::Buffer wgpuBuffer = device.CreateBuffer (&bufDesc);
             if (wgpuBuffer == nullptr)
                 return nullptr;
 
-            m_queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
+            queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
 
             return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (wgpuBuffer) });
         }
@@ -172,7 +174,7 @@ public:
         if (byteSize > buffer->getSizeInBytes())
             return false;
 
-        m_queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
+        queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
         return true;
     }
 
@@ -188,20 +190,20 @@ public:
     bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
 
     /** Returns the native WGPU device for compute operations. */
-    WGPUDevice getBackendDevice() const noexcept { return m_backendDevice; }
+    WGPUDevice getBackendDevice() const noexcept { return backendDevice; }
 
     /** Returns the wgpu::Device for compute operations. */
-    wgpu::Device getDevice() const noexcept { return m_device; }
+    wgpu::Device getDevice() const noexcept { return device; }
 
     /** Returns the wgpu::Queue for compute operations. */
-    wgpu::Queue getQueue() const noexcept { return m_queue; }
+    wgpu::Queue getQueue() const noexcept { return queue; }
 
 private:
-    Options m_options;
-    WGPUDevice m_backendDevice = {};
-    wgpu::Device m_device = {};
-    wgpu::Queue m_queue = {};
-    std::unique_ptr<dawn::native::Instance> m_instance;
+    Options options;
+    WGPUDevice backendDevice = {};
+    wgpu::Device device = {};
+    wgpu::Queue queue = {};
+    std::unique_ptr<dawn::native::Instance> instance;
 };
 
 //==============================================================================

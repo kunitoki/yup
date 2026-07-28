@@ -79,9 +79,7 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_filter=-GpuDeviceOpenGL*
-    - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: xvfb-run -a ./yup_tests --gtest_filter=GpuDeviceOpenGL*
+      run: xvfb-run -a ./yup_tests
 
   build_tests_release:
     runs-on: ubuntu-latest
@@ -102,9 +100,7 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: SDL_VIDEODRIVER=dummy ./yup_tests --gtest_filter=-GpuDeviceOpenGL*
-    - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: xvfb-run -a ./yup_tests --gtest_filter=GpuDeviceOpenGL*
+      run: xvfb-run -a ./yup_tests
 
   build_console:
     runs-on: ubuntu-latest

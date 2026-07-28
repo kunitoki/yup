@@ -31,7 +31,7 @@
 // Test helper: Delegate GraphicsContext that allows injecting a mock ore context.
 //
 // Wraps a real (headless) GraphicsContext and delegates all methods to it except
-// gpuContext(), which returns the supplied rive::ore::Context*.
+// getGpuContext(), which returns the supplied rive::ore::Context*.
 // ==============================================================================
 
 class OreInjectedGraphicsContext : public yup::GraphicsContext
@@ -47,11 +47,11 @@ public:
 
     yup::GpuDevice::Ptr getGpuDevice() const noexcept override { return real->getGpuDevice(); }
 
-    rive::Factory* factory() override { return real->factory(); }
+    rive::Factory* getFactory() override { return real->getFactory(); }
 
-    rive::gpu::RenderContext* renderContext() override { return real->renderContext(); }
+    rive::gpu::RenderContext* getRenderContext() override { return real->getRenderContext(); }
 
-    rive::gpu::RenderTarget* renderTarget() override { return real->renderTarget(); }
+    rive::gpu::RenderTarget* getRenderTarget() override { return real->getRenderTarget(); }
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return real->makeRenderer (width, height); }
 

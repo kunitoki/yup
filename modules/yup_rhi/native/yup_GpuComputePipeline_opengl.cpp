@@ -31,7 +31,7 @@ class GpuComputePipelineGL final : public GpuComputePipeline
 public:
     GpuComputePipelineGL (GLuint program, GpuWorkgroupSize wgs)
         : glProgram (program)
-        , workgroupSize_ (wgs)
+        , workgroupSize (wgs)
     {
     }
 
@@ -41,13 +41,13 @@ public:
             glDeleteProgram (glProgram);
     }
 
-    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize_; }
+    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize; }
 
     GLuint getProgram() const noexcept { return glProgram; }
 
 private:
     GLuint glProgram;
-    GpuWorkgroupSize workgroupSize_;
+    GpuWorkgroupSize workgroupSize;
 };
 
 //==============================================================================

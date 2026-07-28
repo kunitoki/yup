@@ -38,40 +38,42 @@ class GpuDeviceWebGPU : public GpuDevice
 {
 public:
     GpuDeviceWebGPU (Options options)
-        : m_options (options)
+        : options (options)
     {
-        m_device = wgpu::Device::Acquire (emscripten_webgpu_get_device());
-        if (m_device == nullptr)
+        device = wgpu::Device::Acquire (emscripten_webgpu_get_device());
+        if (device == nullptr)
         {
             fprintf (stderr, "WebGPU: no device. Ensure Module.preinitializedWebGPUDevice is set before main().\n");
             return;
         }
 
-        m_queue = m_device.GetQueue();
+        queue = device.GetQueue();
 
-        m_renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
-            {}, m_device, m_queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
+        renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
+            {}, device, queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
 
-        if (m_renderContext == nullptr)
+        if (renderContext == nullptr)
         {
             fprintf (stderr, "WebGPU: failed to create a render context.\n");
             return;
         }
 
-        m_oreContext = m_renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeOreContext();
+        oreContext = renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeOreContext();
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
-    rive::ore::Context* gpuContext() const noexcept override { return m_oreContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }
+
+    rive::ore::Context* getGpuContext() const noexcept override { return oreContext.get(); }
 
     bool isComputeAvailable() const noexcept override { return true; }
 
     /** Returns the native wgpu::Device for compute operations. */
-    wgpu::Device getWgpuDevice() const noexcept { return m_device; }
+    wgpu::Device getWgpuDevice() const noexcept { return device; }
 
     /** Returns the native wgpu::Queue for compute operations. */
-    wgpu::Queue getWgpuQueue() const noexcept { return m_queue; }
+    wgpu::Queue getWgpuQueue() const noexcept { return queue; }
 
     //==============================================================================
 
@@ -88,11 +90,11 @@ public:
             bufDesc.size = byteSize;
             bufDesc.label = "GpuBuffer storage";
 
-            wgpu::Buffer wgpuBuffer = m_device.CreateBuffer (&bufDesc);
+            wgpu::Buffer wgpuBuffer = device.CreateBuffer (&bufDesc);
             if (wgpuBuffer == nullptr)
                 return nullptr;
 
-            m_queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
+            queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
 
             return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (wgpuBuffer) });
         }
@@ -114,7 +116,7 @@ public:
         if (byteSize > buffer->getSizeInBytes())
             return false;
 
-        m_queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
+        queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
         return true;
     }
 
@@ -140,7 +142,7 @@ public:
 
         rive::gpu::RenderTarget* getRenderTarget() noexcept override
         {
-            return renderCanvas != nullptr ? renderCanvas->renderTarget() : nullptr;
+            return renderCanvas != nullptr ? renderCanvas->getRenderTarget() : nullptr;
         }
 
         rive::gpu::RenderContext* getRenderContext() noexcept override
@@ -163,7 +165,7 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetWebGPU>();
@@ -171,8 +173,8 @@ public:
         target->height = height;
         target->renderContext = nullptr;
         target->contextSlot = nullptr;
-        target->renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                  static_cast<uint32_t> (height));
+        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                static_cast<uint32_t> (height));
         if (target->renderCanvas == nullptr)
             return nullptr;
 
@@ -221,13 +223,13 @@ public:
         if (renderContext == nullptr || target.contextSlot == nullptr || ! target.contextSlot->frameActive)
             return;
 
-        wgpu::CommandEncoder encoder = m_device.CreateCommandEncoder();
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
         renderContext->flush ({ .renderTarget = target.getRenderTarget(),
                                 .externalCommandBuffer = encoder.Get() });
 
         wgpu::CommandBuffer commands = encoder.Finish();
-        m_queue.Submit (1, &commands);
+        queue.Submit (1, &commands);
 
         target.contextSlot->frameActive = false;
     }
@@ -240,7 +242,7 @@ public:
 private:
     OffscreenContextSlot* acquireOffscreenContext()
     {
-        for (const auto& slot : m_offscreenContextPool)
+        for (const auto& slot : offscreenContextPool)
         {
             if (! slot->frameActive)
                 return slot.get();
@@ -248,21 +250,21 @@ private:
 
         auto slot = std::make_unique<OffscreenContextSlot>();
         slot->renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
-            {}, m_device, m_queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
+            {}, device, queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
         if (slot->renderContext == nullptr)
             return nullptr;
 
         auto* result = slot.get();
-        m_offscreenContextPool.push_back (std::move (slot));
+        offscreenContextPool.push_back (std::move (slot));
         return result;
     }
 
-    Options m_options;
-    wgpu::Device m_device;
-    wgpu::Queue m_queue;
-    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
-    std::unique_ptr<rive::ore::Context> m_oreContext;
+    Options options;
+    wgpu::Device device;
+    wgpu::Queue queue;
+    std::unique_ptr<rive::gpu::RenderContext> renderContext;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
+    std::unique_ptr<rive::ore::Context> oreContext;
 };
 
 //==============================================================================

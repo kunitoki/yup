@@ -58,7 +58,7 @@ float GetDawnWindowBackingScaleFactor (void* window, bool retina)
 
 std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (void* window, bool retina)
 {
-    @autoreleasepool
+    YUP_AUTORELEASEPOOL
     {
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];

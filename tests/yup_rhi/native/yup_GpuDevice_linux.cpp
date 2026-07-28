@@ -23,6 +23,7 @@
 
 #include <yup_rhi/yup_rhi.h>
 #include <yup_graphics/yup_graphics.h>
+#include <yup_shading/yup_shading.h>
 
 #include <SDL3/SDL.h>
 
@@ -163,7 +164,7 @@ TEST_F (GpuDeviceOpenGLTests, PlatformIsOpenGL)
 
 TEST_F (GpuDeviceOpenGLTests, GpuContextIsNotNull)
 {
-    EXPECT_NE (device->gpuContext(), nullptr);
+    EXPECT_NE (device->getGpuContext(), nullptr);
 }
 
 // --------------------------------------------------------------------------
@@ -326,6 +327,9 @@ TEST_F (GpuDeviceOpenGLTests, GpuFrameWaitForGPU)
 
 TEST_F (GpuDeviceOpenGLTests, CompilePipelineWithMinimalShaders)
 {
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
     const char* vsSrc = R"(
         #version 450
         layout(set = 0, binding = 0) uniform Uniforms { mat4 mvp; } ubo;
@@ -339,19 +343,10 @@ TEST_F (GpuDeviceOpenGLTests, CompilePipelineWithMinimalShaders)
         void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
     )";
 
-    GpuShaderSource vs;
-    vs.language = GpuShaderLanguage::glsl;
-    vs.code = vsSrc;
-    vs.codeSize = (uint32_t) strlen (vsSrc);
-
-    GpuShaderSource fs;
-    fs.language = GpuShaderLanguage::glsl;
-    fs.code = fsSrc;
-    fs.codeSize = (uint32_t) strlen (fsSrc);
-
-    auto result = GpuPipeline::compile (device, vs, fs);
+    auto result = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc);
     ASSERT_TRUE (result.wasOk());
     ASSERT_NE (result.getValue(), nullptr);
+#endif
 }
 
 TEST_F (GpuDeviceOpenGLTests, CompilePipelineFailsWithEmptyVertexCode)
@@ -380,6 +375,9 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawTriangle)
     auto target = GpuTarget::create (device, 256, 256);
     ASSERT_NE (target, nullptr);
 
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
     // Compile a minimal pipeline.
     const char* vsSrc = R"(
         #version 450
@@ -394,17 +392,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawTriangle)
         void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
     )";
 
-    GpuShaderSource vs;
-    vs.language = GpuShaderLanguage::glsl;
-    vs.code = vsSrc;
-    vs.codeSize = (uint32_t) strlen (vsSrc);
-
-    GpuShaderSource fs;
-    fs.language = GpuShaderLanguage::glsl;
-    fs.code = fsSrc;
-    fs.codeSize = (uint32_t) strlen (fsSrc);
-
-    auto compileResult = GpuPipeline::compile (device, vs, fs);
+    auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc);
     ASSERT_TRUE (compileResult.wasOk());
     auto* pipeline = compileResult.getValue().get();
     ASSERT_NE (pipeline, nullptr);
@@ -421,6 +409,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawTriangle)
 
     pass.finish();
     frame.submit();
+#endif
 }
 
 TEST_F (GpuDeviceOpenGLTests, RenderPassClearColor)

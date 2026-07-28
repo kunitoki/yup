@@ -268,7 +268,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
 {
     using namespace GpuPipelineHelpers;
 
-    auto oreCtx = ctx->gpuContext();
+    auto oreCtx = ctx->getGpuContext();
     if (oreCtx == nullptr)
         return makeResultValueFail ("GpuDevice was not created with Options::enableOreContext = true");
 

@@ -31,17 +31,17 @@ class GpuComputePipelineMetal final : public GpuComputePipeline
 public:
     GpuComputePipelineMetal (id<MTLComputePipelineState> state, GpuWorkgroupSize wgs)
         : pipelineState (state)
-        , workgroupSize_ (wgs)
+        , workgroupSize (wgs)
     {
     }
 
-    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize_; }
+    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize; }
 
     id<MTLComputePipelineState> getPipelineState() const noexcept { return pipelineState; }
 
 private:
     id<MTLComputePipelineState> pipelineState;
-    GpuWorkgroupSize workgroupSize_;
+    GpuWorkgroupSize workgroupSize;
 };
 
 //==============================================================================
