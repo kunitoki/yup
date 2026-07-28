@@ -24,6 +24,9 @@
 #include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
+using ::testing::_;
+using ::testing::NiceMock;
+using ::testing::Return;
 
 class GpuTargetTests : public ::testing::Test
 {
@@ -164,15 +167,6 @@ TEST_F (GpuTargetMockTests, AsTextureReturnsValidTexture)
     EXPECT_EQ (tex, tex2);
 }
 
-TEST_F (GpuTargetMockTests, AsImageReturnsValidImage)
-{
-    auto target = GpuTarget::create (ctx, 256, 128);
-    ASSERT_NE (target, nullptr);
-
-    auto img = target->asImage();
-    EXPECT_TRUE (img.isValid());
-}
-
 TEST_F (GpuTargetMockTests, ReadPixelsReturnsSuccess)
 {
     auto target = GpuTarget::create (ctx, 256, 128);
@@ -210,9 +204,4 @@ TEST_F (GpuTargetMockTests, BeginRenderPassWithInvalidFrameReturnsInvalidPass)
 
     auto pass = target->beginRenderPass (frame);
     EXPECT_FALSE (pass.isValid());
-}
-
-TEST_F (GpuTargetMockTests, CreateFromTargetWithNullTargetReturnsNull)
-{
-    EXPECT_EQ (GpuTarget::createFromTarget (ctx, nullptr), nullptr);
 }

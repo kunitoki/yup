@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,6 +19,6 @@
   ==============================================================================
 */
 
-#if YUP_MODULE_AVAILABLE_yup_gui
-#include "bindings/yup_YupGui_bindings.cpp"
-#endif
+#include "yup_ai/yup_LLMProviders.cpp"
+#include "yup_ai/yup_LLMTypes.cpp"
+#include "yup_ai/yup_MCPTypes.cpp"

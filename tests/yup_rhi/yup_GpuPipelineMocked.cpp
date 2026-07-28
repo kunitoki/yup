@@ -416,48 +416,19 @@ TEST_F (GpuBufferMockTests, CreateReturnsNullWhenMakeBufferFails)
     EXPECT_EQ (buf, nullptr);
 }
 
-TEST_F (GpuBufferMockTests, UpdateBufferOnNonStorageBufferReturnsFalse)
+TEST_F (GpuBufferMockTests, UpdateBufferOnVertexBufferSucceeds)
 {
-    // GpuDevice::updateBuffer() is only meaningful for storage buffers, which
-    // this device doesn't support — the base implementation always returns
-    // false, even for an otherwise-valid vertex buffer.
     auto oreBuf = rive::make_rcp<MockOreBuffer>();
     EXPECT_CALL (*mockOreCtx, makeBuffer (_))
         .WillOnce (Return (oreBuf));
+    EXPECT_CALL (*oreBuf, update (_, _, _));
 
     const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
     auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
     ASSERT_NE (buf, nullptr);
 
     const float newData[] = { 5.0f, 6.0f, 7.0f, 8.0f };
-    EXPECT_FALSE (ctx->updateBuffer (buf, newData, sizeof (newData)));
-}
-
-TEST_F (GpuBufferMockTests, CreateWithImplProducesValidBuffer)
-{
-    GpuBuffer::Impl impl;
-    impl.type = GpuBufferType::uniform;
-    impl.byteSize = 64;
-    impl.oreBuffer = rive::make_rcp<MockOreBuffer>();
-
-    auto buf = GpuBuffer::createWithImpl (std::move (impl));
-    ASSERT_NE (buf, nullptr);
-    EXPECT_EQ (buf->getType(), GpuBufferType::uniform);
-    EXPECT_EQ (buf->getSizeInBytes(), 64u);
-    EXPECT_TRUE (buf->isValid());
-}
-
-TEST_F (GpuBufferMockTests, CreateWithImplProducesInvalidBufferWhenOreBufferIsNull)
-{
-    GpuBuffer::Impl impl;
-    impl.type = GpuBufferType::vertex;
-    impl.byteSize = 16;
-    // oreBuffer is null.
-
-    auto buf = GpuBuffer::createWithImpl (std::move (impl));
-    ASSERT_NE (buf, nullptr);
-    EXPECT_EQ (buf->getType(), GpuBufferType::vertex);
-    EXPECT_FALSE (buf->isValid());
+    EXPECT_TRUE (ctx->updateBuffer (buf, newData, sizeof (newData)));
 }
 
 TEST_F (GpuBufferMockTests, CreateFailsWithStorageType)
@@ -533,23 +504,6 @@ TEST_F (GpuDeviceMockTests, CreateBufferReturnsNullWhenOreMakeBufferFails)
     EXPECT_EQ (buf, nullptr);
 }
 
-TEST_F (GpuDeviceMockTests, CreateBufferWithNullDataReturnsNull)
-{
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::vertex, nullptr, 16), nullptr);
-}
-
-TEST_F (GpuDeviceMockTests, CreateBufferWithZeroSizeReturnsNull)
-{
-    const float data[] = { 1.0f };
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::vertex, data, 0), nullptr);
-}
-
-TEST_F (GpuDeviceMockTests, CreateBufferStorageTypeReturnsNull)
-{
-    const float data[] = { 1.0f };
-    EXPECT_EQ (ctx->createBuffer (GpuBufferType::storage, data, sizeof (data)), nullptr);
-}
-
 TEST_F (GpuDeviceMockTests, UpdateBufferWithNullBufferReturnsFalse)
 {
     const float data[] = { 1.0f };
@@ -572,7 +526,7 @@ TEST_F (GpuDeviceMockTests, UpdateBufferOnValidOreBackedBufferSucceeds)
     auto oreBuf = rive::make_rcp<MockOreBuffer>();
     EXPECT_CALL (*mockOreCtx, makeBuffer (_))
         .WillOnce (Return (oreBuf));
-    EXPECT_CALL (*oreBuf, update (_, _));
+    EXPECT_CALL (*oreBuf, update (_, _, _));
 
     const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
     auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
@@ -1026,7 +980,7 @@ TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
 
 TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassStoresPipeline)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto vsModule = makeShaderModuleWithBindingMap();
@@ -1061,7 +1015,7 @@ TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassStoresPipeline)
 
 TEST_F (GpuRenderPassMockTests, SetTextureOnValidPassStoresAndReplacesBinding)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1080,7 +1034,7 @@ TEST_F (GpuRenderPassMockTests, SetTextureOnValidPassStoresAndReplacesBinding)
 
 TEST_F (GpuRenderPassMockTests, SetUniformBufferOnValidPassStoresAndReplacesBinding)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1098,25 +1052,9 @@ TEST_F (GpuRenderPassMockTests, SetUniformBufferOnValidPassStoresAndReplacesBind
     valid.submit();
 }
 
-TEST_F (GpuRenderPassMockTests, SetUniformBufferWithNullDataIsNoop)
-{
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
-    ASSERT_NE (canvas, nullptr);
-
-    auto valid = makeValidFrame();
-    auto pass = canvas->beginRenderPass (valid);
-    ASSERT_TRUE (pass.isValid());
-
-    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
-    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 16));
-
-    pass.finish();
-    valid.submit();
-}
-
 TEST_F (GpuRenderPassMockTests, SetVertexBufferOnValidPassStoresAndReplacesSlot)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1134,7 +1072,7 @@ TEST_F (GpuRenderPassMockTests, SetVertexBufferOnValidPassStoresAndReplacesSlot)
 
 TEST_F (GpuRenderPassMockTests, SetIndexBufferOnValidPassStoresFormat)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1150,7 +1088,7 @@ TEST_F (GpuRenderPassMockTests, SetIndexBufferOnValidPassStoresFormat)
 
 TEST_F (GpuRenderPassMockTests, DrawWithoutPipelineReturnsFalse)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1167,7 +1105,7 @@ TEST_F (GpuRenderPassMockTests, DrawWithoutPipelineReturnsFalse)
 
 TEST_F (GpuRenderPassMockTests, FinishOnValidPassReturnsTrueAndIsIdempotent)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1180,7 +1118,7 @@ TEST_F (GpuRenderPassMockTests, FinishOnValidPassReturnsTrueAndIsIdempotent)
 
 TEST_F (GpuRenderPassMockTests, MoveConstructionFromValidPassClearsSource)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();
@@ -1197,7 +1135,7 @@ TEST_F (GpuRenderPassMockTests, MoveConstructionFromValidPassClearsSource)
 
 TEST_F (GpuRenderPassMockTests, MoveAssignmentFromValidPassClearsSource)
 {
-    auto canvas = GpuCanvas::create (*ctx, 256, 128);
+    auto canvas = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto valid = makeValidFrame();

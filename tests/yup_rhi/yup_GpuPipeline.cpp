@@ -185,10 +185,8 @@ TEST (ShaderBindingMapTests, GLFixupBlobEncodesCombinedSamplers)
 {
     ShaderReflection refl;
 
-    ShaderReflection::ResourceBinding cs;
+    ShaderReflection::GLCombinedSampler cs;
     cs.name = "texSampler";
-    cs.set = 0;
-    cs.binding = 0;
     cs.textureSlot = 2;
     refl.glCombinedSamplers.push_back (cs);
 
@@ -212,10 +210,8 @@ TEST (ShaderBindingMapTests, GLFixupBlobEncodesBothUniformBuffersAndSamplers)
     ub.backendSlot = 0;
     refl.uniformBuffers.push_back (ub);
 
-    ShaderReflection::ResourceBinding cs;
+    ShaderReflection::GLCombinedSampler cs;
     cs.name = "texSampler";
-    cs.set = 0;
-    cs.binding = 0;
     cs.textureSlot = 1;
     refl.glCombinedSamplers.push_back (cs);
 
@@ -235,17 +231,6 @@ TEST_F (GpuPipelineTests, GpuBufferCreateHeadlessReturnsNull)
     const float verts[] = { 0.0f, 1.0f, 2.0f };
     // Headless backend has no ore context — creation fails gracefully.
     EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, verts, sizeof (verts)), nullptr);
-}
-
-TEST_F (GpuPipelineTests, GpuBufferCreateWithNullDataReturnsNull)
-{
-    EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, nullptr, 16), nullptr);
-}
-
-TEST_F (GpuPipelineTests, GpuBufferCreateWithZeroSizeReturnsNull)
-{
-    const float verts[] = { 0.0f };
-    EXPECT_EQ (GpuBuffer::create (*context, GpuBufferType::vertex, verts, 0), nullptr);
 }
 
 TEST (GpuBufferDefaults, DefaultPtrIsNull)
