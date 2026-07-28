@@ -101,7 +101,6 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
                                                               const void* data,
                                                               size_t byteSize)
 {
-    jassert (data != nullptr && byteSize > 0);
     if (data == nullptr || byteSize == 0)
         return nullptr;
 

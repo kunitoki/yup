@@ -70,11 +70,11 @@ public:
 
     rive::gpu::RenderTarget* getRenderTarget() override { return offscreenRenderTarget.get(); }
 
-    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int newWidth, int newHeight, float dpiScale, uint32_t newSampleCount) override
     {
-        width = width;
-        height = height;
-        sampleCount = sampleCount;
+        width = newWidth;
+        height = newHeight;
+        sampleCount = newSampleCount;
         createOffscreenResources();
     }
 
