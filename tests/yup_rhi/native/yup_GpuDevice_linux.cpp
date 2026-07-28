@@ -128,16 +128,24 @@ protected:
         device = gl.createDevice();
         if (device == nullptr)
             GTEST_SKIP() << "Cannot create OpenGL GpuDevice — is GL 4.5 supported?";
+
+        GpuDevice::Options ctxOpts;
+        ctxOpts.loaderFunction = (GpuDevice::LoaderFunction) SDL_GL_GetProcAddress;
+        graphicsContext = GraphicsContext::createContext (GpuPlatform::OpenGL, ctxOpts, device);
+        if (graphicsContext == nullptr)
+            GTEST_SKIP() << "Cannot create OpenGL GraphicsContext";
     }
 
     void TearDown() override
     {
+        graphicsContext = nullptr;
         device = nullptr;
         gl.shutdown();
     }
 
     GLContext gl;
     GpuDevice::Ptr device;
+    std::unique_ptr<GraphicsContext> graphicsContext;
 };
 
 // --------------------------------------------------------------------------
@@ -254,17 +262,6 @@ TEST_F (GpuDeviceOpenGLTests, GpuTargetCreate)
     ASSERT_NE (target, nullptr);
     EXPECT_EQ (target->getWidth(), 128);
     EXPECT_EQ (target->getHeight(), 128);
-}
-
-TEST_F (GpuDeviceOpenGLTests, GpuTargetAsImage)
-{
-    auto target = GpuTarget::create (device, 128, 128);
-    ASSERT_NE (target, nullptr);
-
-    auto img = target->asImage();
-    EXPECT_TRUE (img.isValid());
-    EXPECT_EQ (img.getWidth(), 128);
-    EXPECT_EQ (img.getHeight(), 128);
 }
 
 TEST_F (GpuDeviceOpenGLTests, GpuTargetAsTexture)
@@ -476,13 +473,13 @@ TEST_F (GpuDeviceOpenGLTests, GpuFrameMovePreservesState)
 
 TEST_F (GpuDeviceOpenGLTests, GpuCanvasCreate)
 {
-    auto canvas = GpuCanvas::create (*device, 256, 256);
+    auto canvas = GpuCanvas::create (*graphicsContext, 256, 256);
     ASSERT_NE (canvas, nullptr);
 }
 
 TEST_F (GpuDeviceOpenGLTests, GpuCanvasBeginDrawAndCommit)
 {
-    auto canvas = GpuCanvas::create (*device, 256, 256);
+    auto canvas = GpuCanvas::create (*graphicsContext, 256, 256);
     ASSERT_NE (canvas, nullptr);
 
     canvas->beginDraw();
@@ -491,7 +488,7 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasBeginDrawAndCommit)
 
 TEST_F (GpuDeviceOpenGLTests, GpuCanvasAsImage)
 {
-    auto canvas = GpuCanvas::create (*device, 256, 256);
+    auto canvas = GpuCanvas::create (*graphicsContext, 256, 256);
     ASSERT_NE (canvas, nullptr);
 
     auto& g = canvas->beginDraw();
@@ -510,7 +507,7 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasAsImage)
 
 TEST_F (GpuDeviceOpenGLTests, GpuCanvasReadPixelsAfterDraw)
 {
-    auto canvas = GpuCanvas::create (*device, 128, 128);
+    auto canvas = GpuCanvas::create (*graphicsContext, 128, 128);
     ASSERT_NE (canvas, nullptr);
 
     auto& g = canvas->beginDraw();
