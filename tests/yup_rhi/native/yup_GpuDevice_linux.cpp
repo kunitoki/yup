@@ -54,12 +54,9 @@ struct GLContext
         setenv ("GALLIUM_DRIVER", "llvmpipe", 0);
 #endif
 
-        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 5);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGL_MAJOR);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGL_MINOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        SDL_GL_SetAttribute (SDL_GL_DOUBLEBUFFER, 1);
-        SDL_GL_SetAttribute (SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute (SDL_GL_STENCIL_SIZE, 8);
 
         window = SDL_CreateWindow ("yup_rhi_gl_test",
                                    64,
