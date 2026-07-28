@@ -80,7 +80,7 @@ void YUP_CALLTYPE ColorVectorOperations::convertBGRAtoRGBA (uint8* pixels, int n
     if (numPixels <= 0)
         return;
 
-#if YUP_USE_SSE_INTRINSICS
+#if YUP_USE_SSE3_INTRINSICS
     {
         // 4 pixels (16 bytes) per iteration using pshufb.
         // Mask: swap byte 0↔2, 4↔6, 8↔10, 12↔14 within each pixel quad.
