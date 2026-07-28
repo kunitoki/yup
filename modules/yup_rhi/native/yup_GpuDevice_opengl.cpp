@@ -84,6 +84,9 @@ public:
 
         oreContext = rive::ore::ContextGL::Make();
 
+        const char* glRenderer = reinterpret_cast<const char*> (glGetString (GL_RENDERER));
+        needsSwizzle = (glRenderer != nullptr && strstr (glRenderer, "llvmpipe") != nullptr);
+
 #if YUP_ENABLE_GL_VERBOSE
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
         printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));
@@ -394,6 +397,17 @@ public:
         glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
         auto* bytes = static_cast<uint8_t*> (dst);
+        if (needsSwizzle)
+        {
+            for (int y = 0; y < target.height; ++y)
+            {
+                uint8_t* row = bytes + static_cast<size_t> (y) * bytesPerRow;
+                for (int x = 0; x < target.width; ++x)
+                    std::swap (row[x * 4u + 0u], row[x * 4u + 2u]); // R ↔ B
+            }
+        }
+
+        // Flip vertically: OpenGL framebuffer origin is bottom-left.
         std::vector<uint8_t> rowBuffer (bytesPerRow);
         const int halfHeight = target.height / 2;
         for (int i = 0; i < halfHeight; ++i)
@@ -432,6 +446,7 @@ private:
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextGL> oreContext;
+    bool needsSwizzle = false;
 };
 
 //==============================================================================
