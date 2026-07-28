@@ -19,6 +19,8 @@ extensions = [
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
     "sphinxcontrib.mermaid",
+    "breathe",
+    "exhale",
 ]
 
 myst_enable_extensions = [
@@ -41,8 +43,37 @@ myst_fence_as_directive = ["mermaid"]
 # -- Mermaid configuration ---------------------------------------------------
 mermaid_version = "11.6.0"
 autosectionlabel_prefix_document = True
+
+# Support both MyST Markdown (.md) and reStructuredText (.rst).
+# Exhale generates .rst API reference pages from Doxygen XML.
 source_suffix = {
     ".md": "markdown",
+    ".rst": "restructuredtext",
+}
+
+# -- Breathe / Doxygen configuration -----------------------------------------
+# Doxygen must be run before Sphinx (see .readthedocs.yaml).
+# Breathe reads the XML and Exhale uses Breathe to render C++ API docs.
+breathe_projects = {
+    "YUP": "_doxygen/xml",
+}
+breathe_default_project = "YUP"
+breathe_domain_by_extension = {
+    "h": "cpp",
+    "cpp": "cpp",
+}
+
+# -- Exhale configuration ----------------------------------------------------
+# Exhale auto-generates a complete API reference tree from Doxygen XML.
+# It writes .rst files (not inline eval-rst blocks) so they go through
+# Sphinx's native RST parser, avoiding the MyST mock-inliner issues.
+exhale_args = {
+    "containmentFolder":     "./api-reference",
+    "rootFileName":          "index.rst",
+    "doxygenStripFromPath":  "..",
+    "createTreeView":        False,
+    "fullToctreeMaxDepth":   1,
+    "exhaleExecutesDoxygen": False,
 }
 
 # The root document of the documentation tree.
@@ -50,6 +81,7 @@ root_doc = "index"
 
 exclude_patterns = [
     "_build",
+    "_doxygen",
     "Thumbs.db",
     ".DS_Store",
     "superpowers",

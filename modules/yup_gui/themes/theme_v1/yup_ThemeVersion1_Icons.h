@@ -21,6 +21,7 @@
 
 #pragma once
 
+#ifndef DOXYGEN
 #define YUP_ICON_0 "0"                                                 // U+0030
 #define YUP_ICON_1 "1"                                                 // U+0031
 #define YUP_ICON_2 "2"                                                 // U+0032
@@ -1428,3 +1429,4 @@
 #define YUP_ICON_YEN_SIGN "\xef\x85\x97"                               // U+f157
 #define YUP_ICON_YIN_YANG "\xef\x9a\xad"                               // U+f6ad
 #define YUP_ICON_Z "Z"                                                 // U+005a
+#endif

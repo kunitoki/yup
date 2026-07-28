@@ -1,5 +1,7 @@
-sphinx>=7.0
+sphinx>=9.1
 myst-parser>=2.0
 linkify-it-py>=2.0
 shibuya>=2026.7.12
 sphinxcontrib-mermaid>=0.9
+breathe>=4.36
+exhale>=0.3.7
