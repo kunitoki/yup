@@ -102,6 +102,63 @@ TEST (ColorVectorOpsTests, PremultiplyARGBZeroPixels)
     EXPECT_EQ (pixels[0], 0xdeadbeefu);
 }
 
+TEST (ColorVectorOpsTests, PremultiplyARGBLargePixelCount)
+{
+    // Exercise SIMD path with 100 pixels — well past the scalar tail boundary.
+    constexpr int kCount = 100;
+    uint32_t pixels[kCount];
+    for (int i = 0; i < kCount; ++i)
+    {
+        const uint32_t r = (uint32_t) ((i * 3) & 0xff);
+        const uint32_t g = (uint32_t) ((i * 5) & 0xff);
+        const uint32_t b = (uint32_t) ((i * 7) & 0xff);
+        const uint32_t a = (uint32_t) ((i * 11) & 0xff);
+        pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    ColorVectorOperations::premultiplyARGB (pixels, kCount);
+
+    for (int i = 0; i < kCount; ++i)
+    {
+        const uint32_t a = (uint32_t) ((i * 11) & 0xff);
+        const uint32_t expectedR = ((uint32_t) ((i * 3) & 0xff) * a + 127u) / 255u;
+        const uint32_t expectedG = ((uint32_t) ((i * 5) & 0xff) * a + 127u) / 255u;
+        const uint32_t expectedB = ((uint32_t) ((i * 7) & 0xff) * a + 127u) / 255u;
+
+        EXPECT_EQ ((pixels[i] >> 24) & 0xffu, a);
+        EXPECT_EQ ((pixels[i] >> 16) & 0xffu, expectedR);
+        EXPECT_EQ ((pixels[i] >> 8) & 0xffu, expectedG);
+        EXPECT_EQ (pixels[i] & 0xffu, expectedB);
+    }
+}
+
+TEST (ColorVectorOpsTests, PremultiplyARGBOddPixelCount)
+{
+    // 5 pixels — not a multiple of 4, exercises both SIMD and scalar tail.
+    uint32_t pixels[] = {
+        (0x80u << 24) | (0xffu << 16) | (0x80u << 8) | 0x80u,
+        (0x40u << 24) | (0x40u << 16) | (0x40u << 8) | 0x40u,
+        (0xffu << 24) | (0x10u << 16) | (0x20u << 8) | 0x30u,
+        (0x00u << 24) | (0xaau << 16) | (0xbbu << 8) | 0xccu,
+        (0xc0u << 24) | (0x22u << 16) | (0x44u << 8) | 0x66u
+    };
+
+    ColorVectorOperations::premultiplyARGB (pixels, 5);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        const uint32_t a = (pixels[i] >> 24) & 0xffu;
+        const uint32_t r = (pixels[i] >> 16) & 0xffu;
+        const uint32_t g = (pixels[i] >> 8) & 0xffu;
+        const uint32_t b = pixels[i] & 0xffu;
+
+        // Verify premultiplied channel ≤ min(original channel, alpha)
+        EXPECT_LE (r, a);
+        EXPECT_LE (g, a);
+        EXPECT_LE (b, a);
+    }
+}
+
 // ==============================================================================
 // premultiplyRGBA tests
 // ==============================================================================
@@ -141,6 +198,63 @@ TEST (ColorVectorOpsTests, PremultiplyRGBAZeroPixels)
     uint32_t pixels[] = { makeRGBA (99, 98, 97, 96) };
     ColorVectorOperations::premultiplyRGBA (pixels, 0);
     EXPECT_EQ (pixels[0], makeRGBA (99, 98, 97, 96));
+}
+
+TEST (ColorVectorOpsTests, PremultiplyRGBALargePixelCount)
+{
+    // Exercise SIMD path with 100 pixels — well past the scalar tail boundary.
+    constexpr int kCount = 100;
+    uint32_t pixels[kCount];
+    for (int i = 0; i < kCount; ++i)
+    {
+        const uint8_t r = (uint8_t) ((i * 3) & 0xff);
+        const uint8_t g = (uint8_t) ((i * 5) & 0xff);
+        const uint8_t b = (uint8_t) ((i * 7) & 0xff);
+        const uint8_t a = (uint8_t) ((i * 11) & 0xff);
+        pixels[i] = makeRGBA (r, g, b, a);
+    }
+
+    ColorVectorOperations::premultiplyRGBA (pixels, kCount);
+
+    for (int i = 0; i < kCount; ++i)
+    {
+        const uint32_t a = (uint32_t) ((i * 11) & 0xff);
+        const uint32_t expectedR = ((uint32_t) ((i * 3) & 0xff) * a + 127u) / 255u;
+        const uint32_t expectedG = ((uint32_t) ((i * 5) & 0xff) * a + 127u) / 255u;
+        const uint32_t expectedB = ((uint32_t) ((i * 7) & 0xff) * a + 127u) / 255u;
+
+        EXPECT_EQ ((pixels[i] >> 24) & 0xffu, a);
+        EXPECT_EQ (pixels[i] & 0xffu, expectedR);
+        EXPECT_EQ ((pixels[i] >> 8) & 0xffu, expectedG);
+        EXPECT_EQ ((pixels[i] >> 16) & 0xffu, expectedB);
+    }
+}
+
+TEST (ColorVectorOpsTests, PremultiplyRGBAOddPixelCount)
+{
+    // 5 pixels — not a multiple of 4, exercises both SIMD and scalar tail.
+    uint32_t pixels[] = {
+        makeRGBA (255, 128, 64, 128),
+        makeRGBA (64, 64, 64, 64),
+        makeRGBA (16, 32, 48, 255),
+        makeRGBA (170, 187, 204, 0),
+        makeRGBA (34, 68, 102, 192)
+    };
+
+    ColorVectorOperations::premultiplyRGBA (pixels, 5);
+
+    for (int i = 0; i < 5; ++i)
+    {
+        const uint32_t a = (pixels[i] >> 24) & 0xffu;
+        const uint32_t r = pixels[i] & 0xffu;
+        const uint32_t g = (pixels[i] >> 8) & 0xffu;
+        const uint32_t b = (pixels[i] >> 16) & 0xffu;
+
+        // Verify premultiplied channel ≤ min(original channel, alpha)
+        EXPECT_LE (r, a);
+        EXPECT_LE (g, a);
+        EXPECT_LE (b, a);
+    }
 }
 
 // ==============================================================================
@@ -199,6 +313,44 @@ TEST (ColorVectorOpsTests, ConvertARGBtoRGBAAllOnes)
     uint32_t rgba[] = { 0u };
     ColorVectorOperations::convertARGBtoRGBA (argb, rgba, 1);
     EXPECT_EQ (rgba[0], 0xffffffffu);
+}
+
+TEST (ColorVectorOpsTests, ConvertARGBtoRGBALargePixelCount)
+{
+    // Exercise SIMD path with 100 pixels — well past the scalar tail boundary.
+    constexpr int kCount = 100;
+    uint32_t argb[kCount];
+    for (int i = 0; i < kCount; ++i)
+        argb[i] = (uint32_t) ((i * 7) << 24) | (uint32_t) ((i * 3) << 16) | (uint32_t) ((i * 5) << 8) | (uint32_t) (i & 0xff);
+
+    uint32_t rgba[kCount] = {};
+    ColorVectorOperations::convertARGBtoRGBA (argb, rgba, kCount);
+
+    for (int i = 0; i < kCount; ++i)
+    {
+        // ARGB 0xAARRGGBB -> RGBA 0xRRGGBBAA
+        EXPECT_EQ ((rgba[i] >> 24) & 0xffu, (uint32_t) (i & 0xff));       // old B -> new A
+        EXPECT_EQ ((rgba[i] >> 16) & 0xffu, (uint32_t) ((i * 5) & 0xff)); // old G -> new B
+        EXPECT_EQ ((rgba[i] >> 8) & 0xffu, (uint32_t) ((i * 3) & 0xff));  // old R -> new G
+        EXPECT_EQ (rgba[i] & 0xffu, (uint32_t) ((i * 7) & 0xff));         // old A -> new R
+    }
+}
+
+TEST (ColorVectorOpsTests, ConvertARGBtoRGBAOddPixelCount)
+{
+    // 5 pixels — not a multiple of 4, exercises both SIMD and scalar tail.
+    const uint32_t argb[] = {
+        0x12345678u, 0xaabbccddu, 0xffeeddccu, 0x01020304u, 0x99887766u
+    };
+    uint32_t rgba[5] = {};
+
+    ColorVectorOperations::convertARGBtoRGBA (argb, rgba, 5);
+
+    EXPECT_EQ (rgba[0], 0x34567812u);
+    EXPECT_EQ (rgba[1], 0xbbccddaau);
+    EXPECT_EQ (rgba[2], 0xeeddccffu);
+    EXPECT_EQ (rgba[3], 0x02030401u);
+    EXPECT_EQ (rgba[4], 0x88776699u);
 }
 
 // ==============================================================================
