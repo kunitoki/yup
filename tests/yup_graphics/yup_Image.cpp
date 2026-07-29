@@ -88,13 +88,12 @@ TEST (ImageTests, GrayscaleBitmapConvertsToOpaqueRGBATextureBytes)
     raw[1] = 127;
     raw[2] = 255;
 
-    uint8 textureBytes[12] = {};
+    uint32_t textureBytes[3] = {};
     ColorVectorOperations::convertGrayscaleToRGBA (raw.data(), textureBytes, 3);
 
-    const uint8 expected[] = { 0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 255 };
-
-    for (size_t i = 0; i < std::size (expected); ++i)
-        EXPECT_EQ (textureBytes[i], expected[i]);
+    EXPECT_EQ (textureBytes[0], 0xff000000u);
+    EXPECT_EQ (textureBytes[1], 0xff7f7f7fu);
+    EXPECT_EQ (textureBytes[2], 0xffffffffu);
 }
 
 TEST (ImageTests, RgbBitmapConvertsToOpaqueRGBATextureBytes)
@@ -105,13 +104,11 @@ TEST (ImageTests, RgbBitmapConvertsToOpaqueRGBATextureBytes)
     image.setPixel (1, 0, 0xffabcdef);
 
     const auto raw = image.getRawData();
-    uint8 textureBytes[8] = {};
+    uint32_t textureBytes[2] = {};
     ColorVectorOperations::convertRGBToRGBA (raw.data(), textureBytes, 2);
 
-    const uint8 expected[] = { 0x12, 0x34, 0x56, 0xff, 0xab, 0xcd, 0xef, 0xff };
-
-    for (size_t i = 0; i < std::size (expected); ++i)
-        EXPECT_EQ (textureBytes[i], expected[i]);
+    EXPECT_EQ (textureBytes[0], 0xff563412u);
+    EXPECT_EQ (textureBytes[1], 0xffefcdabu);
 }
 
 TEST (ImageTests, RgbaBitmapConvertsToPremultipliedRGBATextureBytes)
@@ -122,14 +119,12 @@ TEST (ImageTests, RgbaBitmapConvertsToPremultipliedRGBATextureBytes)
     image.setPixel (1, 0, 0xff010203);
 
     const auto raw = image.getRawData();
-    uint8 textureBytes[8] = {};
+    uint32_t textureBytes[2] = {};
     std::memcpy (textureBytes, raw.data(), raw.size());
     ColorVectorOperations::premultiplyRGBA (textureBytes, 2);
 
-    const uint8 expected[] = { 8, 16, 32, 128, 1, 2, 3, 255 };
-
-    for (size_t i = 0; i < std::size (expected); ++i)
-        EXPECT_EQ (textureBytes[i], expected[i]);
+    EXPECT_EQ (textureBytes[0], 0x80201008u);
+    EXPECT_EQ (textureBytes[1], 0xff030201u);
 }
 
 TEST (ImageTests, ColorCanConvertToExplicitPackedByteOrders)

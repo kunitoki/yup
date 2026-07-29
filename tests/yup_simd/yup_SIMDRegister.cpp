@@ -26,12 +26,12 @@
 using namespace yup;
 
 // ==============================================================================
-// Float4 tests
+// Float32x4 tests
 // ==============================================================================
 
 TEST (SIMDRegisterTests, Float4DefaultConstructorIsZero)
 {
-    Float4 r;
+    Float32x4 r;
     float stored[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
     r.storeUnaligned (stored);
 
@@ -41,7 +41,7 @@ TEST (SIMDRegisterTests, Float4DefaultConstructorIsZero)
 
 TEST (SIMDRegisterTests, Float4ZeroHelperIsAllZero)
 {
-    const auto r = Float4::zero();
+    const auto r = Float32x4::zero();
     float stored[4] = {};
     r.storeUnaligned (stored);
 
@@ -51,7 +51,7 @@ TEST (SIMDRegisterTests, Float4ZeroHelperIsAllZero)
 
 TEST (SIMDRegisterTests, Float4BroadcastFillsAllLanes)
 {
-    const auto r = Float4::broadcast (3.14f);
+    const auto r = Float32x4::broadcast (3.14f);
     float stored[4] = {};
     r.storeUnaligned (stored);
 
@@ -62,7 +62,7 @@ TEST (SIMDRegisterTests, Float4BroadcastFillsAllLanes)
 TEST (SIMDRegisterTests, Float4ElementAccessOperator)
 {
     const float values[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
-    const auto r = Float4::loadUnaligned (values);
+    const auto r = Float32x4::loadUnaligned (values);
 
     EXPECT_FLOAT_EQ (r[0], 10.0f);
     EXPECT_FLOAT_EQ (r[1], 20.0f);
@@ -75,9 +75,9 @@ TEST (SIMDRegisterTests, Float4ArithmeticAndHorizontalOps)
     const float aValues[4] = { 1.0f, -2.0f, 3.0f, -4.0f };
     const float bValues[4] = { 5.0f, 6.0f, -7.0f, -8.0f };
 
-    const auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
-    const auto result = a + b * Float4::broadcast (2.0f);
+    const auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
+    const auto result = a + b * Float32x4::broadcast (2.0f);
 
     float stored[4] = {};
     result.storeUnaligned (stored);
@@ -94,8 +94,8 @@ TEST (SIMDRegisterTests, Float4Subtraction)
     const float aValues[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
     const float bValues[4] = { 1.0f, 3.0f, 5.0f, 7.0f };
 
-    const auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    const auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     const auto result = a - b;
 
     float stored[4] = {};
@@ -110,8 +110,8 @@ TEST (SIMDRegisterTests, Float4Division)
     const float aValues[4] = { 4.0f, 9.0f, 16.0f, 25.0f };
     const float bValues[4] = { 2.0f, 3.0f, 4.0f, 5.0f };
 
-    const auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    const auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     const auto result = a / b;
 
     float stored[4] = {};
@@ -126,8 +126,8 @@ TEST (SIMDRegisterTests, Float4CompoundAddAssign)
     const float aValues[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
     const float bValues[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
 
-    auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     a += b;
 
     float stored[4] = {};
@@ -142,8 +142,8 @@ TEST (SIMDRegisterTests, Float4CompoundMulAssign)
     const float aValues[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
     const float bValues[4] = { 2.0f, 3.0f, 4.0f, 5.0f };
 
-    auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     a *= b;
 
     float stored[4] = {};
@@ -158,8 +158,8 @@ TEST (SIMDRegisterTests, Float4ElementwiseMin)
     const float aValues[4] = { 1.0f, 5.0f, 2.0f, 4.0f };
     const float bValues[4] = { 3.0f, 2.0f, 4.0f, 1.0f };
 
-    const auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    const auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     const auto result = a.min (b);
 
     float stored[4] = {};
@@ -174,8 +174,8 @@ TEST (SIMDRegisterTests, Float4ElementwiseMax)
     const float aValues[4] = { 1.0f, 5.0f, 2.0f, 4.0f };
     const float bValues[4] = { 3.0f, 2.0f, 4.0f, 1.0f };
 
-    const auto a = Float4::loadUnaligned (aValues);
-    const auto b = Float4::loadUnaligned (bValues);
+    const auto a = Float32x4::loadUnaligned (aValues);
+    const auto b = Float32x4::loadUnaligned (bValues);
     const auto result = a.max (b);
 
     float stored[4] = {};
@@ -188,7 +188,7 @@ TEST (SIMDRegisterTests, Float4ElementwiseMax)
 TEST (SIMDRegisterTests, Float4AbsOnMixedValues)
 {
     const float values[4] = { -1.0f, 2.0f, -3.0f, 4.0f };
-    const auto r = Float4::loadUnaligned (values);
+    const auto r = Float32x4::loadUnaligned (values);
     const auto result = r.abs();
 
     float stored[4] = {};
@@ -203,21 +203,21 @@ TEST (SIMDRegisterTests, Float4AbsOnMixedValues)
 TEST (SIMDRegisterTests, Float4SumAllLanes)
 {
     const float values[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
-    const auto r = Float4::loadUnaligned (values);
+    const auto r = Float32x4::loadUnaligned (values);
     EXPECT_FLOAT_EQ (r.sum(), 10.0f);
 }
 
 TEST (SIMDRegisterTests, Float4SumWithNegatives)
 {
     const float values[4] = { 1.0f, -1.0f, 2.0f, -2.0f };
-    const auto r = Float4::loadUnaligned (values);
+    const auto r = Float32x4::loadUnaligned (values);
     EXPECT_FLOAT_EQ (r.sum(), 0.0f);
 }
 
 TEST (SIMDRegisterTests, Float4HmaxFindsLargest)
 {
     const float values[4] = { -3.0f, 7.0f, 1.0f, -10.0f };
-    const auto r = Float4::loadUnaligned (values);
+    const auto r = Float32x4::loadUnaligned (values);
     EXPECT_FLOAT_EQ (r.hmax(), 7.0f);
 }
 
@@ -228,7 +228,7 @@ TEST (SIMDRegisterTests, MulAddAndLoadStoreRoundTrip)
     alignas (16) const float add[4] = { 10.0f, 20.0f, 30.0f, 40.0f };
     alignas (16) float stored[4] = {};
 
-    const auto result = Float4::loadAligned (base).mulAdd (Float4::loadAligned (mul), Float4::loadAligned (add));
+    const auto result = Float32x4::loadAligned (base).mulAdd (Float32x4::loadAligned (mul), Float32x4::loadAligned (add));
     result.storeAligned (stored);
 
     for (int i = 0; i < 4; ++i)
@@ -238,7 +238,7 @@ TEST (SIMDRegisterTests, MulAddAndLoadStoreRoundTrip)
 TEST (SIMDRegisterTests, Float4LoadFromPointerConstructor)
 {
     const float values[4] = { 5.0f, 6.0f, 7.0f, 8.0f };
-    const Float4 r (values);
+    const Float32x4 r (values);
 
     float stored[4] = {};
     r.storeUnaligned (stored);
@@ -249,26 +249,26 @@ TEST (SIMDRegisterTests, Float4LoadFromPointerConstructor)
 
 TEST (SIMDRegisterTests, Float4ScalarConstructorBroadcasts)
 {
-    const Float4 r (42.0f);
+    const Float32x4 r (42.0f);
     for (int i = 0; i < 4; ++i)
         EXPECT_FLOAT_EQ (r[i], 42.0f);
 }
 
 // ==============================================================================
-// Float8 tests
+// Float32x8 tests
 // ==============================================================================
 
 TEST (SIMDRegisterTests, Float8DefaultConstructorIsZero)
 {
-    Float8 r;
+    Float32x8 r;
     for (int i = 0; i < 8; ++i)
         EXPECT_FLOAT_EQ (r[i], 0.0f);
 }
 
 TEST (SIMDRegisterTests, Float8BroadcastAndArithmetic)
 {
-    const Float8 a = Float8::broadcast (2.0f);
-    const Float8 b = Float8::broadcast (3.0f);
+    const Float32x8 a = Float32x8::broadcast (2.0f);
+    const Float32x8 b = Float32x8::broadcast (3.0f);
     const auto result = a * b;
 
     for (int i = 0; i < 8; ++i)
@@ -278,7 +278,7 @@ TEST (SIMDRegisterTests, Float8BroadcastAndArithmetic)
 TEST (SIMDRegisterTests, Float8LoadStoreRoundTrip)
 {
     float values[8] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f };
-    const auto r = Float8::loadUnaligned (values);
+    const auto r = Float32x8::loadUnaligned (values);
 
     float stored[8] = {};
     r.storeUnaligned (stored);
@@ -290,14 +290,14 @@ TEST (SIMDRegisterTests, Float8LoadStoreRoundTrip)
 TEST (SIMDRegisterTests, Float8Sum)
 {
     float values[8] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f };
-    const auto r = Float8::loadUnaligned (values);
+    const auto r = Float32x8::loadUnaligned (values);
     EXPECT_FLOAT_EQ (r.sum(), 36.0f);
 }
 
 TEST (SIMDRegisterTests, Float8Hmax)
 {
     float values[8] = { 1.0f, -5.0f, 3.0f, 9.0f, 2.0f, -3.0f, 4.0f, 0.0f };
-    const auto r = Float8::loadUnaligned (values);
+    const auto r = Float32x8::loadUnaligned (values);
     EXPECT_FLOAT_EQ (r.hmax(), 9.0f);
 }
 
@@ -307,18 +307,18 @@ TEST (SIMDRegisterTests, Float8AbsNegatesAll)
     for (int i = 0; i < 8; ++i)
         values[i] = (i % 2 == 0) ? -(float) (i + 1) : (float) (i + 1);
 
-    const auto r = Float8::loadUnaligned (values).abs();
+    const auto r = Float32x8::loadUnaligned (values).abs();
     for (int i = 0; i < 8; ++i)
         EXPECT_FLOAT_EQ (r[i], (float) (i + 1));
 }
 
 // ==============================================================================
-// Double2 tests
+// Float64x2 tests
 // ==============================================================================
 
 TEST (SIMDRegisterTests, Double2DefaultConstructorIsZero)
 {
-    Double2 r;
+    Float64x2 r;
     for (int i = 0; i < 2; ++i)
         EXPECT_DOUBLE_EQ (r[i], 0.0);
 }
@@ -328,8 +328,8 @@ TEST (SIMDRegisterTests, Double2ArithmeticOperations)
     const double aValues[2] = { 1.5, -2.5 };
     const double bValues[2] = { 3.0, 4.0 };
 
-    const auto a = Double2::loadUnaligned (aValues);
-    const auto b = Double2::loadUnaligned (bValues);
+    const auto a = Float64x2::loadUnaligned (aValues);
+    const auto b = Float64x2::loadUnaligned (bValues);
 
     const auto sum = a + b;
     const auto diff = a - b;
@@ -348,7 +348,7 @@ TEST (SIMDRegisterTests, Double2ArithmeticOperations)
 
 TEST (SIMDRegisterTests, Double2BroadcastAndSum)
 {
-    const auto r = Double2::broadcast (3.14);
+    const auto r = Float64x2::broadcast (3.14);
     EXPECT_NEAR (r.sum(), 6.28, 1.0e-12);
 }
 
@@ -357,8 +357,8 @@ TEST (SIMDRegisterTests, Double2MinMax)
     const double aValues[2] = { 1.0, 5.0 };
     const double bValues[2] = { 3.0, 2.0 };
 
-    const auto a = Double2::loadUnaligned (aValues);
-    const auto b = Double2::loadUnaligned (bValues);
+    const auto a = Float64x2::loadUnaligned (aValues);
+    const auto b = Float64x2::loadUnaligned (bValues);
 
     const auto minResult = a.min (b);
     const auto maxResult = a.max (b);
@@ -370,13 +370,13 @@ TEST (SIMDRegisterTests, Double2MinMax)
 }
 
 // ==============================================================================
-// Double4 tests
+// Float64x4 tests
 // ==============================================================================
 
 TEST (SIMDRegisterTests, Double4LoadStoreRoundTrip)
 {
     const double values[4] = { 1.1, 2.2, 3.3, 4.4 };
-    const auto r = Double4::loadUnaligned (values);
+    const auto r = Float64x4::loadUnaligned (values);
 
     double stored[4] = {};
     r.storeUnaligned (stored);
@@ -391,9 +391,9 @@ TEST (SIMDRegisterTests, Double4MulAdd)
     const double mulValues[4] = { 2.0, 3.0, 4.0, 5.0 };
     const double addValues[4] = { 10.0, 20.0, 30.0, 40.0 };
 
-    const auto base = Double4::loadUnaligned (baseValues);
-    const auto mul = Double4::loadUnaligned (mulValues);
-    const auto add = Double4::loadUnaligned (addValues);
+    const auto base = Float64x4::loadUnaligned (baseValues);
+    const auto mul = Float64x4::loadUnaligned (mulValues);
+    const auto add = Float64x4::loadUnaligned (addValues);
     const auto result = base.mulAdd (mul, add);
 
     for (int i = 0; i < 4; ++i)
@@ -403,14 +403,14 @@ TEST (SIMDRegisterTests, Double4MulAdd)
 TEST (SIMDRegisterTests, Double4Sum)
 {
     const double values[4] = { 1.0, 2.0, 3.0, 4.0 };
-    const auto r = Double4::loadUnaligned (values);
+    const auto r = Float64x4::loadUnaligned (values);
     EXPECT_DOUBLE_EQ (r.sum(), 10.0);
 }
 
 TEST (SIMDRegisterTests, Double4Hmax)
 {
     const double values[4] = { -1.0, 3.5, 2.0, -4.0 };
-    const auto r = Double4::loadUnaligned (values);
+    const auto r = Float64x4::loadUnaligned (values);
     EXPECT_DOUBLE_EQ (r.hmax(), 3.5);
 }
 

@@ -397,12 +397,12 @@ public:
         glReadPixels (0, 0, target.width, target.height, GL_RGBA, GL_UNSIGNED_BYTE, dst);
         glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
-        auto* bytes = static_cast<uint8_t*> (dst);
         if (needsSwizzle)
-            ColorVectorOperations::convertBGRAtoRGBA (bytes, target.width * target.height);
+            ColorVectorOperations::convertBGRAtoRGBA (static_cast<uint32_t*> (dst), target.width * target.height);
 
         // Flip vertically: OpenGL framebuffer origin is bottom-left.
         std::vector<uint8_t> rowBuffer (bytesPerRow);
+        auto* bytes = static_cast<uint8_t*> (dst);
         const int halfHeight = target.height / 2;
         for (int i = 0; i < halfHeight; ++i)
         {

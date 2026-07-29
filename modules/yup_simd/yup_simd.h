@@ -119,7 +119,7 @@
 #if YUP_USE_SSE_INTRINSICS
 #include <emmintrin.h>
 
-#if __has_include(<tmmintrin.h>)
+#if __has_include(<tmmintrin.h>) && defined(__SSSE3__)
 #define YUP_USE_SSE3_INTRINSICS 1
 #include <tmmintrin.h>
 #endif

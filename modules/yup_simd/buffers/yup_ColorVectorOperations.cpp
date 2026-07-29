@@ -24,6 +24,7 @@ namespace yup
 
 namespace
 {
+
 static uint32 premultiplyComponent (uint32 component, uint32 alpha) noexcept
 {
     return (component * alpha + 127u) / 255u;
@@ -38,7 +39,29 @@ static uint32 packRGBA (uint32 red, uint32 green, uint32 blue, uint32 alpha) noe
 //==============================================================================
 void YUP_CALLTYPE ColorVectorOperations::premultiplyARGB (uint32* pixels, int numPixels) noexcept
 {
-    for (int i = 0; i < numPixels; ++i)
+    const auto c127 = Uint32x4 (127u);
+    const auto c255 = Uint32x4 (255u);
+    const auto mask8 = Uint32x4 (0xFFu);
+
+    int i = 0;
+
+    for (; i + 4 <= numPixels; i += 4)
+    {
+        auto p = Uint32x4::loadUnaligned (pixels + i);
+        const auto a = p >> 24;
+
+        auto r = ((p >> 16) & mask8) * a;
+        auto g = ((p >> 8) & mask8) * a;
+        auto b = (p & mask8) * a;
+
+        r = (r + c127) / c255;
+        g = (g + c127) / c255;
+        b = (b + c127) / c255;
+
+        ((a << 24) | (r << 16) | (g << 8) | b).storeUnaligned (pixels + i);
+    }
+
+    for (; i < numPixels; ++i)
     {
         const uint32 pixel = pixels[i];
         const uint32 alpha = (pixel >> 24) & 0xffu;
@@ -50,24 +73,53 @@ void YUP_CALLTYPE ColorVectorOperations::premultiplyARGB (uint32* pixels, int nu
     }
 }
 
-void YUP_CALLTYPE ColorVectorOperations::premultiplyRGBA (uint8* pixels, int numPixels) noexcept
+void YUP_CALLTYPE ColorVectorOperations::premultiplyRGBA (uint32* pixels, int numPixels) noexcept
 {
-    auto* pixel = pixels;
+    const auto c127 = Uint32x4 (127u);
+    const auto c255 = Uint32x4 (255u);
+    const auto mask8 = Uint32x4 (0xFFu);
 
-    for (int i = 0; i < numPixels; ++i)
+    int i = 0;
+
+    for (; i + 4 <= numPixels; i += 4)
     {
-        const uint32 alpha = pixel[3];
+        auto p = Uint32x4::loadUnaligned (pixels + i);
+        const auto a = p >> 24;
 
-        pixel[0] = static_cast<uint8> (premultiplyComponent (pixel[0], alpha));
-        pixel[1] = static_cast<uint8> (premultiplyComponent (pixel[1], alpha));
-        pixel[2] = static_cast<uint8> (premultiplyComponent (pixel[2], alpha));
-        pixel += 4;
+        auto r = (p & mask8) * a;
+        auto g = ((p >> 8) & mask8) * a;
+        auto b = ((p >> 16) & mask8) * a;
+
+        r = (r + c127) / c255;
+        g = (g + c127) / c255;
+        b = (b + c127) / c255;
+
+        ((a << 24) | (b << 16) | (g << 8) | r).storeUnaligned (pixels + i);
+    }
+
+    for (; i < numPixels; ++i)
+    {
+        const uint32 pixel = pixels[i];
+        const uint32 alpha = pixel >> 24;
+        const uint32 r = premultiplyComponent (pixel & 0xFFu, alpha);
+        const uint32 g = premultiplyComponent ((pixel >> 8) & 0xFFu, alpha);
+        const uint32 b = premultiplyComponent ((pixel >> 16) & 0xFFu, alpha);
+
+        pixels[i] = (alpha << 24) | (b << 16) | (g << 8) | r;
     }
 }
 
 void YUP_CALLTYPE ColorVectorOperations::convertARGBtoRGBA (const uint32* src, uint32* dst, int numPixels) noexcept
 {
-    for (int i = 0; i < numPixels; ++i)
+    int i = 0;
+
+    for (; i + 4 <= numPixels; i += 4)
+    {
+        const auto p = Uint32x4::loadUnaligned (src + i);
+        ((p << 8) | (p >> 24)).storeUnaligned (dst + i);
+    }
+
+    for (; i < numPixels; ++i)
     {
         const uint32 pixel = src[i];
         dst[i] = ((pixel & 0x00ffffffu) << 8) | ((pixel >> 24) & 0xffu);
@@ -75,89 +127,64 @@ void YUP_CALLTYPE ColorVectorOperations::convertARGBtoRGBA (const uint32* src, u
 }
 
 //==============================================================================
-void YUP_CALLTYPE ColorVectorOperations::convertBGRAtoRGBA (uint8* pixels, int numPixels) noexcept
+void YUP_CALLTYPE ColorVectorOperations::convertBGRAtoRGBA (uint32* pixels, int numPixels) noexcept
 {
     if (numPixels <= 0)
         return;
 
-#if YUP_USE_SSE3_INTRINSICS
-    {
-        // 4 pixels (16 bytes) per iteration using pshufb.
-        // Mask: swap byte 0↔2, 4↔6, 8↔10, 12↔14 within each pixel quad.
-        // Lanes: [2,1,0,3, 6,5,4,7, 10,9,8,11, 14,13,12,15]
-        // _mm_set_epi8 args go MSB→LSB (byte 15 → byte 0):
-        const __m128i shuffleMask = _mm_set_epi8 (15, 12, 13, 14, 11, 8, 9, 10, 7, 4, 5, 6, 3, 0, 1, 2);
-        const int simdPixels = numPixels & ~3; // round down to multiple of 4
-        auto* simdBytes = pixels;
-        for (int i = 0; i < simdPixels; i += 4)
-        {
-            const __m128i v = _mm_loadu_si128 ((const __m128i*) simdBytes);
-            _mm_storeu_si128 ((__m128i*) simdBytes, _mm_shuffle_epi8 (v, shuffleMask));
-            simdBytes += 16;
-        }
+    const auto maskAG = Uint32x4 (0xFF00FF00u);
+    const auto maskFF = Uint32x4 (0xFFu);
 
-        // Scalar tail for remaining < 4 pixels.
-        pixels = simdBytes;
-        numPixels &= 3;
+    const int simdPixels = numPixels & ~3;
+    int i = 0;
+
+    for (; i < simdPixels; i += 4)
+    {
+        const auto p = Uint32x4::loadUnaligned (pixels + i);
+
+        // BGRA (uint32 little-endian): bytes [B,G,R,A]
+        // RGBA: bytes [R,G,B,A]
+        // Transformation: swap byte 0 (B) ↔ byte 2 (R), keep bytes 1 (G) and 3 (A).
+        const auto result = (p & maskAG) | ((p & maskFF) << 16) | ((p >> 16) & maskFF);
+        result.storeUnaligned (pixels + i);
     }
-#elif YUP_USE_ARM_NEON
-    {
-        // Same byte-permute mask using vtbl.
-        const uint8x16_t shuffleMask = { 2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15 };
-        const int simdPixels = numPixels & ~3;
-        auto* simdBytes = pixels;
-        for (int i = 0; i < simdPixels; i += 4)
-        {
-            const uint8x16_t v = vld1q_u8 (simdBytes);
-            vst1q_u8 (simdBytes, vqtbl1q_u8 (v, shuffleMask));
-            simdBytes += 16;
-        }
 
-        pixels = simdBytes;
-        numPixels &= 3;
-    }
-#endif
-
-    // Scalar tail (or full loop when no SIMD is available).
-    for (int i = 0; i < numPixels; ++i)
+    // Scalar tail for remaining < 4 pixels.
+    for (; i < numPixels; ++i)
     {
-        std::swap (pixels[0], pixels[2]);
-        pixels += 4;
+        const auto p = pixels[i];
+        pixels[i] = (p & 0xFF00FF00u) | ((p & 0xFFu) << 16) | ((p >> 16) & 0xFFu);
     }
 }
 
-void YUP_CALLTYPE ColorVectorOperations::convertGrayscaleToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept
+void YUP_CALLTYPE ColorVectorOperations::convertGrayscaleToRGBA (const uint8* src, uint32* dst, int numPixels) noexcept
 {
     for (int i = 0; i < numPixels; ++i)
     {
         const uint32 value = *src++;
-        const auto rgba = packRGBA (value, value, value, 255u);
-        std::memcpy (dst, &rgba, sizeof (rgba));
-        dst += 4;
+        dst[i] = packRGBA (value, value, value, 255u);
     }
 }
 
-void YUP_CALLTYPE ColorVectorOperations::convertRGBToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept
+void YUP_CALLTYPE ColorVectorOperations::convertRGBToRGBA (const uint8* src, uint32* dst, int numPixels) noexcept
 {
     for (int i = 0; i < numPixels; ++i)
     {
-        const auto rgba = packRGBA (src[0], src[1], src[2], 255u);
-        std::memcpy (dst, &rgba, sizeof (rgba));
+        dst[i] = packRGBA (src[0], src[1], src[2], 255u);
         src += 3;
-        dst += 4;
     }
 }
 
 void YUP_CALLTYPE ColorVectorOperations::lerpRows (const float* rowA, const float* rowB, float* dst, float t, int numPixels) noexcept
 {
-    const auto t4 = Float4::broadcast (t);
-    const auto minusOne = Float4::broadcast (-1.0f);
+    const auto t4 = Float32x4::broadcast (t);
+    const auto minusOne = Float32x4::broadcast (-1.0f);
     int i = 0;
 
     for (; i < numPixels; ++i)
     {
-        const auto a = Float4::loadUnaligned (rowA + i * 4);
-        const auto b = Float4::loadUnaligned (rowB + i * 4);
+        const auto a = Float32x4::loadUnaligned (rowA + i * 4);
+        const auto b = Float32x4::loadUnaligned (rowB + i * 4);
         a.mulAdd (b + (a * minusOne), t4).storeUnaligned (dst + i * 4);
     }
 }
