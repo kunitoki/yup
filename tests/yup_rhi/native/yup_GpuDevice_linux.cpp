@@ -536,7 +536,7 @@ TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFailsWithNullDevice)
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
     src.code = "void main() {}";
-    src.codeSize = static_cast<uint32_t> (strlen (src.code));
+    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
 
     auto result = GpuComputePipeline::compile (nullptr, src, GpuWorkgroupSize { 16, 1, 1 });
     EXPECT_TRUE (result.failed());
@@ -550,7 +550,7 @@ TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileWithInvalidSourceFails)
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
     src.code = "not valid glsl at all";
-    src.codeSize = static_cast<uint32_t> (strlen (src.code));
+    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
 
     auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 16, 1, 1 });
     EXPECT_TRUE (result.failed());
