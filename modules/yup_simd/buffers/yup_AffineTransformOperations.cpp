@@ -31,17 +31,17 @@ void YUP_CALLTYPE AffineTransformOperations::transformPoints (const float* srcXs
 {
     int i = 0;
 
-    const auto sx4 = Float4::broadcast (sx);
-    const auto shx4 = Float4::broadcast (shx);
-    const auto tx4 = Float4::broadcast (tx);
-    const auto shy4 = Float4::broadcast (shy);
-    const auto sy4 = Float4::broadcast (sy);
-    const auto ty4 = Float4::broadcast (ty);
+    const auto sx4 = Float32x4::broadcast (sx);
+    const auto shx4 = Float32x4::broadcast (shx);
+    const auto tx4 = Float32x4::broadcast (tx);
+    const auto shy4 = Float32x4::broadcast (shy);
+    const auto sy4 = Float32x4::broadcast (sy);
+    const auto ty4 = Float32x4::broadcast (ty);
 
-    for (; i + Float4::size <= numPoints; i += Float4::size)
+    for (; i + Float32x4::size <= numPoints; i += Float32x4::size)
     {
-        const auto x = Float4::loadUnaligned (srcXs + i);
-        const auto y = Float4::loadUnaligned (srcYs + i);
+        const auto x = Float32x4::loadUnaligned (srcXs + i);
+        const auto y = Float32x4::loadUnaligned (srcYs + i);
 
         const auto outX = tx4.mulAdd (sx4, x).mulAdd (shx4, y);
         const auto outY = ty4.mulAdd (shy4, x).mulAdd (sy4, y);

@@ -88,27 +88,27 @@ static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 }
 #endif
 
-class LowLevelRenderContextDawnPLS : public GraphicsContext
+class GraphicsContextDawn : public GraphicsContext
 {
 public:
-    LowLevelRenderContextDawnPLS (Options options, GpuDevice::Ptr existingGpu = {})
-        : m_options (options)
+    GraphicsContextDawn (Options options, GpuDevice::Ptr existingGpu = {})
+        : options (options)
     {
         // Obtain or create the GpuDevice
         if (existingGpu != nullptr)
-            m_gpuContext = std::move (existingGpu);
+            gpuDevice = std::move (existingGpu);
         else
-            m_gpuContext = GpuDevice::create (GpuPlatform::WebGPU, options);
+            gpuDevice = GpuDevice::create (GpuPlatform::WebGPU, options);
 
         WGPUInstanceDescriptor instanceDescriptor {};
         instanceDescriptor.features.timedWaitAnyEnable = true;
-        m_instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
+        instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
 
         wgpu::RequestAdapterOptions adapterOptions = {
             .powerPreference = wgpu::PowerPreference::HighPerformance,
         };
 
-        auto adapters = m_instance->EnumerateAdapters (&adapterOptions);
+        auto adapters = instance->EnumerateAdapters (&adapterOptions);
 
         wgpu::DawnAdapterPropertiesPowerPreference power_props {};
         wgpu::AdapterProperties adapterProperties {};
@@ -146,39 +146,39 @@ public:
             .requiredFeatures = requiredFeatures.data(),
         };
 
-        m_backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
+        backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
 
         DawnProcTable backendProcs = dawn::native::GetProcs();
         dawnProcSetProcs (&backendProcs);
-        backendProcs.deviceSetUncapturedErrorCallback (m_backendDevice, print_device_error, nullptr);
-        backendProcs.deviceSetDeviceLostCallback (m_backendDevice, device_lost_callback, nullptr);
-        backendProcs.deviceSetLoggingCallback (m_backendDevice, device_log_callback, nullptr);
+        backendProcs.deviceSetUncapturedErrorCallback (backendDevice, print_device_error, nullptr);
+        backendProcs.deviceSetDeviceLostCallback (backendDevice, device_lost_callback, nullptr);
+        backendProcs.deviceSetLoggingCallback (backendDevice, device_log_callback, nullptr);
 
-        m_device = wgpu::Device::Acquire (m_backendDevice);
-        m_queue = m_device.GetQueue();
-        m_plsContext = PLSRenderContextWebGPUImpl::MakeContext (
-            m_device, m_queue, PLSRenderContextWebGPUImpl::ContextOptions());
+        device = wgpu::Device::Acquire (backendDevice);
+        queue = device.GetQueue();
+        plsContext = PLSRenderContextWebGPUImpl::MakeContext (
+            device, queue, PLSRenderContextWebGPUImpl::ContextOptions());
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
-    GpuDevice::Ptr getGpuDevice() const noexcept override { return m_gpuContext; }
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
 
-    Factory* factory() override { return m_plsContext.get(); }
+    Factory* getFactory() override { return plsContext.get(); }
 
-    rive::pls::PLSRenderContext* renderContext() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() override { return plsContext.get(); }
 
-    rive::pls::PLSRenderTarget* renderTarget() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         DawnProcTable backendProcs = dawn::native::GetProcs();
 
-        auto surfaceChainedDesc = SetupDawnWindowAndGetSurfaceDescriptor (window, m_options.retinaDisplay);
+        auto surfaceChainedDesc = SetupDawnWindowAndGetSurfaceDescriptor (window, options.retinaDisplay);
         WGPUSurfaceDescriptor surfaceDesc = {
             .nextInChain = reinterpret_cast<WGPUChainedStruct*> (surfaceChainedDesc.get()),
         };
-        WGPUSurface surface = backendProcs.instanceCreateSurface (m_instance->Get(), &surfaceDesc);
+        WGPUSurface surface = backendProcs.instanceCreateSurface (instance->Get(), &surfaceDesc);
 
         WGPUSwapChainDescriptor swapChainDesc = {
             .usage = WGPUTextureUsage_RenderAttachment,
@@ -188,56 +188,56 @@ public:
             .presentMode = WGPUPresentMode_Immediate,
         };
 
-        if (m_options.enableReadPixels)
+        if (options.readableFramebuffer)
             swapChainDesc.usage |= WGPUTextureUsage_CopySrc;
 
-        WGPUSwapChain backendSwapChain = backendProcs.deviceCreateSwapChain (m_backendDevice, surface, &swapChainDesc);
-        m_swapchain = wgpu::SwapChain::Acquire (backendSwapChain);
+        WGPUSwapChain backendSwapChain = backendProcs.deviceCreateSwapChain (backendDevice, surface, &swapChainDesc);
+        swapchain = wgpu::SwapChain::Acquire (backendSwapChain);
 
-        m_renderTarget = m_plsContext->static_impl_cast<PLSRenderContextWebGPUImpl>()
-                             ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
+        renderTarget = plsContext->static_impl_cast<PLSRenderContextWebGPUImpl>()
+                           ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
 
-        m_pixelReadBuff = {};
+        pixelReadBuff = {};
     }
 
     std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer> (m_plsContext.get());
+        return std::make_unique<PLSRenderer> (plsContext.get());
     }
 
     void begin (PLSRenderContext::FrameDescriptor&& frameDescriptor) override
     {
-        assert (m_swapchain.GetCurrentTexture().GetWidth() == m_renderTarget->width());
-        assert (m_swapchain.GetCurrentTexture().GetHeight() == m_renderTarget->height());
-        m_renderTarget->setTargetTextureView (m_swapchain.GetCurrentTextureView());
-        frameDescriptor.renderTarget = m_renderTarget;
-        m_plsContext->beginFrame (std::move (frameDescriptor));
+        assert (swapchain.GetCurrentTexture().GetWidth() == renderTarget->width());
+        assert (swapchain.GetCurrentTexture().GetHeight() == renderTarget->height());
+        renderTarget->setTargetTextureView (swapchain.GetCurrentTextureView());
+        frameDescriptor.renderTarget = renderTarget;
+        plsContext->beginFrame (std::move (frameDescriptor));
     }
 
     void end (void* window) override
     {
-        m_plsContext->flush();
-        m_swapchain.Present();
+        plsContext->flush();
+        swapchain.Present();
     }
 
-    void tick() override { m_device.Tick(); }
+    void tick() override { device.Tick(); }
 
 private:
-    Options m_options;
-    GpuDevice::Ptr m_gpuContext;
-    WGPUDevice m_backendDevice = {};
-    wgpu::Device m_device = {};
-    wgpu::Queue m_queue = {};
-    wgpu::SwapChain m_swapchain = {};
-    std::unique_ptr<dawn::native::Instance> m_instance;
-    std::unique_ptr<PLSRenderContext> m_plsContext;
-    rcp<PLSRenderTargetWebGPU> m_renderTarget;
-    wgpu::Buffer m_pixelReadBuff;
+    Options options;
+    GpuDevice::Ptr gpuDevice;
+    WGPUDevice backendDevice = {};
+    wgpu::Device device = {};
+    wgpu::Queue queue = {};
+    wgpu::SwapChain swapchain = {};
+    std::unique_ptr<dawn::native::Instance> instance;
+    std::unique_ptr<PLSRenderContext> plsContext;
+    rcp<PLSRenderTargetWebGPU> renderTarget;
+    wgpu::Buffer pixelReadBuff;
 };
 
 std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)
 {
-    return std::make_unique<LowLevelRenderContextDawnPLS> (options, std::move (existingGpu));
+    return std::make_unique<GraphicsContextDawn> (options, std::move (existingGpu));
 }
 
 } // namespace yup

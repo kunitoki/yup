@@ -31,17 +31,17 @@ class GpuComputePipelineWebGPU final : public GpuComputePipeline
 public:
     GpuComputePipelineWebGPU (wgpu::ComputePipeline pipeline, GpuWorkgroupSize wgs)
         : computePipeline (std::move (pipeline))
-        , workgroupSize_ (wgs)
+        , workgroupSize (wgs)
     {
     }
 
-    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize_; }
+    GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize; }
 
     wgpu::ComputePipeline getPipeline() const noexcept { return computePipeline; }
 
 private:
     wgpu::ComputePipeline computePipeline;
-    GpuWorkgroupSize workgroupSize_;
+    GpuWorkgroupSize workgroupSize;
 };
 
 //==============================================================================

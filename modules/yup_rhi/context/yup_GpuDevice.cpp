@@ -22,7 +22,8 @@
 namespace yup
 {
 
-// Forward declarations for backend-specific factory functions
+//==============================================================================
+
 std::unique_ptr<GpuDevice> yup_constructHeadlessGpuDevice (GpuDevice::Options);
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
 std::unique_ptr<GpuDevice> yup_constructMetalGpuDevice (GpuDevice::Options);
@@ -38,6 +39,8 @@ std::unique_ptr<GpuDevice> yup_constructWebGPUGpuDevice (GpuDevice::Options);
 #elif YUP_RIVE_USE_DAWN
 std::unique_ptr<GpuDevice> yup_constructDawnGpuDevice (GpuDevice::Options);
 #endif
+
+//==============================================================================
 
 GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
 {
@@ -98,7 +101,6 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
                                                               const void* data,
                                                               size_t byteSize)
 {
-    jassert (data != nullptr && byteSize > 0);
     if (data == nullptr || byteSize == 0)
         return nullptr;
 
@@ -106,7 +108,7 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
     if (type == GpuBufferType::storage)
         return nullptr;
 
-    auto* oreCtx = gpuContext();
+    auto* oreCtx = getGpuContext();
     if (oreCtx == nullptr)
         return nullptr;
 

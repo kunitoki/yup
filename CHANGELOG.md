@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn
 - Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
+- Fixed a crash on Windows when creating any native window: the D3D11 `GpuDevice` was built with an already moved-from `ID3D11Device`, and the Direct3D `GraphicsContext` created a second device whose swapchain textures could not be used by the render context. Both now share a single `ID3D11Device`
+- Fixed the Emscripten WebGPU `GraphicsContext` never storing its surface size, leaving the offscreen copy at 0x0
 
 #### Rive Runtime Bump
 

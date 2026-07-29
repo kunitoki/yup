@@ -53,6 +53,11 @@ protected:
         parentComponent->addAndMakeVisible (*targetComponent);
     }
 
+    void TearDown() override
+    {
+        PopupMenu::dismissAllPopups();
+    }
+
     std::unique_ptr<Component> parentComponent;
     std::unique_ptr<Component> targetComponent;
 };

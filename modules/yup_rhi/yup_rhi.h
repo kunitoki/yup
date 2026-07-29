@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_shading rive_renderer
+    dependencies:       yup_core yup_shading yup_simd rive_renderer
     appleFrameworks:    Metal
 
   END_YUP_MODULE_DECLARATION
@@ -45,6 +45,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_shading/yup_shading.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")

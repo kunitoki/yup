@@ -35,62 +35,53 @@
 namespace yup
 {
 
-class LowLevelRenderContextWebGPU : public GraphicsContext
+class GraphicsContextWebGPU : public GraphicsContext
 {
 public:
-    LowLevelRenderContextWebGPU (Options options, GpuDevice::Ptr existingGpu = {})
-        : m_options (options)
+    GraphicsContextWebGPU (Options options, GpuDevice::Ptr existingGpu = {})
+        : options (options)
     {
-        m_device = wgpu::Device::Acquire (emscripten_webgpu_get_device());
-        if (m_device == nullptr)
+        device = wgpu::Device::Acquire (emscripten_webgpu_get_device());
+        if (device == nullptr)
         {
             jassertfalse;
             fprintf (stderr, "WebGPU: no device. Ensure Module.preinitializedWebGPUDevice is set before main().\n");
             return;
         }
 
-        m_queue = m_device.GetQueue();
+        queue = device.GetQueue();
 
         // Obtain or create the GpuDevice for RHI/offscreen operations
         if (existingGpu != nullptr)
-            m_gpuContext = std::move (existingGpu);
+            gpuDevice = std::move (existingGpu);
         else
-            m_gpuContext = GpuDevice::create (GpuPlatform::WebGPU, options);
-
-        m_renderContext = rive::gpu::RenderContextWebGPUImpl::MakeContext (
-            {}, m_device, m_queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
-
-        if (m_renderContext == nullptr)
-        {
-            fprintf (stderr, "WebGPU: failed to create a render context.\n");
-            return;
-        }
+            gpuDevice = GpuDevice::create (GpuPlatform::WebGPU, options);
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
-    GpuDevice::Ptr getGpuDevice() const noexcept override { return m_gpuContext; }
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
 
-    rive::Factory* factory() override { return m_renderContext.get(); }
+    rive::Factory* getFactory() override { return gpuDevice->getRenderContext(); }
 
-    rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() override { return gpuDevice->getRenderContext(); }
 
-    rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<rive::RiveRenderer> (m_renderContext.get());
+        return std::make_unique<rive::RiveRenderer> (getRenderContext());
     }
 
-    void onSizeChanged (void*, int width, int height, float dpiScale, uint32_t) override
+    void onSizeChanged (void*, int newWidth, int newHeight, float dpiScale, uint32_t) override
     {
-        if (m_renderContext == nullptr || width <= 0 || height <= 0)
+        if (gpuDevice == nullptr || getRenderContext() == nullptr || newWidth <= 0 || newHeight <= 0)
             return;
 
-        m_width = width;
-        m_height = height;
+        width = newWidth;
+        height = newHeight;
 
-        if (m_surface == nullptr)
+        if (surface == nullptr)
         {
             wgpu::EmscriptenSurfaceSourceCanvasHTMLSelector canvasDesc = {};
             canvasDesc.selector = "#canvas";
@@ -99,11 +90,11 @@ public:
             surfaceDesc.nextInChain = &canvasDesc;
 
             wgpu::Instance instance = wgpu::CreateInstance();
-            m_surface = instance.CreateSurface (&surfaceDesc);
+            surface = instance.CreateSurface (&surfaceDesc);
         }
 
         wgpu::SurfaceConfiguration config = {};
-        config.device = m_device;
+        config.device = device;
         config.format = wgpu::TextureFormat::BGRA8Unorm;
         config.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopyDst;
         config.width = (uint32_t) width;
@@ -111,7 +102,7 @@ public:
         config.alphaMode = wgpu::CompositeAlphaMode::Auto;
         config.presentMode = wgpu::PresentMode::Fifo;
 
-        m_surface.Configure (&config);
+        surface.Configure (&config);
 
         wgpu::TextureDescriptor textureDesc = {};
         textureDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
@@ -119,39 +110,38 @@ public:
         textureDesc.size = { (uint32_t) width, (uint32_t) height, 1 };
         textureDesc.format = wgpu::TextureFormat::BGRA8Unorm;
 
-        m_offscreenTexture = m_device.CreateTexture (&textureDesc);
-        m_offscreenTextureView = m_offscreenTexture.CreateView();
+        offscreenTexture = device.CreateTexture (&textureDesc);
+        offscreenTextureView = offscreenTexture.CreateView();
 
-        m_renderTarget = m_renderContext->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()
-                             ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, (uint32_t) width, (uint32_t) height);
+        renderTarget = getRenderContext()->static_impl_cast<rive::gpu::RenderContextWebGPUImpl>()->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, (uint32_t) width, (uint32_t) height);
     }
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        if (m_offscreenTextureView == nullptr || m_renderTarget == nullptr)
+        if (offscreenTextureView == nullptr || renderTarget == nullptr)
             return;
 
-        m_renderTarget->setTargetTextureView (m_offscreenTextureView, m_offscreenTexture);
-        m_renderContext->beginFrame (frameDescriptor);
+        renderTarget->setTargetTextureView (offscreenTextureView, offscreenTexture);
+        getRenderContext()->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
-        if (m_renderTarget == nullptr || m_offscreenTexture == nullptr || m_surface == nullptr)
+        if (renderTarget == nullptr || offscreenTexture == nullptr || surface == nullptr)
             return;
 
         wgpu::SurfaceTexture surfaceTexture = {};
-        m_surface.GetCurrentTexture (&surfaceTexture);
+        surface.GetCurrentTexture (&surfaceTexture);
         if (surfaceTexture.texture == nullptr)
             return;
 
-        wgpu::CommandEncoder encoder = m_device.CreateCommandEncoder();
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
 
-        m_renderContext->flush ({ .renderTarget = m_renderTarget.get(),
-                                  .externalCommandBuffer = encoder.Get() });
+        getRenderContext()->flush ({ .renderTarget = renderTarget.get(),
+                                     .externalCommandBuffer = encoder.Get() });
 
         wgpu::TexelCopyTextureInfo copySource = {};
-        copySource.texture = m_offscreenTexture;
+        copySource.texture = offscreenTexture;
         copySource.aspect = wgpu::TextureAspect::All;
 
         wgpu::TexelCopyTextureInfo copyDestination = {};
@@ -159,35 +149,34 @@ public:
         copyDestination.aspect = wgpu::TextureAspect::All;
 
         wgpu::Extent3D copySize = {};
-        copySize.width = (uint32_t) m_width;
-        copySize.height = (uint32_t) m_height;
+        copySize.width = (uint32_t) width;
+        copySize.height = (uint32_t) height;
         copySize.depthOrArrayLayers = 1;
 
         encoder.CopyTextureToTexture (&copySource, &copyDestination, &copySize);
 
         wgpu::CommandBuffer commands = encoder.Finish();
-        m_queue.Submit (1, &commands);
+        queue.Submit (1, &commands);
 
-        m_renderTarget->setTargetTextureView ({}, {});
+        renderTarget->setTargetTextureView ({}, {});
     }
 
 private:
-    Options m_options;
-    GpuDevice::Ptr m_gpuContext;
-    wgpu::Device m_device;
-    wgpu::Queue m_queue;
-    wgpu::Surface m_surface;
-    wgpu::Texture m_offscreenTexture;
-    wgpu::TextureView m_offscreenTextureView;
-    int m_width = 0;
-    int m_height = 0;
-    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    rive::rcp<rive::gpu::RenderTargetWebGPU> m_renderTarget;
+    Options options;
+    GpuDevice::Ptr gpuDevice;
+    wgpu::Device device;
+    wgpu::Queue queue;
+    wgpu::Surface surface;
+    wgpu::Texture offscreenTexture;
+    wgpu::TextureView offscreenTextureView;
+    int width = 0;
+    int height = 0;
+    rive::rcp<rive::gpu::RenderTargetWebGPU> renderTarget;
 };
 
 std::unique_ptr<GraphicsContext> yup_constructWebGPUGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)
 {
-    return std::make_unique<LowLevelRenderContextWebGPU> (options, std::move (existingGpu));
+    return std::make_unique<GraphicsContextWebGPU> (options, std::move (existingGpu));
 }
 
 } // namespace yup

@@ -58,7 +58,6 @@ public:
         bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
         bool readableFramebuffer = false;           ///< Allows the framebuffer to be readable.
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
-        bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
@@ -92,21 +91,33 @@ public:
     virtual GpuPlatform getPlatform() const noexcept = 0;
 
     //==============================================================================
+    /** Returns the backend-specific GPU render context, or nullptr if unavailable.
+    
+        This is the native GPU context used by the Rive renderer. It may be
+        nullptr on backends that do not support rendering (e.g., headless compute
+        or OpenGL without a window).
+
+        @return A pointer to the backend-specific RenderContext, or nullptr if unavailable.
+    */
+    virtual rive::gpu::RenderContext* getRenderContext() const { return nullptr; }
+
     /** Returns the backend-agnostic ore GPU context, or nullptr when ore is
         unavailable on this backend.
 
         This is the single backend bridge used by the RHI layer (GpuPipeline,
         GpuFrame, GpuRenderPass, GpuBuffer). User code should prefer the
         dependency-free isGpuAvailable() capability probe instead.
+
+        @return A pointer to the ore::Context, or nullptr if unavailable.
     */
-    virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
+    virtual rive::ore::Context* getGpuContext() const noexcept { return nullptr; }
 
     /** Returns true if a GPU (ore) context is available for RHI operations.
 
-        Equivalent to gpuContext() != nullptr but without referencing any ore
+        Equivalent to getGpuContext() != nullptr but without referencing any ore
         type, so user code and examples can probe GPU capability ore-free.
     */
-    bool isGpuAvailable() const noexcept { return gpuContext() != nullptr; }
+    bool isGpuAvailable() const noexcept { return getGpuContext() != nullptr; }
 
     /** Returns true if compute shaders are available on this backend.
 
