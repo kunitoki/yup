@@ -27,6 +27,7 @@ concept guides, walkthroughs, and reference material.
 - [Imaging](imaging/index.md) - bitmap images: pixels, loading, saving, and drawing.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
+- [AI](ai/index.md) - the AI and LLM infrastructure.
 - [Scripting](scripting/index.md) - the Python bindings layer.
 
 ## Quick links

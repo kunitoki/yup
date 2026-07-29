@@ -106,6 +106,11 @@ struct TestApplication : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+        yup::SystemStats::setApplicationCrashHandler ([] (void*)
+        {
+            yup::Logger::writeToLog (yup::SystemStats::getStackBacktrace());
+        });
+
         yup::Array<char*> argv;
 
         auto applicationName = getApplicationName();

@@ -395,16 +395,16 @@ public:
         glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
         // Flip vertically: OpenGL framebuffer origin is bottom-left.
-        std::vector<uint8_t> rowBuffer (bytesPerRow);
+        offscreenPixelsRow.resize (bytesPerRow);
         auto* bytes = static_cast<uint8_t*> (dst);
         const int halfHeight = target.height / 2;
         for (int i = 0; i < halfHeight; ++i)
         {
             uint8_t* top = bytes + static_cast<size_t> (i) * bytesPerRow;
             uint8_t* bottom = bytes + static_cast<size_t> (target.height - 1 - i) * bytesPerRow;
-            std::memcpy (rowBuffer.data(), top, bytesPerRow);
+            std::memcpy (offscreenPixelsRow.data(), top, bytesPerRow);
             std::memcpy (top, bottom, bytesPerRow);
-            std::memcpy (bottom, rowBuffer.data(), bytesPerRow);
+            std::memcpy (bottom, offscreenPixelsRow.data(), bytesPerRow);
         }
 
         return true;
@@ -434,6 +434,7 @@ private:
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextGL> oreContext;
+    std::vector<uint8_t> offscreenPixelsRow;
 };
 
 //==============================================================================
