@@ -382,11 +382,15 @@ void SDLComponentNative::setPosition (const Point<int>& newPosition)
 Point<int> SDLComponentNative::getPosition() const
 {
     int x = 0, y = 0;
+    float scale = 0.0f;
 
+#if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr)
         SDL_GetWindowPosition (window, &x, &y);
 
-    const auto scale = getWindowUnitsPerPoint (window);
+    scale = getWindowUnitsPerPoint (window);
+#endif
+
     return { roundToInt (x / scale), roundToInt (y / scale) };
 }
 
