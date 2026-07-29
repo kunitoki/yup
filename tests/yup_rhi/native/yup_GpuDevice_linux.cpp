@@ -423,7 +423,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassClearColor)
 
     GpuRenderOptions opts;
     opts.clear = true;
-    opts.clearColor = Color (0, 255, 0, 255); // Green, fully opaque.
+    opts.clearColor = Color (255, 0, 255, 0); // ARGB: Green, fully opaque.
 
     auto pass = target->beginRenderPass (frame, opts);
     ASSERT_TRUE (pass.isValid());
@@ -482,7 +482,7 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasAsImage)
     auto& g = canvas->beginDraw();
 
     // Draw a filled rectangle.
-    g.setFillColor (Color (255, 0, 0, 255));
+    g.setFillColor (Color (255, 255, 0, 0)); // ARGB: Red, fully opaque.
     g.fillRect (0, 0, 256, 256);
 
     canvas->commit();
@@ -501,7 +501,7 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasReadPixelsAfterDraw)
     auto& g = canvas->beginDraw();
 
     // Fill the entire canvas with red.
-    g.setFillColor (Color (255, 0, 0, 255));
+    g.setFillColor (Color (255, 255, 0, 0)); // ARGB: Red, fully opaque.
     g.fillRect (0, 0, 128, 128);
 
     canvas->commit();

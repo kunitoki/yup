@@ -85,9 +85,6 @@ public:
 
         oreContext = rive::ore::ContextGL::Make();
 
-        const char* glRenderer = reinterpret_cast<const char*> (glGetString (GL_RENDERER));
-        needsSwizzle = (glRenderer != nullptr && strstr (glRenderer, "llvmpipe") != nullptr);
-
 #if YUP_ENABLE_GL_VERBOSE
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
         printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));
@@ -397,9 +394,6 @@ public:
         glReadPixels (0, 0, target.width, target.height, GL_RGBA, GL_UNSIGNED_BYTE, dst);
         glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
-        if (needsSwizzle)
-            ColorVectorOperations::convertBGRAtoRGBA (static_cast<uint32_t*> (dst), target.width * target.height);
-
         // Flip vertically: OpenGL framebuffer origin is bottom-left.
         std::vector<uint8_t> rowBuffer (bytesPerRow);
         auto* bytes = static_cast<uint8_t*> (dst);
@@ -440,7 +434,6 @@ private:
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextGL> oreContext;
-    bool needsSwizzle = false;
 };
 
 //==============================================================================
