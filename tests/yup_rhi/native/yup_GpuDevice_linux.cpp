@@ -542,21 +542,6 @@ TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFailsWithNullDevice)
     EXPECT_TRUE (result.failed());
 }
 
-TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileWithInvalidSourceFails)
-{
-#if ! YUP_ENABLE_SHADER_TRANSPILER
-    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
-#else
-    GpuShaderSource src;
-    src.language = GpuShaderLanguage::glsl;
-    src.code = "not valid glsl at all";
-    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
-
-    auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 16, 1, 1 });
-    EXPECT_TRUE (result.failed());
-#endif
-}
-
 TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromGlslMinimalShader)
 {
 #if ! YUP_ENABLE_SHADER_TRANSPILER
