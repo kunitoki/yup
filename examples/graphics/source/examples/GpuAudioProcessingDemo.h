@@ -472,13 +472,25 @@ layout(std140, set = 0, binding = 2) uniform Params {
     float pad1;
 } params;
 
+float excite(float x, float g)
+{
+    float y = x;
+    y = tanh(g * y);
+    y += 0.20 * sin(7.0 * y);
+    y += 0.08 * sin(19.0 * y);
+    y *= 1.0 + 0.3 * abs(y);
+    y = y / (1.0 + abs(y));
+    return y;
+}
+
 void main()
 {
     uint idx = gl_GlobalInvocationID.x;
+
     float s = inputData[idx];
-    s *= params.gain;
-    s = tanh(s);
-    outputData[idx] = s * params.mix + inputData[idx] * (1.0 - params.mix);
+    float d = excite(s, params.gain);
+
+    outputData[idx] = d * params.mix + s * (1.0 - params.mix);
 }
 )glsl";
 

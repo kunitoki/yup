@@ -177,7 +177,7 @@
     Enable logging of audio device events on macOS, such as device changes and errors.
 */
 #ifndef YUP_ENABLE_CORE_AUDIO_LOGGING
-#define YUP_ENABLE_CORE_AUDIO_LOGGING 1
+#define YUP_ENABLE_CORE_AUDIO_LOGGING 0
 #endif
 
 //==============================================================================

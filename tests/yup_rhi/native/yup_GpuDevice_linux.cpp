@@ -516,3 +516,313 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasReadPixelsAfterDraw)
     EXPECT_EQ (pixels[centerIdx + 2], 0u);   // B
     EXPECT_EQ (pixels[centerIdx + 3], 255u); // A
 }
+
+// --------------------------------------------------------------------------
+// Compute shader support
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, IsComputeAvailable)
+{
+    // GL 4.3+ should support compute shaders.
+    EXPECT_TRUE (device->isComputeAvailable());
+}
+
+// --------------------------------------------------------------------------
+// GpuComputePipeline
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFailsWithNullDevice)
+{
+    GpuShaderSource src;
+    src.language = GpuShaderLanguage::glsl;
+    src.code = "void main() {}";
+    src.codeSize = static_cast<uint32_t> (strlen (src.code));
+
+    auto result = GpuComputePipeline::compile (nullptr, src, GpuWorkgroupSize { 16, 1, 1 });
+    EXPECT_TRUE (result.failed());
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileWithInvalidSourceFails)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    GpuShaderSource src;
+    src.language = GpuShaderLanguage::glsl;
+    src.code = "not valid glsl at all";
+    src.codeSize = static_cast<uint32_t> (strlen (src.code));
+
+    auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 16, 1, 1 });
+    EXPECT_TRUE (result.failed());
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromGlslMinimalShader)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    const char* glsl = R"(
+        #version 450
+        layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+        layout(std430, binding = 0) buffer OutputBuf { float values[]; } outputBuf;
+        void main()
+        {
+            uint idx = gl_GlobalInvocationID.x;
+            outputBuf.values[idx] = float(idx) * 2.0;
+        }
+    )";
+
+    auto result = GpuComputePipeline::compileFromGlsl (device, glsl);
+    ASSERT_TRUE (result.wasOk());
+    ASSERT_NE (result.getValue(), nullptr);
+
+    auto wgs = result.getValue()->getWorkgroupSize();
+    EXPECT_EQ (wgs.x, 8u);
+    EXPECT_EQ (wgs.y, 1u);
+    EXPECT_EQ (wgs.z, 1u);
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromGlslFailsWithNullDevice)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    auto result = GpuComputePipeline::compileFromGlsl (nullptr, "#version 450\nvoid main() {}");
+    EXPECT_TRUE (result.failed());
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromBundleFailsWithNullDevice)
+{
+    ShaderBundle bundle;
+    auto result = GpuComputePipeline::compileFromBundle (nullptr, bundle);
+    EXPECT_TRUE (result.failed());
+}
+
+// --------------------------------------------------------------------------
+// GpuComputePass
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassBeginReturnsValidPass)
+{
+    auto pass = GpuComputePass::begin (device);
+    EXPECT_TRUE (pass.isValid());
+
+    if (pass.isValid())
+        pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassIsValid)
+{
+    auto pass = GpuComputePass::begin (device);
+    EXPECT_TRUE (pass.isValid());
+
+    // After finish, isValid should return false.
+    pass.finish();
+    EXPECT_FALSE (pass.isValid());
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassFinishIsIdempotent)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_TRUE (pass.finish());
+    EXPECT_FALSE (pass.finish());
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassDispatchWithoutPipelineReturnsFalse)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_FALSE (pass.dispatch (1, 1, 1));
+    pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassMoveConstruction)
+{
+    auto src = GpuComputePass::begin (device);
+    ASSERT_TRUE (src.isValid());
+
+    GpuComputePass dst (std::move (src));
+    EXPECT_TRUE (dst.isValid());
+    EXPECT_FALSE (src.isValid());
+
+    dst.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassMoveAssignment)
+{
+    auto src = GpuComputePass::begin (device);
+    ASSERT_TRUE (src.isValid());
+
+    auto dst = GpuComputePass::begin (GpuDevice::create (GpuPlatform::Headless, {}));
+    EXPECT_FALSE (dst.isValid());
+
+    dst = std::move (src);
+    EXPECT_TRUE (dst.isValid());
+    EXPECT_FALSE (src.isValid());
+
+    dst.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassSetPipelineDoesNotCrash)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setPipeline (nullptr));
+
+    pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassSetStorageBufferDoesNotCrash)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setStorageBuffer (0, 0, nullptr));
+
+    pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassSetUniformBufferDoesNotCrash)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, data, sizeof (data)));
+
+    pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassSetTextureDoesNotCrash)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
+
+    pass.finish();
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassEndToEndMinimalDispatch)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    // Compile a compute pipeline that writes to a storage buffer.
+    const char* glsl = R"(
+        #version 450
+        layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+        layout(std430, binding = 0) buffer OutputBuf { float values[]; } outputBuf;
+        layout(std140, binding = 1) uniform Params { float multiplier; } params;
+        void main()
+        {
+            uint idx = gl_GlobalInvocationID.x;
+            outputBuf.values[idx] = float(idx) * params.multiplier;
+        }
+    )";
+
+    auto compileResult = GpuComputePipeline::compileFromGlsl (device, glsl);
+    ASSERT_TRUE (compileResult.wasOk());
+    auto* pipeline = compileResult.getValue().get();
+    ASSERT_NE (pipeline, nullptr);
+
+    // Create a storage buffer with initial data.
+    constexpr size_t kBufSize = 8;
+    float initialData[kBufSize] = {};
+    auto storageBuf = device->createBuffer (GpuBufferType::storage, initialData, sizeof (initialData));
+    ASSERT_NE (storageBuf, nullptr);
+    EXPECT_TRUE (storageBuf->isValid());
+
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    pass.setPipeline (*pipeline);
+
+    float multiplier = 2.0f;
+    pass.setUniformBuffer (1, 0, &multiplier, sizeof (multiplier));
+    pass.setStorageBuffer (0, 0, storageBuf);
+
+    EXPECT_TRUE (pass.dispatch (1, 1, 1));
+    EXPECT_TRUE (pass.finish());
+
+    // Read back the buffer and verify results.
+    float readback[kBufSize] = {};
+    device->readBuffer (storageBuf, readback, sizeof (readback));
+    for (size_t i = 0; i < kBufSize; ++i)
+        EXPECT_FLOAT_EQ (readback[i], float (i) * multiplier);
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassEndToEndMultipleGroups)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    const char* glsl = R"(
+        #version 450
+        layout(local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
+        layout(std430, binding = 0) buffer OutputBuf { float values[]; } outputBuf;
+        void main()
+        {
+            uint idx = gl_GlobalInvocationID.x;
+            outputBuf.values[idx] = float(idx);
+        }
+    )";
+
+    auto compileResult = GpuComputePipeline::compileFromGlsl (device, glsl);
+    ASSERT_TRUE (compileResult.wasOk());
+    auto* pipeline = compileResult.getValue().get();
+
+    // 4 workgroups × 4 threads = 16 values
+    constexpr size_t kBufSize = 16;
+    float initialData[kBufSize] = {};
+    auto storageBuf = device->createBuffer (GpuBufferType::storage, initialData, sizeof (initialData));
+    ASSERT_NE (storageBuf, nullptr);
+
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    pass.setPipeline (*pipeline);
+    pass.setStorageBuffer (0, 0, storageBuf);
+    EXPECT_TRUE (pass.dispatch (4, 1, 1));
+    EXPECT_TRUE (pass.finish());
+
+    float readback[kBufSize] = {};
+    device->readBuffer (storageBuf, readback, sizeof (readback));
+    for (size_t i = 0; i < kBufSize; ++i)
+        EXPECT_FLOAT_EQ (readback[i], float (i));
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassDestructorCallsFinish)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+    // Let destructor call finish — should not crash.
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassDestructorAfterFinishDoesNotCrash)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+    pass.finish();
+    // Destructor after explicit finish — should not double-finish.
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassWithHeadlessDeviceIsInvalid)
+{
+    auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (headless, nullptr);
+
+    auto pass = GpuComputePass::begin (headless);
+    EXPECT_FALSE (pass.isValid());
+    EXPECT_FALSE (pass.dispatch (1, 1, 1));
+    EXPECT_FALSE (pass.finish());
+}
