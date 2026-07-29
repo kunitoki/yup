@@ -321,7 +321,13 @@ TEST (ColorVectorOpsTests, ConvertARGBtoRGBALargePixelCount)
     constexpr int kCount = 100;
     uint32_t argb[kCount];
     for (int i = 0; i < kCount; ++i)
-        argb[i] = (uint32_t) (((i * 7) & 0xff) << 24) | (uint32_t) (((i * 3) & 0xff) << 16) | (uint32_t) (((i * 5) & 0xff) << 8) | (uint32_t) (i & 0xff);
+    {
+        const uint32_t a = (uint32_t) ((i * 7) & 0xff);
+        const uint32_t r = (uint32_t) ((i * 3) & 0xff);
+        const uint32_t g = (uint32_t) ((i * 5) & 0xff);
+        const uint32_t b = (uint32_t) (i & 0xff);
+        argb[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
 
     uint32_t rgba[kCount] = {};
     ColorVectorOperations::convertARGBtoRGBA (argb, rgba, kCount);
