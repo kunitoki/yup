@@ -108,7 +108,9 @@ struct TestApplication : yup::YUPApplication
     {
         yup::SystemStats::setApplicationCrashHandler ([] (void*)
         {
-            yup::Logger::writeToLog (yup::SystemStats::getStackBacktrace());
+            auto trace = yup::SystemStats::getStackBacktrace();
+            std::fprintf (stderr, "\n=== CRASH ===\n%s\n=== END CRASH ===\n", trace.toRawUTF8());
+            std::fflush (stderr);
         });
 
         yup::Array<char*> argv;
