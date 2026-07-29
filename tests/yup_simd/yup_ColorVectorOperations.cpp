@@ -321,7 +321,7 @@ TEST (ColorVectorOpsTests, ConvertARGBtoRGBALargePixelCount)
     constexpr int kCount = 100;
     uint32_t argb[kCount];
     for (int i = 0; i < kCount; ++i)
-        argb[i] = (uint32_t) ((i * 7) << 24) | (uint32_t) ((i * 3) << 16) | (uint32_t) ((i * 5) << 8) | (uint32_t) (i & 0xff);
+        argb[i] = (uint32_t) (((i * 7) & 0xff) << 24) | (uint32_t) (((i * 3) & 0xff) << 16) | (uint32_t) (((i * 5) & 0xff) << 8) | (uint32_t) (i & 0xff);
 
     uint32_t rgba[kCount] = {};
     ColorVectorOperations::convertARGBtoRGBA (argb, rgba, kCount);
@@ -329,10 +329,10 @@ TEST (ColorVectorOpsTests, ConvertARGBtoRGBALargePixelCount)
     for (int i = 0; i < kCount; ++i)
     {
         // ARGB 0xAARRGGBB -> RGBA 0xRRGGBBAA
-        EXPECT_EQ ((rgba[i] >> 24) & 0xffu, (uint32_t) (i & 0xff));       // old B -> new A
-        EXPECT_EQ ((rgba[i] >> 16) & 0xffu, (uint32_t) ((i * 5) & 0xff)); // old G -> new B
-        EXPECT_EQ ((rgba[i] >> 8) & 0xffu, (uint32_t) ((i * 3) & 0xff));  // old R -> new G
-        EXPECT_EQ (rgba[i] & 0xffu, (uint32_t) ((i * 7) & 0xff));         // old A -> new R
+        EXPECT_EQ ((rgba[i] >> 24) & 0xffu, (uint32_t) ((i * 3) & 0xff)); // old R -> new R
+        EXPECT_EQ ((rgba[i] >> 16) & 0xffu, (uint32_t) ((i * 5) & 0xff)); // old G -> new G
+        EXPECT_EQ ((rgba[i] >> 8) & 0xffu, (uint32_t) (i & 0xff));        // old B -> new B
+        EXPECT_EQ (rgba[i] & 0xffu, (uint32_t) ((i * 7) & 0xff));         // old A -> new A
     }
 }
 
