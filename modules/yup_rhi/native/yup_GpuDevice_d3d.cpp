@@ -34,14 +34,14 @@ namespace yup
 class GpuDeviceD3D : public GpuDevice
 {
 public:
-    GpuDeviceD3D (ComPtr<ID3D11Device> gpu,
-                  ComPtr<ID3D11DeviceContext> gpuContext,
+    GpuDeviceD3D (ComPtr<ID3D11Device> gpuToUse,
+                  ComPtr<ID3D11DeviceContext> gpuContextToUse,
                   const rive::gpu::D3DContextOptions& contextOptions,
                   Options options)
         : options (options)
         , renderContextOptions (contextOptions)
-        , gpu (std::move (gpu))
-        , gpuContext (std::move (gpuContext))
+        , gpu (std::move (gpuToUse))
+        , gpuContext (std::move (gpuContextToUse))
         , renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (gpu, gpuContext, renderContextOptions))
         , oreContext (rive::ore::ContextD3D11::Make (gpu.Get(), gpuContext.Get()))
     {
@@ -340,6 +340,24 @@ private:
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextD3D11> oreContext;
 };
+
+//==============================================================================
+
+ID3D11Device* yup_getDirect3DDevice (GpuDevice& gpuDevice)
+{
+    if (gpuDevice.getPlatform() != GpuPlatform::Direct3D)
+        return nullptr;
+
+    return static_cast<GpuDeviceD3D&> (gpuDevice).getD3DDevice();
+}
+
+ID3D11DeviceContext* yup_getDirect3DDeviceContext (GpuDevice& gpuDevice)
+{
+    if (gpuDevice.getPlatform() != GpuPlatform::Direct3D)
+        return nullptr;
+
+    return static_cast<GpuDeviceD3D&> (gpuDevice).getD3DDeviceContext();
+}
 
 //==============================================================================
 

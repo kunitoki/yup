@@ -73,13 +73,13 @@ public:
         return std::make_unique<rive::RiveRenderer> (getRenderContext());
     }
 
-    void onSizeChanged (void*, int width, int height, float dpiScale, uint32_t) override
+    void onSizeChanged (void*, int newWidth, int newHeight, float dpiScale, uint32_t) override
     {
-        if (gpuDevice == nullptr || getRenderContext() == nullptr || width <= 0 || height <= 0)
+        if (gpuDevice == nullptr || getRenderContext() == nullptr || newWidth <= 0 || newHeight <= 0)
             return;
 
-        width = width;
-        height = height;
+        width = newWidth;
+        height = newHeight;
 
         if (surface == nullptr)
         {

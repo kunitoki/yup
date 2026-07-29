@@ -28,6 +28,11 @@
 namespace yup
 {
 
+ID3D11Device* yup_getDirect3DDevice (GpuDevice&);
+ID3D11DeviceContext* yup_getDirect3DDeviceContext (GpuDevice&);
+
+//==============================================================================
+
 class GraphicsContextD3D : public GraphicsContext
 {
 public:
@@ -35,19 +40,15 @@ public:
                         ComPtr<ID3D11Device> device,
                         ComPtr<ID3D11DeviceContext> deviceContext,
                         bool isHeadless,
-                        const rive::gpu::D3DContextOptions& contextOptions,
                         Options options,
-                        GpuDevice::Ptr existingGpu = {})
+                        GpuDevice::Ptr gpuDevice)
         : isHeadless (isHeadless)
         , options (options)
+        , gpuDevice (std::move (gpuDevice))
         , d3dFactory (std::move (d3dFactory))
         , device (std::move (device))
         , deviceContext (std::move (deviceContext))
     {
-        if (existingGpu != nullptr)
-            gpuDevice = std::move (existingGpu);
-        else
-            gpuDevice = GpuDevice::create (GpuPlatform::Direct3D, options);
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Direct3D; }
@@ -169,44 +170,25 @@ private:
 
 std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)
 {
-    ComPtr<IDXGIFactory2> factory;
-    VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
+    // The swapchain (and the textures obtained from it) must belong to the very same ID3D11Device
+    // that owns the render context drawing into them, so the GpuDevice is resolved first and its
+    // native device is reused here instead of creating a second one.
+    auto gpuDevice = existingGpu != nullptr ? std::move (existingGpu)
+                                            : GpuDevice::create (GpuPlatform::Direct3D, options);
+    if (gpuDevice == nullptr)
+        return nullptr;
 
-    ComPtr<IDXGIAdapter> adapter;
-    DXGI_ADAPTER_DESC adapterDesc {};
-    rive::gpu::D3DContextOptions contextOptions;
-
-    if (options.disableRasterOrdering)
-    {
-        contextOptions.disableRasterizerOrderedViews = true;
-        contextOptions.disableTypedUAVLoadStore = true;
-    }
-
-    for (UINT i = 0; factory->EnumAdapters (i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
-    {
-        adapter->GetDesc (&adapterDesc);
-        contextOptions.isIntel = adapterDesc.VendorId == 0x163C || adapterDesc.VendorId == 0x8086 || adapterDesc.VendorId == 0x8087;
-        break;
-    }
-
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> deviceContext;
-    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1 };
-
-    UINT creationFlags = 0;
-#ifdef DEBUG
-    creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-    VERIFY_OK (D3D11CreateDevice (adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, nullptr, creationFlags, featureLevels, std::size (featureLevels), D3D11_SDK_VERSION, device.ReleaseAndGetAddressOf(), nullptr, deviceContext.ReleaseAndGetAddressOf()));
+    ComPtr<ID3D11Device> device = yup_getDirect3DDevice (*gpuDevice);
+    ComPtr<ID3D11DeviceContext> deviceContext = yup_getDirect3DDeviceContext (*gpuDevice);
 
     if (! device || ! deviceContext)
         return nullptr;
 
-    printf ("D3D device: %S\n", adapterDesc.Description);
+    ComPtr<IDXGIFactory2> factory;
+    VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
 
     return std::make_unique<GraphicsContextD3D> (
-        std::move (factory), std::move (device), std::move (deviceContext), options.allowHeadlessRendering, contextOptions, options, std::move (existingGpu));
+        std::move (factory), std::move (device), std::move (deviceContext), options.allowHeadlessRendering, options, std::move (gpuDevice));
 }
 
 } // namespace yup
