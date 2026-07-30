@@ -367,6 +367,7 @@ void main() {
         if (! device->isComputeAvailable())
         {
             statusLabel->setText ("Compute shaders not available on this GPU backend.", yup::dontSendNotification);
+            YUP_DBG ("Compute shaders not available on this GPU backend.");
             return;
         }
 
@@ -381,12 +382,14 @@ void main() {
         {
             statusLabel->setText ("Compute shader compile failed: " + computeResult.getErrorMessage().substring (0, 60),
                                   yup::dontSendNotification);
+            YUP_DBG ("Compute shader compile failed: " << computeResult.getErrorMessage());
             return;
         }
 
         computePipeline = computeResult.getValue();
 #else
         statusLabel->setText ("Shader transpiler not available (YUP_ENABLE_SHADER_TRANSPILER).", yup::dontSendNotification);
+        YUP_DBG ("Shader transpiler not available (YUP_ENABLE_SHADER_TRANSPILER).");
         return;
 #endif
 
@@ -422,6 +425,7 @@ void main() {
         {
             statusLabel->setText ("Render shader compile failed: " + renderResult.getErrorMessage().substring (0, 60),
                                   yup::dontSendNotification);
+            YUP_DBG ("Render shader compile failed: " << renderResult.getErrorMessage());
             return;
         }
 
@@ -585,6 +589,7 @@ void main() {
         if (! device->updateBuffer (particleVBO, cpuVertexData.data(), vertexBytes))
         {
             statusLabel->setText ("VBO update failed!", yup::dontSendNotification);
+            YUP_DBG ("VBO update failed!");
             return nullptr;
         }
 
@@ -595,6 +600,7 @@ void main() {
         if (renderTarget == nullptr)
         {
             statusLabel->setText ("Render target creation failed!", yup::dontSendNotification);
+            YUP_DBG ("Render target creation failed!");
             return nullptr;
         }
 

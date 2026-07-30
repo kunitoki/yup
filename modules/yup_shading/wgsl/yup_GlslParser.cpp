@@ -963,6 +963,18 @@ private:
                     // Fall through to regular declaration parsing below
                 }
             }
+
+            // Unnamed block (no instance name): layout(...) buffer BlockName { ... };
+            if (blockStruct && lexer.peek().type == TokenType::semicolon)
+            {
+                lexer.advance(); // consume ;
+                Declaration decl;
+                decl.loc = l;
+                if (qualifier)
+                    decl.qualifier = std::make_unique<TypeQualifier> (std::move (*qualifier));
+                decl.structSpecifier = std::move (blockStruct);
+                return makeResultValueOk (ExternalDeclaration { std::move (decl) });
+            }
         }
 
         // Parse the type specifier (if not already set by block logic above)

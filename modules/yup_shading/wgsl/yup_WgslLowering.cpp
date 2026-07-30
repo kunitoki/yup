@@ -465,6 +465,21 @@ private:
                         info.isGlobal = true;
                         symbolTable.declare (d.structSpecifier->name, info);
                     }
+
+                    // For unnamed interface blocks (no initDeclaratorList), register
+                    // each field as a global variable so they are accessible directly.
+                    if (d.qualifier
+                        && (d.qualifier->hasStorage (StorageQualifier::uniform)
+                            || d.qualifier->hasStorage (StorageQualifier::buffer)))
+                    {
+                        for (auto& field : d.structSpecifier->fields)
+                        {
+                            SymbolInfo info;
+                            info.type = field.type;
+                            info.isGlobal = true;
+                            symbolTable.declare (field.name, info);
+                        }
+                    }
                 }
             }
             else if (std::holds_alternative<FunctionDefinition> (decl))
@@ -503,6 +518,32 @@ private:
                 continue;
 
             auto& d = std::get<Declaration> (decl);
+
+            // Handle unnamed interface blocks (structSpecifier + qualifier but no initDeclaratorList)
+            if (! d.initDeclaratorList && d.structSpecifier && d.qualifier
+                && (d.qualifier->hasStorage (StorageQualifier::uniform)
+                    || d.qualifier->hasStorage (StorageQualifier::buffer)))
+            {
+                uint32_t set = ~0u;
+                uint32_t binding = ~0u;
+
+                if (d.qualifier->layout)
+                {
+                    for (auto& entry : d.qualifier->layout->entries)
+                    {
+                        if (entry.id == LayoutQualifierId::descriptorSet && entry.value && entry.value->is<ExprIntConst>())
+                            set = static_cast<uint32_t> (entry.value->as<ExprIntConst>().value);
+                        else if (entry.id == LayoutQualifierId::binding && entry.value && entry.value->is<ExprIntConst>())
+                            binding = static_cast<uint32_t> (entry.value->as<ExprIntConst>().value);
+                    }
+                }
+
+                for (auto& field : d.structSpecifier->fields)
+                    allocator.registerBinding (field.name, set, binding);
+
+                continue;
+            }
+
             if (! d.initDeclaratorList)
                 continue;
 
@@ -583,6 +624,10 @@ private:
         // Walk body to mark reassigned parameters (Task 2.2)
         if (fd.body)
             markReassignedSymbols (*fd.body);
+
+        // Shadow reassigned parameters: WGSL params are immutable, so rename
+        // the param and insert a mutable local copy (Task 2.2).
+        shadowReassignedParams (fd);
 
         // Process function body
         if (fd.body)
@@ -680,6 +725,84 @@ private:
             }
             if (un.operand)
                 markReassignedInExpr (*un.operand);
+        }
+    }
+
+    //==========================================================================
+    // Shadow reassigned parameters (Task 2.2)
+    //==========================================================================
+
+    void shadowReassignedParams (FunctionDefinition& fd)
+    {
+        // Collect reassigned parameter names
+        std::vector<std::pair<std::string, TypeSpecifier>> shadowed;
+        for (auto& param : fd.prototype.parameters)
+        {
+            auto* info = symbolTable.lookup (param.name);
+            if (info && info->isReassigned)
+                shadowed.push_back ({ param.name, param.type });
+        }
+
+        if (shadowed.empty())
+            return;
+
+        // Rename params in the prototype
+        for (auto& param : fd.prototype.parameters)
+        {
+            for (auto& [origName, origType] : shadowed)
+            {
+                if (param.name == origName)
+                {
+                    param.name = "_" + origName;
+                    break;
+                }
+            }
+        }
+
+        // Insert shadow var declarations at the top of the function body
+        if (! fd.body || ! fd.body->is<StmtCompound>())
+            return;
+
+        auto& comp = fd.body->as<StmtCompound>();
+
+        // Insert in reverse order so they end up in the right order at the top
+        for (auto it = shadowed.rbegin(); it != shadowed.rend(); ++it)
+        {
+            auto& [origName, origType] = *it;
+
+            // Build: var origName: type = _origName;
+            InitDeclaratorList il;
+            il.loc = fd.prototype.loc;
+            il.type = origType;
+
+            SingleDeclaration sd;
+            sd.loc = fd.prototype.loc;
+            sd.name = origName;
+
+            Initializer init;
+            init.loc = fd.prototype.loc;
+            {
+                Expr e;
+                e.loc = fd.prototype.loc;
+                e.value = ExprVariable { fd.prototype.loc, "_" + origName };
+                init.expr = std::make_unique<Expr> (std::move (e));
+            }
+
+            sd.initializer = std::make_unique<Initializer> (std::move (init));
+            il.declarations.push_back (std::move (sd));
+
+            Declaration decl;
+            decl.loc = fd.prototype.loc;
+            decl.initDeclaratorList = std::make_unique<InitDeclaratorList> (std::move (il));
+
+            StmtDeclaration sdStmt;
+            sdStmt.loc = fd.prototype.loc;
+            sdStmt.declaration = std::move (decl);
+
+            Statement stmt;
+            stmt.loc = fd.prototype.loc;
+            stmt.value = std::move (sdStmt);
+            comp.statements.insert (comp.statements.begin(), std::move (stmt));
         }
     }
 

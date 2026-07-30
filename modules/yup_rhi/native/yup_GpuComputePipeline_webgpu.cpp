@@ -66,7 +66,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevi
     device = static_cast<GpuDeviceDawn&> (ctx).getDevice();
 #endif
 
-    wgpu::ShaderModuleWGSLDescriptor wgslDesc {};
+    wgpu::ShaderSourceWGSL wgslDesc {};
     wgslDesc.code = wgslSource;
 
     wgpu::ShaderModuleDescriptor shaderModuleDesc {};

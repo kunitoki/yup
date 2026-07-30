@@ -63,7 +63,6 @@ public:
         pass.SetPipeline (pipe->getPipeline());
 
         std::vector<wgpu::BindGroupEntry> entries;
-        std::vector<wgpu::BindGroupLayoutEntry> layoutEntries;
 
         for (auto& sb : storageBindings)
         {
@@ -80,12 +79,6 @@ public:
             e.offset = 0;
             e.size = bufImpl->webgpuStorageBuffer.GetSize();
             entries.push_back (e);
-
-            wgpu::BindGroupLayoutEntry le {};
-            le.binding = e.binding;
-            le.visibility = wgpu::ShaderStage::Compute;
-            le.buffer.type = wgpu::BufferBindingType::Storage;
-            layoutEntries.push_back (le);
         }
 
         for (auto& ub : uboBindings)
@@ -111,23 +104,14 @@ public:
             e.size = ub.data.size();
             entries.push_back (e);
 
-            wgpu::BindGroupLayoutEntry le {};
-            le.binding = e.binding;
-            le.visibility = wgpu::ShaderStage::Compute;
-            le.buffer.type = wgpu::BufferBindingType::Uniform;
-            le.buffer.hasDynamicOffset = false;
-            layoutEntries.push_back (le);
-
             tempUniformBuffers.push_back (std::move (buf));
         }
 
         if (! entries.empty())
         {
-            wgpu::BindGroupLayoutDescriptor ld {};
-            ld.entryCount = layoutEntries.size();
-            ld.entries = layoutEntries.data();
-
-            wgpu::BindGroupLayout layout = device.CreateBindGroupLayout (&ld);
+            // When the pipeline was created with an implicit layout (the default),
+            // we must use its layout for bind groups — not a manually-built one.
+            wgpu::BindGroupLayout layout = pipe->getPipeline().GetBindGroupLayout (0);
             if (layout != nullptr)
             {
                 wgpu::BindGroupDescriptor bgDesc {};

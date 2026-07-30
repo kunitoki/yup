@@ -86,7 +86,7 @@ public:
                 return nullptr;
 
             wgpu::BufferDescriptor bufDesc {};
-            bufDesc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst;
+            bufDesc.usage = wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::CopySrc;
             bufDesc.size = byteSize;
             bufDesc.label = "GpuBuffer storage";
 
@@ -117,6 +117,80 @@ public:
             return false;
 
         queue.WriteBuffer (impl->webgpuStorageBuffer, 0, data, byteSize);
+        return true;
+    }
+
+    //==============================================================================
+
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+        if (buffer == nullptr || dst == nullptr || dstSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->webgpuStorageBuffer == nullptr)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        // Create a staging buffer for readback
+        wgpu::BufferDescriptor stagingDesc {};
+        stagingDesc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+        stagingDesc.size = byteSize;
+        stagingDesc.label = "GpuBuffer readback staging";
+
+        wgpu::Buffer staging = device.CreateBuffer (&stagingDesc);
+        if (staging == nullptr)
+            return false;
+
+        // Copy storage buffer → staging buffer
+        {
+            wgpu::CommandEncoderDescriptor encDesc {};
+            encDesc.label = "GpuBuffer readback copy";
+            wgpu::CommandEncoder encoder = device.CreateCommandEncoder (&encDesc);
+            if (encoder == nullptr)
+                return false;
+
+            encoder.CopyBufferToBuffer (impl->webgpuStorageBuffer, 0, staging, 0, byteSize);
+
+            wgpu::CommandBuffer commands = encoder.Finish();
+            if (commands != nullptr)
+                queue.Submit (1, &commands);
+        }
+
+        // Map the staging buffer and read back.
+        struct ReadbackContext
+        {
+            bool done = false;
+            WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Success;
+        } ctx;
+
+        WGPUBufferMapCallbackInfo callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+        callbackInfo.callback = [] (WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
+        {
+            auto* c = static_cast<ReadbackContext*> (userdata1);
+            c->status = status;
+            c->done = true;
+        };
+        callbackInfo.userdata1 = &ctx;
+        wgpuBufferMapAsync (staging.Get(), WGPUMapMode_Read, 0, byteSize, callbackInfo);
+
+        // On Emscripten, MapAsync may be asynchronous; if the callback hasn't
+        // fired synchronously, the readback fails gracefully.
+        if (! ctx.done || ctx.status != WGPUMapAsyncStatus_Success)
+            return false;
+
+        const void* mapped = staging.GetConstMappedRange (0, byteSize);
+        if (mapped == nullptr)
+        {
+            staging.Unmap();
+            return false;
+        }
+
+        memcpy (dst, mapped, byteSize);
+        staging.Unmap();
         return true;
     }
 
