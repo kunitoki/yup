@@ -175,6 +175,7 @@ public:
             c->done = true;
         };
         callbackInfo.userdata1 = &ctx;
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
         wgpuBufferMapAsync (staging.Get(), WGPUMapMode_Read, 0, byteSize, callbackInfo);
 
         // On Emscripten, MapAsync may be asynchronous; if the callback hasn't
