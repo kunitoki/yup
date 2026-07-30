@@ -91,6 +91,9 @@ public:
     /** Blocks the calling thread until all submitted GPU work has completed,
         then releases the transient resources held for this frame.
 
+        Idempotent: a second call is a no-op, so waiting explicitly costs no more
+        than letting the frame go out of scope.
+
         Call this explicitly only when results are needed earlier than the end of
         the frame's scope (e.g. before a CPU readback). The destructor already
         waits, because the encoded render passes hold *raw* pointers to the

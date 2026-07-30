@@ -22,7 +22,7 @@
 namespace yup
 {
 
-GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& context, int width, int height)
+GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& context, int width, int height, std::optional<Color> clearColor)
 {
     if (width <= 0 || height <= 0)
         return nullptr;
@@ -44,7 +44,8 @@ GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& context, int width, int heigh
     canvas->context = &context;
     canvas->target = std::move (target);
 
-    gpuDevice->clearOffscreen (*canvas->target->getRenderableTarget(), GpuColor::transparentBlack());
+    if (clearColor.has_value())
+        gpuDevice->clearOffscreen (*canvas->target->getRenderableTarget(), *clearColor);
 
     return canvas;
 }

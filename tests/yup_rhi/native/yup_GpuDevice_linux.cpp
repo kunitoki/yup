@@ -465,6 +465,89 @@ TEST_F (GpuDeviceOpenGLTests, GpuCanvasCreate)
     ASSERT_NE (canvas, nullptr);
 }
 
+TEST_F (GpuDeviceOpenGLTests, GpuCanvasCreateClearsToTransparentBlackByDefault)
+{
+    // A new canvas must be safe to sample before anything is drawn into it, so its
+    // backing texture cannot be left holding uninitialized GPU memory.
+    auto canvas = GpuCanvas::create (*graphicsContext, 64, 64);
+    ASSERT_NE (canvas, nullptr);
+
+    std::vector<uint8_t> pixels (64 * 64 * 4, 0xab);
+    ASSERT_TRUE (canvas->readPixels (pixels.data(), pixels.size()));
+
+    size_t nonZeroBytes = 0;
+    for (const auto value : pixels)
+    {
+        if (value != 0u)
+            ++nonZeroBytes;
+    }
+
+    EXPECT_EQ (nonZeroBytes, 0u);
+}
+
+TEST_F (GpuDeviceOpenGLTests, GpuCanvasCreateClearsToRequestedColor)
+{
+    auto canvas = GpuCanvas::create (*graphicsContext, 64, 64, Color (255, 0, 128, 255));
+    ASSERT_NE (canvas, nullptr);
+
+    std::vector<uint8_t> pixels (64 * 64 * 4, 0);
+    ASSERT_TRUE (canvas->readPixels (pixels.data(), pixels.size()));
+
+    const size_t centerIdx = (32 * 64 + 32) * 4;
+    EXPECT_EQ (pixels[centerIdx + 0], 0u);   // R
+    EXPECT_EQ (pixels[centerIdx + 1], 128u); // G
+    EXPECT_EQ (pixels[centerIdx + 2], 255u); // B
+    EXPECT_EQ (pixels[centerIdx + 3], 255u); // A
+}
+
+TEST_F (GpuDeviceOpenGLTests, GpuCanvasCreateWithoutClearStillSucceeds)
+{
+    // std::nullopt skips the clear; the contents are then undefined by contract, so
+    // only creation itself is asserted here.
+    auto canvas = GpuCanvas::create (*graphicsContext, 64, 64, std::nullopt);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (canvas->getWidth(), 64);
+    EXPECT_EQ (canvas->getHeight(), 64);
+}
+
+TEST_F (GpuDeviceOpenGLTests, ClearOffscreenFillsRenderableTarget)
+{
+    // clearOffscreen needs neither an active frame nor a render pass, so it can run
+    // straight after the target is created.
+    auto target = device->createRenderableTarget (64, 64);
+    ASSERT_NE (target, nullptr);
+
+    ASSERT_TRUE (device->clearOffscreen (*target, GpuColor (0.0f, 1.0f, 0.0f, 1.0f)));
+
+    std::vector<uint8_t> pixels (64 * 64 * 4, 0);
+    ASSERT_TRUE (device->readOffscreenPixels (*target, pixels.data(), pixels.size()));
+
+    const size_t centerIdx = (32 * 64 + 32) * 4;
+    EXPECT_EQ (pixels[centerIdx + 0], 0u);   // R
+    EXPECT_EQ (pixels[centerIdx + 1], 255u); // G
+    EXPECT_EQ (pixels[centerIdx + 2], 0u);   // B
+    EXPECT_EQ (pixels[centerIdx + 3], 255u); // A
+}
+
+TEST_F (GpuDeviceOpenGLTests, ClearOffscreenFillsRenderPassOnlyTarget)
+{
+    // The same call must also work on a plain offscreen target, which has no
+    // dedicated render context.
+    auto target = device->createOffscreenTarget (64, 64);
+    ASSERT_NE (target, nullptr);
+
+    ASSERT_TRUE (device->clearOffscreen (*target, GpuColor (1.0f, 0.0f, 0.0f, 1.0f)));
+
+    std::vector<uint8_t> pixels (64 * 64 * 4, 0);
+    ASSERT_TRUE (device->readOffscreenPixels (*target, pixels.data(), pixels.size()));
+
+    const size_t centerIdx = (32 * 64 + 32) * 4;
+    EXPECT_EQ (pixels[centerIdx + 0], 255u); // R
+    EXPECT_EQ (pixels[centerIdx + 1], 0u);   // G
+    EXPECT_EQ (pixels[centerIdx + 2], 0u);   // B
+    EXPECT_EQ (pixels[centerIdx + 3], 255u); // A
+}
+
 TEST_F (GpuDeviceOpenGLTests, GpuCanvasBeginDrawAndCommit)
 {
     auto canvas = GpuCanvas::create (*graphicsContext, 256, 256);

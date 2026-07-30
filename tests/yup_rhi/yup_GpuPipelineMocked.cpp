@@ -635,10 +635,30 @@ TEST_F (GpuFrameMockTests, WaitForGpuCallsOreWaitForGPU)
     frame.waitForGPU();
 }
 
-TEST_F (GpuFrameMockTests, DestructorSubmitsIfNotSubmitted)
+TEST_F (GpuFrameMockTests, WaitForGpuIsIdempotent)
 {
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
+
+    // A GPU sync is expensive, and the destructor waits too, so repeated waits must
+    // collapse into the single stall the first one already paid for.
+    EXPECT_CALL (*mockOreCtx, waitForGPU());
+
+    auto frame = GpuFrame::begin (ctx);
+    ASSERT_TRUE (frame.isValid());
+    frame.submit();
+    frame.waitForGPU();
+    frame.waitForGPU();
+}
+
+TEST_F (GpuFrameMockTests, DestructorSubmitsAndWaitsIfNotSubmitted)
+{
+    EXPECT_CALL (*mockOreCtx, beginFrame (_));
+    EXPECT_CALL (*mockOreCtx, endFrame());
+
+    // The encoded passes reference this frame's transient resources by raw pointer,
+    // and destruction releases them, so the destructor has to drain the GPU first.
+    EXPECT_CALL (*mockOreCtx, waitForGPU());
 
     {
         auto frame = GpuFrame::begin (ctx);

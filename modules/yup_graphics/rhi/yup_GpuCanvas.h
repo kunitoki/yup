@@ -73,18 +73,25 @@ public:
     //==============================================================================
     /** Creates a GpuCanvas of the given pixel dimensions.
 
-        The new canvas is cleared to transparent black, so it is safe to sample
-        from before anything has been drawn into it.
+        By default the new canvas is filled with transparent black, so it is safe to
+        sample from before anything has been drawn into it. Pass std::nullopt to skip
+        that and leave the contents undefined, which is only safe when the canvas is
+        guaranteed to be fully written before it is next sampled.
 
-        @param ctx      The graphics context that owns the GPU device.
-        @param width    Width in pixels (must be > 0).
-        @param height   Height in pixels (must be > 0).
+        @param ctx         The graphics context that owns the GPU device.
+        @param width       Width in pixels (must be > 0).
+        @param height      Height in pixels (must be > 0).
+        @param clearColor  Color to fill the new canvas with, or std::nullopt to
+                           leave its contents undefined.
 
         @returns A reference-counted pointer to a GpuCanvas, or nullptr on failure.
 
         @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
-    static GpuCanvas::Ptr create (GraphicsContext& ctx, int width, int height);
+    static GpuCanvas::Ptr create (GraphicsContext& ctx,
+                                  int width,
+                                  int height,
+                                  std::optional<Color> clearColor = Colors::transparentBlack);
 
     //==============================================================================
     /** Returns the underlying GpuTarget backing this canvas.

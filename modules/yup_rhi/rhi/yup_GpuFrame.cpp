@@ -28,6 +28,7 @@ struct GpuFrame::Impl
 {
     rive::ore::Context* oreCtx = nullptr;
     bool submitted = false;
+    bool waited = false;
 
     // Resources the encoded render passes reference by raw pointer, so they must
     // remain alive until the GPU has consumed them - i.e. until waitForGPU().
@@ -76,9 +77,11 @@ GpuFrame& GpuFrame::operator= (GpuFrame&& other) noexcept
 {
     if (this != &other)
     {
-        // Submit any pending frame we currently own before taking over.
-        if (auto* i = getImpl(); i != nullptr && ! i->submitted && i->oreCtx != nullptr)
-            i->oreCtx->endFrame();
+        // Submit and drain the frame we currently own before dropping it: replacing
+        // impl releases the transient resources its encoded passes reference by raw
+        // pointer, exactly as destruction would.
+        submit();
+        waitForGPU();
 
         impl = std::move (other.impl);
     }
@@ -109,15 +112,19 @@ bool GpuFrame::submit()
 
     i->oreCtx->endFrame();
     i->submitted = true;
+
     return true;
 }
 
 void GpuFrame::waitForGPU()
 {
     auto* i = getImpl();
-    if (i == nullptr || i->oreCtx == nullptr)
+    if (i == nullptr || i->oreCtx == nullptr || i->waited)
         return;
 
+    // Idempotent: a GPU sync is expensive, and the destructor also waits, so a
+    // caller that waits explicitly must not pay for a second stall.
+    i->waited = true;
     i->oreCtx->waitForGPU();
 
     // GPU has finished; safe to release all transient resources.

@@ -405,7 +405,7 @@ public:
         if (scissorWasEnabled)
             glDisable (GL_SCISSOR_TEST);
 
-        renderTarget->bindTextureFramebuffer (GL_DRAW_FRAMEBUFFER);
+        renderTarget->bindDestinationFramebuffer (GL_DRAW_FRAMEBUFFER);
         glClearColor (color.red, color.green, color.blue, color.alpha);
         glClear (GL_COLOR_BUFFER_BIT);
 
