@@ -423,7 +423,7 @@ public:
 
         @return A new AffineTransform object representing the rotated transformation.
     */
-    [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians) const noexcept
+    [[nodiscard]] AffineTransform rotated (float angleInRadians) const noexcept
     {
         if (angleInRadians == 0.0f)
             return *this;
@@ -475,7 +475,7 @@ public:
 
         @return An AffineTransform object representing the specified rotation.
     */
-    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians) noexcept
+    [[nodiscard]] static AffineTransform rotation (float angleInRadians) noexcept
     {
         if (angleInRadians == 0.0f)
             return identity();
@@ -496,7 +496,7 @@ public:
 
         @return An AffineTransform object representing the specified rotation around the point.
     */
-    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, float centerX, float centerY) noexcept
+    [[nodiscard]] static AffineTransform rotation (float angleInRadians, float centerX, float centerY) noexcept
     {
         if (angleInRadians == 0.0f)
             return identity();
@@ -791,7 +791,7 @@ public:
 
         @return The scale factor of the transformation.
     */
-    [[nodiscard]] constexpr float getScaleFactor() const noexcept
+    [[nodiscard]] float getScaleFactor() const noexcept
     {
         return (std::hypot (scaleX, shearY) + std::hypot (shearX, scaleY)) / 2.0f;
     }
