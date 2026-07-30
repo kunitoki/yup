@@ -523,10 +523,7 @@ public:
 
         @return An AffineTransform object representing the specified rotation around the point.
     */
-    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, Point<float> center) noexcept
-    {
-        return rotation (angleInRadians, center.x, center.y);
-    }
+    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, Point<float> center) noexcept;
 
     //==============================================================================
     /** Create a scaled transformation
