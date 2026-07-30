@@ -229,6 +229,32 @@ public:
         target.contextSlot->frameActive = false;
     }
 
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+
+        id<MTLTexture> texture = target.targetTexture();
+        if (texture == nil)
+            return false;
+
+        YUP_AUTORELEASEPOOL
+        {
+            MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+            descriptor.colorAttachments[0].texture = texture;
+            descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+            descriptor.colorAttachments[0].clearColor = MTLClearColorMake (color.red, color.green, color.blue, color.alpha);
+            descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+            // An encoder with no draws still performs the attachment's load action.
+            id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:descriptor];
+            [encoder endEncoding];
+            [commandBuffer commit];
+        }
+
+        return true;
+    }
+
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
@@ -304,10 +330,17 @@ private:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetMetal : public RenderableTarget
     {
+        ~OffscreenTargetMetal() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         id<MTLTexture> stagingTexture = nil;
@@ -357,8 +390,11 @@ private:
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         rive::gpu::RenderContextMetalImpl::ContextOptions renderCtxOpts;
@@ -371,6 +407,8 @@ private:
         slot->renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (device, renderCtxOpts);
         if (slot->renderContext == nullptr)
             return nullptr;
+
+        slot->leased = true;
 
         auto* result = slot.get();
         offscreenContextPool.push_back (std::move (slot));

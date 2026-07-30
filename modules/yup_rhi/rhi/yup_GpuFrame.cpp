@@ -29,8 +29,9 @@ struct GpuFrame::Impl
     rive::ore::Context* oreCtx = nullptr;
     bool submitted = false;
 
-    // Resources that must remain alive from a draw call until waitForGPU()
-    // completes or the frame is destroyed.
+    // Resources the encoded render passes reference by raw pointer, so they must
+    // remain alive until the GPU has consumed them - i.e. until waitForGPU().
+    // Letting the frame die without waiting frees them too early.
     std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
     std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
     std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
@@ -88,6 +89,8 @@ GpuFrame& GpuFrame::operator= (GpuFrame&& other) noexcept
 GpuFrame::~GpuFrame()
 {
     submit();
+
+    waitForGPU();
 }
 
 //==============================================================================

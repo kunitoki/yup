@@ -129,11 +129,11 @@ public:
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.
 
-        Supported GPU backends may create targets while another offscreen target
-        is rendering. Backends reserve a render context only while its target
-        has an active frame, allowing sequential targets to share idle contexts.
-        A target must outlive its corresponding beginOffscreen()/endOffscreen()
-        pair and the GpuDevice must outlive every target it creates.
+        The returned target is backed by the device's main render context and does
+        not reserve a dedicated one, so it cannot drive a 2D Graphics frame. Use it
+        for render-pass-only surfaces. A target must outlive its corresponding
+        beginOffscreen()/endOffscreen() pair and the GpuDevice must outlive every
+        target it creates.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -148,6 +148,10 @@ public:
         backend-owned RenderContext, which is required to drive a 2D Graphics frame
         (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
         surfaces to avoid allocating a dedicated context.
+
+        The reservation is exclusive and lasts for the target's whole lifetime; the
+        context returns to the pool when the target is destroyed. Two live targets
+        therefore never share a context, which is what allows their frames to nest.
 
         @param width The width of the offscreen target in pixels.
         @param height The height of the offscreen target in pixels.
@@ -185,6 +189,24 @@ public:
         @return True if the pixel read operation was successful, false otherwise.
     */
     virtual bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) = 0;
+
+    /** Clears an offscreen target's color attachment to the given color.
+
+        Encodes the clear with the backend's native API, outside any ore frame or
+        render pass. A clear binds no pipeline, buffers or samplers, so nothing
+        transient has to outlive the encoded work and no GPU sync is required -
+        unlike a GpuRenderPass clear, whose descriptor references its texture view
+        by raw pointer and so obliges the frame to wait before releasing it.
+
+        Needs no active frame, and may be called immediately after the target is
+        created to give it defined contents.
+
+        @param target The OffscreenTarget whose color attachment to clear.
+        @param color  The color to fill the attachment with.
+
+        @return True if the clear was encoded, false if unsupported on this backend.
+    */
+    virtual bool clearOffscreen (OffscreenTarget&, GpuColor) { return false; }
 
     //==============================================================================
     /** Creates a GPU buffer of the given type with initial data.

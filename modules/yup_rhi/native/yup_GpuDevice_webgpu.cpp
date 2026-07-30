@@ -126,10 +126,17 @@ public:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetWebGPU : public RenderableTarget
     {
+        ~OffscreenTargetWebGPU() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
@@ -234,6 +241,35 @@ public:
         target.contextSlot->frameActive = false;
     }
 
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetWebGPU&> (baseTarget);
+
+        auto* renderTarget = static_cast<rive::gpu::RenderTargetWebGPU*> (target.getRenderTarget());
+        if (renderTarget == nullptr)
+            return false;
+
+        wgpu::RenderPassColorAttachment attachment {};
+        attachment.view = renderTarget->targetTextureView();
+        attachment.loadOp = wgpu::LoadOp::Clear;
+        attachment.storeOp = wgpu::StoreOp::Store;
+        attachment.clearValue = { color.red, color.green, color.blue, color.alpha };
+
+        wgpu::RenderPassDescriptor descriptor {};
+        descriptor.colorAttachmentCount = 1;
+        descriptor.colorAttachments = std::addressof (attachment);
+
+        // A pass with no draws still performs the attachment's load operation.
+        auto encoder = device.CreateCommandEncoder();
+        auto pass = encoder.BeginRenderPass (std::addressof (descriptor));
+        pass.End();
+
+        auto commands = encoder.Finish();
+        queue.Submit (1, std::addressof (commands));
+
+        return true;
+    }
+
     bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override
     {
         return false; // GPU-to-CPU buffer mapping is async-only on the web.
@@ -244,8 +280,11 @@ private:
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         auto slot = std::make_unique<OffscreenContextSlot>();
@@ -253,6 +292,8 @@ private:
             {}, device, queue, rive::gpu::RenderContextWebGPUImpl::ContextOptions());
         if (slot->renderContext == nullptr)
             return nullptr;
+
+        slot->leased = true;
 
         auto* result = slot.get();
         offscreenContextPool.push_back (std::move (slot));

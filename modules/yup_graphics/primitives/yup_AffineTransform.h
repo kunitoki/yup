@@ -783,13 +783,17 @@ public:
 
     /** Get the scale factor of the transformation
 
-        Calculates the average of the absolute values of the scale factors along the x and y axes.
+        Calculates the average of the scale factors along the x and y axes, measured
+        as the lengths of the transformed basis vectors. Taking the full column
+        including its shear term keeps the result independent of rotation: reading
+        only the diagonal would report scale * cos(angle), which collapses towards
+        zero as a rotation approaches 90 degrees.
 
         @return The scale factor of the transformation.
     */
     [[nodiscard]] constexpr float getScaleFactor() const noexcept
     {
-        return (yup_abs (scaleX) + yup_abs (scaleY)) / 2.0f;
+        return (std::hypot (scaleX, shearY) + std::hypot (shearX, scaleY)) / 2.0f;
     }
 
     //==============================================================================

@@ -137,10 +137,17 @@ public:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetD3D : public RenderableTarget
     {
+        ~OffscreenTargetD3D() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         ComPtr<ID3D11Texture2D> stagingTexture;
@@ -277,6 +284,24 @@ public:
         target.contextSlot->frameActive = false;
     }
 
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget());
+        if (renderTarget == nullptr || renderTarget->targetTexture() == nullptr)
+            return false;
+
+        ComPtr<ID3D11RenderTargetView> renderTargetView;
+        if (FAILED (gpu->CreateRenderTargetView (renderTarget->targetTexture(), nullptr, renderTargetView.ReleaseAndGetAddressOf())))
+            return false;
+
+        const FLOAT rgba[4] { color.red, color.green, color.blue, color.alpha };
+        gpuContext->ClearRenderTargetView (renderTargetView.Get(), rgba);
+
+        return true;
+    }
+
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
@@ -318,14 +343,19 @@ private:
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         auto slot = std::make_unique<OffscreenContextSlot>();
         slot->renderContext = rive::gpu::RenderContextD3DImpl::MakeContext (gpu, gpuContext, renderContextOptions);
         if (slot->renderContext == nullptr)
             return nullptr;
+
+        slot->leased = true;
 
         auto* result = slot.get();
         offscreenContextPool.push_back (std::move (slot));

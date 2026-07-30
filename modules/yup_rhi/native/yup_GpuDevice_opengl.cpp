@@ -245,10 +245,17 @@ public:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetGL : public RenderableTarget
     {
+        ~OffscreenTargetGL() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
@@ -379,6 +386,37 @@ public:
         target.contextSlot->frameActive = false;
     }
 
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
+
+        auto* renderTarget = static_cast<rive::gpu::RenderTargetGL*> (target.getRenderTarget());
+        if (renderTarget == nullptr)
+            return false;
+
+        // GL state is global and a canvas may be created part-way through a frame,
+        // so restore the draw framebuffer afterwards rather than leaving ours bound.
+        // Scissoring is disabled for the same reason: an enclosing scissor rect
+        // would otherwise clip the clear and leave part of the canvas undefined.
+        GLint previousFramebuffer = 0;
+        glGetIntegerv (GL_DRAW_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
+        const GLboolean scissorWasEnabled = glIsEnabled (GL_SCISSOR_TEST);
+        if (scissorWasEnabled)
+            glDisable (GL_SCISSOR_TEST);
+
+        renderTarget->bindTextureFramebuffer (GL_DRAW_FRAMEBUFFER);
+        glClearColor (color.red, color.green, color.blue, color.alpha);
+        glClear (GL_COLOR_BUFFER_BIT);
+
+        if (scissorWasEnabled)
+            glEnable (GL_SCISSOR_TEST);
+
+        glBindFramebuffer (GL_DRAW_FRAMEBUFFER, static_cast<GLuint> (previousFramebuffer));
+
+        return true;
+    }
+
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
@@ -415,14 +453,19 @@ private:
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         auto slot = std::make_unique<OffscreenContextSlot>();
         slot->renderContext = rive::gpu::RenderContextGLImpl::MakeContext (renderContextOptions);
         if (slot->renderContext == nullptr)
             return nullptr;
+
+        slot->leased = true;
 
         auto* result = slot.get();
         offscreenContextPool.push_back (std::move (slot));

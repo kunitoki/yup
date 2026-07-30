@@ -82,15 +82,20 @@ public:
     /** Submits all render passes recorded since begin().
 
         Idempotent: a second call is a no-op and returns false. Does not block
-        the CPU - call waitForGPU() afterwards if you need results immediately.
+        the CPU.
 
         @return true on success; false if invalid or already submitted.
     */
     bool submit();
 
-    /** Blocks the calling thread until all submitted GPU work has completed.
+    /** Blocks the calling thread until all submitted GPU work has completed,
+        then releases the transient resources held for this frame.
 
-        Also releases the transient resources held for this frame.
+        Call this explicitly only when results are needed earlier than the end of
+        the frame's scope (e.g. before a CPU readback). The destructor already
+        waits, because the encoded render passes hold *raw* pointers to the
+        texture views, uniform buffers and samplers this frame keeps alive, so
+        releasing them while the GPU is still reading would corrupt the output.
     */
     void waitForGPU();
 

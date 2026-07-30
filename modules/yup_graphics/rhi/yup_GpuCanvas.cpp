@@ -22,27 +22,30 @@
 namespace yup
 {
 
-GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
+GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& context, int width, int height)
 {
     if (width <= 0 || height <= 0)
         return nullptr;
 
-    auto gpuCtx = ctx.getGpuDevice();
-    if (gpuCtx == nullptr)
+    auto gpuDevice = context.getGpuDevice();
+    if (gpuDevice == nullptr)
         return nullptr;
 
     // GpuCanvas needs a dedicated render context for the 2D drawing path.
-    auto renderable = gpuCtx->createRenderableTarget (width, height);
+    auto renderable = gpuDevice->createRenderableTarget (width, height);
     if (renderable == nullptr)
         return nullptr;
 
-    auto target = GpuTarget::createFromTarget (gpuCtx, std::move (renderable));
+    auto target = GpuTarget::createFromTarget (gpuDevice, std::move (renderable));
     if (target == nullptr)
         return nullptr;
 
     GpuCanvas::Ptr canvas = new GpuCanvas();
-    canvas->ctx = &ctx;
+    canvas->context = &context;
     canvas->target = std::move (target);
+
+    gpuDevice->clearOffscreen (*canvas->target->getRenderableTarget(), GpuColor::transparentBlack());
+
     return canvas;
 }
 
@@ -69,17 +72,15 @@ int GpuCanvas::getHeight() const noexcept
 
 Graphics& GpuCanvas::beginDraw()
 {
-    jassert (ctx != nullptr && target != nullptr);
+    jassert (context != nullptr && target != nullptr);
 
-    // Drop the previous frame's Graphics so a fresh offscreen 2D frame opens on
-    // the existing (already-allocated) target. The cached texture wraps the same
-    // GPU render target whose contents are overwritten by the new frame, so it is
-    // reset to force a rewrap on the next asTexture().
     graphics.reset();
     frameOpen = false;
     committed = false;
 
-    graphics = std::make_unique<Graphics> (*ctx, *target->getRenderableTarget(), 0u);
+    target->invalidateCachedTexture();
+
+    graphics = std::make_unique<Graphics> (*context, *target->getRenderableTarget(), 0u);
     frameOpen = true;
 
     return *graphics;
@@ -89,16 +90,13 @@ Graphics& GpuCanvas::beginDraw()
 
 bool GpuCanvas::commit()
 {
-    if (! frameOpen || committed || ctx == nullptr || target == nullptr)
+    if (! frameOpen || committed || context == nullptr || target == nullptr)
         return false;
 
     auto* renderableTarget = target->getRenderableTarget();
     if (renderableTarget == nullptr)
         return false;
 
-    // Ensure the Y-flipped sampled mirror exists before the flush so that
-    // blitMirrorIfRegistered (called inside endOffscreen) can update it.
-    // No-op on non-GL backends and for canvases never used as sampled inputs.
     renderableTarget->getOrCreateSampledTexture();
 
     if (graphics == nullptr || ! graphics->commitOffscreenTarget())
@@ -115,8 +113,6 @@ GpuTexture::Ptr GpuCanvas::asTexture()
     if (target == nullptr)
         return nullptr;
 
-    // Auto-commit a 2D frame opened via beginDraw() so callers don't need to
-    // call commit() explicitly. Render-pass-only usage never sets frameOpen.
     if (frameOpen && ! committed)
         commit();
 
@@ -138,7 +134,7 @@ Image GpuCanvas::asImage()
 
 bool GpuCanvas::readPixels (void* dst, size_t byteSize)
 {
-    if (target == nullptr || ctx == nullptr)
+    if (target == nullptr || context == nullptr)
         return false;
 
     if (frameOpen && ! committed)

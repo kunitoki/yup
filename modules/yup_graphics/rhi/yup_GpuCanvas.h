@@ -73,6 +73,9 @@ public:
     //==============================================================================
     /** Creates a GpuCanvas of the given pixel dimensions.
 
+        The new canvas is cleared to transparent black, so it is safe to sample
+        from before anything has been drawn into it.
+
         @param ctx      The graphics context that owns the GPU device.
         @param width    Width in pixels (must be > 0).
         @param height   Height in pixels (must be > 0).
@@ -178,7 +181,7 @@ private:
     //==============================================================================
     GpuCanvas() = default;
 
-    GraphicsContext* ctx = nullptr;
+    GraphicsContext* context = nullptr;
     GpuTarget::Ptr target;
     std::unique_ptr<Graphics> graphics;
     bool frameOpen = false;

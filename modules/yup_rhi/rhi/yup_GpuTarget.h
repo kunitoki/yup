@@ -137,6 +137,8 @@ private:
 
     RenderableTarget* getRenderableTarget() const noexcept { return renderableTarget; }
 
+    void invalidateCachedTexture() noexcept { cachedTexture = nullptr; }
+
     GpuDevice::Ptr ctx;
     std::unique_ptr<OffscreenTarget> offscreenTarget;
     RenderableTarget* renderableTarget = nullptr;
