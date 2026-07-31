@@ -791,9 +791,9 @@ public:
 
         @return The scale factor of the transformation.
     */
-    [[nodiscard]] float getScaleFactor() const noexcept
+    [[nodiscard]] constexpr float getScaleFactor() const noexcept
     {
-        return (std::hypot (scaleX, shearY) + std::hypot (shearX, scaleY)) / 2.0f;
+        return (yup_hypot (scaleX, shearY) + yup_hypot (shearX, scaleY)) / 2.0f;
     }
 
     //==============================================================================
