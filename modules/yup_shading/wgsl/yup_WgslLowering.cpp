@@ -734,12 +734,14 @@ private:
 
     void shadowReassignedParams (FunctionDefinition& fd)
     {
-        // Collect reassigned parameter names
+        // Collect reassigned parameter names (skip out/inout — those use
+        // WGSL pointer references which are already mutable)
         std::vector<std::pair<std::string, TypeSpecifier>> shadowed;
         for (auto& param : fd.prototype.parameters)
         {
             auto* info = symbolTable.lookup (param.name);
-            if (info && info->isReassigned)
+            if (info && info->isReassigned
+                && ! info->isOutParam && ! info->isInoutParam)
                 shadowed.push_back ({ param.name, param.type });
         }
 
