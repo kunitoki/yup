@@ -76,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native GPU buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
 - `Image::fromTexture(GpuTexture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
 - `Graphics::drawTexture(GpuTexture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side ImagePixelData allocation.
+- `GpuRenderPass` no longer creates a sampler and a uniform buffer per draw. The linear/clamp-to-edge samplers that fill a layout's sampler bindings are created once when the `GpuPipeline` is compiled, and uniform buffers come from a size-bucketed pool on the `GpuDevice` that recycles them when a frame reports GPU completion — so a steady-state workload stops allocating GPU objects after its first frames. `GpuFrame` stays stack RAII; nothing changes for callers.
 - Fixed the GLSL→WGSL transpiler rejecting comma-separated members in a struct or interface block (`uniform Params { float s, r, rx, ry; }`), which failed with `Expected ';'`. Each declarator now becomes its own member and binds its own array specifiers.
 
 #### Shader Compiler (#126 and #130)

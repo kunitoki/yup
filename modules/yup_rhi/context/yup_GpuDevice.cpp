@@ -165,4 +165,58 @@ bool GpuDevice::updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t by
     return false;
 }
 
+//==============================================================================
+
+size_t GpuDevice::UniformBufferPool::bucketFor (size_t byteSize) noexcept
+{
+    size_t index = 0;
+
+    for (size_t capacity = minimumCapacity; capacity < byteSize; capacity <<= 1)
+        ++index;
+
+    return index;
+}
+
+rive::rcp<rive::ore::Buffer> GpuDevice::UniformBufferPool::acquire (rive::ore::Context& oreCtx, size_t byteSize)
+{
+    if (byteSize == 0)
+        return nullptr;
+
+    const auto index = bucketFor (byteSize);
+
+    if (index >= buckets.size())
+        buckets.resize (index + 1);
+
+    auto& bucket = buckets[index];
+
+    if (! bucket.empty())
+    {
+        auto buffer = std::move (bucket.back());
+        bucket.pop_back();
+        return buffer;
+    }
+
+    rive::ore::BufferDesc desc;
+    desc.usage = rive::ore::BufferUsage::uniform;
+    desc.size = static_cast<uint32_t> (minimumCapacity << index);
+    desc.data = nullptr;
+    desc.immutable = false; // Rewritten in place every time it is handed out.
+    desc.label = "GpuRenderPass uniform";
+
+    return oreCtx.makeBuffer (desc);
+}
+
+void GpuDevice::UniformBufferPool::release (rive::rcp<rive::ore::Buffer> buffer)
+{
+    if (buffer == nullptr)
+        return;
+
+    // Capacities are exactly minimumCapacity << index, so the buffer lands back in
+    // the bucket it came from, which acquire() has already created.
+    const auto index = bucketFor (buffer->size());
+
+    if (index < buckets.size())
+        buckets[index].push_back (std::move (buffer));
+}
+
 } // namespace yup

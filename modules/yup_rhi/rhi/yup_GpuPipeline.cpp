@@ -231,11 +231,24 @@ rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
 
 struct GpuPipeline::Impl
 {
+    /** A sampler auto-created for one sampler binding declared by the layouts. */
+    struct SamplerBinding
+    {
+        uint32_t binding;
+        rive::rcp<rive::ore::Sampler> sampler;
+    };
+
     rive::ore::Context* oreCtx = nullptr;
     rive::rcp<rive::ore::ShaderModule> vertModule;
     rive::rcp<rive::ore::ShaderModule> fragModule;
     rive::rcp<rive::ore::Pipeline> pipeline;
     std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts; // indexed by group; may contain null entries
+
+    // One sampler per sampler binding the layouts declare, indexed by group.
+    // GpuRenderPass fills every declared sampler slot with a linear/clamp-to-edge
+    // sampler; that descriptor never varies, so the samplers are created here once
+    // rather than per draw. The pipeline outlives the passes that reference them.
+    std::vector<std::vector<SamplerBinding>> samplersPerGroup;
 
     // Vertex-layout storage backing PipelineDesc's raw pointers. The ore
     // Pipeline copies PipelineDesc by value but keeps the vertexBuffers /
@@ -619,6 +632,36 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     implRef->fragModule = std::move (fragModule);
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
+
+    // Create the auto-samplers up front. Their descriptor is fixed, so one per
+    // declared binding serves every draw encoded with this pipeline.
+    implRef->samplersPerGroup.resize (implRef->layouts.size());
+
+    for (size_t g = 0; g < implRef->layouts.size(); ++g)
+    {
+        auto* layout = implRef->layouts[g].get();
+        if (layout == nullptr)
+            continue;
+
+        for (const auto& entry : layout->entries())
+        {
+            if (entry.kind != rive::ore::BindingKind::sampler
+                && entry.kind != rive::ore::BindingKind::comparisonSampler)
+            {
+                continue;
+            }
+
+            rive::ore::SamplerDesc sd;
+            sd.minFilter = rive::ore::Filter::linear;
+            sd.magFilter = rive::ore::Filter::linear;
+            sd.wrapU = rive::ore::WrapMode::clampToEdge;
+            sd.wrapV = rive::ore::WrapMode::clampToEdge;
+
+            if (auto sampler = oreCtx->makeSampler (sd))
+                implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler) });
+        }
+    }
+
     return makeResultValueOk (pipe);
 }
 

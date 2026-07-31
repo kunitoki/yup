@@ -258,6 +258,51 @@ protected:
     GpuDevice() noexcept = default;
 
 private:
+    friend class GpuFrame;
+
+    //==============================================================================
+    /** Pool of small uniform buffers recycled across frames.
+
+        Every draw in a render pass needs its own uniform buffer, and creating one
+        per draw is a native GPU allocation on all backends. Buffers are handed out
+        with a power-of-two capacity and returned once the frame that bound them is
+        finished, so a steady-state workload stops allocating after its first few
+        frames.
+
+        Rewriting a returned buffer is safe even when the GPU may still be reading
+        it: the ore Buffer implementations orphan onto a fresh backing when a buffer
+        is updated after having been bound (D3D11 instead lets the driver rename
+        it), and that is what makes reuse across frames sound.
+    */
+    class UniformBufferPool
+    {
+    public:
+        /** Returns a buffer with room for at least byteSize bytes.
+
+            Creates one only when no returned buffer of that capacity is available.
+
+            @param oreCtx    Context used to create a buffer on a pool miss.
+            @param byteSize  Minimum required capacity in bytes.
+
+            @returns A uniform buffer, or nullptr if creation failed.
+        */
+        rive::rcp<rive::ore::Buffer> acquire (rive::ore::Context& oreCtx, size_t byteSize);
+
+        /** Takes a buffer back so a later acquire() of the same capacity reuses it. */
+        void release (rive::rcp<rive::ore::Buffer> buffer);
+
+    private:
+        /** Smallest capacity handed out - uniform blocks are 16-byte aligned. */
+        static constexpr size_t minimumCapacity = 16;
+
+        /** Index of the bucket holding buffers big enough for byteSize. */
+        static size_t bucketFor (size_t byteSize) noexcept;
+
+        std::vector<std::vector<rive::rcp<rive::ore::Buffer>>> buckets;
+    };
+
+    UniformBufferPool uniformBufferPool;
+
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuDevice)
 };
 
