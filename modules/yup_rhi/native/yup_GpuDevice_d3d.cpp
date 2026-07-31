@@ -47,6 +47,8 @@ public:
     {
     }
 
+    ~GpuDeviceD3D() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Direct3D; }
 
     rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }
@@ -105,14 +107,65 @@ public:
 
     //==============================================================================
 
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+        if (buffer == nullptr || dst == nullptr)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->d3dStorageBuffer == nullptr)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        // The storage buffer is D3D11_USAGE_DEFAULT and so not CPU accessible; a
+        // staging copy is the only way to reach its contents.
+        if (impl->d3dReadbackStaging == nullptr)
+        {
+            D3D11_BUFFER_DESC stagingDesc {};
+            stagingDesc.ByteWidth = static_cast<UINT> (byteSize);
+            stagingDesc.Usage = D3D11_USAGE_STAGING;
+            stagingDesc.BindFlags = 0;
+            stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            stagingDesc.MiscFlags = 0;
+            stagingDesc.StructureByteStride = 0;
+
+            HRESULT hr = gpu->CreateBuffer (&stagingDesc, nullptr, impl->d3dReadbackStaging.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || impl->d3dReadbackStaging == nullptr)
+                return false;
+        }
+
+        // The compute dispatch was issued on this same immediate context, so the
+        // copy is ordered after it, and Map (without DO_NOT_WAIT) blocks until the
+        // copy has retired — which is the blocking contract readBuffer documents.
+        gpuContext->CopyResource (impl->d3dReadbackStaging.Get(), impl->d3dStorageBuffer.Get());
+
+        D3D11_MAPPED_SUBRESOURCE mapped {};
+        HRESULT hr = gpuContext->Map (impl->d3dReadbackStaging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED (hr) || mapped.pData == nullptr)
+            return false;
+
+        memcpy (dst, mapped.pData, byteSize);
+        gpuContext->Unmap (impl->d3dReadbackStaging.Get(), 0);
+        return true;
+    }
+
+    //==============================================================================
+
     bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
     {
         if (buffer == nullptr || data == nullptr || byteSize == 0)
             return false;
 
         auto* impl = buffer->getImpl();
-        if (impl == nullptr || impl->d3dStorageBuffer == nullptr)
+        if (impl == nullptr)
             return false;
+
+        // For ore-backed buffers (vertex, index, uniform), delegate to base class.
+        if (impl->d3dStorageBuffer == nullptr)
+            return GpuDevice::updateBuffer (buffer, data, byteSize);
 
         const auto fullSize = buffer->getSizeInBytes();
         if (byteSize > fullSize)

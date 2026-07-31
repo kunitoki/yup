@@ -129,6 +129,8 @@ public:
         queue = device.GetQueue();
     }
 
+    ~GpuDeviceDawn() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
     rive::gpu::RenderContext* getRenderContext() const override { return nullptr; }
@@ -168,8 +170,12 @@ public:
             return false;
 
         auto* impl = buffer->getImpl();
-        if (impl == nullptr || impl->webgpuStorageBuffer == nullptr)
+        if (impl == nullptr)
             return false;
+
+        // For ore-backed buffers (vertex, index, uniform), delegate to base class.
+        if (impl->webgpuStorageBuffer == nullptr)
+            return GpuDevice::updateBuffer (buffer, data, byteSize);
 
         if (byteSize > buffer->getSizeInBytes())
             return false;

@@ -41,6 +41,8 @@ public:
     {
     }
 
+    ~OreInjectedGpuDevice() override { releasePooledResources(); }
+
     yup::GpuPlatform getPlatform() const noexcept override { return real->getPlatform(); }
 
     rive::ore::Context* getGpuContext() const noexcept override { return injectedOreContext; }

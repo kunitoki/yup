@@ -62,6 +62,8 @@ public:
             UINT slot = static_cast<UINT> (sb.group * 16 + sb.binding);
             ID3D11UnorderedAccessView* uavs[1] = { bufImpl->d3dUav.Get() };
             context->CSSetUnorderedAccessViews (slot, 1, uavs, nullptr);
+
+            rememberBoundUavSlot (slot);
         }
 
         // Constant buffers (uniforms) — 16-byte aligned, DYNAMIC + CPU_WRITE.
@@ -99,15 +101,42 @@ public:
 
     void finish() override
     {
+        // Leaving the storage buffers bound as UAVs makes any later read of them —
+        // a staging copy in GpuDevice::readBuffer(), or a draw sampling the same
+        // resource — a simultaneous write/read binding, which the debug layer
+        // flags. Only the slots this pass actually bound are cleared, so the
+        // render context's own UAV state is left alone.
+        if (context != nullptr)
+        {
+            ID3D11UnorderedAccessView* nullUav[1] = { nullptr };
+
+            for (auto slot : boundUavSlots)
+                context->CSSetUnorderedAccessViews (slot, 1, nullUav, nullptr);
+        }
+
+        boundUavSlots.clear();
         tempBuffers.clear();
         device = nullptr;
         context = nullptr;
     }
 
 private:
+    /** Records a UAV slot for unbinding in finish(), ignoring repeats across dispatches. */
+    void rememberBoundUavSlot (UINT slot)
+    {
+        for (auto existing : boundUavSlots)
+        {
+            if (existing == slot)
+                return;
+        }
+
+        boundUavSlots.push_back (slot);
+    }
+
     ID3D11Device* device;
     ID3D11DeviceContext* context;
     std::vector<ComPtr<ID3D11Buffer>> tempBuffers;
+    std::vector<UINT> boundUavSlots;
 };
 
 //==============================================================================

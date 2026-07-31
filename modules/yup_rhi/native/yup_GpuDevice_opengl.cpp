@@ -112,7 +112,7 @@ public:
 #endif
     }
 
-    ~GpuDeviceGL() override = default;
+    ~GpuDeviceGL() override { releasePooledResources(); }
 
     //==============================================================================
 

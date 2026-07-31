@@ -51,6 +51,8 @@ public:
 
     //==============================================================================
 
+    ~GpuDeviceMetal() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Metal; }
 
     rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }

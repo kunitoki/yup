@@ -75,8 +75,14 @@ public:
     static GpuDevice::Ptr create (GpuPlatform gpuApi, Options options);
 
     //==============================================================================
-    /** Destructor. */
-    ~GpuDevice() override = default;
+    /** Destructor.
+
+        Asserts that the concrete device released the resources this base class
+        pools on its behalf.
+
+        @see releasePooledResources
+    */
+    ~GpuDevice() override;
 
     //==============================================================================
     /** Move constructors and assignment operators. */
@@ -257,6 +263,21 @@ protected:
     /** Default constructor. */
     GpuDevice() noexcept = default;
 
+    /** Releases the GPU resources this base class pools on the backend's behalf.
+
+        Every concrete device must call this from its own destructor. Base-class
+        members are destroyed after the derived class', so pooled resources would
+        otherwise be released after the ore context that created them - which is
+        fatal on any backend whose ore resource destructors reach back into
+        context-owned state, as ore's Vulkan buffer does when it frees through the
+        context's VMA allocator.
+
+        ~GpuDevice() asserts this has happened, so a backend that forgets the call
+        fails loudly in debug on every platform instead of crashing at shutdown on
+        one.
+    */
+    void releasePooledResources() noexcept;
+
 private:
     friend class GpuFrame;
 
@@ -273,6 +294,12 @@ private:
         it: the ore Buffer implementations orphan onto a fresh backing when a buffer
         is updated after having been bound (D3D11 instead lets the driver rename
         it), and that is what makes reuse across frames sound.
+
+        Pooled buffers must not outlive the ore context that created them, because
+        an ore Buffer destructor may reach back into context-owned state - ore's
+        Vulkan buffer frees through the context's VMA allocator. That is why the
+        pool is emptied by releasePooledResources() rather than by its own
+        destructor, which would run too late.
     */
     class UniformBufferPool
     {
@@ -290,6 +317,12 @@ private:
 
         /** Takes a buffer back so a later acquire() of the same capacity reuses it. */
         void release (rive::rcp<rive::ore::Buffer> buffer);
+
+        /** Drops every pooled buffer. */
+        void clear() noexcept;
+
+        /** Returns true when the pool holds no buffers. */
+        bool isEmpty() const noexcept;
 
     private:
         /** Smallest capacity handed out - uniform blocks are 16-byte aligned. */

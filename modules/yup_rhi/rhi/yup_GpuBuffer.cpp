@@ -41,6 +41,10 @@ struct GpuBuffer::Impl
     ComPtr<ID3D11Buffer> d3dStorageBuffer;
     ComPtr<ID3D11UnorderedAccessView> d3dUav;
 
+    /** Staging copy used by readBuffer(), kept alive so a per-frame reader does not
+        reallocate it every frame. Created on first readback. */
+    ComPtr<ID3D11Buffer> d3dReadbackStaging;
+
     ~Impl() = default;
 #elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
     wgpu::Buffer webgpuStorageBuffer;

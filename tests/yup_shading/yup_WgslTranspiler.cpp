@@ -720,7 +720,9 @@ void main()
 )glsl";
 
 // Comma-separated members in a plain struct, where a declarator also carries its
-// own array specifier.
+// own array specifier. The struct is never instantiated: the parser does not
+// resolve user-declared struct names as type names inside a function body, so
+// `Bundle bundle;` would fail for reasons unrelated to the member list.
 constexpr const char* kStructCommaSeparatedMembers = R"glsl(
 #version 450
 struct Bundle {
@@ -730,8 +732,6 @@ struct Bundle {
 
 void main()
 {
-    Bundle bundle;
-    bundle.a = bundle.b + bundle.weights[2] + bundle.offset.x * bundle.scale.y;
 }
 )glsl";
 

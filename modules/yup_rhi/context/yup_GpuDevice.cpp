@@ -167,6 +167,20 @@ bool GpuDevice::updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t by
 
 //==============================================================================
 
+GpuDevice::~GpuDevice()
+{
+    // A backend that forgets releasePooledResources() would let pooled ore buffers
+    // be destroyed after the ore context that created them.
+    jassert (uniformBufferPool.isEmpty());
+}
+
+void GpuDevice::releasePooledResources() noexcept
+{
+    uniformBufferPool.clear();
+}
+
+//==============================================================================
+
 size_t GpuDevice::UniformBufferPool::bucketFor (size_t byteSize) noexcept
 {
     size_t index = 0;
@@ -217,6 +231,20 @@ void GpuDevice::UniformBufferPool::release (rive::rcp<rive::ore::Buffer> buffer)
 
     if (index < buckets.size())
         buckets[index].push_back (std::move (buffer));
+}
+
+void GpuDevice::UniformBufferPool::clear() noexcept
+{
+    buckets.clear();
+}
+
+bool GpuDevice::UniformBufferPool::isEmpty() const noexcept
+{
+    for (const auto& bucket : buckets)
+        if (! bucket.empty())
+            return false;
+
+    return true;
 }
 
 } // namespace yup
