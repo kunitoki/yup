@@ -895,7 +895,10 @@ private:
             ss.loc = l;
 
             if (lexer.peek().type == TokenType::identifier)
+            {
                 ss.name = lexer.advance().text;
+                userStructNames.insert (ss.name);
+            }
 
             expect (TokenType::lBrace);
             while (lexer.peek().type != TokenType::rBrace && lexer.peek().type != TokenType::endOfFile)
@@ -2121,7 +2124,8 @@ private:
             "subpassInputMS"
         };
 
-        return typeNames.find (t) != typeNames.end();
+        return typeNames.find (t) != typeNames.end()
+            || userStructNames.find (t) != userStructNames.end();
     }
 
     ResultValue<TypeSpecifier> parseTypeSpecifier()
@@ -3068,6 +3072,7 @@ private:
     }
 
     Lexer& lexer;
+    std::unordered_set<std::string> userStructNames;
 };
 
 } // namespace

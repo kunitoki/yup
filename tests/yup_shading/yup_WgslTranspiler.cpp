@@ -892,11 +892,11 @@ struct Params {
     vec4 color;
     int flags;
 };
-void main() {}
+void main() { Params p; }
 )glsl";
     auto r = parse (src);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
-    // Exercises the "Parse fields" while loop with multiple iterations
+    // Exercises the "Parse fields" while loop + user-defined type resolution
 }
 
 TEST_F (WgslParserTests, NamedBlockWithInstanceName)
