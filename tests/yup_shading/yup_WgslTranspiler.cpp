@@ -703,6 +703,53 @@ void main()
 }
 )glsl";
 
+// A uniform block whose members share one declaration, as post-process shaders
+// commonly write their parameter block.
+constexpr const char* kUniformBlockCommaSeparatedMembers = R"glsl(
+#version 450
+layout(set = 0, binding = 0) uniform texture2D u_tex;
+layout(set = 0, binding = 1) uniform sampler u_samp;
+layout(set = 0, binding = 2) uniform Params { float s, r, rx, ry, dx, dy, pad0, pad1; } p;
+layout(location = 0) out vec4 fragColor;
+
+void main()
+{
+    vec2 uv = gl_FragCoord.xy / vec2(p.rx, p.ry);
+    fragColor = texture(sampler2D(u_tex, u_samp), uv + vec2(p.dx, p.dy) * p.s);
+}
+)glsl";
+
+// Comma-separated members in a plain struct, where a declarator also carries its
+// own array specifier.
+constexpr const char* kStructCommaSeparatedMembers = R"glsl(
+#version 450
+struct Bundle {
+    float a, b, weights[4];
+    vec2 offset, scale;
+};
+
+void main()
+{
+    Bundle bundle;
+    bundle.a = bundle.b + bundle.weights[2] + bundle.offset.x * bundle.scale.y;
+}
+)glsl";
+
+//==============================================================================
+// AST helpers
+//==============================================================================
+
+/** Finds a named struct or interface block in a parsed translation unit. */
+const wgsl::StructSpecifier* findStruct (const wgsl::TranslationUnit& unit, const std::string& name)
+{
+    for (const auto& external : unit.declarations)
+        if (const auto* declaration = std::get_if<wgsl::Declaration> (&external))
+            if (declaration->structSpecifier != nullptr && declaration->structSpecifier->name == name)
+                return declaration->structSpecifier.get();
+
+    return nullptr;
+}
+
 } // namespace
 
 //==============================================================================
@@ -811,6 +858,36 @@ TEST_F (WgslParserTests, AnonymousUniformBlock)
 {
     auto r = parse (kUniformBlockAnonymous);
     ASSERT_TRUE (r.wasOk());
+}
+
+TEST_F (WgslParserTests, UniformBlockWithCommaSeparatedMembers)
+{
+    auto r = parse (kUniformBlockCommaSeparatedMembers);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    const auto* params = findStruct (r.getReference(), "Params");
+    ASSERT_NE (nullptr, params);
+    ASSERT_EQ (8u, params->fields.size());
+    EXPECT_EQ ("s", params->fields.front().name);
+    EXPECT_EQ ("pad1", params->fields.back().name);
+}
+
+TEST_F (WgslParserTests, StructWithCommaSeparatedMembers)
+{
+    auto r = parse (kStructCommaSeparatedMembers);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    const auto* bundle = findStruct (r.getReference(), "Bundle");
+    ASSERT_NE (nullptr, bundle);
+    ASSERT_EQ (5u, bundle->fields.size());
+    EXPECT_EQ ("a", bundle->fields[0].name);
+    EXPECT_EQ ("b", bundle->fields[1].name);
+    EXPECT_EQ ("offset", bundle->fields[3].name);
+
+    // An array specifier binds to its own declarator, not to the shared base type.
+    EXPECT_EQ ("weights", bundle->fields[2].name);
+    EXPECT_EQ (1u, bundle->fields[2].type.arraySpecifiers.size());
+    EXPECT_TRUE (bundle->fields[1].type.arraySpecifiers.empty());
 }
 
 TEST_F (WgslParserTests, ErrorOnMalformedInput)
@@ -1611,6 +1688,19 @@ TEST_F (WgslEmitterGoldenTests, UBOBecomesUniformVar)
     auto wgsl = r.getValue();
 
     EXPECT_TRUE (wgsl.contains ("var<uniform>"));
+}
+
+TEST_F (WgslEmitterGoldenTests, UBOKeepsEveryCommaSeparatedMember)
+{
+    auto r = transpile (kUniformBlockCommaSeparatedMembers, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("var<uniform>")) << wgsl;
+
+    for (auto* member : { "s", "r", "rx", "ry", "dx", "dy", "pad0", "pad1" })
+        EXPECT_TRUE (wgsl.contains (String (member) + ": f32")) << member << " missing from:\n"
+                                                                << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, FloatLiteralFormats)

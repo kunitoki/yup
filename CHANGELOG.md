@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
 - Fixed a crash on Windows when creating any native window: the D3D11 `GpuDevice` was built with an already moved-from `ID3D11Device`, and the Direct3D `GraphicsContext` created a second device whose swapchain textures could not be used by the render context. Both now share a single `ID3D11Device`
 - Fixed the Emscripten WebGPU `GraphicsContext` never storing its surface size, leaving the offscreen copy at 0x0
+- `Component`'s effect path now reuses its offscreen `GpuCanvas` across frames while the component size is unchanged, instead of allocating (and freeing) a full-size render target every frame. On a size change the outgoing canvas is released before the replacement is created, so its `RenderContext` lease returns to the pool rather than forcing a second context to be reserved permanently
+- `ComponentEffectsDemo`: shader effects now share a common base that compiles the pipeline at most once instead of retrying a failed compile on every frame, reports the compile error in the status label and on the console, and shows the CPU time spent applying the effect next to the paint time
 
 #### Rive Runtime Bump
 
@@ -74,6 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native GPU buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
 - `Image::fromTexture(GpuTexture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
 - `Graphics::drawTexture(GpuTexture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side ImagePixelData allocation.
+- Fixed the GLSL→WGSL transpiler rejecting comma-separated members in a struct or interface block (`uniform Params { float s, r, rx, ry; }`), which failed with `Expected ';'`. Each declarator now becomes its own member and binds its own array specifiers.
 
 #### Shader Compiler (#126 and #130)
 
