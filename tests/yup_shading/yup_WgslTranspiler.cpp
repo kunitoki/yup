@@ -583,6 +583,51 @@ void main()
 }
 )glsl";
 
+constexpr const char* kUnnamedUniformBlock = R"glsl(
+#version 450
+layout(set = 0, binding = 0) uniform {
+    float value;
+};
+void main()
+{
+    float x = value;
+}
+)glsl";
+
+constexpr const char* kUnnamedBufferBlock = R"glsl(
+#version 450
+layout(set = 0, binding = 0) buffer {
+    float value;
+};
+void main()
+{
+    value = 1.0;
+}
+)glsl";
+
+constexpr const char* kFunctionNoParamReassignment = R"glsl(
+#version 450
+float add(float a, float b) { return a + b; }
+float mul(float a, float b) { return a * b; }
+void main()
+{
+    float x = add(1.0, 2.0) * mul(3.0, 4.0);
+}
+)glsl";
+
+constexpr const char* kIfElseStatement = R"glsl(
+#version 450
+void main()
+{
+    float x;
+    if (true) {
+        x = 1.0;
+    } else {
+        x = 2.0;
+    }
+}
+)glsl";
+
 constexpr const char* kFragmentNoInputs = R"glsl(
 #version 450
 layout(location = 0) out vec4 outColor;
@@ -810,6 +855,61 @@ TEST_F (WgslParserTests, StructDeclaration)
 {
     auto r = parse (kStructDecl);
     ASSERT_TRUE (r.wasOk());
+}
+
+TEST_F (WgslParserTests, NamedBlockWithoutInstanceName)
+{
+    const char* src = R"glsl(
+layout(std140, binding = 0) uniform BlockName {
+    float value;
+    vec3 color;
+};
+void main() { float x = value + color.r; }
+)glsl";
+    auto r = parse (src);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    // Parsed as a Declaration with structSpecifier + qualifier, no initDeclaratorList
+}
+
+TEST_F (WgslParserTests, NamedBufferBlockWithoutInstanceName)
+{
+    const char* src = R"glsl(
+layout(std430, binding = 0) buffer StorageBlock {
+    float data;
+};
+void main() { data = 1.0; }
+)glsl";
+    auto r = parse (src);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+}
+
+TEST_F (WgslParserTests, StructWithMultipleFields)
+{
+    const char* src = R"glsl(
+struct Params {
+    float scale;
+    vec3 offset;
+    vec4 color;
+    int flags;
+};
+void main() {}
+)glsl";
+    auto r = parse (src);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    // Exercises the "Parse fields" while loop with multiple iterations
+}
+
+TEST_F (WgslParserTests, NamedBlockWithInstanceName)
+{
+    const char* src = R"glsl(
+layout(std140, binding = 0) uniform Data {
+    float value;
+    vec3 color;
+} u;
+void main() { float x = u.value; }
+)glsl";
+    auto r = parse (src);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
 }
 
 TEST_F (WgslParserTests, OutInoutParameters)
@@ -1506,6 +1606,55 @@ TEST_F (WgslLoweringTests, OutInoutParametersProcessed)
     // Should succeed — out/inout params are lowered to pointer equivalents
 }
 
+TEST_F (WgslLoweringTests, UnnamedUniformBlockHasResources)
+{
+    auto r = lower (kUnnamedUniformBlock, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    auto& resources = r.getReference().resources;
+    EXPECT_GE (resources.size(), 1u);
+
+    bool foundValue = false;
+    for (auto& res : resources)
+    {
+        if (res.name == "value")
+        {
+            foundValue = true;
+            EXPECT_EQ (res.group, 0u);
+            EXPECT_EQ (res.binding, 0u);
+        }
+    }
+    EXPECT_TRUE (foundValue);
+}
+
+TEST_F (WgslLoweringTests, UnnamedBufferBlockHasResources)
+{
+    auto r = lower (kUnnamedBufferBlock, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    auto& resources = r.getReference().resources;
+    EXPECT_GE (resources.size(), 1u);
+
+    bool foundValue = false;
+    for (auto& res : resources)
+    {
+        if (res.name == "value")
+        {
+            foundValue = true;
+            EXPECT_EQ (res.group, 0u);
+            EXPECT_EQ (res.binding, 0u);
+        }
+    }
+    EXPECT_TRUE (foundValue);
+}
+
+TEST_F (WgslLoweringTests, FunctionWithNoReassignedParamsSucceeds)
+{
+    auto r = lower (kFunctionNoParamReassignment, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    // shadowReassignedParams exits early when no parameter is reassigned
+}
+
 //==============================================================================
 // Emitter Golden Tests — WGSL 1.0 output (Task 5.2)
 //==============================================================================
@@ -1690,6 +1839,32 @@ TEST_F (WgslEmitterGoldenTests, UBOBecomesUniformVar)
     EXPECT_TRUE (wgsl.contains ("var<uniform>"));
 }
 
+TEST_F (WgslEmitterGoldenTests, UnnamedUniformBlockEmitsFlatVars)
+{
+    auto r = transpile (kUnnamedUniformBlock, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    // Unnamed interface block fields are emitted as flat global variables
+    EXPECT_TRUE (wgsl.contains ("var<uniform>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("value: f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(0)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@binding(0)")) << wgsl;
+    // Should NOT contain a struct wrapping the fields
+    EXPECT_FALSE (wgsl.contains ("struct {")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, UnnamedBufferBlockEmitsStorageVars)
+{
+    auto r = transpile (kUnnamedBufferBlock, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("var<storage")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("read_write")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("value: f32")) << wgsl;
+}
+
 TEST_F (WgslEmitterGoldenTests, UBOKeepsEveryCommaSeparatedMember)
 {
     auto r = transpile (kUniformBlockCommaSeparatedMembers, ShaderStage::fragment);
@@ -1733,6 +1908,39 @@ TEST_F (WgslEmitterGoldenTests, DiscardStatement)
     auto wgsl = r.getValue();
 
     EXPECT_TRUE (wgsl.contains ("discard"));
+}
+
+TEST_F (WgslEmitterGoldenTests, IfElseBranchEmitted)
+{
+    auto r = transpile (kIfElseStatement, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("else")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("1.0")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("2.0")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, IfElseIfChainEmitted)
+{
+    const char* src = R"glsl(
+void main() {
+    float x;
+    if (true) {
+        x = 1.0;
+    } else if (false) {
+        x = 2.0;
+    } else {
+        x = 3.0;
+    }
+}
+)glsl";
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("else")) << wgsl;
+    // else if chain preserves the nesting
 }
 
 TEST_F (WgslEmitterGoldenTests, ReturnStatement)
