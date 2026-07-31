@@ -128,6 +128,11 @@ public:
 
     //==============================================================================
 
+    /** Pipelined readback: WebGPU buffer mapping resolves through the JavaScript
+        event loop, so blocking here would need ASYNCIFY (which costs code size and
+        runtime speed across the whole module). Each call instead consumes the
+        oldest snapshot that has finished mapping and schedules a fresh one, so the
+        result trails the GPU by a frame or two but never stalls. */
     bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
     {
         if (buffer == nullptr || dst == nullptr || dstSize == 0)
@@ -141,64 +146,48 @@ public:
         if (dstSize < byteSize)
             return false;
 
-        // Create a staging buffer for readback
-        wgpu::BufferDescriptor stagingDesc {};
-        stagingDesc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-        stagingDesc.size = byteSize;
-        stagingDesc.label = "GpuBuffer readback staging";
+        using ReadbackSlot = GpuBuffer::Impl::ReadbackSlot;
 
-        wgpu::Buffer staging = device.CreateBuffer (&stagingDesc);
-        if (staging == nullptr)
+        if (impl->readbackUnavailable)
             return false;
 
-        // Copy storage buffer → staging buffer
+        if (impl->readbackSlots.empty() && ! createReadbackSlots (*impl, byteSize))
         {
-            wgpu::CommandEncoderDescriptor encDesc {};
-            encDesc.label = "GpuBuffer readback copy";
-            wgpu::CommandEncoder encoder = device.CreateCommandEncoder (&encDesc);
-            if (encoder == nullptr)
-                return false;
-
-            encoder.CopyBufferToBuffer (impl->webgpuStorageBuffer, 0, staging, 0, byteSize);
-
-            wgpu::CommandBuffer commands = encoder.Finish();
-            if (commands != nullptr)
-                queue.Submit (1, &commands);
-        }
-
-        // Map the staging buffer and read back.
-        struct ReadbackContext
-        {
-            bool done = false;
-            WGPUMapAsyncStatus status = WGPUMapAsyncStatus_Success;
-        } ctx;
-
-        WGPUBufferMapCallbackInfo callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-        callbackInfo.callback = [] (WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
-        {
-            auto* c = static_cast<ReadbackContext*> (userdata1);
-            c->status = status;
-            c->done = true;
-        };
-        callbackInfo.userdata1 = &ctx;
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
-        wgpuBufferMapAsync (staging.Get(), WGPUMapMode_Read, 0, byteSize, callbackInfo);
-
-        // On Emscripten, MapAsync may be asynchronous; if the callback hasn't
-        // fired synchronously, the readback fails gracefully.
-        if (! ctx.done || ctx.status != WGPUMapAsyncStatus_Success)
-            return false;
-
-        const void* mapped = staging.GetConstMappedRange (0, byteSize);
-        if (mapped == nullptr)
-        {
-            staging.Unmap();
+            // Retrying the same allocation on every frame would only spin.
+            impl->readbackUnavailable = true;
             return false;
         }
 
-        memcpy (dst, mapped, byteSize);
-        staging.Unmap();
-        return true;
+        // Consume the oldest snapshot whose mapping has completed. Copies are
+        // submitted to one queue and their promises resolve in order, so going
+        // oldest-first hands the caller successive states rather than jumping
+        // back and forth in time.
+        ReadbackSlot* oldestMapped = nullptr;
+        for (auto& slot : impl->readbackSlots)
+        {
+            if (slot->mapped && (oldestMapped == nullptr || slot->serial < oldestMapped->serial))
+                oldestMapped = slot.get();
+        }
+
+        bool wroteSnapshot = false;
+
+        if (oldestMapped != nullptr)
+        {
+            if (const void* mapped = oldestMapped->staging.GetConstMappedRange (0, byteSize))
+            {
+                memcpy (dst, mapped, byteSize);
+                wroteSnapshot = true;
+            }
+
+            // Unmapping before the slot is reused is mandatory: a mapped buffer
+            // cannot be a CopyBufferToBuffer destination.
+            oldestMapped->staging.Unmap();
+            oldestMapped->mapped = false;
+        }
+
+        scheduleReadback (*impl, byteSize);
+
+        return wroteSnapshot;
     }
 
     //==============================================================================
@@ -357,6 +346,91 @@ public:
     }
 
 private:
+    /** Allocates the ring of staging buffers used by readBuffer(). */
+    bool createReadbackSlots (GpuBuffer::Impl& impl, size_t byteSize)
+    {
+        wgpu::BufferDescriptor stagingDesc {};
+        stagingDesc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+        stagingDesc.size = byteSize;
+        stagingDesc.label = "GpuBuffer readback staging";
+
+        for (size_t i = 0; i < GpuBuffer::Impl::numReadbackSlots; ++i)
+        {
+            auto slot = std::make_shared<GpuBuffer::Impl::ReadbackSlot>();
+            slot->staging = device.CreateBuffer (&stagingDesc);
+
+            if (slot->staging == nullptr)
+            {
+                impl.readbackSlots.clear();
+                return false;
+            }
+
+            impl.readbackSlots.push_back (std::move (slot));
+        }
+
+        return true;
+    }
+
+    /** Copies the storage buffer into the first free staging slot and starts mapping it. */
+    void scheduleReadback (GpuBuffer::Impl& impl, size_t byteSize)
+    {
+        std::shared_ptr<GpuBuffer::Impl::ReadbackSlot> freeSlot;
+
+        for (const auto& slot : impl.readbackSlots)
+        {
+            if (! slot->mapPending && ! slot->mapped)
+            {
+                freeSlot = slot;
+                break;
+            }
+        }
+
+        if (freeSlot == nullptr)
+            return;
+
+        wgpu::CommandEncoderDescriptor encDesc {};
+        encDesc.label = "GpuBuffer readback copy";
+        wgpu::CommandEncoder encoder = device.CreateCommandEncoder (&encDesc);
+        if (encoder == nullptr)
+            return;
+
+        encoder.CopyBufferToBuffer (impl.webgpuStorageBuffer, 0, freeSlot->staging, 0, byteSize);
+
+        wgpu::CommandBuffer commands = encoder.Finish();
+        if (commands == nullptr)
+            return;
+
+        queue.Submit (1, &commands);
+
+        freeSlot->serial = impl.nextReadbackSerial++;
+        freeSlot->mapPending = true;
+
+        // AllowSpontaneous is what makes this work without a pump: the callback
+        // is invoked straight from the JavaScript promise resolution, between
+        // main-loop ticks. AllowProcessEvents would instead sit in a queue until
+        // someone called wgpuInstanceProcessEvents(), and never complete here.
+        //
+        // The callback owns a strong reference to its slot, so the slot and its
+        // staging buffer stay alive even if the GpuBuffer is released while the
+        // mapping is still in flight.
+        WGPUBufferMapCallbackInfo callbackInfo = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+        callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+        callbackInfo.callback = [] (WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
+        {
+            std::unique_ptr<std::shared_ptr<GpuBuffer::Impl::ReadbackSlot>> owned {
+                static_cast<std::shared_ptr<GpuBuffer::Impl::ReadbackSlot>*> (userdata1)
+            };
+
+            (*owned)->mapPending = false;
+
+            // A failed or aborted mapping leaves the slot free to retry.
+            (*owned)->mapped = status == WGPUMapAsyncStatus_Success;
+        };
+        callbackInfo.userdata1 = new std::shared_ptr<GpuBuffer::Impl::ReadbackSlot> (freeSlot);
+
+        wgpuBufferMapAsync (freeSlot->staging.Get(), WGPUMapMode_Read, 0, byteSize, callbackInfo);
+    }
+
     OffscreenContextSlot* acquireOffscreenContext()
     {
         for (const auto& slot : offscreenContextPool)

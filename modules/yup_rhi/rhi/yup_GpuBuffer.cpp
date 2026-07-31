@@ -49,6 +49,36 @@ struct GpuBuffer::Impl
 #elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
     wgpu::Buffer webgpuStorageBuffer;
 
+    /** One staging buffer in the pipelined readback ring.
+
+        Held by shared_ptr so an in-flight map callback keeps its slot (and the
+        staging buffer it unmaps) alive even if the GpuBuffer is released first.
+    */
+    struct ReadbackSlot
+    {
+        wgpu::Buffer staging;
+        uint64_t serial = 0; ///< Submission order, so snapshots are consumed oldest-first.
+        bool mapPending = false;
+        bool mapped = false;
+
+        ~ReadbackSlot()
+        {
+            if (mapped && staging != nullptr)
+                staging.Unmap();
+        }
+    };
+
+    /** Three slots keep one copy in flight, one map pending and one ready to
+        consume, so a snapshot lands every frame once the ring is primed. */
+    static constexpr size_t numReadbackSlots = 3;
+
+    std::vector<std::shared_ptr<ReadbackSlot>> readbackSlots;
+    uint64_t nextReadbackSerial = 0;
+
+    /** Set when the staging buffers could not be allocated, so a per-frame reader
+        gives up instead of retrying the same failing allocation every frame. */
+    bool readbackUnavailable = false;
+
     ~Impl() = default;
 #elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
     GLuint glBuffer = 0;

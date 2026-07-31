@@ -73,6 +73,31 @@ TEST_F (GpuDeviceErrorTests, ReadBufferWithNonNullBufferReturnsFalse)
     EXPECT_FALSE (device->readBuffer (buffer, readback, sizeof (readback)));
 }
 
+TEST_F (GpuDeviceErrorTests, ReadBufferWithNullDestinationReturnsFalse)
+{
+    const float data[] = { 1.0f, 2.0f, 3.0f };
+    auto buffer = GpuBuffer::create (device, GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buffer, nullptr);
+
+    EXPECT_FALSE (device->readBuffer (buffer, nullptr, sizeof (data)));
+}
+
+TEST_F (GpuDeviceErrorTests, ReadBufferLeavesDestinationUntouchedOnFailure)
+{
+    // A false return means "no new data yet", not "the destination is now junk":
+    // callers own it across calls and must be able to keep using the last snapshot.
+    const float data[] = { 1.0f, 2.0f, 3.0f };
+    auto buffer = GpuBuffer::create (device, GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buffer, nullptr);
+
+    float readback[] = { 7.0f, 8.0f, 9.0f };
+    ASSERT_FALSE (device->readBuffer (buffer, readback, sizeof (readback)));
+
+    EXPECT_FLOAT_EQ (readback[0], 7.0f);
+    EXPECT_FLOAT_EQ (readback[1], 8.0f);
+    EXPECT_FLOAT_EQ (readback[2], 9.0f);
+}
+
 // ---------------------------------------------------------------------------
 // updateBuffer — error paths
 // ---------------------------------------------------------------------------

@@ -476,6 +476,7 @@ void main() {
 
         lastFrameStamp = yup::Time::getHighResolutionTicks();
         frameCount = 0;
+        snapshotCount = 0;
         fpsUpdateAccum = 0.0;
         gpuReady = true;
     }
@@ -537,9 +538,13 @@ void main() {
             }
         }
 
-        // Read back particle data from GPU (readBuffer now synchronises).
-        if (! device->readBuffer (particleSSBO, cpuParticleData.data(), readbackBytes))
-            return nullptr;
+        // Pull the latest particle snapshot. On backends that cannot map a buffer
+        // synchronously (WebGPU) this is pipelined, so it trails the GPU by a frame
+        // or two and returns false on frames where nothing new landed.
+        // cpuParticleData then still holds the previous snapshot, so keep drawing
+        // it instead of dropping the frame.
+        if (device->readBuffer (particleSSBO, cpuParticleData.data(), readbackBytes))
+            ++snapshotCount;
 
         // ---- Build vertex buffer from particle data ---------------------------
         const float sizeY = 20.0f / (float) yup::jmax (viewH, 1);
@@ -621,9 +626,10 @@ void main() {
 
         if (fpsUpdateAccum >= 0.25)
         {
-            statusLabel->setText (yup::String::formatted ("GPU compute | %d particles | f=%d | p0=(%.2f,%.2f) | g=%.2f",
+            statusLabel->setText (yup::String::formatted ("GPU compute | %d particles | f=%d | s=%d | p0=(%.2f,%.2f) | g=%.2f",
                                                           kParticleCount,
                                                           frameCount,
+                                                          snapshotCount,
                                                           (double) cpuParticleData[(size_t) kGpuPosX],
                                                           (double) cpuParticleData[(size_t) kGpuPosY],
                                                           (double) simGravity),
@@ -653,8 +659,10 @@ void main() {
     yup::int64 lastFrameStamp = 0;
     bool gpuReady = false;
 
-    // FPS counter.
+    // FPS counter. snapshotCount tracks how many readbacks actually landed, which
+    // on async-readback backends is lower than frameCount.
     int frameCount = 0;
+    int snapshotCount = 0;
     double fpsUpdateAccum = 0.0;
 
     // UI.

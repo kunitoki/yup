@@ -139,7 +139,8 @@ public:
 
         // The compute dispatch was issued on this same immediate context, so the
         // copy is ordered after it, and Map (without DO_NOT_WAIT) blocks until the
-        // copy has retired — which is the blocking contract readBuffer documents.
+        // copy has retired. D3D11 can therefore read back in lockstep and always
+        // hand the caller current data.
         gpuContext->CopyResource (impl->d3dReadbackStaging.Get(), impl->d3dStorageBuffer.Get());
 
         D3D11_MAPPED_SUBRESOURCE mapped {};

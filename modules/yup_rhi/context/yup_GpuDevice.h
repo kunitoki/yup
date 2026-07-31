@@ -231,15 +231,32 @@ public:
                                                                const void* data,
                                                                size_t byteSize);
 
-    /** Reads storage buffer contents back to CPU memory (blocking).
+    /** Reads storage buffer contents back to CPU memory.
 
         The buffer must have been created with GpuBufferType::storage.
 
-        @param buffer   A storage buffer to read from.
-        @param dst      Destination buffer in CPU memory.
-        @param dstSize  Size in bytes (must match the buffer's byte size).
+        Whether this blocks is a property of the backend, because not all of them
+        can map a buffer synchronously:
 
-        @returns true on success.
+        - Metal, D3D11 and OpenGL read back in lockstep — the call waits for the
+          GPU and fills @p dst every time.
+        - WebGPU maps buffers through a promise that only resolves on a later turn
+          of the JavaScript event loop, so there the readback is pipelined over
+          several staging buffers instead. The call never blocks; it writes @p dst
+          once a snapshot has finished mapping, which trails the GPU by a frame or
+          two.
+
+        Callers must therefore treat @p dst as persistent storage that they own
+        across calls, and a false return as "no new data yet" rather than as an
+        error — the previous contents remain valid and usable. A per-frame reader
+        that redraws its last snapshot works on every backend; one that demands
+        fresh data on every single call does not.
+
+        @param buffer   A storage buffer to read from.
+        @param dst      Destination buffer in CPU memory, persistent across calls.
+        @param dstSize  Size in bytes (must be at least the buffer's byte size).
+
+        @returns true if @p dst was filled with buffer contents.
     */
     virtual bool readBuffer (ReferenceCountedObjectPtr<GpuBuffer> buffer, void* dst, size_t dstSize);
 
