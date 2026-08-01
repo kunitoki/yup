@@ -26,8 +26,6 @@ namespace yup
 
 YUPApplication::YUPApplication()
 {
-    initialiseYup_Windowing();
-
 #if YUP_MAC
     NSMenu* menuBar = [[NSMenu alloc] init];
     NSMenuItem* menuBarItem = [[NSMenuItem alloc] init];
@@ -44,10 +42,7 @@ YUPApplication::YUPApplication()
 #endif
 }
 
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
+YUPApplication::~YUPApplication() = default;
 
 bool YUPApplication::moreThanOneInstanceAllowed()
 {

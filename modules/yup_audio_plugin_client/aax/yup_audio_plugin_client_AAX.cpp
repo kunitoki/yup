@@ -77,7 +77,7 @@ YupPlugin_AAX_PlugInID_Native and YupPlugin_AAX_PlugInID_AudioSuite to be define
 #endif
 #endif
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
@@ -278,7 +278,7 @@ public:
 
     YupAAX_Processor()
     {
-        processor.reset (createPluginProcessor());
+        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
         processor->addListener (this);
 
         AAX_CEffectParameters::GetNumberOfChunks (&yupChunkIndex);
@@ -613,6 +613,63 @@ public:
     // Audio processing
     //==========================================================================
 
+    // Builds one AudioBusBufferView per audio input bus from the flat array of
+    // host-provided input channel buffers. Channels are consumed in bus
+    // declaration order; channels beyond the host-provided count (e.g. an
+    // unconnected sidechain) are exposed as null channel pointers so
+    // processors see deterministic silence.
+    void buildInputBusViews (float* const* inputChannelData, int numIn)
+    {
+        inputBusViews.clear();
+
+        int chOffset = 0;
+
+        for (const auto& bus : processor->getBusLayout().getInputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = inputChannelPtrStorage.data() + chOffset;
+
+            for (int ch = 0; ch < numCh; ++ch)
+                chPtrs[ch] = (inputChannelData != nullptr && chOffset + ch < numIn)
+                               ? inputChannelData[chOffset + ch]
+                               : nullptr;
+
+            inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+        }
+    }
+
+    // Builds one AudioBusBufferView per audio output bus from the flat array of
+    // host-provided output channel buffers.
+    void buildOutputBusViews (float* const* outputChannelData, int numOut)
+    {
+        outputBusViews.clear();
+
+        int chOffset = 0;
+
+        for (const auto& bus : processor->getBusLayout().getOutputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = outputChannelPtrStorage.data() + chOffset;
+
+            for (int ch = 0; ch < numCh; ++ch)
+                chPtrs[ch] = (outputChannelData != nullptr && chOffset + ch < numOut)
+                               ? outputChannelData[chOffset + ch]
+                               : nullptr;
+
+            outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+        }
+    }
+
     void process (float* const* inputChannelData,
                   float* const* outputChannelData,
                   int bufferSize,
@@ -636,12 +693,21 @@ public:
         const auto numIn = layout.getNumAudioInputChannels();
         const auto numOut = layout.getNumAudioOutputChannels();
 
+        // Only Main-role input channels are copied into the outputs; auxiliary
+        // (sidechain) channels must never leak into the main signal path. This
+        // assumes the main input buses are declared before auxiliary buses, which
+        // is the YUP layout convention (mirrored by VST3's kMain-before-kAux rule).
+        int numMainIn = 0;
+        for (const auto& bus : layout.getInputBuses())
+            if (bus.getType() == AudioBus::Type::Audio && bus.getRole() == AudioBus::Role::Main)
+                numMainIn += bus.getNumChannels();
+
         for (int ch = 0; ch < numOut; ++ch)
         {
             if (outputChannelData[ch] == nullptr)
                 continue;
 
-            if (ch < numIn && inputChannelData[ch] != nullptr)
+            if (inputChannelData != nullptr && ch < numMainIn && inputChannelData[ch] != nullptr)
             {
                 if (outputChannelData[ch] != inputChannelData[ch])
                     std::memcpy (outputChannelData[ch], inputChannelData[ch], static_cast<size_t> (bufferSize) * sizeof (float));
@@ -654,10 +720,18 @@ public:
 
         AudioBuffer<float> audioBuffer (outputChannelData, numOut, bufferSize);
 
+        buildInputBusViews (inputChannelData, numIn);
+        buildOutputBusViews (outputChannelData, numOut);
+
         paramChangeBuffer.clear();
 
         AudioProcessContext<float> context {
-            audioBuffer, midiBuffer, paramChangeBuffer, nullptr
+            audioBuffer,
+            midiBuffer,
+            paramChangeBuffer,
+            nullptr,
+            { inputBusViews.data(), inputBusViews.size() },
+            { outputBusViews.data(), outputBusViews.size() }
         };
 
         processAudioBlock (*processor, context, currentlyBypassed);
@@ -711,6 +785,12 @@ private:
         isPrepared = true;
 
         paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
+
+        // Pre-allocate per-bus view storage so the algorithm callback never allocates
+        inputBusViews.reserve (static_cast<size_t> (processor->getNumAudioInputs()));
+        outputBusViews.reserve (static_cast<size_t> (processor->getNumAudioOutputs()));
+        inputChannelPtrStorage.resize (static_cast<size_t> (processor->getBusLayout().getNumAudioInputChannels()));
+        outputChannelPtrStorage.resize (static_cast<size_t> (processor->getBusLayout().getNumAudioOutputChannels()));
 
         if (auto* ctrl = Controller())
             ctrl->SetSignalLatency (processor->getLatencySamples());
@@ -971,6 +1051,13 @@ private:
     MidiBuffer midiBuffer;
     ParameterChangeBuffer paramChangeBuffer;
 
+    // Per-bus view state, pre-allocated in preparePlugin so the real-time
+    // algorithm callback only clears and refills the vectors without allocating
+    std::vector<AudioBusBufferView<const float>> inputBusViews;
+    std::vector<AudioBusBufferView<float>> outputBusViews;
+    std::vector<const float*> inputChannelPtrStorage;
+    std::vector<float*> outputChannelPtrStorage;
+
     std::unordered_map<int32_t, AudioParameter*> paramMap;
     std::vector<AudioParameter*> aaxMeters;
 
@@ -1153,7 +1240,7 @@ void AAX_CALLBACK yupAAXAlgorithmCallback (void* const instancesBegin[], const v
 
 static void getPlugInDescription (AAX_IEffectDescriptor& descriptor)
 {
-    std::unique_ptr<AudioProcessor> plugin (createPluginProcessor());
+    std::unique_ptr<AudioProcessor> plugin (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
 
     descriptor.AddName (YupPlugin_Name);
     descriptor.AddName (YupPlugin_Description);

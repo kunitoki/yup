@@ -120,6 +120,20 @@ public:
     AudioParameterBuilder& withModulePath (const String& modulePath);
 
     /**
+        Sets the measurement unit for this parameter.
+
+        Plugins should set this so hosts can display appropriate unit labels.
+        For custom units not in the ParameterUnit enum, pass
+        ParameterUnit::Custom together with a unit name string.
+
+        @param parameterUnit  The measurement unit.
+        @param parameterUnitName  Optional custom unit name (only used when
+                                   parameterUnit is ParameterUnit::Custom).
+    */
+    AudioParameterBuilder& withUnit (AudioParameter::ParameterUnit parameterUnit,
+                                     const String& parameterUnitName = {});
+
+    /**
         Finalizes the builder and returns a fully constructed AudioProcessorParameter instance.
 
         @returns A shared_ptr to the constructed AudioProcessorParameter.

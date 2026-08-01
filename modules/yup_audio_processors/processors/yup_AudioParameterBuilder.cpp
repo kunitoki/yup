@@ -160,6 +160,14 @@ AudioParameterBuilder& AudioParameterBuilder::withModulePath (const String& modu
     return *this;
 }
 
+AudioParameterBuilder& AudioParameterBuilder::withUnit (AudioParameter::ParameterUnit parameterUnit,
+                                                        const String& parameterUnitName)
+{
+    metadata.unit = parameterUnit;
+    metadata.unitName = parameterUnitName;
+    return *this;
+}
+
 //==============================================================================
 
 AudioParameter::Ptr AudioParameterBuilder::build() const
