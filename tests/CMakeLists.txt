@@ -60,7 +60,6 @@ set (target_modules
     yup_audio_devices
     yup_audio_formats
     yup_audio_processors
-    yup_audio_plugin_client
     yup_audio_graph
     yup_ai
     yup_dsp
@@ -89,7 +88,9 @@ set (target_gtest_modules
     GTest::gmock)
 
 if (YUP_PLATFORM_DESKTOP)
-    list (APPEND target_modules yup_audio_plugin_host)
+    list (APPEND target_modules
+        yup_audio_plugin_host
+        yup_audio_plugin_client)
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
@@ -177,37 +178,39 @@ source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${imported_sources})
 set_source_files_properties (${imported_sources} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 # ==== Plugin wrapper standalone test TUs (compiled directly, not HEADER_FILE_ONLY)
-if (TARGET clap)
-    target_link_libraries (${target_name} PRIVATE clap)
-    target_sources (${target_name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_clap.cpp")
-endif()
-
-if (TARGET sdk)
-    target_link_libraries (${target_name} PRIVATE sdk)
-    target_sources (${target_name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_vst3.cpp")
-    if (TARGET sdk_hosting)
-        target_link_libraries (${target_name} PRIVATE sdk_hosting)
+if (YUP_PLATFORM_DESKTOP)
+    if (TARGET clap)
+        target_link_libraries (${target_name} PRIVATE clap)
+        target_sources (${target_name} PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_clap.cpp")
     endif()
-endif()
 
-if (YUP_PLATFORM_MAC AND TARGET base-sdk-auv2)
-    target_link_libraries (${target_name} PRIVATE base-sdk-auv2)
-    target_sources (${target_name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm")
-    set_source_files_properties (
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm"
-        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
-endif()
+    if (TARGET sdk)
+        target_link_libraries (${target_name} PRIVATE sdk)
+        target_sources (${target_name} PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_vst3.cpp")
+        if (TARGET sdk_hosting)
+            target_link_libraries (${target_name} PRIVATE sdk_hosting)
+        endif()
+    endif()
 
-if (YUP_PLATFORM_MAC)
-    target_sources (${target_name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm")
-    set_source_files_properties (
-        "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm"
-        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
-    target_link_libraries (${target_name} PRIVATE "-framework CoreAudioKit")
+    if (YUP_PLATFORM_MAC AND TARGET base-sdk-auv2)
+        target_link_libraries (${target_name} PRIVATE base-sdk-auv2)
+        target_sources (${target_name} PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm")
+        set_source_files_properties (
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm"
+            PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+    endif()
+
+    if (YUP_PLATFORM_MAC)
+        target_sources (${target_name} PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm")
+        set_source_files_properties (
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm"
+            PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        target_link_libraries (${target_name} PRIVATE "-framework CoreAudioKit")
+    endif()
 endif()
 
 target_compile_options (${target_name} PRIVATE
