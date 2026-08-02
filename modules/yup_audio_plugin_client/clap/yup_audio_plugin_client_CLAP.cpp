@@ -34,7 +34,7 @@
 
 #include <clap/clap.h>
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
@@ -518,6 +518,7 @@ public:
 
     const void* getExtension (std::string_view id);
     const clap_plugin_t* getPlugin() const;
+    AudioProcessor* getProcessor() const noexcept;
 
     void editorResized();
     ScopedValueSetter<bool> scopedHostEditorResizing();
@@ -576,8 +577,22 @@ private:
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> outputChannelsFloat;
     std::vector<double*> outputChannelsDouble;
+
+    std::vector<AudioBusBufferView<const float>> inputBusViewsFloat;
+    std::vector<AudioBusBufferView<float>> outputBusViewsFloat;
+    std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
+    std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
+
     bool isBypassed = false;
     std::atomic<bool> isActive { false };
+
+    //==============================================================================
+    /** Returns true when the CLAP audio bus role is Main. */
+    bool isCLAPAudioBusMain (uint32_t clapAudioBusIndex, bool isInput) const noexcept
+    {
+        return audioProcessor->getBusLayout().getAudioBusRole (static_cast<int> (clapAudioBusIndex), isInput) == AudioBus::Role::Main;
+    }
+
     std::atomic<bool> isInsideProcessBlock { false };
     std::atomic<bool> callLatencyChangeOnNextActivate { false };
     std::atomic<bool> tailChangedPending { false };
@@ -733,9 +748,13 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
         if (useDoublePrecision)
         {
-            // Copy input audio into output buffers for effect processors (double)
+            // Copy main input audio into matching main output buffers for effects.
+            // Auxiliary (sidechain) inputs are NOT copied to outputs.
             for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)
             {
+                if (! wrapper->isCLAPAudioBusMain (busIdx, true))
+                    continue;
+
                 const auto& inBus = process->audio_inputs[busIdx];
                 const auto& outBus = process->audio_outputs[busIdx];
                 const uint32_t chCount = std::min (inBus.channel_count, outBus.channel_count);
@@ -759,7 +778,37 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                              0,
                                              static_cast<int> (process->frames_count));
 
-            AudioProcessContext<double> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+            // Build per-bus input views (all input buses)
+            wrapper->inputBusViewsDouble.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_inputs_count; ++busIdx)
+            {
+                const auto& inBus = process->audio_inputs[busIdx];
+                const bool isSilent = inBus.constant_mask != 0; // CLAP silence flag
+                wrapper->inputBusViewsDouble.emplace_back (
+                    isSilent ? nullptr : reinterpret_cast<const double* const*> (inBus.data64),
+                    static_cast<int> (inBus.channel_count),
+                    audioProcessor.getBusLayout().getAudioBusRole (static_cast<int> (busIdx), true));
+            }
+
+            // Build per-bus output views (all output buses)
+            wrapper->outputBusViewsDouble.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_outputs_count; ++busIdx)
+            {
+                const auto& outBus = process->audio_outputs[busIdx];
+                wrapper->outputBusViewsDouble.emplace_back (
+                    reinterpret_cast<double* const*> (outBus.data64),
+                    static_cast<int> (outBus.channel_count),
+                    audioProcessor.getBusLayout().getAudioBusRole (static_cast<int> (busIdx), false));
+            }
+
+            AudioProcessContext<double> context {
+                audioBuffer,
+                midiBuffer,
+                wrapper->paramChangeBuffer,
+                playHeadPtr,
+                { wrapper->inputBusViewsDouble.data(), wrapper->inputBusViewsDouble.size() },
+                { wrapper->outputBusViewsDouble.data(), wrapper->outputBusViewsDouble.size() }
+            };
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -767,9 +816,13 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         }
         else
         {
-            // Copy input audio into output buffers for effect processors (float)
+            // Copy main input audio into matching main output buffers for effects.
+            // Auxiliary (sidechain) inputs are NOT copied to outputs.
             for (uint32_t busIdx = 0; busIdx < std::min (process->audio_inputs_count, process->audio_outputs_count); ++busIdx)
             {
+                if (! wrapper->isCLAPAudioBusMain (busIdx, true))
+                    continue;
+
                 const auto& inBus = process->audio_inputs[busIdx];
                 const auto& outBus = process->audio_outputs[busIdx];
                 const uint32_t chCount = std::min (inBus.channel_count, outBus.channel_count);
@@ -793,7 +846,37 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                                            0,
                                            static_cast<int> (process->frames_count));
 
-            AudioProcessContext<float> context { audioBuffer, midiBuffer, wrapper->paramChangeBuffer, playHeadPtr };
+            // Build per-bus input views (all input buses)
+            wrapper->inputBusViewsFloat.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_inputs_count; ++busIdx)
+            {
+                const auto& inBus = process->audio_inputs[busIdx];
+                const bool isSilent = inBus.constant_mask != 0; // CLAP silence flag
+                wrapper->inputBusViewsFloat.emplace_back (
+                    isSilent ? nullptr : reinterpret_cast<const float* const*> (inBus.data32),
+                    static_cast<int> (inBus.channel_count),
+                    audioProcessor.getBusLayout().getAudioBusRole (static_cast<int> (busIdx), true));
+            }
+
+            // Build per-bus output views (all output buses)
+            wrapper->outputBusViewsFloat.clear();
+            for (uint32_t busIdx = 0; busIdx < process->audio_outputs_count; ++busIdx)
+            {
+                const auto& outBus = process->audio_outputs[busIdx];
+                wrapper->outputBusViewsFloat.emplace_back (
+                    reinterpret_cast<float* const*> (outBus.data32),
+                    static_cast<int> (outBus.channel_count),
+                    audioProcessor.getBusLayout().getAudioBusRole (static_cast<int> (busIdx), false));
+            }
+
+            AudioProcessContext<float> context {
+                audioBuffer,
+                midiBuffer,
+                wrapper->paramChangeBuffer,
+                playHeadPtr,
+                { wrapper->inputBusViewsFloat.data(), wrapper->inputBusViewsFloat.size() },
+                { wrapper->outputBusViewsFloat.data(), wrapper->outputBusViewsFloat.size() }
+            };
 
             wrapper->isInsideProcessBlock.store (true);
             processAudioBlock (audioProcessor, context, bypassed);
@@ -866,7 +949,7 @@ bool AudioPluginProcessorCLAP::initialise()
 {
     jassert (audioProcessor == nullptr);
 
-    audioProcessor.reset (::createPluginProcessor());
+    audioProcessor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
     if (audioProcessor == nullptr)
         return false;
 
@@ -1126,7 +1209,9 @@ bool AudioPluginProcessorCLAP::initialise()
         info->id = index;
         info->channel_count = audioBus->getNumChannels();
 
-        uint32_t flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
+        uint32_t flags = audioBus->getRole() == AudioBus::Role::Main
+                           ? CLAP_AUDIO_PORT_IS_MAIN
+                           : 0;
         if (audioProcessor->supportsDoublePrecisionProcessing())
             flags |= CLAP_AUDIO_PORT_SUPPORTS_64BITS | CLAP_AUDIO_PORT_PREFERS_64BITS | CLAP_AUDIO_PORT_REQUIRES_COMMON_SAMPLE_SIZE;
         info->flags = flags;
@@ -1551,6 +1636,17 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
     outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
     outputChannelsDouble.reserve (static_cast<size_t> (totalOutputChannels));
 
+    // Pre-allocate per-bus view storage
+    {
+        const auto numAudioInputs = static_cast<size_t> (audioProcessor->getNumAudioInputs());
+        const auto numAudioOutputs = static_cast<size_t> (audioProcessor->getNumAudioOutputs());
+
+        inputBusViewsFloat.reserve (numAudioInputs);
+        outputBusViewsFloat.reserve (numAudioOutputs);
+        inputBusViewsDouble.reserve (numAudioInputs);
+        outputBusViewsDouble.reserve (numAudioOutputs);
+    }
+
     isActive.store (true);
 
     return true;
@@ -1633,6 +1729,13 @@ const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
 const clap_plugin_t* AudioPluginProcessorCLAP::getPlugin() const
 {
     return std::addressof (plugin);
+}
+
+//==============================================================================
+
+AudioProcessor* AudioPluginProcessorCLAP::getProcessor() const noexcept
+{
+    return audioProcessor.get();
 }
 
 //==============================================================================

@@ -147,6 +147,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - SDL3 windowing: mouse move/drag was broken on touch platforms (iOS, Android). Motion was synthesized only by polling `SDL_GetGlobalMouseState`, which has no backend implementation there and falls back to window-relative coordinates, so subtracting the window position shifted every move. Touch platforms now consume the touch-synthesized `SDL_EVENT_MOUSE_MOTION` events directly; desktop keeps the global-cursor poll (needed for embedded plugin editors).
 - SDL3 windowing: mouse drag events were lost inside embedded plugin editors (notably on macOS, where the host owns the native application so SDL never receives Cocoa mouse focus and suppresses drag motion). Dragging is now synthesized by polling the global cursor while a button is held, on the message thread, for all platforms.
 - UBSAN and ASAN fixes throughout the codebase
+- AUv3 plugin host bypass is now connected to the processor: the wrapper-owned bypass parameter is created and drives `processBlockBypassed`, and host bypass state is persisted/restored inside the `YUPProcessorState` blob (legacy raw processor state still loads)
+- Added bypass parameter handling tests for the AU, CLAP, and VST3 plugin client wrappers (routing to `processBlockBypassed`, bypass state round-trip, and text/value conversion)
 
 ---
 
@@ -239,6 +241,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Standalone plugin support with improved audio parameters ([#46](https://github.com/kunitoki/yup/pull/46))
 - CLAP/VST3/AU validators and code signing (`YUP_ENABLE_VST3_VALIDATOR`, etc.) ([#106](https://github.com/kunitoki/yup/pull/106))
 - pluginval integration for automated VST3 validation ([#67](https://github.com/kunitoki/yup/pull/67))
+- Sidechain and multi-bus audio input support across VST3, CLAP, AUv3, AUv2, AAX, and LV2: `AudioBus` gains a `Role` (`Main`/`Auxiliary`) and `isDefaultActive`, `AudioProcessContext` exposes per-bus `inputs`/`outputs` views (`AudioBusBufferView`) with `getMainInput()`/`getAuxiliaryInput()`/`getMainOutput()` accessors, and secondary input buses are forwarded to the processor instead of being discarded
 
 #### Audio Formats (`yup_audio_formats`)
 - New `yup_audio_formats` module: `AudioFormat`, `AudioFormatManager`, `AudioFormatReader`, `AudioFormatWriter`, WAV codec ([#51](https://github.com/kunitoki/yup/pull/51))

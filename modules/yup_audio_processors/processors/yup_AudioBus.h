@@ -46,22 +46,37 @@ public:
         Output
     };
 
+    /** The role of the bus within a multi-bus layout. */
+    enum class Role
+    {
+        /** Primary signal path (e.g. main input, main output). */
+        Main,
+        /** Auxiliary signal path (e.g. sidechain input, reference input). */
+        Auxiliary
+    };
+
     /**
         Constructs an AudioBus.
 
-        @param name        A user-friendly name for the bus.
-        @param type        Signal type.
-        @param direction   Input or output.
-        @param channels    Number of channels (e.g., stereo = 2).
+        @param name            A user-friendly name for the bus.
+        @param type            Signal type.
+        @param direction       Input or output.
+        @param channels        Number of channels (e.g., stereo = 2).
+        @param role            The role of the bus in the layout.
+        @param isDefaultActive Whether the bus is active by default.
     */
     AudioBus (StringRef name,
               Type type,
               Direction direction,
-              int channels)
+              int channels,
+              Role role = Role::Main,
+              bool isDefaultActive = true)
         : name (name)
         , type (type)
         , direction (direction)
         , numChannels (channels)
+        , role (role)
+        , defaultActive (isDefaultActive)
     {
     }
 
@@ -77,6 +92,12 @@ public:
     /** Returns the number of channels on the bus. */
     int getNumChannels() const noexcept { return numChannels; }
 
+    /** Returns the role of the bus within the layout. */
+    Role getRole() const noexcept { return role; }
+
+    /** Returns true if the bus is active by default. */
+    bool isDefaultActive() const noexcept { return defaultActive; }
+
     /** Returns true if the bus is mono. */
     bool isMono() const noexcept { return numChannels == 1; }
 
@@ -88,6 +109,8 @@ private:
     Type type = Type::Audio;
     Direction direction = Direction::Output;
     int numChannels = 0;
+    Role role = Role::Main;
+    bool defaultActive = true;
 };
 
 } // namespace yup
