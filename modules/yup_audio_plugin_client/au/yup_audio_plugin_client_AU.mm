@@ -21,6 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginAUHelpers.h"
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_AU)
@@ -50,7 +51,7 @@
 
 //==============================================================================
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 @class AudioPluginEditorViewAU;
 
@@ -62,94 +63,10 @@ static String describeScopeAndElement (AudioUnitScope scope, AudioUnitElement el
     return "scope=" + String (static_cast<int> (scope)) + ", element=" + String (static_cast<int> (element));
 }
 
-static String describePointer (const void* value)
-{
-    return "0x" + String::toHexString (static_cast<int64> (reinterpret_cast<uintptr_t> (value)));
-}
-
 static String describeStatus (OSStatus status)
 {
     return String (static_cast<int> (status));
 }
-
-//==============================================================================
-
-namespace
-{
-
-//==============================================================================
-
-static CFStringRef getProcessorStateKey()
-{
-    return CFSTR ("YUPProcessorState");
-}
-
-//==============================================================================
-
-struct AUScopedYupInitialiser
-{
-    AUScopedYupInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_add (1) == 0)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "initialising YUP GUI");
-            initialiseYup_GUI();
-        }
-    }
-
-    ~AUScopedYupInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_sub (1) == 1)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "shutting down YUP GUI");
-            shutdownYup_GUI();
-        }
-    }
-
-private:
-    static std::atomic_int numAUScopedInitInstances;
-};
-
-std::atomic_int AUScopedYupInitialiser::numAUScopedInitInstances = 0;
-
-struct AUScopedYupWindowingInitialiser
-{
-    AUScopedYupWindowingInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_add (1) == 0)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "initialising YUP windowing for editor");
-            initialiseYup_Windowing();
-        }
-    }
-
-    ~AUScopedYupWindowingInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_sub (1) == 1)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "shutting down YUP windowing for editor");
-            shutdownYup_Windowing();
-        }
-    }
-
-private:
-    static std::atomic_int numAUScopedInitInstances;
-};
-
-std::atomic_int AUScopedYupWindowingInitialiser::numAUScopedInitInstances = 0;
-
-//==============================================================================
-
-static OSType osTypeFromString (const char* s)
-{
-    if (s == nullptr || std::strlen (s) < 4)
-        return 0;
-
-    return static_cast<OSType> (
-        (static_cast<uint32_t> (static_cast<uint8_t> (s[0])) << 24) | (static_cast<uint32_t> (static_cast<uint8_t> (s[1])) << 16) | (static_cast<uint32_t> (static_cast<uint8_t> (s[2])) << 8) | static_cast<uint32_t> (static_cast<uint8_t> (s[3])));
-}
-
-} // namespace
 
 //==============================================================================
 
@@ -208,7 +125,7 @@ public:
 #endif
         componentInstance (component)
     {
-        processor.reset (::createPluginProcessor());
+        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "created processor instance: wrapper=" << yup::describePointer (this) << ", component=" << yup::describePointer (componentInstance) << ", processor=" << yup::describePointer (processor.get()));
 
@@ -251,6 +168,13 @@ public:
             return kAudioUnitErr_FailedInitialization;
         }
 
+#if ! YupPlugin_IsSynth
+        // Expose one input element per audio input bus so hosts can route
+        // sidechain signals to auxiliary input elements (element 0 is always
+        // the main input). Processors with a single input bus keep one element.
+        SetNumberOfElements (kAudioUnitScope_Input, static_cast<UInt32> (processor->getNumAudioInputs()));
+#endif
+
         processor->setOfflineProcessing (renderingOffline);
         processor->setPlaybackConfiguration (static_cast<float> (getCurrentSampleRate()),
                                              static_cast<int> (GetMaxFramesPerSlice()));
@@ -262,6 +186,12 @@ public:
         paramChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
         emptyParamChangeBuffer.reserve (getDefaultParameterChangeCapacity (*processor));
         audioChannels.reserve (static_cast<size_t> (getTotalAudioOutputChannels (*processor)));
+
+        // Pre-allocate per-bus view storage so the render callback never allocates
+        renderViews.prepare (*processor,
+                              getTotalAudioInputChannels (*processor),
+                              getTotalAudioOutputChannels (*processor));
+        auxiliaryInputValid.resize (static_cast<size_t> (processor->getNumAudioInputs()), 0);
 
         YUP_MODULE_DBG (PLUGIN_CLIENT_AU, "Initialize completed: sampleRate=" << String (getCurrentSampleRate()) << ", maxFramesPerSlice=" << String (static_cast<int> (GetMaxFramesPerSlice())));
 
@@ -316,15 +246,12 @@ public:
 
         const auto& param = parameters[parameterIndex];
 
-        outParameterInfo.flags = kAudioUnitParameterFlag_IsReadable | kAudioUnitParameterFlag_HasCFNameString;
-
-        if (! param->isReadOnly())
-            outParameterInfo.flags |= kAudioUnitParameterFlag_IsWritable;
+        outParameterInfo.flags = makeAUParameterFlags (*param) | kAudioUnitParameterFlag_HasCFNameString;
 
         outParameterInfo.cfNameString = param->getName().toCFString();
         param->getName().copyToUTF8 (outParameterInfo.name, sizeof (outParameterInfo.name));
 
-        outParameterInfo.unit = kAudioUnitParameterUnit_Generic;
+        outParameterInfo.unit = makeAUUnit (*param);
         outParameterInfo.minValue = param->getMinimumValue();
         outParameterInfo.maxValue = param->getMaximumValue();
         outParameterInfo.defaultValue = param->getDefaultValue();
@@ -618,6 +545,116 @@ public:
     }
 
 #else
+    // Effect: pull auxiliary (sidechain) input elements before the base class
+    // renders element 0, so their buffers are populated when ProcessBufferLists
+    // builds the per-bus input views.
+    OSStatus Render (AudioUnitRenderActionFlags& ioActionFlags,
+                     const AudioTimeStamp& inTimeStamp,
+                     UInt32 inNumberFrames) override
+    {
+        if (processor != nullptr)
+            pullAuxiliaryInputElements (ioActionFlags, inTimeStamp, inNumberFrames);
+
+        return AudioPluginAUBase::Render (ioActionFlags, inTimeStamp, inNumberFrames);
+    }
+
+    //==============================================================================
+
+    void pullAuxiliaryInputElements (AudioUnitRenderActionFlags& ioActionFlags,
+                                     const AudioTimeStamp& inTimeStamp,
+                                     UInt32 inNumberFrames)
+    {
+        const auto numInputs = static_cast<UInt32> (processor->getNumAudioInputs());
+        const auto numElements = Inputs().GetNumberOfElements();
+
+        for (UInt32 element = 1; element < numInputs && element < numElements; ++element)
+        {
+            auto& input = Input (element);
+
+            // Only connected elements produce audio; disconnected sidechain
+            // elements stay silent and are exposed as null-buffer views below
+            const auto pullResult = input.IsActive()
+                                      ? input.PullInput (ioActionFlags, inTimeStamp, element, inNumberFrames)
+                                      : kAudioUnitErr_NoConnection;
+
+            auxiliaryInputValid[static_cast<size_t> (element)] = (pullResult == noErr);
+        }
+    }
+
+    //==============================================================================
+
+    // Builds one AudioBusBufferView per audio input bus. Element 0 (the main
+    // input) is mapped from the passed buffer list; elements 1..n (auxiliary /
+    // sidechain inputs) are mapped from their own pulled buffer lists. Views are
+    // real-time safe: they reuse pre-allocated channel-pointer storage.
+    void buildInputBusViews (const AudioBufferList& mainInBuffer)
+    {
+        renderViews.inputBusViews.clear();
+
+        int chOffset = 0;
+        int audioIdx = 0;
+
+        for (const auto& bus : processor->getBusLayout().getInputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = renderViews.inputChannelPtrStorage.data() + chOffset;
+
+            if (audioIdx == 0)
+            {
+                const UInt32 copyCount = std::min (mainInBuffer.mNumberBuffers, static_cast<UInt32> (numCh));
+                for (UInt32 ch = 0; ch < copyCount; ++ch)
+                    chPtrs[ch] = static_cast<const float*> (mainInBuffer.mBuffers[ch].mData);
+            }
+            else if (auxiliaryInputValid[static_cast<size_t> (audioIdx)])
+            {
+                const auto& busBufferList = Input (static_cast<AudioUnitElement> (audioIdx)).GetBufferList();
+                const UInt32 copyCount = std::min (busBufferList.mNumberBuffers, static_cast<UInt32> (numCh));
+                for (UInt32 ch = 0; ch < copyCount; ++ch)
+                    chPtrs[ch] = static_cast<const float*> (busBufferList.mBuffers[ch].mData);
+            }
+
+            renderViews.inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+            ++audioIdx;
+        }
+    }
+
+    // Builds one AudioBusBufferView per audio output bus from the output buffer
+    // list, consuming channels sequentially across buses.
+    void buildOutputBusViews (const AudioBufferList& outBuffer)
+    {
+        renderViews.outputBusViews.clear();
+
+        int chOffset = 0;
+
+        for (const auto& bus : processor->getBusLayout().getOutputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = renderViews.outputChannelPtrStorage.data() + chOffset;
+
+            std::fill (chPtrs, chPtrs + numCh, nullptr);
+
+            const auto available = outBuffer.mNumberBuffers > static_cast<UInt32> (chOffset)
+                                     ? static_cast<UInt32> (numCh)
+                                     : 0u;
+            const UInt32 copyCount = std::min (available, outBuffer.mNumberBuffers - static_cast<UInt32> (chOffset));
+
+            for (UInt32 ch = 0; ch < copyCount; ++ch)
+                chPtrs[ch] = static_cast<float*> (outBuffer.mBuffers[static_cast<UInt32> (chOffset) + ch].mData);
+
+            renderViews.outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+        }
+    }
+
     // Effect: copy input to output and call processBlock
     OSStatus ProcessBufferLists (AudioUnitRenderActionFlags& ioActionFlags,
                                  const AudioBufferList& inBuffer,
@@ -646,6 +683,9 @@ public:
                                        0,
                                        static_cast<int> (inFramesToProcess));
 
+        buildInputBusViews (inBuffer);
+        buildOutputBusViews (outBuffer);
+
         AudioPluginPlayHeadAU playHead (*this, nullptr);
         std::unique_lock<std::mutex> parameterLock (parameterChangeMutex, std::try_to_lock);
         auto& processParamChangeBuffer = parameterLock.owns_lock() ? paramChangeBuffer : emptyParamChangeBuffer;
@@ -653,7 +693,9 @@ public:
         AudioProcessContext<float> context { audioBuffer,
                                              midiBuffer,
                                              processParamChangeBuffer,
-                                             &playHead };
+                                             &playHead,
+                                             { renderViews.inputBusViews.data(), renderViews.inputBusViews.size() },
+                                             { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() } };
         processAudioBlock (*processor, context, isBypassed);
         midiBuffer.clear();
         processParamChangeBuffer.clear();
@@ -703,7 +745,7 @@ public:
 
             auto* stateDictionary = const_cast<CFMutableDictionaryRef> (static_cast<CFDictionaryRef> (*outData));
             CFDictionarySetValue (stateDictionary,
-                                  getProcessorStateKey(),
+                                  getAUProcessorStateKey(),
                                   (__bridge CFDataRef) nsData);
         }
 
@@ -728,7 +770,7 @@ public:
         if (CFGetTypeID (inData) == CFDictionaryGetTypeID())
         {
             processorState = static_cast<CFDataRef> (CFDictionaryGetValue (static_cast<CFDictionaryRef> (inData),
-                                                                           getProcessorStateKey()));
+                                                                           getAUProcessorStateKey()));
 
             if (processorState != nullptr && CFGetTypeID (processorState) != CFDataGetTypeID())
                 return kAudioUnitErr_InvalidPropertyValue;
@@ -1084,6 +1126,11 @@ private:
     std::vector<AudioParameter::Ptr> listenedParameters;
     std::vector<float*> audioChannels;
     std::vector<void*> editorViews;
+
+    // Per-bus view state, pre-allocated in Initialize so the render callback
+    // only clears and refills the vectors without allocating
+    AudioPluginAURenderViews renderViews;
+    std::vector<uint8_t> auxiliaryInputValid; // per-element pull success (effect path)
     AudioUnit componentInstance = nullptr;
     bool renderingOffline = false;
     bool isBypassed = false;

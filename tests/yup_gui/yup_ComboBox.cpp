@@ -42,10 +42,24 @@ class ComboBoxTest : public ::testing::Test
 protected:
     void SetUp() override
     {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        theme = new ApplicationTheme();
+        ApplicationTheme::setGlobalTheme (theme);
+
         comboBox = std::make_unique<ComboBox> ("testComboBox");
         comboBox->setBounds (0, 0, 200, 30);
     }
 
+    void TearDown() override
+    {
+        comboBox.reset();
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+        theme = nullptr;
+        oldTheme = nullptr;
+    }
+
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
     std::unique_ptr<ComboBox> comboBox;
 };
 

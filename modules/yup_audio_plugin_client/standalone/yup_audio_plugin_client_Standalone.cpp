@@ -29,7 +29,7 @@
 #error "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE must be defined"
 #endif
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
@@ -73,7 +73,7 @@ class AudioProcessorApplication
 {
 public:
     AudioProcessorApplication()
-        : processor (::createPluginProcessor())
+        : processor (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION())
     {
     }
 

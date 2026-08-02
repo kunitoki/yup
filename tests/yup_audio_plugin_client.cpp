@@ -19,12 +19,4 @@
   ==============================================================================
 */
 
-#include "mocks/yup_audio_processors.h"
-
-#include "yup_audio_processors/yup_AudioBus.cpp"
-#include "yup_audio_processors/yup_AudioBusBufferView.cpp"
-#include "yup_audio_processors/yup_AudioBusLayout.cpp"
-#include "yup_audio_processors/yup_AudioParameter.cpp"
-#include "yup_audio_processors/yup_AudioProcessContext.cpp"
-#include "yup_audio_processors/yup_ParameterChangeBuffer.cpp"
-#include "yup_audio_processors/yup_SpectralBridge.cpp"
+#include "yup_audio_plugin_client/yup_AudioPluginUtilities.cpp"

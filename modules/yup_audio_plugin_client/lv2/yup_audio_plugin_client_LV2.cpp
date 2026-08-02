@@ -50,7 +50,7 @@
 
 //==============================================================================
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
@@ -205,7 +205,7 @@ public:
 
         processFeatures (features);
 
-        processor.reset (createPluginProcessor());
+        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
         jassert (processor != nullptr);
 
         if (processor == nullptr)
@@ -213,6 +213,12 @@ public:
 
         numInputChannels = processor->getBusLayout().getNumAudioInputChannels();
         numOutputChannels = processor->getBusLayout().getNumAudioOutputChannels();
+
+        // Pre-allocate per-bus view storage so run() never allocates
+        inputBusViews.reserve (static_cast<size_t> (processor->getNumAudioInputs()));
+        outputBusViews.reserve (static_cast<size_t> (processor->getNumAudioOutputs()));
+        inputChannelPtrStorage.resize (static_cast<size_t> (numInputChannels));
+        outputChannelPtrStorage.resize (static_cast<size_t> (numOutputChannels));
 
         // Build parameter Urid maps
         const auto params = processor->getParameters();
@@ -315,6 +321,9 @@ public:
                 audioBuffer.copyFrom (ch, 0, src, numSamplesInt);
         }
 
+        buildInputBusViews();
+        buildOutputBusViews();
+
         // Apply offline processing state
         if (freeWheelingPort != nullptr)
             processor->setOfflineProcessing (*freeWheelingPort > 0.5f);
@@ -323,7 +332,12 @@ public:
         isBypassed = ! isEnabled;
 
         // Build process context and process
-        AudioProcessContext<float> context { audioBuffer, midiEvents, parameterChanges, &playHead };
+        AudioProcessContext<float> context { audioBuffer,
+                                             midiEvents,
+                                             parameterChanges,
+                                             &playHead,
+                                             { inputBusViews.data(), inputBusViews.size() },
+                                             { outputBusViews.data(), outputBusViews.size() } };
 
         {
             const ScopedLock lock (processor->getProcessLock());
@@ -360,6 +374,66 @@ public:
         // Write latency
         if (latencyPort != nullptr)
             *latencyPort = static_cast<float> (processor->getLatencySamples());
+    }
+
+    // Builds one AudioBusBufferView per audio input bus from the host input
+    // port buffers. Channels are consumed in bus declaration order; ports not
+    // connected by the host (null) become null channel pointers so processors
+    // see deterministic silence.
+    void buildInputBusViews()
+    {
+        inputBusViews.clear();
+
+        PortIndices indices { numInputChannels, numOutputChannels };
+        int chOffset = 0;
+
+        for (const auto& bus : processor->getBusLayout().getInputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = inputChannelPtrStorage.data() + chOffset;
+
+            for (int ch = 0; ch < numCh; ++ch)
+            {
+                const auto port = indices.getAudioInputPort (chOffset + ch);
+                const auto* src = (chOffset + ch < numInputChannels) ? audioPorts[static_cast<std::size_t> (port)] : nullptr;
+                chPtrs[ch] = src;
+            }
+
+            inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+        }
+    }
+
+    // Builds one AudioBusBufferView per audio output bus pointing into the
+    // in-place processing buffer, which is copied to the output ports after
+    // processing (the same memory the flat AudioProcessContext::audio exposes).
+    void buildOutputBusViews()
+    {
+        outputBusViews.clear();
+
+        int chOffset = 0;
+
+        for (const auto& bus : processor->getBusLayout().getOutputBuses())
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            const int numCh = bus.getNumChannels();
+            auto* chPtrs = outputChannelPtrStorage.data() + chOffset;
+
+            for (int ch = 0; ch < numCh; ++ch)
+                chPtrs[ch] = (chOffset + ch < numOutputChannels)
+                               ? audioBuffer.getWritePointer (chOffset + ch)
+                               : nullptr;
+
+            outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+            chOffset += numCh;
+        }
     }
 
     void deactivate()
@@ -638,6 +712,12 @@ public:
     float* latencyPort = nullptr;
     const float* freeWheelingPort = nullptr;
     const float* enabledPort = nullptr;
+
+    // Per-bus view state, pre-allocated at construction so run() never allocates
+    std::vector<AudioBusBufferView<const float>> inputBusViews;
+    std::vector<AudioBusBufferView<float>> outputBusViews;
+    std::vector<const float*> inputChannelPtrStorage;
+    std::vector<float*> outputChannelPtrStorage;
 
     LV2_Worker_Schedule* workerSchedule = nullptr;
 

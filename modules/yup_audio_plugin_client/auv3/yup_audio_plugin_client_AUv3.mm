@@ -21,6 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
+#include "../common/yup_AudioPluginAUHelpers.h"
 #include "../common/yup_AudioPluginUtilities.h"
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_AUv3)
@@ -50,54 +51,50 @@
 
 //==============================================================================
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+NS_ASSUME_NONNULL_BEGIN
+
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
 
 //==============================================================================
 
-static String describePointer (const void* value)
+/** Returns value-strings for enumerated/stepped parameters so the host
+    can display discrete choices instead of a raw numeric value.
+*/
+static NSArray<NSString*>* _Nullable makeAUValueStrings (const AudioParameter& param)
 {
-    return "0x" + String::toHexString (static_cast<int64> (reinterpret_cast<uintptr_t> (value)));
+    if (! param.isEnum() && ! param.isStepped())
+        return nil;
+
+    const int numSteps = param.getNumSteps();
+    if (numSteps <= 0)
+        return nil;
+
+    const int numValues = numSteps + 1; // a range with N steps has N+1 discrete values
+    auto* strings = [[NSMutableArray<NSString*> alloc] initWithCapacity:static_cast<NSUInteger> (numValues)];
+
+    const float stepSize = (param.getMaximumValue() - param.getMinimumValue()) / static_cast<float> (numSteps);
+
+    for (int i = 0; i < numValues; ++i)
+    {
+        const auto stepValue = param.getMinimumValue() + static_cast<float> (i) * stepSize;
+        [strings addObject:yupStringToNS (param.convertToString (stepValue))];
+    }
+
+    return strings;
 }
 
 //==============================================================================
 
-struct AUScopedYupInitialiser
-{
-    AUScopedYupInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_add (1) == 0)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "initialising YUP GUI");
-            initialiseYup_GUI();
-        }
-    }
-
-    ~AUScopedYupInitialiser()
-    {
-        if (numAUScopedInitInstances.fetch_sub (1) == 1)
-        {
-            YUP_MODULE_DBG (PLUGIN_CLIENT_AUV3, "shutting down YUP GUI");
-            shutdownYup_GUI();
-        }
-    }
-
-private:
-    static std::atomic_int numAUScopedInitInstances;
-};
-
-std::atomic_int AUScopedYupInitialiser::numAUScopedInitInstances = 0;
-
-//==============================================================================
-
-static float getMaximumParameterValue (const AudioParameter& p)
-{
-    return p.getMaximumValue();
-}
-
-//==============================================================================
+/** Magic/version used to wrap the YUP processor state blob with wrapper-owned
+    bypass state so host bypass survives preset/session restore, matching the
+    approach used by the VST3, CLAP, LV2, and AAX wrappers. Legacy raw processor
+    state (without this magic) is still loaded via readWrapperBypassState's fallback.
+*/
+constexpr int auv3WrapperStateMagic = 0x33564159; // "YAV3"
+constexpr int auv3WrapperStateVersion = 1;
 
 } // namespace yup
 
@@ -126,7 +123,7 @@ public:
                               NSError**)
         : au (audioUnit)
     {
-        processor.reset (::createPluginProcessor());
+        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
         init();
     }
 
@@ -155,6 +152,8 @@ public:
 
     void init()
     {
+        jassert (au != nil); // The AUAudioUnit must be set before initialization
+
         if (processor == nullptr)
             return;
 
@@ -174,23 +173,17 @@ public:
             if (bus.getType() == AudioBus::Type::Audio)
                 totalOutChannels += bus.getNumChannels();
 
-        // Build channel capabilities
+        // Build channel capabilities (one entry per audio bus)
         {
             channelCapabilities.reset ([[NSMutableArray<NSNumber*> alloc] init]);
 
-            int maxInputCh = 0;
-            int maxOutputCh = 0;
-
             for (const auto& bus : busLayout.getInputBuses())
                 if (bus.getType() == AudioBus::Type::Audio)
-                    maxInputCh = std::max (maxInputCh, bus.getNumChannels());
+                    [channelCapabilities.get() addObject:[NSNumber numberWithInteger:bus.getNumChannels()]];
 
             for (const auto& bus : busLayout.getOutputBuses())
                 if (bus.getType() == AudioBus::Type::Audio)
-                    maxOutputCh = std::max (maxOutputCh, bus.getNumChannels());
-
-            [channelCapabilities.get() addObject:[NSNumber numberWithInteger:maxInputCh]];
-            [channelCapabilities.get() addObject:[NSNumber numberWithInteger:maxOutputCh]];
+                    [channelCapabilities.get() addObject:[NSNumber numberWithInteger:bus.getNumChannels()]];
         }
 
         internalRenderBlock = CreateObjCBlock (this, &AudioPluginProcessorAUv3::renderCallback);
@@ -230,6 +223,19 @@ public:
             const auto address = param->getHostParameterID();
             addressForIndex[i] = address;
         }
+
+        // Wrapper-owned bypass parameter backing the host's AUv3 bypass property.
+        // It is deliberately not added to the processor or the AU parameter tree:
+        // the host drives it through setShouldBypassEffect:, the render callback
+        // reads it directly, and it is persisted inside the YUPProcessorState blob.
+        auto bypassMetadata = AudioParameter::Metadata {};
+        bypassMetadata.name = "Bypass";
+        bypassMetadata.hostParameterID = getBypassHostParameterID (*processor);
+        bypassMetadata.valueRange = { 0.0f, 1.0f, 1.0f };
+        bypassMetadata.defaultValue = 0.0f;
+        bypassMetadata.setStepped (true);
+
+        bypassHostParam = std::make_unique<AudioParameter> ("bypass", bypassMetadata);
 
         installParameterTree (createTopLevelNodes());
     }
@@ -300,10 +306,12 @@ public:
                                                                     address:address
                                                                         min:minVal
                                                                         max:maxVal
-                                                                       unit:kAudioUnitParameterUnit_Generic
-                                                                    unitName:nil
-                                                                       flags:0
-                                                                valueStrings:nil
+                                                                       unit:makeAUUnit (*param)
+                                                                    unitName:(param->getUnit() == AudioParameter::ParameterUnit::Custom
+                                                                                  ? yupStringToNS (param->getUnitName())
+                                                                                  : nil)
+                                                                       flags:makeAUv3ParameterFlags (*param)
+                                                                valueStrings:makeAUValueStrings (*param)
                                                          dependentParameters:nil];
 
             if (auParam != nullptr)
@@ -325,11 +333,9 @@ public:
         if (yupParam == nullptr)
             return;
 
-        const auto normalisedValue = static_cast<float> (value) / getMaximumParameterValue (*yupParam);
-
-        if (! approximatelyEqual (normalisedValue, yupParam->getNormalizedValue()))
+        if (! approximatelyEqual (static_cast<float> (value), yupParam->getValue()))
         {
-            yupParam->setNormalizedValue (normalisedValue);
+            yupParam->setValue (static_cast<float> (value));
 
             inParameterChangedCallback = true;
             yupParam->beginChangeGesture();
@@ -346,7 +352,7 @@ public:
         if (yupParam == nullptr)
             return 0;
 
-        return static_cast<AUValue> (yupParam->getNormalizedValue() * getMaximumParameterValue (*yupParam));
+        return static_cast<AUValue> (yupParam->getValue());
     }
 
     NSString* stringFromValue (AUParameter* param, const AUValue* value) const
@@ -358,8 +364,7 @@ public:
         if (yupParam == nullptr)
             return @"";
 
-        const auto normalised = static_cast<float> (*value) / getMaximumParameterValue (*yupParam);
-        return yupStringToNS (yupParam->convertToString (normalised));
+        return yupStringToNS (yupParam->convertToString (static_cast<float> (*value)));
     }
 
     AUValue valueFromString (AUParameter* param, NSString* str) const
@@ -371,11 +376,10 @@ public:
         if (yupParam == nullptr)
             return 0;
 
-        const auto normalised = yupParam->convertFromString (String::fromCFString ((__bridge CFStringRef) str));
-        return static_cast<AUValue> (normalised * getMaximumParameterValue (*yupParam));
+        return static_cast<AUValue> (yupParam->convertFromString (String::fromCFString ((__bridge CFStringRef) str)));
     }
 
-    AudioParameter* getParamForAUAddress (AUParameterAddress address) const
+    AudioParameter* _Nullable getParamForAUAddress (AUParameterAddress address) const
     {
         for (size_t i = 0; i < addressForIndex.size(); ++i)
         {
@@ -390,7 +394,7 @@ public:
         return nullptr;
     }
 
-    AudioParameter* getParamForIndex (int index) const
+    AudioParameter* _Nullable getParamForIndex (int index) const
     {
         const auto parameters = processor->getParameters();
         if (isPositiveAndBelow (index, static_cast<int> (parameters.size())))
@@ -429,7 +433,7 @@ public:
         return factoryPresets.get();
     }
 
-    AUAudioUnitPreset* getCurrentPreset() const
+    AUAudioUnitPreset* _Nullable getCurrentPreset() const
     {
         if (processor == nullptr)
             return nil;
@@ -466,10 +470,18 @@ public:
         if (processor != nullptr)
             processor->saveStateIntoMemory (state);
 
-        if (state.getSize() > 0)
+        // Wrap processor state together with the wrapper-owned bypass state so
+        // host bypass survives preset/session restore (see auv3WrapperStateMagic).
+        const auto wrapperState = writeWrapperBypassState (auv3WrapperStateMagic,
+                                                          auv3WrapperStateVersion,
+                                                          getShouldBypassEffect(),
+                                                          state,
+                                                          state.getSize() > 0);
+
+        if (wrapperState.getSize() > 0)
         {
-            [retval setObject:[[NSData alloc] initWithBytes:state.getData() length:state.getSize()]
-                       forKey:@"YUPProcessorState"];
+            [retval setObject:[[NSData alloc] initWithBytes:wrapperState.getData() length:wrapperState.getSize()]
+                       forKey:(__bridge NSString*) getAUProcessorStateKey()];
         }
 
         return retval;
@@ -480,7 +492,7 @@ public:
         if (state == nil || processor == nullptr)
             return;
 
-        id obj = [state objectForKey:@"YUPProcessorState"];
+        id obj = [state objectForKey:(__bridge NSString*) getAUProcessorStateKey()];
         if (obj == nil || ! [obj isKindOfClass:[NSData class]])
             return;
 
@@ -494,7 +506,16 @@ public:
         }
 
         MemoryBlock stateBlock ([data bytes], static_cast<size_t> (numBytes));
-        processor->loadStateFromMemory (stateBlock);
+        const auto wrapperState = readWrapperBypassState (stateBlock, auv3WrapperStateMagic, auv3WrapperStateVersion);
+
+        // Restore wrapper-owned bypass state when present, otherwise fall back to
+        // treating the whole blob as legacy raw processor state.
+        if (wrapperState.hasWrapperState)
+            setShouldBypassEffect (wrapperState.isBypassed);
+
+        const bool shouldLoadProcessorState = ! wrapperState.hasWrapperState || wrapperState.hasProcessorState;
+        if (shouldLoadProcessorState && wrapperState.processorState.getSize() > 0)
+            processor->loadStateFromMemory (wrapperState.processorState);
 
         {
             ObjCMsgSendSuper<AUAudioUnit, void> (au, @selector (didChangeValueForKey:), @"allParameterValues");
@@ -506,6 +527,8 @@ public:
 
     void addAudioUnitBusses (bool isInput)
     {
+        jassert (au != nil); // The AUAudioUnit must be set before creating bus arrays
+
         auto* array = [[NSMutableArray<AUAudioUnitBus*> alloc] init];
 
         const auto& busLayout = processor->getBusLayout();
@@ -539,7 +562,10 @@ public:
             auto* auBus = [[AUAudioUnitBus alloc] initWithFormat:format error:&error];
 
             if (auBus != nil)
+            {
+                auBus.name = yupStringToNS (bus.getName());
                 [array addObject:auBus];
+            }
         }
 
         if (isInput)
@@ -562,6 +588,24 @@ public:
         if (allocated)
             return false;
 
+        // Accept Float32 always, Float64 if the processor supports it.
+        // Other sample formats (Int16, Int32, etc.) are rejected — AUv3 hosts
+        // predominantly use floating-point.
+        const auto commonFormat = [format commonFormat];
+        if (commonFormat != AVAudioPCMFormatFloat32)
+        {
+            if (commonFormat != AVAudioPCMFormatFloat64
+                || processor == nullptr
+                || ! processor->supportsDoublePrecisionProcessing())
+            {
+                return false;
+            }
+        }
+
+        // Accept both interleaved and non-interleaved.  The render callback
+        // handles deinterleave / interleave internally via AudioData converters,
+        // so there is no need to reject interleaved formats here.
+
         const auto isInput = ([auBus busType] == AUAudioUnitBusTypeInput);
         const auto busIdx = static_cast<int> ([auBus index]);
         const auto newNumChannels = static_cast<int> ([format channelCount]);
@@ -576,7 +620,7 @@ public:
         if (bus.getType() != AudioBus::Type::Audio)
             return false;
 
-        return newNumChannels > 0 && newNumChannels <= bus.getNumChannels();
+        return newNumChannels > 0 && newNumChannels == bus.getNumChannels();
     }
 
     //==============================================================================
@@ -584,6 +628,8 @@ public:
 
     bool allocateRenderResourcesAndReturnError (NSError** outError)
     {
+        jassert (au != nil); // The AUAudioUnit must be set before allocating render resources
+
         allocated = false;
 
         if (processor == nullptr)
@@ -595,19 +641,93 @@ public:
         const AUAudioFrameCount maxFrames = [au maximumFramesToRender];
 
         auto sampleRate = 44100.0;
+        bool sampleRateSet = false;
+        size_t maxInterleavedBytes = 0;
+
+        // Validate bus formats and compute required scratch space.
+        // Float32 and Float64 are accepted (Float64 gated by shouldChangeToFormat).
+        // Both interleaved and non-interleaved are accepted — conversion happens in the
+        // render callback via AudioData converters.
         for (auto* busses : { inputBusses.get(), outputBusses.get() })
         {
-            if ([busses count] > 0)
+            for (NSUInteger i = 0; i < [busses count]; ++i)
             {
-                sampleRate = [[[busses objectAtIndexedSubscript:0] format] sampleRate];
-                break;
+                auto* auBus = [busses objectAtIndexedSubscript:i];
+                auto* fmt = [auBus format];
+
+                // Only float formats are supported (shouldChangeToFormat already gates this)
+                const auto commonFormat = [fmt commonFormat];
+                if (commonFormat != AVAudioPCMFormatFloat32 && commonFormat != AVAudioPCMFormatFloat64)
+                {
+                    if (outError != nullptr)
+                        *outError = [NSError errorWithDomain:NSOSStatusErrorDomain
+                                                       code:kAudioUnitErr_FormatNotSupported
+                                                   userInfo:@{
+                                                       NSLocalizedDescriptionKey:
+                                                           [NSString stringWithFormat:@"Unsupported sample format for bus %@",
+                                                                                     [auBus name]]
+                                                   }];
+                    return false;
+                }
+
+                // Track the largest interleaved buffer needed for format conversion
+                const auto numCh = [fmt channelCount];
+                const auto bytesPerSample = (commonFormat == AVAudioPCMFormatFloat64) ? sizeof (double) : sizeof (float);
+                const auto interleavedBytes = static_cast<size_t> (maxFrames) * static_cast<size_t> (numCh) * bytesPerSample;
+                maxInterleavedBytes = jmax (maxInterleavedBytes, interleavedBytes);
+
+                // Validate consistent sample rate across all buses
+                const auto busSampleRate = [fmt sampleRate];
+                if (! sampleRateSet)
+                {
+                    sampleRate = busSampleRate;
+                    sampleRateSet = true;
+                }
+                else if (! approximatelyEqual (sampleRate, busSampleRate))
+                {
+                    if (outError != nullptr)
+                        *outError = [NSError errorWithDomain:NSOSStatusErrorDomain
+                                                       code:kAudioUnitErr_FormatNotSupported
+                                                   userInfo:@{
+                                                       NSLocalizedDescriptionKey:
+                                                           [NSString stringWithFormat:@"Inconsistent sample rate for bus %@",
+                                                                                     [auBus name]]
+                                                   }];
+                    return false;
+                }
             }
         }
+
+        // Pre-allocate interleaved scratch buffer for format conversion (real-time safe)
+        if (maxInterleavedBytes > interleavedScratchSize)
+        {
+            interleavedScratchData.allocate (maxInterleavedBytes, false);
+            interleavedScratchSize = maxInterleavedBytes;
+        }
+
+        allocatedMaximumFrames = maxFrames;
 
         processor->setPlaybackConfiguration (sampleRate, static_cast<int> (maxFrames));
 
         midiMessages.ensureSize (2048);
         midiMessages.clear();
+
+        // Reserve parameter change buffer capacity for sample-accurate automation.
+        // Capacity = number of parameters * maxFrames per block so that per-sample
+        // ramps never exceed the pre-allocated storage.
+        {
+            const auto numParams = static_cast<int> (processor->getParameters().size());
+            paramChangeBuffer.reserve (numParams * static_cast<int> (maxFrames));
+        }
+
+        // Pre-allocate scratch buffers (real-time safe — no allocation in render callback)
+        scratchBuffer.setSize (totalInChannels, static_cast<int> (maxFrames));
+        scratchBuffer.clear();
+        scratchOutputBuffer.setSize (totalOutChannels, static_cast<int> (maxFrames));
+        scratchOutputBuffer.clear();
+
+        // Pre-allocate per-bus view storage
+        renderViews.prepare (*processor, totalInChannels, totalOutChannels);
 
         hostMusicalContextCallback = [au musicalContextBlock];
         hostTransportStateCallback = [au transportStateBlock];
@@ -628,6 +748,7 @@ public:
     void deallocateRenderResources()
     {
         allocated = false;
+        allocatedMaximumFrames = 0;
         midiOutputEventBlock = nullptr;
         hostMusicalContextCallback = nullptr;
         hostTransportStateCallback = nullptr;
@@ -659,6 +780,12 @@ public:
         if (processor == nullptr)
             return kAudioUnitErr_NoConnection;
 
+        // Reject frame counts exceeding the pre-allocated buffer capacity.
+        // The host should never request more than maximumFramesToRender, but if it
+        // does, proceeding would cause a buffer overrun in the scratch buffers.
+        if (frameCount > allocatedMaximumFrames)
+            return kAudioUnitErr_TooManyFramesToProcess;
+
         const int numFrames = static_cast<int> (frameCount);
 
         if (! approximatelyEqual (lastTimeStamp.mSampleTime, timestamp->mSampleTime))
@@ -666,17 +793,18 @@ public:
             midiMessages.clear();
 
             // Process events (MIDI and parameters)
-            processEvents (realtimeEventListHead, static_cast<AUEventSampleTime> (timestamp->mSampleTime));
+            processEvents (realtimeEventListHead, static_cast<AUEventSampleTime> (timestamp->mSampleTime), frameCount);
 
             lastTimeStamp = *timestamp;
 
-            // Prepare audio buffer
-            scratchBuffer.setSize (std::max (totalInChannels, totalOutChannels), numFrames);
+            // Clear scratch buffers (already sized in allocateRenderResources)
             scratchBuffer.clear();
+            scratchOutputBuffer.clear();
 
             const auto& busLayout = processor->getBusLayout();
 
-            // Pull inputs
+            // Build per-bus input views and pull inputs
+            renderViews.inputBusViews.clear();
             {
                 int chIdx = 0;
                 const auto& inputBuses = busLayout.getInputBuses();
@@ -688,25 +816,119 @@ public:
                         continue;
 
                     const int numCh = bus.getNumChannels();
-                    AudioBufferList* pullData = nullptr;
 
                     if (pullInputBlock != nullptr)
                     {
-                        AudioBufferList localBuffer = {};
-                        localBuffer.mNumberBuffers = static_cast<UInt32> (numCh);
+                        // Look up the AU bus format to determine pull-buffer layout
+                        const auto auBusIdx = static_cast<int> (renderViews.inputBusViews.size());
+                        auto* auBus = [inputBusses.get() objectAtIndexedSubscript:static_cast<NSUInteger> (auBusIdx)];
+                        auto* busFmt = [auBus format];
+                        const bool busIsInterleaved = [busFmt isInterleaved];
+                        const bool busIsFloat64 = ([busFmt commonFormat] == AVAudioPCMFormatFloat64);
 
-                        float* channelPtrs[16] = {};
-                        for (int ch = 0; ch < numCh && ch < 16; ++ch)
+                        if (! busIsInterleaved && ! busIsFloat64)
                         {
-                            localBuffer.mBuffers[ch].mNumberChannels = 1;
-                            localBuffer.mBuffers[ch].mData = scratchBuffer.getWritePointer (chIdx + ch);
-                            localBuffer.mBuffers[ch].mDataByteSize = static_cast<UInt32> (numFrames * sizeof (float));
-                        }
+                            // Planar Float32 — direct pull into scratch (fast path)
+                            const auto bufferListSize = offsetof (AudioBufferList, mBuffers) + static_cast<size_t> (numCh) * sizeof (::AudioBuffer);
+                            auto* pullBuffer = static_cast<AudioBufferList*> (alloca (bufferListSize));
+                            pullBuffer->mNumberBuffers = static_cast<UInt32> (numCh);
 
-                        if (pullInputBlock (actionFlags, timestamp, frameCount, busIdx, &localBuffer) != noErr)
-                        {
                             for (int ch = 0; ch < numCh; ++ch)
-                                scratchBuffer.clear (chIdx + ch, 0, numFrames);
+                            {
+                                pullBuffer->mBuffers[ch].mNumberChannels = 1;
+                                pullBuffer->mBuffers[ch].mData = scratchBuffer.getWritePointer (chIdx + ch);
+                                pullBuffer->mBuffers[ch].mDataByteSize = static_cast<UInt32> (numFrames * sizeof (float));
+                            }
+
+                            if (pullInputBlock (actionFlags, timestamp, frameCount, auBusIdx, pullBuffer) != noErr)
+                            {
+                                for (int ch = 0; ch < numCh; ++ch)
+                                    scratchBuffer.clear (chIdx + ch, 0, numFrames);
+                            }
+                        }
+                        else if (busIsInterleaved)
+                        {
+                            // Interleaved pull — pull into a single interleaved buffer, then deinterleave
+                            const auto bytesPerSample = busIsFloat64 ? sizeof (double) : sizeof (float);
+                            const auto interleavedBytes = static_cast<size_t> (numFrames) * static_cast<size_t> (numCh) * bytesPerSample;
+
+                            const auto bufferListSize = offsetof (AudioBufferList, mBuffers) + sizeof (::AudioBuffer);
+                            auto* pullBuffer = static_cast<AudioBufferList*> (alloca (bufferListSize));
+                            pullBuffer->mNumberBuffers = 1;
+                            pullBuffer->mBuffers[0].mNumberChannels = static_cast<UInt32> (numCh);
+                            pullBuffer->mBuffers[0].mData = interleavedScratchData.getData();
+                            pullBuffer->mBuffers[0].mDataByteSize = static_cast<UInt32> (interleavedBytes);
+
+                            const auto pullStatus = pullInputBlock (actionFlags, timestamp, frameCount, auBusIdx, pullBuffer);
+
+                            // Build destination channel pointers for deinterleave.
+                            // Stack allocation is real-time safe and avoids const-correctness
+                            // issues with renderViews.inputChannelPtrStorage (which stores const float*
+                            // for the later AudioBusBufferView build).
+                            auto* chanPtrs = static_cast<float**> (
+                                alloca (static_cast<size_t> (numCh) * sizeof (float*)));
+                            for (int ch = 0; ch < numCh; ++ch)
+                                chanPtrs[ch] = scratchBuffer.getWritePointer (chIdx + ch);
+
+                            if (pullStatus == noErr)
+                            {
+                                if (busIsFloat64)
+                                {
+                                    using SrcFmt = AudioData::Format<AudioData::Float64, AudioData::NativeEndian>;
+                                    using DstFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                    AudioData::deinterleaveSamples (
+                                        AudioData::InterleavedSource<SrcFmt> { reinterpret_cast<const double*> (interleavedScratchData.getData()), numCh },
+                                        AudioData::NonInterleavedDest<DstFmt> { chanPtrs, numCh },
+                                        numFrames);
+                                }
+                                else
+                                {
+                                    using SrcFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                    using DstFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                    AudioData::deinterleaveSamples (
+                                        AudioData::InterleavedSource<SrcFmt> { reinterpret_cast<const float*> (interleavedScratchData.getData()), numCh },
+                                        AudioData::NonInterleavedDest<DstFmt> { chanPtrs, numCh },
+                                        numFrames);
+                                }
+                            }
+                            else
+                            {
+                                for (int ch = 0; ch < numCh; ++ch)
+                                    scratchBuffer.clear (chIdx + ch, 0, numFrames);
+                            }
+                        }
+                        else
+                        {
+                            // Planar Float64 — pull into planar double, then convert double → float
+                            const auto bufferListSize = offsetof (AudioBufferList, mBuffers) + static_cast<size_t> (numCh) * sizeof (::AudioBuffer);
+                            auto* pullBuffer = static_cast<AudioBufferList*> (alloca (bufferListSize));
+                            pullBuffer->mNumberBuffers = static_cast<UInt32> (numCh);
+
+                            auto* doubleScratch = reinterpret_cast<double*> (interleavedScratchData.getData());
+                            for (int ch = 0; ch < numCh; ++ch)
+                            {
+                                pullBuffer->mBuffers[ch].mNumberChannels = 1;
+                                pullBuffer->mBuffers[ch].mData = doubleScratch + static_cast<size_t> (ch) * static_cast<size_t> (numFrames);
+                                pullBuffer->mBuffers[ch].mDataByteSize = static_cast<UInt32> (numFrames * sizeof (double));
+                            }
+
+                            const auto pullStatus = pullInputBlock (actionFlags, timestamp, frameCount, auBusIdx, pullBuffer);
+
+                            if (pullStatus == noErr)
+                            {
+                                for (int ch = 0; ch < numCh; ++ch)
+                                {
+                                    const auto* src = doubleScratch + static_cast<size_t> (ch) * static_cast<size_t> (numFrames);
+                                    auto* dst = scratchBuffer.getWritePointer (chIdx + ch);
+                                    for (int s = 0; s < numFrames; ++s)
+                                        dst[s] = static_cast<float> (src[s]);
+                                }
+                            }
+                            else
+                            {
+                                for (int ch = 0; ch < numCh; ++ch)
+                                    scratchBuffer.clear (chIdx + ch, 0, numFrames);
+                            }
                         }
                     }
                     else
@@ -714,6 +936,58 @@ public:
                         for (int ch = 0; ch < numCh; ++ch)
                             scratchBuffer.clear (chIdx + ch, 0, numFrames);
                     }
+
+                    // Build AudioBusBufferView for this input bus (real-time safe — uses pre-allocated storage)
+                    auto* chPtrs = renderViews.inputChannelPtrStorage.data() + chIdx;
+                    for (int ch = 0; ch < numCh; ++ch)
+                        chPtrs[ch] = scratchBuffer.getReadPointer (chIdx + ch);
+
+                    renderViews.inputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
+
+                    // Copy main inputs to the corresponding output area
+                    if (bus.getRole() == AudioBus::Role::Main)
+                    {
+                        // Find matching output bus for this main input
+                        int outputChIdx = 0;
+                        for (const auto& outBus : busLayout.getOutputBuses())
+                        {
+                            if (outBus.getType() != AudioBus::Type::Audio)
+                                continue;
+                            if (outBus.getRole() == AudioBus::Role::Main
+                                && outputChIdx == chIdx) // match by channel offset
+                            {
+                                for (int ch = 0; ch < std::min (numCh, outBus.getNumChannels()); ++ch)
+                                    scratchOutputBuffer.copyFrom (outputChIdx + ch, 0, scratchBuffer, chIdx + ch, 0, numFrames);
+                                break;
+                            }
+                            outputChIdx += outBus.getNumChannels();
+                        }
+                    }
+
+                    chIdx += numCh;
+                }
+            }
+
+            // Build per-bus output views
+            renderViews.outputBusViews.clear();
+            {
+                int chIdx = 0;
+                const auto& outputBuses = busLayout.getOutputBuses();
+
+                for (int busIdx = 0; busIdx < static_cast<int> (outputBuses.size()); ++busIdx)
+                {
+                    const auto& bus = outputBuses[busIdx];
+                    if (bus.getType() != AudioBus::Type::Audio)
+                        continue;
+
+                    const int numCh = bus.getNumChannels();
+
+                    // Build AudioBusBufferView for this output bus (real-time safe — uses pre-allocated storage)
+                    auto* chPtrs = renderViews.outputChannelPtrStorage.data() + chIdx;
+                    for (int ch = 0; ch < numCh; ++ch)
+                        chPtrs[ch] = scratchOutputBuffer.getWritePointer (chIdx + ch);
+
+                    renderViews.outputBusViews.emplace_back (chPtrs, numCh, bus.getRole());
 
                     chIdx += numCh;
                 }
@@ -723,10 +997,14 @@ public:
             {
                 AudioPluginPlayHeadAU playHead (*this, timestamp);
 
-                AudioProcessContext<float> context { scratchBuffer,
-                                                     midiMessages,
-                                                     emptyParamChangeBuffer,
-                                                     &playHead };
+                AudioProcessContext<float> context {
+                    scratchOutputBuffer,
+                    midiMessages,
+                    paramChangeBuffer,
+                    &playHead,
+                    { renderViews.inputBusViews.data(), renderViews.inputBusViews.size() },
+                    { renderViews.outputBusViews.data(), renderViews.outputBusViews.size() }
+                };
 
                 if (bypassHostParam != nullptr)
                     processAudioBlock (*processor, context, bypassHostParam->getNormalizedValue() > 0.5f);
@@ -742,6 +1020,7 @@ public:
         {
             const auto& outputBuses = processor->getBusLayout().getOutputBuses();
             int chIdx = 0;
+            int auOutBusIdx = 0;
 
             for (int busIdx = 0; busIdx < static_cast<int> (outputBuses.size()); ++busIdx)
             {
@@ -751,17 +1030,94 @@ public:
 
                 const int numCh = bus.getNumChannels();
 
-                if (busIdx == static_cast<int> (outputBusNumber))
+                if (auOutBusIdx == static_cast<int> (outputBusNumber))
                 {
-                    for (int ch = 0; ch < numCh && ch < static_cast<int> (outputData->mNumberBuffers); ++ch)
-                    {
-                        const auto* src = scratchBuffer.getReadPointer (chIdx + ch);
-                        auto* dst = static_cast<float*> (outputData->mBuffers[ch].mData);
+                    // Look up the AU bus format to determine output layout
+                    auto* auBus = [outputBusses.get() objectAtIndexedSubscript:static_cast<NSUInteger> (auOutBusIdx)];
+                    auto* busFmt = [auBus format];
+                    const bool busIsInterleaved = [busFmt isInterleaved];
+                    const bool busIsFloat64 = ([busFmt commonFormat] == AVAudioPCMFormatFloat64);
 
-                        std::copy (src, src + numFrames, dst);
+                    if (! busIsInterleaved && ! busIsFloat64)
+                    {
+                        // Planar Float32 — direct copy (fast path)
+                        for (int ch = 0; ch < numCh && ch < static_cast<int> (outputData->mNumberBuffers); ++ch)
+                        {
+                            const auto* src = scratchOutputBuffer.getReadPointer (chIdx + ch);
+                            auto* buf = &outputData->mBuffers[ch];
+                            auto* dst = static_cast<float*> (buf->mData);
+
+                            if (dst == nullptr || src == nullptr)
+                                continue;
+
+                            if (buf->mDataByteSize < static_cast<UInt32> (numFrames * static_cast<int> (sizeof (float))))
+                                continue;
+
+                            std::copy (src, src + numFrames, dst);
+                        }
+                    }
+                    else if (busIsInterleaved)
+                    {
+                        // Interleaved output — interleave from planar scratch.
+                        // Validate the host buffer can hold the interleaved data.
+                        const auto bytesPerSample = busIsFloat64 ? sizeof (double) : sizeof (float);
+                        const auto requiredBytes = static_cast<UInt32> (numFrames * numCh * static_cast<int> (bytesPerSample));
+
+                        if (outputData->mNumberBuffers >= 1
+                            && outputData->mBuffers[0].mData != nullptr
+                            && outputData->mBuffers[0].mDataByteSize >= requiredBytes)
+                        {
+                            // Build source channel pointers from scratch buffer (stack allocation, real-time safe).
+                            // NonInterleavedSource expects const float* const* — we allocate as
+                            // const float** and reinterpret_cast to add the inner const qualifier.
+                            auto* storage = static_cast<const float**> (
+                                alloca (static_cast<size_t> (numCh) * sizeof (const float*)));
+                            for (int ch = 0; ch < numCh; ++ch)
+                                storage[ch] = scratchOutputBuffer.getReadPointer (chIdx + ch);
+                            auto* chanPtrs = reinterpret_cast<const float* const*> (storage);
+
+                            if (busIsFloat64)
+                            {
+                                using SrcFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                using DstFmt = AudioData::Format<AudioData::Float64, AudioData::NativeEndian>;
+                                AudioData::interleaveSamples (
+                                    AudioData::NonInterleavedSource<SrcFmt> { chanPtrs, numCh },
+                                    AudioData::InterleavedDest<DstFmt> { reinterpret_cast<double*> (outputData->mBuffers[0].mData), numCh },
+                                    numFrames);
+                            }
+                            else
+                            {
+                                using SrcFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                using DstFmt = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
+                                AudioData::interleaveSamples (
+                                    AudioData::NonInterleavedSource<SrcFmt> { chanPtrs, numCh },
+                                    AudioData::InterleavedDest<DstFmt> { static_cast<float*> (outputData->mBuffers[0].mData), numCh },
+                                    numFrames);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Planar Float64 — convert float → double per channel
+                        for (int ch = 0; ch < numCh && ch < static_cast<int> (outputData->mNumberBuffers); ++ch)
+                        {
+                            const auto* src = scratchOutputBuffer.getReadPointer (chIdx + ch);
+                            auto* buf = &outputData->mBuffers[ch];
+                            auto* dst = static_cast<double*> (buf->mData);
+
+                            if (dst == nullptr || src == nullptr)
+                                continue;
+
+                            if (buf->mDataByteSize < static_cast<UInt32> (numFrames * static_cast<int> (sizeof (double))))
+                                continue;
+
+                            for (int s = 0; s < numFrames; ++s)
+                                dst[s] = static_cast<double> (src[s]);
+                        }
                     }
                 }
 
+                ++auOutBusIdx;
                 chIdx += numCh;
             }
         }
@@ -769,8 +1125,10 @@ public:
         return noErr;
     }
 
-    void processEvents (const AURenderEvent* realtimeEventListHead, AUEventSampleTime startTime)
+    void processEvents (const AURenderEvent* realtimeEventListHead, AUEventSampleTime startTime, AUAudioFrameCount frameCount)
     {
+        paramChangeBuffer.clear();
+
         for (const AURenderEvent* event = realtimeEventListHead; event != nullptr; event = event->head.next)
         {
             switch (event->head.eventType)
@@ -786,14 +1144,48 @@ public:
                 break;
 
                 case AURenderEventParameter:
+                {
+                    const AUParameterEvent& paramEvent = event->parameter;
+
+                    if (auto* p = getParamForAUAddress (paramEvent.parameterAddress))
+                    {
+                        const int offset = static_cast<int> (paramEvent.eventSampleTime - startTime);
+                        const auto normalised = p->convertToNormalizedValue (static_cast<float> (paramEvent.value));
+                        p->setValue (static_cast<float> (paramEvent.value));
+
+                        if (isPositiveAndBelow (offset, static_cast<int> (frameCount)))
+                            paramChangeBuffer.addChange (p->getIndexInContainer(), normalised, offset);
+
+                        inParameterChangedCallback = true;
+                    }
+                }
+                break;
+
                 case AURenderEventParameterRamp:
                 {
                     const AUParameterEvent& paramEvent = event->parameter;
 
                     if (auto* p = getParamForAUAddress (paramEvent.parameterAddress))
                     {
-                        auto normalisedValue = static_cast<float> (paramEvent.value) / getMaximumParameterValue (*p);
-                        p->setNormalizedValue (normalisedValue);
+                        const int startOffset = static_cast<int> (paramEvent.eventSampleTime - startTime);
+                        const int rampFrames = static_cast<int> (paramEvent.rampDurationSampleFrames);
+                        const int rampEndOffset = startOffset + rampFrames;
+                        const auto startValue = p->getValue();
+                        const auto endValue = static_cast<float> (paramEvent.value);
+                        const auto startNormalised = p->convertToNormalizedValue (startValue);
+                        const auto endNormalised = p->convertToNormalizedValue (endValue);
+
+                        // Add ramp start event at the ramp's start offset
+                        if (isPositiveAndBelow (startOffset, static_cast<int> (frameCount)))
+                            paramChangeBuffer.addChange (p->getIndexInContainer(), startNormalised, startOffset);
+
+                        // Add ramp end event. If the ramp extends past this block, clamp it to the last frame.
+                        const int endOffsetClamped = jmin (rampEndOffset, static_cast<int> (frameCount) - 1);
+                        if (endOffsetClamped > startOffset)
+                            paramChangeBuffer.addChange (p->getIndexInContainer(), endNormalised, endOffsetClamped);
+
+                        // Always set the final value so the next block picks up the correct value
+                        p->setValue (endValue);
 
                         inParameterChangedCallback = true;
                     }
@@ -804,6 +1196,9 @@ public:
                     break;
             }
         }
+
+        // Sort changes by sample offset for binary-search lookups during processing
+        paramChangeBuffer.sort();
     }
 
     void sendMidi (int64_t baseTimeStamp, AUAudioFrameCount frameCount)
@@ -1060,7 +1455,7 @@ public:
             if (yupParam == nullptr)
                 return;
 
-            const auto value = newValue * getMaximumParameterValue (*yupParam);
+            const auto value = yupParam->convertToDenormalizedValue (newValue);
 
             if (@available (macOS 10.12, *))
             {
@@ -1157,7 +1552,7 @@ private:
     NSUniquePtr<NSMutableArray<NSNumber*>> channelCapabilities;
 
     NSUniquePtr<AUParameterTree> paramTree;
-    AUParameterObserverToken* editorObserverToken = nullptr;
+    AUParameterObserverToken _Nullable * _Nullable editorObserverToken = nullptr;
 
     mutable std::mutex factoryPresetsMutex;
     NSUniquePtr<NSMutableArray<AUAudioUnitPreset*>> factoryPresets;
@@ -1166,8 +1561,17 @@ private:
     ObjCBlock<AURenderContextObserver> renderContextObserver;
 
     MidiBuffer midiMessages;
-    ParameterChangeBuffer emptyParamChangeBuffer;
+    ParameterChangeBuffer paramChangeBuffer;
     AudioBuffer<float> scratchBuffer;
+    AudioBuffer<float> scratchOutputBuffer;
+
+    // Per-bus view state, pre-allocated in allocateRenderResources so the
+    // render callback only clears and refills the vectors without allocating
+    AudioPluginAURenderViews renderViews;
+
+    // Interleaved scratch buffer for format conversion (deinterleave/interleave)
+    HeapBlock<uint8> interleavedScratchData;
+    size_t interleavedScratchSize = 0;
 
     AUMIDIOutputEventBlock midiOutputEventBlock = nullptr;
 
@@ -1176,13 +1580,14 @@ private:
 
     AudioTimeStamp lastTimeStamp;
 
-    AudioParameter* bypassHostParam = nullptr;
+    std::unique_ptr<AudioParameter> bypassHostParam;
 
     double viewConfigWidth = 0;
     double viewConfigHeight = 0;
 
     ThreadLocalValue<bool> inParameterChangedCallback;
     bool allocated = false;
+    AUAudioFrameCount allocatedMaximumFrames = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginProcessorAUv3)
 };
@@ -1369,7 +1774,7 @@ struct AUAudioUnitSubclass final : public ObjCClass<AUAudioUnit>
         return getIvar<AudioPluginProcessorAUv3*> (self, "cppObject");
     }
 
-    static void setThis (id self, AudioPluginProcessorAUv3* cpp)
+    static void setThis (id self, AudioPluginProcessorAUv3* _Nullable cpp)
     {
         setIvar (self, "cppObject", cpp);
     }
@@ -1386,55 +1791,30 @@ public:
         : myself (vc)
     {
         initialiseYup_GUI();
-        processor.reset (::createPluginProcessor());
     }
 
     ~AudioPluginViewControllerv3() override
     {
         if (processor != nullptr)
         {
-            yup::endActiveParameterGestures (processor.get());
+            yup::endActiveParameterGestures (processor);
             processor->removeListener (this);
+        }
 
-            if (editor != nullptr)
-            {
-                delete editor;
-                editor = nullptr;
-            }
+        if (editor != nullptr)
+        {
+            delete editor;
+            editor = nullptr;
         }
     }
 
     void loadView()
     {
-        if (processor == nullptr)
-            return;
-
-        if (processor->hasEditor())
-        {
-            editor = processor->createEditor();
-
-            if (editor != nullptr)
-            {
-                preferredSize = { editor->getWidth(), editor->getHeight() };
-
-                NSView* view = [[NSView alloc] initWithFrame:NSMakeRect (0, 0, preferredSize.getWidth(), preferredSize.getHeight())];
-                [myself setView:view];
-
-                editor->setVisible (true);
-
-                auto options = ComponentNative::Options()
-                                   .withFlags (ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow);
-
-                editor->addToDesktop (options, (__bridge void*) view);
-            }
-        }
+        createEditorIfNeeded();
     }
 
     void viewDidLayoutSubviews()
     {
-        if (processor == nullptr)
-            return;
-
         if ([myself view] != nil)
         {
             if (editor != nullptr)
@@ -1463,33 +1843,57 @@ public:
 
     AUAudioUnit* createAudioUnit (const AudioComponentDescription& desc, NSError** error)
     {
-        if (processor == nullptr)
-            return nil;
-
-        auto* cpp = new AudioPluginProcessorAUv3 (nil, desc, 0, error);
-
+        // Let the ObjC init create the C++ wrapper — it correctly passes self (the
+        // real AUAudioUnit) to the AudioPluginProcessorAUv3 constructor, so au is
+        // valid when init() runs.
         static AUAudioUnitSubclass auClass;
         auto* au = auClass.createInstance();
         au = ObjCMsgSendSuper<AUAudioUnit, AUAudioUnit*, AudioComponentDescription,
                               AudioComponentInstantiationOptions, NSError * __autoreleasing *> (au, @selector (initWithComponentDescription:options:error:), desc, 0, error);
 
-        if (au == nil)
+        if (au != nil)
         {
-            delete cpp;
-            return nil;
-        }
+            auto* cpp = AUAudioUnitSubclass::_this (au);
+            processor = cpp != nullptr ? cpp->getProcessor() : nullptr;
 
-        AUAudioUnitSubclass::setThis (au, cpp);
-        cpp->init();
+            createEditorIfNeeded();
+        }
 
         return au;
     }
 
-    AudioProcessor* getProcessor() const { return processor.get(); }
+    AudioProcessor* getProcessor() const { return processor; }
 
 private:
+    void createEditorIfNeeded()
+    {
+        // Already created, or no processor available yet
+        if (editor != nullptr || processor == nullptr)
+            return;
+
+        if (processor->hasEditor())
+        {
+            editor = processor->createEditor();
+
+            if (editor != nullptr)
+            {
+                preferredSize = { editor->getWidth(), editor->getHeight() };
+
+                NSView* view = [[NSView alloc] initWithFrame:NSMakeRect (0, 0, preferredSize.getWidth(), preferredSize.getHeight())];
+                [myself setView:view];
+
+                editor->setVisible (true);
+
+                auto options = ComponentNative::Options()
+                                   .withFlags (ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow);
+
+                editor->addToDesktop (options, (__bridge void*) view);
+            }
+        }
+    }
+
     AUViewController<AUAudioUnitFactory>* myself = nil;
-    std::unique_ptr<AudioProcessor> processor;
+    AudioProcessor* processor = nullptr;
     AudioProcessorEditor* editor = nullptr;
     Rectangle<float> preferredSize { 1.0f, 1.0f };
 };
@@ -1519,8 +1923,8 @@ private:
     cpp->loadView();
 }
 
-- (AUAudioUnit*) createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
-                                                   error:(NSError**)error
+- (AUAudioUnit* _Nullable) createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
+                                                             error:(NSError* _Nullable* _Nullable)error
 {
     return cpp->createAudioUnit (desc, error);
 }
@@ -1541,5 +1945,7 @@ private:
 }
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif // YUP_MAC

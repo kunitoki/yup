@@ -66,6 +66,18 @@ inline int getTotalAudioOutputChannels (const AudioProcessor& processor)
     return count;
 }
 
+/** Returns the total number of input audio channels across all input audio buses. */
+inline int getTotalAudioInputChannels (const AudioProcessor& processor)
+{
+    int count = 0;
+
+    for (const auto& bus : processor.getBusLayout().getInputBuses())
+        if (bus.getType() == AudioBus::Type::Audio)
+            count += bus.getNumChannels();
+
+    return count;
+}
+
 /** Returns the default automation-event capacity used by plugin wrappers. */
 inline int getDefaultParameterChangeCapacity (const AudioProcessor& processor)
 {
