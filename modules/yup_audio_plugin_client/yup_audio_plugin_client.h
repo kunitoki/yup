@@ -93,4 +93,22 @@
 
 //==============================================================================
 
+/** Config: YUP_AUDIO_PLUGIN_CREATE_FUNCTION
+
+    The name of the extern "C" function that plugin wrappers call to obtain
+    an AudioProcessor instance. The user must define a function with this name,
+    returning a heap-allocated AudioProcessor. Defaults to createPluginProcessor.
+
+    Override before including the wrapper source to change the entry-point name.
+*/
+#ifndef YUP_AUDIO_PLUGIN_CREATE_FUNCTION
+#define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessor
+#endif
+
+//==============================================================================
+
 #include <yup_audio_processors/yup_audio_processors.h>
+
+//==============================================================================
+
+#include "common/yup_AudioPluginUtilities.h"

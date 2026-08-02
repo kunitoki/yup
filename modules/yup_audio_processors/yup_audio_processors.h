@@ -55,6 +55,7 @@
 
 //==============================================================================
 #include "processors/yup_AudioBus.h"
+#include "processors/yup_AudioBusBufferView.h"
 #include "processors/yup_AudioBusLayout.h"
 #include "processors/yup_AudioParameter.h"
 #include "processors/yup_AudioParameterBuilder.h"

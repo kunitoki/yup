@@ -178,6 +178,7 @@ function (yup_plugin_auv3)
         MACOSX_BUNDLE_INFO_PLIST "${auv3_container_plist_output}"
         MACOSX_BUNDLE_BUNDLE_NAME "${YUP_ARG_PLUGIN_NAME}"
         MACOSX_BUNDLE_GUI_IDENTIFIER "${auv3_container_bundle_identifier}"
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${auv3_container_bundle_identifier}"
         FOLDER "${target_ide_group}"
         XCODE_GENERATE_SCHEME ON)
 

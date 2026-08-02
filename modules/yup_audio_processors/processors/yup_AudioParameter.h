@@ -48,6 +48,93 @@ public:
     /** A function that converts a string to a real value. */
     using StringToValue = std::function<float (const String&)>;
 
+    //==============================================================================
+
+    /**
+        The measurement unit of a parameter value.
+
+        Describes what the real (denormalised) parameter value represents so that
+        plugin hosts can display appropriate unit labels and format values
+        correctly.
+
+        The subset of unit types here maps to every plugin format that supports
+        measurement units, with `Custom` reserved for user-supplied strings.
+    */
+    enum class ParameterUnit : uint8
+    {
+        Generic,        /**< No specific unit. */
+        Percent,        /**< 0–100%. */
+        Decibels,       /**< dB. */
+        Hertz,          /**< Hz. */
+        Milliseconds,   /**< ms. */
+        Seconds,        /**< s. */
+        Degrees,        /**< Angular degrees. */
+        Cents,          /**< Musical cents (1/100 of a semitone). */
+        Semitones,      /**< Musical semitones. */
+        Octaves,        /**< Musical octaves. */
+        BPM,            /**< Beats per minute. */
+        Beats,          /**< Beats. */
+        Ratio,          /**< Dimensionless ratio. */
+        LinearGain,     /**< Linear gain factor. */
+        Pan,            /**< Stereo panning. */
+        MIDINoteNumber, /**< MIDI note number (0–127). */
+        Custom          /**< User-defined unit; use unitName for the label. */
+    };
+
+    //==============================================================================
+
+    /** Returns a short display label for a ParameterUnit.
+
+        Suitable for plugin format fields that need a compact unit string
+        such as VST3's ParameterInfo::units.
+
+        For ParameterUnit::Custom, returns the provided unitName if non-empty,
+        otherwise an empty string.
+    */
+    static const char* getParameterUnitShortName (ParameterUnit unit,
+                                                  const String& unitName = {})
+    {
+        switch (unit)
+        {
+            case ParameterUnit::Generic:
+                return "";
+            case ParameterUnit::Percent:
+                return "%";
+            case ParameterUnit::Decibels:
+                return "dB";
+            case ParameterUnit::Hertz:
+                return "Hz";
+            case ParameterUnit::Milliseconds:
+                return "ms";
+            case ParameterUnit::Seconds:
+                return "s";
+            case ParameterUnit::Degrees:
+                return "deg";
+            case ParameterUnit::Cents:
+                return "ct";
+            case ParameterUnit::Semitones:
+                return "st";
+            case ParameterUnit::Octaves:
+                return "oct";
+            case ParameterUnit::BPM:
+                return "bpm";
+            case ParameterUnit::Beats:
+                return "beats";
+            case ParameterUnit::Ratio:
+                return "";
+            case ParameterUnit::LinearGain:
+                return "";
+            case ParameterUnit::Pan:
+                return "";
+            case ParameterUnit::MIDINoteNumber:
+                return "";
+            case ParameterUnit::Custom:
+                return unitName.isNotEmpty() ? unitName.toRawUTF8() : "";
+        }
+
+        return "";
+    }
+
     /** Sentinel used when a parameter does not provide an explicit host-facing ID. */
     static constexpr uint32 invalidHostParameterID = 0xffffffffu;
 
@@ -147,6 +234,14 @@ public:
 
         /** Optional host-facing module path, using "/" as a separator. */
         String modulePath;
+
+        /** The measurement unit of the parameter value.
+            Use `Custom` together with `unitName` for user-defined labels. */
+        ParameterUnit unit = ParameterUnit::Generic;
+
+        /** A custom unit label, used only when `unit` is set to `Custom`.
+            Examples: "dBFS", "LUFS", "ms/cm". */
+        String unitName;
 
     private:
         uint8 flags = automatableFlag;
@@ -255,6 +350,12 @@ public:
 
     /** Returns the module path of this parameter. */
     String getModulePath() const { return metadata.modulePath; }
+
+    /** Returns the measurement unit of this parameter. */
+    ParameterUnit getUnit() const noexcept { return metadata.unit; }
+
+    /** Returns the custom unit label string (only meaningful when getUnit() == Custom). */
+    String getUnitName() const { return metadata.unitName; }
 
     //==============================================================================
 

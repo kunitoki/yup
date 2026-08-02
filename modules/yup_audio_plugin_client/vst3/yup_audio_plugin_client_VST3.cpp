@@ -53,7 +53,7 @@
 
 //==============================================================================
 
-extern "C" yup::AudioProcessor* createPluginProcessor();
+extern "C" yup::AudioProcessor* YUP_AUDIO_PLUGIN_CREATE_FUNCTION();
 
 namespace yup
 {
@@ -992,9 +992,11 @@ private:
                                  ? Vst::ParameterInfo::kCanAutomate
                                  : 0;
 
+            const auto unitShortName = String (AudioParameter::getParameterUnitShortName (parameter->getUnit(), parameter->getUnitName()));
+
             parameters.addParameter (
-                reinterpret_cast<const Vst::TChar*> (parameter->getName().toUTF16().getAddress()),
-                nullptr,                         // units
+                toTChar (parameter->getName().toUTF16()),
+                unitShortName.isEmpty() ? nullptr : toTChar (unitShortName.toUTF16()),
                 parameter->getNumSteps(),        // step count
                 parameter->getNormalizedValue(), // normalized value
                 flags,                           // flags
@@ -1132,7 +1134,7 @@ public:
 
     AudioPluginProcessorVST3()
     {
-        processor.reset (::createPluginProcessor());
+        processor.reset (::YUP_AUDIO_PLUGIN_CREATE_FUNCTION());
 
         setControllerClass (YupPlugin_Controller_UID);
     }
@@ -1142,6 +1144,10 @@ public:
         endActiveParameterGestures (processor.get());
         processor.reset();
     }
+
+    //==============================================================================
+
+    AudioProcessor* getProcessor() const noexcept { return processor.get(); }
 
     //==============================================================================
 
@@ -1163,9 +1169,20 @@ public:
             const auto nameUTF16 = inputBus.getName().toUTF16();
 
             if (inputBus.getType() == AudioBus::Type::Audio)
-                addAudioInput (toTChar (nameUTF16), speakerArrForChannels (inputBus.getNumChannels()));
+            {
+                const auto busType = inputBus.getRole() == AudioBus::Role::Auxiliary
+                                       ? Steinberg::Vst::kAux
+                                       : Steinberg::Vst::kMain;
+                const auto busFlags = inputBus.isDefaultActive()
+                                        ? Steinberg::Vst::BusInfo::kDefaultActive
+                                        : 0;
+
+                addAudioInput (toTChar (nameUTF16), speakerArrForChannels (inputBus.getNumChannels()), busType, busFlags);
+            }
             else if (inputBus.getType() == AudioBus::Type::Midi)
+            {
                 addEventInput (toTChar (nameUTF16));
+            }
         }
 
         for (const auto& outputBus : processor->getBusLayout().getOutputBuses())
@@ -1173,9 +1190,20 @@ public:
             const auto nameUTF16 = outputBus.getName().toUTF16();
 
             if (outputBus.getType() == AudioBus::Type::Audio)
-                addAudioOutput (toTChar (nameUTF16), speakerArrForChannels (outputBus.getNumChannels()));
+            {
+                const auto busType = outputBus.getRole() == AudioBus::Role::Auxiliary
+                                       ? Steinberg::Vst::kAux
+                                       : Steinberg::Vst::kMain;
+                const auto busFlags = outputBus.isDefaultActive()
+                                        ? Steinberg::Vst::BusInfo::kDefaultActive
+                                        : 0;
+
+                addAudioOutput (toTChar (nameUTF16), speakerArrForChannels (outputBus.getNumChannels()), busType, busFlags);
+            }
             else if (outputBus.getType() == AudioBus::Type::Midi)
+            {
                 addEventOutput (toTChar (nameUTF16));
+            }
         }
 
         // Fallback: synths without an explicit MIDI input bus always get one
@@ -1404,6 +1432,17 @@ public:
         outputChannelsFloat.reserve (static_cast<size_t> (totalOutputChannels));
         outputChannelsDouble.reserve (static_cast<size_t> (totalOutputChannels));
 
+        // Pre-allocate per-bus view storage
+        {
+            const auto numAudioInputs = static_cast<size_t> (processor->getNumAudioInputs());
+            const auto numAudioOutputs = static_cast<size_t> (processor->getNumAudioOutputs());
+
+            inputBusViewsFloat.reserve (numAudioInputs);
+            outputBusViewsFloat.reserve (numAudioOutputs);
+            inputBusViewsDouble.reserve (numAudioInputs);
+            outputBusViewsDouble.reserve (numAudioOutputs);
+        }
+
         return kResultOk;
     }
 
@@ -1535,13 +1574,18 @@ public:
             const bool useDoublePrecision = processSetup.symbolicSampleSize == Vst::kSample64
                                          && processor->supportsDoublePrecisionProcessing();
 
-            // Copy input audio into output buffers for effects
+            // Copy main input audio into matching main output buffers for effects.
+            // Auxiliary (sidechain) inputs are NOT copied to outputs.
             if (data.inputs != nullptr)
             {
                 for (int32 busIdx = 0; busIdx < std::min (data.numInputs, data.numOutputs); ++busIdx)
                 {
                     auto& inBus = data.inputs[busIdx];
                     auto& outBus = data.outputs[busIdx];
+
+                    // Only copy when the bus role is Main (skip Auxiliary/sidechain)
+                    if (! isVST3AudioBusMain (busIdx, true))
+                        continue;
 
                     for (int32 ch = 0; ch < std::min (inBus.numChannels, outBus.numChannels); ++ch)
                     {
@@ -1568,6 +1612,7 @@ public:
 
             if (useDoublePrecision)
             {
+                // Build output channel pointers (flat buffer, backward compat)
                 outputChannelsDouble.clear();
                 for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
                     for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
@@ -1578,12 +1623,30 @@ public:
                                                  0,
                                                  data.numSamples);
 
-                AudioProcessContext<double> doubleCtx { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
+                // Build per-bus input views (all input buses)
+                inputBusViewsDouble.clear();
+                for (int32 busIdx = 0; busIdx < data.numInputs; ++busIdx)
+                    inputBusViewsDouble.push_back (buildVST3InputBusView<double> (data, busIdx));
+
+                // Build per-bus output views (all output buses)
+                outputBusViewsDouble.clear();
+                for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
+                    outputBusViewsDouble.push_back (buildVST3OutputBusView<double> (data, busIdx));
+
+                AudioProcessContext<double> doubleCtx {
+                    audioBuffer,
+                    midiBuffer,
+                    paramChangeBuffer,
+                    playHeadPtr,
+                    { inputBusViewsDouble.data(), static_cast<size_t> (inputBusViewsDouble.size()) },
+                    { outputBusViewsDouble.data(), static_cast<size_t> (outputBusViewsDouble.size()) }
+                };
 
                 processAudioBlock (*processor, doubleCtx, bypassed);
             }
             else
             {
+                // Build output channel pointers (flat buffer, backward compat)
                 outputChannelsFloat.clear();
                 for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
                     for (int32 ch = 0; ch < data.outputs[busIdx].numChannels; ++ch)
@@ -1594,7 +1657,24 @@ public:
                                                0,
                                                data.numSamples);
 
-                AudioProcessContext<float> context { audioBuffer, midiBuffer, paramChangeBuffer, playHeadPtr };
+                // Build per-bus input views (all input buses)
+                inputBusViewsFloat.clear();
+                for (int32 busIdx = 0; busIdx < data.numInputs; ++busIdx)
+                    inputBusViewsFloat.push_back (buildVST3InputBusView<float> (data, busIdx));
+
+                // Build per-bus output views (all output buses)
+                outputBusViewsFloat.clear();
+                for (int32 busIdx = 0; busIdx < data.numOutputs; ++busIdx)
+                    outputBusViewsFloat.push_back (buildVST3OutputBusView<float> (data, busIdx));
+
+                AudioProcessContext<float> context {
+                    audioBuffer,
+                    midiBuffer,
+                    paramChangeBuffer,
+                    playHeadPtr,
+                    { inputBusViewsFloat.data(), static_cast<size_t> (inputBusViewsFloat.size()) },
+                    { outputBusViewsFloat.data(), static_cast<size_t> (outputBusViewsFloat.size()) }
+                };
 
                 processAudioBlock (*processor, context, bypassed);
             }
@@ -1618,7 +1698,70 @@ private:
     ParameterChangeBuffer paramChangeBuffer;
     std::vector<float*> outputChannelsFloat;
     std::vector<double*> outputChannelsDouble;
+
+    std::vector<AudioBusBufferView<const float>> inputBusViewsFloat;
+    std::vector<AudioBusBufferView<float>> outputBusViewsFloat;
+    std::vector<AudioBusBufferView<const double>> inputBusViewsDouble;
+    std::vector<AudioBusBufferView<double>> outputBusViewsDouble;
+
     bool isBypassed = false;
+
+    //==============================================================================
+    /** Looks up the role of a VST3 audio bus by its audio-bus index.
+        Returns true when the bus role is Main. */
+    bool isVST3AudioBusMain (int32 vst3AudioBusIndex, bool isInput) const noexcept
+    {
+        return processor->getBusLayout().getAudioBusRole (vst3AudioBusIndex, isInput) == AudioBus::Role::Main;
+    }
+
+    /** Builds an AudioBusBufferView for a VST3 input bus. */
+    template <typename FloatType>
+    AudioBusBufferView<const FloatType> buildVST3InputBusView (const Vst::ProcessData& data, int32 busIdx) const
+    {
+        const auto& inBus = data.inputs[busIdx];
+
+        if constexpr (std::is_same_v<FloatType, double>)
+        {
+            return { reinterpret_cast<const FloatType* const*> (inBus.channelBuffers64),
+                     static_cast<int> (inBus.numChannels),
+                     processor->getBusLayout().getAudioBusRole (busIdx, true) };
+        }
+        else
+        {
+            // Silence flag: when the host reports silence, provide null pointers so
+            // the processor can detect inactive buses via getReadPointer returning null.
+            const bool isSilent = (inBus.silenceFlags != 0);
+            if (isSilent)
+            {
+                // All channels are silent — return a view with null data pointers
+                return { nullptr, static_cast<int> (inBus.numChannels), processor->getBusLayout().getAudioBusRole (busIdx, true) };
+            }
+
+            return { reinterpret_cast<const FloatType* const*> (inBus.channelBuffers32),
+                     static_cast<int> (inBus.numChannels),
+                     processor->getBusLayout().getAudioBusRole (busIdx, true) };
+        }
+    }
+
+    /** Builds an AudioBusBufferView for a VST3 output bus. */
+    template <typename FloatType>
+    AudioBusBufferView<FloatType> buildVST3OutputBusView (const Vst::ProcessData& data, int32 busIdx) const
+    {
+        const auto& outBus = data.outputs[busIdx];
+
+        if constexpr (std::is_same_v<FloatType, double>)
+        {
+            return { reinterpret_cast<FloatType* const*> (outBus.channelBuffers64),
+                     static_cast<int> (outBus.numChannels),
+                     processor->getBusLayout().getAudioBusRole (busIdx, false) };
+        }
+        else
+        {
+            return { reinterpret_cast<FloatType* const*> (outBus.channelBuffers32),
+                     static_cast<int> (outBus.numChannels),
+                     processor->getBusLayout().getAudioBusRole (busIdx, false) };
+        }
+    }
 };
 
 #ifdef YupPlugin_VST3_Categories
