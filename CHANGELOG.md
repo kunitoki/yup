@@ -182,6 +182,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - AUv3 plugin host bypass is now connected to the processor: the wrapper-owned bypass parameter is created and drives `processBlockBypassed`, and host bypass state is persisted/restored inside the `YUPProcessorState` blob (legacy raw processor state still loads)
 - Added bypass parameter handling tests for the AU, CLAP, and VST3 plugin client wrappers (routing to `processBlockBypassed`, bypass state round-trip, and text/value conversion)
 
+### Documentation
+
+- Added a dedicated DSP documentation area (`docs/dsp/`) covering `yup_dsp` end to end: math/windowing/noise, FFTs and spectral analysis, filter design and filter implementations, dynamics and metering, onset detection, convolution and delay, resampling, and time-stretching/pitch-shifting
+
 ---
 
 ## [1.0.0] - 2026-07-03
