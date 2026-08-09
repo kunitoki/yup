@@ -181,13 +181,13 @@ def test_gpu_render_options_defaults():
 
 
 def test_gpu_render_options_with_args():
-    opts = yup.GpuRenderOptions(True, yup.Colors.black)
+    opts = yup.GpuRenderOptions(True, yup.GpuColor.black())
     assert opts.clear is True
-    assert opts.clearColor == yup.Colors.black
+    assert opts.clearColor == yup.GpuColor.black()
 
 
-def test_graphics_context_options_defaults():
-    opts = yup.GraphicsContextOptions()
+def test_gpu_device_options_defaults():
+    opts = yup.GpuDevice.Options()
     assert opts.retinaDisplay is True
     assert opts.readableFramebuffer is False
     assert opts.synchronousShaderCompilations is False

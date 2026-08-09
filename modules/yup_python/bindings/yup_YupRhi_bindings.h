@@ -21,14 +21,11 @@
 
 #pragma once
 
-#if ! YUP_MODULE_AVAILABLE_yup_graphics
-#error This binding file requires adding the yup_graphics module in the project
-#else
-#include <yup_graphics/yup_graphics.h>
-#endif
-
 #include "yup_YupCore_bindings.h"
+
+#if YUP_MODULE_AVAILABLE_yup_graphics
 #include "yup_YupGraphics_bindings.h"
+#endif
 
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
 #define YUP_PYTHON_INCLUDE_PYBIND11_STL

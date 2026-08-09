@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_rhi
 #include "bindings/yup_YupRhi_bindings.cpp"
+#endif

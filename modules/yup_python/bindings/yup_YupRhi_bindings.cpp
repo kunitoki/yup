@@ -142,6 +142,41 @@ void registerYupRhiBindings (py::module_& m)
 
     // ============================================================================================ GPU config structs
 
+    py::class_<GpuColor> (m, "GpuColor")
+        .def (py::init<>())
+        .def (py::init<float, float, float, float>(), "red"_a, "green"_a, "blue"_a, "alpha"_a = 1.0f)
+        .def_readwrite ("red", &GpuColor::red)
+        .def_readwrite ("green", &GpuColor::green)
+        .def_readwrite ("blue", &GpuColor::blue)
+        .def_readwrite ("alpha", &GpuColor::alpha)
+        .def_static ("black", &GpuColor::black)
+        .def_static ("white", &GpuColor::white)
+        .def_static ("transparentBlack", &GpuColor::transparentBlack)
+        .def ("__eq__", [] (const GpuColor& self, const GpuColor& other)
+        {
+            return self.red == other.red
+                && self.green == other.green
+                && self.blue == other.blue
+                && self.alpha == other.alpha;
+        })
+#if YUP_MODULE_AVAILABLE_yup_graphics
+        .def ("__eq__", [] (const GpuColor& self, const Color& other)
+        {
+            return self.red == other.getRedFloat()
+                && self.green == other.getGreenFloat()
+                && self.blue == other.getBlueFloat()
+                && self.alpha == other.getAlphaFloat();
+        })
+#endif
+        .def ("__repr__", [] (const GpuColor& self)
+        {
+            String repr;
+            repr
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << self.red << ", " << self.green << ", " << self.blue << ", " << self.alpha << ")";
+            return repr;
+        });
+
     py::class_<GpuShaderSource> (m, "GpuShaderSource")
         .def (py::init<>())
         .def_readwrite ("language", &GpuShaderSource::language)
@@ -207,7 +242,7 @@ void registerYupRhiBindings (py::module_& m)
 
     py::class_<GpuRenderOptions> (m, "GpuRenderOptions")
         .def (py::init<>())
-        .def (py::init<bool, Color>(), "clear"_a, "clearColor"_a)
+        .def (py::init<bool, GpuColor>(), "clear"_a, "clearColor"_a)
         .def_readwrite ("clear", &GpuRenderOptions::clear)
         .def_readwrite ("clearColor", &GpuRenderOptions::clearColor);
 
@@ -290,24 +325,6 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getHeight", &GpuTarget::getHeight)
         .def ("asTexture", &GpuTarget::asTexture)
         .def ("__repr__", [] (const GpuTarget& self)
-        {
-            String result;
-            result
-                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
-                << " " << self.getWidth() << "x" << self.getHeight() << ">";
-            return result;
-        });
-
-    // ============================================================================================ yup::GpuCanvas
-
-    py::class_<GpuCanvas, ReferenceCountedObjectPtr<GpuCanvas>> (m, "GpuCanvas")
-        .def_static ("create", &GpuCanvas::create)
-        .def ("getWidth", &GpuCanvas::getWidth)
-        .def ("getHeight", &GpuCanvas::getHeight)
-        .def ("asTexture", &GpuCanvas::asTexture)
-        .def ("asImage", &GpuCanvas::asImage)
-        .def ("getTarget", &GpuCanvas::getTarget)
-        .def ("__repr__", [] (const GpuCanvas& self)
         {
             String result;
             result

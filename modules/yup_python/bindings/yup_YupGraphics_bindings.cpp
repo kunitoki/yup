@@ -1876,6 +1876,26 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getGraphicsContext", &Graphics::getGraphicsContext, py::return_value_policy::reference)
     ;
 
+    // ============================================================================================ yup::GpuCanvas
+
+    py::class_<GpuCanvas, ReferenceCountedObjectPtr<GpuCanvas>> (m, "GpuCanvas")
+        .def_static ("create", &GpuCanvas::create)
+        .def ("getWidth", &GpuCanvas::getWidth)
+        .def ("getHeight", &GpuCanvas::getHeight)
+        .def ("asTexture", &GpuCanvas::asTexture)
+        .def ("asImage", &GpuCanvas::asImage)
+        .def ("beginDraw", &GpuCanvas::beginDraw)
+        .def ("commit", &GpuCanvas::commit)
+        .def ("getTarget", &GpuCanvas::getTarget)
+        .def ("__repr__", [] (const GpuCanvas& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " " << self.getWidth() << "x" << self.getHeight() << ">";
+            return result;
+        });
+
     // ============================================================================================ yup::Colors
 
     auto submoduleColors = m.def_submodule ("Colors");
