@@ -188,9 +188,14 @@ public:
 class NoOpGraphicsContext : public GraphicsContext
 {
 public:
-    NoOpGraphicsContext() = default;
+    NoOpGraphicsContext()
+    {
+        gpuCtx = GpuDevice::create (GpuPlatform::Headless, {});
+    }
 
-    Api getApi() const noexcept override { return Api::Headless; }
+    GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Headless; }
+
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuCtx; }
 
     rive::Factory* factory() override
     {
@@ -224,36 +229,14 @@ public:
     {
     }
 
-    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override
-    {
-        return nullptr;
-    }
-
-    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override
-    {
-        return nullptr;
-    }
-
-    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override
-    {
-    }
-
-    void endOffscreen (OffscreenTarget&) override
-    {
-    }
-
-    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override
-    {
-        return false;
-    }
-
 private:
     NoOpFactory noOpFactory;
+    GpuDevice::Ptr gpuCtx;
 };
 
 //==============================================================================
 
-std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GraphicsContext::Options fiddleOptions)
+std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options fiddleOptions, GpuDevice::Ptr)
 {
     return std::make_unique<NoOpGraphicsContext>();
 }

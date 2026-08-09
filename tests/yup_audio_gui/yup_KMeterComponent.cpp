@@ -27,7 +27,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 //==============================================================================
@@ -69,7 +69,7 @@ TEST (KMeterComponentTests, PaintWithThemeDoesNotCrash)
     KMeterComponent meter (meterState, 0);
     meter.setBounds (0.0f, 0.0f, 60.0f, 240.0f);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (120, 240);
     Graphics g (*context, *renderer);
 
@@ -112,7 +112,7 @@ TEST (KMeterComponentTests, PaintLinearScaleDoesNotCrash)
     meter.setScaleMapping (KMeterComponent::ScaleMapping::linear);
     meter.setBounds (0.0f, 0.0f, 30.0f, 120.0f);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (30, 120);
     Graphics g (*context, *renderer);
 
@@ -127,7 +127,7 @@ TEST (KMeterComponentTests, PaintWithShowPeakFalseDoesNotCrash)
     meter.setShowPeakHold (false);
     meter.setBounds (0.0f, 0.0f, 30.0f, 120.0f);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (30, 120);
     Graphics g (*context, *renderer);
 

@@ -27,7 +27,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 class SpectrumAnalyzerComponentTests : public ::testing::Test
@@ -611,7 +611,7 @@ TEST_F (SpectrumAnalyzerComponentTests, MultipleTimerCallbacks)
 
 TEST_F (SpectrumAnalyzerComponentTests, PaintWithoutCrashing)
 {
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -624,7 +624,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithLinesDisplayType)
 {
     analyzer->setDisplayType (SpectrumAnalyzerComponent::DisplayType::lines);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -637,7 +637,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithFilledDisplayType)
 {
     analyzer->setDisplayType (SpectrumAnalyzerComponent::DisplayType::filled);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -656,7 +656,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithAudioData)
     state->pushSamples (testData.data(), 2048);
     analyzer->timerCallback();
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -669,7 +669,7 @@ TEST_F (SpectrumAnalyzerComponentTests, PaintWithZeroSize)
 {
     analyzer->setBounds (0.0f, 0.0f, 0.0f, 0.0f);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (1, 1);
     Graphics g (*context, *renderer);
 
@@ -732,7 +732,7 @@ TEST_F (SpectrumAnalyzerComponentTests, CompleteWorkflow)
     analyzer->timerCallback();
 
     // Render
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 

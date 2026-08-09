@@ -136,7 +136,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 #include "context/yup_GraphicsContext.cpp"
-#include "rhi/yup_GpuTexture.cpp"
 #include "primitives/yup_Path.cpp"
 #include "primitives/yup_CubicBezier.cpp"
 #include "fonts/yup_Font.cpp"
@@ -155,14 +154,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "svg/yup_SVGCssParser.cpp"
 #include "svg/yup_SVGParser.cpp"
 #include "drawables/yup_Drawable.cpp"
-#include "rhi/yup_ShaderBindingMap.cpp"
-#include "rhi/yup_GpuBuffer.cpp"
-#include "rhi/yup_GpuPipeline.cpp"
-#include "rhi/yup_GpuFrame.cpp"
-#include "rhi/yup_GpuRenderPass.cpp"
-#include "rhi/yup_GpuTarget.cpp"
 #include "rhi/yup_GpuCanvas.cpp"
-#include "rhi/yup_GpuPipelineCache.cpp"
 
 //==============================================================================
 #if YUP_IMAGE_FORMAT_BMP

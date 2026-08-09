@@ -947,7 +947,7 @@ TEST (ImageTests, SetGpuTextureWithNullDoesNotCrash)
 
 TEST (ImageTests, CreateTextureIfNotPresentOnHeadlessReturnsFalse)
 {
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
 
     Image image (8, 8, PixelFormat::RGBA);
@@ -958,7 +958,7 @@ TEST (ImageTests, CreateTextureIfNotPresentOnHeadlessReturnsFalse)
 
 TEST (ImageTests, CreateTextureIfNotPresentOnDefaultImageReturnsFalse)
 {
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
 
     Image image;

@@ -226,12 +226,12 @@ void main() {
                 return;
             }
 
-            auto frame = yup::GpuFrame::begin (ctx);
+            auto frame = yup::GpuFrame::begin (ctx.getGpuDevice());
             auto pass = [&] (yup::GpuTarget& t, const yup::GpuTexture::Ptr& in, float dx, float dy)
             {
                 EffectParams p { sigma, blurR, (float) w, (float) h, dx, dy, 0, 0 };
                 auto rp = t.beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                rp.setPipeline (*pipeline);
+                rp.setPipeline (pipeline);
                 rp.setTexture (0, 0, in);
                 rp.setUniformBuffer (0, 2, &p, sizeof (p));
                 rp.draw (3);
@@ -254,7 +254,7 @@ void main() {
         {
             if (pipeline)
                 return true;
-            auto r = yup::GpuPipeline::compileFromGlsl (ctx, kVertSource, kBlurFrag, {});
+            auto r = yup::GpuPipeline::compileFromGlsl (ctx.getGpuDevice(), kVertSource, kBlurFrag, {});
             if (r.wasOk())
                 pipeline = r.getValue();
             return pipeline != nullptr;
@@ -263,9 +263,9 @@ void main() {
         bool ensureTargets (yup::GraphicsContext& ctx, int w, int h)
         {
             if (! targetA || targetA->getWidth() != w || targetA->getHeight() != h)
-                targetA = yup::GpuTarget::create (ctx, w, h);
+                targetA = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             if (! targetB || targetB->getWidth() != w || targetB->getHeight() != h)
-                targetB = yup::GpuTarget::create (ctx, w, h);
+                targetB = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             return targetA != nullptr && targetB != nullptr;
         }
 
@@ -310,7 +310,7 @@ void main() {
         {
             if (pipeline)
                 return true;
-            auto r = yup::GpuPipeline::compileFromGlsl (ctx, kVertSource, yup::String::fromUTF8 (fragSource), {});
+            auto r = yup::GpuPipeline::compileFromGlsl (ctx.getGpuDevice(), kVertSource, yup::String::fromUTF8 (fragSource), {});
             if (r.wasOk())
                 pipeline = r.getValue();
             return pipeline != nullptr;
@@ -319,7 +319,7 @@ void main() {
         bool ensureTarget (yup::GraphicsContext& ctx, int w, int h)
         {
             if (! target || target->getWidth() != w || target->getHeight() != h)
-                target = yup::GpuTarget::create (ctx, w, h);
+                target = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             return target != nullptr;
         }
 
@@ -333,10 +333,10 @@ void main() {
                 return;
             }
 
-            auto frame = yup::GpuFrame::begin (ctx);
+            auto frame = yup::GpuFrame::begin (ctx.getGpuDevice());
             {
                 auto rp = target->beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                rp.setPipeline (*pipeline);
+                rp.setPipeline (pipeline);
                 rp.setTexture (0, 0, input);
                 rp.setUniformBuffer (0, 2, &p, sizeof (p));
                 rp.draw (3);

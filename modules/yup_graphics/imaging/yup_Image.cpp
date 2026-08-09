@@ -202,6 +202,19 @@ Image Image::fromTexture (GpuTexture::Ptr tex)
     return image;
 }
 
+Image Image::fromTarget (GpuTarget& target)
+{
+    auto img = fromTexture (target.asTexture());
+
+    if (img.isValid())
+    {
+        auto span = img.getRawData();
+        target.readPixels (span.data(), span.size());
+    }
+
+    return img;
+}
+
 //==============================================================================
 
 ResultValue<Image> Image::loadFromData (Span<const uint8> imageData,

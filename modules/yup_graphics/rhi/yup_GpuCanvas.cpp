@@ -27,12 +27,16 @@ GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height)
     if (width <= 0 || height <= 0)
         return nullptr;
 
+    auto gpuCtx = ctx.getGpuDevice();
+    if (gpuCtx == nullptr)
+        return nullptr;
+
     // GpuCanvas needs a dedicated render context for the 2D drawing path.
-    auto renderable = ctx.createRenderableTarget (width, height);
+    auto renderable = gpuCtx->createRenderableTarget (width, height);
     if (renderable == nullptr)
         return nullptr;
 
-    auto target = GpuTarget::createFromTarget (ctx, std::move (renderable));
+    auto target = GpuTarget::createFromTarget (gpuCtx, std::move (renderable));
     if (target == nullptr)
         return nullptr;
 

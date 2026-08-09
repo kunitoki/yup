@@ -32,7 +32,7 @@ class GraphicsTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
         renderer = context->makeRenderer (200, 200);
         ASSERT_NE (renderer, nullptr);
@@ -1055,7 +1055,7 @@ TEST_F (GraphicsTest, CommitOffscreenTarget_FailsOnNonOffscreenGraphics)
 TEST_F (GraphicsTest, GetGraphicsContext_ReturnsValidContext)
 {
     auto& ctx = graphics->getGraphicsContext();
-    EXPECT_EQ (ctx.getApi(), GraphicsContext::Headless);
+    EXPECT_EQ (ctx.getPlatform(), GpuPlatform::Headless);
 }
 
 TEST_F (GraphicsTest, SetMiterLimit_DoesNotCrash)

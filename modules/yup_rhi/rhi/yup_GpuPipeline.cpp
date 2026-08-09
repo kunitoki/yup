@@ -261,16 +261,16 @@ const GpuPipeline::Impl* GpuPipeline::getImpl() const noexcept
 
 //==============================================================================
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
+ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
                                                     const GpuShaderSource& vs,
                                                     const GpuShaderSource& fs,
                                                     const GpuPipelineOptions& pipelineOptions)
 {
     using namespace GpuPipelineHelpers;
 
-    auto oreCtx = ctx.gpuContext();
+    auto oreCtx = ctx->gpuContext();
     if (oreCtx == nullptr)
-        return makeResultValueFail ("GraphicsContext was not created with Options::enableOreContext = true");
+        return makeResultValueFail ("GpuDevice was not created with Options::enableOreContext = true");
 
     if (vs.code == nullptr || vs.codeSize == 0)
         return makeResultValueFail ("Vertex shader code is empty");
@@ -627,32 +627,32 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GraphicsContext& ctx,
 namespace
 {
 
-ShaderLanguage shaderLanguageForApi (GraphicsContext::Api api)
+ShaderLanguage shaderLanguageForApi (GpuPlatform api)
 {
     switch (api)
     {
-        case GraphicsContext::Metal:
+        case GpuPlatform::Metal:
             return ShaderLanguage::msl;
-        case GraphicsContext::Direct3D:
+        case GpuPlatform::Direct3D:
             return ShaderLanguage::hlsl;
-        case GraphicsContext::OpenGLES:
+        case GpuPlatform::OpenGLES:
             return ShaderLanguage::essl;
-        case GraphicsContext::WebGPU:
+        case GpuPlatform::WebGPU:
             return ShaderLanguage::wgsl;
         default:
             return ShaderLanguage::glsl;
     }
 }
 
-GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
+GpuShaderLanguage gpuShaderLanguageForApi (GpuPlatform api)
 {
     switch (api)
     {
-        case GraphicsContext::Metal:
+        case GpuPlatform::Metal:
             return GpuShaderLanguage::msl;
-        case GraphicsContext::Direct3D:
+        case GpuPlatform::Direct3D:
             return GpuShaderLanguage::hlsl;
-        case GraphicsContext::WebGPU:
+        case GpuPlatform::WebGPU:
             return GpuShaderLanguage::wgsl;
         default:
             return GpuShaderLanguage::glsl;
@@ -661,11 +661,11 @@ GpuShaderLanguage gpuShaderLanguageForApi (GraphicsContext::Api api)
 
 } // namespace
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& ctx,
+ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx,
                                                               const ShaderBundle& bundle,
                                                               const GpuPipelineOptions& pipelineOptions)
 {
-    const auto api = ctx.getApi();
+    const auto api = ctx->getPlatform();
     const auto targetLang = shaderLanguageForApi (api);
     const auto gpuLang = gpuShaderLanguageForApi (api);
 
@@ -738,12 +738,12 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GraphicsContext& c
 
 #if YUP_ENABLE_SHADER_TRANSPILER
 
-ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GraphicsContext& ctx,
+ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GpuDevice::Ptr ctx,
                                                             const String& vertexGlsl,
                                                             const String& fragmentGlsl,
                                                             const GpuPipelineOptions& pipelineOptions)
 {
-    const auto targetLang = shaderLanguageForApi (ctx.getApi());
+    const auto targetLang = shaderLanguageForApi (ctx->getPlatform());
 
     ShaderBundleCompiler compiler;
 

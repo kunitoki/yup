@@ -30,6 +30,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
 - New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
 
+#### RHI module extraction & GpuDevice
+
+- **New `yup_rhi` module**: the GPU abstraction layer extracted from `yup_graphics` into its own module (depends on `yup_core`, `yup_shading`, `rive_renderer`). All RHI classes (`GpuFrame`, `GpuPipeline`, `GpuBuffer`, `GpuTexture`, `GpuTarget`, `GpuRenderPass`, `GpuPipelineCache`) now live in `yup_rhi`. `yup_graphics` depends on `yup_rhi` for GPU access.
+- **`GpuDevice`**: new reference-counted GPU device abstraction (was `GpuContext`). Owns the native GPU device and command queue without requiring a window — can be used for headless GPU compute (e.g. audio DSP on the GPU). Created via `GpuDevice::create(GpuPlatform, Options)`. All RHI factory methods (`GpuFrame::begin`, `GpuPipeline::compile*`, `GpuBuffer::create`, `GpuTarget::create`) now take `GpuDevice::Ptr` for safe shared ownership.
+- **`GpuPlatform`** enum: standalone platform enum (`Headless`, `Metal`, `Direct3D`, `OpenGL`, `OpenGLES`, `WebGPU`) replacing the nested `GpuDevice::Api`. `GraphicsContext::getPlatform()` returns it directly — no typedef alias.
+- **`GpuColor`** struct (`rhi/yup_GpuTypes.h`): lightweight 4-component GPU color for render options. Implicitly constructable from any type with `getRedFloat()`/`getGreenFloat()`/`getBlueFloat()`/`getAlphaFloat()` (e.g. `yup::Color`), so `GpuRenderOptions { true, Colors::transparentBlack }` works without code changes.
+- **`GraphicsContext` simplified**: wraps a `GpuDevice::Ptr` (obtained via `getGpuDevice()` returning `GpuDevice::Ptr`). Offscreen target management (`createOffscreenTarget`, `beginOffscreen`, `endOffscreen`, `readOffscreenPixels`) delegated to `GpuDevice`. Factory accepts optional `GpuDevice::Ptr` to share an existing GPU device.
+- **Backends**: `GpuDevice` has native implementations for all platforms (Metal, OpenGL, Direct3D 11, Dawn, WebGPU/Emscripten, Headless). OpenGL backend probes `GL_VERSION` at runtime to detect compute shader support (GL ≥4.3 / GLES ≥3.1).
+- **`::Ptr` safety**: all RHI types that own resources (`GpuPipeline`, `GpuBuffer`, `GpuTexture`, `GpuTarget`, `GpuCanvas`) are reference-counted with `::Ptr`. Factory methods take `GpuDevice::Ptr` to keep the device alive for the resource's lifetime. `GpuFrame` is move-only stack RAII and takes `GpuDevice&` (no ownership).
+
 #### Image Formats
 
 - Added TIFF read/write support (`TiffImageFormat`) via libtiff: RGB, RGBA, Grayscale at 8/16-bit; multi-page reading; DPI and EXIF/ICC/XMP metadata extraction.

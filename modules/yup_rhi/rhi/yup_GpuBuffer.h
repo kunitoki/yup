@@ -22,16 +22,7 @@
 namespace yup
 {
 
-class GraphicsContext;
-
-//==============================================================================
-/** Identifies the intended usage of a GpuBuffer. */
-enum class GpuBufferType : uint8_t
-{
-    vertex,  ///< Per-vertex attribute data, bound via GpuRenderPass::setVertexBuffer().
-    index,   ///< Index data, bound via GpuRenderPass::setIndexBuffer().
-    uniform, ///< Uniform (constant) data.
-};
+class GpuDevice;
 
 //==============================================================================
 /** A reference-counted GPU buffer handle.
@@ -54,7 +45,7 @@ public:
     //==============================================================================
     /** Creates a GPU buffer and uploads the given data.
 
-        @param ctx        A GraphicsContext where GPU context is available.
+        @param ctx        A GpuDevice where GPU context is available.
         @param type       The intended usage of the buffer.
         @param data       Pointer to the source data to upload (must be non-null).
         @param byteSize   Number of bytes to upload (must be greater than zero).
@@ -63,7 +54,7 @@ public:
 
         @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
     */
-    static GpuBuffer::Ptr create (GraphicsContext& ctx,
+    static GpuBuffer::Ptr create (GpuDevice::Ptr ctx,
                                   GpuBufferType type,
                                   const void* data,
                                   size_t byteSize);

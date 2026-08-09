@@ -251,7 +251,7 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
 }
 
 Graphics::Graphics (GraphicsContext& context, Image& image, uint32_t clearColor) noexcept
-    : Graphics (context, context.createRenderableTarget (image.getWidth(), image.getHeight()), clearColor)
+    : Graphics (context, context.getGpuDevice()->createRenderableTarget (image.getWidth(), image.getHeight()), clearColor)
 {
     offscreenTargetImage = std::addressof (image);
 }
@@ -280,7 +280,7 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> 
     frameDesc.loadAction = rive::gpu::LoadAction::clear;
     frameDesc.clearColor = clearColor;
 
-    context.beginOffscreen (*offscreenTarget, frameDesc);
+    context.getGpuDevice()->beginOffscreen (*offscreenTarget, frameDesc);
 
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
@@ -302,7 +302,7 @@ Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t
     frameDesc.loadAction = rive::gpu::LoadAction::clear;
     frameDesc.clearColor = clearColor;
 
-    context.beginOffscreen (*offscreenTarget, frameDesc);
+    context.getGpuDevice()->beginOffscreen (*offscreenTarget, frameDesc);
 
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }
@@ -310,7 +310,7 @@ Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t
 Graphics::~Graphics()
 {
     if (offscreenTarget != nullptr && ! committed)
-        context.endOffscreen (*offscreenTarget);
+        context.getGpuDevice()->endOffscreen (*offscreenTarget);
 }
 
 //==============================================================================
@@ -338,7 +338,7 @@ bool Graphics::commitOffscreenTarget()
     if (offscreenTarget == nullptr || committed)
         return false;
 
-    context.endOffscreen (*offscreenTarget);
+    context.getGpuDevice()->endOffscreen (*offscreenTarget);
     committed = true;
 
     return true;
@@ -353,7 +353,7 @@ bool Graphics::readPixelsToImage()
         commitToImage();
 
     auto span = offscreenTargetImage->getRawData();
-    return context.readOffscreenPixels (*offscreenTarget, span.data(), span.size());
+    return context.getGpuDevice()->readOffscreenPixels (*offscreenTarget, span.data(), span.size());
 }
 
 //==============================================================================
@@ -450,7 +450,7 @@ Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<floa
     if (width <= 0 || height <= 0)
         return;
 
-    auto target = parent.getGraphicsContext().createRenderableTarget (width, height);
+    auto target = parent.getGraphicsContext().getGpuDevice()->createRenderableTarget (width, height);
     if (target == nullptr)
         return;
 

@@ -23,11 +23,17 @@ namespace yup
 {
 
 //==============================================================================
-/** Encapsulates a graphics context that abstracts rendering operations across various APIs.
+/** Encapsulates a graphics context that abstracts windowed rendering operations
+    across various APIs, including Rive vector rendering and swapchain presentation.
 
-    This class serves as a base for implementing specific graphics context functionalities, such as rendering and resource management,
-    across different graphics APIs like OpenGL, OpenGLES, Direct3D, Metal, and WebGPU. It offers a standardized interface for operations
-    common to all graphics APIs.
+    GraphicsContext wraps a GpuDevice (GPU device abstraction) and adds the
+    window/swapchain layer plus Rive vector rendering support. It requires a
+    native window handle (via onSizeChanged) to create a swapchain for presentation.
+
+    For GPU compute without a window (e.g. audio DSP on the GPU), use GpuDevice
+    directly — it does not require a window or Rive dependency.
+
+    @see GpuDevice, ComponentNative::getGraphicsContext
 */
 class YUP_API GraphicsContext
 {
@@ -37,31 +43,10 @@ public:
     using LoaderFunction = void* (*) (const char*);
 
     //==============================================================================
-    /** Enumerates supported graphics APIs. */
-    enum Api
-    {
-        Headless, ///< Specifies the use of a headless context for rendering.
-        OpenGL,   ///< Specifies the use of desktop OpenGL for rendering.
-        OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
-        Direct3D, ///< Specifies the use of Direct3D for rendering.
-        Metal,    ///< Specifies the use of Metal for rendering.
-        WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
-    };
+    /** Configuration options for creating a graphics context.
 
-    /** Configuration options for creating a graphics context. */
-    struct Options
-    {
-        /** Default constructor, initializes the options with default values. */
-        constexpr Options() noexcept = default;
-
-        bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
-        bool readableFramebuffer = false;           ///< Allows the framebuffer to be readable.
-        bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
-        bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
-        bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
-        bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
-        LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
-    };
+        Extends GpuDevice::Options with window-specific settings. */
+    using Options = GpuDevice::Options;
 
     //==============================================================================
     /** Default constructor. */
@@ -78,11 +63,26 @@ public:
     GraphicsContext& operator= (GraphicsContext&& other) noexcept = default;
 
     //==============================================================================
+    /** Returns true if a GPU (ore) context is available for RHI operations. */
+    bool isGpuAvailable() const noexcept;
+
+    //==============================================================================
     /** Returns the graphics API used by this context.
 
-        @return The Api enum value identifying the active rendering backend.
+        @return The GpuPlatform enum value identifying the active rendering backend.
     */
-    virtual Api getApi() const noexcept = 0;
+    virtual GpuPlatform getPlatform() const noexcept = 0;
+
+    //==============================================================================
+    /** Returns the underlying GpuDevice that owns the GPU device.
+
+        The returned pointer is valid for the lifetime of this GraphicsContext.
+        Use this to create GpuPipelines, GpuBuffers, and other RHI resources
+        that can outlive the window.
+
+        @return A shared pointer to the GpuDevice, or nullptr if unavailable.
+    */
+    virtual GpuDevice::Ptr getGpuDevice() const noexcept = 0;
 
     //==============================================================================
     /** Provides access to the associated factory for resource creation.
@@ -102,21 +102,6 @@ public:
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
     virtual rive::gpu::RenderTarget* renderTarget() = 0;
-
-    /** Returns the GPU context, or nullptr when ore is unavailable on this backend.
-
-        This is the single backend bridge used by the RHI layer (GpuPipeline,
-        GpuFrame, GpuRenderPass, GpuBuffer). User code should prefer the dependency-free
-        isGpuAvailable() capability probe instead.
-    */
-    virtual rive::ore::Context* gpuContext() const noexcept { return nullptr; }
-
-    /** Returns true if a GPU (ore) context is available for RHI operations.
-
-        Equivalent to gpuContext() != nullptr but without referencing any ore
-        type, so user code and examples can probe GPU capability ore-free.
-    */
-    bool isGpuAvailable() const noexcept { return gpuContext() != nullptr; }
 
     /** Creates a renderer suitable for the specified dimensions.
 
@@ -155,74 +140,21 @@ public:
     virtual void tick() {}
 
     //==============================================================================
-    /** Creates platform-specific GPU offscreen resources for the given dimensions.
-
-        Supported GPU backends may create targets while another offscreen target
-        is rendering. Backends reserve a render context only while its target
-        has an active frame, allowing sequential targets to share idle contexts.
-        A target must outlive its corresponding beginOffscreen()/endOffscreen()
-        pair and the GraphicsContext must outlive every target it creates.
-
-        @param width The width of the offscreen target in pixels.
-        @param height The height of the offscreen target in pixels.
-
-        @return A unique pointer to an OffscreenTarget object, or nullptr on failure.
-    */
-    virtual std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) = 0;
-
-    /** Creates platform-specific GPU offscreen resources backed by a dedicated render context.
-
-        Unlike createOffscreenTarget(), the returned RenderableTarget reserves a
-        backend-owned RenderContext, which is required to drive a 2D Graphics frame
-        (GpuCanvas::beginDraw). Prefer createOffscreenTarget() for render-pass-only
-        surfaces to avoid allocating a dedicated context.
-
-        @param width The width of the offscreen target in pixels.
-        @param height The height of the offscreen target in pixels.
-
-        @return A unique pointer to a RenderableTarget object, or nullptr on failure.
-    */
-    virtual std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) = 0;
-
-    /** Begins a GPU frame targeting the given offscreen surface.
-
-        A target may have only one active frame. Nested frames are supported when
-        they use distinct OffscreenTarget instances.
-
-        @param target The OffscreenTarget to render into.
-        @param frameDesc The frame descriptor that contains frame-specific data.
-    */
-    virtual void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) = 0;
-
-    /** Flushes GPU commands into the offscreen target.
-    
-        Must be called after beginOffscreen() and before endOffscreen().
-
-        @param target The OffscreenTarget to flush commands into.
-    */
-    virtual void endOffscreen (OffscreenTarget& target) = 0;
-
-    /** Reads RGBA pixels from the completed offscreen frame into CPU memory.
-
-        Must be called after endOffscreen(). Rows are top-to-bottom.
-    
-        @param target The OffscreenTarget to read pixels from.
-        @param dst Pointer to the destination buffer where pixel data will be stored.
-        @param dstSize The size of the destination buffer in bytes.
-
-        @return True if the pixel read operation was successful, false otherwise.
-    */
-    virtual bool readOffscreenPixels (OffscreenTarget& target, void* dst, size_t dstSize) = 0;
-
-    //==============================================================================
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.
         @param options Configuration options for the graphics context.
+        @param existingGpu An optional existing GpuDevice to share. When provided,
+                           the GraphicsContext borrows the GPU device instead of
+                           creating a new one. Useful when an audio processor
+                           already owns a GpuDevice for compute.
 
-        @return A unique pointer to a GraphicsContext, using the specified graphics API and configured according to the options.
+        @return A unique pointer to a GraphicsContext, using the specified graphics
+                API and configured according to the options.
     */
-    static std::unique_ptr<GraphicsContext> createContext (Api graphicsApi, Options options);
+    static std::unique_ptr<GraphicsContext> createContext (GpuPlatform graphicsApi,
+                                                           Options options,
+                                                           GpuDevice::Ptr existingGpu = {});
 };
 
 } // namespace yup

@@ -4,7 +4,7 @@ The graphics stack renders 2D vector content and GPU-accelerated scenes across
 Metal, Direct3D, OpenGL / OpenGL ES, WebGL and WebGPU (WASM / Emscripten), and Vulkan (in progress).
 It is built on the open source [Rive](https://rive.app/) renderer.
 
-**Modules covered:** `yup_graphics`, `yup_shading`, `yup_animation`.
+**Modules covered:** `yup_rhi`, `yup_graphics`, `yup_shading`, `yup_animation`.
 
 ## In this area
 
@@ -29,12 +29,18 @@ own [Imaging](../imaging/index.md) area.
 
 ## Key building blocks
 
-The `yup_graphics` module provides:
+The `yup_graphics` and `yup_rhi` modules provide:
 
-- **`GraphicsContext`** - abstracts the active rendering backend (`Api::Metal`,
-  `Api::Direct3D`, `Api::OpenGL`, `Api::OpenGLES`, `Api::WebGPU`, `Api::Headless`),
-  exposes DPI scaling, offscreen target creation, and the GPU capability probe
-  `isGpuAvailable()`.
+- **`GpuDevice`** (`yup_rhi`) - a reference-counted GPU device abstraction that
+  owns the native GPU device and command queue without requiring a window.
+  Created via `GpuDevice::create(GpuPlatform, Options)`. Supports
+  `GpuPlatform::Metal`, `Direct3D`, `OpenGL`, `OpenGLES`, `WebGPU`, and `Headless`.
+  Use `GpuDevice` directly for GPU compute (e.g. audio DSP on the GPU) — no window needed.
+- **`GraphicsContext`** (`yup_graphics`) - wraps a `GpuDevice` and adds the
+  window/swapchain layer plus Rive vector rendering. Created via
+  `GraphicsContext::createContext(GpuPlatform, Options, GpuDevice::Ptr = {})`.
+  When an existing `GpuDevice::Ptr` is provided, it shares the GPU device
+  (useful when an audio processor already owns one).
 - **`Graphics`** - the immediate-mode 2D drawing API (fills, strokes, paths,
   gradients, text, images, textures).
 - **Primitives** - points, rectangles, sizes, affine transforms, and colors.

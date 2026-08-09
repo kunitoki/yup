@@ -23,6 +23,18 @@ namespace yup
 {
 
 //==============================================================================
+/** Enumerates supported GPU platforms / backends. */
+enum class GpuPlatform
+{
+    Headless, ///< Specifies the use of a headless context for rendering.
+    OpenGL,   ///< Specifies the use of desktop OpenGL for rendering.
+    OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
+    Direct3D, ///< Specifies the use of Direct3D for rendering.
+    Metal,    ///< Specifies the use of Metal for rendering.
+    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
+};
+
+//==============================================================================
 /** Identifies the shading language of a GpuShaderSource code block. */
 enum class GpuShaderLanguage : uint8_t
 {
@@ -33,14 +45,13 @@ enum class GpuShaderLanguage : uint8_t
 };
 
 //==============================================================================
-/** Compiled shader source for one pipeline stage (vertex or fragment).
+/** Compiled shader source for one pipeline stage (vertex, fragment, or compute).
 
-    The binding-map sidecar (@c bindingMap / @c bindingMapSize) is mandatory.
-    It is produced offline by the Rive scripting-workspace RSTB toolchain and
-    must accompany the shader code. GpuPipeline::compile() will assert and fail
-    if the sidecar is missing.
+    The binding-map sidecar (@c bindingMap / @c bindingMapSize) is mandatory for
+    vertex/fragment stages. Compute shaders may omit it when using the native
+    compute path (GpuComputePipeline).
 
-    @see GpuPipeline
+    @see GpuPipeline, GpuComputePipeline
 */
 struct GpuShaderSource
 {
@@ -55,7 +66,7 @@ struct GpuShaderSource
     /** Number of bytes in @c code. */
     uint32_t codeSize = 0;
 
-    /** Mandatory pre-compiled RSTB binding-map sidecar blob. */
+    /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines). */
     const uint8_t* bindingMap = nullptr;
 
     /** Number of bytes in @c bindingMap. */
@@ -75,6 +86,16 @@ struct GpuShaderSource
 
     /** Override the stage entry-point name. nullptr → "vs_main" / "fs_main". */
     const char* entryPoint = nullptr;
+};
+
+//==============================================================================
+/** Identifies the intended usage of a GpuBuffer. */
+enum class GpuBufferType : uint8_t
+{
+    vertex,  ///< Per-vertex attribute data, bound via GpuRenderPass::setVertexBuffer().
+    index,   ///< Index data, bound via GpuRenderPass::setIndexBuffer().
+    uniform, ///< Uniform (constant) data.
+    storage, ///< Storage buffer (read-write SSBO, for compute shaders).
 };
 
 //==============================================================================
@@ -319,114 +340,101 @@ struct GpuPipelineOptions
 };
 
 //==============================================================================
-class GraphicsContext;
+/** A lightweight 4-component color for GPU clear values and render options.
+
+    Lives in yup_rhi to avoid a dependency on yup_graphics. Individual components
+    are float in [0, 1]. Implicitly constructable from any type T that exposes
+    getRedFloat(), getGreenFloat(), getBlueFloat(), getAlphaFloat() — e.g.
+    yup::Color, so GpuRenderOptions { true, Colors::transparentBlack } just works.
+*/
+struct GpuColor
+{
+    constexpr GpuColor() = default;
+
+    constexpr GpuColor (float r, float g, float b, float a = 1.0f)
+        : red (r)
+        , green (g)
+        , blue (b)
+        , alpha (a)
+    {
+    }
+
+    /** Implicit conversion from any type with float-component accessors
+        (e.g. yup::Color). */
+    template <typename T>
+        requires requires (const T& c) {
+            c.getRedFloat();
+            c.getGreenFloat();
+            c.getBlueFloat();
+            c.getAlphaFloat();
+        }
+    constexpr GpuColor (const T& color)
+        : red (color.getRedFloat())
+        , green (color.getGreenFloat())
+        , blue (color.getBlueFloat())
+        , alpha (color.getAlphaFloat())
+    {
+    }
+
+    /** Explicit construct from a packed ARGB value (0xAARRGGBB). */
+    explicit constexpr GpuColor (uint32_t argb)
+        : red (((argb >> 16) & 0xFF) / 255.0f)
+        , green (((argb >> 8) & 0xFF) / 255.0f)
+        , blue (((argb >> 0) & 0xFF) / 255.0f)
+        , alpha (((argb >> 24) & 0xFF) / 255.0f)
+    {
+    }
+
+    float red = 0.0f;
+    float green = 0.0f;
+    float blue = 0.0f;
+    float alpha = 0.0f;
+
+    /** Opaque black (0, 0, 0, 1). */
+    static constexpr GpuColor black() { return { 0.0f, 0.0f, 0.0f, 1.0f }; }
+
+    /** Transparent black (0, 0, 0, 0). */
+    static constexpr GpuColor transparentBlack() { return { 0.0f, 0.0f, 0.0f, 0.0f }; }
+
+    /** Opaque white (1, 1, 1, 1). */
+    static constexpr GpuColor white() { return { 1.0f, 1.0f, 1.0f, 1.0f }; }
+};
 
 //==============================================================================
-/** An immutable, compiled GPU render pipeline.
-
-    GpuPipeline wraps an ore (Rive's backend-agnostic GPU layer) render pipeline
-    consisting of a vertex shader and a fragment shader plus fixed pipeline
-    state. It supports both fullscreen post-process effects and custom geometry
-    rendering (indexed or non-indexed) with vertex buffers, culling, and
-    depth-stencil state.
-
-    A pipeline is immutable once compiled: mutable binding state and per-draw
-    encoding live on GpuRenderPass. Compile a pipeline once (or fetch it from a
-    GpuPipelineCache) and reuse it across frames and render passes.
-
-    @warning Requires the GraphicsContext with a GPU context available on this backend.
-
-    @see GpuRenderPass, GpuFrame, GpuCanvas, GpuPipelineCache, GpuPipelineOptions
-*/
-class YUP_API GpuPipeline : public ReferenceCountedObject
+/** Per-render-pass options controlling attachment load behaviour. */
+struct GpuRenderOptions
 {
-public:
-    using Ptr = ReferenceCountedObjectPtr<GpuPipeline>;
+    /** Default constructor. */
+    constexpr GpuRenderOptions() = default;
 
-    //==============================================================================
-    ~GpuPipeline();
+    /** Constructs a GpuRenderOptions with the given clear flag and clear color. */
+    constexpr GpuRenderOptions (bool clear, GpuColor clearColor)
+        : clear (clear)
+        , clearColor (clearColor)
+    {
+    }
 
-    //==============================================================================
-    /** Compiles a GpuPipeline from vertex and fragment shader sources.
+    /** Whether to clear the target before drawing (LoadOp::clear). When false
+        the existing contents are loaded (LoadOp::load). */
+    bool clear = true;
 
-        Both shaders must supply pre-compiled RSTB binding-map blobs via
-        GpuShaderSource::bindingMap. On failure the returned ResultValue holds a
-        human-readable description of the failure.
+    /** Clear color used when @c clear is true. */
+    GpuColor clearColor = GpuColor::transparentBlack();
+};
 
-        @param ctx              A GraphicsContext with GPU context available.
-        @param vertexShader     Vertex shader source and binding-map sidecar.
-        @param fragmentShader   Fragment shader source and binding-map sidecar.
-        @param pipelineOptions  Pipeline configuration.
+//==============================================================================
+/** Workgroup size for compute shader dispatch.
 
-        @returns A compiled pipeline, or a failure with a human-readable description.
+    Captures the local workgroup size declared in the compute shader via
+    @c layout(local_size_x = X, local_size_y = Y, local_size_z = Z).
 
-        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
-    */
-    static ResultValue<GpuPipeline::Ptr> compile (GraphicsContext& ctx,
-                                                  const GpuShaderSource& vertexShader,
-                                                  const GpuShaderSource& fragmentShader,
-                                                  const GpuPipelineOptions& pipelineOptions = {});
-
-    /** Compiles a GpuPipeline from a pre-built shader bundle.
-
-        The bundle must contain both a vertex and a fragment shader stage. Picks
-        the native shader variant matching the context's graphics API for each
-        stage (Metal→MSL, Direct3D→HLSL, OpenGL(ES)→GLSL/ESSL, WebGPU→WGSL),
-        derives the mandatory binding-map sidecar from the bundled reflection data,
-        and compiles the pipeline. This is the recommended way to consume shaders
-        loaded from .ysl files, and works without the shader transpiler.
-
-        @param ctx              A GraphicsContext with GPU context available.
-        @param bundle           Bundle containing the vertex and fragment stages.
-        @param pipelineOptions  Pipeline configuration.
-
-        @returns A compiled pipeline, or a failure with a human-readable description.
-
-        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
-
-        @see ShaderBundle
-    */
-    static ResultValue<GpuPipeline::Ptr> compileFromBundle (GraphicsContext& ctx,
-                                                            const ShaderBundle& bundle,
-                                                            const GpuPipelineOptions& pipelineOptions = {});
-
-#if YUP_ENABLE_SHADER_TRANSPILER
-    /** Compiles a GpuPipeline directly from GLSL 450 vertex and fragment sources.
-
-        Convenience that transpiles the GLSL to the native language of the
-        context's graphics API, derives the binding-map sidecar via reflection,
-        and compiles the pipeline. Only available when the shader transpiler is
-        compiled in (YUP_ENABLE_SHADER_TRANSPILER = 1).
-
-        @param ctx              A GraphicsContext with GPU context available.
-        @param vertexGlsl       GLSL 450 vertex shader source.
-        @param fragmentGlsl     GLSL 450 fragment shader source.
-        @param pipelineOptions  Pipeline configuration.
-
-        @returns A compiled pipeline, or a failure with a human-readable description.
-
-        @warning Requires ctx.isGpuAvailable() (GPU context available on this backend).
-
-    */
-    static ResultValue<GpuPipeline::Ptr> compileFromGlsl (GraphicsContext& ctx,
-                                                          const String& vertexGlsl,
-                                                          const String& fragmentGlsl,
-                                                          const GpuPipelineOptions& pipelineOptions = {});
-#endif
-
-private:
-    friend class GpuRenderPass;
-
-    GpuPipeline() = default;
-
-    struct Impl;
-    Impl* getImpl() noexcept;
-    const Impl* getImpl() const noexcept;
-
-    static constexpr size_t ImplSizeBytes = 384;
-    TypeErasedObject<ImplSizeBytes> impl;
-
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuPipeline)
+    @see GpuComputePipeline
+*/
+struct GpuWorkgroupSize
+{
+    uint32_t x = 1;
+    uint32_t y = 1;
+    uint32_t z = 1;
 };
 
 } // namespace yup

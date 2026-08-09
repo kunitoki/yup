@@ -460,7 +460,7 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
     {
         MatteParams params { matteModeValue (layer.matteType), (float) w, (float) h, 0.0f };
 
-        auto frame = GpuFrame::begin (context);
+        auto frame = GpuFrame::begin (context.getGpuDevice());
         if (! frame.isValid())
             return false;
 
@@ -468,7 +468,7 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
         if (! pass.isValid())
             return false;
 
-        pass.setPipeline (*pipeline);
+        pass.setPipeline (pipeline);
         pass.setTexture (0, 0, targetTex);
         pass.setTexture (0, 1, sourceTex);
         pass.setUniformBuffer (0, 3, &params, sizeof (params));

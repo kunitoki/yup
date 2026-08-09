@@ -50,11 +50,11 @@ const GpuFrame::Impl* GpuFrame::getImpl() const noexcept
 
 //==============================================================================
 
-GpuFrame GpuFrame::begin (GraphicsContext& ctx)
+GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
 {
     GpuFrame frame;
 
-    auto* oreCtx = ctx.gpuContext();
+    auto* oreCtx = ctx->gpuContext();
     if (oreCtx == nullptr)
         return frame;
 

@@ -10,7 +10,7 @@ buffer set on the pass via `GpuRenderPass::setUniformBuffer()` instead.
 ```cpp
 enum class GpuBufferType : uint8_t { vertex, index, uniform };
 
-static GpuBuffer::Ptr GpuBuffer::create (GraphicsContext& ctx,
+static GpuBuffer::Ptr GpuBuffer::create (GpuDevice::Ptr ctx,
                                          GpuBufferType    type,
                                          const void*      data,
                                          size_t           byteSize);

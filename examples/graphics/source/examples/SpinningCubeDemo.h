@@ -210,7 +210,7 @@ public:
         //    target - no 2D drawing, so no dedicated render context is needed).
         if (sceneCanvas == nullptr || sceneCanvas->getWidth() != w || sceneCanvas->getHeight() != h)
         {
-            sceneCanvas = yup::GpuTarget::create (*capturedContext, w, h);
+            sceneCanvas = yup::GpuTarget::create (capturedContext->getGpuDevice(), w, h);
             if (sceneCanvas == nullptr)
                 return;
         }
@@ -244,22 +244,22 @@ public:
 
             // Ping-pong render targets reused across frames (recreated on resize).
             if (blurCanvasA == nullptr || blurCanvasA->getWidth() != w || blurCanvasA->getHeight() != h)
-                blurCanvasA = yup::GpuTarget::create (*capturedContext, w, h);
+                blurCanvasA = yup::GpuTarget::create (capturedContext->getGpuDevice(), w, h);
 
             if (blurCanvasB == nullptr || blurCanvasB->getWidth() != w || blurCanvasB->getHeight() != h)
-                blurCanvasB = yup::GpuTarget::create (*capturedContext, w, h);
+                blurCanvasB = yup::GpuTarget::create (capturedContext->getGpuDevice(), w, h);
 
             if (blurCanvasA != nullptr && blurCanvasB != nullptr)
             {
                 // Both blur passes share a single GpuFrame.
-                auto frame = yup::GpuFrame::begin (*capturedContext);
+                auto frame = yup::GpuFrame::begin (capturedContext->getGpuDevice());
 
                 auto runPass = [&] (yup::GpuTarget& passCanvas, const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
                 {
                     BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
 
                     auto pass = passCanvas.beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                    pass.setPipeline (*blurPipeline);
+                    pass.setPipeline (blurPipeline);
                     pass.setTexture (0, 0, input);
                     pass.setUniformBuffer (0, 2, &params, sizeof (params));
                     pass.draw (3);
@@ -652,7 +652,7 @@ void main() {
 
     void initBlur()
     {
-        auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+        auto result = yup::GpuPipeline::compileFromGlsl (capturedContext->getGpuDevice(),
                                                          currentBlurVertSource,
                                                          currentBlurFragSource,
                                                          {});
@@ -684,11 +684,11 @@ void main() {
         if (auto* fs = bundle.findShader (yup::ShaderStage::fragment, yup::ShaderLanguage::glsl))
             currentFragSource = fs->inputSource.isNotEmpty() ? fs->inputSource : fs->source;
 
-        auto result = yup::GpuPipeline::compileFromBundle (*capturedContext,
+        auto result = yup::GpuPipeline::compileFromBundle (capturedContext->getGpuDevice(),
                                                            loaded.getReference(),
                                                            cubePipelineOptions());
 #else
-        auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+        auto result = yup::GpuPipeline::compileFromGlsl (capturedContext->getGpuDevice(),
                                                          currentVertSource,
                                                          currentFragSource,
                                                          cubePipelineOptions());
@@ -703,8 +703,8 @@ void main() {
         cubePipeline = result.getValue();
 
         // Upload immutable vertex and index buffers.
-        cubeVBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::vertex, kCubeVerts, sizeof (kCubeVerts));
-        cubeIBO = yup::GpuBuffer::create (*capturedContext, yup::GpuBufferType::index, kCubeIdx, sizeof (kCubeIdx));
+        cubeVBO = yup::GpuBuffer::create (capturedContext->getGpuDevice(), yup::GpuBufferType::vertex, kCubeVerts, sizeof (kCubeVerts));
+        cubeIBO = yup::GpuBuffer::create (capturedContext->getGpuDevice(), yup::GpuBufferType::index, kCubeIdx, sizeof (kCubeIdx));
 
         if (cubeVBO == nullptr || cubeIBO == nullptr)
             yup::Logger::outputDebugString ("SpinningCubeDemo: cube buffer creation failed.");
@@ -774,7 +774,7 @@ void main() {
 
         if (editingBlur)
         {
-            auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+            auto result = yup::GpuPipeline::compileFromGlsl (capturedContext->getGpuDevice(),
                                                              currentBlurVertSource,
                                                              currentBlurFragSource,
                                                              {});
@@ -789,7 +789,7 @@ void main() {
         }
         else
         {
-            auto result = yup::GpuPipeline::compileFromGlsl (*capturedContext,
+            auto result = yup::GpuPipeline::compileFromGlsl (capturedContext->getGpuDevice(),
                                                              currentVertSource,
                                                              currentFragSource,
                                                              cubePipelineOptions());
@@ -984,10 +984,10 @@ void main() {
 
         CubeUniforms uniforms { angleY, angleX, (float) w / (float) h, 0.0f };
 
-        auto frame = yup::GpuFrame::begin (*capturedContext);
+        auto frame = yup::GpuFrame::begin (capturedContext->getGpuDevice());
 
         auto pass = canvas.beginRenderPass (frame, { true, yup::Color (0xff1a1a2e) });
-        pass.setPipeline (*cubePipeline);
+        pass.setPipeline (cubePipeline);
         pass.setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
         if (lottieTexture != nullptr)
             pass.setTexture (0, 1, lottieTexture);
