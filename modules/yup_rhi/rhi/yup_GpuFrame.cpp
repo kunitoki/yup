@@ -1,0 +1,161 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+namespace yup
+{
+
+//==============================================================================
+
+struct GpuFrame::Impl
+{
+    GpuDevice::Ptr device;
+    rive::ore::Context* oreCtx = nullptr;
+    bool submitted = false;
+    bool waited = false;
+    std::vector<rive::rcp<rive::ore::Buffer>> liveBuffers;
+    std::vector<rive::rcp<rive::ore::TextureView>> liveViews;
+    std::vector<rive::rcp<rive::ore::Sampler>> liveSamplers;
+
+    /** Takes a uniform buffer from the device pool, fills it, and keeps it alive
+        for the rest of the frame.
+
+        The encoded render pass references the buffer by raw pointer, so ownership
+        stays with the frame until it completes; the buffer then goes back to the
+        pool. Each call hands out a distinct buffer, so two draws in one frame never
+        share one.
+
+        @returns The filled buffer, or nullptr if none could be obtained.
+    */
+    rive::rcp<rive::ore::Buffer> acquireUniformBuffer (const void* data, size_t byteSize);
+};
+
+//==============================================================================
+
+rive::rcp<rive::ore::Buffer> GpuFrame::Impl::acquireUniformBuffer (const void* data, size_t byteSize)
+{
+    if (device == nullptr || oreCtx == nullptr || data == nullptr || byteSize == 0)
+        return nullptr;
+
+    auto buffer = device->uniformBufferPool.acquire (*oreCtx, byteSize);
+    if (buffer == nullptr)
+        return nullptr;
+
+    buffer->update (data, static_cast<uint32_t> (byteSize), 0);
+
+    liveBuffers.push_back (buffer);
+    return buffer;
+}
+
+//==============================================================================
+
+GpuFrame::Impl* GpuFrame::getImpl() noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+const GpuFrame::Impl* GpuFrame::getImpl() const noexcept
+{
+    return impl.getPayload<Impl>();
+}
+
+//==============================================================================
+
+GpuFrame GpuFrame::begin (GpuDevice::Ptr ctx)
+{
+    GpuFrame frame;
+
+    auto* oreCtx = ctx->getGpuContext();
+    if (oreCtx == nullptr)
+        return frame;
+
+    frame.impl = TypeErasedObject (GpuFrame::Impl {});
+
+    auto* i = frame.getImpl();
+    i->device = ctx;
+    i->oreCtx = oreCtx;
+
+    oreCtx->beginFrame ({});
+    return frame;
+}
+
+//==============================================================================
+
+GpuFrame::GpuFrame (GpuFrame&&) noexcept = default;
+
+GpuFrame& GpuFrame::operator= (GpuFrame&& other) noexcept
+{
+    if (this != &other)
+    {
+        submit();
+        waitForGPU();
+
+        impl = std::move (other.impl);
+    }
+
+    return *this;
+}
+
+GpuFrame::~GpuFrame()
+{
+    submit();
+
+    waitForGPU();
+}
+
+//==============================================================================
+
+bool GpuFrame::isValid() const noexcept
+{
+    auto* i = getImpl();
+    return i != nullptr && i->oreCtx != nullptr;
+}
+
+bool GpuFrame::submit()
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr || i->submitted)
+        return false;
+
+    i->oreCtx->endFrame();
+    i->submitted = true;
+
+    return true;
+}
+
+void GpuFrame::waitForGPU()
+{
+    auto* i = getImpl();
+    if (i == nullptr || i->oreCtx == nullptr || i->waited)
+        return;
+
+    i->waited = true;
+    i->oreCtx->waitForGPU();
+
+    if (i->device != nullptr)
+        for (auto& buffer : i->liveBuffers)
+            i->device->uniformBufferPool.release (std::move (buffer));
+
+    i->liveBuffers.clear();
+    i->liveViews.clear();
+    i->liveSamplers.clear();
+}
+
+} // namespace yup

@@ -92,10 +92,10 @@
 #endif
 
 /** Config: YUP_RIVE_OPENGL_MINOR
-    Enables a speficic OpenGL minor version. Must be at least 2.
+    Enables a speficic OpenGL minor version. Must be at least 3 (OpenGL 4.3+, required for compute shaders).
 */
 #ifndef YUP_RIVE_OPENGL_MINOR
-#define YUP_RIVE_OPENGL_MINOR 2
+#define YUP_RIVE_OPENGL_MINOR 3
 #endif
 
 //==============================================================================

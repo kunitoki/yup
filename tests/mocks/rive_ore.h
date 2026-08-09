@@ -91,8 +91,10 @@ public:
 class MockOreBuffer : public rive::ore::Buffer
 {
 public:
-    MockOreBuffer()
-        : rive::ore::Buffer (0, rive::ore::BufferUsage::uniform)
+    /** Reports @p size from Buffer::size(), which callers use to bucket buffers. */
+    explicit MockOreBuffer (uint32_t size = 0,
+                            rive::ore::BufferUsage usage = rive::ore::BufferUsage::uniform)
+        : rive::ore::Buffer (size, usage)
     {
     }
 
@@ -142,6 +144,15 @@ struct TestOreBindGroup : public rive::ore::BindGroup
 struct TestOreBindGroupLayout : public rive::ore::BindGroupLayout
 {
     TestOreBindGroupLayout() = default;
+
+    /** Declares a binding, so tests can exercise layout-driven code paths. */
+    void addEntry (uint32_t binding, rive::ore::BindingKind kind)
+    {
+        rive::ore::BindGroupLayoutEntry entry;
+        entry.binding = binding;
+        entry.kind = kind;
+        m_entries.push_back (entry);
+    }
 };
 
 struct TestOreSampler : public rive::ore::Sampler

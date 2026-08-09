@@ -120,3 +120,12 @@ shader_bundler *COMPILE_ARGS:
 
 rive_update REF="runtime-v0.1.62":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
+
+rive_shaders_update:
+  uv venv .venv --clear
+  source .venv/bin/activate
+  uv pip install ply
+  uv run make -C thirdparty/rive_renderer/source/shaders -j 8
+  cp -R thirdparty/rive_renderer/source/shaders/out/generated/* thirdparty/rive_renderer/source/generated/shaders/
+  rm -Rf thirdparty/rive_renderer/source/shaders/out
+  .venv/bin/deactivate

@@ -22,35 +22,64 @@
 namespace yup
 {
 
-std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi, Options options)
+//==============================================================================
+bool GraphicsContext::isGpuAvailable() const noexcept
+{
+    if (auto device = getGpuDevice())
+        return device->getGpuContext() != nullptr;
+
+    return false;
+}
+
+//==============================================================================
+std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#endif
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#endif
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#endif
+#if YUP_EMSCRIPTEN && RIVE_WEBGPU
+std::unique_ptr<GraphicsContext> yup_constructWebGPUGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#elif YUP_RIVE_USE_DAWN
+std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
+#endif
+
+//==============================================================================
+std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform graphicsApi,
+                                                                 Options options,
+                                                                 GpuDevice::Ptr existingGpu)
 {
     switch (graphicsApi)
     {
-        case Api::Headless:
-            return yup_constructHeadlessGraphicsContext (options);
+        case GpuPlatform::Headless:
+            return yup_constructHeadlessGraphicsContext (options, std::move (existingGpu));
 
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
-        case Api::Metal:
-            return yup_constructMetalGraphicsContext (options);
+        case GpuPlatform::Metal:
+            return yup_constructMetalGraphicsContext (options, std::move (existingGpu));
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
-        case Api::Direct3D:
-            return yup_constructDirect3DGraphicsContext (options);
+        case GpuPlatform::Direct3D:
+            return yup_constructDirect3DGraphicsContext (options, std::move (existingGpu));
 #endif
 
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
-        case Api::OpenGL:
-        case Api::OpenGLES:
-            return yup_constructOpenGLGraphicsContext (options);
+        case GpuPlatform::OpenGL:
+        case GpuPlatform::OpenGLES:
+            return yup_constructOpenGLGraphicsContext (options, std::move (existingGpu));
 #endif
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
-        case Api::WebGPU:
-            return yup_constructWebGPUGraphicsContext (options);
+        case GpuPlatform::WebGPU:
+            return yup_constructWebGPUGraphicsContext (options, std::move (existingGpu));
 #elif YUP_RIVE_USE_DAWN
-        case Api::WebGPU:
-            return yup_constructDawnGraphicsContext (options);
+        case GpuPlatform::WebGPU:
+            return yup_constructDawnGraphicsContext (options, std::move (existingGpu));
 #endif
 
         default:

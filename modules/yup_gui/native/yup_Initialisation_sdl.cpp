@@ -77,7 +77,11 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         {
             float x = 0.0f, y = 0.0f;
             SDL_GetGlobalMouseState (&x, &y);
-            auto cursorPosition = Point<float> { x, y };
+
+            const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
+            const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
+
+            auto cursorPosition = Point<float> { x / displayScale, y / displayScale };
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
             MouseEvent mouseEvent (
@@ -98,7 +102,11 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         {
             float x = 0.0f, y = 0.0f;
             SDL_GetGlobalMouseState (&x, &y);
-            auto cursorPosition = Point<float> { x, y };
+
+            const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
+            const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
+
+            auto cursorPosition = Point<float> { x / displayScale, y / displayScale };
             auto button = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
@@ -115,7 +123,11 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         {
             float x = 0.0f, y = 0.0f;
             SDL_GetGlobalMouseState (&x, &y);
-            auto cursorPosition = Point<float> { x, y };
+
+            const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
+            const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
+
+            auto cursorPosition = Point<float> { x / displayScale, y / displayScale };
             auto button = toMouseButton (event->button.button);
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
@@ -132,7 +144,11 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         {
             float x = 0.0f, y = 0.0f;
             SDL_GetGlobalMouseState (&x, &y);
-            auto cursorPosition = Point<float> { x, y };
+
+            const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
+            const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
+
+            auto cursorPosition = Point<float> { x / displayScale, y / displayScale };
             auto keyModifiers = toKeyModifiers (SDL_GetModState());
             auto mouseWheelData = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
 

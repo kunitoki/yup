@@ -23,8 +23,6 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP
-
 // ======================================================================
 // Reader dimension and header tests
 // ======================================================================
@@ -852,5 +850,3 @@ TEST (WebPImageFormatTests, ParseRawChunksCreatesMetadata)
     EXPECT_DOUBLE_EQ (reader.metadata->dpiX, 0.0);
     EXPECT_DOUBLE_EQ (reader.metadata->dpiY, 0.0);
 }
-
-#endif // YUP_MODULE_AVAILABLE_libwebp && YUP_IMAGE_FORMAT_WEBP

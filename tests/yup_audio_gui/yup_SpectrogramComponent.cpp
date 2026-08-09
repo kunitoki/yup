@@ -30,7 +30,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 namespace
@@ -325,7 +325,7 @@ TEST_F (SpectrogramComponentTests, ClearHistoryDoesNotChangeConfiguration)
 
 TEST_F (SpectrogramComponentTests, PaintWithoutAudioDataDoesNotCrash)
 {
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -340,7 +340,7 @@ TEST_F (SpectrogramComponentTests, PaintAfterTimerCallbackDoesNotCrash)
     state->pushSamples (testData.data(), static_cast<int> (testData.size()));
     spectrogram->timerCallback();
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 
@@ -380,7 +380,7 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
     state->pushSamples (testData.data(), static_cast<int> (testData.size()));
     spectrogram->timerCallback();
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
     Graphics g (*context, *renderer);
 

@@ -96,6 +96,24 @@ flowchart LR
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
+## AI
+
+LLM clients, embeddings, and MCP (Model Context Protocol). See the [AI](ai/index.md) area.
+
+### yup_ai
+
+Chat-completion clients for OpenAI, Anthropic, and Gemini; function-calling tools;
+text embeddings; and MCP client/server for tool/resource bridging — all over
+HTTP or custom transports.
+
+```mermaid
+flowchart LR
+    yup_ai:::self --> yup_core
+    yup_ai --> yup_events
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ## Graphics
 
 The rendering stack. See the [Graphics](graphics/index.md) area; bitmap image
@@ -120,17 +138,37 @@ flowchart LR
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
+### yup_rhi
+
+The low-level GPU abstraction layer: device management, compute and render
+pipelines, frames, render passes, buffers, textures, and offscreen targets.
+This is the foundation for GPU work that does not require a window or Rive
+vector rendering — use it directly for GPU compute (audio DSP, FFT) without
+pulling in the 2D graphics stack.
+
+```mermaid
+flowchart LR
+    yup_rhi:::self --> yup_core
+    yup_rhi --> yup_shading
+    yup_rhi --> rive_renderer:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ### yup_graphics
 
-The 2D drawing stack and the low-level GPU RHI, rendered through the Rive
-renderer. Covers the graphics context, primitives, paths, fonts, SVG, imaging,
-and GPU pipelines. Image-codec support is optional: link `libpng`, `libjpeg`,
-`libwebp`, and/or `libgif` to enable the corresponding [image formats](imaging/loading.md#available-formats).
+The 2D drawing stack and windowed rendering, layered on `yup_rhi` and the Rive
+renderer. Covers the `GraphicsContext` (window + swapchain), `Graphics` (2D
+drawing API), primitives, paths, fonts, SVG, imaging, and `GpuCanvas` (offscreen
+2D surfaces). Image-codec support is optional: link `libpng`, `libjpeg`,
+`libwebp`, `libgif`, and/or `libtiff` to enable the corresponding
+[image formats](imaging/loading.md#available-formats).
 
 ```mermaid
 flowchart LR
     yup_graphics:::self --> yup_core
     yup_graphics --> yup_simd
+    yup_graphics --> yup_rhi
     yup_graphics --> yup_shading
     yup_graphics --> rive:::ext
     yup_graphics --> rive_renderer:::ext
@@ -139,6 +177,7 @@ flowchart LR
     yup_graphics -. optional .-> libjpeg:::opt
     yup_graphics -. optional .-> libwebp:::opt
     yup_graphics -. optional .-> libgif:::opt
+    yup_graphics -. optional .-> libtiff:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -339,20 +378,21 @@ Bindings for driving YUP from scripts. See the [Scripting](scripting/index.md) a
 
 Python bindings for creating and driving YUP applications from scripts. Its only
 hard dependency is `yup_core`; it additionally generates bindings for
-`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_audio_basics`,
-`yup_audio_devices`, and `yup_audio_processors` when those modules are present in
+`yup_events`, `yup_data_model`, `yup_graphics`, `yup_gui`, `yup_ai`,
+`yup_audio_basics`, `yup_audio_devices`, and `yup_audio_processors` when those modules are present in
 the build.
 
 ```mermaid
 flowchart LR
     yup_python:::self --> yup_core
-    yup_python -. optional .-> yup_events:::opt
-    yup_python -. optional .-> yup_data_model:::opt
-    yup_python -. optional .-> yup_graphics:::opt
-    yup_python -. optional .-> yup_gui:::opt
+    yup_python -. optional .-> yup_ai:::opt
     yup_python -. optional .-> yup_audio_basics:::opt
     yup_python -. optional .-> yup_audio_devices:::opt
     yup_python -. optional .-> yup_audio_processors:::opt
+    yup_python -. optional .-> yup_data_model:::opt
+    yup_python -. optional .-> yup_events:::opt
+    yup_python -. optional .-> yup_graphics:::opt
+    yup_python -. optional .-> yup_gui:::opt
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
@@ -368,10 +408,15 @@ flowchart TD
     simd[yup_simd] --> core[yup_core]
     events[yup_events] --> core
     shading[yup_shading] --> core
+    rhi[yup_rhi] --> core
+    rhi --> shading
     python[yup_python] --> core
+    ai[yup_ai] --> core
+    ai --> events
 
     graphics[yup_graphics] --> core
     graphics --> simd
+    graphics --> rhi
     graphics --> shading
 
     animation[yup_animation] --> core

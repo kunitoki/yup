@@ -82,6 +82,33 @@ public:
         return numChannels;
     }
 
+    /** Returns the role of the audio bus at the given audio-only index.
+
+        Audio-bus indexes count only Audio buses (MIDI buses are skipped), which
+        matches the audio-bus indexing convention used by plugin hosts (e.g. the
+        VST3 audio-bus index, the CLAP audio-port index, or the AU audio-element
+        index). Returns Role::Main when @p audioBusIndex is out of range, so
+        wrapper code can safely fall back to the primary signal path.
+    */
+    AudioBus::Role getAudioBusRole (int audioBusIndex, bool isInput) const noexcept
+    {
+        const auto& buses = isInput ? inputBuses : outputBuses;
+        int audioIdx = 0;
+
+        for (const auto& bus : buses)
+        {
+            if (bus.getType() != AudioBus::Type::Audio)
+                continue;
+
+            if (audioIdx == audioBusIndex)
+                return bus.getRole();
+
+            ++audioIdx;
+        }
+
+        return AudioBus::Role::Main;
+    }
+
 private:
     std::vector<AudioBus> inputBuses;
     std::vector<AudioBus> outputBuses;

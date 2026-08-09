@@ -161,7 +161,7 @@ l0=min(l0,k.Ee);
 #endif
 return l0;}
 #ifdef ENABLE_CLIPPING
-e void yb(uint V0,o4 O0,T4(d)n){
+e void yb(uint V0,o4 O0,T4(d) n){
 #ifdef PLS_BLEND_SRC_OVER
 if(all(lessThan(abs(O0.xy-unpackUnorm4x8(V0).xy),A2(.25/255.))))n=min(n,O0.z);else n=.0;
 #else
@@ -169,9 +169,9 @@ if(V0==O0>>16)n=min(n,unpackHalf2x16(O0).x);else n=.0;
 #endif
 }
 #endif
-e void Y7(uint l0,d m0,e1(i)P
+e void Y7(uint l0,d m0,e1(i) P
 #if defined(ENABLE_CLIPPING)&&!defined(RESOLVE_PLS)
-,T4(o4)q1
+,T4(o4) q1
 #endif
 G6 P3){W0 r1=L5(TC,l0);d n=m0;if((r1.x&(Fe|C9))!=0u){n=abs(n);
 #ifdef ENABLE_EVEN_ODD

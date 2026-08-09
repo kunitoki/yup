@@ -27,7 +27,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 class CartesianPlaneTests : public ::testing::Test
@@ -757,7 +757,7 @@ TEST_F (CartesianPlaneTests, LogarithmicScaleForYAxis)
 
 TEST_F (CartesianPlaneTests, PaintWithoutCrashing)
 {
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -774,7 +774,7 @@ TEST_F (CartesianPlaneTests, PaintWithSignals)
     data.push_back ({ 1.0, 1.0 });
     plane->updateSignalData (index, data);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -788,7 +788,7 @@ TEST_F (CartesianPlaneTests, PaintWithGridLines)
     plane->addVerticalGridLine (0.5);
     plane->addHorizontalGridLine (0.5);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -804,7 +804,7 @@ TEST_F (CartesianPlaneTests, PaintWithLabels)
     plane->addYAxisLabel (0.0, "0");
     plane->addYAxisLabel (1.0, "1");
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -817,7 +817,7 @@ TEST_F (CartesianPlaneTests, PaintWithTitle)
 {
     plane->setTitle ("Test Plot");
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -832,7 +832,7 @@ TEST_F (CartesianPlaneTests, PaintWithLegend)
     plane->addSignal ("Signal 2", Colors::blue);
     plane->setLegendVisible (true);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 600);
     Graphics g (*context, *renderer);
 
@@ -845,7 +845,7 @@ TEST_F (CartesianPlaneTests, PaintWithZeroSize)
 {
     plane->setBounds (0.0f, 0.0f, 0.0f, 0.0f);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (1, 1);
     Graphics g (*context, *renderer);
 

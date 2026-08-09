@@ -505,6 +505,105 @@ TEST (AudioParameterTests, RemovedListenerDoesNotReceiveFurtherChanges)
     EXPECT_EQ (0, listener.valueChangedCount);
 }
 
+//==============================================================================
+// ParameterUnit tests
+//==============================================================================
+
+TEST (AudioParameterTests, GenericUnitIsDefault)
+{
+    auto parameter = makeParameter ("gain", "Gain");
+    EXPECT_EQ (AudioParameter::ParameterUnit::Generic, parameter->getUnit());
+    EXPECT_TRUE (parameter->getUnitName().isEmpty());
+}
+
+TEST (AudioParameterTests, WithUnitSetsCorrectUnit)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("freq")
+                         .withName ("Frequency")
+                         .withRange (20.0f, 20000.0f)
+                         .withDefault (1000.0f)
+                         .withUnit (AudioParameter::ParameterUnit::Hertz)
+                         .build();
+
+    EXPECT_EQ (AudioParameter::ParameterUnit::Hertz, parameter->getUnit());
+    EXPECT_TRUE (parameter->getUnitName().isEmpty());
+}
+
+TEST (AudioParameterTests, WithUnitCustomSetsUnitName)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("level")
+                         .withName ("Level")
+                         .withRange (-60.0f, 0.0f)
+                         .withDefault (-18.0f)
+                         .withUnit (AudioParameter::ParameterUnit::Custom, "dBFS")
+                         .build();
+
+    EXPECT_EQ (AudioParameter::ParameterUnit::Custom, parameter->getUnit());
+    EXPECT_EQ (String ("dBFS"), parameter->getUnitName());
+}
+
+TEST (AudioParameterTests, AllUnitValuesCanBeSet)
+{
+    // Verify every ParameterUnit value compiles and stores correctly
+    struct TestCase
+    {
+        AudioParameter::ParameterUnit unit;
+        String expectedLabel;
+    };
+
+    const TestCase cases[] = {
+        { AudioParameter::ParameterUnit::Generic, "" },
+        { AudioParameter::ParameterUnit::Percent, "%" },
+        { AudioParameter::ParameterUnit::Decibels, "dB" },
+        { AudioParameter::ParameterUnit::Hertz, "Hz" },
+        { AudioParameter::ParameterUnit::Milliseconds, "ms" },
+        { AudioParameter::ParameterUnit::Seconds, "s" },
+        { AudioParameter::ParameterUnit::Degrees, "deg" },
+        { AudioParameter::ParameterUnit::Cents, "ct" },
+        { AudioParameter::ParameterUnit::Semitones, "st" },
+        { AudioParameter::ParameterUnit::Octaves, "oct" },
+        { AudioParameter::ParameterUnit::BPM, "bpm" },
+        { AudioParameter::ParameterUnit::Beats, "beats" },
+        { AudioParameter::ParameterUnit::Ratio, "" },
+        { AudioParameter::ParameterUnit::LinearGain, "" },
+        { AudioParameter::ParameterUnit::Pan, "" },
+        { AudioParameter::ParameterUnit::MIDINoteNumber, "" },
+    };
+
+    for (const auto& tc : cases)
+    {
+        auto parameter = AudioParameterBuilder()
+                             .withID ("p")
+                             .withName ("Param")
+                             .withRange (0.0f, 1.0f)
+                             .withDefault (0.5f)
+                             .withUnit (tc.unit)
+                             .build();
+
+        EXPECT_EQ (tc.unit, parameter->getUnit());
+        EXPECT_STREQ (tc.expectedLabel.toRawUTF8(),
+                      AudioParameter::getParameterUnitShortName (parameter->getUnit(), parameter->getUnitName()));
+    }
+}
+
+TEST (AudioParameterTests, UnitIsRoundTrippedThroughBuilder)
+{
+    auto parameter = AudioParameterBuilder()
+                         .withID ("pan")
+                         .withName ("Pan")
+                         .withRange (-1.0f, 1.0f)
+                         .withDefault (0.0f)
+                         .withUnit (AudioParameter::ParameterUnit::Pan)
+                         .build();
+
+    EXPECT_EQ (AudioParameter::ParameterUnit::Pan, parameter->getUnit());
+    EXPECT_EQ (-1.0f, parameter->getMinimumValue());
+    EXPECT_EQ (1.0f, parameter->getMaximumValue());
+    EXPECT_EQ (0.0f, parameter->getDefaultValue());
+}
+
 TEST (AudioProcessorTests, DuplicateParameterIDsAreIgnored)
 {
     TestAudioProcessor processor;

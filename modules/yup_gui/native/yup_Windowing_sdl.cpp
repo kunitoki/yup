@@ -160,7 +160,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     }
 #endif
 
-    if (currentGraphicsApi == GraphicsContext::OpenGL || currentGraphicsApi == GraphicsContext::OpenGLES)
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
@@ -382,11 +382,15 @@ void SDLComponentNative::setPosition (const Point<int>& newPosition)
 Point<int> SDLComponentNative::getPosition() const
 {
     int x = 0, y = 0;
+    float scale = 0.0f;
 
+#if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
     if (window != nullptr)
         SDL_GetWindowPosition (window, &x, &y);
 
-    const auto scale = getWindowUnitsPerPoint (window);
+    scale = getWindowUnitsPerPoint (window);
+#endif
+
     return { roundToInt (x / scale), roundToInt (y / scale) };
 }
 
@@ -719,7 +723,7 @@ Point<float> SDLComponentNative::getCursorPosition() const
 
 rive::Factory* SDLComponentNative::getFactory()
 {
-    return context ? context->factory() : nullptr;
+    return context ? context->getFactory() : nullptr;
 }
 
 //==============================================================================
@@ -836,7 +840,7 @@ void SDLComponentNative::handleAsyncUpdate()
     if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
 
-    renderContext();
+    getRenderContext();
 
     renderEvent.signal();
 }
@@ -863,12 +867,12 @@ void SDLComponentNative::timerCallback()
     pollCapturedMouseState();
 #endif
 
-    renderContext();
+    getRenderContext();
 }
 
 //==============================================================================
 
-void SDLComponentNative::renderContext()
+void SDLComponentNative::getRenderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
 
@@ -1001,7 +1005,7 @@ void SDLComponentNative::renderContext()
     renderFrame();
 
     // Swap buffers
-    if (window != nullptr && (currentGraphicsApi == GraphicsContext::OpenGL || currentGraphicsApi == GraphicsContext::OpenGLES))
+    if (window != nullptr && (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES))
         SDL_GL_SwapWindow (window);
 
     // Clear repainted areas

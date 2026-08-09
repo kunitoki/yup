@@ -11,7 +11,7 @@ rendering** (indexed or non-indexed) with vertex buffers, culling, and
 depth/stencil state.
 
 ```{note}
-Compiling a pipeline requires GPU context in `GraphicsContext` to exist.
+Compiling a pipeline requires a `GpuDevice` with GPU context available.
 Check `ctx.isGpuAvailable()` first.
 ```
 
@@ -36,7 +36,7 @@ assignment stays consistent across all targets.
 
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (
-    GraphicsContext&          ctx,
+    GpuDevice::Ptr          ctx,
     const ShaderBundle&       bundle,
     const GpuPipelineOptions& options = {});
 ```
@@ -70,7 +70,7 @@ pre-compiled RSTB binding-map blob - see [Binding maps](#binding-maps).
 
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (
-    GraphicsContext&          ctx,
+    GpuDevice::Ptr          ctx,
     const GpuShaderSource&    vertexShader,
     const GpuShaderSource&    fragmentShader,
     const GpuPipelineOptions& options = {});
@@ -233,5 +233,5 @@ if (result.wasOk())
 | `setMaxEntries (n)` / `getMaxEntries()`   | LRU eviction limit (0 = unlimited; default 256).         |
 | `generateCacheKey (bundle, options, api)` | Static SHA1-based key generation.                        |
 
-The cache references an externally-owned `GraphicsContext` that must outlive it.
+The cache references an keeps the `GpuDevice` alive via `Ptr`.
 Eviction is LRU by access order.

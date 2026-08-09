@@ -153,7 +153,7 @@ public:
 
             @return Reference to this Options object for method chaining.
         */
-        Options& withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept;
+        Options& withGraphicsApi (std::optional<GpuPlatform> newGraphicsApi) noexcept;
 
         /** Sets the target framerate for continuous rendering.
 
@@ -190,7 +190,7 @@ public:
         /** The configuration flags for the component. */
         Flags flags = defaultFlags;
         /** The graphics API to use for rendering. */
-        std::optional<GraphicsContext::Api> graphicsApi;
+        std::optional<GpuPlatform> graphicsApi;
         /** The target framerate for continuous rendering. */
         std::optional<float> framerateRedraw;
         /** The clear color to use when rendering. */

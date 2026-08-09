@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_events
 #include "bindings/yup_YupEvents_bindings.cpp"
+#endif

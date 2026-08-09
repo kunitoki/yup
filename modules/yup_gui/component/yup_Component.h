@@ -1474,7 +1474,7 @@ private:
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous);
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
 
     friend class ComponentNative;
@@ -1501,6 +1501,7 @@ private:
     MouseCursor mouseCursor;
     ComponentEffect::Ptr componentEffect;
     GpuCanvas::Ptr cachedTextureCanvas;
+    GpuCanvas::Ptr effectOffscreenCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
 

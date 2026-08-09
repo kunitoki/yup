@@ -77,7 +77,7 @@ class AnimationFrameExporterTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
 
         exporter = std::make_unique<AnimationFrameExporter> (*context);

@@ -21,16 +21,16 @@ The minimal offscreen render surface. It allocates a backing texture from the
 context's main render context - no dedicated 2D context is created.
 
 ```cpp
-static GpuTarget::Ptr GpuTarget::create (GraphicsContext& ctx, int width, int height);
+static GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height);
 ```
 
 ```cpp
 auto target = GpuTarget::create (ctx, 256, 256);
 if (target != nullptr)
 {
-    auto frame = GpuFrame::begin (ctx);
+    auto frame = GpuFrame::begin (device);
     auto pass  = target->beginRenderPass (frame, { true, Colors::transparentBlack });
-    pass.setPipeline (*pipeline);
+    pass.setPipeline (pipeline);
     pass.draw (3);
     pass.finish();
     frame.submit();
@@ -52,11 +52,11 @@ if (target != nullptr)
 Builds on a `GpuTarget` but is backed by a **dedicated render context**, adding
 2D `Graphics` drawing via `beginDraw()` / `commit()`. It consolidates creation,
 rendering, and readback of an offscreen surface into one object, replacing the
-lower-level `GraphicsContext::createOffscreenTarget` / `beginOffscreen` /
+lower-level `GpuDevice::createOffscreenTarget` / `beginOffscreen` /
 `endOffscreen` API.
 
 ```cpp
-static GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height);
+static GpuCanvas::Ptr GpuCanvas::create (GpuDevice::Ptr ctx, int width, int height);
 ```
 
 ### 2D drawing path
@@ -85,7 +85,7 @@ A canvas can also be the target of a `GpuRenderPass`, exactly like `GpuTarget`:
 
 ```cpp
 auto pass = canvas->beginRenderPass (frame, { true, background });
-pass.setPipeline (*pipeline);
+pass.setPipeline (pipeline);
 pass.drawIndexed (indexCount);
 pass.finish();
 ```

@@ -14,6 +14,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 [![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 [![Documentation](https://app.readthedocs.org/projects/yup/badge/?version=latest)](https://yup.readthedocs.io/en/latest)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kunitoki/yup)
+[![Discord](https://dcbadge.limes.pink/api/server/E6pSdcj4R?style=plastic)](https://discord.gg/E6pSdcj4R)
 
 > [!WARNING]
 > YUP is under active early-stage development. APIs may change while the framework is being shaped, but the repository already contains working examples, tests, and platform builds.

@@ -8,13 +8,13 @@ GPU resources (uniform buffers, texture views, samplers) created while encoding
 its passes.
 
 ```cpp
-static GpuFrame GpuFrame::begin (GraphicsContext& ctx);
+static GpuFrame GpuFrame::begin (GpuDevice::Ptr device);
 ```
 
 Begin a frame, encode one or more render passes into it, then submit:
 
 ```cpp
-auto frame = GpuFrame::begin (ctx);
+auto frame = GpuFrame::begin (device);
 if (! frame.isValid())
     return; // No GPU context.
 
@@ -62,7 +62,7 @@ auto pass = canvas->beginRenderPass (frame, { true, background });
 if (! pass.isValid())
     return;
 
-pass.setPipeline (*pipeline);
+pass.setPipeline (pipeline);
 pass.setUniformBuffer (0, 0, &uniforms, sizeof uniforms);
 pass.setTexture (0, 1, sceneTexture);
 pass.setVertexBuffer (0, vertexBuffer);
@@ -89,7 +89,7 @@ For a fullscreen post-process that generates its vertices from the vertex index,
 bind **no** vertex buffers and issue a three-vertex draw:
 
 ```cpp
-pass.setPipeline (*blurPipeline);
+pass.setPipeline (blurPipeline);
 pass.setTexture (0, 0, sourceTexture);
 pass.setUniformBuffer (0, 1, &blurParams, sizeof blurParams);
 pass.draw (3); // fullscreen triangle
@@ -103,8 +103,8 @@ Controls attachment load behavior for a pass:
 ```cpp
 struct GpuRenderOptions
 {
-    bool  clear      = true;                      // clear vs. load existing contents
-    Color clearColor = Colors::transparentBlack;  // used when clear == true
+    bool clear          = true;                     // clear vs. load existing contents
+    GpuColor clearColor = Colors::transparentBlack; // used when clear == true
 };
 ```
 
@@ -114,7 +114,7 @@ struct GpuRenderOptions
 
 ```cpp
 // Clear to a solid background:
-auto pass = target->beginRenderPass (frame, { true, Colors::cornflowerblue });
+auto pass = target->beginRenderPass (frame, { true, Colors::black });
 
 // Draw over existing contents:
 auto overlay = target->beginRenderPass (frame, { false, Colors::transparentBlack });

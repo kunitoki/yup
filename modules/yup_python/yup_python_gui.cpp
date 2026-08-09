@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_gui
 #include "bindings/yup_YupGui_bindings.cpp"
+#endif

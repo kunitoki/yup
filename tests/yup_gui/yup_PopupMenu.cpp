@@ -44,6 +44,10 @@ class PopupMenuTest : public ::testing::Test
 protected:
     void SetUp() override
     {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        theme = new ApplicationTheme();
+        ApplicationTheme::setGlobalTheme (theme);
+
         parentComponent = std::make_unique<Component> ("testParent");
         parentComponent->setBounds (0, 0, 800, 600);
 
@@ -53,6 +57,17 @@ protected:
         parentComponent->addAndMakeVisible (*targetComponent);
     }
 
+    void TearDown() override
+    {
+        PopupMenu::dismissAllPopups();
+
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+        theme = nullptr;
+        oldTheme = nullptr;
+    }
+
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
     std::unique_ptr<Component> parentComponent;
     std::unique_ptr<Component> targetComponent;
 };

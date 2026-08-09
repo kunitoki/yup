@@ -28,3 +28,4 @@
 #include "yup_audio_gui/yup_KMeterComponent.cpp"
 #include "yup_audio_gui/yup_SpectrumAnalyzerComponent.cpp"
 #include "yup_audio_gui/yup_SpectrogramComponent.cpp"
+#include "yup_audio_gui/yup_AudioDeviceManagerPanel.cpp"

@@ -125,29 +125,75 @@ constexpr int numElementsInArray (Type (&)[N]) noexcept
 }
 
 //==============================================================================
+/** Constexpr enabled square root function.
+
+    This is a constexpr enabled square root function that can be used in compile-time
+    calculations. It uses Newton's method to calculate the square root of a number.
+
+    @tags{Core}
+*/
+template <typename Type>
+constexpr Type yup_sqrt (Type x) noexcept
+{
+    if (isConstantEvaluated())
+    {
+        if (x < static_cast<Type> (0))
+            return std::numeric_limits<Type>::quiet_NaN();
+
+        if (x == static_cast<Type> (0))
+            return static_cast<Type> (0);
+
+        Type r = x;
+
+        for (int i = 0; i < 30; ++i)
+            r = static_cast<Type> (0.5) * (r + x / r);
+
+        return r;
+    }
+    else
+    {
+        return std::sqrt (x);
+    }
+}
+
+//==============================================================================
 // Some useful maths functions that aren't always present with all compilers and build settings.
 
 /** Using yup_hypot is easier than dealing with the different types of hypot function
     that are provided by the various platforms and compilers. */
 template <typename Type>
-Type yup_hypot (Type a, Type b) noexcept
+constexpr Type yup_hypot (Type a, Type b) noexcept
 {
+    if (isConstantEvaluated())
+    {
+        return yup_sqrt (a * a + b * b);
+    }
+    else
+    {
 #if YUP_MSVC
-    return static_cast<Type> (_hypot (a, b));
+        return static_cast<Type> (_hypot (a, b));
 #else
-    return static_cast<Type> (hypot (a, b));
+        return static_cast<Type> (hypot (a, b));
 #endif
+    }
 }
 
 #ifndef DOXYGEN
 template <>
-inline float yup_hypot (float a, float b) noexcept
+constexpr float yup_hypot (float a, float b) noexcept
 {
+    if (isConstantEvaluated())
+    {
+        return yup_sqrt (a * a + b * b);
+    }
+    else
+    {
 #if YUP_MSVC
-    return _hypotf (a, b);
+        return _hypotf (a, b);
 #else
-    return hypotf (a, b);
+        return hypotf (a, b);
 #endif
+    }
 }
 #endif
 

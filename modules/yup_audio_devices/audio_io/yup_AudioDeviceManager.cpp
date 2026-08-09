@@ -214,8 +214,23 @@ void AudioDeviceManager::audioDeviceListChanged()
 {
     if (currentAudioDevice != nullptr)
     {
+        if (lastExplicitSettings == nullptr && preferredDeviceName.isEmpty())
+        {
+            auto setup = currentSetup;
+            setup.inputDeviceName.clear();
+            setup.outputDeviceName.clear();
+            insertDefaultDeviceNames (setup);
+
+            if (setup.inputDeviceName != currentSetup.inputDeviceName
+                || setup.outputDeviceName != currentSetup.outputDeviceName)
+                setAudioDeviceSetup (setup, false);
+        }
+
         auto currentDeviceStillAvailable = [&]
         {
+            if (currentAudioDevice == nullptr)
+                return false;
+
             auto currentTypeName = currentAudioDevice->getTypeName();
             auto currentDeviceName = currentAudioDevice->getName();
 

@@ -42,10 +42,24 @@ class ComboBoxTest : public ::testing::Test
 protected:
     void SetUp() override
     {
+        oldTheme = ApplicationTheme::getGlobalTheme();
+        theme = new ApplicationTheme();
+        ApplicationTheme::setGlobalTheme (theme);
+
         comboBox = std::make_unique<ComboBox> ("testComboBox");
         comboBox->setBounds (0, 0, 200, 30);
     }
 
+    void TearDown() override
+    {
+        comboBox.reset();
+        ApplicationTheme::setGlobalTheme (oldTheme.get());
+        theme = nullptr;
+        oldTheme = nullptr;
+    }
+
+    ApplicationTheme::Ptr theme;
+    ApplicationTheme::Ptr oldTheme;
     std::unique_ptr<ComboBox> comboBox;
 };
 
@@ -467,4 +481,47 @@ TEST_F (ComboBoxTest, AddSeparatorBetweenItems)
     EXPECT_EQ (kTestText2, comboBox->getItemText (2));
     EXPECT_EQ (kTestId1, comboBox->getItemId (0));
     EXPECT_EQ (kTestId2, comboBox->getItemId (2));
+}
+
+TEST_F (ComboBoxTest, ClickWhenPopupShownClosesIt)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addItem (kTestText2, kTestId2);
+
+    MouseEvent clickEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f), comboBox.get());
+
+    // First click opens the popup
+    comboBox->mouseDown (clickEvent);
+    ASSERT_TRUE (comboBox->isPopupShown());
+
+    // Second click should dismiss (the else branch in mouseDown)
+    comboBox->mouseDown (clickEvent);
+    EXPECT_FALSE (comboBox->isPopupShown());
+}
+
+TEST_F (ComboBoxTest, FocusGainedRepaints)
+{
+    // Should not crash when called directly
+    EXPECT_NO_THROW (comboBox->focusGained());
+}
+
+TEST_F (ComboBoxTest, FocusLostRepaints)
+{
+    // Should not crash when called directly
+    EXPECT_NO_THROW (comboBox->focusLost());
+}
+
+TEST_F (ComboBoxTest, ShowPopupWithSeparatorDoesNotCrash)
+{
+    comboBox->addItem (kTestText1, kTestId1);
+    comboBox->addSeparator();
+    comboBox->addItem (kTestText2, kTestId2);
+
+    MouseEvent clickEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f), comboBox.get());
+
+    // This triggers showPopup which iterates items including the separator
+    comboBox->mouseDown (clickEvent);
+    EXPECT_TRUE (comboBox->isPopupShown());
+
+    PopupMenu::dismissAllPopups();
 }

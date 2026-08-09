@@ -50,6 +50,7 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_WHEEL ON
     MODULES
+        yup::yup_ai
         yup::yup_animation
         yup::yup_audio_basics
         yup::yup_audio_devices

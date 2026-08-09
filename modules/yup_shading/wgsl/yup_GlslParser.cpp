@@ -895,15 +895,17 @@ private:
             ss.loc = l;
 
             if (lexer.peek().type == TokenType::identifier)
+            {
                 ss.name = lexer.advance().text;
+                userStructNames.insert (ss.name);
+            }
 
             expect (TokenType::lBrace);
             while (lexer.peek().type != TokenType::rBrace && lexer.peek().type != TokenType::endOfFile)
             {
-                auto field = parseStructFieldSpecifier();
-                if (! field)
-                    return makeResultValueFail (field.getErrorMessage());
-                ss.fields.push_back (std::move (field).getValue());
+                auto result = parseStructFieldSpecifiers (ss.fields);
+                if (result.failed())
+                    return makeResultValueFail (result.getErrorMessage());
             }
             expect (TokenType::rBrace);
             expect (TokenType::semicolon);
@@ -962,6 +964,18 @@ private:
                     type = makeResultValueOk (TypeSpecifier::make (l, typeNameToKind (savedName)));
                     // Fall through to regular declaration parsing below
                 }
+            }
+
+            // Unnamed block (no instance name): layout(...) buffer BlockName { ... };
+            if (blockStruct && lexer.peek().type == TokenType::semicolon)
+            {
+                lexer.advance(); // consume ;
+                Declaration decl;
+                decl.loc = l;
+                if (qualifier)
+                    decl.qualifier = std::make_unique<TypeQualifier> (std::move (*qualifier));
+                decl.structSpecifier = std::move (blockStruct);
+                return makeResultValueOk (ExternalDeclaration { std::move (decl) });
             }
         }
 
@@ -2110,7 +2124,8 @@ private:
             "subpassInputMS"
         };
 
-        return typeNames.find (t) != typeNames.end();
+        return typeNames.find (t) != typeNames.end()
+            || userStructNames.find (t) != userStructNames.end();
     }
 
     ResultValue<TypeSpecifier> parseTypeSpecifier()
@@ -2179,10 +2194,9 @@ private:
         // Parse fields
         while (lexer.peek().type != TokenType::rBrace && lexer.peek().type != TokenType::endOfFile)
         {
-            auto field = parseStructFieldSpecifier();
-            if (! field)
-                return makeResultValueFail (field.getErrorMessage());
-            ss.fields.push_back (std::move (field).getValue());
+            auto result = parseStructFieldSpecifiers (ss.fields);
+            if (result.failed())
+                return makeResultValueFail (result.getErrorMessage());
         }
 
         expect (TokenType::rBrace);
@@ -2195,29 +2209,50 @@ private:
         return makeResultValueOk (std::move (ts));
     }
 
-    ResultValue<StructFieldSpecifier> parseStructFieldSpecifier()
+    /** Parses one struct or interface-block member declaration and appends the
+        members it declares to @p fields.
+
+        A single declaration can introduce several members sharing a base type,
+        each with its own array specifiers - `uniform Params { float s, r, pad[2]; }` -
+        which is why the members are appended rather than returned one at a time.
+    */
+    Result parseStructFieldSpecifiers (std::vector<StructFieldSpecifier>& fields)
     {
         SourceLocation l = loc();
-        StructFieldSpecifier field;
-        field.loc = l;
 
         auto qualifier = parseTypeQualifier();
-        if (qualifier)
-            field.qualifier = std::make_unique<TypeQualifier> (std::move (*qualifier));
 
         auto type = parseTypeSpecifier();
         if (! type)
-            return makeResultValueFail (type.getErrorMessage());
-        field.type = std::move (type).getValue();
+            return Result::fail (type.getErrorMessage());
 
-        field.name = expect (TokenType::identifier).text;
+        const auto& baseType = type.getReference();
 
-        // Array specifiers on field
-        while (lexer.peek().type == TokenType::lBracket)
-            field.type.arraySpecifiers.push_back (parseArraySpecifier());
+        for (bool isFirstDeclarator = true;; isFirstDeclarator = false)
+        {
+            StructFieldSpecifier field;
+            field.loc = l;
+            field.type = baseType;
+            field.name = expect (TokenType::identifier).text;
+
+            // Array specifiers bind to the declarator, not to the shared base type.
+            while (lexer.peek().type == TokenType::lBracket)
+                field.type.arraySpecifiers.push_back (parseArraySpecifier());
+
+            // The qualifier belongs to the declaration rather than to any one
+            // member, so it stays on the first - which is where GLSL applies a
+            // layout offset. Nothing downstream reads it today.
+            if (isFirstDeclarator && qualifier)
+                field.qualifier = std::make_unique<TypeQualifier> (std::move (*qualifier));
+
+            fields.push_back (std::move (field));
+
+            if (! match (TokenType::comma))
+                break;
+        }
 
         expect (TokenType::semicolon);
-        return makeResultValueOk (std::move (field));
+        return Result::ok();
     }
 
     static TypeKind typeNameToKind (const std::string& name)
@@ -2900,10 +2935,9 @@ private:
 
         while (lexer.peek().type != TokenType::rBrace && lexer.peek().type != TokenType::endOfFile)
         {
-            auto field = parseStructFieldSpecifier();
-            if (! field)
-                return makeResultValueFail (field.getErrorMessage());
-            ss.fields.push_back (std::move (field).getValue());
+            auto result = parseStructFieldSpecifiers (ss.fields);
+            if (result.failed())
+                return makeResultValueFail (result.getErrorMessage());
         }
 
         expect (TokenType::rBrace);
@@ -3038,6 +3072,7 @@ private:
     }
 
     Lexer& lexer;
+    std::unordered_set<std::string> userStructNames;
 };
 
 } // namespace

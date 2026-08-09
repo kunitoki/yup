@@ -385,6 +385,13 @@ private:
             if (! d.structSpecifier)
                 continue;
 
+            // Skip structs from unnamed interface blocks — they are flattened
+            // into individual global variables.
+            if (! d.initDeclaratorList && d.qualifier
+                && (d.qualifier->hasStorage (StorageQualifier::uniform)
+                    || d.qualifier->hasStorage (StorageQualifier::buffer)))
+                continue;
+
             auto& ss = *d.structSpecifier;
 
             // Emit struct definition
@@ -407,6 +414,39 @@ private:
                 continue;
 
             auto& d = std::get<Declaration> (decl);
+
+            // Handle unnamed interface blocks (structSpecifier + qualifier but no initDeclaratorList).
+            // Each struct field becomes a separate global variable in WGSL.
+            if (! d.initDeclaratorList && d.structSpecifier && d.qualifier
+                && (d.qualifier->hasStorage (StorageQualifier::uniform)
+                    || d.qualifier->hasStorage (StorageQualifier::buffer)))
+            {
+                bool isBuffer = d.qualifier->hasStorage (StorageQualifier::buffer);
+                std::string addrSpace = isBuffer ? "storage" : "uniform";
+
+                for (auto& field : d.structSpecifier->fields)
+                {
+                    const LoweredProgram::ResourceAssignment* assign = nullptr;
+                    for (auto& r : program.resources)
+                    {
+                        if (r.name == field.name)
+                        {
+                            assign = &r;
+                            break;
+                        }
+                    }
+
+                    if (assign)
+                    {
+                        out += "@group(" + std::to_string (assign->group) + ") "
+                             + "@binding(" + std::to_string (assign->binding) + ") ";
+                    }
+
+                    out += "var<" + addrSpace + (isBuffer ? ", read_write" : "") + "> " + field.name + ": " + genericTypeName (field.type) + ";\n";
+                }
+                continue;
+            }
+
             if (! d.initDeclaratorList)
                 continue;
 
@@ -471,7 +511,7 @@ private:
                 }
                 else
                 {
-                    out += "var<" + addrSpace + "> " + sd.name + ": " + genericTypeName (il.type) + ";\n";
+                    out += "var<" + addrSpace + (isBuffer ? ", read_write" : "") + "> " + sd.name + ": " + genericTypeName (il.type) + ";\n";
                 }
             }
         }
@@ -508,6 +548,17 @@ private:
         {
             out += "var<private> gl_FragCoord: vec4<f32>;\n";
             out += "var<private> gl_FrontFacing: bool;\n";
+        }
+
+        // Compute builtins (gl_GlobalInvocationID, etc.) — declared as private
+        // so main_inner() can access them.
+        if (program.entryPoint.isCompute)
+        {
+            for (auto& io : program.entryPoint.inputs)
+            {
+                if (io.isBuiltin)
+                    out += "var<private> " + io.name + ": " + computeInputType (io.builtinName) + ";\n";
+            }
         }
     }
 
@@ -725,11 +776,17 @@ private:
                     out += ", ";
                 first = false;
 
-                out += "@builtin(" + io.builtinName + ") " + io.name + ": " + computeInputType (io.builtinName);
+                out += "@builtin(" + io.builtinName + ") " + io.builtinName + ": " + computeInputType (io.builtinName);
             }
         }
 
         out += ") {\n";
+        // Copy entry-point builtin params to private globals so main_inner() can access them
+        for (auto& io : program.entryPoint.inputs)
+        {
+            if (io.isBuiltin)
+                out += "    " + io.name + " = " + io.builtinName + ";\n";
+        }
         out += "    main_inner();\n";
         out += "}\n";
     }
@@ -787,17 +844,24 @@ private:
             out += ind + "if (";
             if (sel.condition)
                 emitExpr (*sel.condition, out);
-            out += ") ";
+            out += ") {\n";
             if (sel.thenBranch)
-                emitStatement (*sel.thenBranch, out, indent);
-            else
-                out += "{}\n";
+                emitStatement (*sel.thenBranch, out, indent + 1);
+            out += ind + "}\n";
 
             if (sel.elseBranch)
             {
-                // Check if the else branch is itself an 'if' -> merge as 'else if'
                 out += ind + "else ";
-                emitStatement (*sel.elseBranch, out, indent);
+                // Preserve 'else if' — emit the inner selection without wrapping it in
+                // an extra layer, since emitStatement will handle its own braces.
+                if (sel.elseBranch->is<StmtSelection>())
+                    emitStatement (*sel.elseBranch, out, indent);
+                else
+                {
+                    out += "{\n";
+                    emitStatement (*sel.elseBranch, out, indent + 1);
+                    out += ind + "}\n";
+                }
             }
         }
         else if (stmt.is<StmtSwitch>())
@@ -831,11 +895,10 @@ private:
             out += ind + "while (";
             if (w.condition)
                 emitExpr (*w.condition, out);
-            out += ") ";
+            out += ") {\n";
             if (w.body)
-                emitStatement (*w.body, out, indent);
-            else
-                out += "{}\n";
+                emitStatement (*w.body, out, indent + 1);
+            out += ind + "}\n";
         }
         else if (stmt.is<StmtDoWhile>())
         {
@@ -884,11 +947,10 @@ private:
                 emitExpr (*update, out);
             }
 
-            out += ") ";
+            out += ") {\n";
             if (f.body)
-                emitStatement (*f.body, out, indent);
-            else
-                out += "{}\n";
+                emitStatement (*f.body, out, indent + 1);
+            out += ind + "}\n";
         }
         else if (stmt.is<StmtJump>())
         {

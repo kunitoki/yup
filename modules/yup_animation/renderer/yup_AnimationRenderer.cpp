@@ -212,7 +212,8 @@ void AnimationRenderer::renderComposition (Graphics& g,
     sceneCtx.buildParentTransforms (comp.layers);
 
     PrecompCache precompCache;
-    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources };
+    std::vector<AnimationRenderResources::MatteCanvasLease> matteLeases;
+    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources, &matteLeases };
 
     renderLayerList (g, comp.layers, ctx);
 }
@@ -457,10 +458,17 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
         return false;
 
     // 3. Composite target * coverage(source) into resultCanvas.
+    //
+    // The result canvas is written *only* by this pass: it never goes through
+    // beginDraw(), so nothing else clears it, and its backing texture is allocated
+    // uninitialized. Compositing it after a failed encode therefore blits undefined
+    // GPU memory over the whole layer, which reads as a flash of an arbitrary color.
+    // Every step is checked so a failure falls through to the geometric-clip path
+    // instead.
     {
         MatteParams params { matteModeValue (layer.matteType), (float) w, (float) h, 0.0f };
 
-        auto frame = GpuFrame::begin (context);
+        auto frame = GpuFrame::begin (context.getGpuDevice());
         if (! frame.isValid())
             return false;
 
@@ -468,14 +476,23 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
         if (! pass.isValid())
             return false;
 
-        pass.setPipeline (*pipeline);
+        pass.setPipeline (pipeline);
         pass.setTexture (0, 0, targetTex);
         pass.setTexture (0, 1, sourceTex);
         pass.setUniformBuffer (0, 3, &params, sizeof (params));
-        pass.draw (3);
-        pass.finish();
 
-        frame.submit();
+        if (! pass.draw (3))
+            return false;
+
+        if (! pass.finish())
+            return false;
+
+        if (! frame.submit())
+            return false;
+
+        // Leaving this scope waits for the GPU before releasing the views, uniform
+        // buffer and sampler the pass references by raw pointer, so the result
+        // canvas is complete before it is sampled below.
     }
 
     auto resultTex = canvases.getResultCanvas().asTexture();
@@ -486,6 +503,16 @@ bool AnimationRenderer::renderLayerWithMatte (Graphics& g,
     auto saveState = g.saveState();
     g.setOpacity (g.getOpacity() * opacity);
     g.drawTexture (resultTex, fittedRect);
+
+    // drawTexture only queues a reference to resultTex - the enclosing frame reads
+    // it at flush time, after this function has returned. Keep the lease alive for
+    // the rest of the composition render so the pool cannot hand these canvases to
+    // another matte layer, which would overwrite the pixels just queued. Every
+    // matte in a composition is sized to the same fitted rectangle, so without this
+    // the pool reuses one canvas triple for all of them and only the last matte
+    // survives (e.g. world_locations.json's four matted dots collapse to one).
+    if (ctx.matteLeases != nullptr)
+        ctx.matteLeases->push_back (std::move (canvases));
 
     return true;
 }
@@ -621,7 +648,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
                     SceneContext offscreenScene { ctx.scene.comp, localFrame, layer.layerSize };
                     offscreenScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources };
+                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
@@ -640,7 +667,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
     precompScene.buildParentTransforms (asset->layers);
 
-    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, nullptr, ctx.renderResources };
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, nullptr, ctx.renderResources, ctx.matteLeases };
 
     renderLayerList (g, asset->layers, precompCtx);
 }
@@ -969,7 +996,8 @@ void AnimationRenderer::renderGroup (Graphics& g,
                                      const AnimationGroup& group,
                                      const RenderContext& ctx,
                                      float opacity,
-                                     const AnimationRoundedCorner* parentRoundedCorner)
+                                     const AnimationRoundedCorner* parentRoundedCorner,
+                                     std::vector<Path>* geometryOut)
 {
     if (group.hidden)
         return;
@@ -1022,6 +1050,9 @@ void AnimationRenderer::renderGroup (Graphics& g,
     // (otherwise paint-less construction guides get filled - e.g. the stray
     // star shapes in pumped_up.json / mughead.json).
     const bool mergesNestedGeometry = activeMergePaths != nullptr && ! activeMergePaths->hidden;
+    // An enclosing group asking for this group's geometry also needs the geometry
+    // of any paint-less group nested inside it.
+    const bool collectsNestedGeometry = mergesNestedGeometry || geometryOut != nullptr;
     const bool hasModifiers = hasRounded || hasTrim || hasRepeater || hasMergePaths;
     const bool hasDirectPaint = std::any_of (group.children.begin(),
                                              group.children.end(),
@@ -1189,12 +1220,9 @@ void AnimationRenderer::renderGroup (Graphics& g,
         }
         else if (child.kind == AnimationGroup::ChildKind::Group && child.group != nullptr)
         {
-            renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner);
-
             // A nested group without its own paint can supply geometry to a
             // parent paint or Merge Paths modifier.
-            if (! mergesNestedGeometry && ! hasDirectPaint)
-                continue;
+            const bool wantsNestedGeometry = collectsNestedGeometry || hasDirectPaint;
 
             const bool hasOwnPaint = std::any_of (child.group->children.begin(),
                                                   child.group->children.end(),
@@ -1204,17 +1232,44 @@ void AnimationRenderer::renderGroup (Graphics& g,
                     || c.kind == AnimationGroup::ChildKind::Stroke;
             });
 
-            if (! hasOwnPaint)
+            // Harvest the geometry from the nested render call rather than
+            // rebuilding it from raw shapes: the nested group's own modifiers are
+            // what define the outline. A trim reducing a 4-point star to an arc is
+            // how RubberHose rigs draw a limb (mughead.json, pumped_up.json) - drop
+            // it and the parent's stroke paints the whole star instead.
+            std::vector<Path> nestedGeometry;
+            const bool harvest = wantsNestedGeometry && ! hasOwnPaint;
+
+            renderGroup (g, *child.group, ctx, opacity, activeRoundedCorner, harvest ? &nestedGeometry : nullptr);
+
+            if (harvest)
             {
-                Path nestedGeometry = buildMatteClipPathForGroup (*child.group, frameNo, AffineTransform::identity());
-                if (! nestedGeometry.isEmpty())
+                Path combinedGeometry;
+                for (const auto& path : nestedGeometry)
+                    combinedGeometry.appendPath (path);
+
+                if (! combinedGeometry.isEmpty())
                 {
-                    currentPaths.push_back (std::move (nestedGeometry));
+                    currentPaths.push_back (std::move (combinedGeometry));
                     preparedValid = false;
                 }
             }
         }
     }
+
+    if (geometryOut == nullptr || currentPaths.empty())
+        return;
+
+    // Report the modifier-applied geometry in the enclosing group's space. The
+    // group transform is applied here because the caller paints these paths under
+    // its own transform, not this group's.
+    if (hasModifiers && ! preparedValid)
+        computePrepared();
+
+    const auto groupTransform = group.transform.toAffineTransform (frameNo);
+
+    for (const auto& path : (hasModifiers ? preparedCache : currentPaths))
+        geometryOut->push_back (path.transformed (groupTransform));
 }
 
 void AnimationRenderer::applyTrim (Path& path, const AnimationTrim& trim, float frameNo)

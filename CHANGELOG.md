@@ -18,6 +18,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn
 - Fixed `GpuFrame::begin()` aborting on the Emscripten WebGPU backend: the WGPU context now creates and submits its own command encoder when no external one is provided, matching the Metal/GL/D3D11 self-managed frame model
+- Fixed a crash on Windows when creating any native window: the D3D11 `GpuDevice` was built with an already moved-from `ID3D11Device`, and the Direct3D `GraphicsContext` created a second device whose swapchain textures could not be used by the render context. Both now share a single `ID3D11Device`
+- Fixed the Emscripten WebGPU `GraphicsContext` never storing its surface size, leaving the offscreen copy at 0x0
+- Fixed `GpuDevice::updateBuffer()` failing for every vertex, index and uniform buffer on the WebGPU, Dawn and D3D11 backends: those overrides handled native storage buffers only and returned false instead of delegating ore-backed buffers to the base class, the way the Metal and OpenGL overrides do
+- Implemented `GpuDevice::readBuffer()` for D3D11, which previously reported `isComputeAvailable()` but had no override, so every storage buffer readback silently failed through the base class. It copies into a cached `D3D11_USAGE_STAGING` buffer on the immediate context (ordered after the dispatch) and maps it for reading
+- `GpuComputePass` on D3D11 now unbinds the UAV slots it bound when the pass finishes, so a storage buffer is no longer left bound for writing while a later readback or draw reads it
+- Fixed `GpuDevice::readBuffer()` never succeeding on the Emscripten WebGPU backend: it mapped its staging buffer with `WGPUCallbackMode_AllowProcessEvents` and then tested the result in the same call, but WebGPU buffer mapping only resolves through the JavaScript event loop, so the callback could not have run. The WGPU backend now pipelines the readback over a ring of three staging buffers using `WGPUCallbackMode_AllowSpontaneous`, which completes on its own between main-loop ticks — no ASYNCIFY needed
+- `GpuDevice::readBuffer()` is no longer documented as unconditionally blocking. Whether it blocks is a property of the backend: Metal, D3D11 and OpenGL read back in lockstep and fill the destination every call, while WebGPU cannot map synchronously and so trails the GPU by a frame or two. Callers must now own the destination across calls and treat a false return as "no new data yet" rather than an error — the previous contents stay valid
+- `ComputeParticlesDemo`: keeps drawing the last particle snapshot on frames where no new one has landed, so it renders on the Emscripten WebGPU backend instead of showing nothing. The status label reports the landed-snapshot count alongside the frame count
+- `Component`'s effect path now reuses its offscreen `GpuCanvas` across frames while the component size is unchanged, instead of allocating (and freeing) a full-size render target every frame. On a size change the outgoing canvas is released before the replacement is created, so its `RenderContext` lease returns to the pool rather than forcing a second context to be reserved permanently
+- `ComponentEffectsDemo`: shader effects now share a common base that compiles the pipeline at most once instead of retrying a failed compile on every frame, reports the compile error in the status label and on the console, and shows the CPU time spent applying the effect next to the paint time
 
 #### Rive Runtime Bump
 
@@ -29,6 +39,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuTexture` class (`rhi/yup_GpuTexture.h`): opaque reference-counted GPU texture wrapping `rive::gpu::Texture` or `rive::gpu::RenderCanvas`. Obtained from `GpuCanvas::asTexture()` or constructed internally by `Image::fromTexture()`.
 - New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
 - New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
+
+#### RHI module extraction & GpuDevice
+
+- **New `yup_rhi` module**: the GPU abstraction layer extracted from `yup_graphics` into its own module (depends on `yup_core`, `yup_shading`, `rive_renderer`). All RHI classes (`GpuFrame`, `GpuPipeline`, `GpuBuffer`, `GpuTexture`, `GpuTarget`, `GpuRenderPass`, `GpuPipelineCache`) now live in `yup_rhi`. `yup_graphics` depends on `yup_rhi` for GPU access.
+- **`GpuDevice`**: new reference-counted GPU device abstraction (was `GpuContext`). Owns the native GPU device and command queue without requiring a window — can be used for headless GPU compute (e.g. audio DSP on the GPU). Created via `GpuDevice::create(GpuPlatform, Options)`. All RHI factory methods (`GpuFrame::begin`, `GpuPipeline::compile*`, `GpuBuffer::create`, `GpuTarget::create`) now take `GpuDevice::Ptr` for safe shared ownership.
+- **`GpuPlatform`** enum: standalone platform enum (`Headless`, `Metal`, `Direct3D`, `OpenGL`, `OpenGLES`, `WebGPU`) replacing the nested `GpuDevice::Api`. `GraphicsContext::getPlatform()` returns it directly — no typedef alias.
+- **`GpuColor`** struct (`rhi/yup_GpuTypes.h`): lightweight 4-component GPU color for render options. Implicitly constructable from any type with `getRedFloat()`/`getGreenFloat()`/`getBlueFloat()`/`getAlphaFloat()` (e.g. `yup::Color`), so `GpuRenderOptions { true, Colors::transparentBlack }` works without code changes.
+- **`GraphicsContext` simplified**: wraps a `GpuDevice::Ptr` (obtained via `getGpuDevice()` returning `GpuDevice::Ptr`). Offscreen target management (`createOffscreenTarget`, `beginOffscreen`, `endOffscreen`, `readOffscreenPixels`) delegated to `GpuDevice`. Factory accepts optional `GpuDevice::Ptr` to share an existing GPU device.
+- **Backends**: `GpuDevice` has native implementations for all platforms (Metal, OpenGL, Direct3D 11, Dawn, WebGPU/Emscripten, Headless). OpenGL backend probes `GL_VERSION` at runtime to detect compute shader support (GL ≥4.3 / GLES ≥3.1).
+- **`::Ptr` safety**: all RHI types that own resources (`GpuPipeline`, `GpuBuffer`, `GpuTexture`, `GpuTarget`, `GpuCanvas`) are reference-counted with `::Ptr`. Factory methods take `GpuDevice::Ptr` to keep the device alive for the resource's lifetime. `GpuFrame` is move-only stack RAII and takes `GpuDevice&` (no ownership).
+
+#### Compute Shaders & GPU Audio
+
+- New `GpuComputePipeline` class (`rhi/yup_GpuComputePipeline.h`): an immutable compiled compute pipeline that bypasses ore to go directly to the backend-native API (Metal `MTLComputePipelineState`, D3D11 `ID3D11ComputeShader`, WebGPU/Dawn `wgpu::ComputePipeline`, OpenGL `GL_COMPUTE_SHADER`). `compile(ctx, source, GpuWorkgroupSize)`, `compileFromBundle(ctx, ShaderBundle)`, and `compileFromGlsl(ctx, glsl)` (when `YUP_ENABLE_SHADER_TRANSPILER = 1`) all return `ResultValue<GpuComputePipeline::Ptr>`.
+- New `GpuComputePass` class (`rhi/yup_GpuComputePass.h`): move-only RAII compute dispatch encoder (`GpuComputePass::begin(device)`). Binds a `GpuComputePipeline`, storage buffers (`setStorageBuffer`), uniform buffers (`setUniformBuffer`), and textures (`setTexture`), then dispatches workgroups via `dispatch(gx, gy, gz)`.
+- `GpuBuffer` extended with `GpuBufferType::storage`: native storage buffer creation for each backend (Metal `MTLBuffer`, D3D11 structured buffer + UAV, WebGPU `Storage` buffer, OpenGL `GL_SHADER_STORAGE_BUFFER`). Storage buffers are bound to `GpuComputePass::setStorageBuffer()`.
+- `GpuDevice` backends expose native compute handles: `getDevice()`/`getCommandQueue()` (Metal), `getD3DDevice()`/`getD3DDeviceContext()` (D3D11), `getWgpuDevice()`/`getWgpuQueue()` (WebGPU/Emscripten), `getBackendDevice()`/`getDevice()`/`getQueue()` (Dawn).
+- `GpuAudioProcessingDemo` example: real-time GPU-accelerated audio effect (gain + soft clipper) using compute shaders. Captures live audio via `AudioIODeviceCallback`, uploads to GPU storage buffers, dispatches a compute shader, and reads back processed audio — all on the audio I/O thread.
+- New `GpuDevice::updateBuffer()`: writes new data into an existing storage buffer without reallocating it (Metal `contents` memcpy, D3D11 `UpdateSubresource`, WebGPU/Dawn `WriteBuffer`, GL `glBufferSubData`). Fixes `GpuAudioProcessingDemo` reallocating its input storage buffer every audio callback, which caused audible stutter. The gain/mix parameters remain a uniform buffer (as before) — that path is unaffected and its small per-dispatch allocation is negligible next to the audio-block-sized buffer this fix removes.
+- Fixed `ShaderTranspiler`'s MSL backend assigning storage/uniform buffer indices via spirv-cross's own auto-incrementing scheme instead of the shader's declared `layout(binding=N)`: added `CompilerMSL::Options::enable_decoration_binding = true` so the compiled `[[buffer(N)]]` index always matches the declared binding, matching what `GpuComputePass`'s native dispatch (which binds slots as `group*16+binding` with no reflection indirection) requires. This was silently producing zero output from any Metal compute shader with more than one storage/uniform buffer, including `GpuAudioProcessingDemo`.
+- Metal `GpuDevice`/`GpuComputePass` calls now wrap their Objective-C work in `@autoreleasepool` blocks — without one, real-time callers (e.g. an audio thread with no ambient pool) accumulated command buffers/encoders indefinitely.
 
 #### Image Formats
 
@@ -51,6 +82,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuBuffer` class (`rhi/yup_GpuBuffer.h`): reference-counted GPU buffer handle wrapping a backend-native GPU buffer. `GpuBuffer::create(ctx, GpuBufferType, data, byteSize)` uploads immutable vertex/index/uniform data for use with `GpuRenderPass`.
 - `Image::fromTexture(GpuTexture::Ptr)`: creates an `Image` wrapping an existing GPU texture (no CPU round-trip). Suitable for `Graphics::drawImage()`.
 - `Graphics::drawTexture(GpuTexture::Ptr, Rectangle<float>)`: draws a GPU texture directly without materialising an `Image`, avoiding CPU-side ImagePixelData allocation.
+- `GpuRenderPass` no longer creates a sampler and a uniform buffer per draw. The linear/clamp-to-edge samplers that fill a layout's sampler bindings are created once when the `GpuPipeline` is compiled, and uniform buffers come from a size-bucketed pool on the `GpuDevice` that recycles them when a frame reports GPU completion — so a steady-state workload stops allocating GPU objects after its first frames. `GpuFrame` stays stack RAII; nothing changes for callers.
+- Fixed the GLSL→WGSL transpiler rejecting comma-separated members in a struct or interface block (`uniform Params { float s, r, rx, ry; }`), which failed with `Expected ';'`. Each declarator now becomes its own member and binds its own array specifiers.
 
 #### Shader Compiler (#126 and #130)
 
@@ -62,9 +95,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New standalone `yup_shader_bundler` console tool (`cmake/tools/shader_bundler`): takes a `.vert` and `.frag` GLSL (v450 Vulkan dialect) pair on disk and produces a single `.ysl` bundle containing transpiled variants for all target languages (GLSL/ESSL/HLSL/MSL).
 - New `yup_add_shader_bundle()` CMake helper (`cmake/yup_shader_bundler.cmake`): builds the `yup_shader_bundler` tool for the host once (cached in the global property `YUP_SHADER_BUNDLER_EXECUTABLE`), runs it at configure time to generate the `.ysl`, and embeds it into a linkable object library via `yup_add_embedded_binary_resources`. Works even when the outer build is cross-compiling, since the tool is built in its own host binary tree without forwarding the cross toolchain. Accepts an `OPTIONS` argument that forwards arbitrary extra flags verbatim to `yup_shader_bundler` (e.g. `--spirv-opt`, `--target-langs`, `-DNAME=VALUE`, `-I<dir>`).
 
+### AI (`yup_ai`)
+
+- New `yup_ai` module (`modules/yup_ai`): LLM client and AI integration classes depending on `yup_core` and `yup_events`.
+
+#### LLM
+
+- `LLMClient` (`yup_LLMClient.h`): abstract base for chat-completion backends with `complete()` and `completeStreaming()` methods, tool-call loop support via `runToolLoop()`, and structured output via `LLMSchema` JSON Schema or GBNF grammars.
+- `LLMHttpClient` (`yup_LLMHttpClient.h`): HTTP transport for `LLMClient` with retry and timeout logic, handling streaming SSE and non-streaming JSON responses.
+- `LLMClientFactory` (`yup_LLMClientFactory.h`): creates the correct `LLMHttpClient` subclass from `LLMClient::Options::provider`, with convenience factories for each provider.
+- `LLMMessage` (`yup_LLMMessage.h`): chat message with four roles (system, user, assistant, tool), optional tool calls, and serialisation to/from OpenAI ChatML JSON.
+- `LLMResponse` (`yup_LLMResponse.h`): parsed completion response with choices, token usage, tool-call extraction, streaming chunk accumulation, and error handling.
+- `LLMTool` (`yup_LLMTool.h`): callable function descriptor with JSON Schema parameters and a local handler, serialised to OpenAI function-calling format.
+- `LLMToolRegistry` (`yup_LLMToolRegistry.h`): thread-safe registry for `LLMTool` instances with snapshot, lookup, dispatch, and tools-array serialisation.
+- `LLMSchema` (`yup_LLMSchema.h`): fluent builder for JSON Schema objects (`string`, `number`, `integer`, `boolean`, `array`, `object`, `oneOf`) used in structured-output requests across all providers.
+
+#### LLM Providers
+
+- `LLMOpenAIChatClient` (`yup_LLMOpenAIChatClient.h`): OpenAI Chat Completions API — also compatible with Ollama, DeepSeek, OpenRouter, and llama-server.
+- `LLMOpenAIResponsesClient` (`yup_LLMOpenAIResponsesClient.h`): OpenAI Responses API (GPT-5+, reasoning models).
+- `LLMAnthropicClient` (`yup_LLMAnthropicClient.h`): Anthropic Messages API (Claude models).
+- `LLMGeminiClient` (`yup_LLMGeminiClient.h`): Google Gemini generateContent API.
+
+#### Embeddings
+
+- `EmbeddingModel` (`yup_EmbeddingModel.h`): OpenAI-compatible HTTP embedding model with `embed()` / `embedBatch()` and `cosineSimilarity()` helper.
+
+#### MCP (Model Context Protocol)
+
+- `MCPTypes` (`yup_MCPTypes.h`): JSON-RPC 2.0 request/response/error types, MCP capability flags, tool and resource definitions with `toVar` / `fromVar` serialisation.
+- `MCPTransport` (`yup_MCPTransport.h`): abstract transport interface for JSON-RPC messages (stdio, HTTP/SSE, sockets, in-process).
+- `MCPClient` (`yup_MCPClient.h`): synchronous MCP client with `initialize()` handshake, `listTools()` / `callTool()`, `listResources()` / `readResource()`, and tool-import bridge `registerToolsWith()`.
+- `MCPServer` (`yup_MCPServer.h`): MCP server exposing local YUP tools and resources over a transport, with `registerTool()` / `registerResource()`, `start()` / `stop()`, and placeholder `startStdio()` / `startHttp()`.
+
+#### Python Bindings
+
+- Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
+- `AIDemo` example (`examples/graphics/source/examples/AI.h`): interactive demo for all four LLM providers (OpenAI Chat, OpenAI Responses, Anthropic, Gemini) with model and API key configuration, system prompt editing, streaming and non-streaming completion, tool calling, MCP server integration, and embedded text generation.
 
 ### Build System
 
@@ -81,7 +152,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Bug Fixes
 
 - iOS applications now use the `UIScene` lifecycle, removing UIKit's legacy lifecycle warning and ensuring SDL windows are created for the connected scene.
-- Offscreen GPU rendering now supports recursive targets on Metal, OpenGL/GLES, and D3D11. Render contexts are reserved only while a target frame is active, so Lottie alpha/luma mattes, isolated-opacity layers, and cached precomps retain GPU compositing when rendered into an `Image` or `GpuCanvas` without allocating a context per sequential target. Repeated Lottie matte and precomp renders now reuse their canvases rather than allocating GPU textures each frame. Metal child targets allocate only their Rive render-canvas output texture; the CPU readback staging texture is created only when pixels are requested.
+- Offscreen GPU rendering now supports recursive targets on Metal, OpenGL/GLES, and D3D11, so Lottie alpha/luma mattes, isolated-opacity layers, and cached precomps retain GPU compositing when rendered into an `Image` or `GpuCanvas`. Each `RenderableTarget` leases a Rive render context exclusively for its lifetime and returns it to the pool when destroyed. Repeated Lottie matte and precomp renders now reuse their canvases rather than allocating GPU textures each frame. Metal child targets allocate only their Rive render-canvas output texture; the CPU readback staging texture is created only when pixels are requested.
+- Fixed undefined offscreen contents when nesting pooled render targets on all GPU backends. Render context slots were recycled whenever no frame was currently active, so two long-lived targets could share one slot; once their frames nested — which happens as Lottie matte and precomp layers cross their in/out points and the nesting order changes between frames — the inner target skipped `beginFrame` and was then flushed against the outer target's frame descriptor.
+- Lottie: a matte layer no longer paints another matte layer's content. Drawing a matte result only queues a reference to its canvas texture, which the enclosing frame resolves at flush time, but the canvas lease was released as soon as the layer finished. Since every matte in a composition is sized to the same fitted rectangle, the pool handed the same canvas triple to the next matte layer, which overwrote the pixels already queued and left only the last matte visible (e.g. `world_locations.json`'s four matted dots collapsed to one and its continent outlines disappeared; `insta_camera.json` lost its animated circles). Leases are now held until the composition render completes.
+- `GpuFrame` now waits for the GPU before releasing the texture views, uniform buffers and samplers it keeps alive for its encoded render passes. Those passes reference them by raw pointer, and `submit()` does not block, so letting a frame go out of scope freed them while the GPU was still reading — corrupting the pass output progressively, as the freed memory only starts being handed back out after the allocator has churned for a while (the growing magenta flashes in `bell.json`). `waitForGPU()` is now only needed explicitly when results are required before the end of the frame's scope, and is idempotent so waiting explicitly costs no more than one stall. Move-assignment drains the frame it replaces for the same reason.
+- `AffineTransform::getScaleFactor()` is now independent of rotation. It averaged the absolute values of the matrix diagonal and ignored the shear terms, so a rotated transform reported `scale * cos(angle)` — falling to zero at 90 degrees. It now measures the lengths of the transformed basis vectors. Lottie precomposition and matte canvases are sized from this value, so a layer under an animated rotation (e.g. `bell.json`, whose precomposition is parented to a rotating null) requested a different pixel size on every frame, reallocating its canvases mid-frame and flashing while a queued draw still referenced the previous ones.
+- Lottie: the matte canvas pool now replaces an idle slot of a different size instead of appending a new one. Nothing removed slots, so a layer whose on-screen size changed every frame added three canvases — each leasing a Rive render context — per frame, without bound.
+- `GpuCanvas::create()` takes a `std::optional<Color> clearColor`, defaulting to transparent black, and fills the new canvas with it so it is safe to sample before anything is drawn into it (pass `std::nullopt` to leave the contents undefined). The backing texture is allocated uninitialized and a 2D frame whose draw list ends up empty is not guaranteed to honour its `loadAction=clear`, so a canvas could previously be composited while still holding undefined GPU memory (the magenta flashes in `bell.json`, whose only content is one matted precomposition). The clear is issued through the new `GpuDevice::clearOffscreen()`, which encodes it with the backend's native API — a clear binds no pipeline, buffers or samplers, so it needs neither a render pass nor a submit/wait cycle.
+- `GpuCanvas::beginDraw()` now drops the target's cached `GpuTexture` wrap, as its documentation already claimed. The wrap memoizes the Rive texture handle it resolved, so a pooled canvas reused across frames kept handing out the handle resolved on the frame it was first sampled.
+- Lottie: a failed matte composite no longer blits undefined GPU memory over the matted layer. The result canvas is written only by the composite render pass — nothing else clears it, and its backing texture is allocated uninitialized — but the pass result was ignored and the texture composited regardless, flashing an arbitrary color. The renderer now falls back to the geometric-clip matte path when the composite fails.
+- Lottie: a paint-less nested group now contributes its geometry to the enclosing group's paints with its own modifiers applied. The geometry was rebuilt from raw shapes, dropping the nested group's trim, repeater, merge-paths and rounded-corner modifiers, which is what defines the outline: RubberHose rigs draw a limb as a 4-point star trimmed to a quarter, so the parent stroke painted the whole star instead of an arc (the stray stars in `mughead.json` and `pumped_up.json`).
 - Lottie: track mattes (alpha, alpha-inverted, luma, luma-inverted) now composite the matte source's *rendered alpha* — including its fill opacity, gradients, and anti-aliased edges — instead of hard-clipping the target to the source silhouette. The matte source and target are rendered into offscreen GPU buffers (sized to the fitted on-screen resolution) and multiplied by a fullscreen matte-composite shader. A partially transparent matte source now shows through correctly (e.g. `matte_two_item_with_lowerlayer.json`, whose 65%-opacity source blends the white matted ellipse to pink over the red layer beneath). Falls back to the previous geometric-clip behaviour when no GPU is available (e.g. headless rendering).
 - Lottie: `EllipseShape` paths now start at the top (12 o'clock) and follow the shape direction (clockwise for `d == 1`, counter-clockwise for `d == 3`), matching Lottie's convention. Previously they started at the right (3 o'clock) going counter-clockwise, which placed trimmed arcs at the wrong position (e.g. the expanding rings in `world_locations.json` were cut short on the right).
 - `Path::withRoundedCorners()` left one corner sharp on closed subpaths whose geometry ended with an explicit segment back to the start vertex (as produced by Lottie bezier `toPath()`). The duplicated start/end point formed a zero-length edge that made that corner degenerate. The trailing duplicate is now dropped, and corners are rounded with a cubic arc (circle kappa) instead of a single quadratic through the vertex, so a square with a full Round Corners modifier becomes a proper circle (e.g. the morphing loader shape in `loader.json`).
@@ -99,6 +179,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - SDL3 windowing: mouse move/drag was broken on touch platforms (iOS, Android). Motion was synthesized only by polling `SDL_GetGlobalMouseState`, which has no backend implementation there and falls back to window-relative coordinates, so subtracting the window position shifted every move. Touch platforms now consume the touch-synthesized `SDL_EVENT_MOUSE_MOTION` events directly; desktop keeps the global-cursor poll (needed for embedded plugin editors).
 - SDL3 windowing: mouse drag events were lost inside embedded plugin editors (notably on macOS, where the host owns the native application so SDL never receives Cocoa mouse focus and suppresses drag motion). Dragging is now synthesized by polling the global cursor while a button is held, on the message thread, for all platforms.
 - UBSAN and ASAN fixes throughout the codebase
+- AUv3 plugin host bypass is now connected to the processor: the wrapper-owned bypass parameter is created and drives `processBlockBypassed`, and host bypass state is persisted/restored inside the `YUPProcessorState` blob (legacy raw processor state still loads)
+- Added bypass parameter handling tests for the AU, CLAP, and VST3 plugin client wrappers (routing to `processBlockBypassed`, bypass state round-trip, and text/value conversion)
+
+### Documentation
+
+- Added a dedicated DSP documentation area (`docs/dsp/`) covering `yup_dsp` end to end: math/windowing/noise, FFTs and spectral analysis, filter design and filter implementations, dynamics and metering, onset detection, convolution and delay, resampling, and time-stretching/pitch-shifting
 
 ---
 
@@ -191,6 +277,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Standalone plugin support with improved audio parameters ([#46](https://github.com/kunitoki/yup/pull/46))
 - CLAP/VST3/AU validators and code signing (`YUP_ENABLE_VST3_VALIDATOR`, etc.) ([#106](https://github.com/kunitoki/yup/pull/106))
 - pluginval integration for automated VST3 validation ([#67](https://github.com/kunitoki/yup/pull/67))
+- Sidechain and multi-bus audio input support across VST3, CLAP, AUv3, AUv2, AAX, and LV2: `AudioBus` gains a `Role` (`Main`/`Auxiliary`) and `isDefaultActive`, `AudioProcessContext` exposes per-bus `inputs`/`outputs` views (`AudioBusBufferView`) with `getMainInput()`/`getAuxiliaryInput()`/`getMainOutput()` accessors, and secondary input buses are forwarded to the processor instead of being discarded
 
 #### Audio Formats (`yup_audio_formats`)
 - New `yup_audio_formats` module: `AudioFormat`, `AudioFormatManager`, `AudioFormatReader`, `AudioFormatWriter`, WAV codec ([#51](https://github.com/kunitoki/yup/pull/51))

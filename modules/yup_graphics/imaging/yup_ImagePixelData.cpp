@@ -50,17 +50,17 @@ std::vector<uint8> ImagePixelData::toRGBA (bool premultiplyAlpha) const
     switch (format)
     {
         case PixelFormat::Grayscale:
-            ColorVectorOperations::convertGrayscaleToRGBA (src, result.data(), numPixels);
+            ColorVectorOperations::convertGrayscaleToRGBA (src, reinterpret_cast<uint32*> (result.data()), numPixels);
             break;
 
         case PixelFormat::RGB:
-            ColorVectorOperations::convertRGBToRGBA (src, result.data(), numPixels);
+            ColorVectorOperations::convertRGBToRGBA (src, reinterpret_cast<uint32*> (result.data()), numPixels);
             break;
 
         case PixelFormat::RGBA:
             std::memcpy (result.data(), src, result.size());
             if (premultiplyAlpha)
-                ColorVectorOperations::premultiplyRGBA (result.data(), numPixels);
+                ColorVectorOperations::premultiplyRGBA (reinterpret_cast<uint32*> (result.data()), numPixels);
             break;
     }
 

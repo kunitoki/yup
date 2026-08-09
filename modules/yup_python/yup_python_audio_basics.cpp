@@ -19,4 +19,6 @@
   ==============================================================================
 */
 
+#if YUP_MODULE_AVAILABLE_yup_audio_basics
 #include "bindings/yup_YupAudioBasics_bindings.cpp"
+#endif
