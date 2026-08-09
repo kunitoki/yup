@@ -39,44 +39,21 @@ void registerYupRhiBindings (py::module_& m)
 {
     // clang-format off
 
-    // ============================================================================================ yup::GraphicsContext enums
-
-    py::enum_<GraphicsContext::Api> (m, "GraphicsApi")
-        .value ("Headless", GraphicsContext::Api::Headless)
-        .value ("OpenGL", GraphicsContext::Api::OpenGL)
-        .value ("OpenGLES", GraphicsContext::Api::OpenGLES)
-        .value ("Direct3D", GraphicsContext::Api::Direct3D)
-        .value ("Metal", GraphicsContext::Api::Metal)
-        .value ("WebGPU", GraphicsContext::Api::WebGPU)
-                ;
-
-    // ============================================================================================ yup::GraphicsContext::Options
-
-    py::class_<GraphicsContext::Options> (m, "GraphicsContextOptions")
-        .def (py::init<>())
-        .def_readwrite ("retinaDisplay", &GraphicsContext::Options::retinaDisplay)
-        .def_readwrite ("readableFramebuffer", &GraphicsContext::Options::readableFramebuffer)
-        .def_readwrite ("synchronousShaderCompilations", &GraphicsContext::Options::synchronousShaderCompilations)
-        .def_readwrite ("enableReadPixels", &GraphicsContext::Options::enableReadPixels)
-        .def_readwrite ("disableRasterOrdering", &GraphicsContext::Options::disableRasterOrdering)
-        .def_readwrite ("allowHeadlessRendering", &GraphicsContext::Options::allowHeadlessRendering);
-
-    // ============================================================================================ yup::GraphicsContext
-
-    py::class_<GraphicsContext> (m, "GraphicsContext")
-        .def_static ("createContext", &GraphicsContext::createContext,
-                     "graphicsApi"_a, "options"_a)
-        .def ("getApi", &GraphicsContext::getApi)
-        .def ("isGpuAvailable", &GraphicsContext::isGpuAvailable);
-
     // ============================================================================================ GPU enums
+
+    py::enum_<GpuPlatform> (m, "GpuPlatform")
+        .value ("Headless", GpuPlatform::Headless)
+        .value ("OpenGL", GpuPlatform::OpenGL)
+        .value ("OpenGLES", GpuPlatform::OpenGLES)
+        .value ("Direct3D", GpuPlatform::Direct3D)
+        .value ("Metal", GpuPlatform::Metal)
+        .value ("WebGPU", GpuPlatform::WebGPU);
 
     py::enum_<GpuShaderLanguage> (m, "GpuShaderLanguage")
         .value ("wgsl", GpuShaderLanguage::wgsl)
         .value ("glsl", GpuShaderLanguage::glsl)
         .value ("msl", GpuShaderLanguage::msl)
-        .value ("hlsl", GpuShaderLanguage::hlsl)
-                ;
+        .value ("hlsl", GpuShaderLanguage::hlsl);
 
     py::enum_<GpuVertexFormat> (m, "GpuVertexFormat")
         .value ("float1", GpuVertexFormat::float1)
@@ -85,38 +62,32 @@ void registerYupRhiBindings (py::module_& m)
         .value ("float4", GpuVertexFormat::float4)
         .value ("uint8x4", GpuVertexFormat::uint8x4)
         .value ("snorm8x4", GpuVertexFormat::snorm8x4)
-        .value ("unorm8x4", GpuVertexFormat::unorm8x4)
-                ;
+        .value ("unorm8x4", GpuVertexFormat::unorm8x4);
 
     py::enum_<GpuVertexStepMode> (m, "GpuVertexStepMode")
         .value ("vertex", GpuVertexStepMode::vertex)
-        .value ("instance", GpuVertexStepMode::instance)
-                ;
+        .value ("instance", GpuVertexStepMode::instance);
 
     py::enum_<GpuPrimitiveTopology> (m, "GpuPrimitiveTopology")
         .value ("pointList", GpuPrimitiveTopology::pointList)
         .value ("lineList", GpuPrimitiveTopology::lineList)
         .value ("lineStrip", GpuPrimitiveTopology::lineStrip)
         .value ("triangleList", GpuPrimitiveTopology::triangleList)
-        .value ("triangleStrip", GpuPrimitiveTopology::triangleStrip)
-                ;
+        .value ("triangleStrip", GpuPrimitiveTopology::triangleStrip);
 
     py::enum_<GpuIndexFormat> (m, "GpuIndexFormat")
         .value ("none", GpuIndexFormat::none)
         .value ("uint16", GpuIndexFormat::uint16)
-        .value ("uint32", GpuIndexFormat::uint32)
-                ;
+        .value ("uint32", GpuIndexFormat::uint32);
 
     py::enum_<GpuCullMode> (m, "GpuCullMode")
         .value ("none", GpuCullMode::none)
         .value ("front", GpuCullMode::front)
-        .value ("back", GpuCullMode::back)
-                ;
+        .value ("back", GpuCullMode::back);
 
     py::enum_<GpuFaceWinding> (m, "GpuFaceWinding")
         .value ("clockwise", GpuFaceWinding::clockwise)
-        .value ("counterClockwise", GpuFaceWinding::counterClockwise)
-                ;
+        .value ("counterClockwise", GpuFaceWinding::counterClockwise);
 
     py::enum_<GpuCompareFunction> (m, "GpuCompareFunction")
         .value ("never", GpuCompareFunction::never)
@@ -126,8 +97,7 @@ void registerYupRhiBindings (py::module_& m)
         .value ("greater", GpuCompareFunction::greater)
         .value ("notEqual", GpuCompareFunction::notEqual)
         .value ("greaterEqual", GpuCompareFunction::greaterEqual)
-        .value ("always", GpuCompareFunction::always)
-                ;
+        .value ("always", GpuCompareFunction::always);
 
     py::enum_<GpuStencilOp> (m, "GpuStencilOp")
         .value ("keep", GpuStencilOp::keep)
@@ -137,8 +107,7 @@ void registerYupRhiBindings (py::module_& m)
         .value ("decrementClamp", GpuStencilOp::decrementClamp)
         .value ("invert", GpuStencilOp::invert)
         .value ("incrementWrap", GpuStencilOp::incrementWrap)
-        .value ("decrementWrap", GpuStencilOp::decrementWrap)
-                ;
+        .value ("decrementWrap", GpuStencilOp::decrementWrap);
 
     py::enum_<GpuBlendFactor> (m, "GpuBlendFactor")
         .value ("zero", GpuBlendFactor::zero)
@@ -150,30 +119,26 @@ void registerYupRhiBindings (py::module_& m)
         .value ("dstColor", GpuBlendFactor::dstColor)
         .value ("oneMinusDstColor", GpuBlendFactor::oneMinusDstColor)
         .value ("dstAlpha", GpuBlendFactor::dstAlpha)
-        .value ("oneMinusDstAlpha", GpuBlendFactor::oneMinusDstAlpha)
-                ;
+        .value ("oneMinusDstAlpha", GpuBlendFactor::oneMinusDstAlpha);
 
     py::enum_<GpuBlendOp> (m, "GpuBlendOp")
         .value ("add", GpuBlendOp::add)
         .value ("subtract", GpuBlendOp::subtract)
         .value ("reverseSubtract", GpuBlendOp::reverseSubtract)
         .value ("min", GpuBlendOp::min)
-        .value ("max", GpuBlendOp::max)
-                ;
+        .value ("max", GpuBlendOp::max);
 
     py::enum_<GpuTextureFormat> (m, "GpuTextureFormat")
         .value ("rgba8unorm", GpuTextureFormat::rgba8unorm)
         .value ("bgra8unorm", GpuTextureFormat::bgra8unorm)
         .value ("rgba16float", GpuTextureFormat::rgba16float)
         .value ("depth24plusStencil8", GpuTextureFormat::depth24plusStencil8)
-        .value ("depth32float", GpuTextureFormat::depth32float)
-                ;
+        .value ("depth32float", GpuTextureFormat::depth32float);
 
     py::enum_<GpuBufferType> (m, "GpuBufferType")
         .value ("vertex", GpuBufferType::vertex)
         .value ("index", GpuBufferType::index)
-        .value ("uniform", GpuBufferType::uniform)
-                ;
+        .value ("uniform", GpuBufferType::uniform);
 
     // ============================================================================================ GPU config structs
 
@@ -186,8 +151,7 @@ void registerYupRhiBindings (py::module_& m)
 
     py::class_<GpuVertexAttribute> (m, "GpuVertexAttribute")
         .def (py::init<>())
-        .def (py::init<GpuVertexFormat, uint32_t, uint32_t>(),
-              "format"_a, "offset"_a, "shaderLocation"_a)
+        .def (py::init<GpuVertexFormat, uint32_t, uint32_t>(), "format"_a, "offset"_a, "shaderLocation"_a)
         .def_readwrite ("format", &GpuVertexAttribute::format)
         .def_readwrite ("offset", &GpuVertexAttribute::offset)
         .def_readwrite ("shaderLocation", &GpuVertexAttribute::shaderLocation);
@@ -247,6 +211,35 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("clear", &GpuRenderOptions::clear)
         .def_readwrite ("clearColor", &GpuRenderOptions::clearColor);
 
+    // ============================================================================================ yup::GpuDevice
+
+    auto gpuDevice = py::class_<GpuDevice, ReferenceCountedObjectPtr<GpuDevice>>(m, "GpuDevice");
+    
+    py::class_<GpuDevice::Options> (gpuDevice, "Options")
+        .def (py::init<>())
+        .def_readwrite ("retinaDisplay", &GpuDevice::Options::retinaDisplay)
+        .def_readwrite ("readableFramebuffer", &GpuDevice::Options::readableFramebuffer)
+        .def_readwrite ("synchronousShaderCompilations", &GpuDevice::Options::synchronousShaderCompilations)
+        .def_readwrite ("disableRasterOrdering", &GpuDevice::Options::disableRasterOrdering)
+        .def_readwrite ("allowHeadlessRendering", &GpuDevice::Options::allowHeadlessRendering)
+        /*.def_readwrite ("loaderFunction", &GpuDevice::Options::loaderFunction)*/;
+    
+    gpuDevice
+        .def_static ("create", &GpuDevice::create, "gpuApi"_a, "options"_a)
+        .def ("getPlatform", &GpuDevice::getPlatform)
+        .def ("isGpuAvailable", &GpuDevice::isGpuAvailable)
+        .def ("isComputeAvailable", &GpuDevice::isComputeAvailable)
+        //.def ("createOffscreenTarget", &GpuDevice::createOffscreenTarget)
+        //.def ("createRenderableTarget", &GpuDevice::createRenderableTarget)
+        //.def ("beginOffscreen", &GpuDevice::beginOffscreen)
+        //.def ("endOffscreen", &GpuDevice::endOffscreen)
+        //.def ("readOffscreenPixels", &GpuDevice::readOffscreenPixels)
+        //.def ("clearOffscreen", &GpuDevice::clearOffscreen)
+        //.def ("createBuffer", &GpuDevice::createBuffer)
+        //.def ("readBuffer", &GpuDevice::readBuffer)
+        //.def ("updateBuffer", &GpuDevice::updateBuffer)
+        ;
+
     // ============================================================================================ yup::GpuTexture
 
     py::class_<GpuTexture, ReferenceCountedObjectPtr<GpuTexture>> (m, "GpuTexture")
@@ -283,7 +276,7 @@ void registerYupRhiBindings (py::module_& m)
     // ============================================================================================ yup::GpuPipelineCache
 
     py::class_<GpuPipelineCache> (m, "GpuPipelineCache")
-        .def (py::init<GraphicsContext&>())
+        .def (py::init<GpuDevice::Ptr>())
         .def ("getNumEntries", &GpuPipelineCache::getNumEntries)
         .def ("setMaxEntries", &GpuPipelineCache::setMaxEntries)
         .def ("getMaxEntries", &GpuPipelineCache::getMaxEntries)
@@ -296,7 +289,6 @@ void registerYupRhiBindings (py::module_& m)
         .def ("getWidth", &GpuTarget::getWidth)
         .def ("getHeight", &GpuTarget::getHeight)
         .def ("asTexture", &GpuTarget::asTexture)
-        .def ("asImage", &GpuTarget::asImage)
         .def ("__repr__", [] (const GpuTarget& self)
         {
             String result;
