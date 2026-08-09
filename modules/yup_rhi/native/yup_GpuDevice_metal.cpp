@@ -35,27 +35,133 @@ class GpuDeviceMetal : public GpuDevice
 {
 public:
     GpuDeviceMetal (GpuDevice::Options options)
-        : fiddleOptions (options)
+        : options (options)
     {
-        rive::gpu::RenderContextMetalImpl::ContextOptions renderCtxOpts;
+        rive::gpu::RenderContextMetalImpl::ContextOptions renderContexOptions;
 
-        if (fiddleOptions.synchronousShaderCompilations)
-            renderCtxOpts.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
+        if (options.synchronousShaderCompilations)
+            renderContexOptions.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
 
-        if (fiddleOptions.disableRasterOrdering)
-            renderCtxOpts.disableFramebufferReads = true;
+        if (options.disableRasterOrdering)
+            renderContexOptions.disableFramebufferReads = true;
 
-        renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (gpu, renderCtxOpts);
-        oreContext = rive::ore::ContextMetal::Make (gpu, queue);
+        renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (device, renderContexOptions);
+        oreContext = rive::ore::ContextMetal::Make (device, queue);
     }
 
     //==============================================================================
 
+    ~GpuDeviceMetal() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Metal; }
 
-    rive::ore::Context* gpuContext() const noexcept override { return oreContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }
+
+    rive::ore::Context* getGpuContext() const noexcept override { return oreContext.get(); }
 
     bool isComputeAvailable() const noexcept override { return true; }
+
+    //==============================================================================
+
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            MTLResourceOptions options = MTLResourceStorageModeShared;
+            id<MTLBuffer> mtlBuffer = [device newBufferWithBytes:data
+                                                          length:byteSize
+                                                         options:options];
+            if (mtlBuffer == nil)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, mtlBuffer });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    //==============================================================================
+
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+        if (buffer == nullptr || dst == nullptr)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->mtlStorageBuffer == nil)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        YUP_AUTORELEASEPOOL
+        {
+            // Fence the GPU queue with a tiny fill so we know the compute
+            // dispatch has finished, then read directly from the shared buffer.
+            // Avoids a full-size staging allocation + blit (~2 MB for the
+            // particle demo) by exploiting Apple Silicon's unified memory.
+            id<MTLBuffer> fenceBuf = [device newBufferWithLength:4
+                                                         options:MTLResourceStorageModeShared];
+            if (fenceBuf == nil)
+                return false;
+
+            id<MTLCommandBuffer> cmd = [queue commandBuffer];
+            id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+            [blit fillBuffer:fenceBuf range:NSMakeRange (0, 4) value:0];
+            [blit endEncoding];
+            [cmd commit];
+            [cmd waitUntilCompleted];
+
+            std::memcpy (dst, [impl->mtlStorageBuffer contents], byteSize);
+        }
+
+        return true;
+    }
+
+    //==============================================================================
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr)
+            return false;
+
+        // Storage buffers: write directly into the shared MTLBuffer.
+        if (impl->mtlStorageBuffer != nil)
+        {
+            if (byteSize > buffer->getSizeInBytes())
+                return false;
+
+            YUP_AUTORELEASEPOOL
+            {
+                // Serialise after all prior GPU work with a blit, then write.
+                id<MTLBuffer> stagingBuf = [device newBufferWithLength:4
+                                                               options:MTLResourceStorageModeShared];
+
+                id<MTLCommandBuffer> cmd = [queue commandBuffer];
+                id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+                [blit fillBuffer:stagingBuf range:NSMakeRange (0, 4) value:0];
+                [blit endEncoding];
+                [cmd commit];
+                [cmd waitUntilCompleted];
+
+                std::memcpy ([impl->mtlStorageBuffer contents], data, byteSize);
+            }
+
+            return true;
+        }
+
+        // Vertex, index, and uniform buffers go through ore's update().
+        return GpuDevice::updateBuffer (buffer, data, byteSize);
+    }
 
     //==============================================================================
 
@@ -125,6 +231,32 @@ public:
         target.contextSlot->frameActive = false;
     }
 
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
+
+        id<MTLTexture> texture = target.targetTexture();
+        if (texture == nil)
+            return false;
+
+        YUP_AUTORELEASEPOOL
+        {
+            MTLRenderPassDescriptor* descriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+            descriptor.colorAttachments[0].texture = texture;
+            descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+            descriptor.colorAttachments[0].clearColor = MTLClearColorMake (color.red, color.green, color.blue, color.alpha);
+            descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+            // An encoder with no draws still performs the attachment's load action.
+            id<MTLCommandBuffer> commandBuffer = [queue commandBuffer];
+            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:descriptor];
+            [encoder endEncoding];
+            [commandBuffer commit];
+        }
+
+        return true;
+    }
+
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
@@ -148,7 +280,7 @@ public:
 #else
             stagingDesc.storageMode = MTLStorageModeManaged;
 #endif
-            target.stagingTexture = [gpu newTextureWithDescriptor:stagingDesc];
+            target.stagingTexture = [device newTextureWithDescriptor:stagingDesc];
             if (target.stagingTexture == nil)
                 return false;
         }
@@ -190,7 +322,7 @@ public:
 
     //==============================================================================
     /** Returns the native MTLDevice. Used by GraphicsContextMetal to share the device. */
-    id<MTLDevice> getDevice() const noexcept { return gpu; }
+    id<MTLDevice> getDevice() const noexcept { return device; }
 
     /** Returns the native MTLCommandQueue. Used by GraphicsContextMetal. */
     id<MTLCommandQueue> getCommandQueue() const noexcept { return queue; }
@@ -200,10 +332,17 @@ private:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetMetal : public RenderableTarget
     {
+        ~OffscreenTargetMetal() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         id<MTLTexture> stagingTexture = nil;
@@ -241,8 +380,10 @@ private:
         {
             if (renderCanvas == nullptr)
                 return nil;
+
             if (auto* target = static_cast<rive::gpu::RenderTargetMetal*> (renderCanvas->renderTarget()))
                 return target->targetTexture();
+
             return nil;
         }
     };
@@ -251,32 +392,37 @@ private:
     {
         for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         rive::gpu::RenderContextMetalImpl::ContextOptions renderCtxOpts;
-        if (fiddleOptions.synchronousShaderCompilations)
+        if (options.synchronousShaderCompilations)
             renderCtxOpts.shaderCompilationMode = rive::gpu::ShaderCompilationMode::alwaysSynchronous;
-        if (fiddleOptions.disableRasterOrdering)
+        if (options.disableRasterOrdering)
             renderCtxOpts.disableFramebufferReads = true;
 
         auto slot = std::make_unique<OffscreenContextSlot>();
-        slot->renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (gpu, renderCtxOpts);
+        slot->renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (device, renderCtxOpts);
         if (slot->renderContext == nullptr)
             return nullptr;
+
+        slot->leased = true;
 
         auto* result = slot.get();
         offscreenContextPool.push_back (std::move (slot));
         return result;
     }
 
-    const GpuDevice::Options fiddleOptions;
+    const GpuDevice::Options options;
     std::unique_ptr<rive::gpu::RenderContext> renderContext;
     std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
     std::unique_ptr<rive::ore::ContextMetal> oreContext;
-    id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();
-    id<MTLCommandQueue> queue = [gpu newCommandQueue];
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    id<MTLCommandQueue> queue = [device newCommandQueue];
 };
 
 //==============================================================================

@@ -23,7 +23,9 @@
 #include "rive/renderer/d3d11/render_context_d3d_impl.hpp"
 #include "rive/renderer/d3d11/d3d11.hpp"
 #include "rive/renderer/ore/ore_context_d3d11.hpp"
+
 #include <dxgi1_2.h>
+
 #include <vector>
 
 namespace yup
@@ -32,24 +34,156 @@ namespace yup
 class GpuDeviceD3D : public GpuDevice
 {
 public:
-    GpuDeviceD3D (ComPtr<ID3D11Device> gpu,
-                  ComPtr<ID3D11DeviceContext> gpuContext,
+    GpuDeviceD3D (ComPtr<ID3D11Device> gpuToUse,
+                  ComPtr<ID3D11DeviceContext> gpuContextToUse,
                   const rive::gpu::D3DContextOptions& contextOptions,
                   Options options)
-        : m_options (options)
-        , m_renderContextOptions (contextOptions)
-        , m_gpu (std::move (gpu))
-        , m_gpuContext (std::move (gpuContext))
-        , m_renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, m_renderContextOptions))
-        , m_oreContext (rive::ore::ContextD3D11::Make (m_gpu.Get(), m_gpuContext.Get()))
+        : options (options)
+        , renderContextOptions (contextOptions)
+        , gpu (std::move (gpuToUse))
+        , gpuContext (std::move (gpuContextToUse))
+        , renderContext (rive::gpu::RenderContextD3DImpl::MakeContext (gpu, gpuContext, renderContextOptions))
+        , oreContext (rive::ore::ContextD3D11::Make (gpu.Get(), gpuContext.Get()))
     {
     }
 
+    ~GpuDeviceD3D() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Direct3D; }
 
-    rive::ore::Context* gpuContext() const noexcept override { return m_oreContext.get(); }
+    rive::gpu::RenderContext* getRenderContext() const override { return renderContext.get(); }
+
+    rive::ore::Context* getGpuContext() const noexcept override { return oreContext.get(); }
 
     bool isComputeAvailable() const noexcept override { return true; }
+
+    /** Returns the native ID3D11Device for compute operations. */
+    ID3D11Device* getD3DDevice() const noexcept { return gpu.Get(); }
+
+    /** Returns the native ID3D11DeviceContext for compute operations. */
+    ID3D11DeviceContext* getD3DDeviceContext() const noexcept { return gpuContext.Get(); }
+
+    //==============================================================================
+
+    ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
+    {
+        if (type == GpuBufferType::storage)
+        {
+            jassert (data != nullptr && byteSize > 0);
+            if (data == nullptr || byteSize == 0)
+                return nullptr;
+
+            D3D11_BUFFER_DESC bufDesc {};
+            bufDesc.ByteWidth = static_cast<UINT> (byteSize);
+            bufDesc.Usage = D3D11_USAGE_DEFAULT;
+            bufDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+            bufDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+            bufDesc.StructureByteStride = 0;
+
+            D3D11_SUBRESOURCE_DATA initData {};
+            initData.pSysMem = data;
+
+            ComPtr<ID3D11Buffer> d3dBuffer;
+            HRESULT hr = gpu->CreateBuffer (&bufDesc, &initData, d3dBuffer.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || d3dBuffer == nullptr)
+                return nullptr;
+
+            D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc {};
+            uavDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+            uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            uavDesc.Buffer.NumElements = static_cast<UINT> (byteSize / 4);
+            uavDesc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+
+            ComPtr<ID3D11UnorderedAccessView> uav;
+            hr = gpu->CreateUnorderedAccessView (d3dBuffer.Get(), &uavDesc, uav.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || uav == nullptr)
+                return nullptr;
+
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (d3dBuffer), std::move (uav) });
+        }
+
+        return GpuDevice::createBuffer (type, data, byteSize);
+    }
+
+    //==============================================================================
+
+    bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
+    {
+        if (buffer == nullptr || dst == nullptr)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr || impl->d3dStorageBuffer == nullptr)
+            return false;
+
+        const auto byteSize = buffer->getSizeInBytes();
+        if (dstSize < byteSize)
+            return false;
+
+        // The storage buffer is D3D11_USAGE_DEFAULT and so not CPU accessible; a
+        // staging copy is the only way to reach its contents.
+        if (impl->d3dReadbackStaging == nullptr)
+        {
+            D3D11_BUFFER_DESC stagingDesc {};
+            stagingDesc.ByteWidth = static_cast<UINT> (byteSize);
+            stagingDesc.Usage = D3D11_USAGE_STAGING;
+            stagingDesc.BindFlags = 0;
+            stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            stagingDesc.MiscFlags = 0;
+            stagingDesc.StructureByteStride = 0;
+
+            HRESULT hr = gpu->CreateBuffer (&stagingDesc, nullptr, impl->d3dReadbackStaging.ReleaseAndGetAddressOf());
+            if (FAILED (hr) || impl->d3dReadbackStaging == nullptr)
+                return false;
+        }
+
+        // The compute dispatch was issued on this same immediate context, so the
+        // copy is ordered after it, and Map (without DO_NOT_WAIT) blocks until the
+        // copy has retired. D3D11 can therefore read back in lockstep and always
+        // hand the caller current data.
+        gpuContext->CopyResource (impl->d3dReadbackStaging.Get(), impl->d3dStorageBuffer.Get());
+
+        D3D11_MAPPED_SUBRESOURCE mapped {};
+        HRESULT hr = gpuContext->Map (impl->d3dReadbackStaging.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        if (FAILED (hr) || mapped.pData == nullptr)
+            return false;
+
+        memcpy (dst, mapped.pData, byteSize);
+        gpuContext->Unmap (impl->d3dReadbackStaging.Get(), 0);
+        return true;
+    }
+
+    //==============================================================================
+
+    bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
+    {
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr)
+            return false;
+
+        // For ore-backed buffers (vertex, index, uniform), delegate to base class.
+        if (impl->d3dStorageBuffer == nullptr)
+            return GpuDevice::updateBuffer (buffer, data, byteSize);
+
+        const auto fullSize = buffer->getSizeInBytes();
+        if (byteSize > fullSize)
+            return false;
+
+        if (byteSize == fullSize)
+        {
+            gpuContext->UpdateSubresource (impl->d3dStorageBuffer.Get(), 0, nullptr, data, static_cast<UINT> (byteSize), 0);
+        }
+        else
+        {
+            D3D11_BOX box { 0, 0, 0, static_cast<UINT> (byteSize), 1, 1 };
+            gpuContext->UpdateSubresource (impl->d3dStorageBuffer.Get(), 0, &box, data, static_cast<UINT> (byteSize), 0);
+        }
+
+        return true;
+    }
 
     //==============================================================================
 
@@ -57,10 +191,17 @@ public:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
+        bool leased = false;
     };
 
     struct OffscreenTargetD3D : public RenderableTarget
     {
+        ~OffscreenTargetD3D() override
+        {
+            if (contextSlot != nullptr)
+                contextSlot->leased = false;
+        }
+
         int width = 0;
         int height = 0;
         ComPtr<ID3D11Texture2D> stagingTexture;
@@ -108,7 +249,7 @@ public:
         stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
         ComPtr<ID3D11Texture2D> staging;
-        auto hr = m_gpu->CreateTexture2D (&stagingDesc, nullptr, staging.ReleaseAndGetAddressOf());
+        auto hr = gpu->CreateTexture2D (&stagingDesc, nullptr, staging.ReleaseAndGetAddressOf());
         if (FAILED (hr))
             return nullptr;
         return staging;
@@ -116,7 +257,7 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        if (width <= 0 || height <= 0 || m_renderContext == nullptr)
+        if (width <= 0 || height <= 0 || renderContext == nullptr)
             return nullptr;
 
         auto target = std::make_unique<OffscreenTargetD3D>();
@@ -125,8 +266,8 @@ public:
         target->renderContext = nullptr;
         target->contextSlot = nullptr;
 
-        target->renderCanvas = m_renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
-                                                                  static_cast<uint32_t> (height));
+        target->renderCanvas = renderContext->makeRenderCanvas (static_cast<uint32_t> (width),
+                                                                static_cast<uint32_t> (height));
         if (target->renderCanvas == nullptr)
             return nullptr;
 
@@ -192,9 +333,27 @@ public:
         renderContext->flush (flushDesc);
 
         if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
-            m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
+            gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
 
         target.contextSlot->frameActive = false;
+    }
+
+    bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
+    {
+        auto& target = static_cast<OffscreenTargetD3D&> (baseTarget);
+
+        auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget());
+        if (renderTarget == nullptr || renderTarget->targetTexture() == nullptr)
+            return false;
+
+        ComPtr<ID3D11RenderTargetView> renderTargetView;
+        if (FAILED (gpu->CreateRenderTargetView (renderTarget->targetTexture(), nullptr, renderTargetView.ReleaseAndGetAddressOf())))
+            return false;
+
+        const FLOAT rgba[4] { color.red, color.green, color.blue, color.alpha };
+        gpuContext->ClearRenderTargetView (renderTargetView.Get(), rgba);
+
+        return true;
     }
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
@@ -211,11 +370,11 @@ public:
         if (target.getRenderContext() == nullptr)
         {
             if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
-                m_gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
+                gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
         }
 
         D3D11_MAPPED_SUBRESOURCE mapped {};
-        HRESULT hr = m_gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+        HRESULT hr = gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
         if (FAILED (hr))
             return false;
 
@@ -229,37 +388,60 @@ public:
                          bytesPerRow);
         }
 
-        m_gpuContext->Unmap (target.stagingTexture.Get(), 0);
+        gpuContext->Unmap (target.stagingTexture.Get(), 0);
         return true;
     }
 
 private:
     OffscreenContextSlot* acquireOffscreenContext()
     {
-        for (const auto& slot : m_offscreenContextPool)
+        for (const auto& slot : offscreenContextPool)
         {
-            if (! slot->frameActive)
+            if (! slot->leased)
+            {
+                slot->leased = true;
                 return slot.get();
+            }
         }
 
         auto slot = std::make_unique<OffscreenContextSlot>();
-        slot->renderContext = rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, m_renderContextOptions);
+        slot->renderContext = rive::gpu::RenderContextD3DImpl::MakeContext (gpu, gpuContext, renderContextOptions);
         if (slot->renderContext == nullptr)
             return nullptr;
 
+        slot->leased = true;
+
         auto* result = slot.get();
-        m_offscreenContextPool.push_back (std::move (slot));
+        offscreenContextPool.push_back (std::move (slot));
         return result;
     }
 
-    Options m_options;
-    rive::gpu::D3DContextOptions m_renderContextOptions;
-    ComPtr<ID3D11Device> m_gpu;
-    ComPtr<ID3D11DeviceContext> m_gpuContext;
-    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
-    std::vector<std::unique_ptr<OffscreenContextSlot>> m_offscreenContextPool;
-    std::unique_ptr<rive::ore::ContextD3D11> m_oreContext;
+    Options options;
+    rive::gpu::D3DContextOptions renderContextOptions;
+    ComPtr<ID3D11Device> gpu;
+    ComPtr<ID3D11DeviceContext> gpuContext;
+    std::unique_ptr<rive::gpu::RenderContext> renderContext;
+    std::vector<std::unique_ptr<OffscreenContextSlot>> offscreenContextPool;
+    std::unique_ptr<rive::ore::ContextD3D11> oreContext;
 };
+
+//==============================================================================
+
+ID3D11Device* yup_getDirect3DDevice (GpuDevice& gpuDevice)
+{
+    if (gpuDevice.getPlatform() != GpuPlatform::Direct3D)
+        return nullptr;
+
+    return static_cast<GpuDeviceD3D&> (gpuDevice).getD3DDevice();
+}
+
+ID3D11DeviceContext* yup_getDirect3DDeviceContext (GpuDevice& gpuDevice)
+{
+    if (gpuDevice.getPlatform() != GpuPlatform::Direct3D)
+        return nullptr;
+
+    return static_cast<GpuDeviceD3D&> (gpuDevice).getD3DDeviceContext();
+}
 
 //==============================================================================
 

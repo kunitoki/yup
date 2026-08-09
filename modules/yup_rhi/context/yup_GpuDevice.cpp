@@ -22,7 +22,8 @@
 namespace yup
 {
 
-// Forward declarations for backend-specific factory functions
+//==============================================================================
+
 std::unique_ptr<GpuDevice> yup_constructHeadlessGpuDevice (GpuDevice::Options);
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
 std::unique_ptr<GpuDevice> yup_constructMetalGpuDevice (GpuDevice::Options);
@@ -38,6 +39,8 @@ std::unique_ptr<GpuDevice> yup_constructWebGPUGpuDevice (GpuDevice::Options);
 #elif YUP_RIVE_USE_DAWN
 std::unique_ptr<GpuDevice> yup_constructDawnGpuDevice (GpuDevice::Options);
 #endif
+
+//==============================================================================
 
 GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
 {
@@ -90,6 +93,158 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
     }
 
     return ctx.release();
+}
+
+//==============================================================================
+
+ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type,
+                                                              const void* data,
+                                                              size_t byteSize)
+{
+    if (data == nullptr || byteSize == 0)
+        return nullptr;
+
+    // Storage buffers must be handled by backend overrides.
+    if (type == GpuBufferType::storage)
+        return nullptr;
+
+    auto* oreCtx = getGpuContext();
+    if (oreCtx == nullptr)
+        return nullptr;
+
+    rive::ore::BufferDesc desc;
+    switch (type)
+    {
+        case GpuBufferType::vertex:
+            desc.usage = rive::ore::BufferUsage::vertex;
+            break;
+        case GpuBufferType::index:
+            desc.usage = rive::ore::BufferUsage::index;
+            break;
+        default:
+            desc.usage = rive::ore::BufferUsage::uniform;
+            break;
+    }
+
+    desc.size = (uint32_t) byteSize;
+    desc.data = data;
+    desc.immutable = true;
+    desc.label = "GpuBuffer";
+
+    auto buffer = oreCtx->makeBuffer (desc);
+    if (buffer == nullptr)
+        return nullptr;
+
+    return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
+}
+
+bool GpuDevice::readBuffer (GpuBuffer::Ptr, void*, size_t)
+{
+    return false;
+}
+
+bool GpuDevice::updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize)
+{
+    if (buffer == nullptr || data == nullptr || byteSize == 0)
+        return false;
+
+    auto* impl = buffer->getImpl();
+    if (impl == nullptr)
+        return false;
+
+    // For ore-backed buffers (vertex, index, uniform), update in place.
+    if (impl->oreBuffer != nullptr)
+    {
+        if (byteSize > buffer->getSizeInBytes())
+            return false;
+
+        impl->oreBuffer->update (data, (uint32_t) byteSize);
+        return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+
+GpuDevice::~GpuDevice()
+{
+    // A backend that forgets releasePooledResources() would let pooled ore buffers
+    // be destroyed after the ore context that created them.
+    jassert (uniformBufferPool.isEmpty());
+}
+
+void GpuDevice::releasePooledResources() noexcept
+{
+    uniformBufferPool.clear();
+}
+
+//==============================================================================
+
+size_t GpuDevice::UniformBufferPool::bucketFor (size_t byteSize) noexcept
+{
+    size_t index = 0;
+
+    for (size_t capacity = minimumCapacity; capacity < byteSize; capacity <<= 1)
+        ++index;
+
+    return index;
+}
+
+rive::rcp<rive::ore::Buffer> GpuDevice::UniformBufferPool::acquire (rive::ore::Context& oreCtx, size_t byteSize)
+{
+    if (byteSize == 0)
+        return nullptr;
+
+    const auto index = bucketFor (byteSize);
+
+    if (index >= buckets.size())
+        buckets.resize (index + 1);
+
+    auto& bucket = buckets[index];
+
+    if (! bucket.empty())
+    {
+        auto buffer = std::move (bucket.back());
+        bucket.pop_back();
+        return buffer;
+    }
+
+    rive::ore::BufferDesc desc;
+    desc.usage = rive::ore::BufferUsage::uniform;
+    desc.size = static_cast<uint32_t> (minimumCapacity << index);
+    desc.data = nullptr;
+    desc.immutable = false; // Rewritten in place every time it is handed out.
+    desc.label = "GpuRenderPass uniform";
+
+    return oreCtx.makeBuffer (desc);
+}
+
+void GpuDevice::UniformBufferPool::release (rive::rcp<rive::ore::Buffer> buffer)
+{
+    if (buffer == nullptr)
+        return;
+
+    // Capacities are exactly minimumCapacity << index, so the buffer lands back in
+    // the bucket it came from, which acquire() has already created.
+    const auto index = bucketFor (buffer->size());
+
+    if (index < buckets.size())
+        buckets[index].push_back (std::move (buffer));
+}
+
+void GpuDevice::UniformBufferPool::clear() noexcept
+{
+    buckets.clear();
+}
+
+bool GpuDevice::UniformBufferPool::isEmpty() const noexcept
+{
+    for (const auto& bucket : buckets)
+        if (! bucket.empty())
+            return false;
+
+    return true;
 }
 
 } // namespace yup

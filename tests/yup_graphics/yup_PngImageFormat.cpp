@@ -23,8 +23,6 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG
-
 // ======================================================================
 // Reader dimension and header tests
 // ======================================================================
@@ -766,5 +764,3 @@ TEST (PngImageFormatTests, ParseMetadataExtractsTextChunks)
     EXPECT_EQ (reader.metadata->textEntries.getValue ("Title", {}), String ("Test PNG"));
     EXPECT_EQ (reader.metadata->textEntries.getValue ("Author", {}), String ("YUP"));
 }
-
-#endif // YUP_MODULE_AVAILABLE_libpng && YUP_IMAGE_FORMAT_PNG

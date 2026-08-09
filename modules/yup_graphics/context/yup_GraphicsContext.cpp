@@ -26,7 +26,7 @@ namespace yup
 bool GraphicsContext::isGpuAvailable() const noexcept
 {
     if (auto device = getGpuDevice())
-        return device->gpuContext() != nullptr;
+        return device->getGpuContext() != nullptr;
 
     return false;
 }

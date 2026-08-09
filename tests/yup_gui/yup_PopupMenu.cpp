@@ -59,6 +59,8 @@ protected:
 
     void TearDown() override
     {
+        PopupMenu::dismissAllPopups();
+
         ApplicationTheme::setGlobalTheme (oldTheme.get());
         theme = nullptr;
         oldTheme = nullptr;

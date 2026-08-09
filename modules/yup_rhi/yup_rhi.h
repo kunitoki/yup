@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_shading rive_renderer
+    dependencies:       yup_core yup_shading yup_simd rive_renderer
     appleFrameworks:    Metal
 
   END_YUP_MODULE_DECLARATION
@@ -45,6 +45,7 @@
 
 #include <yup_core/yup_core.h>
 #include <yup_shading/yup_shading.h>
+#include <yup_simd/yup_simd.h>
 
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
@@ -65,11 +66,13 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "context/yup_OffscreenTarget.h"
 #include "context/yup_RenderableTarget.h"
 #include "context/yup_GpuDevice.h"
-#include "rhi/yup_ShaderBindingMap.h"
 #include "rhi/yup_GpuBuffer.h"
 #include "rhi/yup_GpuTexture.h"
 #include "rhi/yup_GpuFrame.h"
 #include "rhi/yup_GpuPipeline.h"
+#include "rhi/yup_GpuComputePipeline.h"
+#include "rhi/yup_GpuComputePass.h"
 #include "rhi/yup_GpuRenderPass.h"
 #include "rhi/yup_GpuTarget.h"
 #include "rhi/yup_GpuPipelineCache.h"
+#include "rhi/yup_ShaderBindingMap.h"

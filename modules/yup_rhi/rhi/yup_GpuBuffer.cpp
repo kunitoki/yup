@@ -28,7 +28,69 @@ struct GpuBuffer::Impl
 {
     GpuBufferType type = GpuBufferType::vertex;
     size_t byteSize = 0;
-    rive::rcp<rive::ore::Buffer> buffer;
+
+    // Ore buffer (for vertex, index, uniform).
+    rive::rcp<rive::ore::Buffer> oreBuffer;
+
+    // Native storage buffer handles (for compute).
+#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+    id<MTLBuffer> mtlStorageBuffer = nil;
+
+    ~Impl() = default;
+#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
+    ComPtr<ID3D11Buffer> d3dStorageBuffer;
+    ComPtr<ID3D11UnorderedAccessView> d3dUav;
+
+    /** Staging copy used by readBuffer(), kept alive so a per-frame reader does not
+        reallocate it every frame. Created on first readback. */
+    ComPtr<ID3D11Buffer> d3dReadbackStaging;
+
+    ~Impl() = default;
+#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+    wgpu::Buffer webgpuStorageBuffer;
+
+    /** One staging buffer in the pipelined readback ring.
+
+        Held by shared_ptr so an in-flight map callback keeps its slot (and the
+        staging buffer it unmaps) alive even if the GpuBuffer is released first.
+    */
+    struct ReadbackSlot
+    {
+        wgpu::Buffer staging;
+        uint64_t serial = 0; ///< Submission order, so snapshots are consumed oldest-first.
+        bool mapPending = false;
+        bool mapped = false;
+
+        ~ReadbackSlot()
+        {
+            if (mapped && staging != nullptr)
+                staging.Unmap();
+        }
+    };
+
+    /** Three slots keep one copy in flight, one map pending and one ready to
+        consume, so a snapshot lands every frame once the ring is primed. */
+    static constexpr size_t numReadbackSlots = 3;
+
+    std::vector<std::shared_ptr<ReadbackSlot>> readbackSlots;
+    uint64_t nextReadbackSerial = 0;
+
+    /** Set when the staging buffers could not be allocated, so a per-frame reader
+        gives up instead of retrying the same failing allocation every frame. */
+    bool readbackUnavailable = false;
+
+    ~Impl() = default;
+#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+    GLuint glBuffer = 0;
+
+    ~Impl()
+    {
+        if (glBuffer != 0)
+            glDeleteBuffers (1, &glBuffer);
+    }
+#else
+    ~Impl() = default;
+#endif
 };
 
 //==============================================================================
@@ -64,7 +126,25 @@ size_t GpuBuffer::getSizeInBytes() const noexcept
 bool GpuBuffer::isValid() const noexcept
 {
     auto* i = getImpl();
-    return i != nullptr && i->buffer != nullptr;
+    if (i == nullptr)
+        return false;
+
+    if (i->type == GpuBufferType::storage)
+    {
+#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+        return i->mtlStorageBuffer != nil;
+#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
+        return i->d3dStorageBuffer != nullptr;
+#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+        return i->webgpuStorageBuffer != nullptr;
+#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+        return i->glBuffer != 0;
+#else
+        return false;
+#endif
+    }
+
+    return i->oreBuffer != nullptr;
 }
 
 //==============================================================================
@@ -74,41 +154,16 @@ GpuBuffer::Ptr GpuBuffer::create (GpuDevice::Ptr ctx,
                                   const void* data,
                                   size_t byteSize)
 {
-    auto* oreCtx = ctx->gpuContext();
-    if (oreCtx == nullptr)
+    if (ctx == nullptr)
         return nullptr;
 
-    jassert (data != nullptr && byteSize > 0);
-    if (data == nullptr || byteSize == 0)
-        return nullptr;
+    return ctx->createBuffer (type, data, byteSize);
+}
 
-    rive::ore::BufferDesc desc;
-    switch (type)
-    {
-        case GpuBufferType::vertex:
-            desc.usage = rive::ore::BufferUsage::vertex;
-            break;
-        case GpuBufferType::index:
-            desc.usage = rive::ore::BufferUsage::index;
-            break;
-        case GpuBufferType::storage:
-        case GpuBufferType::uniform:
-        default:
-            desc.usage = rive::ore::BufferUsage::uniform;
-            break;
-    }
-
-    desc.size = (uint32_t) byteSize;
-    desc.data = data;
-    desc.immutable = true;
-    desc.label = "GpuBuffer";
-
-    auto buffer = oreCtx->makeBuffer (desc);
-    if (buffer == nullptr)
-        return nullptr;
-
-    GpuBuffer::Ptr result = new GpuBuffer();
-    result->impl = TypeErasedObject (GpuBuffer::Impl { type, byteSize, std::move (buffer) });
+GpuBuffer::Ptr GpuBuffer::createWithImpl (Impl&& impl)
+{
+    auto* result = new GpuBuffer();
+    result->impl = TypeErasedObject (std::move (impl));
     return result;
 }
 

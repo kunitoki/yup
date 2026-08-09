@@ -87,8 +87,133 @@ TEST (MathFunctionsTests, YupAbs_Runtime)
 }
 
 //==============================================================================
+// yup_sqrt Tests
+//==============================================================================
+
+TEST (MathFunctionsTests, YupSqrt_ConstexprVsRuntime)
+{
+    // Float: constexpr path vs runtime path
+    {
+        constexpr float x0 = yup_sqrt (0.0f);
+        constexpr float x1 = yup_sqrt (1.0f);
+        constexpr float x4 = yup_sqrt (4.0f);
+        constexpr float x9 = yup_sqrt (9.0f);
+        constexpr float x16 = yup_sqrt (16.0f);
+        constexpr float x100 = yup_sqrt (100.0f);
+        constexpr float x2 = yup_sqrt (2.0f);
+
+        EXPECT_FLOAT_EQ (yup_sqrt (0.0f), x0);
+        EXPECT_FLOAT_EQ (yup_sqrt (1.0f), x1);
+        EXPECT_FLOAT_EQ (yup_sqrt (4.0f), x4);
+        EXPECT_FLOAT_EQ (yup_sqrt (9.0f), x9);
+        EXPECT_FLOAT_EQ (yup_sqrt (16.0f), x16);
+        EXPECT_FLOAT_EQ (yup_sqrt (100.0f), x100);
+        EXPECT_FLOAT_EQ (yup_sqrt (2.0f), x2);
+    }
+
+    // Double: constexpr path vs runtime path
+    {
+        constexpr double x0 = yup_sqrt (0.0);
+        constexpr double x1 = yup_sqrt (1.0);
+        constexpr double x4 = yup_sqrt (4.0);
+        constexpr double x9 = yup_sqrt (9.0);
+        constexpr double x16 = yup_sqrt (16.0);
+        constexpr double x100 = yup_sqrt (100.0);
+        constexpr double x2 = yup_sqrt (2.0);
+
+        EXPECT_DOUBLE_EQ (yup_sqrt (0.0), x0);
+        EXPECT_DOUBLE_EQ (yup_sqrt (1.0), x1);
+        EXPECT_DOUBLE_EQ (yup_sqrt (4.0), x4);
+        EXPECT_DOUBLE_EQ (yup_sqrt (9.0), x9);
+        EXPECT_DOUBLE_EQ (yup_sqrt (16.0), x16);
+        EXPECT_DOUBLE_EQ (yup_sqrt (100.0), x100);
+        EXPECT_DOUBLE_EQ (yup_sqrt (2.0), x2);
+    }
+}
+
+TEST (MathFunctionsTests, YupSqrt_Runtime)
+{
+    // Integer sqrt via implicit conversion
+    EXPECT_EQ (yup_sqrt (0), 0);
+    EXPECT_EQ (yup_sqrt (1), 1);
+    EXPECT_EQ (yup_sqrt (4), 2);
+    EXPECT_EQ (yup_sqrt (9), 3);
+    EXPECT_EQ (yup_sqrt (16), 4);
+    EXPECT_EQ (yup_sqrt (25), 5);
+    EXPECT_EQ (yup_sqrt (100), 10);
+
+    // Float tests
+    EXPECT_FLOAT_EQ (yup_sqrt (0.0f), 0.0f);
+    EXPECT_FLOAT_EQ (yup_sqrt (1.0f), 1.0f);
+    EXPECT_FLOAT_EQ (yup_sqrt (4.0f), 2.0f);
+    EXPECT_FLOAT_EQ (yup_sqrt (9.0f), 3.0f);
+    EXPECT_FLOAT_EQ (yup_sqrt (16.0f), 4.0f);
+    EXPECT_FLOAT_EQ (yup_sqrt (2.0f), 1.41421356f);
+    EXPECT_FLOAT_EQ (yup_sqrt (3.0f), 1.73205081f);
+    EXPECT_FLOAT_EQ (yup_sqrt (100.0f), 10.0f);
+
+    // Negative input should return NaN
+    EXPECT_TRUE (std::isnan (yup_sqrt (-1.0f)));
+    EXPECT_TRUE (std::isnan (yup_sqrt (-4.0f)));
+
+    // Double tests
+    EXPECT_DOUBLE_EQ (yup_sqrt (0.0), 0.0);
+    EXPECT_DOUBLE_EQ (yup_sqrt (1.0), 1.0);
+    EXPECT_DOUBLE_EQ (yup_sqrt (4.0), 2.0);
+    EXPECT_DOUBLE_EQ (yup_sqrt (9.0), 3.0);
+    EXPECT_DOUBLE_EQ (yup_sqrt (16.0), 4.0);
+    EXPECT_DOUBLE_EQ (yup_sqrt (2.0), 1.4142135623730951);
+    EXPECT_DOUBLE_EQ (yup_sqrt (100.0), 10.0);
+
+    // Negative input should return NaN
+    EXPECT_TRUE (std::isnan (yup_sqrt (-1.0)));
+    EXPECT_TRUE (std::isnan (yup_sqrt (-4.0)));
+}
+
+//==============================================================================
 // yup_hypot Tests
 //==============================================================================
+
+TEST (MathFunctionsTests, YupHypot_ConstexprVsRuntime)
+{
+    // Float: constexpr path vs runtime path
+    {
+        constexpr float h0 = yup_hypot (0.0f, 0.0f);
+        constexpr float h1 = yup_hypot (1.0f, 0.0f);
+        constexpr float h2 = yup_hypot (0.0f, 1.0f);
+        constexpr float h3 = yup_hypot (3.0f, 4.0f);
+        constexpr float h4 = yup_hypot (5.0f, 12.0f);
+        constexpr float h5 = yup_hypot (8.0f, 6.0f);
+        constexpr float h6 = yup_hypot (-3.0f, 4.0f);
+
+        EXPECT_FLOAT_EQ (yup_hypot (0.0f, 0.0f), h0);
+        EXPECT_FLOAT_EQ (yup_hypot (1.0f, 0.0f), h1);
+        EXPECT_FLOAT_EQ (yup_hypot (0.0f, 1.0f), h2);
+        EXPECT_FLOAT_EQ (yup_hypot (3.0f, 4.0f), h3);
+        EXPECT_FLOAT_EQ (yup_hypot (5.0f, 12.0f), h4);
+        EXPECT_FLOAT_EQ (yup_hypot (8.0f, 6.0f), h5);
+        EXPECT_FLOAT_EQ (yup_hypot (-3.0f, 4.0f), h6);
+    }
+
+    // Double: constexpr path vs runtime path
+    {
+        constexpr double h0 = yup_hypot (0.0, 0.0);
+        constexpr double h1 = yup_hypot (1.0, 0.0);
+        constexpr double h2 = yup_hypot (0.0, 1.0);
+        constexpr double h3 = yup_hypot (3.0, 4.0);
+        constexpr double h4 = yup_hypot (5.0, 12.0);
+        constexpr double h5 = yup_hypot (8.0, 6.0);
+        constexpr double h6 = yup_hypot (-3.0, 4.0);
+
+        EXPECT_DOUBLE_EQ (yup_hypot (0.0, 0.0), h0);
+        EXPECT_DOUBLE_EQ (yup_hypot (1.0, 0.0), h1);
+        EXPECT_DOUBLE_EQ (yup_hypot (0.0, 1.0), h2);
+        EXPECT_DOUBLE_EQ (yup_hypot (3.0, 4.0), h3);
+        EXPECT_DOUBLE_EQ (yup_hypot (5.0, 12.0), h4);
+        EXPECT_DOUBLE_EQ (yup_hypot (8.0, 6.0), h5);
+        EXPECT_DOUBLE_EQ (yup_hypot (-3.0, 4.0), h6);
+    }
+}
 
 TEST (MathFunctionsTests, YupHypot_Float)
 {

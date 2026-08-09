@@ -89,19 +89,19 @@ public:
 
         @return Pointer to a rive::Factory object.
     */
-    virtual rive::Factory* factory() = 0;
+    virtual rive::Factory* getFactory() = 0;
 
     /** Gets the PLS render context, if available.
 
         @return Pointer to a rive::pls::PLSRenderContext, or nullptr if not available.
     */
-    virtual rive::gpu::RenderContext* renderContext() = 0;
+    virtual rive::gpu::RenderContext* getRenderContext() = 0;
 
     /** Gets the PLS render target, if available.
 
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
-    virtual rive::gpu::RenderTarget* renderTarget() = 0;
+    virtual rive::gpu::RenderTarget* getRenderTarget() = 0;
 
     /** Creates a renderer suitable for the specified dimensions.
 

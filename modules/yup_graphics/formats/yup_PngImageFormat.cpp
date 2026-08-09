@@ -372,7 +372,7 @@ void PngImageFormatReader::parseChunks()
                 // tIME chunk
                 if (std::memcmp (type, "tIME", 4) == 0 && chunkLen >= 7)
                 {
-                    char buf[20];
+                    char buf[32];
                     snprintf (buf, sizeof (buf), "%04d:%02d:%02d %02d:%02d:%02d", readBE16 (chunkData), chunkData[2], chunkData[3], chunkData[4], chunkData[5], chunkData[6]);
                     metadata->textEntries.set ("png/time", String (buf));
                 }

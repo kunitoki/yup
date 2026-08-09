@@ -215,7 +215,7 @@ if (YUP_PLATFORM_DESKTOP)
 endif()
 
 target_compile_options (${target_name} PRIVATE
-    $<$<CXX_COMPILER_ID:GNU>:-Wno-subobject-linkage>)
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-subobject-linkage>)
 
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"

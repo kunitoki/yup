@@ -1211,6 +1211,10 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
 void Component::setComponentEffect (ComponentEffect::Ptr effect)
 {
     componentEffect = std::move (effect);
+
+    if (componentEffect == nullptr)
+        effectOffscreenCanvas = nullptr;
+
     repaint();
 }
 
@@ -1335,7 +1339,7 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
@@ -1343,7 +1347,17 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     const auto w = static_cast<int> (getWidth());
     const auto h = static_cast<int> (getHeight());
 
-    auto canvas = GpuCanvas::create (ctx, w, h);
+    GpuCanvas::Ptr canvas;
+    if (reuseCanvas != nullptr && reuseCanvas->getWidth() == w && reuseCanvas->getHeight() == h)
+    {
+        canvas = std::move (reuseCanvas);
+    }
+    else
+    {
+        reuseCanvas = nullptr;
+        canvas = GpuCanvas::create (ctx, w, h);
+    }
+
     if (canvas == nullptr)
         return nullptr;
 
@@ -1468,7 +1482,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     // Effect path: render full subtree offscreen, apply effect, composite
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous);
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous, std::move (effectOffscreenCanvas));
         if (canvas == nullptr)
             return;
 
@@ -1484,6 +1498,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
             componentEffect->apply (g, texture, getLocalBounds());
         }
+
+        effectOffscreenCanvas = canvas;
 
         if (options.cachedToTexture)
             cachedTextureCanvas = canvas;

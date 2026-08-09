@@ -145,12 +145,12 @@ private:
     void evictIfNeeded();
 
     GpuDevice::Ptr context;
-    std::map<String, Entry> cache;
+    std::unordered_map<String, Entry> cache;
     size_t maxEntries = 256;
     uint64 accessCounter = 0;
     mutable CriticalSection lock;
 
-    YUP_DECLARE_NON_COPYABLE (GpuPipelineCache)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuPipelineCache)
 };
 
 } // namespace yup

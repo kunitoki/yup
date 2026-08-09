@@ -26,6 +26,7 @@
 #if YUP_RIVE_USE_D3D
 #include <array>
 #include <dxgi1_2.h>
+#include <rive/renderer/d3d11/d3d11.hpp>
 #endif
 #if YUP_RIVE_USE_OPENGL
 #include <rive/renderer/gl/gles3.hpp>
@@ -55,6 +56,8 @@
 #endif
 
 //==============================================================================
+#include "rhi/yup_GpuBuffer.cpp"
+
 #include "native/yup_GpuDevice_headless.cpp"
 
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
@@ -76,11 +79,34 @@
 #endif
 
 //==============================================================================
-#include "rhi/yup_GpuBuffer.cpp"
 #include "rhi/yup_GpuFrame.cpp"
 #include "rhi/yup_GpuPipeline.cpp"
 #include "rhi/yup_GpuPipelineCache.cpp"
 #include "rhi/yup_GpuRenderPass.cpp"
+
+//==============================================================================
+#include "rhi/yup_GpuComputePass.cpp"
+
+#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#include "native/yup_GpuComputePipeline_metal.cpp"
+#include "native/yup_GpuComputePass_metal.cpp"
+#endif
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+#include "native/yup_GpuComputePipeline_d3d.cpp"
+#include "native/yup_GpuComputePass_d3d.cpp"
+#endif
+#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#include "native/yup_GpuComputePipeline_webgpu.cpp"
+#include "native/yup_GpuComputePass_webgpu.cpp"
+#endif
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#include "native/yup_GpuComputePipeline_opengl.cpp"
+#include "native/yup_GpuComputePass_opengl.cpp"
+#endif
+
+#include "rhi/yup_GpuComputePipeline.cpp"
+
+//==============================================================================
 #include "rhi/yup_GpuTarget.cpp"
 #include "rhi/yup_GpuTexture.cpp"
 #include "rhi/yup_ShaderBindingMap.cpp"

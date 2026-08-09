@@ -60,6 +60,7 @@ struct GpuRenderPass::Impl
     GpuPipeline::Ptr pipelineRef;
     rive::ore::Pipeline* orePipeline = nullptr;
     const std::vector<rive::rcp<rive::ore::BindGroupLayout>>* oreLayouts = nullptr;
+    const std::vector<std::vector<GpuPipeline::Impl::SamplerBinding>>* oreSamplers = nullptr;
 
     bool finished = false;
 
@@ -143,10 +144,25 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
     std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
 
+    // Fast path: skip bind-group creation when there are no UBOs, textures,
+    // or samplers to bind (common for simple vertex-only draws).
+    const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty();
+
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
     {
         auto* layout = layouts[groupIdx].get();
         if (layout == nullptr)
+            continue;
+
+        // The pipeline pre-created one sampler per sampler slot this layout
+        // declares, so their presence also decides whether a bind group is needed.
+        const std::vector<GpuPipeline::Impl::SamplerBinding>* groupSamplers = nullptr;
+        if (oreSamplers != nullptr && groupIdx < oreSamplers->size())
+            groupSamplers = &(*oreSamplers)[groupIdx];
+
+        const bool layoutHasSamplers = groupSamplers != nullptr && ! groupSamplers->empty();
+
+        if (! hasAnyBindings && ! layoutHasSamplers)
             continue;
 
         // UBO entries for this group.
@@ -157,13 +173,9 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
             if (ub.group != (int) groupIdx)
                 continue;
 
-            rive::ore::BufferDesc bufDesc;
-            bufDesc.usage = rive::ore::BufferUsage::uniform;
-            bufDesc.size = (uint32_t) ub.data.size();
-            bufDesc.data = ub.data.data();
-            bufDesc.immutable = true;
-
-            auto buf = oreCtx->makeBuffer (bufDesc);
+            // Recycled from the device pool and owned by the frame, so a steady
+            // stream of draws stops allocating GPU buffers after the first frames.
+            auto buf = framePools->acquireUniformBuffer (ub.data.data(), ub.data.size());
             if (buf == nullptr)
                 continue;
 
@@ -173,7 +185,6 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
             entry.offset = 0;
             entry.size = (uint32_t) ub.data.size();
             uboEntries.push_back (entry);
-            framePools->liveBuffers.push_back (std::move (buf));
         }
 
         // Texture entries for this group.
@@ -195,32 +206,22 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
             framePools->liveViews.push_back (std::move (view));
         }
 
-        // Sampler entries - auto-create one linear+clamp sampler for each
-        // sampler binding declared in the layout.
+        // Sampler entries - one linear+clamp sampler per sampler binding declared
+        // in the layout, created once when the pipeline was compiled. The frame
+        // holds a reference too, since the encoded pass points at them raw and may
+        // outlive this pass object.
         std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
 
-        for (const auto& layoutEntry : layout->entries())
+        if (groupSamplers != nullptr)
         {
-            if (layoutEntry.kind != rive::ore::BindingKind::sampler
-                && layoutEntry.kind != rive::ore::BindingKind::comparisonSampler)
+            for (const auto& sb : *groupSamplers)
             {
-                continue;
+                rive::ore::BindGroupDesc::SampEntry se;
+                se.slot = sb.binding;
+                se.sampler = sb.sampler.get();
+                sampEntries.push_back (se);
+                framePools->liveSamplers.push_back (sb.sampler);
             }
-            rive::ore::SamplerDesc sd;
-            sd.minFilter = rive::ore::Filter::linear;
-            sd.magFilter = rive::ore::Filter::linear;
-            sd.wrapU = rive::ore::WrapMode::clampToEdge;
-            sd.wrapV = rive::ore::WrapMode::clampToEdge;
-
-            auto samp = oreCtx->makeSampler (sd);
-            if (samp == nullptr)
-                continue;
-
-            rive::ore::BindGroupDesc::SampEntry se;
-            se.slot = layoutEntry.binding;
-            se.sampler = samp.get();
-            sampEntries.push_back (se);
-            framePools->liveSamplers.push_back (std::move (samp));
         }
 
         rive::ore::BindGroupDesc bgDesc;
@@ -329,11 +330,13 @@ void GpuRenderPass::setPipeline (GpuPipeline::Ptr pipeline)
     {
         i->orePipeline = pipeImpl->pipeline.get();
         i->oreLayouts = &pipeImpl->layouts;
+        i->oreSamplers = &pipeImpl->samplersPerGroup;
     }
     else
     {
         i->orePipeline = nullptr;
         i->oreLayouts = nullptr;
+        i->oreSamplers = nullptr;
     }
 }
 
@@ -387,7 +390,7 @@ void GpuRenderPass::setVertexBuffer (int slot, GpuBuffer::Ptr buffer)
     if (i == nullptr)
         return;
 
-    auto* ore = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
+    auto* ore = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->oreBuffer.get() : nullptr;
 
     for (auto& vb : i->vertexBindings)
     {
@@ -408,7 +411,7 @@ void GpuRenderPass::setIndexBuffer (GpuIndexFormat format, GpuBuffer::Ptr buffer
     if (i == nullptr)
         return;
 
-    i->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->buffer.get() : nullptr;
+    i->indexOreBuffer = (buffer != nullptr && buffer->getImpl() != nullptr) ? buffer->getImpl()->oreBuffer.get() : nullptr;
     i->indexBuffer = std::move (buffer);
     i->indexFormat = GpuPipelineHelpers::toOreIndexFormat (format);
 }
@@ -438,6 +441,28 @@ bool GpuRenderPass::finish()
     auto* i = getImpl();
     if (i == nullptr || i->finished)
         return false;
+
+    // When a clear was requested but no draw was submitted (no pipeline set),
+    // encode a clear-only render pass so the framebuffer is actually cleared.
+    if (i->options.clear && i->orePipeline == nullptr && i->oreCtx != nullptr && i->outputTexture != nullptr)
+    {
+        auto outputView = Impl::createView (*i->oreCtx, *i->outputTexture, true);
+        if (outputView != nullptr)
+        {
+            rive::ore::RenderPassDesc rpDesc;
+            rpDesc.colorCount = 1;
+            rpDesc.colorAttachments[0].view = outputView.get();
+            rpDesc.colorAttachments[0].loadOp = rive::ore::LoadOp::clear;
+            rpDesc.colorAttachments[0].storeOp = rive::ore::StoreOp::store;
+            rpDesc.colorAttachments[0].clearColor = { i->options.clearColor.red,
+                                                      i->options.clearColor.green,
+                                                      i->options.clearColor.blue,
+                                                      i->options.clearColor.alpha };
+
+            auto renderPass = i->oreCtx->beginRenderPass (rpDesc);
+            renderPass->finish();
+        }
+    }
 
     i->finished = true;
     return true;

@@ -23,8 +23,6 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG
-
 // ======================================================================
 // Reader dimension and header tests
 // ======================================================================
@@ -756,5 +754,3 @@ TEST (JpegImageFormatTests, MetadataExtractsExifOrientation)
     ASSERT_NE (reader.metadata, nullptr);
     EXPECT_EQ (reader.metadata->getOrientation(), 6);
 }
-
-#endif // YUP_MODULE_AVAILABLE_libjpeg && YUP_IMAGE_FORMAT_JPEG

@@ -208,6 +208,15 @@ AnimationRenderResources::MatteCanvasLease AnimationRenderResources::acquireMatt
     slot.width = width;
     slot.height = height;
     slot.inUse = true;
+    for (size_t i = 0; i < matteCanvasPool.size(); ++i)
+    {
+        if (! matteCanvasPool[i].inUse)
+        {
+            matteCanvasPool[i] = std::move (slot);
+            return { *this, i };
+        }
+    }
+
     matteCanvasPool.push_back (std::move (slot));
     return { *this, matteCanvasPool.size() - 1 };
 }

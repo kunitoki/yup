@@ -185,60 +185,42 @@ public:
 
 //==============================================================================
 
-class NoOpGraphicsContext : public GraphicsContext
+class GraphicsContextHeadless : public GraphicsContext
 {
 public:
-    NoOpGraphicsContext()
+    GraphicsContextHeadless()
+        : gpuDevice (GpuDevice::create (GpuPlatform::Headless, {}))
     {
-        gpuCtx = GpuDevice::create (GpuPlatform::Headless, {});
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Headless; }
 
-    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuCtx; }
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
 
-    rive::Factory* factory() override
-    {
-        return std::addressof (noOpFactory);
-    }
+    rive::Factory* getFactory() override { return std::addressof (noOpFactory); }
 
-    rive::gpu::RenderContext* renderContext() override
-    {
-        return nullptr;
-    }
+    rive::gpu::RenderContext* getRenderContext() override { return nullptr; }
 
-    rive::gpu::RenderTarget* renderTarget() override
-    {
-        return nullptr;
-    }
+    rive::gpu::RenderTarget* getRenderTarget() override { return nullptr; }
 
-    std::unique_ptr<rive::Renderer> makeRenderer (int, int) override
-    {
-        return std::make_unique<NoOpRenderer>();
-    }
+    std::unique_ptr<rive::Renderer> makeRenderer (int, int) override { return std::make_unique<NoOpRenderer>(); }
 
-    void onSizeChanged (void*, int, int, float, uint32_t) override
-    {
-    }
+    void onSizeChanged (void*, int, int, float, uint32_t) override {}
 
-    void begin (const rive::gpu::RenderContext::FrameDescriptor&) override
-    {
-    }
+    void begin (const rive::gpu::RenderContext::FrameDescriptor&) override {}
 
-    void end (void*) override
-    {
-    }
+    void end (void*) override {}
 
 private:
     NoOpFactory noOpFactory;
-    GpuDevice::Ptr gpuCtx;
+    GpuDevice::Ptr gpuDevice;
 };
 
 //==============================================================================
 
-std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options fiddleOptions, GpuDevice::Ptr)
+std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options, GpuDevice::Ptr)
 {
-    return std::make_unique<NoOpGraphicsContext>();
+    return std::make_unique<GraphicsContextHeadless>();
 }
 
 } // namespace yup

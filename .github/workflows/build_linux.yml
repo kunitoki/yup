@@ -32,7 +32,9 @@ env:
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
     libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
     libxrandr-dev libxrender-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev
-    libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev
+    libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev libgl1-mesa-dri mesa-utils xvfb
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  GALLIUM_DRIVER: "llvmpipe"
 
 jobs:
   configure:
@@ -43,6 +45,8 @@ jobs:
         fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Test OpenGL Version
+      run: xvfb-run glxinfo | grep "OpenGL version"
     - name: Configure
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
     - name: Build SDL
@@ -75,7 +79,7 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: ./yup_tests
+      run: xvfb-run -a ./yup_tests
 
   build_tests_release:
     runs-on: ubuntu-latest
@@ -96,7 +100,7 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: ./yup_tests
+      run: xvfb-run -a ./yup_tests
 
   build_console:
     runs-on: ubuntu-latest

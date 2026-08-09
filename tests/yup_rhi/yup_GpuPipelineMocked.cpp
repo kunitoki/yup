@@ -26,6 +26,7 @@
 
 using namespace yup;
 using ::testing::_;
+using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::Return;
 using ::testing::ReturnNull;
@@ -416,9 +417,139 @@ TEST_F (GpuBufferMockTests, CreateReturnsNullWhenMakeBufferFails)
     EXPECT_EQ (buf, nullptr);
 }
 
+TEST_F (GpuBufferMockTests, UpdateBufferOnVertexBufferSucceeds)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+    EXPECT_CALL (*oreBuf, update (_, _, _));
+
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+
+    const float newData[] = { 5.0f, 6.0f, 7.0f, 8.0f };
+    EXPECT_TRUE (ctx->updateBuffer (buf, newData, sizeof (newData)));
+}
+
+TEST_F (GpuBufferMockTests, CreateFailsWithStorageType)
+{
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buf = GpuBuffer::create (ctx, GpuBufferType::storage, data, sizeof (data));
+    EXPECT_EQ (buf, nullptr);
+}
+
 // ==============================================================================
-// GpuFrame mock-based tests
+// GpuDevice — mock-based createBuffer / updateBuffer tests
 // ==============================================================================
+
+class GpuDeviceMockTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
+        ctx = new OreInjectedGpuDevice (mockOreCtx.get());
+    }
+
+    std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
+    GpuDevice::Ptr ctx;
+};
+
+TEST_F (GpuDeviceMockTests, CreateBufferVertexSucceeds)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+
+    const float data[] = { 1.0f, 2.0f };
+    auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+    EXPECT_EQ (buf->getType(), GpuBufferType::vertex);
+    EXPECT_TRUE (buf->isValid());
+}
+
+TEST_F (GpuDeviceMockTests, CreateBufferIndexSucceeds)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+
+    const uint16_t data[] = { 0, 1, 2 };
+    auto buf = ctx->createBuffer (GpuBufferType::index, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+    EXPECT_EQ (buf->getType(), GpuBufferType::index);
+    EXPECT_TRUE (buf->isValid());
+}
+
+TEST_F (GpuDeviceMockTests, CreateBufferUniformSucceeds)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+
+    const int data[] = { 42, 43 };
+    auto buf = ctx->createBuffer (GpuBufferType::uniform, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+    EXPECT_EQ (buf->getType(), GpuBufferType::uniform);
+    EXPECT_TRUE (buf->isValid());
+}
+
+TEST_F (GpuDeviceMockTests, CreateBufferReturnsNullWhenOreMakeBufferFails)
+{
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (ReturnNull());
+
+    const float data[] = { 1.0f };
+    auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
+    EXPECT_EQ (buf, nullptr);
+}
+
+TEST_F (GpuDeviceMockTests, UpdateBufferWithNullBufferReturnsFalse)
+{
+    const float data[] = { 1.0f };
+    EXPECT_FALSE (ctx->updateBuffer (nullptr, data, sizeof (data)));
+}
+
+TEST_F (GpuDeviceMockTests, UpdateBufferWithNullDataReturnsFalse)
+{
+    EXPECT_FALSE (ctx->updateBuffer (nullptr, nullptr, 0));
+}
+
+TEST_F (GpuDeviceMockTests, UpdateBufferWithZeroSizeReturnsFalse)
+{
+    const float data[] = { 1.0f };
+    EXPECT_FALSE (ctx->updateBuffer (nullptr, data, 0));
+}
+
+TEST_F (GpuDeviceMockTests, UpdateBufferOnValidOreBackedBufferSucceeds)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+    EXPECT_CALL (*oreBuf, update (_, _, _));
+
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+
+    const float newData[] = { 5.0f, 6.0f, 7.0f, 8.0f };
+    EXPECT_TRUE (ctx->updateBuffer (buf, newData, sizeof (newData)));
+}
+
+TEST_F (GpuDeviceMockTests, UpdateBufferLargerThanOriginalReturnsFalse)
+{
+    auto oreBuf = rive::make_rcp<MockOreBuffer>();
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .WillOnce (Return (oreBuf));
+
+    const float data[] = { 1.0f };
+    auto buf = ctx->createBuffer (GpuBufferType::vertex, data, sizeof (data));
+    ASSERT_NE (buf, nullptr);
+
+    const float largerData[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    EXPECT_FALSE (ctx->updateBuffer (buf, largerData, sizeof (largerData)));
+}
 
 class GpuFrameMockTests : public ::testing::Test
 {
@@ -439,6 +570,36 @@ TEST_F (GpuFrameMockTests, BeginCallsOreBeginFrame)
 
     auto frame = GpuFrame::begin (ctx);
     EXPECT_TRUE (frame.isValid());
+}
+
+TEST_F (GpuFrameMockTests, BeginWithNullGpuContextReturnsInvalidFrame)
+{
+    auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    ASSERT_NE (headless, nullptr);
+
+    auto frame = GpuFrame::begin (headless);
+    EXPECT_FALSE (frame.isValid());
+}
+
+TEST_F (GpuFrameMockTests, MoveConstructionFromValidFrameTransfersState)
+{
+    EXPECT_CALL (*mockOreCtx, beginFrame (_));
+
+    auto src = GpuFrame::begin (ctx);
+    ASSERT_TRUE (src.isValid());
+
+    GpuFrame dst (std::move (src));
+    EXPECT_TRUE (dst.isValid());
+    EXPECT_FALSE (src.isValid());
+}
+
+TEST_F (GpuFrameMockTests, WaitForGpuOnInvalidFrameDoesNotCrash)
+{
+    auto headless = GpuDevice::create (GpuPlatform::Headless, {});
+    auto frame = GpuFrame::begin (headless);
+    EXPECT_FALSE (frame.isValid());
+
+    EXPECT_NO_THROW (frame.waitForGPU());
 }
 
 TEST_F (GpuFrameMockTests, SubmitCallsOreEndFrame)
@@ -475,10 +636,30 @@ TEST_F (GpuFrameMockTests, WaitForGpuCallsOreWaitForGPU)
     frame.waitForGPU();
 }
 
-TEST_F (GpuFrameMockTests, DestructorSubmitsIfNotSubmitted)
+TEST_F (GpuFrameMockTests, WaitForGpuIsIdempotent)
 {
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
+
+    // A GPU sync is expensive, and the destructor waits too, so repeated waits must
+    // collapse into the single stall the first one already paid for.
+    EXPECT_CALL (*mockOreCtx, waitForGPU());
+
+    auto frame = GpuFrame::begin (ctx);
+    ASSERT_TRUE (frame.isValid());
+    frame.submit();
+    frame.waitForGPU();
+    frame.waitForGPU();
+}
+
+TEST_F (GpuFrameMockTests, DestructorSubmitsAndWaitsIfNotSubmitted)
+{
+    EXPECT_CALL (*mockOreCtx, beginFrame (_));
+    EXPECT_CALL (*mockOreCtx, endFrame());
+
+    // The encoded passes reference this frame's transient resources by raw pointer,
+    // and destruction releases them, so the destructor has to drain the GPU first.
+    EXPECT_CALL (*mockOreCtx, waitForGPU());
 
     {
         auto frame = GpuFrame::begin (ctx);
@@ -815,6 +996,300 @@ TEST_F (GpuRenderPassMockTests, DrawEndToEndWithValidPipeline)
     EXPECT_TRUE (pass.draw (4));
 
     pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, DeclaredSamplerIsCreatedWhileCompilingAndReusedByEveryDraw)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+    bgl->addEntry (1, rive::ore::BindingKind::sampler);
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+    // The one declared sampler binding is filled by a sampler created up front,
+    // so no draw ever asks for another one.
+    EXPECT_CALL (*mockOreCtx, makeSampler (_))
+        .Times (1)
+        .WillOnce (Return (rive::make_rcp<TestOreSampler>()));
+
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    ASSERT_TRUE (compileResult.wasOk());
+    auto compiled = compileResult.getValue();
+
+    ON_CALL (*mockOreCtx, wrapRiveTexture (_, _, _))
+        .WillByDefault (Invoke ([] (rive::gpu::Texture*, uint32_t, uint32_t)
+    {
+        return rive::make_rcp<TestOreTextureView>();
+    }));
+    ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+        .WillByDefault (Invoke ([] (const rive::ore::RenderPassDesc&, std::string*)
+    {
+        return std::unique_ptr<rive::ore::RenderPass> (new NiceMock<MockOreRenderPass>());
+    }));
+    ON_CALL (*mockOreCtx, makeBindGroup (_))
+        .WillByDefault (Invoke ([] (const rive::ore::BindGroupDesc& desc)
+    {
+        // The sampler slot is always populated from the pipeline.
+        EXPECT_EQ (1u, desc.samplerCount);
+        return rive::make_rcp<TestOreBindGroup>();
+    }));
+
+    auto frame = makeValidFrame();
+
+    for (int draw = 0; draw < 3; ++draw)
+    {
+        auto pass = target->beginRenderPass (frame);
+        ASSERT_TRUE (pass.isValid());
+        pass.setPipeline (compiled);
+        EXPECT_TRUE (pass.draw (3));
+        pass.finish();
+    }
+
+    frame.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, UniformBuffersAreRecycledAcrossFrames)
+{
+    auto target = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (target, nullptr);
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()))
+        .WillOnce (Return (makeShaderModuleWithBindingMap()));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (rive::make_rcp<TestOreBindGroupLayout>()));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
+
+    // Two draws per frame need two distinct buffers, but the second frame gets
+    // both of them back from the pool - so only two are ever created.
+    EXPECT_CALL (*mockOreCtx, makeBuffer (_))
+        .Times (2)
+        .WillRepeatedly (Invoke ([] (const rive::ore::BufferDesc& desc)
+    {
+        return rive::make_rcp<MockOreBuffer> (desc.size);
+    }));
+
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    ASSERT_TRUE (compileResult.wasOk());
+    auto compiled = compileResult.getValue();
+
+    ON_CALL (*mockOreCtx, wrapRiveTexture (_, _, _))
+        .WillByDefault (Invoke ([] (rive::gpu::Texture*, uint32_t, uint32_t)
+    {
+        return rive::make_rcp<TestOreTextureView>();
+    }));
+    ON_CALL (*mockOreCtx, beginRenderPass (_, _))
+        .WillByDefault (Invoke ([] (const rive::ore::RenderPassDesc&, std::string*)
+    {
+        return std::unique_ptr<rive::ore::RenderPass> (new NiceMock<MockOreRenderPass>());
+    }));
+    ON_CALL (*mockOreCtx, makeBindGroup (_))
+        .WillByDefault (Return (rive::make_rcp<TestOreBindGroup>()));
+
+    const float uniforms[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
+    {
+        auto frame = makeValidFrame();
+
+        for (int draw = 0; draw < 2; ++draw)
+        {
+            auto pass = target->beginRenderPass (frame);
+            ASSERT_TRUE (pass.isValid());
+            pass.setPipeline (compiled);
+            pass.setUniformBuffer (0, 0, uniforms, sizeof (uniforms));
+            EXPECT_TRUE (pass.draw (3));
+            pass.finish();
+        }
+
+        frame.submit();
+        frame.waitForGPU();
+    }
+}
+
+TEST_F (GpuRenderPassMockTests, SetPipelineOnValidPassStoresPipeline)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto vsModule = makeShaderModuleWithBindingMap();
+    auto fsModule = makeShaderModuleWithBindingMap();
+    auto pipeline = rive::make_rcp<TestOrePipeline>();
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+
+    EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
+        .WillOnce (Return (vsModule))
+        .WillOnce (Return (fsModule));
+    EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
+        .WillOnce (Return (bgl));
+    EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
+        .WillOnce (Return (pipeline));
+
+    auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
+    ASSERT_TRUE (compileResult.wasOk());
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    // Set pipeline twice — second call replaces the first.
+    EXPECT_NO_THROW ({
+        pass.setPipeline (*compileResult.getValue());
+        pass.setPipeline (*compileResult.getValue());
+    });
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SetTextureOnValidPassStoresAndReplacesBinding)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    // Setting with null texture should not crash.
+    EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
+
+    // Setting same group/binding again replaces.
+    EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SetUniformBufferOnValidPassStoresAndReplacesBinding)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, data, sizeof (data)));
+
+    // Replacing same group/binding updates the data.
+    float newData[] = { 5.0f };
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, newData, sizeof (newData)));
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SetVertexBufferOnValidPassStoresAndReplacesSlot)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setVertexBuffer (0, nullptr));
+
+    // Replace slot 0.
+    EXPECT_NO_THROW (pass.setVertexBuffer (0, nullptr));
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, SetIndexBufferOnValidPassStoresFormat)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setIndexBuffer (GpuIndexFormat::uint16, nullptr));
+    EXPECT_NO_THROW (pass.setIndexBuffer (GpuIndexFormat::uint32, nullptr));
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, DrawWithoutPipelineReturnsFalse)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    // No pipeline set — draw should fail gracefully.
+    EXPECT_FALSE (pass.draw (4));
+    EXPECT_FALSE (pass.drawIndexed (6));
+
+    pass.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, FinishOnValidPassReturnsTrueAndIsIdempotent)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto pass = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (pass.isValid());
+
+    EXPECT_TRUE (pass.finish());
+    EXPECT_FALSE (pass.finish()); // Idempotent.
+}
+
+TEST_F (GpuRenderPassMockTests, MoveConstructionFromValidPassClearsSource)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto src = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (src.isValid());
+
+    GpuRenderPass dst (std::move (src));
+    EXPECT_TRUE (dst.isValid());
+    EXPECT_FALSE (src.isValid()); // After move, src is empty.
+
+    dst.finish();
+    valid.submit();
+}
+
+TEST_F (GpuRenderPassMockTests, MoveAssignmentFromValidPassClearsSource)
+{
+    auto canvas = GpuTarget::create (ctx, 256, 128);
+    ASSERT_NE (canvas, nullptr);
+
+    auto valid = makeValidFrame();
+    auto src = canvas->beginRenderPass (valid);
+    ASSERT_TRUE (src.isValid());
+
+    auto invalidSrc = makeInvalidFrame();
+    auto dst = canvas->beginRenderPass (invalidSrc);
+    EXPECT_FALSE (dst.isValid());
+
+    dst = std::move (src);
+    EXPECT_TRUE (dst.isValid());
+    EXPECT_FALSE (src.isValid());
+
+    dst.finish();
     valid.submit();
 }
 

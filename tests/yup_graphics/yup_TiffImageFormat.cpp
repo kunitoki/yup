@@ -23,8 +23,6 @@
 
 #include "yup_ImageFormatTools.h"
 
-#if YUP_MODULE_AVAILABLE_libtiff && YUP_IMAGE_FORMAT_TIFF
-
 using namespace yup;
 
 // ======================================================================
@@ -871,5 +869,3 @@ TEST (TiffImageFormatTests, ParseRawChunksExtractsExifWhenPresent)
     ASSERT_NE (reader.metadata, nullptr);
     EXPECT_FALSE (reader.metadata->hasRawChunk ("tiff/exif"));
 }
-
-#endif // YUP_MODULE_AVAILABLE_libtiff && YUP_IMAGE_FORMAT_TIFF

@@ -28,6 +28,7 @@ concept guides, walkthroughs, and reference material.
 - [UI](ui/index.md) - components, windowing, events, layout, and widgets.
 - [DSP](dsp/index.md) - filters, filter design, FFTs, dynamics, metering, onset detection, convolution, resampling, and time-stretching.
 - [Audio](audio/index.md) - audio devices, formats, DSP, the audio graph, processors, and plugin hosting/client wrappers.
+- [AI](ai/index.md) - the AI and LLM infrastructure.
 - [Scripting](scripting/index.md) - the Python bindings layer.
 
 ## Quick links

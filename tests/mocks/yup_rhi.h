@@ -29,7 +29,7 @@
 // Test helper: Delegate GpuDevice that allows injecting a mock ore context.
 //
 // Wraps a real (headless) GpuDevice and delegates all methods to it except
-// gpuContext(), which returns the supplied rive::ore::Context*.
+// getGpuContext(), which returns the supplied rive::ore::Context*.
 // ==============================================================================
 
 class OreInjectedGpuDevice : public yup::GpuDevice
@@ -41,9 +41,11 @@ public:
     {
     }
 
+    ~OreInjectedGpuDevice() override { releasePooledResources(); }
+
     yup::GpuPlatform getPlatform() const noexcept override { return real->getPlatform(); }
 
-    rive::ore::Context* gpuContext() const noexcept override { return injectedOreContext; }
+    rive::ore::Context* getGpuContext() const noexcept override { return injectedOreContext; }
 
     std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int width, int height) override { return real->createOffscreenTarget (width, height); }
 

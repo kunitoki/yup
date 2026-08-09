@@ -481,6 +481,12 @@ class Minifier:
                 out.write('\n')
             elif needs_whitespace and lasttoken_needs_whitespace:
                 out.write(' ')
+            elif tok.type == "ID" and lasttoken.type == "OP" and lasttoken.value == ")":
+                # Mesa's GLSL compiler can reject minified GLSL when a ')' from a
+                # macro argument list is directly adjacent to the next identifier
+                # without any whitespace, e.g., OUT(float2)foo.
+                # Insert a space to work around this Mesa compiler bug.
+                out.write(' ')
 
             # is_newline will be false once we output the token (unless this value otherwise gets
             # updated).

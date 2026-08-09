@@ -1291,6 +1291,64 @@ constexpr const char* kFillEffectJson = R"json({
     ]
 })json";
 
+// A paint-less nested group carrying the modifier that defines the outline, with the
+// paint on the parent group. This is how RubberHose rigs draw a limb: a 4-point star
+// trimmed down to an arc, stroked by the enclosing group. The nested group's trim has
+// to survive being handed up to that stroke, otherwise the whole star gets painted.
+constexpr const char* kNestedTrimmedGroupJson = R"json({
+    "v": "5.7.0", "fr": 25, "ip": 0, "op": 50, "w": 100, "h": 100, "nm": "nested trim",
+    "layers": [
+        {
+            "ddd": 0, "ind": 1, "ty": 4, "nm": "hose", "sr": 1, "ao": 0,
+            "ip": 0, "op": 50, "st": 0, "bm": 0,
+            "ks": {
+                "o": { "a": 0, "k": 100 }, "r": { "a": 0, "k": 0 },
+                "p": { "a": 0, "k": [50, 50, 0] }, "a": { "a": 0, "k": [0, 0, 0] },
+                "s": { "a": 0, "k": [100, 100, 100] }
+            },
+            "shapes": [
+                {
+                    "ty": "gr", "nm": "BaseHose", "hd": false,
+                    "it": [
+                        {
+                            "ty": "gr", "nm": "Arc", "hd": false,
+                            "it": [
+                                {
+                                    "ty": "sr", "nm": "LineForCurve", "hd": false, "sy": 1,
+                                    "pt": { "a": 0, "k": 4 }, "p": { "a": 0, "k": [0, 0] },
+                                    "r": { "a": 0, "k": 0 }, "ir": { "a": 0, "k": 20 },
+                                    "is": { "a": 0, "k": 0 }, "or": { "a": 0, "k": 40 },
+                                    "os": { "a": 0, "k": 0 }
+                                },
+                                {
+                                    "ty": "tm", "nm": "Line Halfer", "hd": false, "m": 1,
+                                    "s": { "a": 0, "k": 0 }, "e": { "a": 0, "k": 25 },
+                                    "o": { "a": 0, "k": 0 }
+                                },
+                                {
+                                    "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] },
+                                    "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 },
+                                    "o": { "a": 0, "k": 100 }
+                                }
+                            ]
+                        },
+                        {
+                            "ty": "st", "nm": "Stroke 1", "hd": false, "lc": 2, "lj": 2,
+                            "c": { "a": 0, "k": [0, 0, 0, 1] }, "o": { "a": 0, "k": 100 },
+                            "w": { "a": 0, "k": 4 }
+                        },
+                        {
+                            "ty": "tr", "p": { "a": 0, "k": [0, 0] }, "a": { "a": 0, "k": [0, 0] },
+                            "s": { "a": 0, "k": [100, 100] }, "r": { "a": 0, "k": 0 },
+                            "o": { "a": 0, "k": 100 }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
 } // namespace
 
 class AnimationRendererTests : public ::testing::Test
@@ -1322,6 +1380,43 @@ TEST_F (AnimationRendererTests, RenderShapeLayerCompositionDoesNotCrash)
 {
     auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
     ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderNestedTrimmedGroupParsesAndRenders)
+{
+    auto comp = LottieReader::parseData (kNestedTrimmedGroupJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    // The trim must be parsed onto the nested group rather than the layer's outer
+    // group, since that is what the geometry hand-off has to carry up to the stroke.
+    const auto* shapeLayer = dynamic_cast<const ShapeLayer*> (comp->layers[0].get());
+    ASSERT_NE (shapeLayer, nullptr);
+    ASSERT_EQ (shapeLayer->groups.size(), 1u);
+
+    const auto* baseHose = shapeLayer->groups[0].get();
+    ASSERT_NE (baseHose, nullptr);
+
+    const AnimationGroup* arc = nullptr;
+    bool baseHoseHasStroke = false;
+    for (const auto& child : baseHose->children)
+    {
+        if (child.kind == AnimationGroup::ChildKind::Group && child.group != nullptr)
+            arc = child.group.get();
+        else if (child.kind == AnimationGroup::ChildKind::Stroke)
+            baseHoseHasStroke = true;
+    }
+
+    EXPECT_TRUE (baseHoseHasStroke);
+    ASSERT_NE (arc, nullptr);
+    EXPECT_TRUE (arc->hasAnyModifier);
 
     auto renderer = context->makeRenderer (100, 100);
     Graphics g (*context, *renderer);

@@ -175,7 +175,7 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
-    void renderContext();
+    void getRenderContext();
 
     void startRendering();
     void stopRendering();

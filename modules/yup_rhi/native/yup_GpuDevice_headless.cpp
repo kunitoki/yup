@@ -29,6 +29,8 @@ class HeadlessGpuDevice : public GpuDevice
 public:
     HeadlessGpuDevice() = default;
 
+    ~HeadlessGpuDevice() override { releasePooledResources(); }
+
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Headless; }
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override

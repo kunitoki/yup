@@ -86,21 +86,21 @@ struct alignas (16) Vec4f
     Vec4f operator+ (Vec4f other) const noexcept
     {
         alignas (16) float result[4];
-        (Float4::loadUnaligned (data()) + Float4::loadUnaligned (other.data())).storeUnaligned (result);
+        (Float32x4::loadUnaligned (data()) + Float32x4::loadUnaligned (other.data())).storeUnaligned (result);
         return load (result);
     }
 
     Vec4f operator* (float scalar) const noexcept
     {
         alignas (16) float result[4];
-        (Float4::loadUnaligned (data()) * Float4::broadcast (scalar)).storeUnaligned (result);
+        (Float32x4::loadUnaligned (data()) * Float32x4::broadcast (scalar)).storeUnaligned (result);
         return load (result);
     }
 
     Vec4f operator* (Vec4f other) const noexcept
     {
         alignas (16) float result[4];
-        (Float4::loadUnaligned (data()) * Float4::loadUnaligned (other.data())).storeUnaligned (result);
+        (Float32x4::loadUnaligned (data()) * Float32x4::loadUnaligned (other.data())).storeUnaligned (result);
         return load (result);
     }
 

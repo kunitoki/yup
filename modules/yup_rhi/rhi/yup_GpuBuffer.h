@@ -73,16 +73,24 @@ public:
     /** Returns true if this buffer holds a valid GPU resource. */
     bool isValid() const noexcept;
 
+    //==============================================================================
+    /** @internal */
+    struct Impl;
+
+    /** @internal */
+    Impl* getImpl() noexcept;
+    const Impl* getImpl() const noexcept;
+
+    /** @internal Creates a GpuBuffer from a pre-built Impl. Used by GpuDevice backends. */
+    static Ptr createWithImpl (Impl&& impl);
+
 private:
+    friend class GpuDevice;
     friend class GpuRenderPass;
 
     GpuBuffer() = default;
 
-    struct Impl;
-    Impl* getImpl() noexcept;
-    const Impl* getImpl() const noexcept;
-
-    static constexpr size_t ImplSizeBytes = 32;
+    static constexpr size_t ImplSizeBytes = 128;
     TypeErasedObject<ImplSizeBytes> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuBuffer)

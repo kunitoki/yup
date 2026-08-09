@@ -7,7 +7,7 @@ r0(R2,d0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 Ja(d6,z6);
 #endif
-K1 N3 Ea(ga,Yd,S0);O3 e void xh(T4(float)o3,d o0,uint T1,e1(uint)p1,e1(d)J3){
+K1 N3 Ea(ga,Yd,S0);O3 e void xh(T4(float) o3,d o0,uint T1,e1(uint) p1,e1(d) J3){
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 if(min(o3,o0)>=1.){return;}
 #endif
@@ -23,7 +23,7 @@ d V1=V5(p1&ja)*ha;d G1=max(V1,o0);q=K8(V1,G1,o3);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 J3=G1;
 #endif
-}o3*=q;}e void yh(T4(float)o3,d P4,uint T1,e1(uint)p1,e1(d)J3){d q=.0;uint fb=q7(abs(P4));p1=pd(S0,T1);
+}o3*=q;}e void yh(T4(float) o3,d P4,uint T1,e1(uint) p1,e1(d) J3){d q=.0;uint fb=q7(abs(P4));p1=pd(S0,T1);
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 if(min(o3,P4)>=1.&&(p1<k.W1||p1>=(k.W1|j5))){return;}
 #endif

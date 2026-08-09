@@ -249,7 +249,7 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     auto width = getWidth();
     auto height = getHeight();
 
-    auto renderContext = context.renderContext();
+    auto renderContext = context.getRenderContext();
     if (renderContext == nullptr || renderContext->impl() == nullptr)
         return false;
 
