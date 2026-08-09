@@ -88,12 +88,12 @@ def test_gpu_buffer_type_enum():
     assert yup.GpuBufferType.uniform is not None
 
 
-def test_graphics_api_enum():
-    assert yup.GraphicsApi.Headless is not None
-    assert yup.GraphicsApi.OpenGL is not None
-    assert yup.GraphicsApi.Metal is not None
-    assert yup.GraphicsApi.Direct3D is not None
-    assert yup.GraphicsApi.WebGPU is not None
+def test_gpu_platform_enum():
+    assert yup.GpuPlatform.Headless is not None
+    assert yup.GpuPlatform.OpenGL is not None
+    assert yup.GpuPlatform.Metal is not None
+    assert yup.GpuPlatform.Direct3D is not None
+    assert yup.GpuPlatform.WebGPU is not None
 
 
 # ==============================================================================

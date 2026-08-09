@@ -1076,7 +1076,7 @@ TEST_F (GpuRenderPassMockTests, UniformBuffersAreRecycledAcrossFrames)
         .Times (2)
         .WillRepeatedly (Invoke ([] (const rive::ore::BufferDesc& desc)
     {
-        return rive::make_rcp<MockOreBuffer> (desc.size);
+        return rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
     }));
 
     auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
