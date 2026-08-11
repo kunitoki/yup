@@ -99,6 +99,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
 
+### Audio
+
+- `AudioViewComponent::setSource` now resets the view range and zoom to fit the new source; previously the old view range survived a source change, silently cropping any longer sample to the previous sample's length.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
