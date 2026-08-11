@@ -148,7 +148,7 @@ JpegImageFormatReader::JpegImageFormatReader (InputStream* stream, const ImageFo
                     metadata->rawChunks["jpeg/exif"] = MemoryBlock (data + 6, dataLength - 6);
             }
             else if (marker->marker == JPEG_APP0 + 1 && dataLength > 29
-                     && std::memcmp (data, "http://ns.adobe.com/xap/", 29) == 0)
+                     && std::memcmp (data, "http://ns.adobe.com/xap/1.0/", 29) == 0)
             {
                 if (getOptions().parseRawChunks)
                     metadata->rawChunks["jpeg/xmp"] = MemoryBlock (data, dataLength);

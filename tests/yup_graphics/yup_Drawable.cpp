@@ -166,7 +166,7 @@ TEST (DrawableTests, ParseSVGFromString)
     EXPECT_EQ (20.0f, drawable.getBounds().getWidth());
     EXPECT_EQ (10.0f, drawable.getBounds().getHeight());
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (32, 32);
     Graphics graphics (*context, *renderer);
 
@@ -193,7 +193,7 @@ TEST (DrawableTests, PaintSVGWithClipPathUseElement)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -217,7 +217,7 @@ TEST (DrawableTests, PaintSVGWithNestedClipPath)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -243,7 +243,7 @@ TEST (DrawableTests, PaintSVGWithRadialGradientFocalPoint)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -269,7 +269,7 @@ TEST (DrawableTests, PaintSVGWithUserSpaceOnUseGradient)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -289,7 +289,7 @@ TEST (DrawableTests, PaintSVGWithStrokeWidthUnits)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -323,7 +323,7 @@ TEST (DrawableTests, PaintClipPathSVGFromFilePaints)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (128, 128);
     Graphics graphics (*context, *renderer);
 
@@ -451,7 +451,7 @@ TEST (DrawableTests, PaintEmptyDrawableDoesNotCrash)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -463,7 +463,7 @@ TEST (DrawableTests, PaintWithFittingDoesNotCrash)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -477,7 +477,7 @@ TEST (DrawableTests, PaintWithVariousFittingModes)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -508,7 +508,7 @@ TEST (DrawableTests, PaintWithVariousJustifications)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -537,7 +537,7 @@ TEST (DrawableTests, PaintWithEmptyTargetArea)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -551,7 +551,7 @@ TEST (DrawableTests, PaintWithNegativeArea)
 {
     Drawable drawable;
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -755,7 +755,7 @@ TEST (DrawableTests, ParseSVGWithDefsXLinkUseAndTspanFlow)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (80, 40);
     Graphics graphics (*context, *renderer);
 
@@ -794,7 +794,7 @@ TEST (DrawableTests, ParseSVGWithTransformOrigin)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (360, 360);
     Graphics graphics (*context, *renderer);
 
@@ -1007,7 +1007,7 @@ TEST (DrawableTests, PaintSVGWithTransformedClipPath)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1051,7 +1051,7 @@ TEST (DrawableTests, PaintSVGWithScimitarClipPathAndGradientStroke)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (96, 96);
     Graphics graphics (*context, *renderer);
     graphics.setDrawingArea (Rectangle<float> (23.0f, 17.0f, 96.0f, 96.0f));
@@ -1078,7 +1078,7 @@ TEST (DrawableTests, PaintSVGWithTransformedRadialGradient)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1107,7 +1107,7 @@ TEST (DrawableTests, PaintSVGWithReflectedRadialGradient)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (96, 96);
     Graphics graphics (*context, *renderer);
 
@@ -1265,7 +1265,7 @@ TEST (DrawableTests, PaintSVGWithMask)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1290,7 +1290,7 @@ TEST (DrawableTests, PaintSVGWithMarkerEnd)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1315,7 +1315,7 @@ TEST (DrawableTests, PaintSVGWithPattern)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1340,7 +1340,7 @@ TEST (DrawableTests, PaintSVGWithCyclicUseDoesNotCrash)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1361,7 +1361,7 @@ TEST (DrawableTests, PaintSVGWithStrokeMiterLimit)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1387,7 +1387,7 @@ TEST (DrawableTests, PaintSVGWithClipRuleEvenOdd)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1408,7 +1408,7 @@ TEST (DrawableTests, PaintSVGWithMixBlendMode)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1431,7 +1431,7 @@ TEST (DrawableTests, PaintSVGWithFEBlendMultiply)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1461,7 +1461,7 @@ TEST (DrawableTests, PaintSVGWithFEBlendAllModes)
         bool result = drawable.parseSVG (svg);
         EXPECT_TRUE (result) << mode;
 
-        auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         auto renderer = context->makeRenderer (64, 64);
         Graphics graphics (*context, *renderer);
 
@@ -1488,7 +1488,7 @@ TEST (DrawableTests, PaintSVGWithFilterChainBlurThenBlend)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1512,7 +1512,7 @@ TEST (DrawableTests, PaintNoRectOverloadWithActualSVGContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1532,7 +1532,7 @@ TEST (DrawableTests, PaintNoRectOverloadWithCircleAndStroke)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -1556,7 +1556,7 @@ TEST (DrawableTests, PaintFittedScaleToFitWithActualContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1576,7 +1576,7 @@ TEST (DrawableTests, PaintFittedScaleToFillWithActualContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1596,7 +1596,7 @@ TEST (DrawableTests, PaintFittedFillWithActualContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1616,7 +1616,7 @@ TEST (DrawableTests, PaintFittedFitWidthAndFitHeightWithActualContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1637,7 +1637,7 @@ TEST (DrawableTests, PaintFittedCenterCropAndCenterInsideWithActualContent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1663,7 +1663,7 @@ TEST (DrawableTests, PaintSVGWithDashedStrokeOnPath)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1684,7 +1684,7 @@ TEST (DrawableTests, PaintSVGWithDashedStrokeAndOffset)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1708,7 +1708,7 @@ TEST (DrawableTests, PaintSVGWithInheritedDashArrayOnGroup)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1738,7 +1738,7 @@ TEST (DrawableTests, PaintSVGWithStrokeLinecapVariants)
         bool result = drawable.parseSVG (svg);
         EXPECT_TRUE (result) << cap;
 
-        auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         auto renderer = context->makeRenderer (64, 64);
         Graphics graphics (*context, *renderer);
 
@@ -1765,7 +1765,7 @@ TEST (DrawableTests, PaintSVGWithStrokeLinejoinVariants)
         bool result = drawable.parseSVG (svg);
         EXPECT_TRUE (result) << join;
 
-        auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         auto renderer = context->makeRenderer (64, 64);
         Graphics graphics (*context, *renderer);
 
@@ -1800,7 +1800,7 @@ TEST (DrawableTests, PaintSVGWithMarkerStartMidEnd)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (96, 96);
     Graphics graphics (*context, *renderer);
 
@@ -1826,7 +1826,7 @@ TEST (DrawableTests, PaintSVGWithMarkerOrientAutoStartReverse)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1859,7 +1859,7 @@ TEST (DrawableTests, PaintSVGWithImageElementViaResolver)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1886,7 +1886,7 @@ TEST (DrawableTests, PaintSVGWithImageElementResolverReturnsNullopt)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -1910,7 +1910,7 @@ TEST (DrawableTests, PaintSVGWithTextAnchorMiddle)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 50);
     Graphics graphics (*context, *renderer);
 
@@ -1930,7 +1930,7 @@ TEST (DrawableTests, PaintSVGWithTextAnchorEnd)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 50);
     Graphics graphics (*context, *renderer);
 
@@ -1953,7 +1953,7 @@ TEST (DrawableTests, PaintSVGWithTextDxDyAttributes)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (120, 60);
     Graphics graphics (*context, *renderer);
 
@@ -1980,7 +1980,7 @@ TEST (DrawableTests, PaintSVGWithFeGaussianBlurAlone)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -2005,7 +2005,7 @@ TEST (DrawableTests, PaintSVGWithFillRuleEvenOddOnPath)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -2059,7 +2059,7 @@ TEST (DrawableTests, PaintSVGWithNestedSvgViewport)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (100, 100);
     Graphics graphics (*context, *renderer);
 
@@ -2086,7 +2086,7 @@ TEST (DrawableTests, PaintSVGWithDashArrayNoneOverridesParent)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -2112,7 +2112,7 @@ TEST (DrawableTests, PaintSVGWithFillOpacityAndStrokeOpacity)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -2136,7 +2136,7 @@ TEST (DrawableTests, PaintSVGWithPreserveAspectRatioNone)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 
@@ -2156,7 +2156,7 @@ TEST (DrawableTests, PaintSVGWithPreserveAspectRatioXMidYMidMeet)
 
     EXPECT_TRUE (result);
 
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     auto renderer = context->makeRenderer (64, 64);
     Graphics graphics (*context, *renderer);
 

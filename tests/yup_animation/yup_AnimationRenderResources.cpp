@@ -64,7 +64,7 @@ TEST (AnimationRenderResourcesTests, DoubleResetDoesNotCrash)
 
 TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithZeroWidthReturnsInvalidLease)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -74,7 +74,7 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithZeroWidthReturnsInv
 
 TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithZeroHeightReturnsInvalidLease)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -84,7 +84,7 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithZeroHeightReturnsIn
 
 TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithNegativeDimensionsReturnsInvalidLease)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -94,7 +94,7 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesWithNegativeDimensionsR
 
 TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesHeadlessContextReturnsInvalidLease)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -106,10 +106,10 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesHeadlessContextReturnsI
 
 TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesBackendContextSwitchingResetsPool)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
-    auto otherContext = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto otherContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (otherContext, nullptr);
 
     AnimationRenderResources resources;
@@ -131,7 +131,7 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesBackendContextSwitching
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroWidthReturnsNull)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -140,7 +140,7 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroWidthReturnsNull)
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroHeightReturnsNull)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -149,7 +149,7 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroHeightReturnsNull)
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasHeadlessReturnsNull)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -158,7 +158,7 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasHeadlessReturnsNull)
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasSameKeyReusesSlot)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -171,7 +171,7 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasSameKeyReusesSlot)
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasDifferentKeysAreIndependent)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -184,10 +184,10 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasDifferentKeysAreIndependent
 
 TEST (AnimationRenderResourcesTests, GetPrecompCanvasBackendContextSwitchingResetsPools)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
-    auto otherContext = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto otherContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (otherContext, nullptr);
 
     AnimationRenderResources resources;
@@ -205,7 +205,7 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasBackendContextSwitchingRese
 
 TEST (AnimationRenderResourcesTests, ResetClearsPrecompCanvasCache)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -278,7 +278,7 @@ TEST (MatteCanvasLeaseTests, InvalidLeaseGetTargetCanvasTriggersAssert)
 
 TEST (AnimationRenderResourcesIntegrationTests, DestroyResourcesWhileLeaseIsValid)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     // On headless the lease is never valid, but the acquire path is exercised.
@@ -292,7 +292,7 @@ TEST (AnimationRenderResourcesIntegrationTests, DestroyResourcesWhileLeaseIsVali
 
 TEST (AnimationRenderResourcesIntegrationTests, ResetWhileLeaseIsActiveAsserts)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
@@ -311,7 +311,7 @@ TEST (AnimationRenderResourcesIntegrationTests, ResetWhileLeaseIsActiveAsserts)
 
 TEST (AnimationRenderResourcesTests, FullApiSmokeTest)
 {
-    auto context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;

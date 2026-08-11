@@ -87,6 +87,17 @@ private:
         PrecompCache* precompCache = nullptr;                ///< Owned by the outermost renderComposition call.
         AnimationRenderResources* renderResources = nullptr; ///< Optional persistent GPU resources (matte pipeline).
 
+        /** Matte canvas leases held until the composition render completes.
+
+            Drawing a matte result only records a reference to its canvas texture;
+            the pixels are read when the enclosing frame flushes. Releasing the
+            lease before then lets the next matte layer acquire the same pooled
+            canvases and overwrite those pixels, so every matte in the frame ends up
+            showing the last one's content. Owned by the outermost
+            renderComposition call.
+        */
+        std::vector<AnimationRenderResources::MatteCanvasLease>* matteLeases = nullptr;
+
         AffineTransform resolveLayerTransform (const AnimationLayer& layer) const;
     };
 
@@ -116,11 +127,21 @@ private:
                                    std::optional<Color> paintOverride,
                                    AnimationRenderResources* renderResources);
 
+    /** Renders @p group, and optionally reports the geometry it contributes to an
+        enclosing group's paints.
+
+        When @p geometryOut is non-null the group's collected paths are appended to
+        it with the group's own modifiers (Merge Paths, Round Corners, Trim,
+        Repeater) already applied and mapped into the parent's space. A paint-less
+        construction group is only meaningful once its modifiers have run - the
+        modifiers are what turn the raw shape into the intended outline.
+    */
     static void renderGroup (Graphics& g,
                              const AnimationGroup& group,
                              const RenderContext& ctx,
                              float opacity,
-                             const AnimationRoundedCorner* parentRoundedCorner = nullptr);
+                             const AnimationRoundedCorner* parentRoundedCorner = nullptr,
+                             std::vector<Path>* geometryOut = nullptr);
 
     static void renderLayerList (Graphics& g,
                                  const std::vector<AnimationLayer::Ptr>& layers,

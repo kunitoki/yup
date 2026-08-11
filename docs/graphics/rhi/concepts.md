@@ -3,10 +3,10 @@
 ## The GPU bridge
 
 Every RHI type is a thin, portable wrapper over a single backend bridge: Rive's
-GPU context. The `GraphicsContext` owns that context and exposes it to the
-RHI layer. You never touch GPU types directly - the RHI hides them behind
-YUP-native handles (`GpuPipeline`, `GpuFrame`, `GpuRenderPass`, `GpuBuffer`,
-`GpuTexture`).
+GPU context. The `GpuDevice` owns that context and exposes it to the RHI layer.
+For windowed rendering, `GraphicsContext` wraps a `GpuDevice` and adds the
+swapchain and Rive vector renderer. For headless GPU compute, use `GpuDevice`
+directly — no window or Rive dependency.
 
 Because the RHI targets one common abstraction, the same code path runs on every
 backend: Metal, Direct3D, OpenGL / OpenGL ES (including WebGL2), and WebGPU.
@@ -16,7 +16,7 @@ backend: Metal, Direct3D, OpenGL / OpenGL ES (including WebGL2), and WebGPU.
 Always check GPU availability before creating RHI resources:
 
 ```cpp
-if (! ctx.isGpuAvailable())
+if (! device.isGpuAvailable())
     return; // No GPU context - fall back or bail out.
 ```
 
@@ -25,16 +25,16 @@ not reference any GPU type, so user code stays backend-clean.
 
 RHI factory functions honor this contract:
 
-- `GpuPipeline::compile(...)` requires `isGpuAvailable()`.
-- `GpuBuffer::create(...)` returns `nullptr` if GPU context is unavailable.
-- `GpuTarget::create(...)` / `GpuCanvas::create(...)` return `nullptr` if
+- `GpuPipeline::compile(device, ...)` requires `isGpuAvailable()`.
+- `GpuBuffer::create(device, ...)` returns `nullptr` if GPU context is unavailable.
+- `GpuTarget::create(device, ...)` / `GpuCanvas::create(ctx, ...)` return `nullptr` if
   offscreen GPU resources cannot be allocated.
 
 ## The frame → pass → draw model
 
 RHI rendering follows a strict hierarchy:
 
-1. **Begin a frame** with `GpuFrame::begin(ctx)`. The frame owns the transient
+1. **Begin a frame** with `GpuFrame::begin(device)`. The frame owns the transient
    GPU resources (uniform buffers, texture views, samplers) created while
    encoding, and keeps them alive until submission completes.
 2. **Begin one or more render passes** into a target
@@ -46,9 +46,9 @@ RHI rendering follows a strict hierarchy:
 5. **Submit the frame** with `submit()` (or let it submit on destruction).
 
 ```cpp
-auto frame = GpuFrame::begin (ctx);
+auto frame = GpuFrame::begin (device);
 auto pass  = target->beginRenderPass (frame, { true, Colors::black });
-pass.setPipeline (*pipeline);
+pass.setPipeline (pipeline);
 pass.draw (3);
 pass.finish();
 frame.submit();

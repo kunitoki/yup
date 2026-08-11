@@ -25,31 +25,33 @@
 
 #include <yup_graphics/yup_graphics.h>
 
+#include "yup_rhi.h"
+
 // ==============================================================================
 // Test helper: Delegate GraphicsContext that allows injecting a mock ore context.
 //
 // Wraps a real (headless) GraphicsContext and delegates all methods to it except
-// gpuContext(), which returns the supplied rive::ore::Context*.
+// getGpuContext(), which returns the supplied rive::ore::Context*.
 // ==============================================================================
 
 class OreInjectedGraphicsContext : public yup::GraphicsContext
 {
 public:
     explicit OreInjectedGraphicsContext (rive::ore::Context* oreContextToUse)
-        : real (yup::GraphicsContext::createContext (yup::GraphicsContext::Headless, {}))
+        : real (yup::GraphicsContext::createContext (yup::GpuPlatform::Headless, {}))
         , injectedOreContext (oreContextToUse)
     {
     }
 
-    yup::GraphicsContext::Api getApi() const noexcept override { return real->getApi(); }
+    yup::GpuPlatform getPlatform() const noexcept override { return real->getPlatform(); }
 
-    rive::Factory* factory() override { return real->factory(); }
+    yup::GpuDevice::Ptr getGpuDevice() const noexcept override { return real->getGpuDevice(); }
 
-    rive::gpu::RenderContext* renderContext() override { return real->renderContext(); }
+    rive::Factory* getFactory() override { return real->getFactory(); }
 
-    rive::gpu::RenderTarget* renderTarget() override { return real->renderTarget(); }
+    rive::gpu::RenderContext* getRenderContext() override { return real->getRenderContext(); }
 
-    rive::ore::Context* gpuContext() const noexcept override { return injectedOreContext; }
+    rive::gpu::RenderTarget* getRenderTarget() override { return real->getRenderTarget(); }
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override { return real->makeRenderer (width, height); }
 
@@ -59,100 +61,7 @@ public:
 
     void end (void* nativeHandle) override { real->end (nativeHandle); }
 
-    std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int width, int height) override { return real->createOffscreenTarget (width, height); }
-
-    std::unique_ptr<yup::RenderableTarget> createRenderableTarget (int width, int height) override { return real->createRenderableTarget (width, height); }
-
-    void beginOffscreen (yup::OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
-
-    void endOffscreen (yup::OffscreenTarget& target) override { real->endOffscreen (target); }
-
-    bool readOffscreenPixels (yup::OffscreenTarget& target, void* dst, size_t dstSize) override { return real->readOffscreenPixels (target, dst, dstSize); }
-
 private:
     std::unique_ptr<yup::GraphicsContext> real;
     rive::ore::Context* injectedOreContext = nullptr;
-};
-
-// ==============================================================================
-// Mock yup::GraphicsContext::RenderableTarget
-// ==============================================================================
-
-class MockOffscreenTarget : public yup::RenderableTarget
-{
-public:
-    explicit MockOffscreenTarget (int w, int h)
-        : width_ (w)
-        , height_ (h)
-    {
-    }
-
-    int getWidth() const noexcept override { return width_; }
-
-    int getHeight() const noexcept override { return height_; }
-
-    rive::gpu::RenderTarget* getRenderTarget() noexcept override { return getRenderTargetProxy(); }
-
-    rive::gpu::RenderContext* getRenderContext() noexcept override { return getRenderContextProxy(); }
-
-    rive::rcp<rive::gpu::RenderCanvas> getRenderCanvas() noexcept override { return getRenderCanvasProxy(); }
-
-    rive::rcp<rive::gpu::Texture> adoptAsTexture() override { return adoptAsTextureProxy(); }
-
-    MOCK_METHOD (rive::gpu::RenderTarget*, getRenderTargetProxy, (), ());
-    MOCK_METHOD (rive::gpu::RenderContext*, getRenderContextProxy, (), ());
-    MOCK_METHOD (rive::rcp<rive::gpu::RenderCanvas>, getRenderCanvasProxy, (), ());
-    MOCK_METHOD (rive::rcp<rive::gpu::Texture>, adoptAsTextureProxy, (), ());
-
-    /** Creates a MockOffscreenTarget pre-configured with a TestGpuTexture for adoptAsTexture. */
-    static std::unique_ptr<MockOffscreenTarget> withGpuTexture (int w, int h)
-    {
-        auto t = std::make_unique<::testing::NiceMock<MockOffscreenTarget>> (w, h);
-        ON_CALL (*t, getRenderCanvasProxy()).WillByDefault (::testing::ReturnNull());
-        ON_CALL (*t, adoptAsTextureProxy())
-            .WillByDefault (::testing::Return (rive::make_rcp<TestGpuTexture> (w, h)));
-        return t;
-    }
-
-private:
-    int width_;
-    int height_;
-};
-
-// ==============================================================================
-// Test helper: OreInjectedGraphicsContext that also injects an offscreen target.
-// Overrides createOffscreenTarget / createRenderableTarget to return a pre-built
-// MockOffscreenTarget.
-// ==============================================================================
-
-class OreAndTargetGraphicsContext : public OreInjectedGraphicsContext
-{
-public:
-    OreAndTargetGraphicsContext (rive::ore::Context* oreCtx,
-                                 std::unique_ptr<MockOffscreenTarget> target)
-        : OreInjectedGraphicsContext (oreCtx)
-        , injectedTarget (std::move (target))
-    {
-    }
-
-    std::unique_ptr<yup::OffscreenTarget> createOffscreenTarget (int, int) override
-    {
-        // Move the target back out — the caller takes ownership.
-        // For repeated use, set up the mock to be reusable.
-        return std::move (injectedTarget);
-    }
-
-    std::unique_ptr<yup::RenderableTarget> createRenderableTarget (int, int) override
-    {
-        // Move the target back out — the caller takes ownership.
-        return std::move (injectedTarget);
-    }
-
-    void setNextOffscreenTarget (std::unique_ptr<MockOffscreenTarget> target)
-    {
-        injectedTarget = std::move (target);
-    }
-
-private:
-    std::unique_ptr<MockOffscreenTarget> injectedTarget;
 };

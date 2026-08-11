@@ -44,24 +44,18 @@ static void print_device_error (WGPUErrorType errorType, const char* message, vo
         case WGPUErrorType_Validation:
             errorTypeName = "Validation";
             break;
-
         case WGPUErrorType_OutOfMemory:
             errorTypeName = "Out of memory";
             break;
-
         case WGPUErrorType_Unknown:
             errorTypeName = "Unknown";
             break;
-
         case WGPUErrorType_DeviceLost:
             errorTypeName = "Device lost";
             break;
-
         default:
-            RIVE_UNREACHABLE();
             return;
     }
-
     printf ("%s error: %s\n", errorTypeName, message);
 }
 
@@ -79,15 +73,11 @@ static void device_log_callback (WGPULoggingType type, const char* message, void
 extern float GetDawnWindowBackingScaleFactor (GLFWwindow*, bool retina);
 extern std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (GLFWwindow*, bool retina);
 #else
-
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-static float GetDawnWindowBackingScaleFactor (GLFWwindow*, bool retina)
-{
-    return 1;
-}
+static float GetDawnWindowBackingScaleFactor (GLFWwindow*, bool retina) { return 1; }
 
 static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (GLFWwindow* window, bool retina)
 {
@@ -98,28 +88,32 @@ static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 }
 #endif
 
-class LowLevelRenderContextDawnPLS : public GraphicsContext
+class GraphicsContextDawn : public GraphicsContext
 {
 public:
-    LowLevelRenderContextDawnPLS (Options options)
-        : m_options (options)
+    GraphicsContextDawn (Options options, GpuDevice::Ptr existingGpu = {})
+        : options (options)
     {
+        // Obtain or create the GpuDevice
+        if (existingGpu != nullptr)
+            gpuDevice = std::move (existingGpu);
+        else
+            gpuDevice = GpuDevice::create (GpuPlatform::WebGPU, options);
+
         WGPUInstanceDescriptor instanceDescriptor {};
         instanceDescriptor.features.timedWaitAnyEnable = true;
-        m_instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
+        instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
 
         wgpu::RequestAdapterOptions adapterOptions = {
             .powerPreference = wgpu::PowerPreference::HighPerformance,
         };
 
-        // Get an adapter for the backend to use, and create the device.
-        auto adapters = m_instance->EnumerateAdapters (&adapterOptions);
+        auto adapters = instance->EnumerateAdapters (&adapterOptions);
 
         wgpu::DawnAdapterPropertiesPowerPreference power_props {};
         wgpu::AdapterProperties adapterProperties {};
         adapterProperties.nextInChain = &power_props;
 
-        // Find the first adapter which satisfies the adapterType requirement.
         auto isAdapterType = [&adapterProperties] (const auto& adapter) -> bool
         {
             adapter.GetProperties (&adapterProperties);
@@ -129,45 +123,22 @@ public:
         auto preferredAdapter = std::find_if (adapters.begin(), adapters.end(), isAdapterType);
         if (preferredAdapter == adapters.end())
         {
-            fprintf (stderr, "Failed to find an adapter! Please try another adapter type.\n");
+            fprintf (stderr, "Failed to find an adapter!\n");
             return;
         }
 
-        std::vector<const char*> enableToggleNames = {
-            "allow_unsafe_apis",
-            "turn_off_vsync",
-            // "skip_validation",
-        };
-
+        std::vector<const char*> enableToggleNames = { "allow_unsafe_apis", "turn_off_vsync" };
         std::vector<const char*> disabledToggleNames;
 
         WGPUDawnTogglesDescriptor toggles = {
-            .chain = {
-                .next = nullptr,
-                .sType = WGPUSType_DawnTogglesDescriptor,
-            },
+            .chain = { .next = nullptr, .sType = WGPUSType_DawnTogglesDescriptor },
             .enabledToggleCount = enableToggleNames.size(),
             .enabledToggles = enableToggleNames.data(),
             .disabledToggleCount = disabledToggleNames.size(),
             .disabledToggles = disabledToggleNames.data(),
         };
 
-        std::vector<WGPUFeatureName> requiredFeatures = {
-            // WGPUFeatureName_IndirectFirstInstance,
-            // WGPUFeatureName_ShaderF16,
-            // WGPUFeatureName_BGRA8UnormStorage,
-            // WGPUFeatureName_Float32Filterable,
-            // WGPUFeatureName_DawnInternalUsages,
-            // WGPUFeatureName_DawnMultiPlanarFormats,
-            // WGPUFeatureName_DawnNative,
-            // WGPUFeatureName_ImplicitDeviceSynchronization,
-            WGPUFeatureName_SurfaceCapabilities,
-            // WGPUFeatureName_TransientAttachments,
-            // WGPUFeatureName_DualSourceBlending,
-            // WGPUFeatureName_Norm16TextureFormats,
-            // WGPUFeatureName_HostMappedPointer,
-            // WGPUFeatureName_ChromiumExperimentalReadWriteStorageTexture,
-        };
+        std::vector<WGPUFeatureName> requiredFeatures = { WGPUFeatureName_SurfaceCapabilities };
 
         WGPUDeviceDescriptor deviceDesc = {
             .nextInChain = reinterpret_cast<WGPUChainedStruct*> (&toggles),
@@ -175,115 +146,98 @@ public:
             .requiredFeatures = requiredFeatures.data(),
         };
 
-        m_backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
+        backendDevice = preferredAdapter->CreateDevice (&deviceDesc);
 
         DawnProcTable backendProcs = dawn::native::GetProcs();
         dawnProcSetProcs (&backendProcs);
-        backendProcs.deviceSetUncapturedErrorCallback (m_backendDevice, print_device_error, nullptr);
-        backendProcs.deviceSetDeviceLostCallback (m_backendDevice, device_lost_callback, nullptr);
-        backendProcs.deviceSetLoggingCallback (m_backendDevice, device_log_callback, nullptr);
+        backendProcs.deviceSetUncapturedErrorCallback (backendDevice, print_device_error, nullptr);
+        backendProcs.deviceSetDeviceLostCallback (backendDevice, device_lost_callback, nullptr);
+        backendProcs.deviceSetLoggingCallback (backendDevice, device_log_callback, nullptr);
 
-        m_device = wgpu::Device::Acquire (m_backendDevice);
-        m_queue = m_device.GetQueue();
-        m_plsContext =
-            PLSRenderContextWebGPUImpl::MakeContext (m_device,
-                                                     m_queue,
-                                                     PLSRenderContextWebGPUImpl::ContextOptions());
+        device = wgpu::Device::Acquire (backendDevice);
+        queue = device.GetQueue();
+        plsContext = PLSRenderContextWebGPUImpl::MakeContext (
+            device, queue, PLSRenderContextWebGPUImpl::ContextOptions());
     }
 
-    Api getApi() const noexcept override { return Api::WebGPU; }
+    GpuPlatform getPlatform() const noexcept override { return GpuPlatform::WebGPU; }
 
-    Factory* factory() override { return m_plsContext.get(); }
+    GpuDevice::Ptr getGpuDevice() const noexcept override { return gpuDevice; }
 
-    rive::pls::PLSRenderContext* renderContext() override { return m_plsContext.get(); }
+    Factory* getFactory() override { return plsContext.get(); }
 
-    rive::pls::PLSRenderTarget* renderTarget() override { return m_renderTarget.get(); }
+    rive::gpu::RenderContext* getRenderContext() override { return plsContext.get(); }
+
+    rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         DawnProcTable backendProcs = dawn::native::GetProcs();
 
-        // Create the swapchain
-        auto surfaceChainedDesc = SetupDawnWindowAndGetSurfaceDescriptor (window, m_options.retinaDisplay);
+        auto surfaceChainedDesc = SetupDawnWindowAndGetSurfaceDescriptor (window, options.retinaDisplay);
         WGPUSurfaceDescriptor surfaceDesc = {
             .nextInChain = reinterpret_cast<WGPUChainedStruct*> (surfaceChainedDesc.get()),
         };
-        WGPUSurface surface = backendProcs.instanceCreateSurface (m_instance->Get(), &surfaceDesc);
+        WGPUSurface surface = backendProcs.instanceCreateSurface (instance->Get(), &surfaceDesc);
 
         WGPUSwapChainDescriptor swapChainDesc = {
             .usage = WGPUTextureUsage_RenderAttachment,
             .format = WGPUTextureFormat_BGRA8Unorm,
             .width = static_cast<uint32_t> (width),
             .height = static_cast<uint32_t> (height),
-            .presentMode = WGPUPresentMode_Immediate, // No vsync.
+            .presentMode = WGPUPresentMode_Immediate,
         };
 
-        if (m_options.enableReadPixels)
+        if (options.readableFramebuffer)
             swapChainDesc.usage |= WGPUTextureUsage_CopySrc;
 
-        WGPUSwapChain backendSwapChain = backendProcs.deviceCreateSwapChain (m_backendDevice, surface, &swapChainDesc);
-        m_swapchain = wgpu::SwapChain::Acquire (backendSwapChain);
+        WGPUSwapChain backendSwapChain = backendProcs.deviceCreateSwapChain (backendDevice, surface, &swapChainDesc);
+        swapchain = wgpu::SwapChain::Acquire (backendSwapChain);
 
-        m_renderTarget = m_plsContext->static_impl_cast<PLSRenderContextWebGPUImpl>()
-                             ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
+        renderTarget = plsContext->static_impl_cast<PLSRenderContextWebGPUImpl>()
+                           ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
 
-        m_pixelReadBuff = {};
+        pixelReadBuff = {};
     }
 
     std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer> (m_plsContext.get());
+        return std::make_unique<PLSRenderer> (plsContext.get());
     }
 
     void begin (PLSRenderContext::FrameDescriptor&& frameDescriptor) override
     {
-        assert (m_swapchain.GetCurrentTexture().GetWidth() == m_renderTarget->width());
-        assert (m_swapchain.GetCurrentTexture().GetHeight() == m_renderTarget->height());
-
-        m_renderTarget->setTargetTextureView (m_swapchain.GetCurrentTextureView());
-
-        frameDescriptor.renderTarget = m_renderTarget;
-
-        m_plsContext->beginFrame (std::move (frameDescriptor));
+        assert (swapchain.GetCurrentTexture().GetWidth() == renderTarget->width());
+        assert (swapchain.GetCurrentTexture().GetHeight() == renderTarget->height());
+        renderTarget->setTargetTextureView (swapchain.GetCurrentTextureView());
+        frameDescriptor.renderTarget = renderTarget;
+        plsContext->beginFrame (std::move (frameDescriptor));
     }
 
     void end (void* window) override
     {
-        m_plsContext->flush();
-
-        m_swapchain.Present();
+        plsContext->flush();
+        swapchain.Present();
     }
 
-    void tick() override
-    {
-        m_device.Tick();
-    }
-
-    std::unique_ptr<OffscreenTarget> createOffscreenTarget (int, int) override { return nullptr; }
-
-    std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
-
-    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override {}
-
-    void endOffscreen (OffscreenTarget&) override {}
-
-    bool readOffscreenPixels (OffscreenTarget&, void*, size_t) override { return false; }
+    void tick() override { device.Tick(); }
 
 private:
-    const LowLevelRenderContext::Options m_options;
-    WGPUDevice m_backendDevice = {};
-    wgpu::Device m_device = {};
-    wgpu::Queue m_queue = {};
-    wgpu::SwapChain m_swapchain = {};
-    std::unique_ptr<dawn::native::Instance> m_instance;
-    std::unique_ptr<PLSRenderContext> m_plsContext;
-    rcp<PLSRenderTargetWebGPU> m_renderTarget;
-    wgpu::Buffer m_pixelReadBuff;
+    Options options;
+    GpuDevice::Ptr gpuDevice;
+    WGPUDevice backendDevice = {};
+    wgpu::Device device = {};
+    wgpu::Queue queue = {};
+    wgpu::SwapChain swapchain = {};
+    std::unique_ptr<dawn::native::Instance> instance;
+    std::unique_ptr<PLSRenderContext> plsContext;
+    rcp<PLSRenderTargetWebGPU> renderTarget;
+    wgpu::Buffer pixelReadBuff;
 };
 
-std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GraphicsContext::Options options)
+std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)
 {
-    return std::make_unique<LowLevelRenderContextDawnPLS> (options);
+    return std::make_unique<GraphicsContextDawn> (options, std::move (existingGpu));
 }
 
 } // namespace yup

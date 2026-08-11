@@ -76,7 +76,8 @@ public:
         paramSlider->onValueChanged = [this] (double v)
         {
             effectParam = (float) v;
-            onEffectParamChanged (effectParam);
+            if (shaderEffect != nullptr)
+                shaderEffect->setEffectParameter (effectParam);
             background->repaint();
         };
         addAndMakeVisible (paramSlider.get());
@@ -171,14 +172,29 @@ public:
     void componentPaintCompleted (yup::Component& component,
                                   const yup::ComponentPaintMetrics& metrics) override
     {
-        if (&component == background.get())
+        if (&component != background.get())
+            return;
+
+        // The effect runs after this callback, so its timing is one frame behind.
+        // Comparing the two numbers against the observed frame rate localises a
+        // slow frame: if both stay small, the time is going to the GPU.
+        const auto paintMicros = ticksToMicroseconds (metrics.totalTicks);
+        const auto effectMicros = shaderEffect != nullptr ? ticksToMicroseconds (shaderEffect->getLastApplyTicks()) : 0;
+
+        yup::MessageManager::callAsync ([this, paintMicros, effectMicros]
         {
-            const auto us = static_cast<int> (metrics.totalTicks * 1000000.0
-                                              / yup::Time::getHighResolutionTicksPerSecond());
-            yup::MessageManager::callAsync ([this, us]
+            paintTimeLabel->setText ("Paint: " + yup::String (paintMicros)
+                                         + " us, effect: " + yup::String (effectMicros) + " us",
+                                     yup::dontSendNotification);
+        });
+
+        if (! compileErrorReported && shaderEffect != nullptr && shaderEffect->getCompileError().isNotEmpty())
+        {
+            compileErrorReported = true;
+
+            yup::MessageManager::callAsync ([this, error = shaderEffect->getCompileError()]
             {
-                paintTimeLabel->setText ("Paint: " + yup::String (us) + " us",
-                                         yup::dontSendNotification);
+                statusLabel->setText ("Shader compile FAILED: " + error, yup::dontSendNotification);
             });
         }
     }
@@ -201,37 +217,109 @@ void main() {
     };
 
     //==============================================================================
-    /** Two-pass separable Gaussian blur. Parameter = sigma (0..64). */
-    class BlurEffect : public yup::ComponentEffect
+    /** Base for the demo's shader effects.
+
+        Owns the pipeline and compiles it at most once. Compiling GLSL runs the
+        shader transpiler - and, on WebGPU, the GLSL→WGSL lowering on top of that -
+        which costs tens of milliseconds, so a failed compile is remembered
+        instead of retried: retrying every frame would silently cap the frame rate
+        rather than just falling back to an unfiltered draw.
+
+        Also records the CPU time spent inside apply(), so the demo can show
+        whether a slow frame is spent on the CPU or waiting on the GPU.
+    */
+    class ShaderEffect : public yup::ComponentEffect
     {
     public:
-        void setEffectParameter (float s) { sigma = s; }
+        void setEffectParameter (float v) { param = v; }
 
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+        /** CPU ticks spent inside the most recent apply() call. */
+        yup::int64 getLastApplyTicks() const noexcept { return applyTicks; }
+
+        /** The error from the single pipeline compile attempt, empty while it succeeded. */
+        const yup::String& getCompileError() const noexcept { return compileError; }
+
+        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) final
         {
-            if (! input || ! input->isValid())
+            if (input == nullptr || ! input->isValid())
                 return;
+
+            const auto startTicks = yup::Time::getHighResolutionTicks();
+
+            if (ensurePipeline (g.getGraphicsContext()))
+                applyEffect (g, input, bounds);
+            else
+                g.drawTexture (input, bounds);
+
+            applyTicks = yup::Time::getHighResolutionTicks() - startTicks;
+        }
+
+    protected:
+        /** Returns this effect's fragment shader source. */
+        virtual const char* getFragmentSource() const = 0;
+
+        /** Renders the effect. Only called once the pipeline compiled successfully. */
+        virtual void applyEffect (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) = 0;
+
+        float param = 8.0f;
+        yup::GpuPipeline::Ptr pipeline;
+
+    private:
+        bool ensurePipeline (yup::GraphicsContext& ctx)
+        {
+            if (pipeline != nullptr)
+                return true;
+
+            if (compileAttempted)
+                return false;
+
+            compileAttempted = true;
+
+            auto result = yup::GpuPipeline::compileFromGlsl (ctx.getGpuDevice(),
+                                                             kVertSource,
+                                                             yup::String::fromUTF8 (getFragmentSource()),
+                                                             {});
+            if (result.wasOk())
+            {
+                pipeline = result.getValue();
+                return true;
+            }
+
+            compileError = result.getErrorMessage();
+            yup::Logger::outputDebugString ("ComponentEffectsDemo: shader compile failed: " + compileError);
+            return false;
+        }
+
+        bool compileAttempted = false;
+        yup::String compileError;
+        yup::int64 applyTicks = 0;
+    };
+
+    //==============================================================================
+    /** Two-pass separable Gaussian blur. Parameter = sigma (0..64). */
+    class BlurEffect : public ShaderEffect
+    {
+    protected:
+        const char* getFragmentSource() const override { return kBlurFrag; }
+
+        void applyEffect (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+        {
             auto& ctx = g.getGraphicsContext();
             const int w = input->getWidth(), h = input->getHeight();
-            const float blurR = std::ceil (sigma * 3.0f);
+            const float blurR = std::ceil (param * 3.0f);
 
-            if (! ensurePipeline (ctx))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
             if (! ensureTargets (ctx, w, h))
             {
                 g.drawTexture (input, bounds);
                 return;
             }
 
-            auto frame = yup::GpuFrame::begin (ctx);
+            auto frame = yup::GpuFrame::begin (ctx.getGpuDevice());
             auto pass = [&] (yup::GpuTarget& t, const yup::GpuTexture::Ptr& in, float dx, float dy)
             {
-                EffectParams p { sigma, blurR, (float) w, (float) h, dx, dy, 0, 0 };
+                EffectParams p { param, blurR, (float) w, (float) h, dx, dy, 0, 0 };
                 auto rp = t.beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                rp.setPipeline (*pipeline);
+                rp.setPipeline (pipeline);
                 rp.setTexture (0, 0, in);
                 rp.setUniformBuffer (0, 2, &p, sizeof (p));
                 rp.draw (3);
@@ -246,26 +334,14 @@ void main() {
         }
 
     private:
-        float sigma = 4.0f;
-        yup::GpuPipeline::Ptr pipeline;
         yup::GpuTarget::Ptr targetA, targetB;
-
-        bool ensurePipeline (yup::GraphicsContext& ctx)
-        {
-            if (pipeline)
-                return true;
-            auto r = yup::GpuPipeline::compileFromGlsl (ctx, kVertSource, kBlurFrag, {});
-            if (r.wasOk())
-                pipeline = r.getValue();
-            return pipeline != nullptr;
-        }
 
         bool ensureTargets (yup::GraphicsContext& ctx, int w, int h)
         {
             if (! targetA || targetA->getWidth() != w || targetA->getHeight() != h)
-                targetA = yup::GpuTarget::create (ctx, w, h);
+                targetA = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             if (! targetB || targetB->getWidth() != w || targetB->getHeight() != h)
-                targetB = yup::GpuTarget::create (ctx, w, h);
+                targetB = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             return targetA != nullptr && targetB != nullptr;
         }
 
@@ -296,47 +372,27 @@ void main() {
 
     //==============================================================================
     /** Single-pass fullscreen effect base. Shared by Pixelate, Edge, Wave, Sharpen, CRT. */
-    class SinglePassEffect : public yup::ComponentEffect
+    class SinglePassEffect : public ShaderEffect
     {
-    public:
-        void setEffectParameter (float v) { param = v; }
-
     protected:
-        float param = 8.0f;
-        yup::GpuPipeline::Ptr pipeline;
-        yup::GpuTarget::Ptr target;
+        /** Fills the uniform block for this effect from the input dimensions. */
+        virtual EffectParams getEffectParams (const yup::GpuTexture& input) const = 0;
 
-        bool ensurePipeline (yup::GraphicsContext& ctx, const char* fragSource)
-        {
-            if (pipeline)
-                return true;
-            auto r = yup::GpuPipeline::compileFromGlsl (ctx, kVertSource, yup::String::fromUTF8 (fragSource), {});
-            if (r.wasOk())
-                pipeline = r.getValue();
-            return pipeline != nullptr;
-        }
-
-        bool ensureTarget (yup::GraphicsContext& ctx, int w, int h)
-        {
-            if (! target || target->getWidth() != w || target->getHeight() != h)
-                target = yup::GpuTarget::create (ctx, w, h);
-            return target != nullptr;
-        }
-
-        void drawPass (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds, const EffectParams& p)
+        void applyEffect (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
         {
             auto& ctx = g.getGraphicsContext();
-            const int w = input->getWidth(), h = input->getHeight();
-            if (! ensureTarget (ctx, w, h))
+            if (! ensureTarget (ctx, input->getWidth(), input->getHeight()))
             {
                 g.drawTexture (input, bounds);
                 return;
             }
 
-            auto frame = yup::GpuFrame::begin (ctx);
+            const auto p = getEffectParams (*input);
+
+            auto frame = yup::GpuFrame::begin (ctx.getGpuDevice());
             {
                 auto rp = target->beginRenderPass (frame, { true, yup::Colors::transparentBlack });
-                rp.setPipeline (*pipeline);
+                rp.setPipeline (pipeline);
                 rp.setTexture (0, 0, input);
                 rp.setUniformBuffer (0, 2, &p, sizeof (p));
                 rp.draw (3);
@@ -345,25 +401,28 @@ void main() {
             frame.submit();
             g.drawTexture (target->asTexture(), bounds);
         }
+
+    private:
+        yup::GpuTarget::Ptr target;
+
+        bool ensureTarget (yup::GraphicsContext& ctx, int w, int h)
+        {
+            if (! target || target->getWidth() != w || target->getHeight() != h)
+                target = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
+            return target != nullptr;
+        }
     };
 
     //==============================================================================
     /** Pixelate: downsamples into blocks. Parameter = block size (1..64). */
     class PixelateEffect : public SinglePassEffect
     {
-    public:
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+    protected:
+        const char* getFragmentSource() const override { return kPixelateFrag; }
+
+        EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            if (! input || ! input->isValid())
-                return;
-            auto& ctx = g.getGraphicsContext();
-            if (! ensurePipeline (ctx, kPixelateFrag))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
-            EffectParams p { param, (float) input->getWidth(), (float) input->getHeight(), 0, 0, 0, 0, 0 };
-            drawPass (g, input, bounds, p);
+            return { param, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
 
     private:
@@ -386,19 +445,12 @@ void main() {
     /** Sobel edge detection. Parameter = threshold (0..64). */
     class EdgeEffect : public SinglePassEffect
     {
-    public:
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+    protected:
+        const char* getFragmentSource() const override { return kEdgeFrag; }
+
+        EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            if (! input || ! input->isValid())
-                return;
-            auto& ctx = g.getGraphicsContext();
-            if (! ensurePipeline (ctx, kEdgeFrag))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
-            EffectParams p { param * 0.05f, (float) input->getWidth(), (float) input->getHeight(), 0, 0, 0, 0, 0 };
-            drawPass (g, input, bounds, p);
+            return { param * 0.05f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
 
     private:
@@ -433,18 +485,12 @@ void main() {
     public:
         WaveEffect() { param = 12.0f; }
 
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+    protected:
+        const char* getFragmentSource() const override { return kWaveFrag; }
+
+        EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            if (! input || ! input->isValid())
-                return;
-            auto& ctx = g.getGraphicsContext();
-            if (! ensurePipeline (ctx, kWaveFrag))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
-            EffectParams p { param, 12.0f, (float) yup::Time::getMillisecondCounterHiRes() * 0.002f, (float) input->getWidth(), (float) input->getHeight(), 0, 0, 0 };
-            drawPass (g, input, bounds, p);
+            return { param, 12.0f, (float) yup::Time::getMillisecondCounterHiRes() * 0.002f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0 };
         }
 
     private:
@@ -472,18 +518,12 @@ void main() {
     public:
         SharpenEffect() { param = 4.0f; }
 
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+    protected:
+        const char* getFragmentSource() const override { return kSharpenFrag; }
+
+        EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            if (! input || ! input->isValid())
-                return;
-            auto& ctx = g.getGraphicsContext();
-            if (! ensurePipeline (ctx, kSharpenFrag))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
-            EffectParams p { param * 0.1f, (float) input->getWidth(), (float) input->getHeight(), 0, 0, 0, 0, 0 };
-            drawPass (g, input, bounds, p);
+            return { param * 0.1f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
 
     private:
@@ -517,18 +557,12 @@ void main() {
     public:
         CRTScanEffect() { param = 12.0f; }
 
-        void apply (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
+    protected:
+        const char* getFragmentSource() const override { return kCRTFrag; }
+
+        EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            if (! input || ! input->isValid())
-                return;
-            auto& ctx = g.getGraphicsContext();
-            if (! ensurePipeline (ctx, kCRTFrag))
-            {
-                g.drawTexture (input, bounds);
-                return;
-            }
-            EffectParams p { param * 0.02f, (float) input->getWidth(), (float) input->getHeight(), 0, 0, 0, 0, 0 };
-            drawPass (g, input, bounds, p);
+            return { param * 0.02f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
 
     private:
@@ -700,88 +734,45 @@ void main() {
     //==============================================================================
     void selectEffect()
     {
-        const auto id = effectCombo->getSelectedId();
         background->setComponentEffect (nullptr);
         activeEffect = nullptr;
+        shaderEffect = nullptr;
+        compileErrorReported = false;
 
-        float defaultParam = 8.0f;
-
-        switch (id)
+        struct Choice
         {
-            case 1:
-            {
-                auto effect = new BlurEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 8.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            case 2:
-            {
-                auto effect = new PixelateEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 8.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            case 3:
-            {
-                auto effect = new EdgeEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 16.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            case 4:
-            {
-                auto effect = new WaveEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 16.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            case 5:
-            {
-                auto effect = new SharpenEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 8.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            case 6:
-            {
-                auto effect = new CRTScanEffect();
-                activeEffect = yup::ReferenceCountedObjectPtr<yup::ComponentEffect> (effect);
-                defaultParam = 12.0f;
-                onEffectParamChanged = [effect] (float v)
-                {
-                    effect->setEffectParameter (v);
-                };
-                break;
-            }
-            default:
-                break;
-        }
+            ShaderEffect* effect;
+            float defaultParam;
+        };
 
-        if (activeEffect != nullptr)
+        const auto choice = [id = effectCombo->getSelectedId()]() -> Choice
         {
-            effectParam = defaultParam;
-            onEffectParamChanged (effectParam);
+            switch (id)
+            {
+                case 1:
+                    return { new BlurEffect(), 8.0f };
+                case 2:
+                    return { new PixelateEffect(), 8.0f };
+                case 3:
+                    return { new EdgeEffect(), 16.0f };
+                case 4:
+                    return { new WaveEffect(), 16.0f };
+                case 5:
+                    return { new SharpenEffect(), 8.0f };
+                case 6:
+                    return { new CRTScanEffect(), 12.0f };
+                default:
+                    return { nullptr, 8.0f };
+            }
+        }();
+
+        if (choice.effect != nullptr)
+        {
+            shaderEffect = choice.effect;
+            activeEffect = yup::ComponentEffect::Ptr (choice.effect);
+
+            effectParam = choice.defaultParam;
+            shaderEffect->setEffectParameter (effectParam);
             paramSlider->setValue ((double) effectParam, yup::dontSendNotification);
             background->setComponentEffect (activeEffect);
         }
@@ -819,6 +810,11 @@ void main() {
         statusLabel->setText (text, yup::dontSendNotification);
     }
 
+    static int ticksToMicroseconds (yup::int64 ticks)
+    {
+        return static_cast<int> (ticks * 1000000.0 / yup::Time::getHighResolutionTicksPerSecond());
+    }
+
     //==============================================================================
     yup::GraphicsContext* capturedContext = nullptr;
 
@@ -834,8 +830,9 @@ void main() {
     std::unique_ptr<AnimatedPattern> spinner;
     std::unique_ptr<SnapshotPreview> snapshotPreview;
 
-    yup::ReferenceCountedObjectPtr<yup::ComponentEffect> activeEffect;
-    std::function<void (float)> onEffectParamChanged = [] (float) {};
+    yup::ComponentEffect::Ptr activeEffect;
+    ShaderEffect* shaderEffect = nullptr; // Same object as activeEffect, kept for its stats.
+    bool compileErrorReported = false;
     float effectParam = 8.0f;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentEffectsDemo)

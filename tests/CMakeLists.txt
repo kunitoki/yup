@@ -67,6 +67,7 @@ set (target_modules
     yup_data_model
     yup_graphics
     yup_animation
+    yup_rhi
     yup_shading
     dr_libs
     pffft_library
@@ -214,7 +215,7 @@ if (YUP_PLATFORM_DESKTOP)
 endif()
 
 target_compile_options (${target_name} PRIVATE
-    $<$<CXX_COMPILER_ID:GNU>:-Wno-subobject-linkage>)
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:GNU>>:-Wno-subobject-linkage>)
 
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"

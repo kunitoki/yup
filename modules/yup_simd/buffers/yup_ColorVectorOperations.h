@@ -31,8 +31,8 @@ public:
     /** Premultiplies alpha in-place on a row of packed `0xAARRGGBB` pixels. */
     static void YUP_CALLTYPE premultiplyARGB (uint32* pixels, int numPixels) noexcept;
 
-    /** Premultiplies alpha in-place on a row of RGBA byte pixels. */
-    static void YUP_CALLTYPE premultiplyRGBA (uint8* pixels, int numPixels) noexcept;
+    /** Premultiplies alpha in-place on a row of packed RGBA pixels. */
+    static void YUP_CALLTYPE premultiplyRGBA (uint32* pixels, int numPixels) noexcept;
 
     /** Converts packed `0xAARRGGBB` pixels to packed `0xRRGGBBAA` pixels.
 
@@ -40,11 +40,20 @@ public:
     */
     static void YUP_CALLTYPE convertARGBtoRGBA (const uint32* src, uint32* dst, int numPixels) noexcept;
 
-    /** Expands 8-bit grayscale pixels to RGBA byte pixels with opaque alpha. */
-    static void YUP_CALLTYPE convertGrayscaleToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept;
+    /** Swaps the R and B channels of packed BGRA pixels to RGBA in place.
 
-    /** Expands RGB byte pixels to RGBA byte pixels with opaque alpha. */
-    static void YUP_CALLTYPE convertRGBToRGBA (const uint8* src, uint8* dst, int numPixels) noexcept;
+        Processes 4 pixels per iteration using xsimd; falls back to a
+        scalar R ↔ B swap loop for the tail.
+
+        The pixel count must accurately reflect the number of pixels in `pixels`.
+    */
+    static void YUP_CALLTYPE convertBGRAtoRGBA (uint32* pixels, int numPixels) noexcept;
+
+    /** Expands 8-bit grayscale pixels to packed RGBA pixels with opaque alpha. */
+    static void YUP_CALLTYPE convertGrayscaleToRGBA (const uint8* src, uint32* dst, int numPixels) noexcept;
+
+    /** Expands RGB byte pixels to packed RGBA pixels with opaque alpha. */
+    static void YUP_CALLTYPE convertRGBToRGBA (const uint8* src, uint32* dst, int numPixels) noexcept;
 
     /** Blends rows of float RGBA pixels using `dst = rowA + (rowB - rowA) * t`. */
     static void YUP_CALLTYPE lerpRows (const float* rowA, const float* rowB, float* dst, float t, int numPixels) noexcept;

@@ -51,11 +51,11 @@ g Ic(float ma,c D8,float F1){c g6=(1.-D8*abs(F1))*.5;float Y3,l5;if(abs(ma-T6)<1
 e d d8(g J F3){d Y3=J.z;d l5=max(J.w,.0);d h6=Y3>=.0?g5(l5):.0;if(abs(Y3)<C8){d x=abs(J.x)-Gc;d y=-J.y+f7;d V2=(y-l5)*0.5984134206;i t=l5+V2*B0(0.20888568955,0.62665706865,1.04442844776,1.46219982687);i u=t*-Y3+(y*Y3+x);i Tf=B0(g5(u[0]),g5(u[1]),g5(u[2]),g5(u[3]));i Jc=t*5.09593080173+-2.54796540086;i Uf=exp2(-Jc*Jc);h6+=dot(Tf,Uf)*V2;}return h6*sign(J.x);}e d v4(g J F3){float h6=1.;float Vf=(1.-f7)+J.x;h6-=g5(Vf);float Wf=1.-J.y;h6-=g5(Wf);return h6;}
 #endif
 #if defined(CB)&&defined(BD)
-e U m5(int Kc){return U(Kc&((1<<pc)-1),Kc>>pc);}e float Lc(Z Y0,c Xf){c e2=Z0(Y0,Xf);return(abs(e2.x)+abs(e2.y))*(1./dot(e2,e2));}e bool p9(g h7,g oa,int T,e1(uint)c3,e1(c)Yf
+e U m5(int Kc){return U(Kc&((1<<pc)-1),Kc>>pc);}e float Lc(Z Y0,c Xf){c e2=Z0(Y0,Xf);return(abs(e2.x)+abs(e2.y))*(1./dot(e2,e2));}e bool p9(g h7,g oa,int T,e1(uint) c3,e1(c) Yf
 #ifndef BB
-,e1(g)N1
+,e1(g) N1
 #else
-,e1(X)i7
+,e1(X) i7
 #endif
 i6){int E8=int(h7.x);float F1=h7.y;float pa=h7.z;int Mc=floatBitsToInt(h7.w)>>2;int j7=floatBitsToInt(h7.w)&3;int qa=min(E8,Mc-1);int G4=T*Mc+qa;C4 n5=v1(DC,m5(G4));uint e0=f5(n5.w);uint F8=max(e0&wc,1u);Q ra=P0(XC,F8-1u);c Nc=uintBitsToFloat(ra.xy);c3=ra.z&0xffffu;uint Oc=ra.w;Z Y0=j2(uintBitsToFloat(P0(MB,c3*4u)));Q H4=P0(MB,c3*4u+1u);c c2=uintBitsToFloat(H4.xy);float H2=uintBitsToFloat(H4.z);float I2=uintBitsToFloat(H4.w);uint Pc=e0&D3;if(Pc!=0u){E8=int(oa.x);F1=oa.y;pa=oa.z;}if(E8!=qa){int Qc=G4+E8-qa;C4 Rc=v1(DC,m5(Qc));if((f5(Rc.w)&(D3|0xffffu))!=(e0&(D3|0xffffu))){bool Zf=H2==.0||Nc.x!=.0;if(Zf){G4=int(Oc);n5=v1(DC,m5(G4));}}else{G4=Qc;n5=Rc;}e0=(f5(n5.w)&~D3)|Pc;}float h1;
 #ifdef HB
@@ -94,11 +94,11 @@ N1.xy=mix(N1.xy,c(1.,-1.),bf(k.og!=0u));
 return true;}
 #endif
 #if defined(CB)&&defined(DB)
-e c tb(V j6,e1(uint)c3
+e c tb(V j6,e1(uint) c3
 #ifdef BB
-,e1(X)i7
+,e1(X) i7
 #else
-,e1(d)pg
+,e1(d) pg
 #endif
 i6){c3=floatBitsToUint(j6.z)&0xffffu;
 #ifdef BB
@@ -109,11 +109,11 @@ pg=U9(floatBitsToInt(j6.z)>>16);
 c k6=j6.xy;Z Y0=j2(uintBitsToFloat(P0(MB,c3*4u)));Q H4=P0(MB,c3*4u+1u);c c2=uintBitsToFloat(H4.xy);k6=Z0(Y0,k6)+c2;return k6;}
 #endif
 #if defined(CB)&&defined(EB)
-e c sb(V j6,e1(uint)c3,
+e c sb(V j6,e1(uint) c3,
 #ifdef BB
-e1(X)i7,
+e1(X) i7,
 #endif
-e1(c)qg i6){c3=floatBitsToUint(j6.z)&0xffffu;Q J4=P0(MB,c3*4u+2u);
+e1(c) qg i6){c3=floatBitsToUint(j6.z)&0xffffu;Q J4=P0(MB,c3*4u+2u);
 #ifdef BB
 i7=i2(J4.x);
 #endif

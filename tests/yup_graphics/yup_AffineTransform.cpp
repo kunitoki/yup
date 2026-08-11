@@ -289,6 +289,29 @@ TEST (AffineTransformTests, ScaleFactor)
     EXPECT_FLOAT_EQ (t.getScaleFactor(), 4.0f);
 }
 
+TEST (AffineTransformTests, ScaleFactorIsIndependentOfRotation)
+{
+    // Rotating does not resize anything, so the reported scale must not change with
+    // the angle. Reading only the matrix diagonal would report scale * cos(angle),
+    // which reaches zero at 90 degrees.
+    for (const float degrees : { 0.0f, 30.0f, 45.0f, 60.0f, 90.0f, 137.0f, 180.0f, 270.0f })
+    {
+        const auto rotated = AffineTransform::scaling (4.0f).rotated (degreesToRadians (degrees));
+
+        EXPECT_NEAR (rotated.getScaleFactor(), 4.0f, 1.0e-4f) << "at " << degrees << " degrees";
+    }
+}
+
+TEST (AffineTransformTests, ScaleFactorAveragesNonUniformScaling)
+{
+    const auto t = AffineTransform::scaling (2.0f, 6.0f);
+    EXPECT_FLOAT_EQ (t.getScaleFactor(), 4.0f);
+
+    // Still the average of the two axis lengths once rotated.
+    const auto rotated = t.rotated (degreesToRadians (90.0f));
+    EXPECT_NEAR (rotated.getScaleFactor(), 4.0f, 1.0e-4f);
+}
+
 TEST (AffineTransformTests, MatrixPoints)
 {
     AffineTransform t (2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f);

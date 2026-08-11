@@ -149,7 +149,7 @@ GpuPipeline::Ptr AnimationRenderResources::getMattePipeline (GraphicsContext& co
     options.colorTargets[0].format = GpuTextureFormat::rgba8unorm;
     options.colorTargets[0].blendEnabled = false;
 
-    auto result = GpuPipeline::compileFromGlsl (context,
+    auto result = GpuPipeline::compileFromGlsl (context.getGpuDevice(),
                                                 String::fromUTF8 (kMatteVertSource, (int) sizeof (kMatteVertSource) - 1),
                                                 String::fromUTF8 (kMatteFragSource, (int) sizeof (kMatteFragSource) - 1),
                                                 options);
@@ -208,6 +208,15 @@ AnimationRenderResources::MatteCanvasLease AnimationRenderResources::acquireMatt
     slot.width = width;
     slot.height = height;
     slot.inUse = true;
+    for (size_t i = 0; i < matteCanvasPool.size(); ++i)
+    {
+        if (! matteCanvasPool[i].inUse)
+        {
+            matteCanvasPool[i] = std::move (slot);
+            return { *this, i };
+        }
+    }
+
     matteCanvasPool.push_back (std::move (slot));
     return { *this, matteCanvasPool.size() - 1 };
 }

@@ -84,7 +84,7 @@ ComponentNative::Options& ComponentNative::Options::withTemporaryWindow (bool sh
     return *this;
 }
 
-ComponentNative::Options& ComponentNative::Options::withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
+ComponentNative::Options& ComponentNative::Options::withGraphicsApi (std::optional<GpuPlatform> newGraphicsApi) noexcept
 {
     graphicsApi = newGraphicsApi;
     return *this;

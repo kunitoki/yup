@@ -30,7 +30,7 @@ class GpuCanvasTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        context = GraphicsContext::createContext (GraphicsContext::Headless, {});
+        context = GraphicsContext::createContext (GpuPlatform::Headless, {});
         ASSERT_NE (context, nullptr);
     }
 
@@ -143,7 +143,7 @@ TEST (TextureTests, ValidTextureReportsCorrectlyViaGpuCanvas)
 
 TEST (GraphicsDrawTextureTests, NullTextureIsNoOp)
 {
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
 
     auto renderer = ctx->makeRenderer (128, 128);
@@ -161,7 +161,7 @@ TEST (GraphicsDrawTextureTests, NullTextureIsNoOp)
 
 TEST_F (GpuCanvasTests, BeginRenderPassWithNullCanvasReturnsInvalidPass)
 {
-    auto frame = GpuFrame::begin (*context);
+    auto frame = GpuFrame::begin (context->getGpuDevice());
     if (! frame.isValid())
         return;
 

@@ -239,6 +239,63 @@ public:
     }
 
     //==============================================================================
+    /** Bitwise AND of two SIMD registers element-wise.
+
+        @param other The SIMD register to AND with.
+
+        @returns A SIMD register containing the element-wise bitwise AND.
+    */
+    forcedinline SIMDRegister operator& (SIMDRegister other) const noexcept
+    {
+        SIMDRegister result;
+        for (std::size_t i = 0; i < numBatches; ++i)
+            result.data[i] = data[i] & other.data[i];
+        return result;
+    }
+
+    /** Bitwise OR of two SIMD registers element-wise.
+
+        @param other The SIMD register to OR with.
+
+        @returns A SIMD register containing the element-wise bitwise OR.
+    */
+    forcedinline SIMDRegister operator| (SIMDRegister other) const noexcept
+    {
+        SIMDRegister result;
+        for (std::size_t i = 0; i < numBatches; ++i)
+            result.data[i] = data[i] | other.data[i];
+        return result;
+    }
+
+    /** Left shift each element by a scalar amount.
+
+        @param shift The number of bits to shift left.
+
+        @returns A SIMD register containing the shifted elements.
+    */
+    forcedinline SIMDRegister operator<< (int shift) const noexcept
+    {
+        SIMDRegister result;
+        for (std::size_t i = 0; i < numBatches; ++i)
+            result.data[i] = data[i] << shift;
+        return result;
+    }
+
+    /** Right shift each element by a scalar amount.
+
+        @param shift The number of bits to shift right.
+
+        @returns A SIMD register containing the shifted elements.
+    */
+    forcedinline SIMDRegister operator>> (int shift) const noexcept
+    {
+        SIMDRegister result;
+        for (std::size_t i = 0; i < numBatches; ++i)
+            result.data[i] = data[i] >> shift;
+        return result;
+    }
+
+    //==============================================================================
     /** Performs a fused multiply-add operation: this + (a * b).
     
         @param a The first SIMD register to multiply.
@@ -382,9 +439,10 @@ private:
     std::array<Batch, numBatches> data;
 };
 
-using Float4 = SIMDRegister<float, 4>;
-using Float8 = SIMDRegister<float, 8>;
-using Double2 = SIMDRegister<double, 2>;
-using Double4 = SIMDRegister<double, 4>;
+using Float32x4 = SIMDRegister<float, 4>;
+using Float32x8 = SIMDRegister<float, 8>;
+using Float64x2 = SIMDRegister<double, 2>;
+using Float64x4 = SIMDRegister<double, 4>;
+using Uint32x4 = SIMDRegister<uint32, 4>;
 
 } // namespace yup

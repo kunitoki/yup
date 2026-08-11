@@ -98,6 +98,10 @@ html_theme_options = {
             "url": "imaging/index",
         },
         {
+            "title": "DSP",
+            "url": "dsp/index",
+        },
+        {
             "title": "Audio",
             "url": "audio/index",
         }

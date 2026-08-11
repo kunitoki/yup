@@ -91,6 +91,11 @@ public:
         comp.cachedTextureCanvas = canvas;
     }
 
+    static GpuCanvas::Ptr getEffectOffscreenCanvas (const Component& comp)
+    {
+        return comp.effectOffscreenCanvas;
+    }
+
     static void triggerPaint (Component& comp, Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous = false)
     {
         comp.internalPaint (g, repaintArea, renderContinuous);
@@ -145,7 +150,7 @@ TEST_F (ComponentEffectTest, ApplyIsCalled)
     auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
     EXPECT_EQ (effect->applyCount, 0);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -238,7 +243,7 @@ TEST_F (ComponentEffectTest, ClearsCachedCanvasWhenEnabled)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -259,7 +264,7 @@ TEST_F (ComponentEffectTest, RepaintInvalidatesCache)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -276,7 +281,7 @@ TEST_F (ComponentEffectTest, RepaintWithRectInvalidatesCache)
 {
     Component comp ("test");
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -294,7 +299,7 @@ TEST_F (ComponentEffectTest, SetBoundsInvalidatesCache)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto canvas = GpuCanvas::create (*ctx, 64, 64);
     if (canvas == nullptr)
@@ -388,7 +393,7 @@ TEST_F (ComponentEffectTest, ChildrenArePainted)
     parentMock.addAndMakeVisible (child1);
     parentMock.addAndMakeVisible (child2);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -406,7 +411,7 @@ TEST_F (ComponentEffectTest, PaintOverChildrenIsCalled)
     parentMock.setBounds (0, 0, 400, 300);
     parentMock.setVisible (true);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -427,7 +432,7 @@ TEST_F (ComponentEffectTest, ZeroSizedReturnsEmpty)
 {
     Component comp ("test");
     // Default 0×0 size
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     EXPECT_FALSE (comp.snapshotToImage (*ctx).isValid());
 }
@@ -437,7 +442,7 @@ TEST_F (ComponentEffectTest, HeadlessContextReturnsEmpty)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     EXPECT_FALSE (comp.snapshotToImage (*ctx).isValid());
 }
@@ -447,7 +452,7 @@ TEST_F (ComponentEffectTest, IncludeEffectsFlagDoesNotCrashWithHeadless)
     Component comp ("test");
     comp.setBounds (0, 0, 200, 200);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
 
     // Both calls should return empty without crashing
@@ -470,7 +475,7 @@ TEST_F (ComponentEffectTest, ChildrenStillPaintWhenParentIsCached)
     parentMock.setCachedToTexture (true);
     parentMock.addAndMakeVisible (child);
 
-    auto ctx = GraphicsContext::createContext (GraphicsContext::Headless, {});
+    auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (ctx, nullptr);
     auto renderer = ctx->makeRenderer (200, 200);
     ASSERT_NE (renderer, nullptr);
@@ -526,7 +531,7 @@ protected:
 
     static void SetUpTestSuite()
     {
-        gpuContext = GraphicsContext::createContext (GraphicsContext::Metal, {});
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
         if (gpuContext == nullptr)
             return;
 
@@ -811,15 +816,53 @@ TEST_F (ComponentEffectGpuTest, EffectPlusCacheRendersEffectEveryFrame)
     auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
     ASSERT_NE (firstCanvas, nullptr);
 
-    // Effect path always re-renders the full subtree (so cached canvas
-    // is recreated), because a child repaint doesn't invalidate the
-    // parent's cache. Effect must track live child content.
+    // The effect path always re-renders the full subtree, because a child repaint
+    // doesn't invalidate the parent's cache and the effect must track live child
+    // content. Caching is therefore ineffective here, which is what applyCount
+    // rising on every paint shows.
     triggerPaintOnCanvas (*comp, 128, 128);
     EXPECT_GT (effect->applyCount, applyCountAfterFirst);
 
+    // The canvas itself is reused while the component size is unchanged - only its
+    // contents are redrawn - so no GPU render target is reallocated per frame.
     auto secondCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
     ASSERT_NE (secondCanvas, nullptr);
-    EXPECT_NE (firstCanvas.get(), secondCanvas.get());
+    EXPECT_EQ (firstCanvas.get(), secondCanvas.get());
+}
+
+TEST_F (ComponentEffectGpuTest, EffectCanvasIsReusedUntilTheComponentIsResized)
+{
+    if (! gpuContext)
+        return;
+
+    auto comp = makeComp ("test", 128, 128);
+    comp->setVisible (true);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 128, 128);
+
+    // Holding this reference also keeps the assertions below honest: the replaced
+    // canvas stays alive, so a new one cannot be allocated at the same address.
+    auto firstCanvas = ComponentHelper::getEffectOffscreenCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
+    EXPECT_EQ (128, firstCanvas->getWidth());
+    EXPECT_EQ (128, firstCanvas->getHeight());
+
+    // Unchanged size: the same canvas is drawn into again.
+    triggerPaintOnCanvas (*comp, 128, 128);
+    EXPECT_EQ (firstCanvas.get(), ComponentHelper::getEffectOffscreenCanvas (*comp).get());
+
+    // A resize leaves the cached canvas the wrong size, so it has to be replaced.
+    comp->setBounds (0, 0, 64, 64);
+    triggerPaintOnCanvas (*comp, 64, 64);
+
+    auto resizedCanvas = ComponentHelper::getEffectOffscreenCanvas (*comp);
+    ASSERT_NE (resizedCanvas, nullptr);
+    EXPECT_NE (firstCanvas.get(), resizedCanvas.get());
+    EXPECT_EQ (64, resizedCanvas->getWidth());
+    EXPECT_EQ (64, resizedCanvas->getHeight());
 }
 
 #endif // YUP_MAC

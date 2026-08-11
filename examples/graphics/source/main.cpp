@@ -69,10 +69,12 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/ClipboardDemo.h"
 #include "examples/ColorLab.h"
 #include "examples/ComponentEffectsDemo.h"
+#include "examples/ComputeParticlesDemo.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
+#include "examples/GpuAudioProcessingDemo.h"
 #include "examples/Images.h"
 #include "examples/LayoutFonts.h"
 #include "examples/LottieDemo.h"
@@ -178,10 +180,12 @@ public:
         addDemo ("Clipboard", [] { return std::make_unique<ClipboardDemo>(); });
         addDemo ("Color Lab", [] { return std::make_unique<ColorLabDemo>(); });
         addDemo ("Component Effects", [] { return std::make_unique<ComponentEffectsDemo>(); });
+        addDemo ("Compute Particles", [] { return std::make_unique<ComputeParticlesDemo>(); });
         addDemo ("Convolution Demo", [] { return std::make_unique<ConvolutionDemo>(); });
         addDemo ("Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
+        addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });

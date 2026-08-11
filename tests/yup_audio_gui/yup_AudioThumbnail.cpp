@@ -29,7 +29,7 @@ using namespace yup;
 
 namespace yup
 {
-extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GraphicsContext::Options);
+extern std::unique_ptr<yup::GraphicsContext> yup_constructHeadlessGraphicsContext (yup::GpuDevice::Options, yup::GpuDevice::Ptr);
 } // namespace yup
 
 namespace
@@ -475,7 +475,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithValidData)
     auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -496,7 +496,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithInvalidChannelIndex)
     auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -517,7 +517,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithNegativeChannelIndex)
     auto buffer = createThumbnailTestBuffer (2, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -538,7 +538,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithEmptyRange)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -553,7 +553,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithEmptyRange)
 
 TEST_F (AudioThumbnailTests, PaintChannelWithNoPeakProfile)
 {
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -574,7 +574,7 @@ TEST_F (AudioThumbnailTests, PaintChannelZoomedIn)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 200);
     Graphics g (*context, *renderer);
 
@@ -595,7 +595,7 @@ TEST_F (AudioThumbnailTests, PaintChannelZoomedOut)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -616,7 +616,7 @@ TEST_F (AudioThumbnailTests, PaintChannelMultipleChannels)
     auto buffer = createThumbnailTestBuffer (8, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 800);
     Graphics g (*context, *renderer);
 
@@ -640,7 +640,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithZeroPixelWidth)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -661,7 +661,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithNegativePixelWidth)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 
@@ -682,7 +682,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithVeryLargePixelWidth)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (10000, 200);
     Graphics g (*context, *renderer);
 
@@ -703,7 +703,7 @@ TEST_F (AudioThumbnailTests, PaintChannelWithEmptyLane)
     auto buffer = createThumbnailTestBuffer (1, kThumbnailBufferSize);
     syncThumbnail.setSource (&buffer, kThumbnailSampleRate);
 
-    auto context = yup_constructHeadlessGraphicsContext ({});
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (400, 200);
     Graphics g (*context, *renderer);
 

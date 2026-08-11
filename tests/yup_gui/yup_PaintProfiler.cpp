@@ -647,7 +647,7 @@ protected:
     {
         GraphicsContext::Options opts;
         opts.allowHeadlessRendering = true;
-        context = GraphicsContext::createContext (GraphicsContext::Api::Headless, opts);
+        context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
         renderer = context->makeRenderer (200, 200);
 
         profiler = &PaintProfiler::getInstance();
