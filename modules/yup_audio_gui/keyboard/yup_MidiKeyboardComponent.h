@@ -179,6 +179,8 @@ public:
     /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
+    void keyUp (const KeyPress& key, const Point<float>& position) override;
+    /** @internal */
     void focusLost () override;
 
     //==============================================================================
@@ -188,6 +190,9 @@ public:
     bool isMouseOverNote (int midiNoteNumber) const { return midiNoteNumber == mouseOverNote; }
 
 private:
+    /** Maps a computer-keyboard key to a midi note using the base octave, or -1. */
+    int getNoteForKeyPress (const KeyPress& key) const;
+
     //==============================================================================
     MidiKeyboardState& state;
 
