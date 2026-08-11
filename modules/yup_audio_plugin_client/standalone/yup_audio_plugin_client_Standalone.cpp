@@ -70,6 +70,7 @@ private:
 class AudioProcessorApplication
     : public YUPApplication
     , public AudioIODeviceCallback
+    , public Timer
 {
 public:
     AudioProcessorApplication()
@@ -93,8 +94,12 @@ public:
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
-        deviceManager.initialiseWithDefaultDevices (0, 2);
+        deviceManager.initialiseWithDefaultDevices (2, 2);
         deviceManager.addAudioCallback (this);
+        deviceManager.addMidiInputDeviceCallback ({}, &midiCollector);
+
+        updateMidiInputDevices();
+        startTimer (1000);
 
         auto* editor = processor->createEditor();
         window = std::make_unique<AudioProcessorEditorWindow> (getApplicationName(), editor);
@@ -109,6 +114,9 @@ public:
 
         window.reset();
 
+        stopTimer();
+
+        deviceManager.removeMidiInputDeviceCallback ({}, &midiCollector);
         deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
 
@@ -132,7 +140,9 @@ public:
             audioBuffer.clear();
         }
 
-        MidiBuffer midiBuffer;
+        midiBuffer.clear();
+        midiCollector.removeNextBlockOfMessages (midiBuffer, numSamples);
+
         ParameterChangeBuffer emptyParams;
         AudioProcessContext<float> ctx { audioBuffer, midiBuffer, emptyParams };
         processor->processBlock (ctx);
@@ -144,6 +154,9 @@ public:
 
     void audioDeviceAboutToStart (AudioIODevice* device) override
     {
+        midiCollector.reset (device->getCurrentSampleRate());
+        midiBuffer.ensureSize (4096);
+
         processor->prepareToPlay (AudioSpec (device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples()));
 
         audioBuffer.setSize (
@@ -160,9 +173,38 @@ public:
         processor->releaseResources();
     }
 
+    void timerCallback() override
+    {
+        updateMidiInputDevices();
+    }
+
 private:
+    void updateMidiInputDevices()
+    {
+        auto newMidiDevices = MidiInput::getAvailableDevices();
+        if (newMidiDevices == lastMidiDevices)
+            return;
+
+        for (const auto& oldDevice : lastMidiDevices)
+        {
+            if (! newMidiDevices.contains (oldDevice))
+                deviceManager.setMidiInputDeviceEnabled (oldDevice.identifier, false);
+        }
+
+        for (const auto& newDevice : newMidiDevices)
+        {
+            if (! lastMidiDevices.contains (newDevice))
+                deviceManager.setMidiInputDeviceEnabled (newDevice.identifier, true);
+        }
+
+        lastMidiDevices = std::move (newMidiDevices);
+    }
+
     AudioDeviceManager deviceManager;
     AudioBuffer<float> audioBuffer;
+    MidiBuffer midiBuffer;
+    MidiMessageCollector midiCollector;
+    Array<MidiDeviceInfo> lastMidiDevices;
     std::unique_ptr<AudioProcessor> processor;
     std::unique_ptr<AudioProcessorEditorWindow> window;
 };

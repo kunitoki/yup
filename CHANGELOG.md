@@ -102,6 +102,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Audio
 
 - Streaming (real-time) onset detection: `OnsetDetector::prepareStreaming`/`processStreaming`/`drainStreamingOnsets` run the SuperFlux pipeline incrementally — `Spectrogram` gained a per-hop streaming path producing frames identical to offline (verified bit-exact by tests), `SuperFluxODF` and `OnsetPeakPicker` gained per-frame streaming entry points (online mode, causal windows only), onsets are delivered through a lock-free queue, and the detection threshold is adjustable in real time. All offline APIs and behavior are unchanged (additive only, covered by equivalence and regression tests); ComplexFlux and onset refinement remain offline-only.
+- Standalone plugin wrapper now feeds MIDI input to the processor: all available MIDI input devices are enabled and collected via `MidiMessageCollector` into the `AudioProcessContext`, with hot-plug support (devices polled once per second, mirroring JUCE's `autoOpenMidiDevices` behavior).
+- Standalone plugin wrapper now opens the default audio input device (2 in / 2 out instead of 0 / 2), so plugins with input buses (sidechains, effects) receive live input; the macOS app plist template gained `NSMicrophoneUsageDescription` so input access can actually be granted.
 
 ### Examples
 
