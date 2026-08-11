@@ -44,10 +44,9 @@ File getStyledTextTestFontFile()
 
 Font loadStyledTextTestFont (float height = 16.0f)
 {
-    Font font;
-    auto result = font.loadFromFile (getStyledTextTestFontFile());
-    EXPECT_TRUE (result.wasOk());
-    return font.withHeight (height);
+    auto result = Font::loadFontFromFile (getStyledTextTestFontFile());
+    EXPECT_TRUE (result.wasOk()); // can't use ASSERT_* here: it returns void, but this function returns Font
+    return result.getValue().withHeight (height);
 }
 } // namespace
 
@@ -1106,4 +1105,190 @@ TEST (StyledTextTests, AdjacentLineMovementClampsAtDocumentEdges)
 
     EXPECT_EQ (0, text.getGlyphIndexOnAdjacentLine (0, false));
     EXPECT_EQ (7, text.getGlyphIndexOnAdjacentLine (7, true));
+}
+
+// ==============================================================================
+// Wrapped-text positioning tests (caret, selection, hit-testing)
+// ==============================================================================
+
+namespace
+{
+
+// Builds a StyledText with a long single-run string wrapped into several visual
+// lines, returning the text and the first character index of the second line.
+struct WrappedTextFixture
+{
+    StyledText text;
+    String content;
+    int wrapChar = -1;
+    int numLines = 0;
+};
+
+WrappedTextFixture makeWrappedText (float width,
+                                    StyledText::HorizontalAlign align = StyledText::left)
+{
+    WrappedTextFixture fixture;
+    fixture.content = "The quick brown fox jumps over the lazy dog, and keeps running far past the end of this line.";
+
+    auto font = loadStyledTextTestFont();
+
+    {
+        auto modifier = fixture.text.startUpdate();
+        modifier.setMaxSize ({ width, 400.0f });
+        modifier.setWrap (StyledText::wrap);
+        modifier.setHorizontalAlign (align);
+        modifier.appendText (fixture.content, font);
+    }
+
+    const auto& orderedLines = fixture.text.getOrderedLines();
+    fixture.numLines = static_cast<int> (orderedLines.size());
+
+    if (fixture.numLines >= 2)
+    {
+        for (const auto& [run, glyphIndex] : orderedLines[1])
+        {
+            if (glyphIndex < run->textIndices.size())
+            {
+                fixture.wrapChar = static_cast<int> (run->textIndices[glyphIndex]);
+                break;
+            }
+        }
+    }
+
+    return fixture;
+}
+
+} // namespace
+
+TEST (StyledTextTests, WrappedCaretBoundsPlaceAtWrappedLineStart)
+{
+    const float width = 80.0f;
+    auto fixture = makeWrappedText (width);
+
+    ASSERT_GE (fixture.numLines, 2);
+    ASSERT_GT (fixture.wrapChar, 0);
+
+    const auto& orderedLines = fixture.text.getOrderedLines();
+    const float wrappedLineStartX = orderedLines[1].glyphLine().startX;
+
+    // Caret at the start of the wrapped line must land on that line's left edge,
+    // not at the paragraph-relative x position of the previous line.
+    const auto caretAtWrap = fixture.text.getCaretBounds (fixture.wrapChar);
+    ASSERT_FALSE (caretAtWrap.isEmpty());
+    EXPECT_NEAR (wrappedLineStartX, caretAtWrap.getX(), 1.0f);
+
+    // ...and must be vertically below the first line.
+    const auto caretAtStart = fixture.text.getCaretBounds (0);
+    ASSERT_FALSE (caretAtStart.isEmpty());
+    EXPECT_GT (caretAtWrap.getY(), caretAtStart.getY());
+
+    // The caret at the last visible character of the previous line stays at its
+    // right edge, which is to the right of the wrapped line's start. (Note: the
+    // character right before wrapChar is often the trailing space at the break,
+    // which the line breaker drops, so the caret there correctly lands on the
+    // next line's start instead.)
+    int lastVisibleCharOfLine0 = -1;
+    for (const auto& [run, glyphIndex] : orderedLines[0])
+    {
+        if (glyphIndex < run->textIndices.size())
+            lastVisibleCharOfLine0 = jmax (lastVisibleCharOfLine0, static_cast<int> (run->textIndices[glyphIndex]));
+    }
+
+    ASSERT_GE (lastVisibleCharOfLine0, 0);
+
+    const auto caretAtPreviousLineEnd = fixture.text.getCaretBounds (lastVisibleCharOfLine0);
+    ASSERT_FALSE (caretAtPreviousLineEnd.isEmpty());
+    EXPECT_GT (caretAtPreviousLineEnd.getX(), caretAtWrap.getX());
+    EXPECT_LE (caretAtPreviousLineEnd.getX(), width);
+}
+
+TEST (StyledTextTests, WrappedCaretBoundsRespectCenteredAlignment)
+{
+    auto fixture = makeWrappedText (80.0f, StyledText::center);
+
+    ASSERT_GE (fixture.numLines, 2);
+    ASSERT_GT (fixture.wrapChar, 0);
+
+    const auto& orderedLines = fixture.text.getOrderedLines();
+    const float wrappedLineStartX = orderedLines[1].glyphLine().startX;
+
+    // Centered wrapped lines start at a nonzero x; the caret must follow it.
+    EXPECT_GT (wrappedLineStartX, 0.0f);
+
+    const auto caretAtWrap = fixture.text.getCaretBounds (fixture.wrapChar);
+    ASSERT_FALSE (caretAtWrap.isEmpty());
+    EXPECT_NEAR (wrappedLineStartX, caretAtWrap.getX(), 1.0f);
+}
+
+TEST (StyledTextTests, WrappedSelectionRectanglesStayWithinLineWidths)
+{
+    const float width = 80.0f;
+    auto fixture = makeWrappedText (width);
+
+    ASSERT_GE (fixture.numLines, 2);
+    ASSERT_GT (fixture.wrapChar, 1);
+
+    // Selection spanning the wrap boundary: last chars of line 1 + first chars of line 2.
+    const auto rectangles = fixture.text.getSelectionRectangles (fixture.wrapChar - 2, fixture.wrapChar + 2);
+
+    // One rectangle per visual line, no runaway paragraph-relative x offsets.
+    ASSERT_EQ (2u, rectangles.size());
+
+    for (const auto& rect : rectangles)
+    {
+        EXPECT_GE (rect.getX(), 0.0f);
+        EXPECT_LE (rect.getRight(), width);
+    }
+
+    EXPECT_LT (rectangles[0].getY(), rectangles[1].getY());
+    EXPECT_NEAR (0.0f, rectangles[1].getX(), 1.0f);
+}
+
+TEST (StyledTextTests, WrappedGlyphIndexAtPositionHitsCorrectLine)
+{
+    const float width = 80.0f;
+    auto fixture = makeWrappedText (width);
+
+    ASSERT_GE (fixture.numLines, 2);
+    ASSERT_GT (fixture.wrapChar, 0);
+
+    const auto& orderedLines = fixture.text.getOrderedLines();
+
+    // Click at the left edge of the wrapped line maps to its first character.
+    const auto secondLineY = orderedLines[1].y() + (orderedLines[1].glyphLine().top + orderedLines[1].glyphLine().bottom) * 0.5f;
+    const int indexOnSecondLine = fixture.text.getGlyphIndexAtPosition ({ 2.0f, secondLineY });
+    EXPECT_GE (indexOnSecondLine, fixture.wrapChar);
+
+    // Click at the left edge of the first line stays before the wrap point.
+    const auto firstLineY = orderedLines[0].y() + (orderedLines[0].glyphLine().top + orderedLines[0].glyphLine().bottom) * 0.5f;
+    const int indexOnFirstLine = fixture.text.getGlyphIndexAtPosition ({ 2.0f, firstLineY });
+    EXPECT_LT (indexOnFirstLine, fixture.wrapChar);
+
+    // Position -> caret -> position round-trip on the wrapped line.
+    const auto caret = fixture.text.getCaretBounds (fixture.wrapChar);
+    ASSERT_FALSE (caret.isEmpty());
+    const int roundTripped = fixture.text.getGlyphIndexAtPosition ({ caret.getX() + 1.0f, caret.getCenterY() });
+    EXPECT_GE (roundTripped, fixture.wrapChar);
+}
+
+TEST (StyledTextTests, AdjacentLineMovementWorksAcrossWraps)
+{
+    const float width = 80.0f;
+    auto fixture = makeWrappedText (width);
+
+    ASSERT_GE (fixture.numLines, 2);
+    ASSERT_GT (fixture.wrapChar, 0);
+
+    // Moving down from the first character lands on the wrapped line's first character.
+    const int downFromStart = fixture.text.getGlyphIndexOnAdjacentLine (0, true);
+    EXPECT_EQ (fixture.wrapChar, downFromStart);
+
+    // Moving up from the wrapped line's first character returns to the start.
+    const int upFromWrap = fixture.text.getGlyphIndexOnAdjacentLine (fixture.wrapChar, false);
+    EXPECT_EQ (0, upFromWrap);
+
+    // Moving down past the last line clamps to the end of the text.
+    const int textEnd = fixture.content.length();
+    const int downFromEnd = fixture.text.getGlyphIndexOnAdjacentLine (textEnd, true);
+    EXPECT_EQ (textEnd, downFromEnd);
 }

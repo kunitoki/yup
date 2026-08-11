@@ -28,8 +28,13 @@ class PythonDemo : public yup::Component
 public:
     PythonDemo()
         : Component ("PythonDemoDemo")
+        , scriptEditor (scriptDocument)
     {
         setOpaque (false);
+
+        scriptDocument.setText (defaultScript, yup::dontSendNotification);
+        scriptEditor.setSyntaxDefinition ("python");
+        addAndMakeVisible (scriptEditor);
 
         runPython.setButtonText ("Run Python!");
         runPython.onClick = [this]
@@ -39,14 +44,7 @@ public:
             locals["yup"] = pybind11::module_::import (yup::PythonModuleName);
             locals["this"] = pybind11::cast (this);
 
-            auto script = yup::String (R"(
-                import sys
-                print("Scripting YUP!")
-                this.backgroundColor = yup.Color.opaqueRandom()
-                this.repaint();
-            )");
-
-            auto result = engine.runScript (script.dedentLines(), locals);
+            auto result = engine.runScript (scriptDocument.getText(), locals);
             if (result.failed())
                 YUP_DBG (result.getErrorMessage());
         };
@@ -56,13 +54,14 @@ public:
     void resized() override
     {
         constexpr int margin = 5;
-        constexpr int buttonWidth = 100;
         constexpr int buttonHeight = 30;
 
         auto bounds = getLocalBounds().reduced (margin);
 
-        auto buttons1 = bounds.removeFromTop (buttonHeight);
-        runPython.setBounds (buttons1.removeFromLeft (buttonWidth));
+        runPython.setBounds (bounds.removeFromTop (buttonHeight).reduced (4, 0));
+        bounds.removeFromTop (4);
+
+        scriptEditor.setBounds (bounds);
     }
 
     void paint (yup::Graphics& g) override
@@ -74,8 +73,17 @@ public:
     yup::Color backgroundColor = yup::Colors::transparentBlack;
 
 private:
+    static constexpr const char* defaultScript = R"(
+import sys
+print("Scripting YUP!")
+this.backgroundColor = yup.Color.opaqueRandom()
+this.repaint();
+)";
+
     yup::TextButton runPython;
     yup::ScriptEngine engine;
+    yup::CodeDocument scriptDocument;
+    yup::CodeEditor scriptEditor;
 };
 
 //==============================================================================

@@ -130,4 +130,14 @@ const Font& ApplicationTheme::getDefaultIconFont() const
     return defaultIconFont;
 }
 
+void ApplicationTheme::setDefaultMonospaceFont (Font font)
+{
+    defaultMonospaceFont = std::move (font);
+}
+
+const Font& ApplicationTheme::getDefaultMonospaceFont() const
+{
+    return defaultMonospaceFont;
+}
+
 } // namespace yup

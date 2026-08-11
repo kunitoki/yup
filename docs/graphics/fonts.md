@@ -13,10 +13,40 @@ or variable-axis settings.
 ### Loading a font
 
 ```cpp
-Font font;
-font.loadFromFile (File ("/path/to/Font.otf"));
-// or from a memory buffer:
-font.loadFromData (fontBytes);
+// Load a font from a file:
+auto result = Font::loadFontFromFile (File ("/path/to/Font.otf"));
+if (result.wasOk())
+    Font font = result.getValue();
+
+// Or from a memory buffer:
+auto fromData = Font::loadFontFromData (fontBytes);
+```
+
+### Loading system and first-available fonts
+
+The loaders above (plus the ones below) are statics returning a
+`ResultValue<Font>` — check `wasOk()` / `failed()` and read the value with
+`getValue()`:
+
+```cpp
+// Load a font from a file.
+auto font = Font::loadFontFromFile (File ("/path/to/Font.otf"));
+
+// Load the first file that exists from a list of candidates.
+auto fallback = Font::loadFontFromFirstAvailableFile ({
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+});
+
+// Load the platform's default serif / monospace system text font
+// (CoreText system UI fonts on Apple platforms, well-known font files elsewhere).
+auto serif    = Font::loadSerifSystemTextFont();
+auto monospace = Font::loadMonospaceSystemTextFont();
+
+if (auto result = Font::loadFontFromFile (file); result.wasOk())
+    auto font = result.getValue();   // use the loaded font
+else
+    Logger::outputDebugString (result.getErrorMessage());
 ```
 
 ### Font metrics
@@ -88,6 +118,19 @@ global `ApplicationTheme`, and combine it with `withHeight` for a specific size:
 auto font     = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 auto bodyFont = font.withHeight (14.0f);
 auto titleFont = font.withHeight (24.0f);
+```
+
+The theme also carries separate serif and monospace text fonts. The default
+theme embeds Roboto Flex as the serif font and JetBrains Mono Variable as the
+monospace font (when `YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT` /
+`YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT` are enabled, forced on
+Emscripten), falling back to the platform system fonts otherwise:
+
+```cpp
+auto theme = ApplicationTheme::getGlobalTheme();
+theme->setDefaultMonospaceFont (Font::loadMonospaceSystemTextFont().valueOr (theme->getDefaultFont()));
+
+auto mono = theme->getDefaultMonospaceFont();   // e.g. the CodeEditor default
 ```
 
 ## StyledText

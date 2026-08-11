@@ -400,3 +400,19 @@ TEST_F (ApplicationThemeTest, FindColorInstanceMethodRespectsComponentOverride)
     ASSERT_TRUE (result.has_value());
     EXPECT_EQ (result.value(), compColor);
 }
+
+TEST_F (ApplicationThemeTest, SetDefaultMonospaceFont)
+{
+    auto originalFont = theme->getDefaultMonospaceFont();
+
+    Font newFont;
+    theme->setDefaultMonospaceFont (newFont);
+
+    EXPECT_EQ (newFont, theme->getDefaultMonospaceFont());
+}
+
+TEST_F (ApplicationThemeTest, GetDefaultMonospaceFontReturnsValid)
+{
+    auto font = theme->getDefaultMonospaceFont();
+    EXPECT_TRUE (font.getHeight() >= 0.0f);
+}
