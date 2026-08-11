@@ -99,6 +99,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
 
+### Audio
+
+- Standalone plugin wrapper now feeds MIDI input to the processor: all available MIDI input devices are enabled and collected via `MidiMessageCollector` into the `AudioProcessContext`, with hot-plug support (devices polled once per second, mirroring JUCE's `autoOpenMidiDevices` behavior).
+- Standalone plugin wrapper now opens the default audio input device (2 in / 2 out instead of 0 / 2), so plugins with input buses (sidechains, effects) receive live input; the macOS app plist template gained `NSMicrophoneUsageDescription` so input access can actually be granted.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
