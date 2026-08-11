@@ -1021,3 +1021,178 @@ TEST_F (OnsetDetectorTests, ResetClearsResults)
     EXPECT_TRUE (onsetDetector.getOnsetTimes().empty());
     EXPECT_TRUE (onsetDetector.getActivationFunction().empty());
 }
+
+//==============================================================================
+// Streaming vs Offline Equivalence Tests
+//==============================================================================
+
+class OnsetStreamingTests : public ::testing::Test
+{
+protected:
+    static constexpr float sampleRate = 44100.0f;
+
+    static OnsetDetector::Parameters makeStreamableParams()
+    {
+        return { .spectrogram = { .fftSize = 1024, .fps = 200 },
+                 .peakPicker = { .threshold = 0.5f, .combineSec = 0.2f, .onlineMode = true },
+                 .useFilterBank = true,
+                 .refineOnsets = false };
+    }
+
+    static std::vector<double> feedInChunks (OnsetDetector& detector, const std::vector<float>& data, std::size_t fixedChunk = 0)
+    {
+        static constexpr std::size_t variedChunks[] = { 1, 7, 128, 512, 1000, 64, 333 };
+
+        std::vector<double> onsets;
+        double scratch[32];
+
+        std::size_t position = 0;
+        std::size_t chunkIndex = 0;
+
+        while (position < data.size())
+        {
+            const auto wanted = fixedChunk != 0 ? fixedChunk : variedChunks[chunkIndex++ % 7];
+            const auto n = std::min (wanted, data.size() - position);
+
+            detector.processStreaming (data.data() + position, static_cast<int> (n));
+            position += n;
+
+            int drained = 0;
+            while ((drained = detector.drainStreamingOnsets (scratch, 32)) > 0)
+                onsets.insert (onsets.end(), scratch, scratch + drained);
+        }
+
+        return onsets;
+    }
+};
+
+TEST_F (OnsetStreamingTests, SpectrogramStreamingMatchesOfflineFrames)
+{
+    Spectrogram::Parameters specParams;
+    specParams.fftSize = 1024;
+    specParams.fps = 200;
+
+    Spectrogram offline;
+    Spectrogram streaming;
+    offline.prepare (specParams, sampleRate);
+    streaming.prepare (specParams, sampleRate);
+    streaming.prepareStreaming();
+
+    const auto data = makeClickTrain (44100, sampleRate, 120.0f);
+
+    offline.processOffline (data.data(), static_cast<int> (data.size()));
+
+    std::vector<std::vector<float>> streamedFrames;
+
+    static constexpr std::size_t chunks[] = { 1, 7, 128, 512, 1000, 64, 333 };
+    std::size_t position = 0;
+    std::size_t chunkIndex = 0;
+
+    while (position < data.size())
+    {
+        const auto n = std::min (chunks[chunkIndex++ % 7], data.size() - position);
+        streaming.processStreaming (data.data() + position, static_cast<int> (n));
+        position += n;
+
+        const int pending = streaming.getNumPendingStreamFrames();
+
+        for (int i = 0; i < pending; ++i)
+        {
+            const float* frame = streaming.getPendingStreamFrame (i);
+            streamedFrames.emplace_back (frame, frame + streaming.getNumBins());
+        }
+
+        streaming.consumePendingStreamFrames (pending);
+    }
+
+    // Streaming stops at the last fully-covered window; offline additionally
+    // zero-pads a few trailing frames past the signal end.
+    const int offlineFrames = offline.getNumFrames();
+    const int windowFrames = offline.getFFTSize() / offline.getHopSize() + 1;
+
+    ASSERT_LE (static_cast<int> (streamedFrames.size()), offlineFrames);
+    ASSERT_GE (static_cast<int> (streamedFrames.size()), offlineFrames - windowFrames);
+
+    const int numBins = offline.getNumBins();
+    const float* offlineData = offline.getMagnitudeData();
+
+    for (std::size_t frame = 0; frame < streamedFrames.size(); ++frame)
+        for (int bin = 0; bin < numBins; ++bin)
+            ASSERT_FLOAT_EQ (offlineData[frame * static_cast<std::size_t> (numBins) + static_cast<std::size_t> (bin)],
+                             streamedFrames[frame][static_cast<std::size_t> (bin)])
+                << "frame " << frame << " bin " << bin;
+}
+
+TEST_F (OnsetStreamingTests, DetectorStreamingMatchesOnlineOffline)
+{
+    const auto data = makeClickTrain (88200, sampleRate, 120.0f);
+
+    OnsetDetector offline;
+    offline.prepare (makeStreamableParams(), sampleRate);
+    offline.processOffline (data.data(), static_cast<int> (data.size()));
+    const auto& expected = offline.getOnsetTimes();
+
+    OnsetDetector streaming;
+    ASSERT_TRUE (streaming.prepareStreaming (makeStreamableParams(), sampleRate).wasOk());
+
+    const auto streamed = feedInChunks (streaming, data);
+
+    ASSERT_EQ (expected.size(), streamed.size());
+
+    for (std::size_t i = 0; i < expected.size(); ++i)
+        EXPECT_DOUBLE_EQ (expected[i], streamed[i]) << "onset " << i;
+}
+
+TEST_F (OnsetStreamingTests, StreamingIsChunkSizeInvariant)
+{
+    const auto data = makeClickTrain (88200, sampleRate, 120.0f);
+
+    OnsetDetector bySample;
+    OnsetDetector byBlock;
+    ASSERT_TRUE (bySample.prepareStreaming (makeStreamableParams(), sampleRate).wasOk());
+    ASSERT_TRUE (byBlock.prepareStreaming (makeStreamableParams(), sampleRate).wasOk());
+
+    const auto onsetsBySample = feedInChunks (bySample, data, 1);
+    const auto onsetsByBlock = feedInChunks (byBlock, data, data.size());
+
+    ASSERT_EQ (onsetsBySample.size(), onsetsByBlock.size());
+
+    for (std::size_t i = 0; i < onsetsBySample.size(); ++i)
+        EXPECT_DOUBLE_EQ (onsetsBySample[i], onsetsByBlock[i]);
+}
+
+TEST_F (OnsetStreamingTests, StreamingRejectsComplexFlux)
+{
+    auto params = makeStreamableParams();
+    params.useComplexFlux = true;
+
+    OnsetDetector detector;
+    EXPECT_TRUE (detector.prepareStreaming (params, sampleRate).failed());
+}
+
+TEST_F (OnsetStreamingTests, ReportsHalfWindowLatency)
+{
+    OnsetDetector detector;
+    ASSERT_TRUE (detector.prepareStreaming (makeStreamableParams(), sampleRate).wasOk());
+
+    EXPECT_DOUBLE_EQ (512.0 / 44100.0, detector.getStreamingLatencySeconds());
+}
+
+TEST_F (OnsetStreamingTests, ResetStreamingStartsAFreshStream)
+{
+    const auto data = makeClickTrain (44100, sampleRate, 120.0f);
+
+    OnsetDetector detector;
+    ASSERT_TRUE (detector.prepareStreaming (makeStreamableParams(), sampleRate).wasOk());
+
+    const auto first = feedInChunks (detector, data);
+
+    detector.resetStreaming();
+
+    const auto second = feedInChunks (detector, data);
+
+    ASSERT_EQ (first.size(), second.size());
+
+    for (std::size_t i = 0; i < first.size(); ++i)
+        EXPECT_DOUBLE_EQ (first[i], second[i]);
+}

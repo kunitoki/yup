@@ -58,6 +58,26 @@ public:
     //==============================================================================
     /** Returns the activation function values (one per frame). */
     virtual const std::vector<float>& getActivations() const noexcept = 0;
+
+    //==============================================================================
+    /** True if this ODF implements the incremental streaming API. */
+    virtual bool supportsStreaming() const noexcept { return false; }
+
+    /** Prepares the streaming path for frames of @p numBins bins. Allocates. */
+    virtual void prepareStreaming (int numBins) { (void) numBins; }
+
+    /** Computes the activation for one streamed frame. Real-time safe after
+        prepareStreaming(). Produces the same values as compute() would for the
+        same frame sequence. */
+    virtual float computeStreamingFrame (const float* frameMagnitudes, int numBins) noexcept
+    {
+        (void) frameMagnitudes;
+        (void) numBins;
+        return 0.0f;
+    }
+
+    /** Resets the streaming state. */
+    virtual void resetStreaming() noexcept {}
 };
 
 } // namespace yup

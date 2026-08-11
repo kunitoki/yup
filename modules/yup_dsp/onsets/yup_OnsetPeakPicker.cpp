@@ -132,6 +132,91 @@ void OnsetPeakPicker::detect (const float* activations, int numFrames)
 }
 
 //==============================================================================
+void OnsetPeakPicker::prepareStreaming()
+{
+    // Streaming cannot look ahead: prepare() must have run with onlineMode
+    // (which zeroes the post windows).
+    jassert (postAvgLen == 0 && postMaxLen == 0);
+
+    const int span = jmax (preMaxLen, preAvgLen) + 1;
+    streamActivations.assign (static_cast<std::size_t> (span), 0.0f);
+    streamThreshold.store (params.threshold, std::memory_order_relaxed);
+
+    resetStreaming();
+}
+
+void OnsetPeakPicker::resetStreaming() noexcept
+{
+    std::fill (streamActivations.begin(), streamActivations.end(), 0.0f);
+
+    streamFrameIndex = 0;
+    streamLastDetection = 0.0;
+    streamHasDetection = false;
+}
+
+bool OnsetPeakPicker::detectStreamingFrame (float activation, double& outOnsetTimeSeconds) noexcept
+{
+    jassert (! streamActivations.empty()); // prepareStreaming() not called
+
+    const auto span = static_cast<int64> (streamActivations.size());
+    const auto frame = streamFrameIndex;
+
+    streamActivations[static_cast<std::size_t> (frame % span)] = activation;
+    ++streamFrameIndex;
+
+    if (activation <= 0.0f)
+        return false;
+
+    // Same decision sequence as detect() with zero post windows, iterating the
+    // clamped past windows in ascending frame order for identical arithmetic.
+    const auto maxStart = jmax (static_cast<int64> (0), frame - preMaxLen);
+
+    float movMax = 0.0f;
+    for (auto i = maxStart; i <= frame; ++i)
+    {
+        const float value = streamActivations[static_cast<std::size_t> (i % span)];
+        if (value > movMax)
+            movMax = value;
+    }
+
+    if (activation != movMax)
+        return false;
+
+    const auto avgStart = jmax (static_cast<int64> (0), frame - preAvgLen);
+
+    double avg = 0.0;
+    for (auto i = avgStart; i <= frame; ++i)
+        avg += streamActivations[static_cast<std::size_t> (i % span)];
+
+    avg /= static_cast<double> (frame - avgStart + 1);
+
+    const auto threshold = static_cast<double> (streamThreshold.load (std::memory_order_relaxed));
+
+    if (preAvgLen == 0 && postAvgLen == 0)
+    {
+        if (static_cast<double> (activation) < threshold)
+            return false;
+    }
+    else
+    {
+        if (static_cast<double> (activation) < avg + threshold)
+            return false;
+    }
+
+    const double time = static_cast<double> (frame) / static_cast<double> (fps)
+                      + static_cast<double> (params.delaySec);
+
+    if (streamHasDetection && time - streamLastDetection <= static_cast<double> (params.combineSec))
+        return false;
+
+    streamLastDetection = time;
+    streamHasDetection = true;
+    outOnsetTimeSeconds = time;
+
+    return true;
+}
+
+//==============================================================================
 void OnsetPeakPicker::refineOnsetTimes (const float* samples, int numSamples, float sampleRate, double maxRefineSec, float threshold)
 {
     jassert (samples != nullptr);

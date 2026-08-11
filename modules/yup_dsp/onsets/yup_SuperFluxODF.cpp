@@ -109,6 +109,86 @@ void SuperFluxODF::compute (const Spectrogram& spec)
 }
 
 //==============================================================================
+void SuperFluxODF::prepareStreaming (int numBins)
+{
+    jassert (numBins > 0);
+    jassert (diffFrames >= 1); // prepare() must have run first
+
+    streamNumBins = numBins;
+    streamHistory.assign (static_cast<std::size_t> (diffFrames + 1) * static_cast<std::size_t> (numBins), 0.0f);
+
+    resetStreaming();
+}
+
+void SuperFluxODF::resetStreaming() noexcept
+{
+    std::fill (streamHistory.begin(), streamHistory.end(), 0.0f);
+    streamFramesSeen = 0;
+}
+
+float SuperFluxODF::computeStreamingFrame (const float* frameMagnitudes, int numBins) noexcept
+{
+    jassert (frameMagnitudes != nullptr);
+    jassert (numBins == streamNumBins);
+    jassert (! streamHistory.empty()); // prepareStreaming() not called
+
+    const int historyFrames = diffFrames + 1;
+    const auto slot = static_cast<std::size_t> (streamFramesSeen % historyFrames);
+
+    std::copy (frameMagnitudes,
+               frameMagnitudes + numBins,
+               streamHistory.data() + slot * static_cast<std::size_t> (numBins));
+
+    const auto frameIndex = streamFramesSeen;
+    ++streamFramesSeen;
+
+    // Matches compute(): the first diffFrames frames have no reference frame
+    // and produce zero activation.
+    if (frameIndex < diffFrames)
+        return 0.0f;
+
+    const auto prevSlot = static_cast<std::size_t> ((frameIndex - diffFrames) % historyFrames);
+    const float* previous = streamHistory.data() + prevSlot * static_cast<std::size_t> (numBins);
+    const float* current = streamHistory.data() + slot * static_cast<std::size_t> (numBins);
+
+    float sum = 0.0f;
+
+    for (int band = 0; band < numBins; ++band)
+    {
+        // Maximum filter with shifting window, identical to compute().
+        int first = band - maxFilterHalf;
+        int last = first + maxFilterBins - 1;
+
+        if (first < 0)
+        {
+            last -= first;
+            first = 0;
+        }
+
+        if (last >= numBins)
+        {
+            first = jmax (0, first - (last - numBins + 1));
+            last = numBins - 1;
+        }
+
+        float prevMax = previous[band];
+
+        for (int k = first; k <= last; ++k)
+        {
+            if (previous[k] > prevMax)
+                prevMax = previous[k];
+        }
+
+        const float diff = current[band] - prevMax;
+
+        if (diff > 0.0f)
+            sum += diff;
+    }
+
+    return sum;
+}
+
+//==============================================================================
 int SuperFluxODF::deriveDiffFrames (const float* window, int windowSize, float ratio, int hopSize)
 {
     jassert (window != nullptr);

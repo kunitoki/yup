@@ -135,6 +135,39 @@ public:
     /** Returns the current parameters. */
     const Parameters& getParameters() const noexcept { return params; }
 
+    //==============================================================================
+    /** Prepares the incremental streaming path (real-time onset detection).
+
+        Forces the peak picker into online mode (no look-ahead) and disables
+        onset refinement; only the SuperFlux ODF is supported (useComplexFlux
+        must be false). Allocates; not real-time safe.
+
+        After this, feed audio with processStreaming() from the audio thread
+        and collect detections with drainStreamingOnsets() from any other
+        single thread. Offline use (processOffline) is unaffected by this API.
+
+        @returns Result::ok(), or a failure if the configuration cannot stream.
+    */
+    Result prepareStreaming (const Parameters& p, float sampleRate);
+
+    /** Feeds mono samples through the streaming pipeline. Lock-free and
+        allocation-free. Returns the number of onsets detected in this call. */
+    int processStreaming (const float* monoSamples, int numSamples) noexcept;
+
+    /** Copies up to @p maxOnsets pending onset times (seconds since streaming
+        started) into @p outTimesSeconds, returning the number written.
+        Single-consumer; callable from a non-audio thread. */
+    int drainStreamingOnsets (double* outTimesSeconds, int maxOnsets) noexcept;
+
+    /** Resets the streaming pipeline and discards pending onsets. */
+    void resetStreaming() noexcept;
+
+    /** The streaming path's inherent latency: half the FFT window. */
+    double getStreamingLatencySeconds() const noexcept;
+
+    /** Adjusts the streaming detection threshold. Safe from any thread. */
+    void setStreamingThreshold (float newThreshold) noexcept { peakPicker.setStreamingThreshold (newThreshold); }
+
 private:
     //==============================================================================
     Spectrogram spectrogram;
@@ -144,6 +177,14 @@ private:
 
     Parameters params;
     float sampleRate = 44100.0f;
+
+    //==============================================================================
+    // Streaming onset queue: single producer (audio thread), single consumer.
+    static constexpr int onsetQueueSize = 256;
+
+    std::array<double, onsetQueueSize> onsetQueue {};
+    std::atomic<uint64> onsetQueueWrite { 0 };
+    std::atomic<uint64> onsetQueueRead { 0 };
 };
 
 } // namespace yup

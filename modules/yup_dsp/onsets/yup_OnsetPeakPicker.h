@@ -99,6 +99,25 @@ public:
     void detect (const float* activations, int numFrames);
 
     //==============================================================================
+    /** Prepares the incremental streaming path. Call after prepare() with
+        onlineMode enabled (streaming cannot look ahead). Allocates. */
+    void prepareStreaming();
+
+    /** Feeds one activation frame; returns true when this frame is an onset,
+        in which case @p outOnsetTimeSeconds receives its time (frame / fps
+        plus delaySec). Produces the same decisions as detect() in online mode.
+        Real-time safe after prepareStreaming(). */
+    bool detectStreamingFrame (float activation, double& outOnsetTimeSeconds) noexcept;
+
+    /** Resets the streaming state. */
+    void resetStreaming() noexcept;
+
+    /** Adjusts the detection threshold used by detectStreamingFrame(). Safe to
+        call from any thread while streaming; initialized from the prepared
+        parameters. Does not affect detect(). */
+    void setStreamingThreshold (float newThreshold) noexcept { streamThreshold.store (newThreshold, std::memory_order_relaxed); }
+
+    //==============================================================================
     /**
         Refines onset times to sample-accurate positions using RMS envelope
         analysis and zero-crossing alignment.
@@ -144,6 +163,14 @@ private:
     int postAvgLen = 0;
     int postMaxLen = 0;
     std::vector<double> onsetTimes;
+
+    // Streaming state: a ring of the last max(preMaxLen, preAvgLen) + 1
+    // activations, plus the running detection context.
+    std::vector<float> streamActivations;
+    std::atomic<float> streamThreshold { 0.0f };
+    int64 streamFrameIndex = 0;
+    double streamLastDetection = 0.0;
+    bool streamHasDetection = false;
 };
 
 } // namespace yup

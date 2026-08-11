@@ -133,6 +133,112 @@ void OnsetDetector::reset()
         odf->reset();
 }
 
+//==============================================================================
+Result OnsetDetector::prepareStreaming (const Parameters& p, float sr)
+{
+    if (p.useComplexFlux)
+        return Result::fail ("Streaming onset detection supports the SuperFlux ODF only");
+
+    Parameters streamingParams = p;
+    streamingParams.peakPicker.onlineMode = true;
+    streamingParams.refineOnsets = false;
+
+    prepare (streamingParams, sr);
+
+    jassert (odf != nullptr && odf->supportsStreaming());
+
+    spectrogram.prepareStreaming();
+    odf->prepareStreaming (spectrogram.getNumBins());
+    peakPicker.prepareStreaming();
+
+    resetStreaming();
+
+    return Result::ok();
+}
+
+int OnsetDetector::processStreaming (const float* monoSamples, int numSamples) noexcept
+{
+    jassert (monoSamples != nullptr);
+
+    int onsetsDetected = 0;
+    int samplesConsumed = 0;
+
+    while (samplesConsumed < numSamples)
+    {
+        // Feed at most one hop at a time so pending frames are consumed as
+        // they appear and the spectrogram's pending ring can never overflow.
+        const int chunk = jmin (numSamples - samplesConsumed, spectrogram.getHopSize());
+
+        spectrogram.processStreaming (monoSamples + samplesConsumed, chunk);
+        samplesConsumed += chunk;
+
+        const int pending = spectrogram.getNumPendingStreamFrames();
+
+        for (int index = 0; index < pending; ++index)
+        {
+            const float activation = odf->computeStreamingFrame (spectrogram.getPendingStreamFrame (index),
+                                                                 spectrogram.getNumBins());
+
+            double onsetTime = 0.0;
+
+            if (peakPicker.detectStreamingFrame (activation, onsetTime))
+            {
+                const auto write = onsetQueueWrite.load (std::memory_order_relaxed);
+                const auto read = onsetQueueRead.load (std::memory_order_acquire);
+
+                if (write - read < static_cast<uint64> (onsetQueueSize))
+                {
+                    onsetQueue[static_cast<std::size_t> (write % onsetQueueSize)] = onsetTime;
+                    onsetQueueWrite.store (write + 1, std::memory_order_release);
+                    ++onsetsDetected;
+                }
+            }
+        }
+
+        spectrogram.consumePendingStreamFrames (pending);
+    }
+
+    return onsetsDetected;
+}
+
+int OnsetDetector::drainStreamingOnsets (double* outTimesSeconds, int maxOnsets) noexcept
+{
+    jassert (outTimesSeconds != nullptr);
+
+    auto read = onsetQueueRead.load (std::memory_order_relaxed);
+    const auto write = onsetQueueWrite.load (std::memory_order_acquire);
+
+    int count = 0;
+
+    while (read < write && count < maxOnsets)
+    {
+        outTimesSeconds[count++] = onsetQueue[static_cast<std::size_t> (read % onsetQueueSize)];
+        ++read;
+    }
+
+    onsetQueueRead.store (read, std::memory_order_release);
+
+    return count;
+}
+
+void OnsetDetector::resetStreaming() noexcept
+{
+    spectrogram.resetStreaming();
+    peakPicker.resetStreaming();
+
+    if (odf != nullptr)
+        odf->resetStreaming();
+
+    onsetQueueRead.store (onsetQueueWrite.load (std::memory_order_relaxed), std::memory_order_relaxed);
+}
+
+double OnsetDetector::getStreamingLatencySeconds() const noexcept
+{
+    return sampleRate > 0.0f
+             ? static_cast<double> (spectrogram.getFFTSize()) * 0.5 / static_cast<double> (sampleRate)
+             : 0.0;
+}
+
 const std::vector<float>& OnsetDetector::getActivationFunction() const noexcept
 {
     static const std::vector<float> empty;
