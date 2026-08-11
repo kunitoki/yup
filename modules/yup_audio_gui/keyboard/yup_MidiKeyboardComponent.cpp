@@ -134,6 +134,8 @@ void MidiKeyboardComponent::mouseDown (const MouseEvent& e)
     if (! isEnabled())
         return;
 
+    takeKeyboardFocus();
+
     updateNoteUnderMouse (e, true);
     shouldCheckState = true;
 }
@@ -225,35 +227,58 @@ void MidiKeyboardComponent::resized()
     shouldCheckState = true;
 }
 
-void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>& position)
+int MidiKeyboardComponent::getNoteForKeyPress (const KeyPress& key) const
 {
+    // Compares key codes only: KeyPress::operator== also compares the
+    // scancode, which is always zero on a literal like KeyPress ('z') but set
+    // on real events, so full KeyPress comparisons can never match here.
     int midiNote = -1;
 
-    if (key == KeyPress ('z')) midiNote = 0;
-    else if (key == KeyPress ('s')) midiNote = 1;
-    else if (key == KeyPress ('x')) midiNote = 2;
-    else if (key == KeyPress ('d')) midiNote = 3;
-    else if (key == KeyPress ('c')) midiNote = 4;
-    else if (key == KeyPress ('v')) midiNote = 5;
-    else if (key == KeyPress ('g')) midiNote = 6;
-    else if (key == KeyPress ('b')) midiNote = 7;
-    else if (key == KeyPress ('h')) midiNote = 8;
-    else if (key == KeyPress ('n')) midiNote = 9;
-    else if (key == KeyPress ('j')) midiNote = 10;
-    else if (key == KeyPress ('m')) midiNote = 11;
-    else if (key == KeyPress (',')) midiNote = 12;
-    else if (key == KeyPress ('l')) midiNote = 13;
-    else if (key == KeyPress ('.')) midiNote = 14;
-    else if (key == KeyPress (';')) midiNote = 15;
-    else if (key == KeyPress ('/')) midiNote = 16;
+    switch (key.getKey())
+    {
+        case 'z': midiNote = 0; break;
+        case 's': midiNote = 1; break;
+        case 'x': midiNote = 2; break;
+        case 'd': midiNote = 3; break;
+        case 'c': midiNote = 4; break;
+        case 'v': midiNote = 5; break;
+        case 'g': midiNote = 6; break;
+        case 'b': midiNote = 7; break;
+        case 'h': midiNote = 8; break;
+        case 'n': midiNote = 9; break;
+        case 'j': midiNote = 10; break;
+        case 'm': midiNote = 11; break;
+        case ',': midiNote = 12; break;
+        case 'l': midiNote = 13; break;
+        case '.': midiNote = 14; break;
+        case ';': midiNote = 15; break;
+        case '/': midiNote = 16; break;
+        default: break;
+    }
+
+    if (midiNote < 0)
+        return -1;
+
+    midiNote += 12 * octaveNumForMiddleC;
+
+    return midiNote >= 0 && midiNote < 128 ? midiNote : -1;
+}
+
+void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>& position)
+{
+    const auto midiNote = getNoteForKeyPress (key);
+
+    // Ignore held-key auto-repeat: the note is already sounding.
+    if (midiNote >= 0 && ! state.isNoteOn (midiChannel, midiNote))
+        state.noteOn (midiChannel, midiNote, velocity);
+}
+
+void MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>& position)
+{
+    const auto midiNote = getNoteForKeyPress (key);
 
     if (midiNote >= 0)
-    {
-        midiNote += 12 * octaveNumForMiddleC;
-
-        if (midiNote >= 0 && midiNote < 128)
-            state.noteOn (midiChannel, midiNote, velocity);
-    }
+        state.noteOff (midiChannel, midiNote, 0.0f);
 }
 
 void MidiKeyboardComponent::focusLost()

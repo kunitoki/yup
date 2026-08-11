@@ -99,6 +99,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
 
+### Audio
+
+- `MidiKeyboardComponent`: computer-keyboard input fixed and completed — the key mapping now compares key codes instead of whole `KeyPress` objects (whose scancode field made the comparison always fail, so typing never triggered notes), notes receive a note-off on key release (new `keyUp` override; previously notes never stopped), held-key auto-repeat no longer retriggers, and clicking the component now takes keyboard focus so typing works right after.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.
