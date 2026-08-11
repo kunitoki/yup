@@ -96,6 +96,39 @@ public:
     void reset();
 
     //==============================================================================
+    /** Prepares the incremental streaming path. Call after prepare(); allocates.
+
+        Streaming produces frames identical to processOffline() on the same
+        signal (including the zero-padded leading frames), one frame per hop,
+        each available once its centered window is fully covered by received
+        samples — an inherent latency of getFFTSize() / 2 samples.
+
+        Local Group Delay is not supported while streaming (computeLGD must be
+        false). An instance is either used offline or streaming, not both.
+    */
+    void prepareStreaming();
+
+    /** Pushes samples and computes any frames they complete. Returns the number
+        of newly pending frames. Real-time safe after prepareStreaming(). */
+    int processStreaming (const float* samples, int numSamples) noexcept;
+
+    /** Number of streamed frames computed but not yet consumed. */
+    int getNumPendingStreamFrames() const noexcept { return numPendingStreamFrames; }
+
+    /** Pending streamed frame data (getNumBins() floats); index 0 is the oldest
+        pending frame. */
+    const float* getPendingStreamFrame (int index) const noexcept;
+
+    /** Marks the oldest @p numFramesToConsume pending frames as consumed. */
+    void consumePendingStreamFrames (int numFramesToConsume) noexcept;
+
+    /** Total frames produced by the streaming path since the last reset. */
+    int64 getStreamFrameCount() const noexcept { return streamFramesProduced; }
+
+    /** Resets the streaming state (received samples, pending frames). */
+    void resetStreaming() noexcept;
+
+    //==============================================================================
     /** Returns the number of frames in the computed spectrogram. */
     int getNumFrames() const noexcept { return numFrames; }
 
@@ -136,6 +169,7 @@ public:
 private:
     //==============================================================================
     void computeLGDForFrame (int frameIdx);
+    void computeStreamFrame() noexcept;
 
     //==============================================================================
     Parameters params;
@@ -155,6 +189,20 @@ private:
     FFTProcessor fft;
     std::vector<float> fftInput;
     std::vector<float> fftOutput;
+
+    //==============================================================================
+    // Streaming state; untouched by the offline path.
+    static constexpr int maxPendingStreamFrames = 64;
+
+    std::vector<float> streamRing;      // last fftSize input samples
+    std::vector<float> streamRawMag;    // scratch, fftSize/2
+    std::vector<float> streamFiltered;  // scratch, numBins (filter bank only)
+    std::vector<float> streamFrames;    // pending ring [maxPendingStreamFrames x numBins]
+
+    int64 streamSamplesReceived = 0;
+    int64 streamNextFrameEnd = 0;
+    int64 streamFramesProduced = 0;
+    int numPendingStreamFrames = 0;
 };
 
 } // namespace yup

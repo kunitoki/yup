@@ -76,6 +76,12 @@ public:
     void prepare (const Parameters& p, const float* window, int windowSize, int hopSize);
 
     //==============================================================================
+    bool supportsStreaming() const noexcept override { return true; }
+    void prepareStreaming (int numBins) override;
+    float computeStreamingFrame (const float* frameMagnitudes, int numBins) noexcept override;
+    void resetStreaming() noexcept override;
+
+    //==============================================================================
     /** @see OnsetDetectionFunction::compute */
     void compute (const Spectrogram& spec) override;
 
@@ -104,6 +110,11 @@ private:
     int diffFrames = 1;
     int maxFilterBins = 3;
     int maxFilterHalf = 1;
+
+    // Streaming state: a ring of the last (diffFrames + 1) frames.
+    std::vector<float> streamHistory;
+    int streamNumBins = 0;
+    int64 streamFramesSeen = 0;
 };
 
 } // namespace yup

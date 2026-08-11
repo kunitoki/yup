@@ -99,6 +99,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Python bindings for `yup_ai` (`modules/yup_python/bindings/yup_YupAi_bindings.cpp`): exposes LLM client, provider, messages, tools, responses, MCP types, client, and server to Python via pybind11.
 
+### Audio
+
+- Streaming (real-time) onset detection: `OnsetDetector::prepareStreaming`/`processStreaming`/`drainStreamingOnsets` run the SuperFlux pipeline incrementally — `Spectrogram` gained a per-hop streaming path producing frames identical to offline (verified bit-exact by tests), `SuperFluxODF` and `OnsetPeakPicker` gained per-frame streaming entry points (online mode, causal windows only), onsets are delivered through a lock-free queue, and the detection threshold is adjustable in real time. All offline APIs and behavior are unchanged (additive only, covered by equivalence and regression tests); ComplexFlux and onset refinement remain offline-only.
+
 ### Examples
 
 - `SpinningCubeDemo` example (`examples/graphics`): rewritten to the new RHI shape — `GpuFrame` + `GpuCanvas::beginDraw` + `GpuRenderPass` for both the indexed cube draw and the separable two-pass blur (H+V sharing one `GpuFrame`), `isGpuAvailable()` capability probe, and live GLSL editing via `GpuPipeline::compileFromGlsl`. The default Lottie animation is now played back per-frame into an offscreen `GpuCanvas` (2D path) and sampled by the cube's fragment shader so the animation is texture-mapped onto every cube face.

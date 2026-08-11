@@ -143,6 +143,124 @@ void Spectrogram::processOffline (const float* samples, int numSamples)
 }
 
 //==============================================================================
+void Spectrogram::prepareStreaming()
+{
+    jassert (fftSize > 0 && hopSize > 0);
+    jassert (! params.computeLGD); // LGD (ComplexFlux) is not supported while streaming
+
+    streamRing.assign (static_cast<std::size_t> (fftSize), 0.0f);
+    streamRawMag.assign (static_cast<std::size_t> (fftSize / 2), 0.0f);
+    streamFrames.assign (static_cast<std::size_t> (maxPendingStreamFrames) * static_cast<std::size_t> (numBins), 0.0f);
+
+    if (filterBank != nullptr)
+        streamFiltered.assign (static_cast<std::size_t> (numBins), 0.0f);
+
+    resetStreaming();
+}
+
+void Spectrogram::resetStreaming() noexcept
+{
+    std::fill (streamRing.begin(), streamRing.end(), 0.0f);
+
+    streamSamplesReceived = 0;
+    streamNextFrameEnd = fftSize / 2; // frame 0 is centered on sample 0
+    streamFramesProduced = 0;
+    numPendingStreamFrames = 0;
+}
+
+int Spectrogram::processStreaming (const float* samples, int numSamples) noexcept
+{
+    jassert (samples != nullptr);
+    jassert (! streamRing.empty()); // prepareStreaming() not called
+
+    const int pendingBefore = numPendingStreamFrames;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        streamRing[static_cast<std::size_t> (streamSamplesReceived % fftSize)] = samples[i];
+        ++streamSamplesReceived;
+
+        if (streamSamplesReceived == streamNextFrameEnd)
+        {
+            computeStreamFrame();
+            streamNextFrameEnd += hopSize;
+        }
+    }
+
+    return numPendingStreamFrames - pendingBefore;
+}
+
+void Spectrogram::computeStreamFrame() noexcept
+{
+    jassert (numPendingStreamFrames < maxPendingStreamFrames); // consume before pushing more
+
+    // Same frame math as processOffline: a window of fftSize samples centered
+    // on frame * hopSize, zero-padded where it reaches before the signal start.
+    const int64 windowStart = streamSamplesReceived - static_cast<int64> (fftSize);
+
+    for (int i = 0; i < fftSize; ++i)
+    {
+        const int64 srcIdx = windowStart + i;
+
+        fftInput[static_cast<std::size_t> (i)] = srcIdx >= 0
+            ? streamRing[static_cast<std::size_t> (srcIdx % fftSize)] * window[static_cast<std::size_t> (i)]
+            : 0.0f;
+    }
+
+    fft.performRealFFTForward (fftInput.data(), fftOutput.data());
+
+    const int numRawBins = fftSize / 2;
+
+    for (int i = 0; i < numRawBins; ++i)
+    {
+        const float real = fftOutput[static_cast<std::size_t> (i * 2)];
+        const float imag = fftOutput[static_cast<std::size_t> (i * 2 + 1)];
+        streamRawMag[static_cast<std::size_t> (i)] = std::sqrt (real * real + imag * imag);
+    }
+
+    const float* frameMag = streamRawMag.data();
+
+    if (filterBank != nullptr)
+    {
+        filterBank->applySingleFrame (streamRawMag.data(), streamFiltered.data());
+        frameMag = streamFiltered.data();
+    }
+
+    const auto slot = static_cast<std::size_t> (streamFramesProduced % maxPendingStreamFrames);
+    float* destination = streamFrames.data() + slot * static_cast<std::size_t> (numBins);
+
+    for (int bin = 0; bin < numBins; ++bin)
+    {
+        float val = frameMag[bin];
+
+        if (params.useLog)
+            val = std::log10 (params.logMul * val + params.logAdd);
+
+        destination[bin] = val;
+    }
+
+    ++streamFramesProduced;
+    ++numPendingStreamFrames;
+}
+
+const float* Spectrogram::getPendingStreamFrame (int index) const noexcept
+{
+    jassert (index >= 0 && index < numPendingStreamFrames);
+
+    const auto oldest = streamFramesProduced - numPendingStreamFrames;
+    const auto slot = static_cast<std::size_t> ((oldest + index) % maxPendingStreamFrames);
+
+    return streamFrames.data() + slot * static_cast<std::size_t> (numBins);
+}
+
+void Spectrogram::consumePendingStreamFrames (int numFramesToConsume) noexcept
+{
+    jassert (numFramesToConsume >= 0 && numFramesToConsume <= numPendingStreamFrames);
+
+    numPendingStreamFrames -= numFramesToConsume;
+}
+
+//==============================================================================
 void Spectrogram::computeLGDForFrame (int frameIdx)
 {
     const int numRawBins = fftSize / 2;
