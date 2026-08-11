@@ -162,6 +162,13 @@
 
 //==============================================================================
 
+#include "layout/yup_FlexItem.h"
+#include "layout/yup_FlexBox.h"
+#include "layout/yup_GridItem.h"
+#include "layout/yup_Grid.h"
+
+//==============================================================================
+
 #include "profiling/yup_PaintProfiler.h"
 
 //==============================================================================

@@ -31,6 +31,8 @@
 #include "yup_gui/yup_Desktop.cpp"
 #include "yup_gui/yup_DragAndDropData.cpp"
 #include "yup_gui/yup_FileChooser.cpp"
+#include "yup_gui/yup_FlexBox.cpp"
+#include "yup_gui/yup_Grid.cpp"
 #include "yup_gui/yup_KeyModifiers.cpp"
 #include "yup_gui/yup_KeyPress.cpp"
 #include "yup_gui/yup_Label.cpp"

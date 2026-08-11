@@ -76,6 +76,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/FilterDemo.h"
 #include "examples/GpuAudioProcessingDemo.h"
 #include "examples/Images.h"
+#include "examples/Layout.h"
 #include "examples/LayoutFonts.h"
 #include "examples/LottieDemo.h"
 #include "examples/OffscreenRenderDemo.h"
@@ -187,6 +188,7 @@ public:
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
         addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+        addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
         addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
