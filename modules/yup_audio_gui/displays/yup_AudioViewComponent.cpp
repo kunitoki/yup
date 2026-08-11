@@ -42,12 +42,26 @@ AudioViewComponent::~AudioViewComponent()
 
 void AudioViewComponent::setSource (const AudioBuffer<float>* newBuffer, double newSampleRate)
 {
+    // A new source resets the view to fit: keeping the previous range (or
+    // zoom) would silently crop any longer sample to the old length.
+    viewRangeSamples = {};
+    zoomFactor = 1.0;
+
     thumbnail->setSource (newBuffer, newSampleRate);
+
+    ensureViewRangeIsValid();
+    repaint();
 }
 
 void AudioViewComponent::setSource (std::unique_ptr<AudioFormatReader> reader, double newSampleRate)
 {
+    viewRangeSamples = {};
+    zoomFactor = 1.0;
+
     thumbnail->setSource (std::move (reader), newSampleRate);
+
+    ensureViewRangeIsValid();
+    repaint();
 }
 
 void AudioViewComponent::clear()

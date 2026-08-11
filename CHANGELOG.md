@@ -105,6 +105,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Standalone plugin wrapper now feeds MIDI input to the processor: all available MIDI input devices are enabled and collected via `MidiMessageCollector` into the `AudioProcessContext`, with hot-plug support (devices polled once per second, mirroring JUCE's `autoOpenMidiDevices` behavior).
 - Standalone plugin wrapper now opens the default audio input device (2 in / 2 out instead of 0 / 2), so plugins with input buses (sidechains, effects) receive live input; the macOS app plist template gained `NSMicrophoneUsageDescription` so input access can actually be granted.
 - `MidiKeyboardComponent`: computer-keyboard input fixed and completed — the key mapping now compares key codes instead of whole `KeyPress` objects (whose scancode field made the comparison always fail, so typing never triggered notes), notes receive a note-off on key release (new `keyUp` override; previously notes never stopped), held-key auto-repeat no longer retriggers, and clicking the component now takes keyboard focus so typing works right after.
+- `AudioViewComponent::setSource` now resets the view range and zoom to fit the new source; previously the old view range survived a source change, silently cropping any longer sample to the previous sample's length.
 
 ### Examples
 
