@@ -182,7 +182,7 @@ TEST (CodeDocumentTests, ReplaceRangeWithMultiLineText)
     document.setText ("a\nb\nc");
 
     document.replaceRange (CodeDocument::Position (document, 0, 1),
-                           CodeDocument::Position (document, 2, 1),
+                           CodeDocument::Position (document, 2, 0),
                            "\nX\nY\n");
 
     EXPECT_EQ (String ("a\nX\nY\nc"), document.getText());
@@ -244,6 +244,11 @@ TEST (CodeDocumentTests, UndoAcrossMultipleEdits)
     document.replaceRange (CodeDocument::Position (document, 1, 0),
                            CodeDocument::Position (document, 1, 1),
                            "B");
+
+    // Consecutive edits coalesce into a single undo transaction unless a new one
+    // is begun, so open a new transaction to make each edit undoable separately.
+    document.getUndoManager()->beginNewTransaction();
+
     document.replaceRange (CodeDocument::Position (document, 2, 0),
                            CodeDocument::Position (document, 2, 1),
                            "C");
@@ -668,7 +673,9 @@ TEST (CodeDocumentTests, RepeatedUndoRedoCyclesAreStable)
     CodeDocument document;
     document.setText ("abc\ndef");
 
-    auto* undo = document.getUndoManager();
+    auto undo = document.getUndoManager();
+    ASSERT_TRUE (undo);
+
     undo->beginNewTransaction();
     document.insertText (CodeDocument::Position (document, 1, 0), "X");
     undo->beginNewTransaction();

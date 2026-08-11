@@ -309,7 +309,7 @@ TEST (SyntaxDefinitionTests, RawStringPrefixes)
     EXPECT_FALSE (custom.isRawStringPrefix ("R"));
 }
 
-TEST (SyntaxDefinitionTests, RawStringsFlagDefaultsPrefixesToCpp)
+TEST (SyntaxDefinitionTests, RawStringsFlagDefaultsPrefixesToNothing)
 {
     SyntaxDefinition custom;
     auto result = custom.loadFromData (R"({
@@ -318,8 +318,8 @@ TEST (SyntaxDefinitionTests, RawStringsFlagDefaultsPrefixesToCpp)
     })");
 
     EXPECT_TRUE (result.wasOk());
-    EXPECT_TRUE (custom.isRawStringPrefix ("R"));
-    EXPECT_TRUE (custom.isRawStringPrefix ("LR"));
+    EXPECT_FALSE (custom.isRawStringPrefix ("R"));
+    EXPECT_FALSE (custom.isRawStringPrefix ("LR"));
 }
 
 TEST (SyntaxDefinitionTests, StringPrefixes)

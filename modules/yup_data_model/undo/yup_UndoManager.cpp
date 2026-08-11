@@ -150,6 +150,9 @@ bool UndoManager::perform (UndoableAction::Ptr action)
 
         currentTransaction->add (action);
 
+        if (nextRedoAction < undoHistory.size())
+            undoHistory.removeRange (nextRedoAction, undoHistory.size() - nextRedoAction);
+
         return true;
     }
 
@@ -226,8 +229,7 @@ bool UndoManager::undo()
 
 bool UndoManager::canRedo() const
 {
-    return (currentTransaction != nullptr && currentTransaction->isValid())
-        || isPositiveAndBelow (nextRedoAction, undoHistory.size());
+    return isPositiveAndBelow (nextRedoAction, undoHistory.size());
 }
 
 bool UndoManager::redo()

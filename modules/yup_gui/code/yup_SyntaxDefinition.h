@@ -39,7 +39,7 @@ namespace yup
         "name": "C++",
         "extensions": ["cpp", "h", "hpp"],
         "lineComment": "//",
-        "blockComment": { "start": "/*", "end": "*&#47;" },
+        "blockComment": { "start": "&#92*", "end": "*&#47;" },
         "strings": { "delimiters": ["\\"", "'"], "escape": "\\\\", "multiLine": false },
         "preprocessor": "#",
         "numbers": { "hex": true, "binary": true, "float": true, "exponent": true, "suffix": true },
