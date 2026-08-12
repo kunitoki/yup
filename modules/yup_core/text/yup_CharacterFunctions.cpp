@@ -433,6 +433,16 @@ bool CharacterFunctions::isPrintable (const yup_wchar character) noexcept
     return iswprint ((wint_t) character) != 0;
 }
 
+bool CharacterFunctions::isAsciiPrintable (const yup_wchar character) noexcept
+{
+    return character >= 32 && character < 127;
+}
+
+bool CharacterFunctions::isControlCharacter (const yup_wchar character) noexcept
+{
+    return character < 0x20 || character == 0x7f;
+}
+
 int CharacterFunctions::getHexDigitValue (const yup_wchar digit) noexcept
 {
     auto d = (unsigned int) (digit - '0');

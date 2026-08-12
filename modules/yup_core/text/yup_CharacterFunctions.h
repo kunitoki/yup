@@ -183,6 +183,12 @@ public:
     */
     static bool isPrintable (yup_wchar character) noexcept;
 
+    /** Checks whether a character is a printable ASCII character (codes 32–126 inclusive). */
+    static bool isAsciiPrintable (yup_wchar character) noexcept;
+
+    /** Checks whether a character is an ASCII control character (codes 0–31 or 127). */
+    static bool isControlCharacter (yup_wchar character) noexcept;
+
     /** Returns 0 to 16 for '0' to 'F", or -1 for characters that aren't a legal hex digit. */
     static int getHexDigitValue (yup_wchar digit) noexcept;
 
