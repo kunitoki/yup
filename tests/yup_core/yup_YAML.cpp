@@ -580,3 +580,233 @@ TEST_F (YAMLTests, EscapeStringAndParseQuotedString)
     EXPECT_EQ ((yup_wchar) 0xd800, surrogateChars.getAndAdvance());
     EXPECT_EQ ((yup_wchar) 'A', surrogateChars.getAndAdvance());
 }
+
+TEST_F (YAMLTests, Yaml11Booleans)
+{
+    EXPECT_TRUE (YAML::fromString ("y").isBool());
+    EXPECT_TRUE (static_cast<bool> (YAML::fromString ("y")));
+    EXPECT_TRUE (YAML::fromString ("Y").isBool());
+    EXPECT_TRUE (static_cast<bool> (YAML::fromString ("Y")));
+
+    EXPECT_TRUE (YAML::fromString ("n").isBool());
+    EXPECT_FALSE (static_cast<bool> (YAML::fromString ("n")));
+    EXPECT_TRUE (YAML::fromString ("N").isBool());
+    EXPECT_FALSE (static_cast<bool> (YAML::fromString ("N")));
+
+    // YES/NO uppercase variants
+    EXPECT_TRUE (static_cast<bool> (YAML::fromString ("YES")));
+    EXPECT_FALSE (static_cast<bool> (YAML::fromString ("NO")));
+
+    // ON/OFF uppercase variants
+    EXPECT_TRUE (static_cast<bool> (YAML::fromString ("ON")));
+    EXPECT_FALSE (static_cast<bool> (YAML::fromString ("OFF")));
+}
+
+TEST_F (YAMLTests, Int64Min)
+{
+    auto v = YAML::fromString ("-9223372036854775808");
+    EXPECT_TRUE (v.isInt64());
+    EXPECT_EQ (std::numeric_limits<int64>::min(), static_cast<int64> (v));
+
+    // INT64_MAX should still be int64 (not fitting in int)
+    auto maxV = YAML::fromString ("9223372036854775807");
+    EXPECT_TRUE (maxV.isInt64());
+    EXPECT_EQ (std::numeric_limits<int64>::max(), static_cast<int64> (maxV));
+}
+
+TEST_F (YAMLTests, DepthLimitExceeded)
+{
+    var result;
+
+    // Build a deeply nested array that exceeds the max depth
+    String deep;
+    for (int i = 0; i < 600; ++i)
+        deep << "[";
+    for (int i = 0; i < 600; ++i)
+        deep << "]";
+
+    EXPECT_TRUE (YAML::parse (deep, result).failed());
+
+    // Deeply nested map
+    String deepMap;
+    for (int i = 0; i < 600; ++i)
+        deepMap << "k" << String (i) << ": {";
+    deepMap << "v: 1";
+    for (int i = 0; i < 600; ++i)
+        deepMap << "}";
+
+    EXPECT_TRUE (YAML::parse (deepMap, result).failed());
+}
+
+TEST_F (YAMLTests, DuplicateAnchor)
+{
+    var result;
+
+    // Same anchor name defined twice
+    EXPECT_TRUE (YAML::parse ("a: &dup 1\nb: &dup 2", result).failed());
+
+    // Also test in flow context
+    EXPECT_TRUE (YAML::parse ("{a: &dup 1, b: &dup 2}", result).failed());
+}
+
+TEST_F (YAMLTests, CyclicAlias)
+{
+    var result;
+
+    // Direct self-reference cycle
+    EXPECT_TRUE (YAML::parse ("&a [*a]", result).failed());
+
+    // Indirect cycle through a map
+    EXPECT_TRUE (YAML::parse ("&a {b: *a}", result).failed());
+}
+
+TEST_F (YAMLTests, ExtendedEscapeSequences)
+{
+    // \0 null character
+    EXPECT_EQ (String::fromUTF8 ("a\0b", 3), YAML::fromString ("\"a\\0b\"").toString());
+
+    // \v vertical tab
+    EXPECT_EQ ("a\vb", YAML::fromString ("\"a\\vb\"").toString());
+
+    // \e escape
+    EXPECT_EQ (String::charToString (0x1b), YAML::fromString ("\"\\e\"").toString());
+
+    // \xNN hex escape
+    EXPECT_EQ ("A", YAML::fromString ("\"\\x41\"").toString());
+
+    // \N next line (0x85)
+    EXPECT_EQ (String::charToString (0x85), YAML::fromString ("\"\\N\"").toString());
+
+    // \_ non-breaking space (0xa0)
+    EXPECT_EQ (String::charToString (0xa0), YAML::fromString ("\"\\_\"").toString());
+
+    // \L line separator (0x2028)
+    EXPECT_EQ (String::charToString (0x2028), YAML::fromString ("\"\\L\"").toString());
+
+    // \P paragraph separator (0x2029)
+    EXPECT_EQ (String::charToString (0x2029), YAML::fromString ("\"\\P\"").toString());
+
+    // \U0001F600 astral character via 8-digit hex
+    auto astral8 = YAML::fromString ("\"\\U0001F600\"");
+    EXPECT_EQ (0x1f600, static_cast<int> (astral8.toString().getCharPointer().getAndAdvance()));
+
+    // escaped space
+    EXPECT_EQ ("a b", YAML::fromString ("\"a\\ b\"").toString());
+
+    // escaped forward slash
+    EXPECT_EQ ("a/b", YAML::fromString ("\"a\\/b\"").toString());
+}
+
+TEST_F (YAMLTests, FormatterEscapeOutput)
+{
+    // escapeString for various control characters
+    EXPECT_EQ ("\\n", YAML::escapeString ("\n"));
+    EXPECT_EQ ("\\t", YAML::escapeString ("\t"));
+    EXPECT_EQ ("\\r", YAML::escapeString ("\r"));
+    EXPECT_EQ ("\\\\", YAML::escapeString ("\\"));
+    EXPECT_EQ ("\\\"", YAML::escapeString ("\""));
+    EXPECT_EQ ("\\a", YAML::escapeString ("\a"));
+    EXPECT_EQ ("\\b", YAML::escapeString ("\b"));
+    EXPECT_EQ ("\\f", YAML::escapeString ("\f"));
+    EXPECT_EQ ("\\v", YAML::escapeString ("\v"));
+    EXPECT_EQ ("\\e", YAML::escapeString (String::charToString (0x1b)));
+
+    // Non-ASCII characters should be unicode-escaped
+    auto escaped = YAML::escapeString (String::fromUTF8 ("café"));
+    EXPECT_TRUE (escaped.contains ("\\u00e9") || escaped.contains ("\\u00E9"));
+
+    // toString with spacing none
+    var v = YAML::parse ("a: 1\nb:\n  - 1\n  - 2");
+    EXPECT_EQ ("{a:1,b:[1,2]}", YAML::toString (v, YAML::FormatOptions {}.withSpacing (YAML::Spacing::none)));
+}
+
+TEST_F (YAMLTests, WriteToStream)
+{
+    MemoryOutputStream mo;
+    var data = YAML::parse ("a: 1\nb: 2");
+    YAML::writeToStream (mo, data, false);
+    EXPECT_EQ ("a: 1\nb: 2", mo.toUTF8());
+
+    MemoryOutputStream mo2;
+    YAML::writeToStream (mo2, data, YAML::FormatOptions {}.withSpacing (YAML::Spacing::singleLine));
+    EXPECT_EQ ("{a: 1, b: 2}", mo2.toUTF8());
+}
+
+TEST_F (YAMLTests, FlowSequenceOfMaps)
+{
+    auto v = YAML::parse (R"(- name: a
+  value: 1
+- name: b
+  value: 2)");
+
+    EXPECT_TRUE (v.isArray());
+    EXPECT_EQ (2, v.size());
+    EXPECT_TRUE (v[0].isObject());
+    EXPECT_EQ ("a", v[0]["name"].toString());
+    EXPECT_EQ (1, static_cast<int> (v[0]["value"]));
+}
+
+TEST_F (YAMLTests, KeepChompingBlockScalar)
+{
+    // + chomping indicator keeps all trailing newlines
+    auto v = YAML::parse ("text: |+\n  line1\n  line2\n");
+    EXPECT_EQ ("line1\nline2\n", v["text"].toString());
+}
+
+TEST_F (YAMLTests, ExplicitIndentBlockScalar)
+{
+    // Explicit indent indicator on block scalar
+    auto v = YAML::parse ("text: |2\n   indented\n   content");
+    EXPECT_EQ (" indented\n content\n", v["text"].toString());
+}
+
+TEST_F (YAMLTests, SequenceItemWithAnchor)
+{
+    auto v = YAML::parse ("- &anchor value\n- *anchor");
+    EXPECT_TRUE (v.isArray());
+    EXPECT_EQ (2, v.size());
+    EXPECT_EQ ("value", v[0].toString());
+    EXPECT_EQ ("value", v[1].toString());
+}
+
+TEST_F (YAMLTests, MultilineFlowSequence)
+{
+    auto v = YAML::parse (R"([
+  1,
+  2,
+  3
+])");
+    EXPECT_TRUE (v.isArray());
+    EXPECT_EQ (3, v.size());
+    EXPECT_EQ (1, static_cast<int> (v[0]));
+    EXPECT_EQ (2, static_cast<int> (v[1]));
+    EXPECT_EQ (3, static_cast<int> (v[2]));
+}
+
+TEST_F (YAMLTests, InvalidEscapeSequence)
+{
+    var result;
+    // \q is not a valid escape
+    EXPECT_TRUE (YAML::parse ("\"\\q\"", result).failed());
+}
+
+TEST_F (YAMLTests, UnexpectedContentAfterFlowCollection)
+{
+    var result;
+    // Extra content after a flow collection on the same line
+    EXPECT_TRUE (YAML::parse ("{a: 1} extra", result).failed());
+}
+
+TEST_F (YAMLTests, UnterminatedFlowCollection)
+{
+    var result;
+    EXPECT_TRUE (YAML::parse ("{a: 1", result).failed());
+}
+
+TEST_F (YAMLTests, AliasAnchorAsMapKey)
+{
+    var result;
+    // Aliases and anchors are not allowed as map keys
+    EXPECT_TRUE (YAML::parse ("*alias: value", result).failed());
+    EXPECT_TRUE (YAML::parse ("&anchor: value", result).failed());
+}
