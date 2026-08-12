@@ -83,6 +83,32 @@ Related helpers:
 `JSON::parse` accepts only a valid JSON object or array at the top level.
 ```
 
+## YAML
+
+The `YAML` class converts between YAML text and `var`, mirroring the `JSON`
+interface: `parse` (with `Result` error detail), `fromString`, `toString` and
+`writeToStream`, plus `FormatOptions` to choose block vs flow style and number
+precision.
+
+```cpp
+var parsed = YAML::parse (yamlText);        // var() on failure
+Result r = YAML::parse (yamlText, result);  // error detail with line numbers
+String text = YAML::toString (parsed);      // block style by default
+String flow = YAML::toString (parsed, YAML::FormatOptions {}.withSpacing (YAML::Spacing::singleLine));
+```
+
+Supported: core-schema type resolution (null, booleans, integers including
+`0x`/`0o` prefixes and `_` separators, floats including `.inf`/`.nan`), block
+and flow collections, single/double-quoted scalars, comments, block scalars
+(`|` and `>` with chomping indicators), and anchors/aliases/merge keys
+(`&x`/`*x`/`<<:`), which are resolved by copying data into the `var` tree.
+
+```{note}
+Custom tags, multi-document streams (`---`/`...`) and YAML 1.1 boolean
+spellings (`yes`/`no`/`on`/`off`) are not supported; the writer never emits
+anchors, aliases or merge keys.
+```
+
 ## XML
 
 `yup_core` ships a small, self-contained XML DOM: `XmlElement` (a mutable node)

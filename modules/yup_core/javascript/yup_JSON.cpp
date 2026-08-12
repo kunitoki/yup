@@ -418,7 +418,7 @@ struct JSONFormatter
                     break;
 
                 default:
-                    if (c >= 32 && c < 127)
+                    if (CharacterFunctions::isAsciiPrintable (c))
                     {
                         out << (char) c;
                     }
