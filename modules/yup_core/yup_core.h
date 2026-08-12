@@ -269,6 +269,7 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 YUP_END_IGNORE_WARNINGS_MSVC
 
 #include "misc/yup_MetaProgramming.h"
+#include "misc/yup_HashGenerator.h"
 #include "text/yup_String.h"
 #include "text/yup_StringRef.h"
 #include "logging/yup_Logger.h"

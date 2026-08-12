@@ -36,10 +36,11 @@ public:
     void applyStyleProperty (StringRef property, StringRef value, SVGElement& e);
     void applyStylesheetRules (const XmlElement& xmlElement, SVGElement& e);
     void parseStyleElement (const XmlElement& element);
-    bool matchesCssSelector (const XmlElement& xmlElement, const SVGCssRule& rule) const;
+    void buildCssRuleIndex();
 
 private:
     SVGData& data;
+    SVGCssRuleIndex ruleIndex;
 };
 
 } // namespace yup

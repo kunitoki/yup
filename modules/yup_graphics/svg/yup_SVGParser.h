@@ -58,6 +58,10 @@ public:
     static String extractGradientUrl (const String& value);
     static String extractUrlId (const String& value);
 
+    /** Parses a CSS blend mode string (e.g. "multiply", "screen") into a BlendMode.
+        Returns std::nullopt for unrecognised values. */
+    static std::optional<BlendMode> parseBlendMode (StringRef value);
+
     static std::optional<Image> loadImageFromHref (const SVGDocument::ParseOptions& options,
                                                    const String& href);
     ///@}

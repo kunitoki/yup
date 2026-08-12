@@ -65,6 +65,9 @@ struct DefaultHashFunctions
     /** Generates a simple hash from a string. */
     static int generateHash (const String& key, int upperLimit) noexcept { return generateHash ((uint32) key.hashCode(), upperLimit); }
 
+    /** Generates a simple hash from a StringRef. */
+    static int generateHash (StringRef key, int upperLimit) noexcept { return generateHash ((uint32) key.hashCode(), upperLimit); }
+
     /** Generates a simple hash from a variant. */
     static int generateHash (const var& key, int upperLimit) noexcept { return generateHash (key.toString(), upperLimit); }
 
@@ -124,8 +127,8 @@ struct DefaultHashFunctions
 */
 template <typename KeyType,
           typename ValueType,
-          class HashFunctionType = DefaultHashFunctions,
-          class TypeOfCriticalSectionToUse = DummyCriticalSection>
+          typename HashFunctionType = DefaultHashFunctions,
+          typename TypeOfCriticalSectionToUse = DummyCriticalSection>
 class HashMap
 {
 private:
