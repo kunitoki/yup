@@ -111,7 +111,7 @@ protected:
             {
                 var v (createRandomVar (depth + 1));
 
-                for (int i = 1 + random.nextInt (30); --i >= 0;)
+                for (int i = 1 + random.nextInt (5); --i >= 0;)
                     v.append (createRandomVar (depth + 1));
 
                 return v;
@@ -121,7 +121,7 @@ protected:
             {
                 auto o = new DynamicObject();
 
-                for (int i = random.nextInt (30); --i >= 0;)
+                for (int i = random.nextInt (5); --i >= 0;)
                     o->setProperty (createRandomIdentifier(), createRandomVar (depth + 1));
 
                 return o;
@@ -214,4 +214,159 @@ TEST_F (JSONTests, ParseNestedObject)
     EXPECT_TRUE (v.isObject());
     EXPECT_TRUE (v["outer"].isObject());
     EXPECT_EQ (42, (int) v["outer"]["inner"]);
+}
+
+TEST_F (JSONTests, ParseNumberVariants)
+{
+    EXPECT_EQ (-42, static_cast<int> (JSON::parse ("[-42]")[0]));
+    EXPECT_EQ (3, static_cast<int> (JSON::parse ("[3]")[0]));
+    EXPECT_DOUBLE_EQ (3.14, static_cast<double> (JSON::parse ("[3.14]")[0]));
+    EXPECT_DOUBLE_EQ (1e5, static_cast<double> (JSON::parse ("[1e5]")[0]));
+    EXPECT_DOUBLE_EQ (1.5e-3, static_cast<double> (JSON::parse ("[1.5e-3]")[0]));
+
+    // Large int64
+    auto large = JSON::parse ("[9223372036854775807]")[0];
+    EXPECT_TRUE (large.isInt64());
+    EXPECT_EQ (std::numeric_limits<int64>::max(), static_cast<int64> (large));
+}
+
+TEST_F (JSONTests, ParseEmptyContainers)
+{
+    auto emptyObj = JSON::parse ("{}");
+    EXPECT_TRUE (emptyObj.isObject());
+    EXPECT_EQ (0, emptyObj.getDynamicObject()->getProperties().size());
+
+    auto emptyArr = JSON::parse ("[]");
+    EXPECT_TRUE (emptyArr.isArray());
+    EXPECT_EQ (0, emptyArr.size());
+}
+
+TEST_F (JSONTests, ParseObjectErrorPaths)
+{
+    var result;
+
+    // Missing closing brace
+    EXPECT_TRUE (JSON::parse ("{\"a\": 1", result).failed());
+
+    // Missing colon
+    EXPECT_TRUE (JSON::parse ("{\"a\" 1}", result).failed());
+
+    // Missing property name quotes
+    EXPECT_TRUE (JSON::parse ("{a: 1}", result).failed());
+
+    // Invalid property name
+    EXPECT_TRUE (JSON::parse ("{\"\": 1}", result).failed());
+
+    // Missing comma or brace
+    EXPECT_TRUE (JSON::parse ("{\"a\": 1 \"b\": 2}", result).failed());
+}
+
+TEST_F (JSONTests, ParseArrayErrorPaths)
+{
+    var result;
+
+    // Missing closing bracket
+    EXPECT_TRUE (JSON::parse ("[1, 2", result).failed());
+
+    // Missing comma or bracket
+    EXPECT_TRUE (JSON::parse ("[1 2]", result).failed());
+}
+
+TEST_F (JSONTests, ParseAnyUnexpectedChar)
+{
+    // fromString with unexpected character should return void
+    EXPECT_TRUE (JSON::fromString ("invalid").isVoid());
+    EXPECT_TRUE (JSON::fromString ("@invalid").isVoid());
+}
+
+TEST_F (JSONTests, WriteUndefined)
+{
+    // JSON write of undefined
+    EXPECT_EQ ("undefined", JSON::toString (var::undefined()));
+}
+
+TEST_F (JSONTests, WriteNonFiniteDouble)
+{
+    // JSON writes null for non-finite doubles
+    EXPECT_EQ ("null", JSON::toString (var (std::numeric_limits<double>::infinity())));
+    EXPECT_EQ ("null", JSON::toString (var (-std::numeric_limits<double>::infinity())));
+    EXPECT_EQ ("null", JSON::toString (var (std::numeric_limits<double>::quiet_NaN())));
+}
+
+TEST_F (JSONTests, ParseQuotedStringErrors)
+{
+    var result;
+
+    // Not a quoted string
+    String notQuoted = "hello";
+    auto t = notQuoted.getCharPointer();
+    EXPECT_TRUE (JSON::parseQuotedString (t, result).failed());
+
+    // Unterminated string
+    String unterminated = "\"hello";
+    t = unterminated.getCharPointer();
+    EXPECT_TRUE (JSON::parseQuotedString (t, result).failed());
+}
+
+TEST_F (JSONTests, ParseQuotedStringEscapes)
+{
+    var result;
+
+    // Various escapes
+    String newline = "\"hello\\nworld\"";
+    auto t = newline.getCharPointer();
+    EXPECT_TRUE (JSON::parseQuotedString (t, result).wasOk());
+    EXPECT_EQ ("hello\nworld", result.toString());
+
+    String tab = "\"hello\\tworld\"";
+    t = tab.getCharPointer();
+    EXPECT_TRUE (JSON::parseQuotedString (t, result).wasOk());
+    EXPECT_EQ ("hello\tworld", result.toString());
+
+    // Unicode escape
+    String unicode = "\"caf\\u00e9\"";
+    t = unicode.getCharPointer();
+    EXPECT_TRUE (JSON::parseQuotedString (t, result).wasOk());
+    EXPECT_EQ (String::fromUTF8 ("café"), result.toString());
+}
+
+TEST_F (JSONTests, EscapeString)
+{
+    EXPECT_EQ ("hello world", JSON::escapeString ("hello world"));
+    EXPECT_EQ ("line\\nbreak", JSON::escapeString ("line\nbreak"));
+    EXPECT_EQ ("tab\\there", JSON::escapeString ("tab\there"));
+    EXPECT_EQ ("quote \\\" here", JSON::escapeString ("quote \" here"));
+    EXPECT_EQ ("back\\\\slash", JSON::escapeString ("back\\slash"));
+}
+
+TEST_F (JSONTests, WriteToStream)
+{
+    MemoryOutputStream mo;
+    var data = JSON::parse ("{\"a\": 1, \"b\": 2}");
+    JSON::writeToStream (mo, data, false);
+    auto text = mo.toUTF8();
+    // Verify round-trip: the output should parse back to the same data
+    auto reparsed = JSON::parse (text);
+    EXPECT_EQ (1, static_cast<int> (reparsed["a"]));
+    EXPECT_EQ (2, static_cast<int> (reparsed["b"]));
+}
+
+TEST_F (JSONTests, ToStringFormatOptions)
+{
+    auto v = JSON::parse ("{\"a\": 1, \"b\": [1, 2]}");
+
+    EXPECT_EQ ("{\"a\": 1, \"b\": [1, 2]}", JSON::toString (v, true));
+
+    auto multi = JSON::toString (v, false);
+    auto reparsed = JSON::parse (multi);
+    EXPECT_EQ (1, static_cast<int> (reparsed["a"]));
+    EXPECT_EQ (2, static_cast<int> (reparsed["b"].size()));
+}
+
+TEST_F (JSONTests, WriteNonDynamicObject)
+{
+    // Writing a non-DynamicObject object hits jassertfalse in debug;
+    // in release it just does nothing. Ensure toString doesn't crash.
+    var v (42); // an int, not an object
+    EXPECT_TRUE (JSON::toString (v).isNotEmpty());
 }

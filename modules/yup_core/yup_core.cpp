@@ -56,7 +56,9 @@
 #include <atomic>
 #include <ctime>
 #include <cctype>
+#include <charconv>
 #include <cstdarg>
+#include <limits>
 #include <locale>
 #include <thread>
 
@@ -228,6 +230,7 @@ extern char** environ;
 #include "javascript/yup_JSON.cpp"
 #include "javascript/yup_JSONUtils.cpp"
 #include "javascript/yup_Javascript.cpp"
+#include "yaml/yup_YAML.cpp"
 #include "containers/yup_DynamicObject.cpp"
 #include "xml/yup_XmlDocument.cpp"
 #include "xml/yup_XmlElement.cpp"

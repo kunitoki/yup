@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `LottieReader::parseFile()`, `parseData()`, `parseStream()`, and `parseFromZip()` now return `ResultValue<AnimationComposition::Ptr>` and no longer take a trailing `String* outError` out-parameter; check `wasOk()`/`failed()` and read the message via `getErrorMessage()`.
 - `AnimationFrameExporter` is now an instance-based class bound to a `GraphicsContext` (construct `AnimationFrameExporter exporter (ctx);` then call `exporter.renderFrame(anim, …)` / `exporter.renderAllFrames(…)` / `exporter.exportToGif(anim, …)`), so it can own and reuse the GPU matte-composite pipeline across frames instead of recompiling it per frame. The `exportToGif(frames, frameRate, …)` frame-sequence encoder remains a static helper.
 
+### Core
+
+- Added a `YAML` class: a self-contained YAML parser and writer converting between YAML text and `var` (`parse`, `fromString`, `toString`, `writeToStream`, `FormatOptions`), with core-schema type resolution, block/flow collections, block scalars, and anchors/aliases/merge keys
+
 ### Graphics
 
 - Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn
