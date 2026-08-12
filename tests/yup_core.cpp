@@ -109,4 +109,5 @@
 #include "yup_core/yup_WebInputStream.cpp"
 #include "yup_core/yup_XmlDocument.cpp"
 #include "yup_core/yup_XmlElement.cpp"
+#include "yup_core/yup_YAML.cpp"
 #include "yup_core/yup_ZipFile.cpp"
