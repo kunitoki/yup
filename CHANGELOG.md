@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComputeParticlesDemo`: keeps drawing the last particle snapshot on frames where no new one has landed, so it renders on the Emscripten WebGPU backend instead of showing nothing. The status label reports the landed-snapshot count alongside the frame count
 - `Component`'s effect path now reuses its offscreen `GpuCanvas` across frames while the component size is unchanged, instead of allocating (and freeing) a full-size render target every frame. On a size change the outgoing canvas is released before the replacement is created, so its `RenderContext` lease returns to the pool rather than forcing a second context to be reserved permanently
 - `ComponentEffectsDemo`: shader effects now share a common base that compiles the pipeline at most once instead of retrying a failed compile on every frame, reports the compile error in the status label and on the console, and shows the CPU time spent applying the effect next to the paint time
+- New `Layout` example (`examples/graphics`): exercises the FlexBox and Grid layout containers with pages for direction, wrap, justify-content, align-items, align-content, flex grow/shrink/basis, align-self, order, margins/gaps, percentage sizing, min/max constraints, grid track sizing (px/fr/auto), explicit placement and spans, auto placement, grid alignment, and nested flex/grid compositions
 
 #### Rive Runtime Bump
 
@@ -155,6 +156,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Bug Fixes
 
+- `FlexBox`: the `gap` is no longer applied after the last item on each line. It was added unconditionally after every item, so when items grew or shrank to fill the container exactly (e.g. `flexGrow` items with `gap`), the trailing gap pushed the final item past the container's main-axis edge and it got clipped (e.g. the last panel in each row of the `Layout` example).
 - iOS applications now use the `UIScene` lifecycle, removing UIKit's legacy lifecycle warning and ensuring SDL windows are created for the connected scene.
 - Offscreen GPU rendering now supports recursive targets on Metal, OpenGL/GLES, and D3D11, so Lottie alpha/luma mattes, isolated-opacity layers, and cached precomps retain GPU compositing when rendered into an `Image` or `GpuCanvas`. Each `RenderableTarget` leases a Rive render context exclusively for its lifetime and returns it to the pool when destroyed. Repeated Lottie matte and precomp renders now reuse their canvases rather than allocating GPU textures each frame. Metal child targets allocate only their Rive render-canvas output texture; the CPU readback staging texture is created only when pixels are requested.
 - Fixed undefined offscreen contents when nesting pooled render targets on all GPU backends. Render context slots were recycled whenever no frame was currently active, so two long-lived targets could share one slot; once their frames nested — which happens as Lottie matte and precomp layers cross their in/out points and the nesting order changes between frames — the inner target skipped `beginFrame` and was then flushed against the outer target's frame descriptor.
@@ -329,6 +331,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added unit coverage for `SystemClipboard` data formats and `Component` drag-and-drop callbacks
 - Safe area support: `Component::getSafeAreaBounds()` and `safeAreaChanged()` virtual (backed by `ComponentNative::getSafeAreaBounds()`), so content can avoid display cutouts and system bars on mobile devices
 - High dpi support on Windows and Linux X11: window bounds, screen geometry and input coordinates are now logical points everywhere (converted at the SDL boundary), so windows and content scale with the display scale like on macOS; live display scale changes resize the native window keeping the logical size
+
+#### Layout
+- `FlexBox`: flex-shrink is now applied when a line overflows (deficit distributed by `flexShrink × size`), `wrapReverse` reverses the line order on the cross axis, and min/max constraints are now clamped for every `align-self` value instead of only `stretch`
+- `FlexBox`/`Grid` items: unspecified sizes now fall back to the component's current bounds (intrinsic/measured sizing) instead of collapsing to zero
+- Percentage sizing: `FlexItem::withWidthPercent()` / `withHeightPercent()` (resolved against the container) and `GridItem::withWidthPercent()` / `withHeightPercent()` (resolved against the cell)
+- `FlexBox` baseline alignment: `AlignItems::baseline` / `AlignSelf::baseline` with `FlexItem::withBaseline()` aligning items on the line's shared baseline
+- `GridItem`: new `width`/`height`/`minWidth`/`minHeight`/`maxWidth`/`maxHeight` fields with fluent setters, replacing the hardcoded 100×100 fallback for non-stretch items
+- `Grid` auto-placement: items with unset `column`/`row` (-1) flow row by row into the first free cell, skipping cells occupied by explicit items and spans; implicit tracks are created as needed
 
 #### Text
 - `TextEditor` and `Label` components ([#16](https://github.com/kunitoki/yup/pull/16), [#55](https://github.com/kunitoki/yup/pull/55))
