@@ -87,7 +87,7 @@ Related helpers:
 
 The `YAML` class converts between YAML text and `var`, mirroring the `JSON`
 interface: `parse` (with `Result` error detail), `fromString`, `toString` and
-`writeToStream`, plus `FormatOptions` to choose block vs flow style and number
+`writeToStream`, plus `FormatOptions` to choose spacing style and number
 precision.
 
 ```cpp
@@ -95,19 +95,50 @@ var parsed = YAML::parse (yamlText);        // var() on failure
 Result r = YAML::parse (yamlText, result);  // error detail with line numbers
 String text = YAML::toString (parsed);      // block style by default
 String flow = YAML::toString (parsed, YAML::FormatOptions {}.withSpacing (YAML::Spacing::singleLine));
+String none = YAML::toString (parsed, YAML::FormatOptions {}.withSpacing (YAML::Spacing::none));
 ```
 
-Supported: core-schema type resolution (null, booleans, integers including
-`0x`/`0o` prefixes and `_` separators, floats including `.inf`/`.nan`), block
-and flow collections, single/double-quoted scalars, comments, block scalars
-(`|` and `>` with chomping indicators), and anchors/aliases/merge keys
-(`&x`/`*x`/`<<:`), which are resolved by copying data into the `var` tree.
+### Supported features
+
+**Type resolution** according to the YAML core schema:
+
+- `null`, `~` → void
+- `true`/`false`, `yes`/`no`, `on`/`off`, `y`/`n` (case-insensitive) → bool
+- Integers: decimal, hex (`0x1F`), octal (`0o17`), with `_` separators (`1_000`)
+- Floats: `3.14`, `1e5`, `1.5e-3`, `.5`, `1.`; `.inf`/`-.inf`, `.nan`
+- Strings: plain, single-quoted, double-quoted scalars
+
+**Collections:** block (`key: value`, `- item`) and flow (`{a: 1}`, `[1, 2]`)
+with arbitrary nesting.
+
+**Block scalars:** literal (`|`) and folded (`>`) with chomping indicators
+(`-`/`+`) and explicit indentation (`|2`).
+
+**Anchors, aliases, and merge keys:** `&anchor` defines an anchor on any node,
+`*anchor` dereferences it (deep-copied into the result), and `<<: *anchor`
+merges mapped values in a YAML 1.1-compatible way.
+
+**Quoted string utilities:** `escapeString` escapes a string for double-quoted
+YAML output; `parseQuotedString` parses a quoted YAML scalar from a raw
+character pointer.
+
+### Error handling and safety
+
+`YAML::parse(text, result)` returns a `Result` with line-numbered error messages
+for malformed input. The parser enforces:
+
+- Maximum nesting depth of 512 to prevent stack overflow
+- Cyclic alias detection (`&a [*a]` is rejected)
+- Duplicate anchor detection (`&a 1\n&a 2` is rejected)
 
 ```{note}
-Custom tags, multi-document streams (`---`/`...`) and YAML 1.1 boolean
-spellings (`yes`/`no`/`on`/`off`) are not supported; the writer never emits
-anchors, aliases or merge keys.
-```
+`YAML::parse` accepts only a valid YAML mapping or sequence at the top level.
+Use `YAML::fromString` to parse plain scalars, booleans, or numbers. Custom
+tags, multi-document streams (`---`/`...`), and the merge key `<<` in a quoted
+context are not supported. The writer never emits anchors, aliases or merge
+keys; YAML 1.1 boolean spellings (`yes`/`no`/`on`/`off`/`y`/`n`) are
+recognised on input but emitted as quoted strings to ensure unambiguous
+interop.
 
 ## XML
 
