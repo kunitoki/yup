@@ -167,6 +167,7 @@
 #include "code/yup_SyntaxDefinition.h"
 #include "code/yup_CodeDocument.h"
 #include "code/yup_CodeTokeniser.h"
+#include "code/yup_CodeEditorScheme.h"
 #include "code/yup_CodeEditor.h"
 #include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"

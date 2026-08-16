@@ -52,7 +52,7 @@ namespace yup
     tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
 
     for (auto& token : tokeniser.getTokens (document, 0))
-        auto color = tokeniser.getSyntaxDefinition().getColor (token.type);
+        auto tokenType = token.type; // color it with CodeEditorScheme::getColor (tokenType)
     @endcode
 
     @see SyntaxDefinition, CodeDocument

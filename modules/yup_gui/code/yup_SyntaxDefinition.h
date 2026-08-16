@@ -45,13 +45,13 @@ namespace yup
         "numbers": { "hex": true, "binary": true, "float": true, "exponent": true, "suffix": true },
         "keywords": ["if", "for", "return"],
         "types": ["int", "float", "void"],
-        "operators": ["+", "-", "->", "::"],
-        "colors": { "keyword": "#569cd6", "type": "#4ec9b0" }
+        "operators": ["+", "-", "->", "::"]
     }
     @endcode
 
     Only `name` is mandatory; every other section is optional and falls back to
-    sensible defaults. Token colors default to a dark-editor palette.
+    sensible defaults. Colors are not part of a syntax definition: they belong
+    to a CodeEditorScheme (see CodeEditor::setScheme).
 
     @see CodeTokeniser
 */
@@ -177,23 +177,6 @@ public:
     bool isIdentifierPart (yup_wchar character) const;
 
     //==============================================================================
-    /** Returns the color used to draw a token type, if the definition provides one.
-
-        @param type The token type.
-        @returns The color, or std::nullopt if not specified.
-    */
-    std::optional<Color> getColor (TokenType type) const;
-
-    /** Returns the color used to draw text selection, if the definition provides one.
-
-        The selection color is parsed from the `"selection"` key of the JSON `"colors"`
-        section and defaults to a dark-editor palette color when not specified.
-
-        @returns The selection color, or std::nullopt if not specified.
-    */
-    std::optional<Color> getSelectionColor() const;
-
-    //==============================================================================
     /** Returns a built-in definition by language name ("cpp", "glsl", "python" or "xml").
 
         @param languageName The language name.
@@ -212,9 +195,6 @@ public:
     static String tokenTypeToString (TokenType type);
 
 private:
-    static std::optional<Color> colorFromTokenTypeString (StringRef name);
-    void applyDefaults();
-
     String name;
     std::vector<String> fileExtensions;
 
@@ -238,9 +218,6 @@ private:
     std::unordered_set<String> keywords;
     std::unordered_set<String> types;
     std::unordered_set<String> operators;
-
-    std::array<std::optional<Color>, 10> colors;
-    std::optional<Color> selectionColor;
 };
 
 } // namespace yup

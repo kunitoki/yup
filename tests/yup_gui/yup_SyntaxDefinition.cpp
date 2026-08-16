@@ -46,9 +46,6 @@ TEST (SyntaxDefinitionTests, BuiltInCppLoads)
     EXPECT_EQ (String ("/*"), definition.getBlockComment()->start);
     EXPECT_EQ (String ("*/"), definition.getBlockComment()->end);
     EXPECT_EQ (String ("#"), definition.getPreprocessorPrefix());
-
-    EXPECT_TRUE (definition.getColor (SyntaxDefinition::TokenType::keyword).has_value());
-    EXPECT_TRUE (definition.getColor (SyntaxDefinition::TokenType::comment).has_value());
 }
 
 TEST (SyntaxDefinitionTests, BuiltInCppHasExtensionsAndOperators)
@@ -169,8 +166,7 @@ TEST (SyntaxDefinitionTests, LoadFromDataParsesCustomDefinition)
         "extensions": ["t"],
         "lineComment": ";",
         "keywords": ["foo", "bar"],
-        "types": ["widget"],
-        "colors": { "keyword": "#ff0000" }
+        "types": ["widget"]
     })");
 
     EXPECT_TRUE (result.wasOk());
@@ -180,13 +176,6 @@ TEST (SyntaxDefinitionTests, LoadFromDataParsesCustomDefinition)
     EXPECT_FALSE (definition.isKeyword ("baz"));
     EXPECT_TRUE (definition.isType ("widget"));
     EXPECT_EQ (String (";"), definition.getLineCommentPrefix());
-
-    const auto keywordColor = definition.getColor (SyntaxDefinition::TokenType::keyword);
-    ASSERT_TRUE (keywordColor.has_value());
-    EXPECT_EQ (Color::fromString ("#ff0000"), *keywordColor);
-
-    // Unspecified token types fall back to defaults.
-    EXPECT_TRUE (definition.getColor (SyntaxDefinition::TokenType::comment).has_value());
 }
 
 TEST (SyntaxDefinitionTests, LoadFromDataRejectsInvalidJson)
@@ -223,49 +212,6 @@ TEST (SyntaxDefinitionTests, TokenTypeToStringRoundTrips)
     EXPECT_EQ (String ("identifier"), SyntaxDefinition::tokenTypeToString (SyntaxDefinition::TokenType::identifier));
     EXPECT_EQ (String ("whitespace"), SyntaxDefinition::tokenTypeToString (SyntaxDefinition::TokenType::whitespace));
     EXPECT_EQ (String ("other"), SyntaxDefinition::tokenTypeToString (SyntaxDefinition::TokenType::other));
-}
-
-// ==============================================================================
-// Selection color
-// ==============================================================================
-
-TEST (SyntaxDefinitionTests, BuiltInHasDefaultSelectionColor)
-{
-    const auto& definition = SyntaxDefinition::getBuiltIn ("cpp");
-
-    const auto selectionColor = definition.getSelectionColor();
-    ASSERT_TRUE (selectionColor.has_value());
-    EXPECT_EQ (Color::fromString ("#264f78"), *selectionColor);
-}
-
-TEST (SyntaxDefinitionTests, LoadFromDataParsesSelectionColor)
-{
-    SyntaxDefinition definition;
-    auto result = definition.loadFromData (R"({
-        "name": "TestLang",
-        "colors": { "keyword": "#ff0000", "selection": "#00ff00" }
-    })");
-
-    EXPECT_TRUE (result.wasOk());
-
-    const auto selectionColor = definition.getSelectionColor();
-    ASSERT_TRUE (selectionColor.has_value());
-    EXPECT_EQ (Color::fromString ("#00ff00"), *selectionColor);
-}
-
-TEST (SyntaxDefinitionTests, LoadFromDataDefaultsSelectionColor)
-{
-    SyntaxDefinition definition;
-    auto result = definition.loadFromData (R"({
-        "name": "TestLang",
-        "colors": { "keyword": "#ff0000" }
-    })");
-
-    EXPECT_TRUE (result.wasOk());
-
-    const auto selectionColor = definition.getSelectionColor();
-    ASSERT_TRUE (selectionColor.has_value());
-    EXPECT_EQ (Color::fromString ("#264f78"), *selectionColor);
 }
 
 TEST (SyntaxDefinitionTests, RawStringsFlag)
@@ -394,12 +340,6 @@ TEST (SyntaxDefinitionTests, LoadFromDataWithNameOnlyAppliesDefaults)
     EXPECT_FALSE (definition.getBlockComment().has_value());
     EXPECT_FALSE (definition.areStringsMultiLine());
     EXPECT_TRUE (definition.getPreprocessorPrefix().isEmpty());
-
-    // Every token type gets a default color, and the selection color defaults too.
-    for (int i = 0; i < 10; ++i)
-        EXPECT_TRUE (definition.getColor (static_cast<SyntaxDefinition::TokenType> (i)).has_value());
-
-    EXPECT_TRUE (definition.getSelectionColor().has_value());
 }
 
 // ==============================================================================
@@ -495,21 +435,6 @@ TEST (SyntaxDefinitionTests, IdentifierStartAndPartRules)
     EXPECT_TRUE (definition.isIdentifierPart ('_'));
     EXPECT_TRUE (definition.isIdentifierPart ('9'));
     EXPECT_FALSE (definition.isIdentifierPart ('-'));
-}
-
-TEST (SyntaxDefinitionTests, CustomColorsAreAppliedAndOthersDefaulted)
-{
-    SyntaxDefinition definition;
-    auto result = definition.loadFromData (R"({
-        "name": "ColorLang",
-        "colors": { "comment": "#123456", "string": "#654321" }
-    })");
-
-    EXPECT_TRUE (result.wasOk());
-
-    EXPECT_EQ (Color::fromString ("#123456"), *definition.getColor (SyntaxDefinition::TokenType::comment));
-    EXPECT_EQ (Color::fromString ("#654321"), *definition.getColor (SyntaxDefinition::TokenType::string));
-    EXPECT_EQ (Color::fromString ("#b5cea8"), *definition.getColor (SyntaxDefinition::TokenType::number));
 }
 
 TEST (SyntaxDefinitionTests, GetBuiltInGlslNumbersDifferFromCpp)

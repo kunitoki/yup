@@ -1043,3 +1043,153 @@ TEST (CodeEditorTest, BreakpointOnOutOfRangeLineClamps)
     editor.setBreakpoint (-1, false); // clamps to line 0, which has no breakpoint
     EXPECT_FALSE (editor.getBreakpoint (0));
 }
+
+// ==============================================================================
+// Scheme
+// ==============================================================================
+
+TEST (CodeEditorTest, DefaultSchemeIsApplied)
+{
+    CodeEditor editor;
+
+    const auto background = editor.getScheme().getColor (CodeEditorScheme::ColorId::background);
+    ASSERT_TRUE (background.has_value());
+    EXPECT_EQ (Color (0xff1e1e1e), *background);
+}
+
+TEST (CodeEditorTest, SetAndGetScheme)
+{
+    CodeEditor editor;
+
+    editor.setScheme (CodeEditorScheme::getBuiltIn ("monokai"));
+
+    const auto background = editor.getScheme().getColor (CodeEditorScheme::ColorId::background);
+    ASSERT_TRUE (background.has_value());
+    EXPECT_EQ (Color (0xff272822), *background);
+}
+
+TEST (CodeEditorTest, SettingSchemeUpdatesTokenColors)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("int main() {}");
+
+    editor.setScheme (CodeEditorScheme::getBuiltIn ("solarizedDark"));
+
+    const auto keywordColor = editor.getScheme().getColor (SyntaxDefinition::TokenType::keyword);
+    ASSERT_TRUE (keywordColor.has_value());
+    EXPECT_EQ (Color (0xff859900), *keywordColor);
+}
+
+// ==============================================================================
+// Scrollbar
+// ==============================================================================
+
+namespace
+{
+
+ScrollBar* findVerticalScrollBar (CodeEditor& editor)
+{
+    for (int i = 0; i < editor.getNumChildComponents(); ++i)
+    {
+        if (auto* scrollBar = dynamic_cast<ScrollBar*> (editor.getChildComponent (i)))
+            return scrollBar;
+    }
+
+    return nullptr;
+}
+
+} // namespace
+
+TEST (CodeEditorTest, ScrollBarIsHiddenWhenContentFits)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+    editor.setText ("one\ntwo\nthree");
+    editor.setSize (400, 400);
+
+    auto* scrollBar = findVerticalScrollBar (editor);
+    ASSERT_NE (nullptr, scrollBar);
+    EXPECT_FALSE (scrollBar->isVisible());
+}
+
+TEST (CodeEditorTest, ScrollBarAppearsWhenLinesOverflow)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    String text;
+    for (int i = 0; i < 200; ++i)
+        text += "line " + String (i) + "\n";
+
+    editor.setText (text);
+    editor.setSize (400, 200);
+
+    auto* scrollBar = findVerticalScrollBar (editor);
+    ASSERT_NE (nullptr, scrollBar);
+    EXPECT_TRUE (scrollBar->isVisible());
+}
+
+TEST (CodeEditorTest, ScrollBarTracksScrollOffset)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    String text;
+    for (int i = 0; i < 200; ++i)
+        text += "line " + String (i) + "\n";
+
+    editor.setText (text);
+    editor.setSize (400, 200);
+
+    auto* scrollBar = findVerticalScrollBar (editor);
+    ASSERT_NE (nullptr, scrollBar);
+    ASSERT_TRUE (scrollBar->isVisible());
+
+    editor.setScrollOffset (Point<float> (0.0f, 100.0f));
+
+    EXPECT_GT (scrollBar->getCurrentRangeStart(), 0.0);
+}
+
+TEST (CodeEditorTest, ScrollBarScrollingMovesEditorScrollOffset)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    String text;
+    for (int i = 0; i < 200; ++i)
+        text += "line " + String (i) + "\n";
+
+    editor.setText (text);
+    editor.setSize (400, 200);
+
+    auto* scrollBar = findVerticalScrollBar (editor);
+    ASSERT_NE (nullptr, scrollBar);
+    ASSERT_TRUE (scrollBar->isVisible());
+
+    scrollBar->setCurrentRangeStart (50.0, sendNotification);
+
+    EXPECT_FLOAT_EQ (50.0f, editor.getScrollOffset().getY());
+}
+
+TEST (CodeEditorTest, ScrollBarIsLeftOfMinimap)
+{
+    CodeDocument document;
+    CodeEditor editor (document);
+
+    String text;
+    for (int i = 0; i < 200; ++i)
+        text += "line " + String (i) + "\n";
+
+    editor.setText (text);
+    editor.setSize (400, 200);
+
+    auto* scrollBar = findVerticalScrollBar (editor);
+    ASSERT_NE (nullptr, scrollBar);
+    ASSERT_TRUE (scrollBar->isVisible());
+
+    // The minimap (60px) keeps the far-right edge; the scrollbar must sit to its
+    // left, flush against the minimap's left edge at most.
+    EXPECT_LE (scrollBar->getBounds().getRight(), editor.getWidth() - 60.0f);
+    EXPECT_LT (scrollBar->getBounds().getX(), editor.getWidth() - 60.0f);
+}

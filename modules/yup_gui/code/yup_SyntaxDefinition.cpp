@@ -85,19 +85,7 @@ constexpr auto cppDefinitionJson = R"json({
     "numbers": { "hex": true, "binary": true, "float": true, "exponent": true, "suffix": true },
     "keywords": ["alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "break", "case", "catch", "class", "compl", "concept", "const", "consteval", "constexpr", "constinit", "const_cast", "continue", "co_await", "co_return", "co_yield", "decltype", "default", "delete", "do", "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "for", "friend", "goto", "if", "inline", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "using", "virtual", "while", "xor", "xor_eq"],
     "types": ["bool", "char", "char8_t", "char16_t", "char32_t", "double", "float", "int", "long", "short", "signed", "unsigned", "void", "wchar_t", "size_t", "ptrdiff_t", "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "intptr_t", "uintptr_t"],
-    "operators": ["::", "->*", "->", "<=>", "<<=", ">>=", "...", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", ".*", "##", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "#", "@"],
-    "colors": {
-        "comment": "#6a9955",
-        "string": "#ce9178",
-        "number": "#b5cea8",
-        "keyword": "#569cd6",
-        "type": "#4ec9b0",
-        "operator": "#d4d4d4",
-        "preprocessor": "#c586c0",
-        "identifier": "#d4d4d4",
-        "other": "#d4d4d4",
-        "selection": "#264f78"
-    }
+    "operators": ["::", "->*", "->", "<=>", "<<=", ">>=", "...", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", ".*", "##", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "#", "@"]
 })json";
 
 constexpr auto glslDefinitionJson = R"json({
@@ -110,19 +98,7 @@ constexpr auto glslDefinitionJson = R"json({
     "numbers": { "hex": true, "binary": false, "float": true, "exponent": true, "suffix": false },
     "keywords": ["attribute", "const", "uniform", "varying", "buffer", "shared", "coherent", "restrict", "readonly", "writeonly", "atomic_uint", "layout", "centroid", "flat", "smooth", "noperspective", "patch", "sample", "break", "continue", "do", "for", "while", "switch", "case", "default", "if", "else", "subroutine", "in", "out", "inout", "true", "false", "invariant", "precise", "discard", "return", "struct"],
     "types": ["void", "bool", "int", "uint", "float", "double", "vec2", "vec3", "vec4", "ivec2", "ivec3", "ivec4", "uvec2", "uvec3", "uvec4", "bvec2", "bvec3", "bvec4", "dvec2", "dvec3", "dvec4", "mat2", "mat3", "mat4", "mat2x2", "mat2x3", "mat2x4", "mat3x2", "mat3x3", "mat3x4", "mat4x2", "mat4x3", "mat4x4", "dmat2", "dmat3", "dmat4", "dmat2x2", "dmat2x3", "dmat2x4", "dmat3x2", "dmat3x3", "dmat3x4", "dmat4x2", "dmat4x3", "dmat4x4", "sampler1D", "sampler2D", "sampler3D", "samplerCube", "sampler2DShadow", "samplerCubeShadow", "sampler1DArray", "sampler2DArray", "sampler2DRect", "samplerBuffer", "sampler2DMS", "isampler1D", "isampler2D", "isampler3D", "isamplerCube", "usampler1D", "usampler2D", "usampler3D", "usamplerCube", "image1D", "image2D", "image3D", "imageCube"],
-    "operators": ["::", "->", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "#"],
-    "colors": {
-        "comment": "#6a9955",
-        "string": "#ce9178",
-        "number": "#b5cea8",
-        "keyword": "#569cd6",
-        "type": "#4ec9b0",
-        "operator": "#d4d4d4",
-        "preprocessor": "#c586c0",
-        "identifier": "#d4d4d4",
-        "other": "#d4d4d4",
-        "selection": "#264f78"
-    }
+    "operators": ["::", "->", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "#"]
 })json";
 
 constexpr auto pythonDefinitionJson = R"json({
@@ -133,18 +109,7 @@ constexpr auto pythonDefinitionJson = R"json({
     "numbers": { "hex": true, "binary": true, "float": true, "exponent": true, "suffix": false },
     "keywords": ["False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"],
     "types": ["int", "float", "complex", "bool", "str", "bytes", "bytearray", "list", "tuple", "dict", "set", "frozenset", "object", "type"],
-    "operators": ["**", "//", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "//=", "%=", "**=", "@=", "&=", "|=", "^=", "<<=", ">>=", ":=", "->", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "@", "=", "<", ">", "!", "&", "|", "^", "~"],
-    "colors": {
-        "comment": "#6a9955",
-        "string": "#ce9178",
-        "number": "#b5cea8",
-        "keyword": "#569cd6",
-        "type": "#4ec9b0",
-        "operator": "#d4d4d4",
-        "identifier": "#d4d4d4",
-        "other": "#d4d4d4",
-        "selection": "#264f78"
-    }
+    "operators": ["**", "//", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "//=", "%=", "**=", "@=", "&=", "|=", "^=", "<<=", ">>=", ":=", "->", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "@", "=", "<", ">", "!", "&", "|", "^", "~"]
 })json";
 
 constexpr auto xmlDefinitionJson = R"json({
@@ -155,18 +120,7 @@ constexpr auto xmlDefinitionJson = R"json({
     "strings": { "delimiters": ["\"", "'"], "escape": "\\", "multiLine": false },
     "numbers": { "hex": false, "binary": false, "float": true, "exponent": false, "suffix": false },
     "keywords": ["xml", "DOCTYPE", "ELEMENT", "ATTLIST", "ENTITY", "NOTATION", "CDATA", "PUBLIC", "SYSTEM"],
-    "operators": ["]]>", "<!", "<?", "?>", "</", "/>", "<", ">", "=", ":", "&", ";", "!", "?", "/", "-", ".", ","],
-    "colors": {
-        "comment": "#6a9955",
-        "string": "#ce9178",
-        "number": "#b5cea8",
-        "keyword": "#569cd6",
-        "type": "#4ec9b0",
-        "operator": "#d4d4d4",
-        "identifier": "#d4d4d4",
-        "other": "#d4d4d4",
-        "selection": "#264f78"
-    }
+    "operators": ["]]>", "<!", "<?", "?>", "</", "/>", "<", ">", "=", ":", "&", ";", "!", "?", "/", "-", ".", ","]
 })json";
 
 SyntaxDefinition parseBuiltIn (const char* jsonText)
@@ -249,28 +203,6 @@ Result SyntaxDefinition::loadFromData (StringRef jsonText)
     addStringArrayProperty (parsed, "keywords", keywords);
     addStringArrayProperty (parsed, "types", types);
     addStringArrayProperty (parsed, "operators", operators);
-
-    if (parsed.hasProperty (Identifier ("colors")) && parsed["colors"].isObject())
-    {
-        const auto& colorObject = parsed["colors"];
-
-        for (int i = 0; i < static_cast<int> (colors.size()); ++i)
-        {
-            const auto type = static_cast<TokenType> (i);
-            const auto colorName = tokenTypeToString (type);
-
-            if (colorObject.hasProperty (Identifier (colorName)))
-            {
-                const auto colorValue = colorObject[Identifier (colorName)];
-                colors[static_cast<size_t> (i)] = Color::fromString (colorValue.toString());
-            }
-        }
-
-        if (colorObject.hasProperty (Identifier ("selection")))
-            selectionColor = Color::fromString (colorObject[Identifier ("selection")].toString());
-    }
-
-    applyDefaults();
 
     return Result::ok();
 }
@@ -403,16 +335,6 @@ bool SyntaxDefinition::isIdentifierPart (yup_wchar character) const
     return isIdentifierStart (character) || (character >= '0' && character <= '9');
 }
 
-std::optional<Color> SyntaxDefinition::getColor (TokenType type) const
-{
-    return colors[static_cast<size_t> (type)];
-}
-
-std::optional<Color> SyntaxDefinition::getSelectionColor() const
-{
-    return selectionColor;
-}
-
 //==============================================================================
 
 const SyntaxDefinition& SyntaxDefinition::getBuiltIn (StringRef languageName)
@@ -495,42 +417,6 @@ String SyntaxDefinition::tokenTypeToString (TokenType type)
     return "other";
 }
 
-std::optional<Color> SyntaxDefinition::colorFromTokenTypeString (StringRef name)
-{
-    if (name == StringRef ("comment"))
-        return Color::fromString ("#6a9955");
-    if (name == StringRef ("string"))
-        return Color::fromString ("#ce9178");
-    if (name == StringRef ("number"))
-        return Color::fromString ("#b5cea8");
-    if (name == StringRef ("keyword"))
-        return Color::fromString ("#569cd6");
-    if (name == StringRef ("type"))
-        return Color::fromString ("#4ec9b0");
-    if (name == StringRef ("operator"))
-        return Color::fromString ("#d4d4d4");
-    if (name == StringRef ("preprocessor"))
-        return Color::fromString ("#c586c0");
-    if (name == StringRef ("identifier"))
-        return Color::fromString ("#d4d4d4");
-    if (name == StringRef ("whitespace"))
-        return Color::fromString ("#00000000");
-    if (name == StringRef ("other"))
-        return Color::fromString ("#d4d4d4");
-
-    return std::nullopt;
-}
-
-void SyntaxDefinition::applyDefaults()
-{
-    for (int i = 0; i < static_cast<int> (colors.size()); ++i)
-    {
-        if (! colors[static_cast<size_t> (i)].has_value())
-            colors[static_cast<size_t> (i)] = colorFromTokenTypeString (tokenTypeToString (static_cast<TokenType> (i)));
-    }
-
-    if (! selectionColor.has_value())
-        selectionColor = Color::fromString ("#264f78");
-}
+//==============================================================================
 
 } // namespace yup

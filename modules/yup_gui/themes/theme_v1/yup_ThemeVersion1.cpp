@@ -379,6 +379,106 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
 
 //==============================================================================
 
+void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor)
+{
+    ignoreUnused (theme);
+
+    const auto bounds = editor.getLocalBounds();
+    const auto textArea = editor.getTextArea();
+    const auto& scheme = editor.getScheme();
+    const auto scrollOffset = editor.getScrollOffset();
+
+    // Background
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0xff1e1e1e)));
+    g.fillRect (bounds);
+
+    // Current line
+    if (editor.hasKeyboardFocus() && editor.getDocument() != nullptr)
+    {
+        const auto currentLineColor = scheme.getColor (CodeEditorScheme::ColorId::currentLine).value_or (Color (0x11222222));
+        const int currentLine = editor.getDocument()->indexToPosition (editor.getCaretPosition()).getLineNumber();
+        const float lineY = textArea.getY() + currentLine * editor.getLineHeight() - scrollOffset.getY();
+
+        g.setFillColor (currentLineColor);
+        g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
+    }
+
+    // Gutter
+    if (editor.isLineNumbersVisible() && editor.getDocument() != nullptr)
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::gutterBackground).value_or (Color (0xff252526)));
+        g.fillRect (Rectangle<float> (bounds.getX(), bounds.getY(), textArea.getX() - bounds.getX(), bounds.getHeight()));
+
+        const float lineHeight = editor.getLineHeight();
+        const int firstVisibleLine = jmax (0, static_cast<int> (scrollOffset.getY() / lineHeight));
+        const int lastVisibleLine = jmin (editor.getDocument()->getNumLines() - 1,
+                                          static_cast<int> ((scrollOffset.getY() + textArea.getHeight()) / lineHeight) + 1);
+
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::gutterText).value_or (Color (0xff858585)));
+
+        const float numberWidth = textArea.getX() - bounds.getX() - 8.0f;
+
+        for (int line = firstVisibleLine; line <= lastVisibleLine; ++line)
+        {
+            const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
+
+            g.fillFittedText (String (line + 1),
+                              editor.getFont().withHeight (editor.getFont().getHeight() * 0.9f),
+                              Rectangle<float> (bounds.getX() + 4.0f, y, numberWidth, lineHeight),
+                              Justification::right);
+        }
+
+        // Breakpoint markers
+        if (! editor.getBreakpointLines().empty())
+        {
+            g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::breakpoint).value_or (Color (0xffe51400)));
+
+            for (const int line : editor.getBreakpointLines())
+            {
+                if (line < firstVisibleLine || line > lastVisibleLine)
+                    continue;
+
+                const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
+                g.fillEllipse (Rectangle<float> (bounds.getX() + 5.0f, y + lineHeight * 0.5f - 4.0f, 8.0f, 8.0f));
+            }
+        }
+    }
+
+    auto clipState = g.saveState();
+    g.setClipPath (textArea.translated (editor.getBoundsRelativeToTopLevelComponent().getTopLeft()));
+
+    // Selection
+    if (editor.hasSelection())
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::selection).value_or (Color (0x33264692)));
+
+        for (const auto& rectangle : editor.getSelectedTextAreas())
+            g.fillRect (rectangle);
+    }
+
+    // Search match highlights
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::searchHighlight).value_or (Color (0x3348c0ff)));
+
+    for (const auto& rectangle : editor.getSearchMatchAreas())
+        g.fillRect (rectangle);
+
+    // Text
+    const float windowY = editor.getWindowFirstLine() * editor.getLineHeight();
+    const auto scrolledTextBounds = textArea.translated (-scrollOffset.getX(), windowY - scrollOffset.getY());
+    g.fillFittedText (editor.getStyledText(), scrolledTextBounds);
+
+    // Caret
+    if (editor.hasKeyboardFocus() && editor.isCaretVisible())
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::caret).value_or (Colors::white));
+        g.fillRect (editor.getCaretBounds());
+    }
+
+    clipState.restore();
+}
+
+//==============================================================================
+
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     auto bounds = b.getLocalBounds();
@@ -1792,6 +1892,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
     theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
     theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
+    theme->setComponentStyle<CodeEditor> (ComponentStyle::createStyle<CodeEditor> (paintCodeEditor));
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));

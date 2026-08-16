@@ -24,6 +24,8 @@
 namespace yup
 {
 
+class ScrollBar;
+
 //==============================================================================
 /** A syntax-highlighting source code editor.
 
@@ -98,6 +100,20 @@ public:
 
     /** Returns the active syntax definition. */
     const SyntaxDefinition& getSyntaxDefinition() const;
+
+    //==============================================================================
+    /** Sets the color scheme used to render the editor.
+
+        The scheme provides every color the editor needs to paint itself, including
+        the per-token syntax colors, so switching scheme changes the whole look of
+        the editor consistently.
+
+        @param newScheme The scheme to use (copied).
+    */
+    void setScheme (const CodeEditorScheme& newScheme);
+
+    /** Returns the active color scheme. */
+    const CodeEditorScheme& getScheme() const noexcept;
 
     //==============================================================================
     /** Returns the font used to draw the text. */
@@ -287,16 +303,32 @@ public:
     void setMinimapVisible (bool shouldBeVisible);
 
     //==============================================================================
-    /** Color identifiers used by the code editor. */
-    struct Style
-    {
-        static const Identifier backgroundColorId;
-        static const Identifier textColorId;
-        static const Identifier caretColorId;
-        static const Identifier gutterBackgroundColorId;
-        static const Identifier gutterTextColorId;
-        static const Identifier currentLineColorId;
-    };
+    /** @internal Returns the rectangle of the text area (used by the theme for painting). */
+    Rectangle<float> getTextArea() const;
+
+    /** @internal Returns the height of a single line of text. */
+    float getLineHeight() const;
+
+    /** @internal Returns the caret bounds in view coordinates (used by the theme for painting). */
+    Rectangle<float> getCaretBounds() const;
+
+    /** @internal Returns the current selection rectangles in view coordinates. */
+    std::vector<Rectangle<float>> getSelectedTextAreas() const;
+
+    /** @internal Returns the search-match highlight rectangles in view coordinates. */
+    std::vector<Rectangle<float>> getSearchMatchAreas() const;
+
+    /** @internal Returns the styled text used for rendering. */
+    const StyledText& getStyledText() const noexcept;
+
+    /** @internal Returns the first line of the currently shaped text window. */
+    int getWindowFirstLine() const noexcept;
+
+    /** @internal Returns true if the caret is currently visible. */
+    bool isCaretVisible() const noexcept;
+
+    /** @internal Returns the lines that have a breakpoint set. */
+    const std::vector<int>& getBreakpointLines() const noexcept;
 
     //==============================================================================
     /** @internal */
@@ -339,19 +371,17 @@ private:
     void updateStyledTextIfNeeded();
     void rebuildStyledText();
     void clampScrollOffsetIfNeeded();
+    void updateScrollBar();
+    float getScrollBarWidth() const noexcept;
 
     void updateCaretPosition();
     void ensureCaretVisible();
     void blinkCaret();
     void stopCaretBlinking();
     void startCaretBlinking();
-    Rectangle<float> getCaretBounds() const;
     Rectangle<float> getCaretBoundsInDocument() const;
 
     int getGlyphIndexAtPosition (const Point<float>& position) const;
-    float getLineHeight() const;
-    Rectangle<float> getTextArea() const;
-    std::vector<Rectangle<float>> getSelectedTextAreas() const;
 
     Range<int> computeShapingWindow() const;
     bool windowNeedsExpanding() const;
@@ -392,8 +422,10 @@ private:
     std::unique_ptr<CodeDocument> internalDocument;
     std::unique_ptr<DocumentListener> documentListener;
     std::unique_ptr<Minimap> minimap;
+    std::unique_ptr<ScrollBar> scrollBar;
 
     CodeTokeniser tokeniser;
+    CodeEditorScheme scheme;
     StyledText styledText;
     Font font;
     float fontSize = 14.0f;

@@ -6,7 +6,7 @@ pieces:
 - `CodeDocument` — a line-based text model with undo/redo and incremental
   change notifications.
 - `SyntaxDefinition` — a declarative, JSON-driven description of a language
-  (comments, strings, keywords, operators, colors).
+  (comments, strings, keywords, operators).
 - `CodeTokeniser` — an incremental, per-line tokenizer driven by a
   `SyntaxDefinition`.
 - `CodeEditor` — the `Component` that ties them together: caret/selection,
@@ -77,19 +77,7 @@ Only `name` is mandatory; every other section is optional.
     "numbers": { "hex": true, "binary": true, "float": true, "exponent": true, "suffix": true },
     "keywords": ["if", "for", "return"],
     "types": ["int", "float", "void"],
-    "operators": ["+", "-", "->", "::"],
-    "colors": {
-        "comment": "#6a9955",
-        "string": "#ce9178",
-        "number": "#b5cea8",
-        "keyword": "#569cd6",
-        "type": "#4ec9b0",
-        "operator": "#d4d4d4",
-        "preprocessor": "#c586c0",
-        "identifier": "#d4d4d4",
-        "other": "#d4d4d4",
-        "selection": "#264f78"
-    }
+    "operators": ["+", "-", "->", "::"]
 }
 ```
 
@@ -112,8 +100,10 @@ Only `name` is mandatory; every other section is optional.
   exponent, suffix).
 - `keywords` / `types` / `operators` — word sets; identifiers are classified
   keyword → type → identifier. Operators use longest-match (3, 2, 1 chars).
-- `colors` — token colors; keys are the token-type names above. Unspecified
-  types fall back to a dark-editor palette.
+
+Colors are not part of a syntax definition: they belong to a
+`CodeEditorScheme` (see below), so the same definition can be rendered with
+any scheme.
 
 Load a custom definition at runtime:
 
@@ -135,13 +125,44 @@ tokeniser.setSyntaxDefinition (yup::SyntaxDefinition::getBuiltIn ("cpp"));
 
 for (auto& token : tokeniser.getTokens (document, 0))
 {
-    auto color = tokeniser.getSyntaxDefinition().getColor (token.type);
+    auto tokenType = token.type; // color it with CodeEditorScheme::getColor (tokenType)
     // token.start / token.end are character offsets within the line
 }
 ```
 
 The tokenizer subscribes itself to the document on first use, so edits
 invalidate the right lines automatically.
+
+## CodeEditorScheme
+
+A `CodeEditorScheme` owns every color the editor needs to paint itself: the
+editor chrome (background, gutter, caret, current line, selection, search
+highlight, breakpoint, minimap background/foreground/viewport) and the
+per-token syntax colors. Colors are stored keyed by `Identifier` and accessed through
+`setColor` / `getColor`, using the string constants in
+`CodeEditorScheme::ColorId` for the chrome colors and the token-type names
+(`"keyword"`, `"string"`, …) for the syntax colors.
+
+```cpp
+yup::CodeEditorScheme scheme;
+scheme.setColor (yup::CodeEditorScheme::ColorId::background, yup::Color (0xff282c34));
+scheme.setColor (yup::SyntaxDefinition::TokenType::keyword, yup::Color (0xffc678dd));
+```
+
+Built-in well-known schemes are available through `getBuiltIn`, matching
+case-insensitively and ignoring spaces/hyphens:
+
+```cpp
+yup::CodeEditorScheme::getBuiltIn ("monokai");          // Monokai
+yup::CodeEditorScheme::getBuiltIn ("alabaster");        // Alabaster (light)
+yup::CodeEditorScheme::getBuiltIn ("oneDark");          // One Dark
+yup::CodeEditorScheme::getBuiltIn ("solarizedDark");    // Solarized Dark
+yup::CodeEditorScheme::getBuiltIn ("solarizedLight");   // Solarized Light
+```
+
+`getAvailableSchemeNames()` returns the display names of the built-in schemes
+and `getDefault()` the classic dark palette. A default-constructed scheme
+carries that same dark palette, so a bare `CodeEditor` renders like before.
 
 ## CodeEditor
 
@@ -161,9 +182,9 @@ Highlights:
   (ctrl+c/x/v), undo/redo (ctrl+z/y), read-only mode, tab expands to spaces.
 - **Smart auto-indent** — pressing enter copies the current line's leading
   whitespace.
-- **Syntax colors** — tokens are rendered from the definition's palette; the
-  colored text layout is rebuilt only when the document, font or definition
-  changes.
+- **Syntax colors** — tokens are rendered from the active `CodeEditorScheme`;
+  the colored text layout is rebuilt only when the document, font, definition
+  or scheme changes.
 - **Gutter** — optional line numbers; clicking the gutter toggles a
   breakpoint marker.
 - **Find / replace** — `findAll`, `findNext`/`findPrevious` (wrap-around),
@@ -171,12 +192,18 @@ Highlights:
   `highlightSearchMatches`.
 - **Bracket matching** — `getBracketMatch` returns the matching `() [] {}` pair
   around the caret as a range (callers can highlight it themselves).
-- **Minimap** — an optional right-edge code-density overview; click to scroll.
-- **Styling** — token colors (including the text **selection** color, keyed as
-  `"selection"` in the definition's `colors`) come from the `SyntaxDefinition`;
-  remaining chrome colors resolve through `ApplicationTheme` via
-  `CodeEditor::Style` identifiers, plus `setFont` (defaults to the theme's
-  monospace font).
+- **Minimap** — an optional right-edge code-density overview; click or drag to
+  scroll, with the vertical scrollbar sitting to its left.
+- **Scrollbar** — a vertical scrollbar appears automatically (auto-hide) when
+  the document has more lines than fit the viewport.
+- **Styling** — every color (background, gutter, caret, selection, search
+  highlight, breakpoint, and the per-token syntax colors) comes from the
+  active `CodeEditorScheme`; the painting itself is provided by the theme
+  (Themes v1). `setFont` defaults to the theme's monospace font.
+
+```cpp
+editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("monokai"));
+```
 
 ```cpp
 editor.setLineNumbersVisible (false);

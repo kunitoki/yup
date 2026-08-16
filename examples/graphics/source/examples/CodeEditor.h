@@ -41,7 +41,20 @@ public:
         };
         addAndMakeVisible (languageCombo);
 
+        schemeCombo.addItem ("Monokai", schemeMonokai);
+        schemeCombo.addItem ("Alabaster", schemeAlabaster);
+        schemeCombo.addItem ("One Dark", schemeOneDark);
+        schemeCombo.addItem ("Solarized Dark", schemeSolarizedDark);
+        schemeCombo.addItem ("Solarized Light", schemeSolarizedLight);
+        schemeCombo.setSelectedId (schemeOneDark);
+        schemeCombo.onSelectedItemChanged = [this]
+        {
+            applyScheme (schemeCombo.getSelectedId());
+        };
+        addAndMakeVisible (schemeCombo);
+
         applyLanguage (languageCpp);
+        applyScheme (schemeOneDark);
         addAndMakeVisible (editor);
 
         setSize (640, 480);
@@ -51,7 +64,9 @@ public:
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (10);
-        languageCombo.setBounds (bounds.removeFromTop (24));
+        auto topRow = bounds.removeFromTop (24);
+        schemeCombo.setBounds (topRow.removeFromLeft (topRow.getWidth() * 0.5f - 3));
+        languageCombo.setBounds (topRow.reduced (3, 0));
         editor.setBounds (bounds.reduced (0, 6));
     }
 
@@ -62,6 +77,15 @@ private:
         languageGlsl,
         languagePython,
         languageXml
+    };
+
+    enum
+    {
+        schemeMonokai = 1,
+        schemeAlabaster,
+        schemeOneDark,
+        schemeSolarizedDark,
+        schemeSolarizedLight
     };
 
     void applyLanguage (int languageId)
@@ -86,6 +110,35 @@ private:
             case languageXml:
                 editor.setSyntaxDefinition ("xml");
                 editor.setText (xmlSample);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void applyScheme (int schemeId)
+    {
+        switch (schemeId)
+        {
+            case schemeMonokai:
+                editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("monokai"));
+                break;
+
+            case schemeAlabaster:
+                editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("alabaster"));
+                break;
+
+            case schemeOneDark:
+                editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("oneDark"));
+                break;
+
+            case schemeSolarizedDark:
+                editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("solarizedDark"));
+                break;
+
+            case schemeSolarizedLight:
+                editor.setScheme (yup::CodeEditorScheme::getBuiltIn ("solarizedLight"));
                 break;
 
             default:
@@ -165,6 +218,7 @@ for i in range (3):
 )";
 
     yup::ComboBox languageCombo { "LanguageSelector" };
+    yup::ComboBox schemeCombo { "SchemeSelector" };
     yup::CodeDocument document;
     yup::CodeEditor editor;
 };

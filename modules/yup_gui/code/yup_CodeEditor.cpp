@@ -24,15 +24,6 @@ namespace yup
 
 //==============================================================================
 
-const Identifier CodeEditor::Style::backgroundColorId = "codeEditorBackground";
-const Identifier CodeEditor::Style::textColorId = "codeEditorText";
-const Identifier CodeEditor::Style::caretColorId = "codeEditorCaret";
-const Identifier CodeEditor::Style::gutterBackgroundColorId = "codeEditorGutterBackground";
-const Identifier CodeEditor::Style::gutterTextColorId = "codeEditorGutterText";
-const Identifier CodeEditor::Style::currentLineColorId = "codeEditorCurrentLine";
-
-//==============================================================================
-
 class CodeEditor::DocumentListener : public CodeDocument::Listener
 {
 public:
@@ -70,8 +61,9 @@ public:
 
         const auto bounds = getLocalBounds();
         const float minimapWidth = bounds.getWidth();
+        const auto& scheme = editor.getScheme();
 
-        g.setFillColor (Color (0xff202020));
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::minimapBackground).value_or (Color (0xff202020)));
         g.fillRect (bounds);
 
         const float lineHeight = editor.getLineHeight();
@@ -79,7 +71,7 @@ public:
         const float totalHeight = jmax (1.0f, static_cast<float> (numLines) * lineHeight);
         const float scale = bounds.getHeight() / totalHeight;
 
-        g.setFillColor (Color (0x66ffffff));
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::minimapForeground).value_or (Color (0x66ffffff)));
 
         const float charWidth = editor.font.getHeight() * 0.6f;
 
@@ -108,26 +100,19 @@ public:
         const float viewY = editor.scrollOffset.getY() * scale;
         const float viewH = jmin (bounds.getHeight() - viewY, editor.getTextArea().getHeight() * scale);
 
-        g.setFillColor (Color (0x3300a0ff));
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::minimapViewport).value_or (Color (0x3300a0ff)));
         g.fillRect (Rectangle<float> (0.0f, viewY, minimapWidth, jmax (2.0f, viewH)));
     }
 
     void mouseDown (const MouseEvent& event) override
     {
         editor.takeKeyboardFocus();
+        scrollToPosition (event.getPosition().to<float>());
+    }
 
-        if (editor.document == nullptr)
-            return;
-
-        editor.updateStyledTextIfNeeded();
-
-        const auto position = event.getPosition().to<float>();
-        const float totalHeight = jmax (1.0f, static_cast<float> (editor.document->getNumLines()) * editor.getLineHeight());
-        const float scale = editor.getTextArea().getHeight() / totalHeight;
-
-        editor.scrollOffset.setY ((position.getY() - editor.getTextArea().getY()) / scale - editor.getTextArea().getHeight() * 0.5f);
-        editor.clampScrollOffsetIfNeeded();
-        editor.repaint();
+    void mouseDrag (const MouseEvent& event) override
+    {
+        scrollToPosition (event.getPosition().to<float>());
     }
 
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
@@ -136,6 +121,24 @@ public:
     }
 
 private:
+    void scrollToPosition (const Point<float>& position)
+    {
+        if (editor.document == nullptr)
+            return;
+
+        editor.updateStyledTextIfNeeded();
+
+        const auto textArea = editor.getTextArea();
+        const float totalHeight = jmax (1.0f, static_cast<float> (editor.document->getNumLines()) * editor.getLineHeight());
+        const float scale = textArea.getHeight() / totalHeight;
+
+        const float clampedY = jlimit (getLocalBounds().getY(), getLocalBounds().getBottom(), position.getY());
+
+        editor.scrollOffset.setY ((clampedY - textArea.getY()) / scale - textArea.getHeight() * 0.5f);
+        editor.clampScrollOffsetIfNeeded();
+        editor.repaint();
+    }
+
     CodeEditor& editor;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Minimap)
@@ -177,6 +180,17 @@ void CodeEditor::initialiseEditor()
 
     if (minimapVisible)
         addAndMakeVisible (minimap.get());
+
+    scrollBar = std::make_unique<ScrollBar> (ScrollBar::Orientation::vertical);
+    scrollBar->setVisibilityMode (ScrollBar::VisibilityMode::autoHide);
+    scrollBar->setScrollBarWidth (12.0f);
+    scrollBar->onScrollPositionChanged = [this] (double newPosition)
+    {
+        scrollOffset.setY (static_cast<float> (newPosition));
+        clampScrollOffsetIfNeeded();
+        repaint();
+    };
+    addAndMakeVisible (scrollBar.get());
 
     if (auto theme = ApplicationTheme::getGlobalTheme())
     {
@@ -245,6 +259,20 @@ bool CodeEditor::setSyntaxDefinitionForExtension (StringRef fileExtension)
 const SyntaxDefinition& CodeEditor::getSyntaxDefinition() const
 {
     return tokeniser.getSyntaxDefinition();
+}
+
+//==============================================================================
+
+void CodeEditor::setScheme (const CodeEditorScheme& newScheme)
+{
+    scheme = newScheme;
+    needsStyledTextUpdate = true;
+    repaint();
+}
+
+const CodeEditorScheme& CodeEditor::getScheme() const noexcept
+{
+    return scheme;
 }
 
 //==============================================================================
@@ -568,12 +596,11 @@ void CodeEditor::shapeWindow (Range<int> window)
     modifier.setHorizontalAlign (StyledText::left);
     modifier.setVerticalAlign (StyledText::top);
 
-    const auto textColor = findColor (Style::textColorId).value_or (Color (0xffd4d4d4));
-    const auto& definition = tokeniser.getSyntaxDefinition();
+    const auto textColor = scheme.getColor (CodeEditorScheme::ColorId::text).value_or (Color (0xffd4d4d4));
 
-    auto colorForToken = [this, &definition, &textColor] (SyntaxDefinition::TokenType type) -> Color
+    auto colorForToken = [this, &textColor] (SyntaxDefinition::TokenType type) -> Color
     {
-        return definition.getColor (type).value_or (textColor);
+        return scheme.getColor (type).value_or (textColor);
     };
 
     for (int line = windowFirstLine; line <= windowLastLine; ++line)
@@ -706,6 +733,8 @@ void CodeEditor::clampScrollOffsetIfNeeded()
 
     scrollOffset.setX (jmax (0.0f, jmin (scrollOffset.getX(), jmax (0.0f, textSize.getWidth() - textArea.getWidth()))));
     scrollOffset.setY (jmax (0.0f, jmin (scrollOffset.getY(), jmax (0.0f, documentHeight - textArea.getHeight()))));
+
+    updateScrollBar();
 }
 
 void CodeEditor::blinkCaret()
@@ -734,11 +763,29 @@ Rectangle<float> CodeEditor::getTextArea() const
     const auto bounds = getLocalBounds().reduced (4.0f);
     const float gutterWidth = getGutterWidth();
     const float minimapWidth = getMinimapWidth();
+    const float scrollBarWidth = getScrollBarWidth();
 
     return Rectangle<float> (bounds.getX() + gutterWidth,
                              bounds.getY(),
-                             bounds.getWidth() - gutterWidth - minimapWidth,
+                             bounds.getWidth() - gutterWidth - minimapWidth - scrollBarWidth,
                              bounds.getHeight());
+}
+
+float CodeEditor::getScrollBarWidth() const noexcept
+{
+    return scrollBar != nullptr && scrollBar->isVisible() ? scrollBar->getScrollBarWidth() : 0.0f;
+}
+
+void CodeEditor::updateScrollBar()
+{
+    if (scrollBar == nullptr || document == nullptr)
+        return;
+
+    const auto textArea = getTextArea();
+    const float documentHeight = document->getNumLines() * getLineHeight();
+
+    scrollBar->setRangeLimits (0.0, documentHeight);
+    scrollBar->setCurrentRange (scrollOffset.getY(), scrollOffset.getY() + textArea.getHeight());
 }
 
 float CodeEditor::getMinimapWidth() const
@@ -838,6 +885,43 @@ std::vector<Rectangle<float>> CodeEditor::getSelectedTextAreas() const
     return rectangles;
 }
 
+std::vector<Rectangle<float>> CodeEditor::getSearchMatchAreas() const
+{
+    if (searchMatches.empty() || document == nullptr)
+        return {};
+
+    const auto textArea = getTextArea();
+
+    std::vector<Rectangle<float>> rectangles;
+    for (const auto& match : searchMatches)
+    {
+        for (const auto& rectangle : getSelectionRectanglesInDocument (match.getStart(), match.getEnd()))
+            rectangles.push_back (rectangle.translated (textArea.getTopLeft() - scrollOffset));
+    }
+
+    return rectangles;
+}
+
+const StyledText& CodeEditor::getStyledText() const noexcept
+{
+    return styledText;
+}
+
+int CodeEditor::getWindowFirstLine() const noexcept
+{
+    return windowFirstLine;
+}
+
+bool CodeEditor::isCaretVisible() const noexcept
+{
+    return caretVisible;
+}
+
+const std::vector<int>& CodeEditor::getBreakpointLines() const noexcept
+{
+    return breakpointLines;
+}
+
 int CodeEditor::getGlyphIndexAtPosition (const Point<float>& position) const
 {
     const auto textArea = getTextArea();
@@ -858,110 +942,34 @@ void CodeEditor::paint (Graphics& g)
 {
     updateStyledTextIfNeeded();
 
-    const auto bounds = getLocalBounds();
-    const auto textArea = getTextArea();
-
-    // Background
-    auto backgroundColor = findColor (Style::backgroundColorId).value_or (Color (0xff1e1e1e));
-    g.setFillColor (backgroundColor);
-    g.fillRect (bounds);
-
-    if (hasKeyboardFocus() && document != nullptr)
-    {
-        const auto currentLineColor = findColor (Style::currentLineColorId).value_or (Color (0x11222222));
-        const int currentLine = document->indexToPosition (caretPosition).getLineNumber();
-        const float lineY = textArea.getY() + currentLine * getLineHeight() - scrollOffset.getY();
-
-        g.setFillColor (currentLineColor);
-        g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), getLineHeight()));
-    }
-
-    // Gutter
-    if (lineNumbersVisible && document != nullptr)
-    {
-        g.setFillColor (findColor (Style::gutterBackgroundColorId).value_or (Color (0xff252526)));
-        g.fillRect (Rectangle<float> (bounds.getX(), bounds.getY(), textArea.getX() - bounds.getX(), bounds.getHeight()));
-
-        const float lineHeight = getLineHeight();
-        const int firstVisibleLine = jmax (0, static_cast<int> (scrollOffset.getY() / lineHeight));
-        const int lastVisibleLine = jmin (document->getNumLines() - 1,
-                                          static_cast<int> ((scrollOffset.getY() + textArea.getHeight()) / lineHeight) + 1);
-
-        g.setFillColor (findColor (Style::gutterTextColorId).value_or (Color (0xff858585)));
-
-        const float numberWidth = textArea.getX() - bounds.getX() - 8.0f;
-
-        for (int line = firstVisibleLine; line <= lastVisibleLine; ++line)
-        {
-            const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
-
-            g.fillFittedText (String (line + 1), font.withHeight (fontSize * 0.9f), Rectangle<float> (bounds.getX() + 4.0f, y, numberWidth, lineHeight), Justification::right);
-        }
-
-        // Breakpoint markers
-        if (! breakpointLines.empty())
-        {
-            g.setFillColor (Color (0xffe51400));
-
-            for (const int line : breakpointLines)
-            {
-                if (line < firstVisibleLine || line > lastVisibleLine)
-                    continue;
-
-                const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
-                g.fillEllipse (Rectangle<float> (bounds.getX() + 5.0f, y + lineHeight * 0.5f - 4.0f, 8.0f, 8.0f));
-            }
-        }
-    }
-
-    auto clipState = g.saveState();
-    g.setClipPath (textArea.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
-
-    // Selection
-    if (hasSelection())
-    {
-        g.setFillColor (getSyntaxDefinition().getSelectionColor().value_or (Color (0x33264692)));
-        for (const auto& rectangle : getSelectedTextAreas())
-            g.fillRect (rectangle);
-    }
-
-    // Search match highlights
-    if (! searchMatches.empty())
-    {
-        g.setFillColor (Color (0x3348c0ff));
-        for (const auto& match : searchMatches)
-        {
-            for (const auto& rectangle : getSelectionRectanglesInDocument (match.getStart(), match.getEnd()))
-                g.fillRect (rectangle.translated (textArea.getTopLeft() - scrollOffset));
-        }
-    }
-
-    // Text
-    const float windowY = windowFirstLine * getLineHeight();
-    const auto scrolledTextBounds = textArea.translated (-scrollOffset.getX(), windowY - scrollOffset.getY());
-    g.fillFittedText (styledText, scrolledTextBounds);
-
-    // Caret
-    if (hasKeyboardFocus() && caretVisible)
-    {
-        g.setFillColor (findColor (Style::caretColorId).value_or (Color (0xffffffff)));
-        g.fillRect (getCaretBounds());
-    }
-
-    clipState.restore();
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 void CodeEditor::resized()
 {
+    const auto bounds = getLocalBounds();
+
+    updateScrollBar();
+
+    const float minimapWidth = getMinimapWidth();
+
     if (minimap != nullptr && minimapVisible)
     {
-        const auto bounds = getLocalBounds();
-        const float minimapWidth = getMinimapWidth();
-
         minimap->setBounds (bounds.getRight() - minimapWidth,
                             bounds.getY(),
                             minimapWidth,
                             bounds.getHeight());
+    }
+
+    if (scrollBar != nullptr)
+    {
+        const float width = scrollBar->getScrollBarWidth();
+
+        scrollBar->setBounds (bounds.getRight() - minimapWidth - width,
+                              bounds.getY(),
+                              width,
+                              bounds.getHeight());
     }
 
     ensureCaretVisible();
@@ -1071,7 +1079,7 @@ void CodeEditor::mouseWheel (const MouseEvent&, const MouseWheelData& wheelData)
 {
     const float wheelSpeed = 30.0f;
 
-    scrollOffset.setX (scrollOffset.getX() - wheelData.getDeltaX() * wheelSpeed);
+    scrollOffset.setX (scrollOffset.getX() + wheelData.getDeltaX() * wheelSpeed);
     scrollOffset.setY (scrollOffset.getY() - wheelData.getDeltaY() * wheelSpeed);
 
     clampScrollOffsetIfNeeded();
