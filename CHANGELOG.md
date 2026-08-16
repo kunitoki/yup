@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Config macro `YUP_EMBED_DEFAULT_THEME_TEXT_FONT` renamed to `YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT`; the embedded default text font now only covers the serif font. A new `YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT` config selects whether the monospace theme font is embedded.
 - `Font` loading is now static-only: the instance `loadFromData()` / `loadFromFile()` methods were removed in favor of `Font::loadFontFromData()`, `Font::loadFontFromFile()`, `Font::loadFontFromFirstAvailableFile()`, `Font::loadSerifSystemTextFont()` and `Font::loadMonospaceSystemTextFont()`, all returning `ResultValue<Font>`.
 
+### Core
+
+- Added a `YAML` class: a self-contained YAML parser and writer converting between YAML text and `var` (`parse`, `fromString`, `toString`, `writeToStream`, `FormatOptions`), with core-schema type resolution, block/flow collections, block scalars, and anchors/aliases/merge keys
+
 ### Graphics
 
 - Added a native WebGPU `GraphicsContext` backend for Emscripten via the Emdawnwebgpu port (`RIVE_WEBGPU=2` + `--use-port=emdawnwebgpu`, enabled with the `ENABLE_EMSCRIPTEN_WEBGPU` parameter of `yup_standalone_app`), rendering Rive content through the browser's WebGPU API without Dawn

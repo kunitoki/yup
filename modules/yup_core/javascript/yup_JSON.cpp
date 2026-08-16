@@ -317,8 +317,12 @@ struct JSONParser
                 throwError ("Expected a property name in double-quotes", errorLocation);
 
             errorLocation = currentLocation;
-            Identifier propertyName (parseString ('"'));
 
+            auto propertyString = parseString ('"');
+            if (propertyString.isEmpty())
+                throwError ("Property name cannot be empty", errorLocation);
+
+            auto propertyName = Identifier (propertyString);
             if (! propertyName.isValid())
                 throwError ("Invalid property name", errorLocation);
 
@@ -418,7 +422,7 @@ struct JSONFormatter
                     break;
 
                 default:
-                    if (c >= 32 && c < 127)
+                    if (CharacterFunctions::isAsciiPrintable (c))
                     {
                         out << (char) c;
                     }
