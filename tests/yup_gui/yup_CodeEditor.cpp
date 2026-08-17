@@ -1292,11 +1292,12 @@ TEST (CodeEditorTest, ScrollToLineUpdatesScrollOffsetAndShapingWindow)
     CodeDocument document;
     CodeEditor editor (document);
 
+    editor.setSize (400, 200);
+
     String text;
     for (int i = 0; i < 100; ++i)
         text += "line " + String (i) + "\n";
     editor.setText (text);
-    editor.setSize (400, 200);
 
     editor.scrollToLine (50);
 
