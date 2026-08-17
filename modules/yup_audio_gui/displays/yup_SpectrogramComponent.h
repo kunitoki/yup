@@ -28,7 +28,7 @@ namespace yup
     ARGB colors for spectrogram visualization.
 
     The default color map produces a professional heatmap gradient:
-    black → dark blue → blue → cyan → green → yellow → red → white.
+    black > dark blue > blue > cyan > green > yellow > red > white.
 
     @tags{Audio}
 */
@@ -39,11 +39,11 @@ public:
     /** Predefined color map types. */
     enum class Type
     {
-        heatmap,   ///< Black → blue → cyan → green → yellow → red → white
-        grayscale, ///< Black → gray → white
-        cool,      ///< Black → blue → cyan → white
-        warm,      ///< Black → red → orange → yellow → white
-        viridis    ///< Perceptually uniform blue → green → yellow
+        heatmap,   ///< Black > blue > cyan > green > yellow > red > white
+        grayscale, ///< Black > gray > white
+        cool,      ///< Black > blue > cyan > white
+        warm,      ///< Black > red > orange > yellow > white
+        viridis    ///< Perceptually uniform blue > green > yellow
     };
 
     //==============================================================================
@@ -68,6 +68,16 @@ public:
     /** Returns the number of color stops in the lookup table. */
     int getNumColorStops() const noexcept { return numColorStops; }
 
+    /** Returns the raw ARGB color lookup table (0xAARRGGBB per entry).
+
+        The table holds exactly getNumColorStops() entries sampled from the
+        gradient, which is what map() interpolates between. Uploading this table
+        to the GPU lets a shader perform the same color mapping.
+
+        @return a span over the color table.
+    */
+    Span<const uint32> getColorTable() const noexcept { return colorTable; }
+
 private:
     //==============================================================================
     void buildHeatmap();
@@ -91,10 +101,6 @@ private:
     scrolling waterfall display. Each new row of FFT data is rendered at the
     top of the display and previous rows scroll downward.
 
-    The spectrogram image is stored in a GPU texture which is updated each frame
-    by invalidating the existing texture and letting the renderer recreate it.
-    Frequency and decibel grid lines are drawn as vector overlays.
-
     Example usage:
 
     @code
@@ -105,7 +111,6 @@ private:
         spectrogram.setFrequencyRange (20.0f, 20000.0f);
         spectrogram.setDecibelRange (-100.0f, 0.0f);
         spectrogram.setColorMap (SpectrogramColorMap::Type::heatmap);
-        spectrogram.setUpdateRate (25);
 
         // In audio callback:
         analyzerState.pushSamples (audioData, numSamples);
@@ -113,16 +118,16 @@ private:
 
     @see SpectrumAnalyzerState, SpectrumAnalyzerComponent, SpectrogramColorMap
 */
-class YUP_API SpectrogramComponent
-    : public Component
-    , public Timer
+class YUP_API SpectrogramComponent : public Component
 {
 public:
     //==============================================================================
     /** Display constants. */
     enum
     {
-        defaultSpectrogramWidth = 512 ///< Default number of horizontal frequency bins.
+        defaultSpectrogramWidth = 1024,      ///< Default number of horizontal frequency bins.
+        defaultSpectrogramMagnitudes = 2048, ///< Default number of magnitudes per FFT (must be >= defaultSpectrogramWidth).
+        defaultColorLutSize = 256            ///< Default number of color stops in the color lookup table.
     };
 
     //==============================================================================
@@ -156,14 +161,20 @@ public:
     WindowType getWindowType() const noexcept { return currentWindowType; }
 
     //==============================================================================
-    /** Sets the display update rate in Hz.
+    /** Sets the waterfall scroll speed, as a multiplier of the realtime FFT
+        row rate (sampleRate / hopSize).
 
-        @param hz    update rate (typical values: 10-30 Hz)
+        A multiplier of 1.0 (the default) keeps the waterfall locked to the
+        audio: new rows slide in exactly as fast as the FFT produces them.
+        Values above 1.0 scroll faster than realtime (rows are dropped at the
+        bottom sooner), values below 1.0 scroll slower. 0.0 pauses the scroll.
+
+        @param scrollSpeedMultiplier   the scroll speed multiplier (clamped to >= 0)
     */
-    void setUpdateRate (int hz);
+    void setScrollSpeed (float scrollSpeedMultiplier);
 
-    /** Returns the current update rate in Hz. */
-    int getUpdateRate() const noexcept;
+    /** Returns the current scroll speed multiplier (1.0 = realtime). */
+    float getScrollSpeed() const noexcept { return scrollSpeedMultiplier; }
 
     //==============================================================================
     /** Sets the frequency range for the display.
@@ -217,7 +228,7 @@ public:
     /** Sets the number of FFT frames kept in the scrolling history.
 
         This determines how many past FFT frames are visible in the display.
-        The spectrogram image height is resized to match this value.
+        The history canvases are resized to match this value.
 
         @param numFrames    number of history frames (minimum: 4, default: matches component height)
     */
@@ -243,14 +254,16 @@ public:
     //==============================================================================
     /** Returns the current spectrogram image.
 
-        The returned image contains the waterfall history used by paint() when
-        rendering the component. The image may be invalid until the spectrogram
-        has allocated its history buffer, for example after setNumHistoryFrames()
-        or after processing FFT data on a visible component.
+        The returned image contains the waterfall history held in the current
+        history canvas. This performs a GPU readback, which is slower than
+        rendering from the component's cached GPU texture (via paint()); prefer
+        painting the component directly when possible. The image is invalid
+        until the component has a live GPU render context and its history
+        canvases have been created (e.g. after the first paint).
 
         @returns the current spectrogram image.
     */
-    Image getSpectrogramImage() const noexcept { return spectrogramImage; }
+    Image getSpectrogramImage();
 
     //==============================================================================
     /** @internal */
@@ -258,35 +271,64 @@ public:
     /** @internal */
     void resized() override;
     /** @internal */
-    void timerCallback() override;
+    void refreshDisplay (double lastFrameTimeSeconds) override;
 
 private:
     //==============================================================================
     void processFFT();
-    void updateSpectrogramImage();
-    void scrollSpectrogram();
-    void writeMagnitudeRow();
+    void updateFrequencyMapping();
+    bool ensureGpuTargets (GraphicsContext& context);
+    void ensureWaterfallPipeline();
+    void applyPendingRows();
+    void advanceScroll();
+    float getRowRate() const noexcept;
     void initializeFFTBuffers();
     void generateWindow();
-    void ensureImageSize();
 
     float frequencyToX (float frequency, float width) const noexcept;
     void drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds);
+    void drawFrequencyGridCached (Graphics& g, const Rectangle<float>& bounds);
 
     //==============================================================================
     SpectrumAnalyzerState& analyzerState;
 
-    // FFT processing (performed on UI thread)
     std::unique_ptr<FFTProcessor> fftProcessor;
     std::vector<float> fftInputBuffer;
     std::vector<float> fftOutputBuffer;
     std::vector<float> windowBuffer;
-    std::vector<float> magnitudeBuffer;   // Per-bin magnitudes from FFT
-    std::vector<float> displayMagnitudes; // Magnitudes mapped to display bins
+    std::vector<float> magnitudeBuffer;
+    std::vector<float> displayMagnitudes;
 
-    // Spectrogram image
-    Image spectrogramImage;
+    // Spectrogram color map
     SpectrogramColorMap colorMap;
+
+    // Precomputed log-frequency > FFT-bin mapping
+    struct DisplayBinMapping
+    {
+        float startBin = 0.0f;
+        float endBin = 0.0f;
+        float exactBin = 0.0f;
+    };
+
+    std::vector<DisplayBinMapping> displayBinMapping;
+
+    // GPU waterfall state
+    GpuDevice::Ptr gpuDevice;
+    GpuPipeline::Ptr waterfallPipeline;
+    GpuTarget::Ptr gpuTargets[2];
+    GpuTexture::Ptr displayTexture;
+    std::vector<std::vector<float>> pendingRows;
+    std::vector<float> rowDataCache;  // Reused uniform buffer (shader mags[defaultSpectrogramMagnitudes])
+    std::vector<uint32> lutDataCache; // Reused color LUT (shader lut[defaultColorLutSize])
+    bool lutNeedsRefresh = true;      // Re-fill lutDataCache on the next apply
+    int pingPongIndex = 0;
+    float scrollOffset = 0.0f;
+    uint32 lastPaintTimeMs = 0;
+
+    // Cached frequency grid (frequency lines + labels).
+    GpuCanvas::Ptr gridCanvas;
+    Rectangle<float> gridCacheBounds;
+    bool gridNeedsRedraw = true;
 
     // Configuration
     WindowType currentWindowType = WindowType::hann;
@@ -300,6 +342,7 @@ private:
     float minDecibels = -100.0f;
     float maxDecibels = 0.0f;
     double sampleRate = 44100.0;
+    float scrollSpeedMultiplier = 1.0f;
 
     // Window compensation
     float windowGain = 1.0f;

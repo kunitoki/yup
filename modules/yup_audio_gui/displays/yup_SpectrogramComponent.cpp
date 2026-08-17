@@ -22,6 +22,53 @@
 namespace yup
 {
 
+namespace
+{
+
+//==============================================================================
+/*
+
+// The waterfall shader is precompiled into a .ysl bundle embedded in
+// yup_SpectrogramComponentShader.inc (do not edit by hand). Regenerate it after
+// changing yup_SpectrogramComponentShader.vert / .frag with:
+
+    build/mac/_host_tools/shader_bundler/yup_shader_bundler \
+       --vert  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.vert \
+       --frag  modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.frag \
+       --output /tmp/yup_SpectrogramComponentShader.ysl \
+       --target-langs glsl,essl,hlsl,msl,wgsl
+
+// then embed the bundle bytes into the .inc (keep the two-line comment header):
+
+   xxd -i /tmp/yup_SpectrogramComponentShader.ysl \
+       | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' \
+       > /tmp/yup_SpectrogramComponentShader.inc.body
+   { echo '// Generated shader bundle (yup_SpectrogramComponentShader.ysl) - do not edit by hand.'; \
+     echo '// Regenerate with the command at the top of yup_SpectrogramComponent.cpp.'; \
+     cat /tmp/yup_SpectrogramComponentShader.inc.body; } \
+       > modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.inc
+
+*/
+
+// Embedded precompiled shader bundle (.ysl), consumed by ShaderBundle::loadFromData().
+constexpr uint8_t kSpectrogramShaderBundle[] = {
+#include "yup_SpectrogramComponentShader.inc"
+};
+
+// Uniforms for the waterfall shader (std140: eight floats).
+struct WaterfallParams
+{
+    float numRows;
+    float width; // Waterfall texture width in texels
+    float height;
+    float bins; // Number of magnitude bins per row
+    float pad0;
+    float pad1;
+    float pad2;
+    float pad3;
+};
+} // namespace
+
 //==============================================================================
 // SpectrogramColorMap
 //==============================================================================
@@ -158,13 +205,14 @@ SpectrogramComponent::SpectrogramComponent (SpectrumAnalyzerState& state)
 
     initializeFFTBuffers();
     generateWindow();
+    updateFrequencyMapping();
 
-    startTimerHz (25); // 25 FPS updates
+    rowDataCache.resize (defaultSpectrogramMagnitudes, 0.0f);
+    lutDataCache.resize (defaultColorLutSize, 0u);
 }
 
 SpectrogramComponent::~SpectrogramComponent()
 {
-    stopTimer();
 }
 
 //==============================================================================
@@ -179,23 +227,111 @@ void SpectrogramComponent::initializeFFTBuffers()
     magnitudeBuffer.resize (static_cast<size_t> (numBins), 0.0f);
 }
 
-void SpectrogramComponent::ensureImageSize()
+//==============================================================================
+void SpectrogramComponent::applyPendingRows()
 {
-    const int currentWidth = spectrogramImage.isValid() ? spectrogramImage.getWidth() : 0;
-    const int currentHeight = spectrogramImage.isValid() ? spectrogramImage.getHeight() : 0;
+    if (pendingRows.empty())
+        return;
 
-    if (currentWidth != spectrogramWidth || currentHeight != numHistoryFrames)
+    if (waterfallPipeline == nullptr || gpuTargets[0] == nullptr || gpuTargets[1] == nullptr)
     {
-        spectrogramImage = Image (spectrogramWidth, numHistoryFrames, PixelFormat::RGBA);
-        spectrogramImage.fill (0xFF0a0a0a);
+        pendingRows.clear();
+        return;
     }
+
+    const int numRows = static_cast<int> (pendingRows.size());
+    const int maxShaderRows = jmax (1, static_cast<int> (rowDataCache.size()) / spectrogramWidth);
+    const int appliedRows = jmin (numRows, maxShaderRows);
+
+    auto& previous = gpuTargets[pingPongIndex];
+    auto& current = gpuTargets[pingPongIndex ^ 1];
+
+    const WaterfallParams params { static_cast<float> (appliedRows),
+                                   static_cast<float> (spectrogramWidth * 2), // render width
+                                   static_cast<float> (numHistoryFrames),
+                                   static_cast<float> (spectrogramWidth), // bins
+                                   0.0f,
+                                   0.0f,
+                                   0.0f,
+                                   0.0f };
+
+    for (int row = 0; row < appliedRows; ++row)
+    {
+        const auto& magnitudes = pendingRows[static_cast<size_t> (row)];
+        std::copy (magnitudes.begin(),
+                   magnitudes.begin() + spectrogramWidth,
+                   rowDataCache.begin() + static_cast<std::ptrdiff_t> (row) * spectrogramWidth);
+    }
+
+    if (lutNeedsRefresh)
+    {
+        const auto colorTable = colorMap.getColorTable();
+        std::copy (colorTable.begin(),
+                   colorTable.begin() + static_cast<std::ptrdiff_t> (jmin (colorTable.size(), lutDataCache.size())),
+                   lutDataCache.begin());
+        lutNeedsRefresh = false;
+    }
+
+    auto frame = GpuFrame::begin (gpuDevice);
+    if (frame.isValid())
+    {
+        auto pass = current->beginRenderPass (frame, { false, GpuColor::transparentBlack() });
+        if (pass.isValid())
+        {
+            pass.setPipeline (waterfallPipeline);
+            pass.setTexture (0, 0, previous->asTexture());
+            pass.setUniformBuffer (0, 2, &params, sizeof (params));
+            pass.setUniformBuffer (0, 3, rowDataCache.data(), rowDataCache.size() * sizeof (float));
+            pass.setUniformBuffer (0, 4, lutDataCache.data(), lutDataCache.size() * sizeof (uint32));
+
+            if (pass.draw (3) && pass.finish() && frame.submit())
+            {
+                displayTexture = current->asTexture();
+
+                pingPongIndex ^= 1;
+                scrollOffset -= static_cast<float> (appliedRows);
+            }
+        }
+    }
+
+    pendingRows.erase (pendingRows.begin(), pendingRows.begin() + appliedRows);
 }
 
-//==============================================================================
-void SpectrogramComponent::timerCallback()
+void SpectrogramComponent::advanceScroll()
+{
+    const auto now = Time::getMillisecondCounter();
+    const float elapsedSeconds = lastPaintTimeMs == 0 ? 0.0f : static_cast<float> (now - lastPaintTimeMs) / 1000.0f;
+    lastPaintTimeMs = now;
+
+    const float rowRate = getRowRate();
+    const float advance = rowRate > 0.0f ? rowRate * scrollSpeedMultiplier * jlimit (0.0f, 0.25f, elapsedSeconds) : 0.0f;
+    scrollOffset = jlimit (-1.0f, 0.0f, scrollOffset + advance);
+}
+
+void SpectrogramComponent::setScrollSpeed (float scrollSpeedMultiplier)
+{
+    this->scrollSpeedMultiplier = jmax (0.0f, scrollSpeedMultiplier);
+}
+
+void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
 {
     if (! isShowing())
+    {
+        analyzerState.reset();
         return;
+    }
+
+    // If the analysis fell behind the audio (e.g. slow frames), skip the stale
+    // rows so the display keeps tracking the most recent audio instead of the
+    // latency accumulating over time.
+    const int numReady = analyzerState.getNumAvailableSamples();
+    const int hopSize = analyzerState.getHopSize();
+    if (hopSize > 0 && numReady > fftSize)
+    {
+        const int skipRows = (numReady - fftSize) / hopSize;
+        for (int i = 0; i < skipRows && analyzerState.isFFTDataReady(); ++i)
+            analyzerState.getFFTData (fftInputBuffer.data());
+    }
 
     bool hasNewData = false;
     int fftCount = 0;
@@ -205,14 +341,26 @@ void SpectrogramComponent::timerCallback()
     while (analyzerState.isFFTDataReady() && fftCount < maxFFTsPerFrame)
     {
         processFFT();
+
+        pendingRows.push_back (displayMagnitudes);
+
         hasNewData = true;
         ++fftCount;
     }
 
-    if (hasNewData)
-        updateSpectrogramImage();
+    // Defensive bound: never let the pending queue grow unboundedly if paint()
+    // is ever throttled - keep only the newest rows.
+    if (pendingRows.size() > 16)
+        pendingRows.erase (pendingRows.begin(), pendingRows.begin() + static_cast<std::ptrdiff_t> (pendingRows.size() - 16));
 
-    repaint();
+    if (hasNewData)
+        repaint();
+}
+
+float SpectrogramComponent::getRowRate() const noexcept
+{
+    const int hopSize = analyzerState.getHopSize();
+    return hopSize > 0 ? static_cast<float> (sampleRate) / static_cast<float> (hopSize) : 0.0f;
 }
 
 void SpectrogramComponent::processFFT()
@@ -227,8 +375,7 @@ void SpectrogramComponent::processFFT()
     }
 
     // Apply window function
-    for (int i = 0; i < fftSize; ++i)
-        fftInputBuffer[static_cast<size_t> (i)] *= windowBuffer[static_cast<size_t> (i)];
+    FloatVectorOperations::multiply (fftInputBuffer.data(), windowBuffer.data(), fftInputBuffer.data(), fftSize);
 
     // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
@@ -243,53 +390,19 @@ void SpectrogramComponent::processFFT()
         magnitudeBuffer[static_cast<size_t> (binIndex)] = std::sqrt (real * real + imag * imag) * windowGain;
     }
 
-    // Map FFT bins to display bins using logarithmic frequency scaling
-    const int numDisplayBins = spectrogramWidth;
-
-    for (int i = 0; i < numDisplayBins; ++i)
+    // Map FFT bins to display bins using the precomputed logarithmic mapping.
+    for (int i = 0; i < spectrogramWidth; ++i)
     {
-        const float proportion = static_cast<float> (i) / static_cast<float> (numDisplayBins - 1);
-        const float logFreq = logMinFrequency + proportion * (logMaxFrequency - logMinFrequency);
-        const float centerFreq = std::pow (10.0f, logFreq);
-
-        float freqRangeStart, freqRangeEnd;
-
-        if (i == 0)
-        {
-            freqRangeStart = minFrequency;
-            const float nextLogFreq = logMinFrequency + (static_cast<float> (i + 1) / static_cast<float> (numDisplayBins - 1)) * (logMaxFrequency - logMinFrequency);
-            const float nextFreq = std::pow (10.0f, nextLogFreq);
-            freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
-        }
-        else if (i == numDisplayBins - 1)
-        {
-            const float prevLogFreq = logMinFrequency + (static_cast<float> (i - 1) / static_cast<float> (numDisplayBins - 1)) * (logMaxFrequency - logMinFrequency);
-            const float prevFreq = std::pow (10.0f, prevLogFreq);
-            freqRangeStart = (prevFreq + centerFreq) * 0.5f;
-            freqRangeEnd = maxFrequency;
-        }
-        else
-        {
-            const float prevLogFreq = logMinFrequency + (static_cast<float> (i - 1) / static_cast<float> (numDisplayBins - 1)) * (logMaxFrequency - logMinFrequency);
-            const float nextLogFreq = logMinFrequency + (static_cast<float> (i + 1) / static_cast<float> (numDisplayBins - 1)) * (logMaxFrequency - logMinFrequency);
-            const float prevFreq = std::pow (10.0f, prevLogFreq);
-            const float nextFreq = std::pow (10.0f, nextLogFreq);
-            freqRangeStart = (prevFreq + centerFreq) * 0.5f;
-            freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
-        }
-
-        const float startBin = (freqRangeStart * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-        const float endBin = (freqRangeEnd * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-        const float binSpan = endBin - startBin;
+        const auto& mapping = displayBinMapping[static_cast<size_t> (i)];
+        const float binSpan = mapping.endBin - mapping.startBin;
 
         float magnitude = 0.0f;
 
         if (binSpan <= 1.5f)
         {
-            const float exactBin = (centerFreq * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-            const int bin1 = jlimit (0, numBins - 1, static_cast<int> (exactBin));
+            const int bin1 = jlimit (0, numBins - 1, static_cast<int> (mapping.exactBin));
             const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
-            const float fraction = exactBin - static_cast<float> (bin1);
+            const float fraction = mapping.exactBin - static_cast<float> (bin1);
 
             const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
             const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
@@ -297,8 +410,8 @@ void SpectrogramComponent::processFFT()
         }
         else
         {
-            const int binStart = jlimit (0, numBins - 1, static_cast<int> (startBin));
-            const int binEnd = jlimit (0, numBins - 1, static_cast<int> (endBin + 0.5f));
+            const int binStart = jlimit (0, numBins - 1, static_cast<int> (mapping.startBin));
+            const int binEnd = jlimit (0, numBins - 1, static_cast<int> (mapping.endBin + 0.5f));
 
             for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
                 magnitude = jmax (magnitude, magnitudeBuffer[static_cast<size_t> (binIndex)]);
@@ -318,46 +431,124 @@ void SpectrogramComponent::processFFT()
     }
 }
 
-void SpectrogramComponent::updateSpectrogramImage()
+void SpectrogramComponent::updateFrequencyMapping()
 {
-    ensureImageSize();
+    displayBinMapping.resize (static_cast<size_t> (spectrogramWidth));
 
-    scrollSpectrogram();
-    writeMagnitudeRow();
+    const int numDisplayBins = spectrogramWidth;
+    const float invLastBin = 1.0f / static_cast<float> (numDisplayBins - 1);
 
-    // Invalidate so the GPU texture is recreated from updated pixel data
-    spectrogramImage.invalidateTexture();
-}
-
-void SpectrogramComponent::scrollSpectrogram()
-{
-    auto raw = spectrogramImage.getRawData();
-    const int width = spectrogramImage.getWidth();
-    const int height = spectrogramImage.getHeight();
-    const int stride = spectrogramImage.getPixelStride();
-    const int rowBytes = width * stride;
-
-    // Shift all rows down by one (row 0 stays at top, row height-1 falls off)
-    if (height > 1)
+    for (int i = 0; i < numDisplayBins; ++i)
     {
-        std::memmove (
-            raw.data() + rowBytes,
-            raw.data(),
-            static_cast<size_t> ((height - 1)) * static_cast<size_t> (rowBytes));
+        const float proportion = static_cast<float> (i) * invLastBin;
+        const float logFreq = logMinFrequency + proportion * (logMaxFrequency - logMinFrequency);
+        const float centerFreq = std::pow (10.0f, logFreq);
+
+        const float prevProportion = static_cast<float> (i - 1) * invLastBin;
+        const float nextProportion = static_cast<float> (i + 1) * invLastBin;
+
+        float freqRangeStart, freqRangeEnd;
+
+        if (i == 0)
+        {
+            freqRangeStart = minFrequency;
+            freqRangeEnd = (centerFreq + std::pow (10.0f, logMinFrequency + nextProportion * (logMaxFrequency - logMinFrequency))) * 0.5f;
+        }
+        else if (i == numDisplayBins - 1)
+        {
+            freqRangeStart = (std::pow (10.0f, logMinFrequency + prevProportion * (logMaxFrequency - logMinFrequency)) + centerFreq) * 0.5f;
+            freqRangeEnd = maxFrequency;
+        }
+        else
+        {
+            freqRangeStart = (std::pow (10.0f, logMinFrequency + prevProportion * (logMaxFrequency - logMinFrequency)) + centerFreq) * 0.5f;
+            freqRangeEnd = (centerFreq + std::pow (10.0f, logMinFrequency + nextProportion * (logMaxFrequency - logMinFrequency))) * 0.5f;
+        }
+
+        auto& mapping = displayBinMapping[static_cast<size_t> (i)];
+        mapping.startBin = (freqRangeStart * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
+        mapping.endBin = (freqRangeEnd * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
+        mapping.exactBin = (centerFreq * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
     }
 }
 
-void SpectrogramComponent::writeMagnitudeRow()
+bool SpectrogramComponent::ensureGpuTargets (GraphicsContext& context)
 {
-    auto& bitmap = spectrogramImage.getPixelData();
-    const int width = spectrogramImage.getWidth();
+    if (gpuTargets[0] != nullptr && gpuTargets[1] != nullptr)
+        return true;
 
-    for (int x = 0; x < width; ++x)
+    if (! context.isGpuAvailable())
+        return false;
+
+    gpuDevice = context.getGpuDevice();
+    if (gpuDevice == nullptr)
+        return false;
+
+    // The waterfall texture is rendered at a higher horizontal resolution than
+    // the bin count and interpolated in the shader for a smooth (antialiased)
+    // frequency axis.
+    const int renderWidth = spectrogramWidth * 2;
+
+    const auto backgroundColor = Color (0xFF0a0a0a);
+
+    gpuTargets[0] = GpuTarget::create (gpuDevice, renderWidth, numHistoryFrames);
+    gpuTargets[1] = GpuTarget::create (gpuDevice, renderWidth, numHistoryFrames);
+
+    if (gpuTargets[0] == nullptr || gpuTargets[1] == nullptr)
     {
-        const float magnitude = displayMagnitudes[static_cast<size_t> (x)];
-        const uint32 color = colorMap.map (magnitude);
-        bitmap.setPixel (x, 0, color);
+        gpuTargets[0] = nullptr;
+        gpuTargets[1] = nullptr;
+        return false;
     }
+
+    const GpuRenderOptions clearOptions { true, backgroundColor };
+    for (auto& target : gpuTargets)
+    {
+        auto frame = GpuFrame::begin (gpuDevice);
+        if (frame.isValid())
+        {
+            auto pass = target->beginRenderPass (frame, clearOptions);
+            pass.finish();
+            frame.submit();
+        }
+    }
+
+    ensureWaterfallPipeline();
+
+    pingPongIndex = 0;
+    displayTexture = gpuTargets[0]->asTexture();
+
+    scrollOffset = 0.0f;
+    lastPaintTimeMs = 0;
+
+    return true;
+}
+
+void SpectrogramComponent::ensureWaterfallPipeline()
+{
+    if (waterfallPipeline != nullptr || gpuDevice == nullptr)
+        return;
+
+    auto loaded = ShaderBundle::loadFromData (kSpectrogramShaderBundle, sizeof (kSpectrogramShaderBundle));
+    if (loaded.failed())
+    {
+        YUP_DBG ("Failed to load precompiled waterfall shader bundle: " << loaded.getErrorMessage());
+
+        jassertfalse; // Waterfall shader bundle failed to load - no waterfall will be rendered.
+        return;
+    }
+
+    GpuPipelineOptions options;
+    options.colorTargetCount = 1;
+    options.colorTargets[0].format = GpuTextureFormat::rgba8unorm;
+    options.colorTargets[0].blendEnabled = false;
+
+    auto result = GpuPipeline::compileFromBundle (gpuDevice, loaded.getReference(), options);
+
+    if (result.wasOk())
+        waterfallPipeline = result.getValue();
+    else
+        jassertfalse; // Waterfall shader failed to compile - no waterfall will be rendered.
 }
 
 void SpectrogramComponent::generateWindow()
@@ -374,18 +565,31 @@ void SpectrogramComponent::generateWindow()
 //==============================================================================
 void SpectrogramComponent::paint (Graphics& g)
 {
+    // Lazily move to the GPU path on the first paint that has a live context.
+    if (gpuTargets[0] == nullptr && g.getGraphicsContext().isGpuAvailable())
+        ensureGpuTargets (g.getGraphicsContext());
+
+    // Apply any FFT rows queued since the last timer tick.
+    applyPendingRows();
+
+    // Advance the fractional scroll offset on the GPU path.
+    advanceScroll();
+
     const auto bounds = getLocalBounds();
 
     // Background
     g.setFillColor (Color (0xFF0a0a0a));
     g.fillAll();
 
-    // Draw the spectrogram image (stretched to fill the component)
-    if (spectrogramImage.isValid())
-        g.drawImage (spectrogramImage, bounds);
+    // Draw the spectrogram, stretched to fill the component.
+    if (displayTexture != nullptr)
+    {
+        const float scaleY = bounds.getHeight() / static_cast<float> (displayTexture->getHeight());
+        g.drawTexture (displayTexture, Rectangle<float> (bounds.getX(), bounds.getY() + scrollOffset * scaleY, bounds.getWidth(), bounds.getHeight()));
+    }
 
-    // Draw grid overlays
-    drawFrequencyGrid (g, bounds);
+    // Draw grid overlays (cached offscreen, only re-rendered on changes)
+    drawFrequencyGridCached (g, bounds);
 }
 
 void SpectrogramComponent::resized()
@@ -399,9 +603,9 @@ void SpectrogramComponent::drawFrequencyGrid (Graphics& g, const Rectangle<float
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (9.0f);
 
     const int multipliers[] = { 1, 2, 5 };
-    const int powers[] = { 1, 10, 100, 1000, 10000 };
+    const int powers[] = { 1, 10, 100, 200, 1000, 2000, 10000 };
 
-    for (int brightness = 0; brightness < 3; ++brightness)
+    for (int brightness = 0; brightness < numElementsInArray (multipliers); ++brightness)
     {
         Color lineColor;
         float lineWidth;
@@ -427,7 +631,7 @@ void SpectrogramComponent::drawFrequencyGrid (Graphics& g, const Rectangle<float
         g.setStrokeColor (lineColor);
         g.setStrokeWidth (lineWidth);
 
-        for (int power = 0; power < 5; ++power)
+        for (int power = 0; power < numElementsInArray (powers); ++power)
         {
             float freq = static_cast<float> (multipliers[brightness] * powers[power]);
 
@@ -466,6 +670,34 @@ float SpectrogramComponent::frequencyToX (float frequency, float width) const no
     return jmap (std::log10 (frequency), logMinFrequency, logMaxFrequency, 0.0f, width);
 }
 
+void SpectrogramComponent::drawFrequencyGridCached (Graphics& g, const Rectangle<float>& bounds)
+{
+    const Rectangle<float> cacheBounds (0.0f, 0.0f, static_cast<float> (static_cast<int> (bounds.getWidth())), static_cast<float> (static_cast<int> (bounds.getHeight())));
+
+    if (gridCanvas == nullptr || gridNeedsRedraw || gridCacheBounds != cacheBounds)
+    {
+        gridCanvas = GpuCanvas::create (g.getGraphicsContext(),
+                                        static_cast<int> (cacheBounds.getWidth()),
+                                        static_cast<int> (cacheBounds.getHeight()),
+                                        Colors::transparentBlack);
+
+        if (gridCanvas != nullptr)
+        {
+            auto& gridGraphics = gridCanvas->beginDraw();
+            drawFrequencyGrid (gridGraphics, cacheBounds);
+            gridCanvas->commit();
+
+            gridCacheBounds = cacheBounds;
+            gridNeedsRedraw = false;
+        }
+    }
+
+    if (gridCanvas != nullptr)
+        g.drawTexture (gridCanvas->asTexture(), bounds);
+    else
+        drawFrequencyGrid (g, bounds);
+}
+
 //==============================================================================
 void SpectrogramComponent::setFFTSize (int size)
 {
@@ -478,6 +710,7 @@ void SpectrogramComponent::setFFTSize (int size)
 
         initializeFFTBuffers();
         generateWindow();
+        updateFrequencyMapping();
 
         clearHistory();
         repaint();
@@ -491,18 +724,6 @@ void SpectrogramComponent::setWindowType (WindowType type)
         currentWindowType = type;
         needsWindowUpdate = true;
     }
-}
-
-void SpectrogramComponent::setUpdateRate (int hz)
-{
-    stopTimer();
-    startTimerHz (jmax (1, jmin (60, hz)));
-}
-
-int SpectrogramComponent::getUpdateRate() const noexcept
-{
-    const int intervalMs = getTimerInterval();
-    return isTimerRunning() ? 1000 / intervalMs : 0;
 }
 
 void SpectrogramComponent::setFrequencyRange (float minFreq, float maxFreq)
@@ -520,6 +741,9 @@ void SpectrogramComponent::setFrequencyRange (float minFreq, float maxFreq)
     maxFrequency = newMaxFrequency;
     logMinFrequency = std::log10 (minFrequency);
     logMaxFrequency = std::log10 (maxFrequency);
+
+    updateFrequencyMapping();
+    gridNeedsRedraw = true;
 
     clearHistory();
 }
@@ -550,12 +774,14 @@ void SpectrogramComponent::setSampleRate (double rate)
         return;
 
     sampleRate = newSampleRate;
+    updateFrequencyMapping();
     clearHistory();
 }
 
 void SpectrogramComponent::setColorMap (SpectrogramColorMap::Type type)
 {
     colorMap = SpectrogramColorMap (type);
+    lutNeedsRefresh = true; // Re-fill the cached LUT on the next apply
     clearHistory();
 }
 
@@ -563,9 +789,13 @@ void SpectrogramComponent::setNumHistoryFrames (int numFrames)
 {
     numHistoryFrames = jmax (4, numFrames);
 
-    // Recreate the image with the new height
-    spectrogramImage = Image (spectrogramWidth, numHistoryFrames, PixelFormat::RGBA);
-    spectrogramImage.fill (Color (0xFF0a0a0a).getARGB());
+    pendingRows.clear();
+    scrollOffset = 0.0f;
+    lastPaintTimeMs = 0;
+
+    gpuTargets[0] = nullptr;
+    gpuTargets[1] = nullptr;
+    displayTexture = nullptr;
 
     repaint();
 }
@@ -582,10 +812,23 @@ float SpectrogramComponent::getOverlapFactor() const noexcept
 
 void SpectrogramComponent::clearHistory()
 {
-    if (spectrogramImage.isValid())
-        spectrogramImage.fill (Color (0xFF0a0a0a).getARGB());
+    pendingRows.clear();
+    scrollOffset = 0.0f;
+    lastPaintTimeMs = 0;
+
+    gpuTargets[0] = nullptr;
+    gpuTargets[1] = nullptr;
+    displayTexture = nullptr;
 
     repaint();
+}
+
+Image SpectrogramComponent::getSpectrogramImage()
+{
+    if (gpuTargets[pingPongIndex] != nullptr)
+        return Image::fromTarget (*gpuTargets[pingPongIndex]);
+
+    return {};
 }
 
 } // namespace yup
