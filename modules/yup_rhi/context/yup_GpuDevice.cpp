@@ -128,7 +128,7 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
 
     desc.size = (uint32_t) byteSize;
     desc.data = data;
-    desc.immutable = true;
+    desc.immutable = false;
     desc.label = "GpuBuffer";
 
     auto buffer = oreCtx->makeBuffer (desc);

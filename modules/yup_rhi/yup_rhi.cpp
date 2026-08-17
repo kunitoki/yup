@@ -24,10 +24,16 @@
 //==============================================================================
 #if YUP_WINDOWS
 #if YUP_RIVE_USE_D3D
+#include <algorithm>
 #include <array>
+#include <string>
+
+#include <d3dcompiler.h>
 #include <dxgi1_2.h>
+
 #include <rive/renderer/d3d11/d3d11.hpp>
 #endif
+
 #if YUP_RIVE_USE_OPENGL
 #include <rive/renderer/gl/gles3.hpp>
 #endif
@@ -47,7 +53,9 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #endif
+
 #include <rive/renderer/gl/gles3.hpp>
+
 #endif
 
 #if YUP_RIVE_USE_DAWN
