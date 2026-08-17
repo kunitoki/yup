@@ -225,6 +225,21 @@ public:
     */
     const Font& getDefaultIconFont() const;
 
+    //==============================================================================
+    /**
+        Sets the default monospace text font for the application theme.
+
+        @param font  The font to set as the default font (for monospace text).
+    */
+    void setDefaultMonospaceFont (Font font);
+
+    /**
+        Returns the default monospace text font for the application theme.
+
+        @returns  The default monospace text font.
+    */
+    const Font& getDefaultMonospaceFont() const;
+
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
 
@@ -234,6 +249,7 @@ private:
     std::unordered_map<Identifier, float> defaultMetrics;
     Font defaultFont;
     Font defaultIconFont;
+    Font defaultMonospaceFont;
 
     YUP_LEAK_DETECTOR (ApplicationTheme)
 };

@@ -25,6 +25,26 @@ namespace yup
 namespace
 {
 
+//==============================================================================
+
+#if YUP_MAC || YUP_IOS
+ResultValue<Font> loadSystemUIFont (CTFontUIFontType fontType)
+{
+    if (auto systemFont = CTFontCreateUIFontForLanguage (fontType, 0.0, nullptr))
+    {
+        auto releaseSystemFont = ErasedScopeGuard ([systemFont]
+        {
+            CFRelease (systemFont);
+        });
+
+        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (systemFont)), true, 400, 100))
+            return yup::makeResultValueOk (Font (std::move (font)));
+    }
+
+    return yup::makeResultValueFail ("Unable to load the system UI font");
+}
+#endif
+
 uint32_t axisTagFromString (StringRef tagName)
 {
     uint32_t tag = 0;
@@ -67,37 +87,116 @@ Font::Font (rive::rcp<rive::Font> font, float height)
 
 //==============================================================================
 
-Result Font::loadFromData (const MemoryBlock& fontBytes)
+ResultValue<Font> Font::loadFontFromData (const MemoryBlock& fontBytes)
 {
     if (fontBytes.isEmpty())
-        return Result::fail ("Unable to instantiate font from empty data");
+        return yup::makeResultValueFail ("Unable to instantiate font from empty data");
 
-    font = HBFont::Decode (rive::make_span (static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize()));
-    return font ? Result::ok() : Result::fail ("Unable to load font");
+    auto font = HBFont::Decode (rive::make_span (static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize()));
+    if (font == nullptr)
+        return yup::makeResultValueFail ("Unable to load font");
+
+    return yup::makeResultValueOk (Font (std::move (font)));
 }
 
-Result Font::loadFromData (const Span<const uint8>& fontBytes)
+ResultValue<Font> Font::loadFontFromData (const Span<const uint8>& fontBytes)
 {
     if (fontBytes.empty())
-        return Result::fail ("Unable to instantiate font from empty data");
+        return yup::makeResultValueFail ("Unable to instantiate font from empty data");
 
-    font = HBFont::Decode (rive::make_span (fontBytes.data(), fontBytes.size()));
-    return font ? Result::ok() : Result::fail ("Unable to load font");
+    auto font = HBFont::Decode (rive::make_span (fontBytes.data(), fontBytes.size()));
+    if (font == nullptr)
+        return yup::makeResultValueFail ("Unable to load font");
+
+    return yup::makeResultValueOk (Font (std::move (font)));
 }
 
-Result Font::loadFromFile (const File& fontFile)
+//==============================================================================
+
+ResultValue<Font> Font::loadFontFromFile (const File& fontFile)
 {
     if (! fontFile.existsAsFile())
-        return Result::fail ("Unable to load font from non existing file");
+        return yup::makeResultValueFail ("Unable to load font from non existing file");
 
-    if (auto is = fontFile.createInputStream(); is != nullptr && is->openedOk())
+    auto is = fontFile.createInputStream();
+    if (is == nullptr || ! is->openedOk())
+        return yup::makeResultValueFail ("Unable to open font file");
+
+    yup::MemoryBlock mb;
+    is->readIntoMemoryBlock (mb);
+
+    return loadFontFromData (mb);
+}
+
+ResultValue<Font> Font::loadFontFromFirstAvailableFile (std::initializer_list<const char*> fontPaths)
+{
+    for (auto* fontPath : fontPaths)
     {
-        yup::MemoryBlock mb;
-        is->readIntoMemoryBlock (mb);
-        return loadFromData (mb);
+        auto font = loadFontFromFile (File (fontPath));
+        if (font.wasOk())
+            return font;
     }
 
-    return Result::ok();
+    return yup::makeResultValueFail ("No font found among the provided paths");
+}
+
+//==============================================================================
+
+ResultValue<Font> Font::loadSerifSystemTextFont()
+{
+#if YUP_MAC || YUP_IOS
+    return loadSystemUIFont (kCTFontUIFontSystem);
+
+#elif YUP_WINDOWS
+    return loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\segoeui.ttf)",
+                                             R"(C:\Windows\Fonts\arial.ttf)" });
+
+#elif YUP_ANDROID
+    return loadFontFromFirstAvailableFile ({ "/system/fonts/Roboto-Regular.ttf",
+                                             "/system/fonts/NotoSans-Regular.ttf",
+                                             "/system/fonts/DroidSans.ttf" });
+
+#elif YUP_LINUX
+    return loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                                             "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+                                             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                             "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                                             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+                                             "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+                                             "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf" });
+
+#else
+    return yup::makeResultValueFail ("No system serif font available on this platform");
+
+#endif
+}
+
+ResultValue<Font> Font::loadMonospaceSystemTextFont()
+{
+#if YUP_MAC
+    return loadSystemUIFont (kCTFontUIFontUserFixedPitch);
+
+#elif YUP_IOS
+    return loadSystemUIFont (kCTFontUIFontUserFixedPitch);
+
+#elif YUP_WINDOWS
+    return loadFontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\consola.ttf)",
+                                             R"(C:\Windows\Fonts\cour.ttf)" });
+
+#elif YUP_ANDROID
+    return loadFontFromFirstAvailableFile ({ "/system/fonts/DroidSansMono.ttf" });
+
+#elif YUP_LINUX
+    return loadFontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                                             "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+                                             "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf",
+                                             "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
+                                             "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf" });
+
+#else
+    return yup::makeResultValueFail ("No system monospace font available on this platform");
+
+#endif
 }
 
 //==============================================================================

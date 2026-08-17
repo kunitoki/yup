@@ -87,6 +87,12 @@ public:
                          float letterSpacing = 0.0f);
 
         void appendText (StringRef text,
+                         Color color,
+                         const Font& font,
+                         float lineHeight = -1.0f,
+                         float letterSpacing = 0.0f);
+
+        void appendText (StringRef text,
                          rive::rcp<rive::RenderPaint> paint,
                          const Font& font,
                          float lineHeight = -1.0f,
@@ -213,6 +219,12 @@ private:
                      float lineHeight,
                      float letterSpacing);
 
+    void appendText (StringRef text,
+                     Color color,
+                     const Font& font,
+                     float lineHeight,
+                     float letterSpacing);
+
     void setOverflow (TextOverflow value);
     void setHorizontalAlign (HorizontalAlign value);
     void setVerticalAlign (VerticalAlign value);
@@ -232,6 +244,9 @@ private:
     std::vector<RenderStyle> styles;
     std::vector<RenderStyle*> renderStyles;
     rive::GlyphLookup glyphLookup;
+    std::unordered_map<uint32_t, rive::rcp<rive::RenderPaint>> colorPaints;
+
+    std::unordered_map<const rive::Font*, std::unordered_map<rive::GlyphID, rive::RawPath>> glyphPathCache;
 
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;
@@ -243,6 +258,8 @@ private:
     Rectangle<float> bounds;
     bool isDirty = false;
     std::vector<float> paragraphYOffsets;
+    std::vector<std::vector<float>> lineGlyphX;
+    std::vector<float> lineEndX;
     float defaultLineHeight = 0.0f;
 };
 

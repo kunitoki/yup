@@ -88,9 +88,6 @@ public:
     //==============================================================================
     GpuAudioProcessingDemo()
         : yup::Component ("GpuAudioProcessingDemo")
-#if YUP_ENABLE_SHADER_TRANSPILER
-        , currentGlslSource (yup::String::fromUTF8 (kDefaultGlslSource, sizeof (kDefaultGlslSource) - 1))
-#endif
     {
         loadAudioFile();
 
@@ -128,14 +125,12 @@ public:
         addAndMakeVisible (statusLabel.get());
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-        shaderEditor = std::make_unique<yup::TextEditor> ("shaderEditor");
-        shaderEditor->setMultiLine (true);
-        shaderEditor->setReadOnly (false);
-        shaderEditor->setText (currentGlslSource, yup::dontSendNotification);
-        shaderEditor->onTextChange = [this]
-        {
-            currentGlslSource = shaderEditor->getText();
-        };
+        shaderDocument = std::make_unique<yup::CodeDocument>();
+        shaderDocument->setText (yup::String::fromUTF8 (kDefaultGlslSource, sizeof (kDefaultGlslSource) - 1),
+                                 yup::dontSendNotification);
+
+        shaderEditor = std::make_unique<yup::CodeEditor> (*shaderDocument);
+        shaderEditor->setSyntaxDefinition ("glsl");
         addAndMakeVisible (shaderEditor.get());
 
         recompileButton = std::make_unique<yup::TextButton> ("Recompile");
@@ -432,9 +427,9 @@ private:
             return;
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-        yup::String glslSource = currentGlslSource.isEmpty()
+        yup::String glslSource = shaderDocument->getText().isEmpty()
                                    ? yup::String::fromUTF8 (kDefaultGlslSource, sizeof (kDefaultGlslSource) - 1)
-                                   : currentGlslSource;
+                                   : shaderDocument->getText();
 
         auto result = yup::GpuComputePipeline::compileFromGlsl (computeDevice, glslSource);
         if (result.wasOk())
@@ -537,8 +532,8 @@ void main()
     std::unique_ptr<yup::Label> statusLabel;
 
 #if YUP_ENABLE_SHADER_TRANSPILER
-    yup::String currentGlslSource;
-    std::unique_ptr<yup::TextEditor> shaderEditor;
+    std::unique_ptr<yup::CodeDocument> shaderDocument;
+    std::unique_ptr<yup::CodeEditor> shaderEditor;
     std::unique_ptr<yup::TextButton> recompileButton;
     std::unique_ptr<yup::Label> compileStatusLabel;
 #endif

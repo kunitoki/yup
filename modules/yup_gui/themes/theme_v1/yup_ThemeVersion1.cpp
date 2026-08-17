@@ -23,86 +23,24 @@
 #include <yup_audio_gui/yup_audio_gui.h>
 #endif
 
-#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT
-#if YUP_MAC || YUP_IOS
-#include <CoreText/CoreText.h>
-#include <rive/text/font_hb.hpp>
-#endif
-#endif
-
 namespace yup
 {
 
 //==============================================================================
 
-#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#if YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
 extern const uint8_t RobotoFlexFont_data[];
 extern const std::size_t RobotoFlexFont_size;
+#endif
+
+#if YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT
+extern const uint8_t JetBrainsMonoFont_data[];
+extern const std::size_t JetBrainsMonoFont_size;
 #endif
 
 #if YUP_EMBED_DEFAULT_THEME_ICON_FONT
 extern const uint8_t FontAwesome7Font_data[];
 extern const std::size_t FontAwesome7Font_size;
-#endif
-
-//==============================================================================
-
-#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT
-std::optional<Font> loadThemeVersion1FontFromFirstAvailableFile (std::initializer_list<const char*> fontPaths)
-{
-    for (auto* fontPath : fontPaths)
-    {
-        auto fontFile = File (fontPath);
-        if (! fontFile.existsAsFile())
-            continue;
-
-        Font font;
-        if (font.loadFromFile (fontFile).wasOk())
-            return font;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<Font> loadThemeVersion1SystemTextFont()
-{
-#if YUP_MAC || YUP_IOS
-    if (auto systemFont = CTFontCreateUIFontForLanguage (kCTFontUIFontSystem, 0.0, nullptr))
-    {
-        auto releaseSystemFont = ErasedScopeGuard ([systemFont]
-        {
-            CFRelease (systemFont);
-        });
-
-        if (auto font = HBFont::FromSystem (const_cast<void*> (static_cast<const void*> (systemFont)), true, 400, 100))
-            return Font (std::move (font));
-    }
-
-    return std::nullopt;
-
-#elif YUP_WINDOWS
-    return loadThemeVersion1FontFromFirstAvailableFile ({ R"(C:\Windows\Fonts\segoeui.ttf)",
-                                                          R"(C:\Windows\Fonts\arial.ttf)" });
-
-#elif YUP_ANDROID
-    return loadThemeVersion1FontFromFirstAvailableFile ({ "/system/fonts/Roboto-Regular.ttf",
-                                                          "/system/fonts/NotoSans-Regular.ttf",
-                                                          "/system/fonts/DroidSans.ttf" });
-
-#elif YUP_LINUX
-    return loadThemeVersion1FontFromFirstAvailableFile ({ "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                                                          "/usr/share/fonts/noto/NotoSans-Regular.ttf",
-                                                          "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                                                          "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-                                                          "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-                                                          "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
-                                                          "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf" });
-
-#else
-    return std::nullopt;
-
-#endif
-}
 #endif
 
 //==============================================================================
@@ -437,6 +375,106 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
         auto caretBounds = t.getCaretBounds();
         g.fillRect (caretBounds);
     }
+}
+
+//==============================================================================
+
+void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEditor& editor)
+{
+    ignoreUnused (theme);
+
+    const auto bounds = editor.getLocalBounds();
+    const auto textArea = editor.getTextArea();
+    const auto& scheme = editor.getScheme();
+    const auto scrollOffset = editor.getScrollOffset();
+
+    // Background
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0xff1e1e1e)));
+    g.fillRect (bounds);
+
+    // Current line
+    if (editor.hasKeyboardFocus() && editor.getDocument() != nullptr)
+    {
+        const auto currentLineColor = scheme.getColor (CodeEditorScheme::ColorId::currentLine).value_or (Color (0x11222222));
+        const int currentLine = editor.getDocument()->indexToPosition (editor.getCaretPosition()).getLineNumber();
+        const float lineY = textArea.getY() + currentLine * editor.getLineHeight() - scrollOffset.getY();
+
+        g.setFillColor (currentLineColor);
+        g.fillRect (Rectangle<float> (textArea.getX(), lineY, textArea.getWidth(), editor.getLineHeight()));
+    }
+
+    // Gutter
+    if (editor.isLineNumbersVisible() && editor.getDocument() != nullptr)
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::gutterBackground).value_or (Color (0xff252526)));
+        g.fillRect (Rectangle<float> (bounds.getX(), bounds.getY(), textArea.getX() - bounds.getX(), bounds.getHeight()));
+
+        const float lineHeight = editor.getLineHeight();
+        const int firstVisibleLine = jmax (0, static_cast<int> (scrollOffset.getY() / lineHeight));
+        const int lastVisibleLine = jmin (editor.getDocument()->getNumLines() - 1,
+                                          static_cast<int> ((scrollOffset.getY() + textArea.getHeight()) / lineHeight) + 1);
+
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::gutterText).value_or (Color (0xff858585)));
+
+        const float numberWidth = textArea.getX() - bounds.getX() - 8.0f;
+
+        for (int line = firstVisibleLine; line <= lastVisibleLine; ++line)
+        {
+            const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
+
+            g.fillFittedText (String (line + 1),
+                              editor.getFont().withHeight (editor.getFont().getHeight() * 0.9f),
+                              Rectangle<float> (bounds.getX() + 4.0f, y, numberWidth, lineHeight),
+                              Justification::right);
+        }
+
+        // Breakpoint markers
+        if (! editor.getBreakpointLines().empty())
+        {
+            g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::breakpoint).value_or (Color (0xffe51400)));
+
+            for (const int line : editor.getBreakpointLines())
+            {
+                if (line < firstVisibleLine || line > lastVisibleLine)
+                    continue;
+
+                const float y = textArea.getY() + line * lineHeight - scrollOffset.getY();
+                g.fillEllipse (Rectangle<float> (bounds.getX() + 5.0f, y + lineHeight * 0.5f - 4.0f, 8.0f, 8.0f));
+            }
+        }
+    }
+
+    auto clipState = g.saveState();
+    g.setClipPath (textArea.translated (editor.getBoundsRelativeToTopLevelComponent().getTopLeft()));
+
+    // Selection
+    if (editor.hasSelection())
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::selection).value_or (Color (0x33264692)));
+
+        for (const auto& rectangle : editor.getSelectedTextAreas())
+            g.fillRect (rectangle);
+    }
+
+    // Search match highlights
+    g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::searchHighlight).value_or (Color (0x3348c0ff)));
+
+    for (const auto& rectangle : editor.getSearchMatchAreas())
+        g.fillRect (rectangle);
+
+    // Text
+    const float windowY = editor.getWindowFirstLine() * editor.getLineHeight();
+    const auto scrolledTextBounds = textArea.translated (-scrollOffset.getX(), windowY - scrollOffset.getY());
+    g.fillFittedText (editor.getStyledText(), scrolledTextBounds);
+
+    // Caret
+    if (editor.hasKeyboardFocus() && editor.isCaretVisible())
+    {
+        g.setFillColor (scheme.getColor (CodeEditorScheme::ColorId::caret).value_or (Colors::white));
+        g.fillRect (editor.getCaretBounds());
+    }
+
+    clipState.restore();
 }
 
 //==============================================================================
@@ -1805,29 +1843,41 @@ ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
 
-#if YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+#if YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
     {
-        Font font;
-        if (auto result = font.loadFromData (Span (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
-
-        theme->setDefaultFont (std::move (font));
+        if (auto font = Font::loadFontFromData (Span (&RobotoFlexFont_data[0], RobotoFlexFont_size)); font.failed())
+            yup::Logger::outputDebugString (font.getErrorMessage());
+        else
+            theme->setDefaultFont (font.getValue());
     }
 #else
-    if (auto font = loadThemeVersion1SystemTextFont())
-        theme->setDefaultFont (std::move (*font));
+    if (auto font = Font::loadSerifSystemTextFont(); font.wasOk())
+        theme->setDefaultFont (font.getValue());
     else
-        yup::Logger::outputDebugString ("Unable to load a system text font for the default theme");
+        yup::Logger::outputDebugString (font.getErrorMessage());
 #endif
 
 #if YUP_EMBED_DEFAULT_THEME_ICON_FONT
     {
-        Font font;
-        if (auto result = font.loadFromData (Span (&FontAwesome7Font_data[0], FontAwesome7Font_size)); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
-
-        theme->setDefaultIconFont (std::move (font));
+        if (auto font = Font::loadFontFromData (Span (&FontAwesome7Font_data[0], FontAwesome7Font_size)); font.failed())
+            yup::Logger::outputDebugString (font.getErrorMessage());
+        else
+            theme->setDefaultIconFont (font.getValue());
     }
+#endif
+
+#if YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT
+    {
+        if (auto font = Font::loadFontFromData (Span (&JetBrainsMonoFont_data[0], JetBrainsMonoFont_size)); font.failed())
+            yup::Logger::outputDebugString (font.getErrorMessage());
+        else
+            theme->setDefaultMonospaceFont (font.getValue());
+    }
+#else
+    if (auto font = Font::loadMonospaceSystemTextFont(); font.wasOk())
+        theme->setDefaultMonospaceFont (font.getValue());
+    else
+        yup::Logger::outputDebugString (font.getErrorMessage());
 #endif
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
@@ -1842,6 +1892,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
     theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
     theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
+    theme->setComponentStyle<CodeEditor> (ComponentStyle::createStyle<CodeEditor> (paintCodeEditor));
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));

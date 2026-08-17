@@ -76,6 +76,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #if YUP_RIVE_USE_METAL
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#include <CoreText/CoreText.h>
 
 #if YUP_MAC
 #import <Cocoa/Cocoa.h>
