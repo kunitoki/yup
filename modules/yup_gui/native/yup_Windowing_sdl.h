@@ -109,6 +109,9 @@ public:
     GraphicsContext* getGraphicsContext() override;
 
     //==============================================================================
+    void runWithGraphicsContext (const std::function<void()>& fn) override;
+
+    //==============================================================================
     void* getNativeHandle() const override;
 
     //==============================================================================
@@ -215,6 +218,10 @@ private:
 
     RectangleList<float> currentRepaintAreas;
     CriticalSection repaintLock;
+
+    /** Serializes access to the shared GL context between the render thread and
+        any other thread running offscreen GPU work (see runWithGraphicsContext). */
+    CriticalSection glContextLock;
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;

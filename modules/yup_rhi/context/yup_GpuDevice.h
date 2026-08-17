@@ -53,7 +53,7 @@ public:
     struct Options
     {
         /** Default constructor, initializes the options with default values. */
-        constexpr Options() noexcept = default;
+        Options() noexcept = default;
 
         bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
         bool readableFramebuffer = false;           ///< Allows the framebuffer to be readable.
@@ -61,6 +61,20 @@ public:
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
+
+        /** Optional callback that runs GPU work with the native rendering context made
+            current on the calling thread.
+
+            GL contexts are thread-affine and the windowing layer may bind the context
+            to a dedicated render thread. Offscreen GPU work initiated from other threads
+            (e.g. snapshots taken from the message thread) must go through this callback
+            so the context is bound — and its access serialized with the render thread —
+            for the duration of the work. Backends without a thread-affine context
+            (D3D, Metal, WebGPU) ignore it. When null, GPU work runs as-is.
+
+            @param fn The GPU work to run with the context current.
+        */
+        std::function<void (const std::function<void()>&)> contextActivator;
     };
 
     //==============================================================================

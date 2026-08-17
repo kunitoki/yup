@@ -35,18 +35,18 @@ struct GpuBuffer::Impl
     // Native storage buffer handles (for compute).
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
     id<MTLBuffer> mtlStorageBuffer = nil;
+#endif
 
-    ~Impl() = default;
-#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
     ComPtr<ID3D11Buffer> d3dStorageBuffer;
     ComPtr<ID3D11UnorderedAccessView> d3dUav;
 
     /** Staging copy used by readBuffer(), kept alive so a per-frame reader does not
         reallocate it every frame. Created on first readback. */
     ComPtr<ID3D11Buffer> d3dReadbackStaging;
+#endif
 
-    ~Impl() = default;
-#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
     wgpu::Buffer webgpuStorageBuffer;
 
     /** One staging buffer in the pipelined readback ring.
@@ -57,7 +57,7 @@ struct GpuBuffer::Impl
     struct ReadbackSlot
     {
         wgpu::Buffer staging;
-        uint64_t serial = 0; ///< Submission order, so snapshots are consumed oldest-first.
+        uint64_t serial = 0;
         bool mapPending = false;
         bool mapped = false;
 
@@ -78,19 +78,19 @@ struct GpuBuffer::Impl
     /** Set when the staging buffers could not be allocated, so a per-frame reader
         gives up instead of retrying the same failing allocation every frame. */
     bool readbackUnavailable = false;
+#endif
 
-    ~Impl() = default;
-#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
     GLuint glBuffer = 0;
+#endif
 
     ~Impl()
     {
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
         if (glBuffer != 0)
             glDeleteBuffers (1, &glBuffer);
-    }
-#else
-    ~Impl() = default;
 #endif
+    }
 };
 
 //==============================================================================
@@ -131,17 +131,25 @@ bool GpuBuffer::isValid() const noexcept
 
     if (i->type == GpuBufferType::storage)
     {
+        // Only the handle owned by the creating backend is ever non-empty; check
+        // each enabled backend independently since several may coexist in a build.
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
-        return i->mtlStorageBuffer != nil;
-#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
-        return i->d3dStorageBuffer != nullptr;
-#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
-        return i->webgpuStorageBuffer != nullptr;
-#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
-        return i->glBuffer != 0;
-#else
-        return false;
+        if (i->mtlStorageBuffer != nil)
+            return true;
 #endif
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        if (i->d3dStorageBuffer != nullptr)
+            return true;
+#endif
+#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+        if (i->webgpuStorageBuffer != nullptr)
+            return true;
+#endif
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+        if (i->glBuffer != 0)
+            return true;
+#endif
+        return false;
     }
 
     return i->oreBuffer != nullptr;

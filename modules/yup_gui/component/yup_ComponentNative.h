@@ -214,6 +214,22 @@ public:
     virtual ~ComponentNative();
 
     //==============================================================================
+    /** Runs @a fn with the native GPU context made current on this thread, when
+        the backend requires it.
+
+        OpenGL contexts are thread-affine, and the windowing layer binds the
+        context to a dedicated render thread. Offscreen GPU work initiated from
+        other threads (e.g. component snapshots taken from the message thread)
+        must run through this hook so the context is bound, and its access is
+        serialized with the render thread, for the duration of @a fn.
+
+        The default implementation simply invokes @a fn.
+
+        @param fn The GPU work to run with the context current.
+    */
+    virtual void runWithGraphicsContext (const std::function<void()>& fn) { fn(); }
+
+    //==============================================================================
     /** Sets the window title.
 
         @param title The new title to set.

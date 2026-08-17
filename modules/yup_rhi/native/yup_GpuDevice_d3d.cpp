@@ -97,7 +97,7 @@ public:
             if (FAILED (hr) || uav == nullptr)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (d3dBuffer), std::move (uav) });
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav) });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);

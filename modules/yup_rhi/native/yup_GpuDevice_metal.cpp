@@ -78,7 +78,7 @@ public:
             if (mtlBuffer == nil)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, mtlBuffer });
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .mtlStorageBuffer = mtlBuffer });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);

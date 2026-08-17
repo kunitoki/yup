@@ -170,6 +170,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
+
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
     }
 
@@ -179,6 +180,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
     graphicsOptions.loaderFunction = [] (const char* name) -> void*
     {
         return reinterpret_cast<void*> (SDL_GL_GetProcAddress (name));
+    };
+    graphicsOptions.contextActivator = [this] (const std::function<void()>& fn)
+    {
+        runWithGraphicsContext (fn);
     };
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
@@ -200,9 +205,6 @@ SDLComponentNative::SDLComponentNative (Component& component,
           jmax (1, screenBounds.getHeight()) });
 
     // Attach the graphics surface to the native view on the message thread.
-    // This is the only place a backend is allowed to touch native UI (Metal
-    // attaches its CAMetalLayer to the NSView here); the render thread later
-    // only resizes GPU resources via onSizeChanged().
     {
         const auto contentSize = getContentSize();
         context->attachToWindow (getNativeHandle(), contentSize.getWidth(), contentSize.getHeight(), getScaleDpi());
@@ -321,9 +323,6 @@ void SDLComponentNative::toFront()
 
 Size<int> SDLComponentNative::getContentSize() const
 {
-    // The drawable size must match the real window surface: deriving it from the
-    // logical size multiplied by a scale factor would drift from the actual pixel
-    // size on platforms where SDL window coordinates are physical pixels.
     if (window != nullptr)
     {
         int width = 0, height = 0;
@@ -820,14 +819,10 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
-    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
-        SDL_GL_MakeCurrent (window, windowContext);
-
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
     WaitableTimer frameTimer;
-
     const auto waitUntil = [&frameTimer] (double waitUntilSeconds)
     {
         frameTimer.waitUntil (waitUntilSeconds * 1000.0);
@@ -856,6 +851,34 @@ void SDLComponentNative::run()
             waitUntil ((yup::Time::getMillisecondCounterHiRes() / 1000.0) + secondsToWait);
     }
 }
+
+//==============================================================================
+
+void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn)
+{
+    const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
+
+    if (isGL)
+    {
+        const ScopedLock sl (glContextLock);
+
+        const bool wasCurrent = isGL && (SDL_GL_GetCurrentContext() == windowContext);
+
+        if (! wasCurrent)
+            SDL_GL_MakeCurrent (window, windowContext);
+
+        fn();
+
+        if (! wasCurrent)
+            SDL_GL_MakeCurrent (window, nullptr);
+    }
+    else
+    {
+        fn();
+    }
+}
+
+//==============================================================================
 
 void SDLComponentNative::timerCallback()
 {
@@ -899,6 +922,8 @@ void SDLComponentNative::renderFrame()
     if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
         return;
 
+    const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
+
     // Resize GL resources on the render thread, which owns the GL context.
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
@@ -909,9 +934,21 @@ void SDLComponentNative::renderFrame()
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
+        if (isGL)
+        {
+            glContextLock.enter();
+            SDL_GL_MakeCurrent (window, windowContext);
+        }
+
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
+
+        if (isGL)
+        {
+            SDL_GL_MakeCurrent (window, nullptr);
+            glContextLock.exit();
+        }
 
         repaint();
     }
@@ -950,6 +987,7 @@ void SDLComponentNative::renderFrame()
     frameDescriptor.clockwiseFillOverride = true;
 
     RectangleList<float> repaintAreas;
+    bool glContextLocked = false;
 
     {
         const MessageManagerLock mmLock (this);
@@ -974,6 +1012,13 @@ void SDLComponentNative::renderFrame()
 
         if (! renderContinuous && repaintAreas.isEmpty())
             return;
+
+        if (isGL)
+        {
+            glContextLock.enter();
+            glContextLocked = true;
+            SDL_GL_MakeCurrent (window, windowContext);
+        }
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
@@ -1021,8 +1066,16 @@ void SDLComponentNative::renderFrame()
         context->tick();
     }
 
-    if (window != nullptr && (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES))
+    if (window != nullptr && isGL)
+    {
         SDL_GL_SwapWindow (window);
+
+        if (glContextLocked)
+        {
+            SDL_GL_MakeCurrent (window, nullptr);
+            glContextLock.exit();
+        }
+    }
 }
 
 //==============================================================================

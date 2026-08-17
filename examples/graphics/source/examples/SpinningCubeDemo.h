@@ -179,7 +179,7 @@ public:
         }
 
         lottiePlayer.advanceTime (lastFrameTimeSeconds);
-        repaint();
+        repaint (getCubeArea());
     }
 
     //==============================================================================

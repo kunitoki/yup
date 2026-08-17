@@ -158,9 +158,17 @@ private:
             fprintf (stderr, "blitToMainFramebuffer: Invalid program or texture\n");
             return;
         }
+
+        const GLboolean scissorWasEnabled = glIsEnabled (GL_SCISSOR_TEST);
+        if (scissorWasEnabled)
+            glDisable (GL_SCISSOR_TEST);
+
         glBindFramebuffer (GL_READ_FRAMEBUFFER, offscreenFramebuffer);
         glBindFramebuffer (GL_DRAW_FRAMEBUFFER, 0);
         glBlitFramebuffer (0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+        if (scissorWasEnabled)
+            glEnable (GL_SCISSOR_TEST);
     }
 
     Options options;
