@@ -1101,3 +1101,243 @@ TEST (CodeTokeniserTests, PythonSingleQuotedTripleStringSpansLines)
     EXPECT_EQ (SyntaxDefinition::TokenType::string, line1[0].type);
     EXPECT_EQ (String ("two'''"), tokenText (document, 1, line1[0]));
 }
+
+// ==============================================================================
+// Block comment and raw string delimiter edges
+// ==============================================================================
+
+TEST (CodeTokeniserTests, BlockCommentWithEmptyEndNeverCloses)
+{
+    SyntaxDefinition definition;
+    definition.loadFromData (R"({
+        "name": "TestLang",
+        "blockComment": { "start": "<<" }
+    })");
+
+    CodeDocument document;
+    document.setText ("<< comment text");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (definition);
+
+    // An empty "end" delimiter can never be found in the text, so the block comment
+    // consumes the rest of the line (covers findPattern's empty-pattern guard).
+    const auto tokens = tokeniser.getTokens (document, 0);
+    ASSERT_EQ (1u, tokens.size());
+    EXPECT_EQ (SyntaxDefinition::TokenType::comment, tokens[0].type);
+    EXPECT_EQ (String ("<< comment text"), tokenText (document, 0, tokens[0]));
+}
+
+TEST (CodeTokeniserTests, RawStringPrefixFollowedBySpaceIsNotRawString)
+{
+    CodeDocument document;
+    document.setText ("R\" (bad)\";");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+
+    const auto tokens = tokeniser.getTokens (document, 0);
+
+    // Whitespace immediately after the opening quote is not a valid raw-string
+    // delimiter character, so "R" falls back to being an ordinary identifier and
+    // the rest tokenizes as an ordinary double-quoted string.
+    ASSERT_GE (tokens.size(), 2u);
+    EXPECT_EQ (SyntaxDefinition::TokenType::identifier, tokens[0].type);
+    EXPECT_EQ (String ("R"), tokenText (document, 0, tokens[0]));
+
+    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("\" (bad)\""), tokenText (document, 0, *stringToken));
+}
+
+// ==============================================================================
+// Multi-line string delimiter edges
+// ==============================================================================
+
+TEST (CodeTokeniserTests, MultiLineDelimiterWithoutMultiLineFlagDoesNotSpanLines)
+{
+    SyntaxDefinition definition;
+    definition.loadFromData (R"({
+        "name": "TestLang",
+        "strings": { "multiLineDelimiters": ["\"\"\""], "multiLine": false }
+    })");
+
+    CodeDocument document;
+    document.setText ("x = \"\"\"unterminated");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (definition);
+
+    // The delimiter is recognized, but multi-line strings are disabled, so the
+    // unterminated match simply consumes to the end of the line without carrying
+    // any state to the next line.
+    const auto tokens = tokeniser.getTokens (document, 0);
+    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("\"\"\"unterminated"), tokenText (document, 0, *stringToken));
+}
+
+TEST (CodeTokeniserTests, TripleQuotedStringClosesOnSameLine)
+{
+    CodeDocument document;
+    document.setText ("x = \"\"\"hello\"\"\"\ny = 1");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
+
+    const auto line0 = tokeniser.getTokens (document, 0);
+    const auto* stringToken = findTokenOfType (line0, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("\"\"\"hello\"\"\""), tokenText (document, 0, *stringToken));
+
+    // The string closed on line 0, so line 1 is normal code, not a continuation.
+    const auto line1 = tokeniser.getTokens (document, 1);
+    EXPECT_EQ (nullptr, findTokenOfType (line1, SyntaxDefinition::TokenType::string));
+    EXPECT_NE (nullptr, findTokenOfType (line1, SyntaxDefinition::TokenType::number));
+}
+
+TEST (CodeTokeniserTests, PythonPrefixedTripleQuotedStringClosesOnSameLine)
+{
+    CodeDocument document;
+    document.setText ("doc = f\"\"\"hello\"\"\"\nvalue = 3");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
+
+    const auto line0 = tokeniser.getTokens (document, 0);
+    const auto* stringToken = findTokenOfType (line0, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("f\"\"\"hello\"\"\""), tokenText (document, 0, *stringToken));
+
+    // The string closed on line 0, so line 1 is normal code, not a continuation.
+    const auto line1 = tokeniser.getTokens (document, 1);
+    EXPECT_EQ (nullptr, findTokenOfType (line1, SyntaxDefinition::TokenType::string));
+    EXPECT_NE (nullptr, findTokenOfType (line1, SyntaxDefinition::TokenType::number));
+}
+
+TEST (CodeTokeniserTests, PrefixedMultiLineDelimiterWithoutMultiLineFlagDoesNotSpanLines)
+{
+    SyntaxDefinition definition;
+    definition.loadFromData (R"({
+        "name": "TestLang",
+        "strings": { "delimiters": ["\""], "multiLineDelimiters": ["\"\"\""], "multiLine": false, "stringPrefixes": ["f"] }
+    })");
+
+    CodeDocument document;
+    document.setText ("x = f\"\"\"unterminated");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (definition);
+
+    // The prefixed delimiter is recognized, but multi-line strings are disabled, so
+    // the unterminated match consumes to the end of the line without returning a
+    // continuation state.
+    const auto tokens = tokeniser.getTokens (document, 0);
+    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("f\"\"\"unterminated"), tokenText (document, 0, *stringToken));
+}
+
+TEST (CodeTokeniserTests, PythonPrefixedStringWithEscapedQuote)
+{
+    CodeDocument document;
+    document.setText ("s = f\"a\\\"b\"");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("python"));
+
+    const auto tokens = tokeniser.getTokens (document, 0);
+
+    // The escaped quote inside the prefixed single-line string must not close it early.
+    const auto* stringToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::string);
+    ASSERT_NE (nullptr, stringToken);
+    EXPECT_EQ (String ("f\"a\\\"b\""), tokenText (document, 0, *stringToken));
+}
+
+// ==============================================================================
+// Cache and lifecycle edge cases
+// ==============================================================================
+
+TEST (CodeTokeniserTests, InvalidateLinesOnEmptyCacheIsANoOp)
+{
+    CodeDocument document;
+    document.setText ("int a;");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+
+    // No getTokens call yet, so the cache is empty; invalidateLines must be a
+    // harmless no-op rather than indexing into an empty vector.
+    tokeniser.invalidateLines (0, 5);
+
+    EXPECT_NE (nullptr, findTokenOfType (tokeniser.getTokens (document, 0), SyntaxDefinition::TokenType::type));
+}
+
+TEST (CodeTokeniserTests, DocumentEditAfterClearIsHarmless)
+{
+    CodeDocument document;
+    document.setText ("int a;");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (SyntaxDefinition::getBuiltIn ("cpp"));
+
+    // Attach to the document and populate the cache.
+    ASSERT_NE (nullptr, findTokenOfType (tokeniser.getTokens (document, 0), SyntaxDefinition::TokenType::type));
+
+    // clear() empties the cache but does not detach the listener, so the next edit
+    // notifies codeDocumentChanged with an empty cache — it must be a no-op rather
+    // than dereferencing a non-existent cache entry.
+    tokeniser.clear();
+
+    document.replaceRange (CodeDocument::Position (document, 0, 0),
+                           CodeDocument::Position (document, 0, 3),
+                           "float");
+
+    const auto tokens = tokeniser.getTokens (document, 0);
+    const auto* typeToken = findTokenOfType (tokens, SyntaxDefinition::TokenType::type);
+    ASSERT_NE (nullptr, typeToken);
+    EXPECT_EQ (String ("float"), tokenText (document, 0, *typeToken));
+}
+
+TEST (CodeTokeniserTests, ReloadingSyntaxDefinitionInPlacePropagatesStateChange)
+{
+    SyntaxDefinition definition;
+    definition.loadFromData (R"({
+        "name": "TestLang",
+        "strings": { "delimiters": ["\""] }
+    })");
+
+    CodeDocument document;
+    document.setText ("a\n~~unterminated\nb");
+
+    CodeTokeniser tokeniser;
+    tokeniser.setSyntaxDefinition (definition);
+
+    // Prime the cache for all three lines under the original definition (no
+    // multi-line delimiters yet, so "~~" tokenizes as ordinary characters).
+    for (int i = 0; i < 3; ++i)
+        ASSERT_FALSE (tokeniser.getTokens (document, i).empty());
+
+    EXPECT_EQ (nullptr, findTokenOfType (tokeniser.getTokens (document, 1), SyntaxDefinition::TokenType::string));
+
+    // Reload the same definition object in place, now declaring "~~" as a
+    // multi-line string delimiter. loadFromData is additive, so this changes what
+    // line 1 means without the tokeniser being told — it only reacts to
+    // CodeDocument edits, so the caller must invalidate the affected lines itself.
+    definition.loadFromData (R"({
+        "name": "TestLang",
+        "strings": { "multiLineDelimiters": ["~~"], "multiLine": true }
+    })");
+
+    tokeniser.invalidateLines (1, 1);
+
+    // Line 1 now opens an unterminated multi-line string, which changes its exit
+    // state and must ripple forward to mark line 2 dirty as well.
+    const auto line1 = tokeniser.getTokens (document, 1);
+    ASSERT_EQ (1u, line1.size());
+    EXPECT_EQ (SyntaxDefinition::TokenType::string, line1[0].type);
+
+    const auto line2 = tokeniser.getTokens (document, 2);
+    ASSERT_EQ (1u, line2.size());
+    EXPECT_EQ (SyntaxDefinition::TokenType::string, line2[0].type);
+}

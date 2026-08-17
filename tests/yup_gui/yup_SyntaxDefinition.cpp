@@ -447,3 +447,90 @@ TEST (SyntaxDefinitionTests, GetBuiltInGlslNumbersDifferFromCpp)
     EXPECT_TRUE (cpp.numbersAllowBinary());
     EXPECT_TRUE (cpp.numbersAllowSuffix());
 }
+
+// ==============================================================================
+// Loading from a real file
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, LoadFromFileParsesValidFile)
+{
+    auto file = File::createTempFile ("syntax_definition_test");
+    EXPECT_TRUE (file.replaceWithText (R"({
+        "name": "FileLang",
+        "keywords": ["alpha", "beta"]
+    })"));
+
+    SyntaxDefinition definition;
+    auto result = definition.loadFromFile (file);
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_EQ (String ("FileLang"), definition.getName());
+    EXPECT_TRUE (definition.isKeyword ("alpha"));
+    EXPECT_TRUE (definition.isKeyword ("beta"));
+    EXPECT_FALSE (definition.isKeyword ("gamma"));
+
+    file.deleteFile();
+}
+
+// ==============================================================================
+// Non-object JSON root
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, LoadFromDataRejectsEmptyJsonWithSpecificMessage)
+{
+    // JSON::parse's underlying parser only accepts '{' or '[' as the document root: any JSON
+    // array reaches loadFromData's isObject() check as an object-like value (so it fails later,
+    // at the missing-"name" check), and any bare scalar throws a parse error before isObject()
+    // is ever reached. An empty (or whitespace-only) payload is the only input that parses
+    // successfully to a non-object var, so it's the only way to exercise this specific message.
+    SyntaxDefinition definition;
+    auto result = definition.loadFromData ("");
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_EQ (String ("Syntax definition JSON must be an object"), result.getErrorMessage());
+}
+
+// ==============================================================================
+// Raw string and string literal prefix accessors
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, GetRawStringPrefixesReturnsConfiguredList)
+{
+    const auto& cpp = SyntaxDefinition::getBuiltIn ("cpp");
+    const auto& prefixes = cpp.getRawStringPrefixes();
+
+    ASSERT_EQ (5u, prefixes.size());
+    EXPECT_TRUE (std::find (prefixes.begin(), prefixes.end(), String ("R")) != prefixes.end());
+    EXPECT_TRUE (std::find (prefixes.begin(), prefixes.end(), String ("u8R")) != prefixes.end());
+}
+
+TEST (SyntaxDefinitionTests, GetStringPrefixesReturnsConfiguredList)
+{
+    const auto& cpp = SyntaxDefinition::getBuiltIn ("cpp");
+    const auto& prefixes = cpp.getStringPrefixes();
+
+    ASSERT_EQ (4u, prefixes.size());
+    EXPECT_TRUE (std::find (prefixes.begin(), prefixes.end(), String ("u8")) != prefixes.end());
+    EXPECT_TRUE (std::find (prefixes.begin(), prefixes.end(), String ("L")) != prefixes.end());
+}
+
+TEST (SyntaxDefinitionTests, GetRawStringPrefixesAndStringPrefixesDefaultToEmpty)
+{
+    SyntaxDefinition definition;
+    auto result = definition.loadFromData (R"({ "name": "Tiny" })");
+
+    EXPECT_TRUE (result.wasOk());
+    EXPECT_TRUE (definition.getRawStringPrefixes().empty());
+    EXPECT_TRUE (definition.getStringPrefixes().empty());
+}
+
+// ==============================================================================
+// Token type fallback
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, TokenTypeToStringFallsBackToOtherForUnknownValue)
+{
+    const auto unknownType = static_cast<SyntaxDefinition::TokenType> (255);
+
+    EXPECT_EQ (String ("other"), SyntaxDefinition::tokenTypeToString (unknownType));
+}

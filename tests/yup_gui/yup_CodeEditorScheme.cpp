@@ -209,3 +209,28 @@ TEST (CodeEditorSchemeTests, GetDefaultReturnsDarkScheme)
     EXPECT_TRUE (defaultScheme.getColor (CodeEditorScheme::ColorId::background).has_value());
     EXPECT_EQ (Color (0xff1e1e1e), defaultScheme.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0)));
 }
+
+TEST (CodeEditorSchemeTests, GetBuiltInForUnknownNameReturnsInertScheme)
+{
+    const auto& inert = CodeEditorScheme::getBuiltIn ("notAScheme");
+
+    EXPECT_TRUE (inert.getName().isEmpty());
+    EXPECT_EQ (CodeEditorScheme::getDefault().getColor (CodeEditorScheme::ColorId::background).value_or (Color (0)),
+               inert.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0)));
+}
+
+TEST (CodeEditorSchemeTests, GetBuiltInIgnoresUnderscores)
+{
+    const auto& canonical = CodeEditorScheme::getBuiltIn ("One Dark");
+    const auto& underscored = CodeEditorScheme::getBuiltIn ("one_dark");
+
+    const auto background = canonical.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0));
+
+    EXPECT_EQ (background, underscored.getColor (CodeEditorScheme::ColorId::background).value_or (Color (0)));
+}
+
+TEST (CodeEditorSchemeTests, GetBuiltInForNameReturnsSameInstanceAsGetBuiltIn)
+{
+    for (const auto& name : CodeEditorScheme::getAvailableSchemeNames())
+        EXPECT_EQ (&CodeEditorScheme::getBuiltIn (name), CodeEditorScheme::getBuiltInForName (name));
+}
