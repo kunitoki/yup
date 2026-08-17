@@ -25,8 +25,6 @@ namespace yup
 //==============================================================================
 
 WaitableTimer::WaitableTimer()
-    : epoch (std::chrono::steady_clock::now())
-    , epochCounterMs (Time::getMillisecondCounterHiRes())
 {
 #if YUP_WINDOWS
     handle = CreateWaitableTimerExW (nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
@@ -70,10 +68,22 @@ void WaitableTimer::waitUntil (double milliseconds)
 
 void WaitableTimer::waitUntilFallback (double milliseconds)
 {
-    const auto target = epoch + std::chrono::duration<double, std::milli> (milliseconds - epochCounterMs);
+    if (const auto nowMs = Time::getMillisecondCounterHiRes(); milliseconds - nowMs > 4.0)
+    {
+        const auto target = std::chrono::steady_clock::now() + std::chrono::duration<double, std::milli> ((milliseconds - 4.0) - nowMs);
 
-    std::unique_lock lock (mutex);
-    cv.wait_until (lock, target);
+        std::unique_lock lock (mutex);
+        cv.wait_until (lock, target);
+    }
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds - 4.0)
+        std::this_thread::sleep_for (std::chrono::microseconds (25));
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds - 2.0)
+        std::this_thread::sleep_for (std::chrono::microseconds (10));
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds)
+        std::this_thread::sleep_for (std::chrono::microseconds (1));
 }
 
 } // namespace yup

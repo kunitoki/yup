@@ -39,8 +39,13 @@ namespace yup
       CPU while blocked. Plain sleeps are only as accurate as the 1 ms timer
       tick requested via timeBeginPeriod(), so a sleep targeting a deadline
       can overshoot it by up to a full tick.
-    - On other platforms it waits on a condition variable with a
-      steady-clock deadline, which the OS wakes with microsecond precision.
+    - On other platforms it blocks on a condition variable for the bulk of
+      the wait (to avoid burning CPU), then finishes with a short, tiered
+      busy-wait against Time::getMillisecondCounterHiRes() for the last few
+      milliseconds. The condition-variable wake alone is not precise enough
+      on its own: OS scheduling and timer-coalescing latency (particularly
+      on macOS) can make it overshoot the deadline by several milliseconds,
+      which the trailing busy-wait corrects for.
 
     Use it for frame pacing or any loop that must meet a deadline rather than
     merely sleep for a while.
@@ -70,8 +75,6 @@ private:
 
     std::mutex mutex;
     std::condition_variable cv;
-    std::chrono::steady_clock::time_point epoch;
-    double epochCounterMs = 0.0;
 
     YUP_DECLARE_NON_COPYABLE (WaitableTimer)
 };
