@@ -187,6 +187,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
         return; // TODO - raise something ?
     }
 
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
+        SDL_GL_MakeCurrent (window, nullptr);
+
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created YUP GraphicsContext");
 
     // Resize after callbacks are in place
@@ -195,6 +198,15 @@ SDLComponentNative::SDLComponentNative (Component& component,
           screenBounds.getY(),
           jmax (1, screenBounds.getWidth()),
           jmax (1, screenBounds.getHeight()) });
+
+    // Attach the graphics surface to the native view on the message thread.
+    // This is the only place a backend is allowed to touch native UI (Metal
+    // attaches its CAMetalLayer to the NSView here); the render thread later
+    // only resizes GPU resources via onSizeChanged().
+    {
+        const auto contentSize = getContentSize();
+        context->attachToWindow (getNativeHandle(), contentSize.getWidth(), contentSize.getHeight(), getScaleDpi());
+    }
 
     // Check mouse capture
     if (shouldCaptureMouse && isVisible())
@@ -214,9 +226,6 @@ SDLComponentNative::~SDLComponentNative()
 
     // Stop the rendering first, before touching any SDL resources
     stopRendering();
-
-    // Cancel any pending async update that may have been scheduled by the render thread
-    cancelPendingUpdate();
 
     // Remove event watch
     SDL_RemoveEventWatch (eventDispatcher, this);
@@ -324,7 +333,7 @@ Size<int> SDLComponentNative::getContentSize() const
             return { width, height };
     }
 
-    return { jmax (1, screenBounds.getWidth()), jmax (1, screenBounds.getHeight()) };
+    return { jmax (1, currentContentWidth), jmax (1, currentContentHeight) };
 }
 
 //==============================================================================
@@ -646,24 +655,24 @@ void SDLComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
 
 bool SDLComponentNative::isAtomicModeEnabled() const
 {
-    return renderAtomicMode;
+    return renderAtomicMode.load (std::memory_order_relaxed);
 }
 
 void SDLComponentNative::enableAtomicMode (bool shouldBeEnabled)
 {
-    renderAtomicMode = shouldBeEnabled;
+    renderAtomicMode.store (shouldBeEnabled, std::memory_order_relaxed);
 
     repaint();
 }
 
 bool SDLComponentNative::isWireframeEnabled() const
 {
-    return renderWireframe;
+    return renderWireframe.load (std::memory_order_relaxed);
 }
 
 void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
 {
-    renderWireframe = shouldBeEnabled;
+    renderWireframe.store (shouldBeEnabled, std::memory_order_relaxed);
 
     repaint();
 }
@@ -672,14 +681,27 @@ void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
 
 void SDLComponentNative::repaint()
 {
-    currentRepaintAreas.clearQuick();
+    const auto fullArea = Rectangle<float>().withSize (getSize().to<float>());
 
-    currentRepaintAreas.add (Rectangle<float>().withSize (getSize().to<float>()));
+    {
+        const ScopedLock sl (repaintLock);
+        currentRepaintAreas.clearQuick();
+        currentRepaintAreas.add (fullArea);
+    }
+
+    if constexpr (! renderDrivenByTimer)
+        renderEvent.signal();
 }
 
 void SDLComponentNative::repaint (const Rectangle<float>& rect)
 {
-    currentRepaintAreas.add (rect);
+    {
+        const ScopedLock sl (repaintLock);
+        currentRepaintAreas.add (rect);
+    }
+
+    if constexpr (! renderDrivenByTimer)
+        renderEvent.signal();
 }
 
 const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
@@ -798,51 +820,48 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
+        SDL_GL_MakeCurrent (window, windowContext);
+
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
+    const auto waitUntil = [] (double waitUntilSeconds)
+    {
+        const auto waitUntilMs = waitUntilSeconds * 1000.0;
+
+        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
+            std::this_thread::sleep_for (std::chrono::microseconds (25));
+
+        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
+            std::this_thread::sleep_for (std::chrono::microseconds (10));
+
+        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs)
+            std::this_thread::sleep_for (std::chrono::microseconds (1));
+    };
+
     while (! threadShouldExit())
     {
-        double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        // Trigger and wait for rendering
-        renderEvent.reset();
-        cancelPendingUpdate();
-        triggerAsyncUpdate();
         renderEvent.wait (maxFrameTimeMs - 4.0);
+        renderEvent.reset();
 
         if (threadShouldExit())
             break;
 
-        // Measure spent time and cap the framerate
-        double currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-        double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
+        renderFrame();
 
+        if (threadShouldExit())
+            break;
+
+        // Cap the frame rate with the fine-grained sleep staircase.
+        const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
+
         if (secondsToWait > 0.0)
-        {
-            const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
-
-            while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
-                std::this_thread::sleep_for (std::chrono::microseconds (25));
-
-            while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-                std::this_thread::sleep_for (std::chrono::microseconds (10));
-
-            while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                std::this_thread::sleep_for (std::chrono::microseconds (1));
-        }
+            waitUntil ((yup::Time::getMillisecondCounterHiRes() / 1000.0) + secondsToWait);
     }
-}
-
-void SDLComponentNative::handleAsyncUpdate()
-{
-    if (! isThreadRunning() || ! isInitialised.test_and_set())
-        return;
-
-    getRenderContext();
-
-    renderEvent.signal();
 }
 
 void SDLComponentNative::timerCallback()
@@ -867,25 +886,27 @@ void SDLComponentNative::timerCallback()
     pollCapturedMouseState();
 #endif
 
-    getRenderContext();
+    if constexpr (renderDrivenByTimer)
+        renderFrame();
 }
 
 //==============================================================================
 
-void SDLComponentNative::getRenderContext()
+void SDLComponentNative::renderFrame()
 {
-    YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
+    YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
     if (context == nullptr)
         return;
 
     const auto contentSize = getContentSize();
-    auto contentWidth = contentSize.getWidth();
-    auto contentHeight = contentSize.getHeight();
+    const auto contentWidth = contentSize.getWidth();
+    const auto contentHeight = contentSize.getHeight();
 
     if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
         return;
 
+    // Resize GL resources on the render thread, which owns the GL context.
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
@@ -902,8 +923,8 @@ void SDLComponentNative::getRenderContext()
         repaint();
     }
 
-    auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
-    auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+    const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
+    const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
     const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
     {
@@ -920,96 +941,95 @@ void SDLComponentNative::getRenderContext()
         }
     });
 
+    const auto loadAction = (renderContinuous)
+                              ? rive::gpu::LoadAction::clear
+                              : rive::gpu::LoadAction::preserveRenderTarget;
+
+    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
+    frameDescriptor.renderTargetWidth = static_cast<uint32_t> (currentContentWidth);
+    frameDescriptor.renderTargetHeight = static_cast<uint32_t> (currentContentHeight);
+    frameDescriptor.loadAction = loadAction;
+    frameDescriptor.clearColor = clearColor.getARGB();
+    frameDescriptor.disableRasterOrdering = renderAtomicMode.load (std::memory_order_relaxed);
+    frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
+    frameDescriptor.fillsDisabled = false;
+    frameDescriptor.strokesDisabled = false;
+    frameDescriptor.clockwiseFillOverride = true;
+
+    RectangleList<float> repaintAreas;
+
     {
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
+        const MessageManagerLock mmLock (this);
+        if (! mmLock.lockWasGained())
+            return;
 
-        component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
-        lastRenderTimeSeconds = currentTimeSeconds;
-    }
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
 
-    if (renderContinuous)
-        repaint();
-    else if (currentRepaintAreas.isEmpty())
-        return;
+            component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+            lastRenderTimeSeconds = currentTimeSeconds;
+        }
 
-    auto renderFrame = [&]
-    {
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
+        if (renderContinuous)
+            repaint();
 
-        // Setup frame description
-        const auto loadAction = (renderContinuous)
-                                  ? rive::gpu::LoadAction::clear
-                                  : rive::gpu::LoadAction::preserveRenderTarget;
+        {
+            const ScopedLock sl (repaintLock);
+            repaintAreas = currentRepaintAreas;
+            currentRepaintAreas.clearQuick();
+        }
 
-        rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
-        frameDescriptor.renderTargetWidth = static_cast<uint32_t> (currentContentWidth);
-        frameDescriptor.renderTargetHeight = static_cast<uint32_t> (currentContentHeight);
-        frameDescriptor.loadAction = loadAction;
-        frameDescriptor.clearColor = clearColor.getARGB();
-        frameDescriptor.disableRasterOrdering = renderAtomicMode;
-        frameDescriptor.wireframe = renderWireframe;
-        frameDescriptor.fillsDisabled = false;
-        frameDescriptor.strokesDisabled = false;
-        frameDescriptor.clockwiseFillOverride = true;
+        if (! renderContinuous && repaintAreas.isEmpty())
+            return;
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
 
-            // Begin context drawing
             context->begin (frameDescriptor);
         }
 
+        // Repaint the component hierarchy (runs user paint() under the lock).
+        const auto repaintComponents = [&]
         {
-            const auto repaintComponents = [&]
+            if (renderer != nullptr)
             {
-                // Repaint components hierarchy
-                if (renderer != nullptr)
+                const auto dpiScale = getScaleDpi();
+
+                for (auto& repaintArea : repaintAreas)
                 {
-                    const auto dpiScale = getScaleDpi();
+                    YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
-                    for (auto& repaintArea : currentRepaintAreas)
-                    {
-                        YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
-
-                        Graphics g (*context, *renderer, dpiScale);
-                        component.internalPaint (g, repaintArea, renderContinuous);
-                    }
+                    Graphics g (*context, *renderer, dpiScale);
+                    component.internalPaint (g, repaintArea, renderContinuous);
                 }
-            };
-
-            if (PaintProfiler::hasRegisteredComponents() && PaintProfiler::getInstance().isEnabled())
-            {
-                PaintProfiler::getInstance().beginFrame();
-                const auto endFrameGuard = ErasedScopeGuard ([&]
-                {
-                    PaintProfiler::getInstance().endFrame();
-                });
-
-                repaintComponents();
             }
-            else
-            {
-                repaintComponents();
-            }
-        }
+        };
 
-        // Finish context drawing
+        if (PaintProfiler::hasRegisteredComponents() && PaintProfiler::getInstance().isEnabled())
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
+            PaintProfiler::getInstance().beginFrame();
+            const auto endFrameGuard = ErasedScopeGuard ([&]
+            {
+                PaintProfiler::getInstance().endFrame();
+            });
 
-            context->end (getNativeHandle());
-            context->tick();
+            repaintComponents();
         }
-    };
+        else
+        {
+            repaintComponents();
+        }
+    }
 
-    renderFrame();
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
 
-    // Swap buffers
+        context->end (getNativeHandle());
+        context->tick();
+    }
+
     if (window != nullptr && (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES))
         SDL_GL_SwapWindow (window);
-
-    // Clear repainted areas
-    currentRepaintAreas.clearQuick();
 }
 
 //==============================================================================
@@ -1029,6 +1049,9 @@ void SDLComponentNative::startRendering()
     }
     else
     {
+        if (! isTimerRunning())
+            startTimerHz (desiredFrameRate);
+
         if (! isThreadRunning())
             startThread (Priority::high);
     }
@@ -1042,15 +1065,13 @@ void SDLComponentNative::stopRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering requested: rendering=" << String (isRendering() ? "true" : "false"));
 
-    if constexpr (renderDrivenByTimer)
+    if (isTimerRunning())
     {
-        if (isTimerRunning())
-        {
-            stopTimer();
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render timer");
-        }
+        stopTimer();
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render/input timer");
     }
-    else
+
+    if constexpr (! renderDrivenByTimer)
     {
         if (isThreadRunning())
         {

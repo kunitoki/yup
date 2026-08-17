@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComputeParticlesDemo`: keeps drawing the last particle snapshot on frames where no new one has landed, so it renders on the Emscripten WebGPU backend instead of showing nothing. The status label reports the landed-snapshot count alongside the frame count
 - `Component`'s effect path now reuses its offscreen `GpuCanvas` across frames while the component size is unchanged, instead of allocating (and freeing) a full-size render target every frame. On a size change the outgoing canvas is released before the replacement is created, so its `RenderContext` lease returns to the pool rather than forcing a second context to be reserved permanently
 - `ComponentEffectsDemo`: shader effects now share a common base that compiles the pipeline at most once instead of retrying a failed compile on every frame, reports the compile error in the status label and on the console, and shows the CPU time spent applying the effect next to the paint time
+- `SDLComponentNative` now renders each window on its own dedicated render thread instead of the message thread: the component-tree walk runs under a `MessageManagerLock` while GL command submission and buffer swap happen unlocked, so multiple windows no longer serialize their frame rendering (and vsync waits) on the message thread
 
 #### Rive Runtime Bump
 

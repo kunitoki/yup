@@ -27,12 +27,11 @@ class SDLComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
-    , public AsyncUpdater
 {
-#if (YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    static constexpr bool renderDrivenByTimer = false;
-#else
+#if YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)
     static constexpr bool renderDrivenByTimer = true;
+#else
+    static constexpr bool renderDrivenByTimer = false;
 #endif
 
 public:
@@ -119,7 +118,6 @@ public:
 
     //==============================================================================
     void run() override;
-    void handleAsyncUpdate() override;
     void timerCallback() override;
 
     //==============================================================================
@@ -175,7 +173,7 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
-    void getRenderContext();
+    void renderFrame();
 
     void startRendering();
     void stopRendering();
@@ -216,6 +214,7 @@ private:
     RelativeTime doubleClickTime;
 
     RectangleList<float> currentRepaintAreas;
+    CriticalSection repaintLock;
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
@@ -231,8 +230,8 @@ private:
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
     double lastRenderTimeSeconds = 0.0;
-    bool renderAtomicMode = false;
-    bool renderWireframe = false;
+    std::atomic<bool> renderAtomicMode = false;
+    std::atomic<bool> renderWireframe = false;
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;
