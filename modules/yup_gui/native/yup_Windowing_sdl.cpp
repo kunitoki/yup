@@ -681,7 +681,7 @@ void SDLComponentNative::enableWireframe (bool shouldBeEnabled)
 
 void SDLComponentNative::repaint()
 {
-    const auto fullArea = Rectangle<float>().withSize (getSize().to<float>());
+    const auto fullArea = Rectangle<float>().withSize (screenBounds.getSize().to<float>());
 
     {
         const ScopedLock sl (repaintLock);

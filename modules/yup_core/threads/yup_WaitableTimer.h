@@ -67,11 +67,11 @@ public:
     void waitUntil (double milliseconds);
 
 private:
+    void waitUntilFallback (double milliseconds);
+
 #if YUP_WINDOWS
     void* handle = nullptr;
 #endif
-
-    void waitUntilFallback (double milliseconds);
 
     std::mutex mutex;
     std::condition_variable cv;
