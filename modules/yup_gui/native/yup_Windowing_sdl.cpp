@@ -826,18 +826,11 @@ void SDLComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    const auto waitUntil = [] (double waitUntilSeconds)
+    WaitableTimer frameTimer;
+
+    const auto waitUntil = [&frameTimer] (double waitUntilSeconds)
     {
-        const auto waitUntilMs = waitUntilSeconds * 1000.0;
-
-        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
-            std::this_thread::sleep_for (std::chrono::microseconds (25));
-
-        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-            std::this_thread::sleep_for (std::chrono::microseconds (10));
-
-        while (yup::Time::getMillisecondCounterHiRes() < waitUntilMs)
-            std::this_thread::sleep_for (std::chrono::microseconds (1));
+        frameTimer.waitUntil (waitUntilSeconds * 1000.0);
     };
 
     while (! threadShouldExit())
@@ -855,7 +848,7 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        // Cap the frame rate with the fine-grained sleep staircase.
+        // Cap the frame rate with the waitable timer.
         const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
 

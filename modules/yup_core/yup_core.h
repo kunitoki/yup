@@ -366,6 +366,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "threads/yup_Process.h"
 #include "threads/yup_SpinLock.h"
 #include "threads/yup_WaitableEvent.h"
+#include "threads/yup_WaitableTimer.h"
 #include "threads/yup_Thread.h"
 #include "threads/yup_RecursiveSpinLock.h"
 #include "threads/yup_HighResolutionTimer.h"

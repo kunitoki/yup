@@ -323,8 +323,6 @@ public:
         flushDesc.renderTarget = target.getRenderTarget();
         renderContext->flush (flushDesc);
 
-        if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
-            gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
 
         target.contextSlot->frameActive = false;
     }
@@ -358,11 +356,9 @@ public:
         if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
             return false;
 
-        if (target.getRenderContext() == nullptr)
-        {
-            if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+        if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+            if (renderTarget->targetTexture() != nullptr)
                 gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
-        }
 
         D3D11_MAPPED_SUBRESOURCE mapped {};
         HRESULT hr = gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
