@@ -55,6 +55,7 @@
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/factory.hpp>
+#include <rive/text/font_hb.hpp>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
 #include <rive_renderer/rive_renderer.h>
@@ -182,6 +183,8 @@ class Context;
 
 //==============================================================================
 
+#include "graphics/yup_BlendMode.h"
+#include "graphics/yup_Color.h"
 #include "layout/yup_Justification.h"
 #include "layout/yup_Fitting.h"
 #include "primitives/yup_AffineTransform.h"
@@ -201,8 +204,6 @@ class Context;
 #include "imaging/yup_ImageFormatReader.h"
 #include "imaging/yup_ImageFormatWriter.h"
 #include "imaging/yup_ImageFormatManager.h"
-#include "graphics/yup_BlendMode.h"
-#include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
 #include "graphics/yup_Colors.h"
 #include "graphics/yup_StrokeJoin.h"

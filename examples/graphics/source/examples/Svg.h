@@ -96,9 +96,8 @@ private:
 
     void loadDemoFont()
     {
-        yup::Font font;
-        if (font.loadFromFile (dataDirectory.getChildFile ("RobotoFlex-VariableFont.ttf")).wasOk())
-            demoFont = std::move (font);
+        if (auto result = yup::Font::loadFontFromFile (dataDirectory.getChildFile ("RobotoFlex-VariableFont.ttf")); result.wasOk())
+            demoFont = result.getValue();
     }
 
     std::optional<yup::Image> fetchHttpImage (const yup::String& href)

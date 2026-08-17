@@ -50,11 +50,10 @@ protected:
 
         theme = new ApplicationTheme();
 
-        Font font;
-        auto result = font.loadFromFile (getTextEditorTestFontFile());
+        auto result = Font::loadFontFromFile (getTextEditorTestFontFile());
         ASSERT_TRUE (result.wasOk());
 
-        theme->setDefaultFont (std::move (font));
+        theme->setDefaultFont (result.getValue());
         ApplicationTheme::setGlobalTheme (theme);
 
         editor = std::make_unique<TextEditor> ("testEditor");

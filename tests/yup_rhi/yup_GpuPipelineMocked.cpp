@@ -1071,12 +1071,14 @@ TEST_F (GpuRenderPassMockTests, UniformBuffersAreRecycledAcrossFrames)
         .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
 
     // Two draws per frame need two distinct buffers, but the second frame gets
-    // both of them back from the pool - so only two are ever created.
+    // both of them back from the pool - so only two are ever created. The
+    // uploads performed on each acquired buffer are incidental to what this
+    // test verifies, so they use NiceMock to stay quiet.
     EXPECT_CALL (*mockOreCtx, makeBuffer (_))
         .Times (2)
         .WillRepeatedly (Invoke ([] (const rive::ore::BufferDesc& desc)
     {
-        return rive::make_rcp<MockOreBuffer> (desc.size);
+        return rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size);
     }));
 
     auto compileResult = GpuPipeline::compile (ctx, makeShaderSource ("// VS"), makeShaderSource ("// FS"));
