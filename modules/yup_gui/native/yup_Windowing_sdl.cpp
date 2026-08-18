@@ -162,13 +162,6 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
-        if (currentGraphicsApi == GpuPlatform::OpenGL)
-        {
-            SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-            SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 5);
-            SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        }
-
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
         {
@@ -177,6 +170,16 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
+
+#if ! YUP_EMSCRIPTEN
+        SDL_GL_SetAttribute (SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
+        computeContext = SDL_GL_CreateContext (window);
+
+        if (computeContext == nullptr)
+            Logger::outputDebugString ("SDL: unable to create GL compute context, compute will fall back to the window context: " + String (SDL_GetError()));
+
+        SDL_GL_MakeCurrent (window, windowContext);
+#endif
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
     }
@@ -192,15 +195,17 @@ SDLComponentNative::SDLComponentNative (Component& component,
     {
         runWithGraphicsContext (fn);
     };
+    graphicsOptions.computeContextActivator = [this] (const std::function<void()>& fn)
+    {
+        runWithComputeContext (fn);
+    };
+
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
     {
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create YUP GraphicsContext");
         return; // TODO - raise something ?
     }
-
-    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
-        SDL_GL_MakeCurrent (window, nullptr);
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created YUP GraphicsContext");
 
@@ -220,6 +225,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
     // Check mouse capture
     if (shouldCaptureMouse && isVisible())
         updateMouseCapture (true);
+
+    // Release the GL context on the message thread
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
+        SDL_GL_MakeCurrent (window, nullptr);
 
     // Start the rendering
     startRendering();
@@ -251,15 +260,23 @@ SDLComponentNative::~SDLComponentNative()
     // Destroy the window
     if (window != nullptr)
     {
+        SDL_GL_MakeCurrent (window, nullptr);
+
+        if (computeContext != nullptr)
+        {
+            SDL_GL_DestroyContext (computeContext);
+            computeContext = nullptr;
+        }
+
         if (windowContext != nullptr)
         {
-            SDL_GL_MakeCurrent (window, nullptr);
             SDL_GL_DestroyContext (windowContext);
             windowContext = nullptr;
         }
 
         SDL_DestroyProperties (SDL_GetWindowProperties (window));
         SDL_DestroyWindow (window);
+
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroyed window");
         window = nullptr;
     }
@@ -865,6 +882,36 @@ void SDLComponentNative::run()
         if (secondsToWait > 0.0)
             waitUntil ((yup::Time::getMillisecondCounterHiRes() / 1000.0) + secondsToWait);
     }
+}
+
+//==============================================================================
+
+void SDLComponentNative::runWithComputeContext (const std::function<void()>& fn)
+{
+    if (computeContext == nullptr)
+    {
+        runWithGraphicsContext (fn);
+        return;
+    }
+
+    const ScopedLock sl (glContextLock);
+
+    if (computeContextLost)
+        return;
+
+    auto* previousContext = SDL_GL_GetCurrentContext();
+
+    if (! SDL_GL_MakeCurrent (window, computeContext) || SDL_GL_GetCurrentContext() != computeContext)
+    {
+        Logger::outputDebugString ("SDL: unable to make GL compute context current, GPU compute is disabled: " + String (SDL_GetError()));
+
+        computeContextLost = true;
+        SDL_GL_MakeCurrent (window, previousContext);
+        return;
+    }
+
+    fn();
+    SDL_GL_MakeCurrent (window, previousContext);
 }
 
 //==============================================================================

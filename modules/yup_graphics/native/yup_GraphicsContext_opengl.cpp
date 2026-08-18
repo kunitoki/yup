@@ -109,6 +109,9 @@ private:
         cleanupOffscreenResources();
 
         glGenTextures (1, &offscreenTexture);
+        if (offscreenTexture == 0)
+            fprintf (stderr, "createOffscreenResources: glGenTextures returned 0 (no current/usable GL context?) glGetError=0x%x\n", glGetError());
+
         glBindTexture (GL_TEXTURE_2D, offscreenTexture);
         glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -123,12 +126,15 @@ private:
         glBindTexture (GL_TEXTURE_2D, 0);
 
         glGenFramebuffers (1, &offscreenFramebuffer);
+        if (offscreenFramebuffer == 0)
+            fprintf (stderr, "createOffscreenResources: glGenFramebuffers returned 0 glGetError=0x%x\n", glGetError());
+
         glBindFramebuffer (GL_FRAMEBUFFER, offscreenFramebuffer);
         glFramebufferTexture2D (GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, offscreenTexture, 0);
 
         GLenum status = glCheckFramebufferStatus (GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
-            fprintf (stderr, "Offscreen framebuffer is not complete: 0x%x\n", status);
+            fprintf (stderr, "Offscreen framebuffer is not complete: status=0x%x, fbo=%u, tex=%u\n", status, offscreenFramebuffer, offscreenTexture);
 
         glBindFramebuffer (GL_FRAMEBUFFER, 0);
 

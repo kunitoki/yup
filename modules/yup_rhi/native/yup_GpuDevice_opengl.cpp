@@ -25,6 +25,7 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/ore/ore_context_gl.hpp"
 
+#include <atomic>
 #include <vector>
 #include <cstring>
 #include <functional>
@@ -167,9 +168,9 @@ public:
 
     ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
     {
-        return withGLContext ([&]() -> ReferenceCountedObjectPtr<GpuBuffer>
+        if (type == GpuBufferType::storage)
         {
-            if (type == GpuBufferType::storage)
+            return withComputeContext ([&]() -> ReferenceCountedObjectPtr<GpuBuffer>
             {
                 jassert (data != nullptr && byteSize > 0);
                 if (data == nullptr || byteSize == 0)
@@ -184,9 +185,12 @@ public:
                 glBufferData (GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr> (byteSize), data, GL_DYNAMIC_COPY);
                 glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
 
-                return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .glBuffer = buf });
-            }
+                return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .glStorageBuffer = { buf, this } });
+            });
+        }
 
+        return withGLContext ([&]() -> ReferenceCountedObjectPtr<GpuBuffer>
+        {
             return GpuDevice::createBuffer (type, data, byteSize);
         });
     }
@@ -195,17 +199,20 @@ public:
 
     bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
     {
+#if YUP_WASM
+        // WebGL 2.0 (GLES 3.0) has no GL_SHADER_STORAGE_BUFFER — fall back to base.
         return withGLContext ([&]() -> bool
         {
-#if YUP_WASM
-            // WebGL 2.0 (GLES 3.0) has no GL_SHADER_STORAGE_BUFFER — fall back to base.
             return GpuDevice::readBuffer (std::move (buffer), dst, dstSize);
+        });
 #else
+        return withComputeContext ([&]() -> bool
+        {
             if (buffer == nullptr || dst == nullptr)
                 return false;
 
             auto* impl = buffer->getImpl();
-            if (impl == nullptr || impl->glBuffer == 0)
+            if (impl == nullptr || impl->glStorageBuffer.id == 0)
                 return false;
 
             const auto byteSize = buffer->getSizeInBytes();
@@ -213,7 +220,7 @@ public:
                 return false;
 
             glFinish();
-            glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glBuffer);
+            glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glStorageBuffer.id);
             void* mapped = glMapBufferRange (GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr> (byteSize), GL_MAP_READ_BIT);
             if (mapped != nullptr)
             {
@@ -222,36 +229,39 @@ public:
             }
             glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
             return mapped != nullptr;
-#endif
         });
+#endif
     }
 
     //==============================================================================
 
     bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
     {
-        return withGLContext ([&]() -> bool
+        if (buffer == nullptr || data == nullptr || byteSize == 0)
+            return false;
+
+        auto* impl = buffer->getImpl();
+        if (impl == nullptr)
+            return false;
+
+        // For native GL storage buffers, use glBufferSubData on the compute context.
+        if (impl->glStorageBuffer.id != 0)
         {
-            if (buffer == nullptr || data == nullptr || byteSize == 0)
-                return false;
-
-            auto* impl = buffer->getImpl();
-            if (impl == nullptr)
-                return false;
-
-            // For native GL storage buffers, use glBufferSubData.
-            if (impl->glBuffer != 0)
+            return withComputeContext ([&]() -> bool
             {
                 if (byteSize > buffer->getSizeInBytes())
                     return false;
 
-                glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glBuffer);
+                glBindBuffer (GL_SHADER_STORAGE_BUFFER, impl->glStorageBuffer.id);
                 glBufferSubData (GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr> (byteSize), data);
                 glBindBuffer (GL_SHADER_STORAGE_BUFFER, 0);
                 return true;
-            }
+            });
+        }
 
-            // For ore-backed buffers (vertex, index, uniform), delegate to base class.
+        // For ore-backed buffers (vertex, index, uniform), delegate to base class.
+        return withGLContext ([&]() -> bool
+        {
             return GpuDevice::updateBuffer (buffer, data, byteSize);
         });
     }
@@ -490,22 +500,31 @@ public:
         });
     }
 
+    //==============================================================================
+
+    void runOnComputeContext (const std::function<void()>& fn) const override
+    {
+        withComputeContext ([&]
+        {
+            fn();
+        });
+    }
+
 private:
-    /** Runs @a fn with the GL context current on this thread, when a context
-        activator was provided in the device options (see GpuDevice::Options::contextActivator).
-        Without one, @a fn runs directly — the caller is responsible for having a
-        current context, as before. */
+    /** Runs @a fn with the given context activator current on this thread. With a
+        null activator, @a fn runs directly — the caller is responsible for having
+        a current context, as before. */
     template <class Fn>
-    std::invoke_result_t<Fn> withGLContext (Fn&& fn) const
+    static std::invoke_result_t<Fn> withActivator (const std::function<void (const std::function<void()>&)>& activator, Fn&& fn)
     {
         using Result = std::invoke_result_t<Fn>;
 
-        if (! options.contextActivator)
+        if (! activator)
             return std::invoke (std::forward<Fn> (fn));
 
         if constexpr (std::is_void_v<Result>)
         {
-            options.contextActivator ([&]
+            activator ([&]
             {
                 std::invoke (std::forward<Fn> (fn));
             });
@@ -513,12 +532,35 @@ private:
         else
         {
             std::optional<Result> result;
-            options.contextActivator ([&]
+            activator ([&]
             {
                 result.emplace (std::invoke (std::forward<Fn> (fn)));
             });
+            if (! result.has_value())
+                return Result {};
+
             return std::move (*result);
         }
+    }
+
+    /** Runs @a fn with the GL rendering context current on this thread
+        (see GpuDevice::Options::contextActivator). */
+    template <class Fn>
+    std::invoke_result_t<Fn> withGLContext (Fn&& fn) const
+    {
+        return withActivator (options.contextActivator, std::forward<Fn> (fn));
+    }
+
+    /** Runs @a fn with the dedicated GL compute context current on this thread
+        (see GpuDevice::Options::computeContextActivator), falling back to the
+        rendering context when no compute activator was provided. */
+    template <class Fn>
+    std::invoke_result_t<Fn> withComputeContext (Fn&& fn) const
+    {
+        if (options.computeContextActivator)
+            return withActivator (options.computeContextActivator, std::forward<Fn> (fn));
+
+        return withActivator (options.contextActivator, std::forward<Fn> (fn));
     }
 
     OffscreenContextSlot* acquireOffscreenContext()

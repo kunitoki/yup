@@ -75,6 +75,22 @@ public:
             @param fn The GPU work to run with the context current.
         */
         std::function<void (const std::function<void()>&)> contextActivator;
+
+        /** Optional callback that runs GPU compute work with a dedicated compute
+            context made current on the calling thread.
+
+            Some GL drivers stop executing compute dispatches when they are
+            interleaved with rendering on the same context — or on any context of
+            the same share group. Providing a dedicated, unshared context isolates
+            the compute command stream from the render pass; every compute resource
+            (program, storage buffers) then lives exclusively on that context.
+            When null, compute work falls back to contextActivator (or runs as-is
+            when that is also null). Backends without a thread-affine context
+            (D3D, Metal, WebGPU) ignore it.
+
+            @param fn The GPU compute work to run with the compute context current.
+        */
+        std::function<void (const std::function<void()>&)> computeContextActivator;
     };
 
     //==============================================================================
@@ -145,6 +161,22 @@ public:
         WebGPU backends. Not available on OpenGL/GLES or Headless.
     */
     virtual bool isComputeAvailable() const noexcept { return false; }
+
+    /** Runs GPU compute work with the backend's compute context current on the
+        calling thread.
+
+        On OpenGL this routes @p fn through Options::computeContextActivator so
+        the work is encoded on a dedicated compute context, isolated from the
+        rendering command stream (falling back to Options::contextActivator when
+        no compute activator was provided). On every other backend @p fn runs
+        directly.
+
+        Used internally by GpuComputePass and GpuComputePipeline; user code
+        normally never needs to call this.
+
+        @param fn The GPU compute work to run with the compute context current.
+    */
+    virtual void runOnComputeContext (const std::function<void()>& fn) const { fn(); }
 
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.

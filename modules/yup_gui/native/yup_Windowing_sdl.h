@@ -176,6 +176,7 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
+    void runWithComputeContext (const std::function<void()>& fn);
     void renderFrame();
 
     void startRendering();
@@ -185,6 +186,8 @@ private:
 
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;
+    SDL_GLContext computeContext = nullptr;
+    bool computeContextLost = false;
 
     void* parentWindow = nullptr;
     String windowTitle;

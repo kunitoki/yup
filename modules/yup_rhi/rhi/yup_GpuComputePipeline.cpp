@@ -54,7 +54,18 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
-            return yup_constructComputePipelineGL (source, workgroupSize);
+        {
+            std::optional<ResultValue<GpuComputePipeline::Ptr>> result;
+            ctx->runOnComputeContext ([&]
+            {
+                result.emplace (yup_constructComputePipelineGL (ctx, source, workgroupSize));
+            });
+
+            if (! result.has_value())
+                return makeResultValueFail ("GL compute context is not available");
+
+            return std::move (*result);
+        }
 #endif
         default:
             return makeResultValueFail ("Unsupported GPU platform for compute pipelines");
