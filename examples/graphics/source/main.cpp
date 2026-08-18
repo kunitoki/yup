@@ -40,6 +40,10 @@
 #include <BinaryData.h>
 #endif
 
+#if YUP_WINDOWS
+#include <crtdbg.h>
+#endif
+
 //==============================================================================
 
 inline yup::File getAssetPath (yup::StringRef subPath = {})
@@ -379,6 +383,10 @@ struct Application : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+//#if YUP_WINDOWS
+//        _CrtSetBreakAlloc (277639);
+//#endif
+
         YUP_PROFILE_START();
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);

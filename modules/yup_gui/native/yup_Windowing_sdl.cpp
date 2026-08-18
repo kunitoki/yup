@@ -162,6 +162,13 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
     {
+        if (currentGraphicsApi == GpuPlatform::OpenGL)
+        {
+            SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+            SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 5);
+            SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        }
+
         windowContext = SDL_GL_CreateContext (window);
         if (windowContext == nullptr)
         {
@@ -244,6 +251,14 @@ SDLComponentNative::~SDLComponentNative()
     // Destroy the window
     if (window != nullptr)
     {
+        if (windowContext != nullptr)
+        {
+            SDL_GL_MakeCurrent (window, nullptr);
+            SDL_GL_DestroyContext (windowContext);
+            windowContext = nullptr;
+        }
+
+        SDL_DestroyProperties (SDL_GetWindowProperties (window));
         SDL_DestroyWindow (window);
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroyed window");
         window = nullptr;
