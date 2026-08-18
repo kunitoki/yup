@@ -277,6 +277,90 @@ TEST_F (GraphicsParityTests, LaterFillsPaintOverEarlierOnes)
 }
 
 //==============================================================================
+// Clipping. The component tree walk clips every child to its bounds, so a
+// backend that drops or misplaces a clip leaks one component's paint over its
+// siblings. Assert the clip both keeps what is inside and rejects what is not.
+//==============================================================================
+
+TEST_F (GraphicsParityTests, ClipRestrictsDrawingToTheClipRectangle)
+{
+    const auto bitmap = render (Colors::white, [] (Graphics& g)
+    {
+        auto state = g.saveState();
+
+        g.setClipPath (Rectangle<float> (16.0f, 16.0f, 16.0f, 16.0f));
+        g.setFillColor (Colors::black);
+        g.fillAll();
+    });
+
+    ASSERT_TRUE (bitmap.isValid());
+
+    const auto black = test::packRGBA (0, 0, 0, 255);
+    const auto white = test::packRGBA (255, 255, 255, 255);
+
+    EXPECT_TRUE (pixelIs (bitmap, 24, 24, black, "inside the clip"));
+    EXPECT_TRUE (pixelIs (bitmap, 8, 24, white, "left of the clip"));
+    EXPECT_TRUE (pixelIs (bitmap, 40, 24, white, "right of the clip"));
+    EXPECT_TRUE (pixelIs (bitmap, 24, 8, white, "above the clip"));
+    EXPECT_TRUE (pixelIs (bitmap, 24, 40, white, "below the clip"));
+}
+
+//==============================================================================
+// Restoring state must drop the clip. A clip that outlives its SavedState
+// silently shrinks everything drawn afterwards, which is the software version
+// of the leaked scissor rect that clipped the Linux window blit.
+//==============================================================================
+
+TEST_F (GraphicsParityTests, RestoringStateDropsTheClip)
+{
+    const auto bitmap = render (Colors::white, [] (Graphics& g)
+    {
+        {
+            auto state = g.saveState();
+
+            g.setClipPath (Rectangle<float> (0.0f, 0.0f, 8.0f, 8.0f));
+            g.setFillColor (Colors::red);
+            g.fillAll();
+        }
+
+        g.setFillColor (Colors::black);
+        g.fillAll();
+    });
+
+    EXPECT_TRUE (test::bitmapIsSolid (bitmap, test::packRGBA (0, 0, 0, 255), "clip_restored"));
+}
+
+//==============================================================================
+// Transforms. The tree walk translates into each child's coordinate space, so a
+// translated rectangle has to land exactly where the untranslated one would
+// have, offset by the transform and nowhere else.
+//==============================================================================
+
+TEST_F (GraphicsParityTests, TranslationOffsetsGeometryByExactlyTheTranslation)
+{
+    const auto bitmap = render (Colors::white, [] (Graphics& g)
+    {
+        auto state = g.saveState();
+
+        g.setTransform (AffineTransform::translation (16.0f, 24.0f));
+        g.setFillColor (Colors::black);
+        g.fillRect (0.0f, 0.0f, 16.0f, 16.0f);
+    });
+
+    ASSERT_TRUE (bitmap.isValid());
+
+    const auto black = test::packRGBA (0, 0, 0, 255);
+    const auto white = test::packRGBA (255, 255, 255, 255);
+
+    // The rect was drawn at the origin under a (16, 24) translation, so it now
+    // occupies x 16..32, y 24..40.
+    EXPECT_TRUE (pixelIs (bitmap, 24, 32, black, "inside the translated rect"));
+    EXPECT_TRUE (pixelIs (bitmap, 4, 4, white, "where the rect would be untranslated"));
+    EXPECT_TRUE (pixelIs (bitmap, 24, 12, white, "above the translated rect"));
+    EXPECT_TRUE (pixelIs (bitmap, 40, 32, white, "right of the translated rect"));
+}
+
+//==============================================================================
 // A rendered frame must not be uninitialised memory. This is the same measure
 // tools/check_screenshot.py applies to CI captures, asserted here against real
 // drawing rather than a clear, so the threshold it uses stays grounded in what
