@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Core
 
 - Added a `YAML` class: a self-contained YAML parser and writer converting between YAML text and `var` (`parse`, `fromString`, `toString`, `writeToStream`, `FormatOptions`), with core-schema type resolution, block/flow collections, block scalars, and anchors/aliases/merge keys
+- Added a `CancelToken` class (`threads/yup_CancelToken.h`): a thread-safe, copyable observer token with `wasCancelled()`, blocking observation via `waitForCancellation()`, and callback observation via `registerCallback()`/`Registration`, inspired by .NET's `CancellationToken`
+- Added a `CancelTokenSource` class (`threads/yup_CancelTokenSource.h`): a move-only RAII owner of a `CancelToken` that is the sole canceller, requesting cancellation automatically when destroyed (unless moved-from), with observer copies obtained via `getToken()`
 
 ### Graphics
 
