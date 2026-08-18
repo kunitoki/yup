@@ -326,11 +326,8 @@ public:
 
     void selectComponent (int index)
     {
-        for (auto* component : components)
-        {
-            if (component != nullptr)
-                component->setVisible (false);
-        }
+        if (! yup::isPositiveAndBelow (index, components.size()))
+            return;
 
         if (components[index] == nullptr)
         {
@@ -338,7 +335,20 @@ public:
             addChildComponent (components[index]);
         }
 
+        for (int i = 0; i < components.size(); ++i)
+        {
+            if (i == index)
+                continue;
+
+            if (components[i] != nullptr)
+            {
+                components[i]->setVisible (false);
+                components.set (i, nullptr);
+            }
+        }
+
         resized(); // Ensure the newly created component is sized correctly
+
         components[index]->setVisible (true);
     }
 

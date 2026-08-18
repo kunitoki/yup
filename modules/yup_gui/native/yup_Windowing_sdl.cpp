@@ -871,7 +871,10 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        renderFrame();
+        YUP_AUTORELEASEPOOL
+        {
+            renderFrame();
+        }
 
         if (threadShouldExit())
             break;
@@ -936,14 +939,12 @@ void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn
 
             if (! wasCurrent)
                 SDL_GL_MakeCurrent (window, nullptr);
-        }
 
-        return;
+            return;
+        }
     }
-    else
-    {
-        fn();
-    }
+
+    fn();
 }
 
 //==============================================================================
@@ -1105,15 +1106,13 @@ void SDLComponentNative::renderFrame()
         {
             if (renderer != nullptr)
             {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+
                 const auto dpiScale = getScaleDpi();
+                const auto repaintArea = repaintAreas.getBoundingBox().toNearestInt();
 
-                for (auto& repaintArea : repaintAreas)
-                {
-                    YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
-
-                    Graphics g (*context, *renderer, dpiScale);
-                    component.internalPaint (g, repaintArea, renderContinuous);
-                }
+                Graphics g (*context, *renderer, dpiScale);
+                component.internalPaint (g, repaintArea, renderContinuous);
             }
         };
 
