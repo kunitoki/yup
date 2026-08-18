@@ -30,6 +30,7 @@
 #include "yup_graphics/yup_Drawable.cpp"
 #include "yup_graphics/yup_Font.cpp"
 #include "yup_graphics/yup_Graphics.cpp"
+#include "yup_graphics/yup_GraphicsParity.cpp"
 #include "yup_graphics/yup_GraphicsOffscreen.cpp"
 #include "yup_graphics/yup_GpuCanvas.cpp"
 #include "yup_graphics/yup_Image.cpp"

@@ -28,6 +28,7 @@
 #include <SDL3/SDL.h>
 #endif
 
+#include <memory>
 #include <string>
 
 namespace yup::test
@@ -124,6 +125,8 @@ public:
     /** Releases the device and any native resources. */
     ~GpuTestDevice()
     {
+        // The context borrows the device, so it must go first.
+        graphicsContext = nullptr;
         device = nullptr;
         releaseNativeResources();
     }
@@ -142,6 +145,23 @@ public:
 
     /** Returns the device. Only call this when isValid() is true. */
     GpuDevice::Ptr getDevice() const noexcept { return device; }
+
+    /** Returns a GraphicsContext sharing this device, or nullptr on failure.
+
+        Created on first use and owned by this object. It borrows the device
+        rather than creating a second one, so 2D drawing and the RHI operate on
+        the same GPU resources, the way an application's window does.
+    */
+    GraphicsContext* getGraphicsContext()
+    {
+        if (device == nullptr)
+            return nullptr;
+
+        if (graphicsContext == nullptr)
+            graphicsContext = GraphicsContext::createContext (nativeGpuPlatform(), GraphicsContext::Options {}, device);
+
+        return graphicsContext.get();
+    }
 
     /** Returns the device. Only call this when isValid() is true. */
     GpuDevice& operator*() const noexcept
@@ -262,6 +282,7 @@ private:
 
     //==============================================================================
     GpuDevice::Ptr device;
+    std::unique_ptr<GraphicsContext> graphicsContext;
     std::string failureReason { "no native GPU backend is available on this platform" };
 
 #if YUP_LINUX || YUP_WINDOWS
