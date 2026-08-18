@@ -127,6 +127,13 @@ public:
     virtual GpuPlatform getPlatform() const noexcept = 0;
 
     //==============================================================================
+    /** Returns true if a GPU (ore) context is available for RHI operations.
+
+        Equivalent to getGpuContext() != nullptr but without referencing any ore
+        type, so user code and examples can probe GPU capability ore-free.
+    */
+    bool isGpuAvailable() const noexcept { return getGpuContext() != nullptr; }
+
     /** Returns the backend-specific GPU render context, or nullptr if unavailable.
     
         This is the native GPU context used by the Rive renderer. It may be
@@ -148,13 +155,7 @@ public:
     */
     virtual rive::ore::Context* getGpuContext() const noexcept { return nullptr; }
 
-    /** Returns true if a GPU (ore) context is available for RHI operations.
-
-        Equivalent to getGpuContext() != nullptr but without referencing any ore
-        type, so user code and examples can probe GPU capability ore-free.
-    */
-    bool isGpuAvailable() const noexcept { return getGpuContext() != nullptr; }
-
+    //==============================================================================
     /** Returns true if compute shaders are available on this backend.
 
         Compute shaders are available on Metal, D3D11, D3D12, Vulkan, and

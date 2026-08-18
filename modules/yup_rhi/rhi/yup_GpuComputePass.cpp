@@ -23,8 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-// Backend factory functions — defined in native/yup_GpuComputePass_*.cpp
-//==============================================================================
 
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
@@ -39,8 +37,6 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&);
 #endif
 
-//==============================================================================
-// GpuComputePass::Impl — base with common bindings, virtual dispatch / finish
 //==============================================================================
 
 struct GpuComputePass::Impl
@@ -74,6 +70,7 @@ struct GpuComputePass::Impl
     std::vector<TexBinding> texBindings;
 
     virtual ~Impl() = default;
+
     virtual bool isValid() const = 0;
     virtual bool dispatch (uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ) = 0;
     virtual void finish() = 0;
@@ -94,11 +91,13 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
             pass.impl = yup_createComputePassImplMetal (*ctx);
             break;
 #endif
+
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
         case GpuPlatform::Direct3D:
             pass.impl = yup_createComputePassImplD3D11 (*ctx);
             break;
 #endif
+
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
         case GpuPlatform::WebGPU:
             pass.impl = yup_createComputePassImplWebGPU (*ctx);
@@ -108,12 +107,14 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
             pass.impl = yup_createComputePassImplWebGPU (*ctx);
             break;
 #endif
+
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
             pass.impl = yup_createComputePassImplGL (*ctx);
             break;
 #endif
+
         default:
             break;
     }

@@ -49,6 +49,7 @@ struct GlStorageBuffer
         if (this != &other)
         {
             release();
+
             id = std::exchange (other.id, 0);
             device = std::move (other.device);
         }

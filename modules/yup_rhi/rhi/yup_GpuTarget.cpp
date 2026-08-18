@@ -78,8 +78,6 @@ GpuTexture::Ptr GpuTarget::asTexture()
     if (auto canvas = target.getRenderCanvas())
     {
         cachedTexture = GpuTexture::fromRenderCanvas (std::move (canvas), w, h);
-        // Only attach the Y-flip mirror if it was already created; GPU
-        // render-pass targets never create one.
         cachedTexture->sampledTexture = target.getSampledTexture();
     }
     else if (auto tex = target.adoptAsTexture())
