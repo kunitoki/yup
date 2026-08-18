@@ -40,7 +40,10 @@
 #include <BinaryData.h>
 #endif
 
-#if YUP_WINDOWS
+// Enable this to enable leak detection tools on windows
+// #define YUP_ENABLE_WINDOWS_BREAK_ALLOC 277639
+
+#if YUP_WINDOWS && YUP_ENABLE_WINDOWS_BREAK_ALLOC
 #include <crtdbg.h>
 #endif
 
@@ -343,16 +346,46 @@ private:
     void updateWindowTitle()
     {
         yup::String title;
+        auto nativeComponent = getNativeComponent();
 
-        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        auto currentFps = nativeComponent ? nativeComponent->getCurrentFrameRate() : 0.0f;
         title << "[" << yup::String (currentFps, 1) << " FPS]";
-        title << " | YUP On Rive Renderer";
+        title << " | " << yup::YUPApplication::getInstance()->getApplicationName() << " ";
 
-        if (getNativeComponent()->isAtomicModeEnabled())
-            title << " (atomic)";
+        if (nativeComponent)
+        {
+            if (auto context = nativeComponent->getGraphicsContext())
+            {
+                switch (context->getPlatform())
+                {
+                    case yup::GpuPlatform::Direct3D:
+                        title << " | D3D11";
+                        break;
 
-        auto [width, height] = getNativeComponent()->getContentSize();
-        title << " | " << width << " x " << height;
+                    case yup::GpuPlatform::Metal:
+                        title << " | Metal";
+                        break;
+
+                    case yup::GpuPlatform::OpenGL:
+                        title << " | OpenGL 4.x";
+                        break;
+
+                    case yup::GpuPlatform::OpenGLES:
+                        title << " | OpenGLES 3.x";
+                        break;
+
+                    case yup::GpuPlatform::WebGPU:
+                        title << " | WebGPU";
+                        break;
+                }
+            }
+
+            if (nativeComponent->isAtomicModeEnabled())
+                title << " (atomic)";
+
+            auto [width, height] = nativeComponent->getContentSize();
+            title << " | " << width << " x " << height;
+        }
 
         setTitle (title);
     }
@@ -373,7 +406,7 @@ struct Application : yup::YUPApplication
 
     yup::String getApplicationName() override
     {
-        return "yup! graphics";
+        return "YUP! demos";
     }
 
     yup::String getApplicationVersion() override
@@ -383,9 +416,9 @@ struct Application : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
-//#if YUP_WINDOWS
-//        _CrtSetBreakAlloc (277639);
-//#endif
+#if YUP_WINDOWS && YUP_ENABLE_WINDOWS_BREAK_ALLOC
+        _CrtSetBreakAlloc (YUP_ENABLE_WINDOWS_BREAK_ALLOC);
+#endif
 
         YUP_PROFILE_START();
 
