@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+### Tests
+
+- Added `tests/helpers/yup_GpuTestDevice.h`: creates a real on-GPU `GpuDevice` for the current platform, so rendering tests run against the backend the application uses rather than `GpuPlatform::Headless`, which produces no pixels. Metal needs no window; the OpenGL path creates a hidden SDL window and makes its context current. Reports a reason and lets the test skip when no usable GPU is present
+- Added `tests/helpers/yup_PixelCompare.h`: a top-down RGBA8 `Bitmap`, readback from an `OffscreenTarget`, a tolerance-aware comparator that dumps both images to PNG on failure, and a local-flatness measure that detects uninitialised GPU memory without needing a reference image. Artifacts go to `YUP_TEST_ARTIFACT_DIR` when set
+- Added `tests/yup_rhi/yup_GpuParity.cpp`: cross-platform backend parity tests covering exact clear colours, clear overwrite, target aliasing, a Rive frame clear through `beginOffscreen`, and the documented RGBA8 top-down readback contract
+
 ### Breaking changes
 
 - macOS: OpenGL rendering backend removed in favor of Metal only

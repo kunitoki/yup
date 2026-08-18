@@ -25,6 +25,7 @@
 #include "mocks/yup_graphics.h"
 
 #include "yup_rhi/yup_GpuTarget.cpp"
+#include "yup_rhi/yup_GpuParity.cpp"
 #include "yup_rhi/yup_GpuPipeline.cpp"
 #include "yup_rhi/yup_GpuPipelineMocked.cpp"
 
