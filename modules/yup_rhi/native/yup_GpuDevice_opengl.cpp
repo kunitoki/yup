@@ -138,7 +138,7 @@ public:
 
     bool isComputeAvailable() const noexcept override
     {
-        return withGLContext ([&] () -> bool
+        return withGLContext ([&]() -> bool
         {
             // GL 4.3+ and GLES 3.1+ support compute shaders natively.
             // Probe the version string at runtime.
@@ -167,7 +167,7 @@ public:
 
     ReferenceCountedObjectPtr<GpuBuffer> createBuffer (GpuBufferType type, const void* data, size_t byteSize) override
     {
-        return withGLContext ([&] () -> ReferenceCountedObjectPtr<GpuBuffer>
+        return withGLContext ([&]() -> ReferenceCountedObjectPtr<GpuBuffer>
         {
             if (type == GpuBufferType::storage)
             {
@@ -195,7 +195,7 @@ public:
 
     bool readBuffer (GpuBuffer::Ptr buffer, void* dst, size_t dstSize) override
     {
-        return withGLContext ([&] () -> bool
+        return withGLContext ([&]() -> bool
         {
 #if YUP_WASM
             // WebGL 2.0 (GLES 3.0) has no GL_SHADER_STORAGE_BUFFER — fall back to base.
@@ -230,7 +230,7 @@ public:
 
     bool updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t byteSize) override
     {
-        return withGLContext ([&] () -> bool
+        return withGLContext ([&]() -> bool
         {
             if (buffer == nullptr || data == nullptr || byteSize == 0)
                 return false;
@@ -343,7 +343,7 @@ public:
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
     {
-        return withGLContext ([&] () -> std::unique_ptr<OffscreenTarget>
+        return withGLContext ([&]() -> std::unique_ptr<OffscreenTarget>
         {
             if (width <= 0 || height <= 0 || renderContext == nullptr)
                 return nullptr;
@@ -365,7 +365,7 @@ public:
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int width, int height) override
     {
-        return withGLContext ([&] () -> std::unique_ptr<RenderableTarget>
+        return withGLContext ([&]() -> std::unique_ptr<RenderableTarget>
         {
             if (width <= 0 || height <= 0)
                 return nullptr;
@@ -424,7 +424,7 @@ public:
 
     bool clearOffscreen (OffscreenTarget& baseTarget, GpuColor color) override
     {
-        return withGLContext ([&] () -> bool
+        return withGLContext ([&]() -> bool
         {
             auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
 
@@ -458,7 +458,7 @@ public:
 
     bool readOffscreenPixels (OffscreenTarget& baseTarget, void* dst, size_t dstSize) override
     {
-        return withGLContext ([&] () -> bool
+        return withGLContext ([&]() -> bool
         {
             auto& target = static_cast<OffscreenTargetGL&> (baseTarget);
             if (target.getRenderTarget() == nullptr || dst == nullptr)
@@ -496,7 +496,7 @@ private:
         Without one, @a fn runs directly — the caller is responsible for having a
         current context, as before. */
     template <class Fn>
-    auto withGLContext (Fn&& fn) const
+    std::invoke_result_t<Fn> withGLContext (Fn&& fn) const
     {
         using Result = std::invoke_result_t<Fn>;
 
@@ -505,12 +505,18 @@ private:
 
         if constexpr (std::is_void_v<Result>)
         {
-            options.contextActivator ([&] { std::invoke (std::forward<Fn> (fn)); });
+            options.contextActivator ([&]
+            {
+                std::invoke (std::forward<Fn> (fn));
+            });
         }
         else
         {
             std::optional<Result> result;
-            options.contextActivator ([&] { result.emplace (std::invoke (std::forward<Fn> (fn))); });
+            options.contextActivator ([&]
+            {
+                result.emplace (std::invoke (std::forward<Fn> (fn)));
+            });
             return std::move (*result);
         }
     }
