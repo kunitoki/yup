@@ -125,6 +125,33 @@ inline Bitmap readTarget (GpuDevice& device, OffscreenTarget& target, int width,
 }
 
 //==============================================================================
+/** Copies an RGBA Image into a Bitmap.
+
+    Image holds its raw bytes in the same top-down RGBA order a Bitmap uses, so
+    this is a straight copy. Returns an invalid Bitmap for an image in any other
+    pixel format, or one with no CPU-side pixels.
+*/
+inline Bitmap bitmapFromImage (const Image& image)
+{
+    Bitmap result;
+
+    if (! image.isValid() || image.getPixelFormat() != PixelFormat::RGBA)
+        return result;
+
+    const auto raw = image.getRawData();
+    const auto expected = static_cast<size_t> (image.getWidth()) * static_cast<size_t> (image.getHeight()) * 4u;
+
+    if (raw.size() < expected)
+        return result;
+
+    result.width = image.getWidth();
+    result.height = image.getHeight();
+    result.pixels.assign (raw.data(), raw.data() + expected);
+
+    return result;
+}
+
+//==============================================================================
 /** The outcome of comparing two bitmaps. */
 struct BitmapDiff
 {

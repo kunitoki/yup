@@ -46,6 +46,8 @@ inline GpuPlatform nativeGpuPlatform() noexcept
     return GpuPlatform::Metal;
 #elif YUP_WINDOWS
     return GpuPlatform::Direct3D;
+#elif YUP_ANDROID || YUP_WASM
+    return GpuPlatform::OpenGLES;
 #else
     return GpuPlatform::OpenGL;
 #endif

@@ -30,6 +30,7 @@
 #include "yup_gui/yup_ComboBox.cpp"
 #include "yup_gui/yup_Component.cpp"
 #include "yup_gui/yup_ComponentNative.cpp"
+#include "yup_gui/yup_ComponentParity.cpp"
 #include "yup_gui/yup_ComponentEffect.cpp"
 #include "yup_gui/yup_Desktop.cpp"
 #include "yup_gui/yup_DragAndDropData.cpp"
