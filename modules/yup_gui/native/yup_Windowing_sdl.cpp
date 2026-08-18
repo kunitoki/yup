@@ -1109,7 +1109,7 @@ void SDLComponentNative::renderFrame()
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
                 const auto dpiScale = getScaleDpi();
-                const auto repaintArea = repaintAreas.getBoundingBox().toNearestInt();
+                const auto repaintArea = repaintAreas.getBoundingBox().smallestIntContainer();
 
                 Graphics g (*context, *renderer, dpiScale);
                 component.internalPaint (g, repaintArea, renderContinuous);
