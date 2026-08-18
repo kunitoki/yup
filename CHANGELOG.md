@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+### Linux CI
+
+- `build_linux.yml` sets `YUP_TEST_REQUIRE_GPU=1`, so a GPU-backed test that cannot create a device fails the job rather than skipping. A skip is indistinguishable from a pass in a CI summary, which would let a runner that lost llvmpipe report green while proving nothing. It also sets `YUP_TEST_ARTIFACT_DIR` and uploads the PNGs a failing pixel comparison leaves behind
+
 ### Tests
 
 - Added `tests/helpers/yup_GpuTestDevice.h`: creates a real on-GPU `GpuDevice` for the current platform, so rendering tests run against the backend the application uses rather than `GpuPlatform::Headless`, which produces no pixels. Metal needs no window; the OpenGL path creates a hidden SDL window and makes its context current. Reports a reason and lets the test skip when no usable GPU is present

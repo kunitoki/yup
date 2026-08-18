@@ -35,6 +35,10 @@ env:
     libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev libgl1-mesa-dri mesa-utils xvfb
   LIBGL_ALWAYS_SOFTWARE: "1"
   GALLIUM_DRIVER: "llvmpipe"
+  # llvmpipe is always present on this runner, so a GPU-backed test that cannot
+  # create a device is a real failure rather than a reason to skip.
+  YUP_TEST_REQUIRE_GPU: "1"
+  YUP_TEST_ARTIFACT_DIR: "/tmp/yup_test_artifacts"
 
 jobs:
   configure:
@@ -80,6 +84,14 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: xvfb-run -a ./yup_tests
+    - name: Upload Failed Comparison Images
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pixel-diff-debug
+        path: /tmp/yup_test_artifacts
+        if-no-files-found: ignore
+        retention-days: 14
 
   build_tests_release:
     runs-on: ubuntu-latest
@@ -101,6 +113,14 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: xvfb-run -a ./yup_tests
+    - name: Upload Failed Comparison Images
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pixel-diff-release
+        path: /tmp/yup_test_artifacts
+        if-no-files-found: ignore
+        retention-days: 14
 
   build_console:
     runs-on: ubuntu-latest

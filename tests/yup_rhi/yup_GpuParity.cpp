@@ -44,8 +44,17 @@ class GpuParityTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        if (! gpu.isValid())
-            GTEST_SKIP() << "no usable GPU device: " << gpu.getFailureReason();
+        if (gpu.isValid())
+            return;
+
+        // A skip reads as a pass in most CI summaries, so a runner that was
+        // meant to have a GPU and lost it would report green while proving
+        // nothing. YUP_TEST_REQUIRE_GPU=1 turns that into a failure.
+        if (test::GpuTestDevice::isGpuRequired())
+            FAIL() << "YUP_TEST_REQUIRE_GPU is set but no " << test::GpuTestDevice::getPlatformName()
+                   << " device could be created: " << gpu.getFailureReason();
+
+        GTEST_SKIP() << "no usable GPU device: " << gpu.getFailureReason();
     }
 
     test::GpuTestDevice gpu;

@@ -157,6 +157,18 @@ public:
         return device.get();
     }
 
+    /** Returns true when the environment demands a working GPU.
+
+        A test that skips is indistinguishable from a test that passed in most
+        CI summaries, so a runner that quietly lost its GPU would report green
+        while proving nothing. Set YUP_TEST_REQUIRE_GPU=1 on any runner that is
+        supposed to have one, and a missing device becomes a failure instead.
+    */
+    static bool isGpuRequired()
+    {
+        return SystemStats::getEnvironmentVariable ("YUP_TEST_REQUIRE_GPU", {}).trim() == "1";
+    }
+
     /** Returns a short name for the active backend, for test output. */
     static const char* getPlatformName() noexcept
     {
