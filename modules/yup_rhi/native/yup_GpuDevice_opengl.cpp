@@ -25,6 +25,10 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 #include "rive/renderer/ore/ore_context_gl.hpp"
 
+#if YUP_EMSCRIPTEN
+#include <emscripten/html5.h>
+#endif
+
 #include <atomic>
 #include <vector>
 #include <cstring>
@@ -78,6 +82,14 @@ public:
         if (! gladLoadCustomLoader ((GLADloadfunc) options.loaderFunction))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
+            return;
+        }
+#endif
+
+#if YUP_EMSCRIPTEN
+        if (emscripten_webgl_get_current_context() == 0)
+        {
+            fprintf (stderr, "No current WebGL context, GL device unavailable.\n");
             return;
         }
 #endif
@@ -139,6 +151,9 @@ public:
 
     bool isComputeAvailable() const noexcept override
     {
+        if (renderContext == nullptr)
+            return false;
+
         return withGLContext ([&]() -> bool
         {
             // GL 4.3+ and GLES 3.1+ support compute shaders natively.

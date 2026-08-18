@@ -28,7 +28,7 @@ class SDLComponentNative final
     , public Timer
     , public Thread
 {
-#if YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)
+#if YUP_EMSCRIPTEN
     static constexpr bool renderDrivenByTimer = true;
 #else
     static constexpr bool renderDrivenByTimer = false;

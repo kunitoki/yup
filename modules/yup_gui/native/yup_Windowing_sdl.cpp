@@ -84,8 +84,6 @@ SDLComponentNative::SDLComponentNative (Component& component,
 #if YUP_WINDOWS
     if (parent != nullptr)
     {
-        // Register a plain window class to avoid triggering SDL's WndProc during creation
-        // (SDL will subclass it afterwards when wrapping the existing HWND).
         static const wchar_t childWindowClass[] = L"YUPChildWindow";
         static bool childWindowClassRegistered = false;
 
@@ -227,8 +225,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
         updateMouseCapture (true);
 
     // Release the GL context on the message thread
-    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
-        SDL_GL_MakeCurrent (window, nullptr);
+    if constexpr (! renderDrivenByTimer)
+    {
+        if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
+            SDL_GL_MakeCurrent (window, nullptr);
+    }
 
     // Start the rendering
     startRendering();
@@ -918,21 +919,26 @@ void SDLComponentNative::runWithComputeContext (const std::function<void()>& fn)
 
 void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn)
 {
-    const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
-
-    if (isGL)
+    if constexpr (! renderDrivenByTimer)
     {
-        const ScopedLock sl (glContextLock);
+        const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
 
-        const bool wasCurrent = isGL && (SDL_GL_GetCurrentContext() == windowContext);
+        if (isGL)
+        {
+            const ScopedLock sl (glContextLock);
 
-        if (! wasCurrent)
-            SDL_GL_MakeCurrent (window, windowContext);
+            const bool wasCurrent = isGL && (SDL_GL_GetCurrentContext() == windowContext);
 
-        fn();
+            if (! wasCurrent)
+                SDL_GL_MakeCurrent (window, windowContext);
 
-        if (! wasCurrent)
-            SDL_GL_MakeCurrent (window, nullptr);
+            fn();
+
+            if (! wasCurrent)
+                SDL_GL_MakeCurrent (window, nullptr);
+        }
+
+        return;
     }
     else
     {
@@ -998,8 +1004,11 @@ void SDLComponentNative::renderFrame()
 
         if (isGL)
         {
-            glContextLock.enter();
-            SDL_GL_MakeCurrent (window, windowContext);
+            if constexpr (! renderDrivenByTimer)
+            {
+                glContextLock.enter();
+                SDL_GL_MakeCurrent (window, windowContext);
+            }
         }
 
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
@@ -1008,8 +1017,11 @@ void SDLComponentNative::renderFrame()
 
         if (isGL)
         {
-            SDL_GL_MakeCurrent (window, nullptr);
-            glContextLock.exit();
+            if constexpr (! renderDrivenByTimer)
+            {
+                SDL_GL_MakeCurrent (window, nullptr);
+                glContextLock.exit();
+            }
         }
 
         repaint();
@@ -1051,11 +1063,8 @@ void SDLComponentNative::renderFrame()
     RectangleList<float> repaintAreas;
     bool glContextLocked = false;
 
+    auto renderInternal = [&]() -> bool
     {
-        const MessageManagerLock mmLock (this);
-        if (! mmLock.lockWasGained())
-            return;
-
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
 
@@ -1068,18 +1077,21 @@ void SDLComponentNative::renderFrame()
 
         {
             const ScopedLock sl (repaintLock);
-            repaintAreas = currentRepaintAreas;
+            repaintAreas = std::move (currentRepaintAreas);
             currentRepaintAreas.clearQuick();
         }
 
         if (! renderContinuous && repaintAreas.isEmpty())
-            return;
+            return false;
 
         if (isGL)
         {
-            glContextLock.enter();
-            glContextLocked = true;
-            SDL_GL_MakeCurrent (window, windowContext);
+            if constexpr (! renderDrivenByTimer)
+            {
+                glContextLock.enter();
+                glContextLocked = true;
+                SDL_GL_MakeCurrent (window, windowContext);
+            }
         }
 
         {
@@ -1119,6 +1131,23 @@ void SDLComponentNative::renderFrame()
         {
             repaintComponents();
         }
+
+        return true;
+    };
+
+    if constexpr (! renderDrivenByTimer)
+    {
+        const MessageManagerLock mmLock (Thread::getCurrentThread());
+        if (! mmLock.lockWasGained())
+            return;
+
+        if (! renderInternal())
+            return;
+    }
+    else
+    {
+        if (! renderInternal())
+            return;
     }
 
     {
@@ -1128,14 +1157,18 @@ void SDLComponentNative::renderFrame()
         context->tick();
     }
 
-    if (window != nullptr && isGL)
+    if (isGL && window != nullptr)
     {
         SDL_GL_SwapWindow (window);
 
-        if (glContextLocked)
+        if constexpr (! renderDrivenByTimer)
         {
-            SDL_GL_MakeCurrent (window, nullptr);
-            glContextLock.exit();
+            if (glContextLocked)
+            {
+                SDL_GL_MakeCurrent (window, nullptr);
+
+                glContextLock.exit();
+            }
         }
     }
 }
@@ -1644,8 +1677,6 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
 
         component.internalFocusChanged (true);
 
-        // Re-notify the focused widget so it restarts its caret and text input.
-        // This pairs with the focusLost() call in the gotFocus=false branch below.
         if (lastComponentFocused != nullptr && lastComponentFocused.get() != std::addressof (component))
         {
             auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
@@ -1658,8 +1689,6 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
     }
     else
     {
-        // Properly notify the focused widget so it stops its caret and text input
-        // via relinquishTextInput(), keeping textInputActive in sync with SDL's state.
         if (lastComponentFocused != nullptr && lastComponentFocused.get() != std::addressof (component))
         {
             auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());

@@ -377,6 +377,10 @@ private:
                     case yup::GpuPlatform::WebGPU:
                         title << " | WebGPU";
                         break;
+
+                    case yup::GpuPlatform::Headless:
+                        title << " | Headless";
+                        break;
                 }
             }
 
