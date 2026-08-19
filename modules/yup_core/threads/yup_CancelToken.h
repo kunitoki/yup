@@ -45,11 +45,9 @@ namespace yup
     All copies of a CancelToken share the same underlying cancellation state,
     so a cancellation requested by the source is immediately visible to every
     copy. Tokens can be handed to worker threads or asynchronous sub-operations
-    freely; no token copy can ever trigger cancellation itself, mirroring
-    .NET's CancellationToken.
+    freely; no token copy can ever trigger cancellation itself.
 
-    The token can be observed in three complementary ways, loosely inspired by
-    the .NET cancellation model:
+    The token can be observed in three complementary ways:
 
       - Non-blocking polling: wasCancelled() is a lock-free atomic read that
         can be checked from any thread, including real-time threads.
@@ -60,8 +58,7 @@ namespace yup
       - Callbacks: registerCallback() attaches a callback that is invoked
         exactly once, on the thread that cancels the token, in registration
         order. A callback registered after the token was already cancelled is
-        invoked synchronously by registerCallback(), mirroring .NET's
-        CancellationToken.Register().
+        invoked synchronously by registerCallback().
 
     Tokens that can never be cancelled can be created with the default
     constructor or with none(); calling waitForCancellation() on such a token
@@ -253,7 +250,7 @@ public:
 
         If the token has already been cancelled, the callback is invoked
         synchronously by this method, before it returns, and the returned
-        registration is invalid (mirroring .NET's CancellationToken.Register()).
+        registration is invalid.
 
         If the token can never be cancelled (default-constructed / none()),
         the callback is never invoked and the returned registration is invalid.
