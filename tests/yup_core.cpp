@@ -27,6 +27,8 @@
 #include "yup_core/yup_Base64.cpp"
 #include "yup_core/yup_BigInteger.cpp"
 #include "yup_core/yup_BufferedInputStream.cpp"
+#include "yup_core/yup_CancelToken.cpp"
+#include "yup_core/yup_CancelTokenSource.cpp"
 #include "yup_core/yup_CharacterFunctions.cpp"
 #include "yup_core/yup_ChildProcess.cpp"
 #include "yup_core/yup_ConsoleApplication.cpp"

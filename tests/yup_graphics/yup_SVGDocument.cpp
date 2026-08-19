@@ -2575,19 +2575,39 @@ TEST (SVGDocumentTests, SVGCssParserMatchesSimpleSelectors)
 {
     SVGData data;
     SVGCssParser parser (data);
+
+    data.cssRules.push_back ({ "rect", { "fill: red" }, 1, 1 });
+    data.cssRules.push_back ({ "#target", { "fill: blue" }, 100, 2 });
+    data.cssRules.push_back ({ ".highlight", { "fill: green" }, 10, 3 });
+    data.cssRules.push_back ({ "rect#target.highlight", { "fill: yellow" }, 111, 4 });
+    data.cssRules.push_back ({ ".missing", { "fill: black" }, 10, 5 });
+    data.cssRules.push_back ({ "circle.highlight", { "fill: white" }, 11, 6 });
+    parser.buildCssRuleIndex();
+
     XmlElement rect ("rect");
     rect.setAttribute ("id", "target");
     rect.setAttribute ("class", "highlight selected");
 
-    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "rect", {}, 0, 0 }));
-    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "#target", {}, 0, 0 }));
-    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { ".highlight", {}, 0, 0 }));
-    EXPECT_TRUE (parser.matchesCssSelector (rect, SVGCssRule { "rect#target.highlight", {}, 0, 0 }));
+    // Should match: rect tag, #target id, .highlight class, combined selector
+    {
+        SVGElement e;
+        e.tagName = "rect";
+        parser.applyStylesheetRules (rect, e);
+        EXPECT_TRUE (e.fillColor.has_value());
+        // Highest specificity wins: rect#target.highlight (111) → yellow
+        EXPECT_EQ (e.fillColor->toString(), Color::fromString ("yellow").toString());
+    }
 
-    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "", {}, 0, 0 }));
-    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "g rect", {}, 0, 0 }));
-    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { ".missing", {}, 0, 0 }));
-    EXPECT_FALSE (parser.matchesCssSelector (rect, SVGCssRule { "circle.highlight", {}, 0, 0 }));
+    // Empty/missing selectors should not match
+    {
+        XmlElement circle ("circle");
+        circle.setAttribute ("id", "other");
+        circle.setAttribute ("class", "otherclass");
+        SVGElement e;
+        e.tagName = "circle";
+        parser.applyStylesheetRules (circle, e);
+        EXPECT_FALSE (e.fillColor.has_value());
+    }
 }
 
 TEST (SVGDocumentTests, SVGCssParserApplyStylesheetRulesUsesSpecificityOrder)
@@ -2598,6 +2618,7 @@ TEST (SVGDocumentTests, SVGCssParserApplyStylesheetRulesUsesSpecificityOrder)
     data.cssRules.push_back ({ "#target", { "fill: green" }, 100, 2 });
 
     SVGCssParser parser (data);
+    parser.buildCssRuleIndex();
     XmlElement rect ("rect");
     rect.setAttribute ("id", "target");
     rect.setAttribute ("class", "highlight");

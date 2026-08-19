@@ -657,26 +657,7 @@ yup_wchar String::operator[] (int index) const noexcept
     return text[index];
 }
 
-template <typename Type>
-struct HashGenerator
-{
-    template <typename CharPointer>
-    static Type calculate (CharPointer t) noexcept
-    {
-        Type result = {};
-
-        while (! t.isEmpty())
-            result = ((Type) multiplier) * result + (Type) t.getAndAdvance();
-
-        return result;
-    }
-
-    enum
-    {
-        multiplier = sizeof (Type) > 4 ? 101 : 31
-    };
-};
-
+//==============================================================================
 int String::hashCode() const noexcept { return (int) HashGenerator<uint32>::calculate (text); }
 
 int64 String::hashCode64() const noexcept { return (int64) HashGenerator<uint64>::calculate (text); }
@@ -2746,4 +2727,3 @@ String String::dedentLines() const
 }
 
 } // namespace yup
-

@@ -57,292 +57,290 @@ void SVGCssParser::parseCSSStyle (const String& styleString, SVGElement& e)
 
 void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef, SVGElement& e)
 {
-    String property (propertyRef.text);
     String value (valueRef.text);
-
-    property = property.trim().toLowerCase();
     value = value.trim();
+
+    String property (propertyRef.text);
+    property = property.trim().toLowerCase();
+
+    if (property.isEmpty())
+        return;
 
     YUP_DRAWABLE_LOG ("applyStyleProperty - tag: " << e.tagName
                                                    << " id: " << e.id.value_or (String ("none"))
                                                    << " property: " << property
                                                    << " value: " << value);
 
-    if (property == "fill")
-    {
-        e.fillCurrentColor = false;
-        e.fillUrl.reset();
-        e.fillColor.reset();
-        e.noFill = false;
+    // Dispatch table mapping CSS property names to handlers, grouped by semantic category
+    using Handler = void (*) (const String&, SVGElement&);
 
-        if (value == "none")
-            e.noFill = true;
-        else if (value == "currentColor")
-            e.fillCurrentColor = true;
-        else if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-            e.fillUrl = url;
-        else if (value.isNotEmpty())
-            e.fillColor = Color::fromString (value);
-    }
-    else if (property == "stroke")
+    struct PropertyHandlers
     {
-        e.strokeCurrentColor = false;
-        e.strokeUrl.reset();
-        e.strokeColor.reset();
-        e.noStroke = false;
+        HashMap<StringRef, Handler> map;
 
-        if (value == "none")
-            e.noStroke = true;
-        else if (value == "currentColor")
-            e.strokeCurrentColor = true;
-        else if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-            e.strokeUrl = url;
-        else if (value.isNotEmpty())
-            e.strokeColor = Color::fromString (value);
-    }
-    else if (property == "color")
-    {
-        if (value != "currentColor" && value != "inherit")
-            e.color = Color::fromString (value);
-    }
-    else if (property == "stroke-width")
-    {
-        float strokeWidth = SVGParser::parseUnit (value, e.strokeWidth.value_or (1.0f), e.fontSize.value_or (12.0f));
-        if (strokeWidth >= 0.0f)
-            e.strokeWidth = strokeWidth;
-    }
-    else if (property == "stroke-linejoin")
-    {
-        if (value == "round")
-            e.strokeJoin = StrokeJoin::Round;
-        else if (value == "miter")
-            e.strokeJoin = StrokeJoin::Miter;
-        else if (value == "bevel")
-            e.strokeJoin = StrokeJoin::Bevel;
-    }
-    else if (property == "stroke-linecap")
-    {
-        if (value == "round")
-            e.strokeCap = StrokeCap::Round;
-        else if (value == "square")
-            e.strokeCap = StrokeCap::Square;
-        else if (value == "butt")
-            e.strokeCap = StrokeCap::Butt;
-    }
-    else if (property == "opacity")
-    {
-        float opacity = value.getFloatValue();
-        if (opacity >= 0.0f && opacity <= 1.0f)
-            e.opacity = opacity;
-    }
-    else if (property == "display")
-    {
-        if (value == "none")
-            e.hidden = true;
-    }
-    else if (property == "visibility")
-    {
-        e.hidden = value == "hidden" || value == "collapse";
-    }
-    else if (property == "font-family")
-    {
-        e.fontFamily = value.unquoted();
-    }
-    else if (property == "font-size")
-    {
-        float fontSize = SVGParser::parseUnit (value, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
-        if (fontSize > 0.0f)
-            e.fontSize = fontSize;
-    }
-    else if (property == "text-anchor")
-    {
-        e.textAnchor = value;
-    }
-    else if (property == "letter-spacing")
-    {
-        if (value != "normal")
-            e.letterSpacing = SVGParser::parseUnit (value, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
-    }
-    else if (property == "word-spacing")
-    {
-        if (value != "normal")
-            e.wordSpacing = SVGParser::parseUnit (value, 0.0f, e.fontSize.value_or (12.0f), e.fontSize.value_or (12.0f));
-    }
-    else if (property == "font-weight")
-    {
-        if (value == "bold" || value == "bolder")
-            e.fontWeight = 700;
-        else if (value == "normal" || value == "lighter")
-            e.fontWeight = 400;
-        else
+        PropertyHandlers()
         {
-            const int numericWeight = value.getIntValue();
-            if (numericWeight >= 100 && numericWeight <= 900)
-                e.fontWeight = numericWeight;
-        }
-    }
-    else if (property == "font-style")
-    {
-        e.fontItalic = (value == "italic" || value == "oblique");
-    }
-    else if (property == "font-variant")
-    {
-        YUP_DRAWABLE_LOG ("CSS font-variant currently not applied - value: " << value);
-    }
-    else if (property == "font-stretch")
-    {
-        YUP_DRAWABLE_LOG ("CSS font-stretch currently not applied - value: " << value);
-    }
-    else if (property == "font")
-    {
-        YUP_DRAWABLE_LOG ("CSS font shorthand currently not applied - value: " << value);
-    }
-    else if (property == "dominant-baseline")
-    {
-        YUP_DRAWABLE_LOG ("CSS dominant-baseline currently not applied - value: " << value);
-    }
-    else if (property == "alignment-baseline")
-    {
-        YUP_DRAWABLE_LOG ("CSS alignment-baseline currently not applied - value: " << value);
-    }
-    else if (property == "baseline-shift")
-    {
-        YUP_DRAWABLE_LOG ("CSS baseline-shift currently not applied - value: " << value);
-    }
-    else if (property == "clip-path")
-    {
-        String clipPathUrl = SVGParser::extractUrlId (value);
-        if (clipPathUrl.isNotEmpty())
-            e.clipPathUrl = clipPathUrl;
-    }
-    else if (property == "mask")
-    {
-        if (auto maskUrl = SVGParser::extractUrlId (value); maskUrl.isNotEmpty())
-            e.maskUrl = maskUrl;
-    }
-    else if (property == "marker-start")
-    {
-        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-            e.markerStart = url;
-    }
-    else if (property == "marker-mid")
-    {
-        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-            e.markerMid = url;
-    }
-    else if (property == "marker-end")
-    {
-        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-            e.markerEnd = url;
-    }
-    else if (property == "marker")
-    {
-        if (auto url = SVGParser::extractUrlId (value); url.isNotEmpty())
-        {
-            e.markerStart = url;
-            e.markerMid = url;
-            e.markerEnd = url;
-        }
-    }
-    else if (property == "stroke-miterlimit")
-    {
-        float val = value.getFloatValue();
-        e.strokeMiterLimit = std::max (1.0f, val);
-    }
-    else if (property == "filter")
-    {
-        if (value == "none")
-            e.filterUrl.reset();
-        else if (auto filterUrl = SVGParser::extractUrlId (value); filterUrl.isNotEmpty())
-            e.filterUrl = filterUrl;
-        else
-            YUP_DRAWABLE_LOG ("CSS filter currently only supports url(...) - value: " << value);
-    }
-    else if (property == "stroke-dasharray")
-    {
-        if (value == "none")
-        {
-            e.strokeDashArray.reset();
-            e.strokeDashArrayNone = true;
-        }
-        else
-        {
-            Array<float> dashes;
-            for (const auto dash : SVGParser::parseLengthList (value, e.fontSize.value_or (12.0f), 100.0f))
+            map.set ("fill", [] (const String& v, SVGElement& el)
             {
-                if (dash >= 0.0f)
-                    dashes.add (dash);
-            }
-
-            if (! dashes.isEmpty())
+                el.fillCurrentColor = false;
+                el.fillUrl.reset();
+                el.fillColor.reset();
+                el.noFill = false;
+                if (v == "none")
+                {
+                    el.noFill = true;
+                }
+                else if (v == "currentColor")
+                {
+                    el.fillCurrentColor = true;
+                }
+                else if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                {
+                    el.fillUrl = url;
+                }
+                else if (v.isNotEmpty())
+                {
+                    el.fillColor = Color::fromString (v);
+                }
+            });
+            map.set ("stroke", [] (const String& v, SVGElement& el)
             {
-                e.strokeDashArray = dashes;
-                e.strokeDashArrayNone = false;
-            }
+                el.strokeCurrentColor = false;
+                el.strokeUrl.reset();
+                el.strokeColor.reset();
+                el.noStroke = false;
+                if (v == "none")
+                {
+                    el.noStroke = true;
+                }
+                else if (v == "currentColor")
+                {
+                    el.strokeCurrentColor = true;
+                }
+                else if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                {
+                    el.strokeUrl = url;
+                }
+                else if (v.isNotEmpty())
+                {
+                    el.strokeColor = Color::fromString (v);
+                }
+            });
+            map.set ("color", [] (const String& v, SVGElement& el)
+            {
+                if (v != "currentColor" && v != "inherit")
+                    el.color = Color::fromString (v);
+            });
+
+            // Stroke properties
+            map.set ("stroke-width", [] (const String& v, SVGElement& el)
+            {
+                float sw = SVGParser::parseUnit (v, el.strokeWidth.value_or (1.0f), el.fontSize.value_or (12.0f));
+                if (sw >= 0.0f)
+                    el.strokeWidth = sw;
+            });
+            map.set ("stroke-linejoin", [] (const String& v, SVGElement& el)
+            {
+                if (v == "round")
+                    el.strokeJoin = StrokeJoin::Round;
+                else if (v == "miter")
+                    el.strokeJoin = StrokeJoin::Miter;
+                else if (v == "bevel")
+                    el.strokeJoin = StrokeJoin::Bevel;
+            });
+            map.set ("stroke-linecap", [] (const String& v, SVGElement& el)
+            {
+                if (v == "round")
+                    el.strokeCap = StrokeCap::Round;
+                else if (v == "square")
+                    el.strokeCap = StrokeCap::Square;
+                else if (v == "butt")
+                    el.strokeCap = StrokeCap::Butt;
+            });
+            map.set ("stroke-miterlimit", [] (const String& v, SVGElement& el)
+            {
+                float val = v.getFloatValue();
+                el.strokeMiterLimit = std::max (1.0f, val);
+            });
+            map.set ("stroke-dasharray", [] (const String& v, SVGElement& el)
+            {
+                if (v == "none")
+                {
+                    el.strokeDashArray.reset();
+                    el.strokeDashArrayNone = true;
+                }
+                else
+                {
+                    Array<float> dashes;
+                    for (const auto dash : SVGParser::parseLengthList (v, el.fontSize.value_or (12.0f), 100.0f))
+                    {
+                        if (dash >= 0.0f)
+                            dashes.add (dash);
+                    }
+                    if (! dashes.isEmpty())
+                    {
+                        el.strokeDashArray = dashes;
+                        el.strokeDashArrayNone = false;
+                    }
+                }
+            });
+            map.set ("stroke-dashoffset", [] (const String& v, SVGElement& el)
+            {
+                el.strokeDashOffset = SVGParser::parseUnit (v);
+            });
+
+            // Opacity
+            map.set ("opacity", [] (const String& v, SVGElement& el)
+            {
+                float op = v.getFloatValue();
+                if (op >= 0.0f && op <= 1.0f)
+                    el.opacity = op;
+            });
+            map.set ("fill-opacity", [] (const String& v, SVGElement& el)
+            {
+                float op = v.getFloatValue();
+                if (op >= 0.0f && op <= 1.0f)
+                    el.fillOpacity = op;
+            });
+            map.set ("stroke-opacity", [] (const String& v, SVGElement& el)
+            {
+                float op = v.getFloatValue();
+                if (op >= 0.0f && op <= 1.0f)
+                    el.strokeOpacity = op;
+            });
+
+            // Visibility
+            map.set ("display", [] (const String& v, SVGElement& el)
+            {
+                if (v == "none")
+                    el.hidden = true;
+            });
+            map.set ("visibility", [] (const String& v, SVGElement& el)
+            {
+                el.hidden = (v == "hidden" || v == "collapse");
+            });
+
+            // Font
+            map.set ("font-family", [] (const String& v, SVGElement& el)
+            {
+                el.fontFamily = v.unquoted();
+            });
+            map.set ("font-size", [] (const String& v, SVGElement& el)
+            {
+                float fs = SVGParser::parseUnit (v, el.fontSize.value_or (12.0f), el.fontSize.value_or (12.0f), el.fontSize.value_or (12.0f));
+                if (fs > 0.0f)
+                    el.fontSize = fs;
+            });
+            map.set ("font-weight", [] (const String& v, SVGElement& el)
+            {
+                if (v == "bold" || v == "bolder")
+                    el.fontWeight = 700;
+                else if (v == "normal" || v == "lighter")
+                    el.fontWeight = 400;
+                else
+                {
+                    int nw = v.getIntValue();
+                    if (nw >= 100 && nw <= 900)
+                        el.fontWeight = nw;
+                }
+            });
+            map.set ("font-style", [] (const String& v, SVGElement& el)
+            {
+                el.fontItalic = (v == "italic" || v == "oblique");
+            });
+
+            // Text
+            map.set ("text-anchor", [] (const String& v, SVGElement& el)
+            {
+                el.textAnchor = v;
+            });
+            map.set ("letter-spacing", [] (const String& v, SVGElement& el)
+            {
+                if (v != "normal")
+                    el.letterSpacing = SVGParser::parseUnit (v, 0.0f, el.fontSize.value_or (12.0f), el.fontSize.value_or (12.0f));
+            });
+            map.set ("word-spacing", [] (const String& v, SVGElement& el)
+            {
+                if (v != "normal")
+                    el.wordSpacing = SVGParser::parseUnit (v, 0.0f, el.fontSize.value_or (12.0f), el.fontSize.value_or (12.0f));
+            });
+
+            // Clip/Mask/Filter
+            map.set ("clip-path", [] (const String& v, SVGElement& el)
+            {
+                String url = SVGParser::extractUrlId (v);
+                if (url.isNotEmpty())
+                    el.clipPathUrl = url;
+            });
+            map.set ("mask", [] (const String& v, SVGElement& el)
+            {
+                if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                    el.maskUrl = url;
+            });
+            map.set ("filter", [] (const String& v, SVGElement& el)
+            {
+                if (v == "none")
+                    el.filterUrl.reset();
+                else if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                    el.filterUrl = url;
+                else
+                    YUP_DRAWABLE_LOG ("CSS filter currently only supports url(...) - value: " << v);
+            });
+
+            // Markers
+            map.set ("marker-start", [] (const String& v, SVGElement& el)
+            {
+                if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                    el.markerStart = url;
+            });
+            map.set ("marker-mid", [] (const String& v, SVGElement& el)
+            {
+                if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                    el.markerMid = url;
+            });
+            map.set ("marker-end", [] (const String& v, SVGElement& el)
+            {
+                if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                    el.markerEnd = url;
+            });
+            map.set ("marker", [] (const String& v, SVGElement& el)
+            {
+                if (auto url = SVGParser::extractUrlId (v); url.isNotEmpty())
+                {
+                    el.markerStart = url;
+                    el.markerMid = url;
+                    el.markerEnd = url;
+                }
+            });
+
+            // Rules
+            map.set ("fill-rule", [] (const String& v, SVGElement& el)
+            {
+                if (v == "evenodd" || v == "nonzero")
+                    el.fillRule = v;
+            });
+            map.set ("clip-rule", [] (const String& v, SVGElement& el)
+            {
+                if (v == "evenodd" || v == "nonzero")
+                    el.clipRule = v;
+            });
+
+            // Blend mode
+            map.set ("mix-blend-mode", [] (const String& v, SVGElement& el)
+            {
+                el.blendMode = SVGParser::parseBlendMode (v).value_or (BlendMode::SrcOver);
+            });
         }
-    }
-    else if (property == "stroke-dashoffset")
-    {
-        e.strokeDashOffset = SVGParser::parseUnit (value);
-    }
-    else if (property == "fill-opacity")
-    {
-        float opacity = value.getFloatValue();
-        if (opacity >= 0.0f && opacity <= 1.0f)
-            e.fillOpacity = opacity;
-    }
-    else if (property == "stroke-opacity")
-    {
-        float opacity = value.getFloatValue();
-        if (opacity >= 0.0f && opacity <= 1.0f)
-            e.strokeOpacity = opacity;
-    }
-    else if (property == "fill-rule")
-    {
-        if (value == "evenodd" || value == "nonzero")
-            e.fillRule = value;
-    }
-    else if (property == "clip-rule")
-    {
-        if (value == "evenodd" || value == "nonzero")
-            e.clipRule = value;
-    }
-    else if (property == "mix-blend-mode")
-    {
-        if (value == "multiply")
-            e.blendMode = BlendMode::Multiply;
-        else if (value == "screen")
-            e.blendMode = BlendMode::Screen;
-        else if (value == "overlay")
-            e.blendMode = BlendMode::Overlay;
-        else if (value == "darken")
-            e.blendMode = BlendMode::Darken;
-        else if (value == "lighten")
-            e.blendMode = BlendMode::Lighten;
-        else if (value == "color-dodge")
-            e.blendMode = BlendMode::ColorDodge;
-        else if (value == "color-burn")
-            e.blendMode = BlendMode::ColorBurn;
-        else if (value == "hard-light")
-            e.blendMode = BlendMode::HardLight;
-        else if (value == "soft-light")
-            e.blendMode = BlendMode::SoftLight;
-        else if (value == "difference")
-            e.blendMode = BlendMode::Difference;
-        else if (value == "exclusion")
-            e.blendMode = BlendMode::Exclusion;
-        else if (value == "hue")
-            e.blendMode = BlendMode::Hue;
-        else if (value == "saturation")
-            e.blendMode = BlendMode::Saturation;
-        else if (value == "color")
-            e.blendMode = BlendMode::Color;
-        else if (value == "luminosity")
-            e.blendMode = BlendMode::Luminosity;
-    }
+    };
+
+    static const PropertyHandlers handlers;
+
+    if (auto* handler = handlers.map.getPointer (property))
+        (*handler) (value, e);
     else
     {
-        YUP_DRAWABLE_LOG ("Unsupported CSS property ignored - property: " << property << " value: " << value);
+        // Log-only properties (not yet handled)
+        YUP_DRAWABLE_LOG ("Unsupported CSS property ignored - property: " << property << " value: " << String (valueRef.text));
     }
 }
 
@@ -350,13 +348,92 @@ void SVGCssParser::applyStyleProperty (StringRef propertyRef, StringRef valueRef
 
 void SVGCssParser::applyStylesheetRules (const XmlElement& xmlElement, SVGElement& e)
 {
-    std::vector<const SVGCssRule*> matchedRules;
+    if (data.cssRules.empty())
+        return;
 
-    for (const auto& rule : data.cssRules)
+    // Collect candidate rule indices from each index bucket
+    std::vector<int> candidateIndices;
+
+    const auto tagName = xmlElement.getTagNameWithoutNamespace();
+    if (auto* tagRules = ruleIndex.byTag.getPointer (tagName))
+        candidateIndices.insert (candidateIndices.end(), tagRules->begin(), tagRules->end());
+
+    const auto id = xmlElement.getStringAttribute ("id");
+    if (id.isNotEmpty())
     {
-        if (matchesCssSelector (xmlElement, rule))
-            matchedRules.push_back (std::addressof (rule));
+        if (auto* idRules = ruleIndex.byId.getPointer (id))
+            candidateIndices.insert (candidateIndices.end(), idRules->begin(), idRules->end());
     }
+
+    const auto classAttr = xmlElement.getStringAttribute ("class");
+    if (classAttr.isNotEmpty())
+    {
+        const auto classNames = StringArray::fromTokens (classAttr, " \t\r\n", "");
+        for (const auto& className : classNames)
+        {
+            if (auto* classRules = ruleIndex.byClass.getPointer (className))
+                candidateIndices.insert (candidateIndices.end(), classRules->begin(), classRules->end());
+        }
+    }
+
+    if (candidateIndices.empty())
+        return;
+
+    // Deduplicate
+    std::sort (candidateIndices.begin(), candidateIndices.end());
+    candidateIndices.erase (std::unique (candidateIndices.begin(), candidateIndices.end()), candidateIndices.end());
+
+    // Re-verify each candidate: the index returns candidates by single dimension
+    // (tag, id, or class), but multi-part selectors like "circle.highlight" need
+    // all parts to match. Filter out candidates where the full selector doesn't match.
+    const auto elementId = xmlElement.getStringAttribute ("id");
+    const auto elementClasses = classAttr.isNotEmpty()
+                                  ? StringArray::fromTokens (classAttr, " \t\r\n", "")
+                                  : StringArray();
+
+    const auto selectorMatches = [&] (const SVGCssRule& rule) -> bool
+    {
+        const auto& sel = rule.selector;
+        if (sel.isEmpty() || sel.containsChar (' ') || sel.containsChar ('>') || sel.containsChar ('+'))
+            return false;
+
+        const auto hashIdx = sel.indexOf ("#");
+        const auto dotIdx = sel.indexOf (".");
+
+        if (hashIdx < 0 && dotIdx < 0)
+            return true; // simple tag selector, already matched by byTag[index]
+
+        if (hashIdx >= 0)
+        {
+            const auto idEnd = (dotIdx > hashIdx) ? dotIdx : sel.length();
+            if (sel.substring (hashIdx + 1, idEnd) != elementId)
+                return false;
+        }
+
+        if (dotIdx >= 0)
+        {
+            const auto className = sel.substring (dotIdx + 1);
+            if (! elementClasses.contains (className))
+                return false;
+        }
+
+        return true;
+    };
+
+    candidateIndices.erase (std::remove_if (candidateIndices.begin(), candidateIndices.end(), [&] (int i)
+    {
+        return ! selectorMatches (data.cssRules[static_cast<size_t> (i)]);
+    }),
+                            candidateIndices.end());
+
+    if (candidateIndices.empty())
+        return;
+
+    std::vector<const SVGCssRule*> matchedRules;
+    matchedRules.reserve (candidateIndices.size());
+
+    for (const auto index : candidateIndices)
+        matchedRules.push_back (std::addressof (data.cssRules[static_cast<size_t> (index)]));
 
     std::stable_sort (matchedRules.begin(), matchedRules.end(), [] (const SVGCssRule* a, const SVGCssRule* b)
     {
@@ -456,55 +533,15 @@ void SVGCssParser::parseStyleElement (const XmlElement& element)
 
 //==============================================================================
 
-bool SVGCssParser::matchesCssSelector (const XmlElement& xmlElement, const SVGCssRule& rule) const
+void SVGCssParser::buildCssRuleIndex()
 {
-    auto selector = rule.selector.trim();
-    if (selector.isEmpty() || selector.containsChar (' ') || selector.containsChar ('>') || selector.containsChar ('+'))
-        return false;
+    ruleIndex = {};
+    ruleIndex.buildFrom (data.cssRules);
 
-    String tagName;
-    String id;
-    String className;
-
-    auto hashIndex = selector.indexOf ("#");
-    auto dotIndex = selector.indexOf (".");
-    auto splitIndex = -1;
-
-    if (hashIndex >= 0 && dotIndex >= 0)
-        splitIndex = jmin (hashIndex, dotIndex);
-    else
-        splitIndex = jmax (hashIndex, dotIndex);
-
-    if (splitIndex > 0)
-        tagName = selector.substring (0, splitIndex);
-
-    if (hashIndex == 0)
-        id = selector.substring (1);
-    else if (hashIndex > 0)
-        id = selector.substring (hashIndex + 1, dotIndex > hashIndex ? dotIndex : selector.length());
-
-    if (dotIndex == 0)
-        className = selector.substring (1);
-    else if (dotIndex > 0)
-        className = selector.substring (dotIndex + 1);
-
-    if (splitIndex < 0 && ! selector.startsWithChar ('#') && ! selector.startsWithChar ('.'))
-        tagName = selector;
-
-    if (tagName.isNotEmpty() && tagName != xmlElement.getTagNameWithoutNamespace())
-        return false;
-
-    if (id.isNotEmpty() && id != xmlElement.getStringAttribute ("id"))
-        return false;
-
-    if (className.isNotEmpty())
-    {
-        auto classes = StringArray::fromTokens (xmlElement.getStringAttribute ("class"), " \t\r\n", "");
-        if (! classes.contains (className))
-            return false;
-    }
-
-    return tagName.isNotEmpty() || id.isNotEmpty() || className.isNotEmpty();
+    YUP_DRAWABLE_LOG ("buildCssRuleIndex - totalRules: " << data.cssRules.size()
+                                                         << " byTag: " << ruleIndex.byTag.size()
+                                                         << " byId: " << ruleIndex.byId.size()
+                                                         << " byClass: " << ruleIndex.byClass.size());
 }
 
 } // namespace yup

@@ -31,4 +31,60 @@ struct SVGCssRule
     int order = 0;
 };
 
+//==============================================================================
+/** Index for fast CSS rule lookup by tag name, id, and class name.
+
+    Built after all CSS rules are parsed and used by SVGCssParser::applyStylesheetRules
+    to avoid O(N×M) brute-force matching of every rule against every element.
+*/
+struct SVGCssRuleIndex
+{
+    /** Maps a tag name (e.g. "path", "rect") to the indices of matching rules. */
+    HashMap<String, std::vector<int>> byTag;
+
+    /** Maps an id (e.g. "myId") to the indices of matching rules. */
+    HashMap<String, std::vector<int>> byId;
+
+    /** Maps a class name (e.g. "myClass") to the indices of matching rules. */
+    HashMap<String, std::vector<int>> byClass;
+
+    /** Builds the index from a vector of rules. */
+    void buildFrom (const std::vector<SVGCssRule>& rules)
+    {
+        for (int i = 0; i < static_cast<int> (rules.size()); ++i)
+        {
+            const auto& rule = rules[i];
+            const auto& sel = rule.selector;
+
+            const auto hashIndex = sel.indexOf ("#");
+            const auto dotIndex = sel.indexOf (".");
+            const auto splitIndex = (hashIndex >= 0 && dotIndex >= 0)
+                                      ? jmin (hashIndex, dotIndex)
+                                      : jmax (hashIndex, dotIndex);
+
+            if (hashIndex >= 0)
+            {
+                const auto idEnd = (dotIndex > hashIndex) ? dotIndex : sel.length();
+                auto id = sel.substring (hashIndex + 1, idEnd);
+                if (id.isNotEmpty())
+                    byId.getReference (id).push_back (i);
+            }
+
+            if (dotIndex >= 0)
+            {
+                auto className = sel.substring (dotIndex + 1);
+                if (className.isNotEmpty())
+                    byClass.getReference (className).push_back (i);
+            }
+
+            if (splitIndex != 0 && ! sel.startsWithChar ('#') && ! sel.startsWithChar ('.'))
+            {
+                auto tagName = (splitIndex > 0) ? sel.substring (0, splitIndex) : sel;
+                if (tagName.isNotEmpty())
+                    byTag.getReference (tagName).push_back (i);
+            }
+        }
+    }
+};
+
 } // namespace yup
