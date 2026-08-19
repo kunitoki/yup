@@ -142,14 +142,17 @@ public:
 
             auto result = toasts->showToast (toast);
 
+            // Report the resolved path too, so an unreachable asset is visible.
+            const yup::String imagePath = toast.getImagePath().getFullPathName();
+
             if (result.wasOk())
             {
                 lastToastId = result.getValue();
-                updateStatus ("Image notification sent (id " + yup::String (lastToastId) + ").");
+                updateStatus ("Image notification sent (id " + yup::String (lastToastId) + ") [img: " + imagePath + "].");
             }
             else
             {
-                updateStatus ("Failed to send image notification: " + result.getErrorMessage());
+                updateStatus ("Failed to send image notification: " + result.getErrorMessage() + " [img: " + imagePath + "]");
             }
         };
         addAndMakeVisible (*imageButton);

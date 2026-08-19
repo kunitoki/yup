@@ -207,6 +207,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - UBSAN and ASAN fixes throughout the codebase
 - AUv3 plugin host bypass is now connected to the processor: the wrapper-owned bypass parameter is created and drives `processBlockBypassed`, and host bypass state is persisted/restored inside the `YUPProcessorState` blob (legacy raw processor state still loads)
 - Added bypass parameter handling tests for the AU, CLAP, and VST3 plugin client wrappers (routing to `processBlockBypassed`, bypass state round-trip, and text/value conversion)
+- Windows toasts emit the `scenario` attribute with the spellings the toast schema declares (`reminder` / `alarm` / `incomingCall`) rather than the capitalised WinToast ones, which are not part of the enumeration. Schema conformance only — it is not the cause of the toasts that fail to display on Windows 11, see `docs/Windows Toast 80070490 Analysis.md`
+- Windows toasts no longer hand `put_ExpirationTime` a stack object that dies at the end of the enclosing `if` block. The notification retains that `IReference<DateTime>` for its whole life, so it was already dangling by the time `Show()` read it; it is now a reference-counted `ComBaseClassHelper` that the notification keeps alive
 
 ### Documentation
 
