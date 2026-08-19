@@ -70,7 +70,7 @@
 #elif YUP_IOS
 #import <UserNotifications/UserNotifications.h>
 
-#if YUP_WINDOWS
+#elif YUP_WINDOWS
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4471 4710 4711 4514 4820 4668 4505)
 #include <sdkddkver.h>
 #include <ShObjIdl.h>
