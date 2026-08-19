@@ -49,6 +49,14 @@ using namespace yup;
 
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
 
+// The GL entry points come from Rive's loader, the same header the OpenGL
+// GraphicsContext uses. Including it here rather than a system <GL/gl.h> keeps
+// the test on exactly the function pointers the context itself calls.
+#include "rive/renderer/gl/gles3.hpp"
+
+#include <cstring>
+#include <vector>
+
 namespace
 {
 
