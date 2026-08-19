@@ -184,7 +184,7 @@ public:
         dateTime.UniversalTime = now() + millisecondsFromNow * 10000;
     }
 
-    ~InternalDateTime() override = default;
+    ~InternalDateTime() = default;
 
     operator INT64() const { return dateTime.UniversalTime; }
 
@@ -334,7 +334,8 @@ HRESULT getRealOSVersion (RTL_OSVERSIONINFOW& versionInfo)
 
 HRESULT defaultExecutablePath (wchar_t* path, DWORD nSize = MAX_PATH)
 {
-    return ::GetModuleFileNameW (::GetCurrentProcess(), path, nSize) > 0 ? S_OK : E_FAIL;
+    const HMODULE module = ::GetModuleHandleW (nullptr);
+    return module != nullptr && ::GetModuleFileNameW (module, path, nSize) > 0 ? S_OK : E_FAIL;
 }
 
 HRESULT defaultShellLinksDirectory (wchar_t* path, DWORD nSize = MAX_PATH)
