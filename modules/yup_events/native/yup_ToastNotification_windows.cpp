@@ -366,6 +366,19 @@ HRESULT defaultShellLinkPath (const std::wstring& appName, wchar_t* path, DWORD 
     return hr;
 }
 
+std::wstring parentDirectory (const wchar_t* path)
+{
+    const wchar_t* lastSeparator = nullptr;
+
+    for (const wchar_t* character = path; *character != 0; ++character)
+    {
+        if (*character == L'\\' || *character == L'/')
+            lastSeparator = character;
+    }
+
+    return lastSeparator == nullptr ? std::wstring() : std::wstring (path, static_cast<std::size_t> (lastSeparator - path));
+}
+
 HRESULT setNodeStringValue (const std::wstring& string, IXmlNode* node, IXmlDocument* xml)
 {
     ComPtr<IXmlText> textNode;
@@ -699,6 +712,8 @@ HRESULT createShellLinkHelper (ToastState& state)
     if (FAILED (Util::defaultShellLinkPath (state.appName, slPath)) || FAILED (Util::defaultExecutablePath (exePath)))
         return E_FAIL;
 
+    const std::wstring exeDirectory = Util::parentDirectory (exePath);
+
     ComPtr<IShellLinkW> shellLink;
     HRESULT hr = ::CoCreateInstance (CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS (&shellLink));
     if (FAILED (hr))
@@ -712,7 +727,7 @@ HRESULT createShellLinkHelper (ToastState& state)
     if (FAILED (hr))
         return hr;
 
-    hr = shellLink->SetWorkingDirectory (exePath);
+    hr = shellLink->SetWorkingDirectory (exeDirectory.c_str());
     if (FAILED (hr))
         return hr;
 
@@ -866,8 +881,19 @@ HRESULT setBindToastGenericHelper (IXmlDocument* xml)
 
 HRESULT setImageFieldHelper (IXmlDocument* xml, const std::wstring& path, bool isToastGeneric, bool isCropHintCircle)
 {
+    wchar_t absolutePath[MAX_PATH] = { L'\0' };
+    if (::GetFullPathNameW (path.c_str(), MAX_PATH, absolutePath, nullptr) == 0)
+        return E_FAIL;
+
     std::wstring imagePath (L"file:///");
-    imagePath += path;
+    imagePath += absolutePath;
+
+    // file:// URIs require forward slashes; Windows paths use backslashes.
+    for (auto& character : imagePath)
+    {
+        if (character == L'\\')
+            character = L'/';
+    }
 
     ComPtr<IXmlNodeList> nodeList;
     HRESULT hr = xml->GetElementsByTagName (WinToastStringWrapper (L"image").get(), &nodeList);
@@ -1147,6 +1173,10 @@ HRESULT addScenarioHelper (IXmlDocument* xml, const std::wstring& scenario)
 ComPtr<IToastNotifier> notifier (const std::wstring& aumi, bool& succeeded)
 {
     succeeded = false;
+
+    if (! DllImporter::initialize())
+        return nullptr;
+
     ComPtr<IToastNotificationManagerStatics> notificationManager;
     ComPtr<IToastNotifier> toastNotifier;
 
@@ -1311,9 +1341,12 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
                 return failWith (ToastNotification::Error::notDisplayed);
         }
 
-        hr = addScenarioHelper (xmlDocument.Get(), scenarioToWideString (toast.getScenario()));
-        if (FAILED (hr))
-            return failWith (ToastNotification::Error::notDisplayed);
+        if (toast.getScenario() != ToastTemplate::Scenario::default_)
+        {
+            hr = addScenarioHelper (xmlDocument.Get(), scenarioToWideString (toast.getScenario()));
+            if (FAILED (hr))
+                return failWith (ToastNotification::Error::notDisplayed);
+        }
     }
 
     if (toast.hasImage())
@@ -1379,7 +1412,9 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
         ScopedLock lock (state.bufferLock);
         state.buffer.erase (id);
 
-        return failWith (ToastNotification::Error::notDisplayed);
+        const String message = ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed)
+                             + " (HRESULT 0x" + String::toHexString (static_cast<uint32> (hr)) + ")";
+        return makeResultValueFail (message);
     }
 
     return makeResultValueOk (id);
@@ -1459,6 +1494,9 @@ bool toastNotificationHide (int64 id)
 void toastNotificationClear()
 {
     auto& state = getToastState();
+
+    if (! state.isInitialized)
+        return;
 
     bool succeeded = false;
     ComPtr<IToastNotifier> toastNotifier = notifier (state.aumi, succeeded);

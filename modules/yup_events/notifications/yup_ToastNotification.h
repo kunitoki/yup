@@ -640,9 +640,9 @@ public:
     /** Convenience method to send a simple title + message notification.
 
         This initializes the backend if needed, displays a two-line text
-        notification with the given title and message (the message is shown as
-        the attribution text where supported), and invokes the callback with the
-        outcome of the operation.
+        notification with the given title and message (title on the first line,
+        message on the second), and invokes the callback with the outcome of
+        the operation.
 
         @param title                   The notification title.
         @param message                 The notification message.

@@ -266,7 +266,7 @@ void ToastNotification::sendNotification (StringRef title, StringRef message, st
 
     ToastTemplate toast (ToastTemplate::TemplateType::text02);
     toast.setFirstLine (title);
-    toast.setAttributionText (message);
+    toast.setSecondLine (message);
 
     if (expirationMilliseconds.has_value())
         toast.setExpiration (*expirationMilliseconds);
