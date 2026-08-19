@@ -36,9 +36,6 @@ namespace
 {
 
 //==============================================================================
-// Dynamically loaded WinRT entry points. Resolving them lazily keeps the module
-// linkable on systems without the WinRT API surface; the libraries stay open
-// for the lifetime of the process.
 namespace DllImporter
 {
 using FnSetCurrentProcessExplicitAppUserModelID = HRESULT (FAR STDAPICALLTYPE*) (PCWSTR);
@@ -141,8 +138,7 @@ String consumeHString (HSTRING handle)
 }
 
 //==============================================================================
-// A WinRT DateTime counts 100-nanosecond ticks since 1601-01-01, while Time
-// counts milliseconds since 1970-01-01.
+// A WinRT DateTime counts 100-nanosecond ticks since 1601-01-01, while Time counts milliseconds since 1970-01-01.
 DateTime toDateTime (Time time) noexcept
 {
     constexpr int64 ticksPerMillisecond = 10000;
@@ -153,11 +149,6 @@ DateTime toDateTime (Time time) noexcept
     return dateTime;
 }
 
-/*  The IReference<DateTime> handed to IToastNotification::put_ExpirationTime.
-
-    The notification retains it for as long as it lives, so it is reference
-    counted rather than owned by the caller.
-*/
 class DateTimeReference final : public ComBaseClassHelper<IReference<DateTime>>
 {
 public:
@@ -190,10 +181,6 @@ using ActivatedHandler = ITypedEventHandler<WinRTToastNotification*, IInspectabl
 using DismissedHandler = ITypedEventHandler<WinRTToastNotification*, ToastDismissedEventArgs*>;
 using FailedHandler = ITypedEventHandler<WinRTToastNotification*, ToastFailedEventArgs*>;
 
-/*  Adapts a callable onto one of the toast's event handler interfaces. All
-    three of them report the notification as their first argument, which is of
-    no use here as the caller already knows which toast it subscribed to.
-*/
 template <typename HandlerType, typename ArgsType>
 class ToastEventHandler final : public ComBaseClassHelper<HandlerType>
 {
@@ -221,8 +208,6 @@ ComSmartPtr<HandlerType> makeToastEventHandler (CallbackType&& callback)
 }
 
 //==============================================================================
-// A copy of the event callbacks of a ToastTemplate, retained until the
-// notification is gone.
 struct ToastCallbacks
 {
     std::function<void()> onActivated;
@@ -238,7 +223,6 @@ struct EventTokens
     EventRegistrationToken failed {};
 };
 
-// A displayed notification plus the tokens of its event handlers.
 class NotifyData
 {
 public:
@@ -280,7 +264,6 @@ private:
 };
 
 //==============================================================================
-// The per-process state of the toast backend.
 struct ToastState
 {
     bool isInitialized = false;
@@ -304,9 +287,9 @@ ToastState& getToastState()
 void markAsReadyForDeletion (int64 id)
 {
     auto& state = getToastState();
+
     const ScopedLock lock (state.bufferLock);
 
-    // Flush the buffer, removing the toasts that are ready for deletion.
     for (auto it = state.buffer.begin(); it != state.buffer.end();)
     {
         if (it->second.isReadyForDeletion())
@@ -320,7 +303,6 @@ void markAsReadyForDeletion (int64 id)
         }
     }
 
-    // Mark this toast as ready for deletion, so it is removed on the next flush.
     const auto iter = state.buffer.find (id);
     if (iter != state.buffer.end())
         iter->second.markAsReadyForDeletion();
@@ -352,10 +334,6 @@ bool isSupportingModernFeatures()
 }
 
 //==============================================================================
-// Thin wrappers over the WinRT XML DOM, which is several calls deep for every
-// read and write. A null return means "absent or unreadable"; the callers map
-// every such failure onto the same user-facing error.
-
 ComSmartPtr<IXmlNode> getNodeByTagName (IXmlDocument* xml, const String& tagName, uint32 index = 0)
 {
     ComSmartPtr<IXmlNodeList> nodeList;
@@ -397,8 +375,6 @@ bool setElementAttribute (IXmlDocument* xml, const String& tagName, const String
         && SUCCEEDED (element->SetAttribute (ScopedHString (name), ScopedHString (value)));
 }
 
-// The DOM holds the value of both elements and attributes in a child text node,
-// so a value is assigned by appending one.
 bool setNodeValue (IXmlDocument* xml, IXmlNode* node, const String& value)
 {
     if (node == nullptr)
@@ -460,8 +436,6 @@ ComSmartPtr<IXmlNode> addAttributeNode (IXmlDocument* xml, IXmlNode* node, const
     return attributeNode;
 }
 
-// Returns the named attribute, creating an empty one when the template that the
-// node came from does not declare it.
 ComSmartPtr<IXmlNode> getOrAddAttributeNode (IXmlDocument* xml, IXmlNode* node, const String& name)
 {
     if (const auto attribute = getAttributeNode (node, name))
@@ -498,8 +472,6 @@ ComSmartPtr<IXmlNode> appendElement (IXmlDocument* xml, IXmlNode* parent, const 
     return appendedNode;
 }
 
-// Appends an element, carrying the given empty attributes, to the first node
-// with the root tag name.
 ComSmartPtr<IXmlNode> appendElementTo (IXmlDocument* xml, const String& rootTagName, const String& tagName, const StringArray& attributeNames = {})
 {
     const auto node = appendElement (xml, getNodeByTagName (xml, rootTagName), tagName);
@@ -618,8 +590,6 @@ bool isToastGeneric (const ToastTemplate& toast)
 }
 
 //==============================================================================
-// The start menu shortcut carrying the app user model id, without which Windows
-// refuses to display notifications for an unpackaged app.
 File getShellLinkFile (const String& appName)
 {
     return File::getSpecialLocation (File::userApplicationDataDirectory)
@@ -737,8 +707,6 @@ Result createShortcut (ToastState& state)
         }
     }
 
-    // A shell link that no longer matches the executable is rebuilt from
-    // scratch rather than patched in place.
     if (validateShellLink (state).wasOk())
         return Result::ok();
 
@@ -746,9 +714,6 @@ Result createShortcut (ToastState& state)
 }
 
 //==============================================================================
-// Toast payload builders. Each one edits the XML document that
-// GetTemplateContent() produced for the template type of the toast.
-
 Result setTextField (IXmlDocument* xml, const String& text, uint32 position)
 {
     if (! setNodeValue (xml, getNodeByTagName (xml, "text", position), text))
@@ -757,8 +722,6 @@ Result setTextField (IXmlDocument* xml, const String& text, uint32 position)
     return Result::ok();
 }
 
-// Attribution text is an adaptive toast feature, expressed as an extra
-// <text placement="attribution"> appended to the binding.
 Result setAttributionTextField (IXmlDocument* xml, const String& text)
 {
     const auto node = appendElementTo (xml, "binding", "text", { "placement" });
@@ -768,8 +731,6 @@ Result setAttributionTextField (IXmlDocument* xml, const String& text)
     if (! setNodeValue (xml, getAttributeNode (node, "placement"), "attribution"))
         return Result::fail ("Could not mark the attribution text element");
 
-    // The element was appended last, so it is also the last <text> in the
-    // document order that GetElementsByTagName() reports.
     const auto textCount = getNodeCountByTagName (xml, "text");
     if (textCount == 0)
         return Result::fail ("Could not locate the attribution text element");
@@ -1076,8 +1037,6 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
 
     const auto setting = getNotifierSetting (notifier);
 
-    // Every failure below is reported with the payload built so far, as the
-    // platform gives no indication of what it rejected.
     const auto failWith = [&xmlDocument] (const String& message)
     {
         return makeResultValueFail (message + "\nXML: " + getXmlString (xmlDocument));
@@ -1099,8 +1058,6 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
 
     if (isSupportingModernFeatures())
     {
-        // Note that this runs after the template's own text fields have been
-        // filled, as attribution text adds one more of them.
         if (toast.getAttributionText().isNotEmpty())
         {
             if (const auto result = setAttributionTextField (xmlDocument, toast.getAttributionText()); result.failed())
@@ -1140,7 +1097,6 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
 
     if (toast.hasImage())
     {
-        // The circular crop hint arrived with the Windows 10 Anniversary Update.
         const auto useCircleCropHint = toast.getCropHint() == ToastTemplate::CropHint::circle
                                     && getWindowsBuildNumber() >= 14393;
 
