@@ -19,3 +19,5 @@ audio-thread safety are still to come.
 - **Synchronization** - `CriticalSection`, atomics, and lock-free patterns for
   the audio thread.
 - **Async** - timers, async updaters, and deferred callbacks.
+- **Cancellation** - `CancelToken`: request, block on, and observe operation
+  cancellation.

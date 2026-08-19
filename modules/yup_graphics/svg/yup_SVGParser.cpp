@@ -126,10 +126,37 @@ bool SVGParser::parseDocument (std::unique_ptr<XmlElement> svgRoot)
     };
 
     collectStyleElements (*svgRoot);
+    cssParser.buildCssRuleIndex();
 
     auto result = parseElement (*svgRoot, true, {});
 
     resolvePatternHrefs();
+
+    // Pre-resolve gradient href chains at parse time to avoid O(N) re-resolution at render
+    for (auto& gradient : data.gradients)
+    {
+        if (! gradient->href.isEmpty())
+        {
+            auto resolved = resolveGradient (gradient);
+            gradient = resolved;
+        }
+    }
+    data.gradientsById.clear();
+    for (const auto& gradient : data.gradients)
+        data.gradientsById.set (gradient->id, gradient);
+
+    // Pre-resolve filter href chains at parse time
+    for (auto& filter : data.filters)
+    {
+        if (! filter->href.isEmpty())
+        {
+            auto resolved = resolveFilter (filter);
+            filter = resolved;
+        }
+    }
+    data.filtersById.clear();
+    for (const auto& filter : data.filters)
+        data.filtersById.set (filter->id, filter);
 
     if (result)
     {
@@ -914,38 +941,7 @@ void SVGParser::parseStyle (const XmlElement& element, const AffineTransform& cu
 
     String mixBlendMode = element.getStringAttribute ("mix-blend-mode");
     if (mixBlendMode.isNotEmpty())
-    {
-        if (mixBlendMode == "multiply")
-            e.blendMode = BlendMode::Multiply;
-        else if (mixBlendMode == "screen")
-            e.blendMode = BlendMode::Screen;
-        else if (mixBlendMode == "overlay")
-            e.blendMode = BlendMode::Overlay;
-        else if (mixBlendMode == "darken")
-            e.blendMode = BlendMode::Darken;
-        else if (mixBlendMode == "lighten")
-            e.blendMode = BlendMode::Lighten;
-        else if (mixBlendMode == "color-dodge")
-            e.blendMode = BlendMode::ColorDodge;
-        else if (mixBlendMode == "color-burn")
-            e.blendMode = BlendMode::ColorBurn;
-        else if (mixBlendMode == "hard-light")
-            e.blendMode = BlendMode::HardLight;
-        else if (mixBlendMode == "soft-light")
-            e.blendMode = BlendMode::SoftLight;
-        else if (mixBlendMode == "difference")
-            e.blendMode = BlendMode::Difference;
-        else if (mixBlendMode == "exclusion")
-            e.blendMode = BlendMode::Exclusion;
-        else if (mixBlendMode == "hue")
-            e.blendMode = BlendMode::Hue;
-        else if (mixBlendMode == "saturation")
-            e.blendMode = BlendMode::Saturation;
-        else if (mixBlendMode == "color")
-            e.blendMode = BlendMode::Color;
-        else if (mixBlendMode == "luminosity")
-            e.blendMode = BlendMode::Luminosity;
-    }
+        e.blendMode = parseBlendMode (mixBlendMode).value_or (BlendMode::SrcOver);
 
     String fontFamily = element.getStringAttribute ("font-family");
     if (fontFamily.isNotEmpty())
@@ -1345,6 +1341,7 @@ SVGGradient::Ptr SVGParser::resolveGradient (SVGGradient::Ptr gradient) const
     SVGGradient::Ptr resolvedGradient = new SVGGradient;
     resolvedGradient->type = gradient->type;
     resolvedGradient->id = gradient->id;
+    resolvedGradient->href = gradient->href; // preserve the href for introspection
     resolvedGradient->units = referencedGradient->units;
     resolvedGradient->spreadMethod = referencedGradient->spreadMethod;
     resolvedGradient->start = referencedGradient->start;
@@ -1456,73 +1453,9 @@ void SVGParser::parseFEBlend (const XmlElement& element, SVGFilter& filter)
 
     auto mode = element.getStringAttribute ("mode");
     if (mode.isEmpty())
-    {
         blend->mode = BlendMode::SrcOver;
-    }
-    else if (mode == "normal")
-    {
-        blend->mode = BlendMode::SrcOver;
-    }
-    else if (mode == "multiply")
-    {
-        blend->mode = BlendMode::Multiply;
-    }
-    else if (mode == "screen")
-    {
-        blend->mode = BlendMode::Screen;
-    }
-    else if (mode == "overlay")
-    {
-        blend->mode = BlendMode::Overlay;
-    }
-    else if (mode == "darken")
-    {
-        blend->mode = BlendMode::Darken;
-    }
-    else if (mode == "lighten")
-    {
-        blend->mode = BlendMode::Lighten;
-    }
-    else if (mode == "color-dodge")
-    {
-        blend->mode = BlendMode::ColorDodge;
-    }
-    else if (mode == "color-burn")
-    {
-        blend->mode = BlendMode::ColorBurn;
-    }
-    else if (mode == "hard-light")
-    {
-        blend->mode = BlendMode::HardLight;
-    }
-    else if (mode == "soft-light")
-    {
-        blend->mode = BlendMode::SoftLight;
-    }
-    else if (mode == "difference")
-    {
-        blend->mode = BlendMode::Difference;
-    }
-    else if (mode == "exclusion")
-    {
-        blend->mode = BlendMode::Exclusion;
-    }
-    else if (mode == "hue")
-    {
-        blend->mode = BlendMode::Hue;
-    }
-    else if (mode == "saturation")
-    {
-        blend->mode = BlendMode::Saturation;
-    }
-    else if (mode == "color")
-    {
-        blend->mode = BlendMode::Color;
-    }
-    else if (mode == "luminosity")
-    {
-        blend->mode = BlendMode::Luminosity;
-    }
+    else
+        blend->mode = parseBlendMode (mode).value_or (BlendMode::SrcOver);
 
     if (blend->in.isEmpty() && blend->in2.isEmpty())
         blend->in = "SourceGraphic";
@@ -2057,25 +1990,28 @@ float SVGParser::parseUnit (const String& value, float defaultValue, float fontS
     if (end == begin)
         return defaultValue;
 
-    String unit = String (CharPointer_UTF8 (end)).trim().toLowerCase();
+    // Skip whitespace before unit identifier
+    while (end != nullptr && (*end == ' ' || *end == '\t'))
+        ++end;
 
-    if (unit.isEmpty() || unit == "px")
+    // Compare unit suffix without allocating a String (hot path called per attribute)
+    if (end == nullptr || *end == 0 || strcmp (end, "px") == 0)
         return static_cast<float> (numericValue);
-    if (unit == "pt")
+    if (strcmp (end, "pt") == 0)
         return static_cast<float> (numericValue * 1.333333);
-    if (unit == "pc")
+    if (strcmp (end, "pc") == 0)
         return static_cast<float> (numericValue * 16.0);
-    if (unit == "mm")
+    if (strcmp (end, "mm") == 0)
         return static_cast<float> (numericValue * 3.779528);
-    if (unit == "cm")
+    if (strcmp (end, "cm") == 0)
         return static_cast<float> (numericValue * 37.79528);
-    if (unit == "in")
+    if (strcmp (end, "in") == 0)
         return static_cast<float> (numericValue * 96.0);
-    if (unit == "em")
+    if (strcmp (end, "em") == 0)
         return static_cast<float> (numericValue * fontSize);
-    if (unit == "ex")
+    if (strcmp (end, "ex") == 0)
         return static_cast<float> (numericValue * fontSize * 0.5);
-    if (unit == "%")
+    if (strcmp (end, "%") == 0)
         return static_cast<float> (numericValue * viewportSize * 0.01);
 
     return static_cast<float> (numericValue);
@@ -2121,6 +2057,45 @@ String SVGParser::extractUrlId (const String& value)
     url = url.substring (1);
     YUP_DRAWABLE_LOG ("Extracted gradient URL: '" << url << "' from: '" << value << "'");
     return url;
+}
+
+//==============================================================================
+
+std::optional<BlendMode> SVGParser::parseBlendMode (StringRef value)
+{
+    if (value == StringRef ("multiply"))
+        return BlendMode::Multiply;
+    if (value == StringRef ("screen"))
+        return BlendMode::Screen;
+    if (value == StringRef ("overlay"))
+        return BlendMode::Overlay;
+    if (value == StringRef ("darken"))
+        return BlendMode::Darken;
+    if (value == StringRef ("lighten"))
+        return BlendMode::Lighten;
+    if (value == StringRef ("color-dodge"))
+        return BlendMode::ColorDodge;
+    if (value == StringRef ("color-burn"))
+        return BlendMode::ColorBurn;
+    if (value == StringRef ("hard-light"))
+        return BlendMode::HardLight;
+    if (value == StringRef ("soft-light"))
+        return BlendMode::SoftLight;
+    if (value == StringRef ("difference"))
+        return BlendMode::Difference;
+    if (value == StringRef ("exclusion"))
+        return BlendMode::Exclusion;
+    if (value == StringRef ("hue"))
+        return BlendMode::Hue;
+    if (value == StringRef ("saturation"))
+        return BlendMode::Saturation;
+    if (value == StringRef ("color"))
+        return BlendMode::Color;
+    if (value == StringRef ("luminosity"))
+        return BlendMode::Luminosity;
+    if (value == StringRef ("normal"))
+        return BlendMode::SrcOver;
+    return std::nullopt;
 }
 
 //==============================================================================
