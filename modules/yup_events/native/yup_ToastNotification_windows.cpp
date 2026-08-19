@@ -41,6 +41,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #include <cwchar>
 #include <map>
+#include <optional>
 
 #if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "shlwapi")
@@ -353,15 +354,6 @@ void markAsReadyForDeletion (int64 id)
 }
 
 //==============================================================================
-// SystemStats reports the Windows family, which is what gates the adaptive
-// toast features as a whole.
-bool isSupportingModernFeatures()
-{
-    return SystemStats::getOperatingSystemType() >= SystemStats::Windows10;
-}
-
-// Individual features are gated on the build number instead, which SystemStats
-// does not expose.
 int getWindowsBuildNumber()
 {
     if (const auto ntdll = ::GetModuleHandleW (L"ntdll.dll"))
@@ -379,6 +371,11 @@ int getWindowsBuildNumber()
     }
 
     return 0;
+}
+
+bool isSupportingModernFeatures()
+{
+    return getWindowsBuildNumber() >= 10240;
 }
 
 //==============================================================================
@@ -1052,6 +1049,44 @@ ComSmartPtr<IToastNotifier> createNotifier (const String& aumi)
     return notifier;
 }
 
+/*  Asks Windows whether it will deliver toasts for this app at all.
+
+    This covers the app, user, group policy and manifest level blocks only. It
+    does NOT cover Do Not Disturb, Focus assist, or the per-app "show
+    notification banners" switch: those suppress the on-screen banner while
+    still delivering the toast to the notification center, and they report
+    Enabled here.
+    https://learn.microsoft.com/en-us/uwp/api/windows.ui.notifications.toastnotifier.setting
+*/
+std::optional<NotificationSetting> getNotifierSetting (IToastNotifier* notifier)
+{
+    auto setting = NotificationSetting_Enabled;
+
+    if (notifier == nullptr || FAILED (notifier->get_Setting (&setting)))
+        return {};
+
+    return setting;
+}
+
+String getNotifierSettingName (NotificationSetting setting)
+{
+    switch (setting)
+    {
+        case NotificationSetting_Enabled:
+            return "enabled";
+        case NotificationSetting_DisabledForApplication:
+            return "disabled for this application";
+        case NotificationSetting_DisabledForUser:
+            return "disabled for this user";
+        case NotificationSetting_DisabledByGroupPolicy:
+            return "disabled by group policy";
+        case NotificationSetting_DisabledByManifest:
+            return "disabled by manifest";
+    }
+
+    return "unknown";
+}
+
 //==============================================================================
 ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotificationSettings& settings)
 {
@@ -1078,6 +1113,8 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
         || FAILED (notificationManager->GetTemplateContent (static_cast<ToastTemplateType> (toast.getType()),
                                                             xmlDocument.resetAndGetPointerAddress())))
         return makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed));
+
+    const auto setting = getNotifierSetting (notifier);
 
     // Every failure below is reported with the payload built so far, as the
     // platform gives no indication of what it rejected.
@@ -1191,9 +1228,8 @@ ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotific
         state.buffer.try_emplace (id, notification, tokens);
     }
 
-    // The payload is logged as well, since the platform will happily accept a
-    // notification it then decides not to show.
-    YUP_DBG ("[yup toast] payload: " << getXmlString (xmlDocument));
+    YUP_DBG ("[yup toast] delivery: " << (setting.has_value() ? getNotifierSettingName (*setting) : String ("unreadable"))
+                                      << ", payload: " << getXmlString (xmlDocument));
 
     if (FAILED (notifier->Show (notification)))
     {
@@ -1251,19 +1287,30 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 //==============================================================================
 void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
 {
-    if (callback)
-        callback (ToastNotification::PermissionState::granted);
+    if (! callback)
+        return;
+
+    const auto setting = getNotifierSetting (createNotifier (getToastState().aumi));
+
+    if (! setting.has_value())
+    {
+        callback (ToastNotification::PermissionState::notDetermined);
+        return;
+    }
+
+    callback (*setting == NotificationSetting_Enabled ? ToastNotification::PermissionState::granted
+                                                      : ToastNotification::PermissionState::denied);
 }
 
 void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
 {
-    if (callback)
-        callback (ToastNotification::PermissionState::granted);
+    toastNotificationGetPermissionState (std::move (callback));
 }
 
 void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)>)
 {
-    // Windows has no user-facing notification permission.
+    // Windows offers no change notification for the notifier setting; it has to
+    // be polled through getPermissionState().
 }
 
 //==============================================================================
