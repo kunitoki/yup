@@ -2,8 +2,7 @@
 
 `yup::CancelToken` and `yup::CancelTokenSource` (in `yup_core/threads`) provide
 a thread-safe way to request and observe the cancellation of a long-running
-operation, loosely inspired by .NET's
-`CancellationTokenSource`/`CancellationToken` and `std::jthread`.
+operation.
 
 ## Requesting cancellation
 
