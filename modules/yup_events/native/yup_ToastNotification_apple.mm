@@ -42,8 +42,7 @@ namespace
 {
 
 //==============================================================================
-// A copy of the event callbacks of a ToastTemplate, retained until the
-// notification is gone.
+// A copy of the event callbacks of a ToastTemplate, retained until the notification is gone.
 struct ToastCallbacks
 {
     std::function<void()> onActivated;
@@ -70,6 +69,7 @@ AppleToastState& getToastState()
     return state;
 }
 
+//==============================================================================
 ToastNotification::PermissionState mapAuthorizationStatus (UNAuthorizationStatus status)
 {
     switch (status)
@@ -214,9 +214,6 @@ namespace
 {
 
 static ToastNotificationCenterDelegate* toastNotificationDelegate = nil;
-
-// The set of notification categories registered by this backend, kept so that
-// registering a new category doesn't drop the previously registered ones.
 static NSMutableSet<UNNotificationCategory*>* sRegisteredCategories = nil;
 
 //==============================================================================
@@ -318,7 +315,6 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
         {
             UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
 
-            // Don't clobber a delegate the application may have set itself.
             if (center.delegate == nil)
                 center.delegate = toastNotificationDelegate;
 
@@ -349,12 +345,8 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
     NSString* requestIdentifier = [[NSUUID UUID] UUIDString];
     const String yupIdentifier = nsStringToYup (requestIdentifier);
 
-    // The blocks below run asynchronously, after the caller's template may have
-    // been destroyed, so they must capture their own copy.
     const ToastTemplate toastCopy (toast);
 
-    // Removes the pending entry from the bookkeeping maps, used when the
-    // notification is never submitted (for example when permission is denied).
     const auto removePendingNotification = ^
     {
         ScopedLock lock (state.lock);
@@ -370,8 +362,6 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
         }
     };
 
-    // Builds the notification and submits it to the center, reporting the
-    // outcome through completion.
     const auto submitNotification = ^ (UNUserNotificationCenter* center)
     {
         UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
@@ -392,25 +382,18 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
         {
             const File sourceFile (toastCopy.hasHeroImage() ? toastCopy.getHeroImagePath() : toastCopy.getImagePath());
 
-            const String extension = sourceFile.getFileExtension().isEmpty() ? ".img" : sourceFile.getFileExtension();
-            const File tempCopy = File::createTempFile (extension);
+            TemporaryFile tempCopy (sourceFile.getFileExtension().isEmpty() ? ".img" : sourceFile.getFileExtension());
 
-            if (sourceFile.copyFileTo (tempCopy))
+            if (sourceFile.copyFileTo (tempCopy.getFile()))
             {
                 NSError* attachmentError = nil;
                 UNNotificationAttachment* const attachment = [UNNotificationAttachment attachmentWithIdentifier:@"yup_image"
-                                                                                                          URL:createNSURLFromFile (tempCopy)
+                                                                                                          URL:createNSURLFromFile (tempCopy.getFile())
                                                                                                       options:nil
                                                                                                         error:&attachmentError];
 
                 if (attachment != nil)
-                {
                     content.attachments = @[ attachment ];
-                }
-                else
-                {
-                    tempCopy.deleteFile();
-                }
             }
         }
 
@@ -458,8 +441,6 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
                 if (toastCopy.getExpiration() > 0)
                 {
-                    // UNUserNotificationCenter has no expiration concept, so remove
-                    // the delivered notification after the requested timeout.
                     dispatch_after (dispatch_time (DISPATCH_TIME_NOW, (int64_t) toastCopy.getExpiration() * NSEC_PER_MSEC),
                                     dispatch_get_main_queue(), ^
                     {

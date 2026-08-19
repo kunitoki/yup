@@ -212,7 +212,7 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
             if (typeof Notification === "undefined" || Notification.permission !== "granted")
                 return 0;
 
-            var options = { body: body, tag: "yup-" + id };
+            var options = ({ body: body, tag: "yup-" + id });
             if (icon.length > 0)
                 options.icon = icon;
 
@@ -242,8 +242,10 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
             return 1;
         }, id, title.toRawUTF8(), body.toRawUTF8(), iconPath.toRawUTF8(), static_cast<double> (expiration));
 
-        return created != 0 ? makeResultValueOk (id)
-                            : makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed));
+        if (created != 0)
+            return makeResultValueOk (id);
+
+        return makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed));
     };
 
     const auto complete = [completion] (const ResultValue<int64>& result)
@@ -263,7 +265,7 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
         case ToastNotification::PermissionState::denied:
         {
-            const auto result = makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied));
+            const ResultValue<int64> result (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied)));
             complete (result);
             return result;
         }
