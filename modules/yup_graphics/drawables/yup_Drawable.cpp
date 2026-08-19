@@ -31,105 +31,9 @@ SVGGradient::Ptr getGradientById (const SVGData& data, const String& id)
     return data.gradientsById[id];
 }
 
-SVGGradient::Ptr resolveGradient (const SVGData& data, SVGGradient::Ptr gradient)
-{
-    if (gradient == nullptr || gradient->href.isEmpty())
-        return gradient;
-
-    auto referencedGradient = getGradientById (data, gradient->href);
-    if (referencedGradient == nullptr)
-        return gradient;
-
-    referencedGradient = resolveGradient (data, referencedGradient);
-
-    SVGGradient::Ptr resolved = new SVGGradient;
-    resolved->type = gradient->type;
-    resolved->id = gradient->id;
-    resolved->units = referencedGradient->units;
-    resolved->spreadMethod = referencedGradient->spreadMethod;
-    resolved->start = referencedGradient->start;
-    resolved->end = referencedGradient->end;
-    resolved->center = referencedGradient->center;
-    resolved->radius = referencedGradient->radius;
-    resolved->focal = referencedGradient->focal;
-    resolved->transform = referencedGradient->transform;
-    resolved->stops = referencedGradient->stops;
-    resolved->hasStart = referencedGradient->hasStart;
-    resolved->hasEnd = referencedGradient->hasEnd;
-    resolved->hasCenter = referencedGradient->hasCenter;
-    resolved->hasRadius = referencedGradient->hasRadius;
-    resolved->hasFocal = referencedGradient->hasFocal;
-    resolved->hasUnits = referencedGradient->hasUnits;
-    resolved->hasSpreadMethod = referencedGradient->hasSpreadMethod;
-
-    if (gradient->hasStart)
-    {
-        resolved->start = gradient->start;
-        resolved->hasStart = true;
-    }
-    if (gradient->hasEnd)
-    {
-        resolved->end = gradient->end;
-        resolved->hasEnd = true;
-    }
-    if (gradient->hasCenter)
-    {
-        resolved->center = gradient->center;
-        resolved->hasCenter = true;
-    }
-    if (gradient->hasRadius)
-    {
-        resolved->radius = gradient->radius;
-        resolved->hasRadius = true;
-    }
-    if (gradient->hasFocal)
-    {
-        resolved->focal = gradient->focal;
-        resolved->hasFocal = true;
-    }
-
-    if (! gradient->transform.isIdentity())
-        resolved->transform = gradient->transform;
-    if (gradient->hasUnits)
-    {
-        resolved->units = gradient->units;
-        resolved->hasUnits = true;
-    }
-    if (gradient->hasSpreadMethod)
-    {
-        resolved->spreadMethod = gradient->spreadMethod;
-        resolved->hasSpreadMethod = true;
-    }
-    if (! gradient->stops.empty())
-        resolved->stops = gradient->stops;
-
-    return resolved;
-}
-
 SVGFilter::Ptr getFilterById (const SVGData& data, const String& id)
 {
     return data.filtersById[id];
-}
-
-SVGFilter::Ptr resolveFilter (const SVGData& data, SVGFilter::Ptr filter)
-{
-    if (filter == nullptr || filter->href.isEmpty())
-        return filter;
-
-    auto referencedFilter = resolveFilter (data, getFilterById (data, filter->href));
-    if (referencedFilter == nullptr)
-        return filter;
-
-    SVGFilter::Ptr resolved = new SVGFilter;
-    resolved->id = filter->id;
-    resolved->href = filter->href;
-
-    if (! filter->primitives.empty())
-        resolved->primitives = filter->primitives;
-    else
-        resolved->primitives = referencedFilter->primitives;
-
-    return resolved;
 }
 
 AffineTransform createGradientSpaceTransform (const SVGGradient& gradient, const Rectangle<float>* objectBounds)
@@ -387,7 +291,7 @@ void Drawable::paintElement (Graphics& g,
 
     if (element.filterUrl)
     {
-        if (auto filter = resolveFilter (data, getFilterById (data, *element.filterUrl)))
+        if (auto filter = getFilterById (data, *element.filterUrl))
         {
             for (const auto& primitive : filter->primitives)
             {
@@ -626,7 +530,7 @@ void Drawable::paintElement (Graphics& g,
     {
         if (auto gradient = getGradientById (data, *element.fillUrl))
         {
-            auto resolvedGradient = resolveGradient (data, gradient);
+            auto resolvedGradient = gradient;
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
@@ -780,7 +684,7 @@ void Drawable::paintElement (Graphics& g,
     {
         if (auto gradient = getGradientById (data, *element.strokeUrl))
         {
-            auto resolvedGradient = resolveGradient (data, gradient);
+            auto resolvedGradient = gradient;
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
