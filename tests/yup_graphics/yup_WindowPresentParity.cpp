@@ -232,6 +232,64 @@ TEST_F (WindowPresentParityTests, PresentedSurfaceIsNotUninitialisedMemory)
 }
 
 //==============================================================================
+// The two tests above pass whether or not the scissor guard exists, because a
+// clear and a plain rectangle never make Rive run its glyph and feather atlas
+// pass, and that pass is what set the scissor the original fault inherited. To
+// test the contract rather than wait for the conditions that expose it, plant
+// the hostile state deliberately and require end() to deliver the frame anyway.
+//==============================================================================
+
+TEST_F (WindowPresentParityTests, PresentIsNotClippedByALeftoverScissorRect)
+{
+    rive::gpu::RenderContext::FrameDescriptor desc;
+    desc.renderTargetWidth = static_cast<uint32_t> (kSurfaceSize);
+    desc.renderTargetHeight = static_cast<uint32_t> (kSurfaceSize);
+    desc.loadAction = rive::gpu::LoadAction::clear;
+    desc.clearColor = 0xFF0000FF; // Opaque blue.
+
+    context->begin (desc);
+
+    // Exactly what Rive's atlas pass leaves behind: a small scissor at the
+    // framebuffer origin, still enabled when flush returns.
+    glEnable (GL_SCISSOR_TEST);
+    glScissor (0, 0, 8, 8);
+
+    context->end (nullptr);
+
+    const auto bitmap = readDefaultFramebuffer (kSurfaceSize, kSurfaceSize);
+    ASSERT_TRUE (bitmap.isValid());
+
+    EXPECT_TRUE (test::bitmapIsSolid (bitmap, test::packRGBA (0, 0, 255, 255), "present_leftover_scissor"))
+        << "the frame was clipped by a scissor rect that end() should have cleared before presenting";
+
+    glDisable (GL_SCISSOR_TEST);
+}
+
+TEST_F (WindowPresentParityTests, PresentIsNotDroppedByALeftoverColorMask)
+{
+    rive::gpu::RenderContext::FrameDescriptor desc;
+    desc.renderTargetWidth = static_cast<uint32_t> (kSurfaceSize);
+    desc.renderTargetHeight = static_cast<uint32_t> (kSurfaceSize);
+    desc.loadAction = rive::gpu::LoadAction::clear;
+    desc.clearColor = 0xFF00FF00; // Opaque green.
+
+    context->begin (desc);
+
+    // Rive sets write masks during flush. glBlitFramebuffer obeys them.
+    glColorMask (GL_FALSE, GL_TRUE, GL_FALSE, GL_TRUE);
+
+    context->end (nullptr);
+
+    glColorMask (GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    const auto bitmap = readDefaultFramebuffer (kSurfaceSize, kSurfaceSize);
+    ASSERT_TRUE (bitmap.isValid());
+
+    EXPECT_TRUE (test::bitmapIsSolid (bitmap, test::packRGBA (0, 255, 0, 255), "present_leftover_colormask"))
+        << "a colour channel was dropped by a write mask that end() should have reset before presenting";
+}
+
+//==============================================================================
 // GraphicsContext::end() must not leave the scissor test enabled. Nothing
 // downstream expects it, and the blit that presents the frame is subject to it.
 // Asserting the state directly names the fault instead of only its symptom.
