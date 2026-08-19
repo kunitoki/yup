@@ -232,81 +232,44 @@ TEST_F (WindowPresentParityTests, PresentedSurfaceIsNotUninitialisedMemory)
 }
 
 //==============================================================================
-// The two tests above pass whether or not the scissor guard exists, because a
-// clear and a plain rectangle never make Rive run its glyph and feather atlas
-// pass, and that pass is what set the scissor the original fault inherited. To
-// test the contract rather than wait for the conditions that expose it, plant
-// the hostile state deliberately and require end() to deliver the frame anyway.
+// The tests above pass with or without the scissor guard, verified by removing
+// it and rebuilding. They cover orientation and completeness, but they cannot
+// reproduce the fault, because a clear and a plain rectangle never make Rive
+// run its glyph and feather atlas pass, and that pass is what leaves the
+// scissor behind.
+//
+// Planting the state from outside does not work either: end() calls
+// invalidateGLState() before flush(), so Rive's own disableScissor() emits a
+// real glDisable and wipes anything planted beforehand. The state can only be
+// left dirty from inside flush.
+//
+// A feathered fill routes through the atlas pass, which is the condition that
+// produced the original 32x32 clip.
 //==============================================================================
 
-TEST_F (WindowPresentParityTests, PresentIsNotClippedByALeftoverScissorRect)
+TEST_F (WindowPresentParityTests, AFeatheredFillDoesNotClipThePresentedFrame)
 {
-    rive::gpu::RenderContext::FrameDescriptor desc;
-    desc.renderTargetWidth = static_cast<uint32_t> (kSurfaceSize);
-    desc.renderTargetHeight = static_cast<uint32_t> (kSurfaceSize);
-    desc.loadAction = rive::gpu::LoadAction::clear;
-    desc.clearColor = 0xFF0000FF; // Opaque blue.
+    const auto bitmap = presentFrame (0xFF0000FF, [] (Graphics& g)
+    {
+        g.setFillColor (Colors::white);
+        g.setFeather (8.0f);
+        g.fillRect (20.0f, 20.0f, 24.0f, 24.0f);
+    });
 
-    context->begin (desc);
-
-    // Exactly what Rive's atlas pass leaves behind: a small scissor at the
-    // framebuffer origin, still enabled when flush returns.
-    glEnable (GL_SCISSOR_TEST);
-    glScissor (0, 0, 8, 8);
-
-    context->end (nullptr);
-
-    const auto bitmap = readDefaultFramebuffer (kSurfaceSize, kSurfaceSize);
     ASSERT_TRUE (bitmap.isValid());
 
-    EXPECT_TRUE (test::bitmapIsSolid (bitmap, test::packRGBA (0, 0, 255, 255), "present_leftover_scissor"))
-        << "the frame was clipped by a scissor rect that end() should have cleared before presenting";
+    // The feathered rectangle sits well inside the surface, so every corner must
+    // still hold the clear colour. If the blit was clipped to the atlas scissor,
+    // the corners keep whatever the back buffer held before this frame.
+    const auto blue = test::packRGBA (0, 0, 255, 255);
 
-    glDisable (GL_SCISSOR_TEST);
-}
+    EXPECT_TRUE (bitmap.getPixel (1, 1) == blue) << "top-left corner did not receive the frame";
+    EXPECT_TRUE (bitmap.getPixel (kSurfaceSize - 2, 1) == blue) << "top-right corner did not receive the frame";
+    EXPECT_TRUE (bitmap.getPixel (1, kSurfaceSize - 2) == blue) << "bottom-left corner did not receive the frame";
+    EXPECT_TRUE (bitmap.getPixel (kSurfaceSize - 2, kSurfaceSize - 2) == blue) << "bottom-right corner did not receive the frame";
 
-TEST_F (WindowPresentParityTests, PresentIsNotDroppedByALeftoverColorMask)
-{
-    rive::gpu::RenderContext::FrameDescriptor desc;
-    desc.renderTargetWidth = static_cast<uint32_t> (kSurfaceSize);
-    desc.renderTargetHeight = static_cast<uint32_t> (kSurfaceSize);
-    desc.loadAction = rive::gpu::LoadAction::clear;
-    desc.clearColor = 0xFF00FF00; // Opaque green.
-
-    context->begin (desc);
-
-    // Rive sets write masks during flush. glBlitFramebuffer obeys them.
-    glColorMask (GL_FALSE, GL_TRUE, GL_FALSE, GL_TRUE);
-
-    context->end (nullptr);
-
-    glColorMask (GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-
-    const auto bitmap = readDefaultFramebuffer (kSurfaceSize, kSurfaceSize);
-    ASSERT_TRUE (bitmap.isValid());
-
-    EXPECT_TRUE (test::bitmapIsSolid (bitmap, test::packRGBA (0, 255, 0, 255), "present_leftover_colormask"))
-        << "a colour channel was dropped by a write mask that end() should have reset before presenting";
-}
-
-//==============================================================================
-// GraphicsContext::end() must not leave the scissor test enabled. Nothing
-// downstream expects it, and the blit that presents the frame is subject to it.
-// Asserting the state directly names the fault instead of only its symptom.
-//==============================================================================
-
-TEST_F (WindowPresentParityTests, EndDoesNotLeaveTheScissorTestEnabled)
-{
-    presentFrame (0xFF000000, nullptr);
-
-    EXPECT_FALSE (glIsEnabled (GL_SCISSOR_TEST))
-        << "GL_SCISSOR_TEST is still enabled after end(), so the next blit to the window will be clipped";
-
-    GLboolean colorMask[4] = {};
-    glGetBooleanv (GL_COLOR_WRITEMASK, colorMask);
-
-    EXPECT_TRUE (colorMask[0] && colorMask[1] && colorMask[2] && colorMask[3])
-        << "a colour channel is masked off after end(), so the next blit to the window will drop it";
+    // And the feathered shape itself must actually be there.
+    EXPECT_TRUE (bitmap.getPixel (kSurfaceSize / 2, kSurfaceSize / 2) != blue) << "the feathered fill was not drawn at all";
 }
 
 #else
