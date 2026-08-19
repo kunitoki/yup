@@ -417,9 +417,13 @@ private:
     that touch UI code inside them should marshal back to their UI thread
     first.
 
-    @tags{Core}
+    The singleton is deleted automatically when the application shuts down
+    (see DeletedAtShutdown), so there is no need to call deleteInstance()
+    explicitly.
+
+    @tags{Events}
 */
-class YUP_API ToastNotification
+class YUP_API ToastNotification : public DeletedAtShutdown
 {
 public:
     //==============================================================================

@@ -35,8 +35,6 @@ guidance together.
   `BinaryArchive`, and `var`/JSON conversion.
 - [System & application](system-and-app.md) - `SystemStats`, `Uuid`,
   `ConsoleApplication`, runtime permissions, and platform macros.
-- [Toast notifications](toast-notifications.md) - the cross-platform
-  `ToastNotification` utility and its `ToastTemplate`.
 - [Networking](networking.md) - `URL`, `WebInputStream`, `Socket`, `IPAddress`,
   and `NamedPipe`.
 
@@ -66,6 +64,5 @@ data-interchange
 xml
 serialisation
 system-and-app
-toast-notifications
 networking
 ```

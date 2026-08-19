@@ -21,7 +21,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_core/yup_core.h>
+#include <yup_events/yup_events.h>
 
 using namespace yup;
 

@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ComputeParticlesDemo`: keeps drawing the last particle snapshot on frames where no new one has landed, so it renders on the Emscripten WebGPU backend instead of showing nothing. The status label reports the landed-snapshot count alongside the frame count
 - `Component`'s effect path now reuses its offscreen `GpuCanvas` across frames while the component size is unchanged, instead of allocating (and freeing) a full-size render target every frame. On a size change the outgoing canvas is released before the replacement is created, so its `RenderContext` lease returns to the pool rather than forcing a second context to be reserved permanently
 - `ComponentEffectsDemo`: shader effects now share a common base that compiles the pipeline at most once instead of retrying a failed compile on every frame, reports the compile error in the status label and on the console, and shows the CPU time spent applying the effect next to the paint time
+- Added a `Toast Notifications` demo to the graphics example app demonstrating the `ToastNotification` utility: a simple `sendNotification`, a rich `ToastTemplate` (attribution, actions, scenario, duration, expiration, event callbacks), an image template, and hide/clear
 
 #### Rive Runtime Bump
 

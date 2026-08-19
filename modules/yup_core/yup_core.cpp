@@ -158,7 +158,6 @@ extern char** environ;
 #if YUP_MAC || YUP_IOS
 #include <xlocale.h>
 #include <mach/mach.h>
-#import <UserNotifications/UserNotifications.h>
 #endif
 
 #if YUP_ANDROID
@@ -193,7 +192,6 @@ extern char** environ;
 #include "memory/yup_AllocationHooks.cpp"
 #include "cryptography/yup_SHA1.cpp"
 #include "misc/yup_RuntimePermissions.cpp"
-#include "misc/yup_ToastNotification.cpp"
 #include "misc/yup_Result.cpp"
 #include "misc/yup_Uuid.cpp"
 #include "misc/yup_ConsoleApplication.cpp"
@@ -266,7 +264,6 @@ extern char** environ;
 #include "native/yup_Threads_apple.mm"
 #include "native/yup_PlatformTimer_generic.cpp"
 #include "native/yup_Process_apple.mm"
-#include "native/yup_ToastNotification_apple.mm"
 
 //==============================================================================
 #elif YUP_WINDOWS
@@ -277,7 +274,6 @@ extern char** environ;
 #include "native/yup_Threads_windows.cpp"
 #include "native/yup_PlatformTimer_windows.cpp"
 #include "native/yup_Watchdog_windows.h"
-#include "native/yup_ToastNotification_windows.cpp"
 
 //==============================================================================
 #elif YUP_LINUX
@@ -291,7 +287,6 @@ extern char** environ;
 #include "native/yup_Threads_linux.cpp"
 #include "native/yup_PlatformTimer_generic.cpp"
 #include "native/yup_Watchdog_linux.h"
-#include "native/yup_ToastNotification_linux.cpp"
 
 //==============================================================================
 #elif YUP_BSD
@@ -305,7 +300,6 @@ extern char** environ;
 #include "native/yup_SystemStats_linux.cpp"
 #include "native/yup_Threads_linux.cpp"
 #include "native/yup_PlatformTimer_generic.cpp"
-#include "native/yup_ToastNotification_linux.cpp"
 
 //==============================================================================
 #elif YUP_ANDROID
@@ -318,7 +312,6 @@ extern char** environ;
 #include "native/yup_Threads_android.cpp"
 #include "native/yup_RuntimePermissions_android.cpp"
 #include "native/yup_PlatformTimer_generic.cpp"
-#include "native/yup_ToastNotification_android.cpp"
 
 //==============================================================================
 #elif YUP_WASM
@@ -329,7 +322,6 @@ extern char** environ;
 #include "native/yup_Threads_wasm.cpp"
 #include "native/yup_CommonFile_linux.cpp"
 #include "native/yup_PlatformTimer_generic.cpp"
-#include "native/yup_ToastNotification_wasm.cpp"
 #endif
 
 #include "native/yup_AndroidDocument_android.cpp"

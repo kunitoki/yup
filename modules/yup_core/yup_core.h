@@ -52,7 +52,7 @@
 
     dependencies:       zlib
     optionalDeps:       sqlite3_library
-    appleFrameworks:    Foundation UserNotifications
+    appleFrameworks:    Foundation
     macFrameworks:      Cocoa IOKit Security
     iosFrameworks:      UIKit
     iosSimFrameworks:   UIKit
@@ -361,7 +361,6 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "maths/yup_Expression.h"
 #include "maths/yup_Random.h"
 #include "misc/yup_RuntimePermissions.h"
-#include "misc/yup_ToastNotification.h"
 #include "misc/yup_WindowsRegistry.h"
 #include "threads/yup_ChildProcess.h"
 #include "threads/yup_DynamicLibrary.h"

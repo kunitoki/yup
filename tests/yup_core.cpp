@@ -102,7 +102,6 @@
 #include "yup_core/yup_ThreadPool.cpp"
 #include "yup_core/yup_Time.cpp"
 #include "yup_core/yup_TimeSliceThread.cpp"
-#include "yup_core/yup_ToastNotification.cpp"
 #include "yup_core/yup_URL.cpp"
 #include "yup_core/yup_Uuid.cpp"
 #include "yup_core/yup_Variant.cpp"
