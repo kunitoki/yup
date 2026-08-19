@@ -70,6 +70,26 @@
 #elif YUP_IOS
 #import <UserNotifications/UserNotifications.h>
 
+#if YUP_WINDOWS
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4471 4710 4711 4514 4820 4668 4505)
+#include <sdkddkver.h>
+#include <ShObjIdl.h>
+#include <windows.ui.notifications.h>
+#include <roapi.h>
+#include <propvarutil.h>
+#include <functiondiscoverykeys.h>
+#include <winstring.h>
+YUP_END_IGNORE_WARNINGS_MSVC
+
+#include <cwchar>
+#include <map>
+#include <optional>
+
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "shlwapi")
+#pragma comment(lib, "user32")
+#endif
+
 #elif YUP_LINUX || YUP_BSD
 #include <unistd.h>
 

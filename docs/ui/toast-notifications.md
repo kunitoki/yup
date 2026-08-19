@@ -6,7 +6,7 @@ platform's native notification API behind a single interface:
 
 | Platform | Backend |
 | -------- | ------- |
-| Windows  | WinToast port (toast XML + AUMI/shortcut handling) |
+| Windows  | Windows toast XML + AUMI/shortcut handling |
 | macOS / iOS | `UserNotifications` (`UNUserNotificationCenter`) |
 | Android  | `NotificationManager` via JNI |
 | Linux / BSD | `notify-send`, falling back to `zenity` |

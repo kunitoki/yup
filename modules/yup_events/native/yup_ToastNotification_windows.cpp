@@ -19,34 +19,7 @@
   ==============================================================================
 */
 
-/*
-    This file is a port of the WinToast library
-    (https://github.com/mohabouje/WinToast, Copyright (C) 2016-2023 Mohammed
-    Boujemaoui), adapted to the YUP APIs and conventions.
-*/
-
 #if YUP_WINDOWS
-
-YUP_BEGIN_IGNORE_WARNINGS_MSVC (4471 4710 4711 4514 4820 4668 4505)
-
-#include <sdkddkver.h>
-#include <ShObjIdl.h>
-#include <windows.ui.notifications.h>
-#include <roapi.h>
-#include <propvarutil.h>
-#include <functiondiscoverykeys.h>
-#include <winstring.h>
-
-YUP_END_IGNORE_WARNINGS_MSVC
-
-#include <cwchar>
-#include <map>
-#include <optional>
-
-#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
-#pragma comment(lib, "shlwapi")
-#pragma comment(lib, "user32")
-#endif
 
 namespace yup
 {
@@ -806,8 +779,6 @@ Result setAttributionTextField (IXmlDocument* xml, const String& text)
 
 Result setImageField (IXmlDocument* xml, const File& imageFile, bool useAppLogoPlacement, bool useCircleCropHint)
 {
-    // A toast whose image cannot be resolved is dropped by the platform without
-    // reporting an error, so an unreachable file is caught here instead.
     if (! imageFile.existsAsFile())
         return Result::fail ("The toast image does not exist: " + imageFile.getFullPathName());
 
@@ -815,8 +786,6 @@ Result setImageField (IXmlDocument* xml, const File& imageFile, bool useAppLogoP
     if (node == nullptr)
         return Result::fail ("The template carries no image element");
 
-    // A template that does not expose the image as an element is left with its
-    // default placement, exactly as the source it was ported from does.
     if (useAppLogoPlacement)
     {
         if (const auto element = node.getInterface<IXmlElement>())
@@ -830,9 +799,7 @@ Result setImageField (IXmlDocument* xml, const File& imageFile, bool useAppLogoP
         }
     }
 
-    // A file:// URI uses forward slashes, a Windows path uses backslashes.
     const auto imageUri = "file:///" + imageFile.getFullPathName().replaceCharacter ('\\', '/');
-
     if (! setNodeValue (xml, getOrAddAttributeNode (xml, node, "src"), imageUri))
         return Result::fail ("Could not set the image source");
 
@@ -899,8 +866,6 @@ Result addAction (IXmlDocument* xml, const String& content, const String& argume
     }
     else
     {
-        // Buttons are rendered by the adaptive template only, which also wants
-        // the longer display duration.
         if (! setElementAttribute (xml, "toast", "template", "ToastGeneric")
             || ! setElementAttribute (xml, "toast", "duration", "long"))
             return Result::fail ("Could not switch the toast to the adaptive template");
@@ -922,16 +887,12 @@ Result addAction (IXmlDocument* xml, const String& content, const String& argume
     return Result::ok();
 }
 
-// Turns the legacy template that the toast was created from into an adaptive
-// (ToastGeneric) one, which is what Windows 10 and above render.
 Result convertToAdaptiveToast (IXmlDocument* xml)
 {
     if (! setElementAttribute (xml, "binding", "template", "ToastGeneric"))
         return Result::fail ("Could not switch the binding to the adaptive template");
 
-    // The legacy image templates carry a placement the adaptive one rejects.
     const auto imageCount = getNodeCountByTagName (xml, "image");
-
     for (uint32 i = 0; i < imageCount; ++i)
     {
         const auto node = getNodeByTagName (xml, "image", i);
@@ -948,8 +909,6 @@ Result convertToAdaptiveToast (IXmlDocument* xml)
 }
 
 //==============================================================================
-// The activation argument carries the index of the action button that was
-// pressed; it is empty when the toast body itself was clicked.
 String getActivationArguments (IInspectable* inspectable)
 {
     if (inspectable == nullptr)
@@ -995,11 +954,12 @@ bool addEventHandlers (IToastNotification* notification, ToastCallbacks callback
 
         if (eventArgs != nullptr && SUCCEEDED (eventArgs->get_Reason (&reason)))
         {
-            // Windows reports an expired toast as if the user had cancelled it.
             if (reason == ToastDismissalReason_UserCanceled
                 && expirationTime.toMilliseconds() != 0
                 && Time::getCurrentTime() >= expirationTime)
+            {
                 reason = ToastDismissalReason_TimedOut;
+            }
 
             if (callbacks.onDismissed)
                 callbacks.onDismissed (static_cast<ToastTemplate::DismissalReason> (reason));
