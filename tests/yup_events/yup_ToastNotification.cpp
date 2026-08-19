@@ -249,6 +249,22 @@ TEST_F (ToastNotificationTests, ShowToastBeforeInitializeFails)
     EXPECT_EQ (ToastNotification::getErrorDescription (ToastNotification::Error::notInitialized), result.getErrorMessage());
 }
 
+TEST_F (ToastNotificationTests, ShowToastCompletionNotInvokedOnSyncFailure)
+{
+    // When showToast() fails synchronously (backend not initialized), the
+    // completion callback is not invoked - the return value carries the error.
+    bool completionInvoked = false;
+
+    auto result = ToastNotification::getInstance()->showToast (ToastTemplate(),
+                                                               [&] (const ResultValue<int64>&)
+    {
+        completionInvoked = true;
+    });
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_FALSE (completionInvoked);
+}
+
 TEST_F (ToastNotificationTests, HideToastBeforeInitializeReturnsFalse)
 {
     EXPECT_FALSE (ToastNotification::getInstance()->hideToast (42));
@@ -286,9 +302,13 @@ TEST_F (ToastNotificationTests, ErrorDescriptionsAreAvailable)
         ToastNotification::Error::invalidParameters,
         ToastNotification::Error::invalidHandler,
         ToastNotification::Error::notDisplayed,
+        ToastNotification::Error::permissionDenied,
         ToastNotification::Error::unknownError
     };
 
     for (const auto error : errors)
         EXPECT_FALSE (ToastNotification::getErrorDescription (error).isEmpty());
+
+    EXPECT_EQ (String ("The user denied or revoked notification permission"),
+               ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied));
 }

@@ -61,12 +61,30 @@ struct AppleToastState
     std::map<String, ToastCallbacks> identifierToCallbacks;
     yup::Atomic<int64> nextId { 1 };
     bool initialized { false };
+    std::function<void (ToastNotification::PermissionState)> permissionStateChangedCallback;
 };
 
 AppleToastState& getToastState()
 {
     static AppleToastState state;
     return state;
+}
+
+ToastNotification::PermissionState mapAuthorizationStatus (UNAuthorizationStatus status)
+{
+    switch (status)
+    {
+        case UNAuthorizationStatusNotDetermined:
+            return ToastNotification::PermissionState::notDetermined;
+        case UNAuthorizationStatusDenied:
+            return ToastNotification::PermissionState::denied;
+        case UNAuthorizationStatusAuthorized:
+        case UNAuthorizationStatusProvisional:
+            return ToastNotification::PermissionState::granted;
+        default:
+            // Includes UNAuthorizationStatusEphemeral (macOS 12+ / iOS 14+).
+            return ToastNotification::PermissionState::granted;
+    }
 }
 
 } // namespace
@@ -164,6 +182,24 @@ AppleToastState& getToastState()
     }
 
     completionHandler();
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter*)center
+    didChangeSettings:(UNNotificationSettings*)settings API_AVAILABLE(macos(12.0), ios(15.0))
+{
+    yup::ignoreUnused (center);
+
+    auto& state = yup::detail::getToastState();
+
+    std::function<void (yup::ToastNotification::PermissionState)> callback;
+
+    {
+        yup::ScopedLock lock (state.lock);
+        callback = state.permissionStateChangedCallback;
+    }
+
+    if (callback)
+        callback (yup::detail::mapAuthorizationStatus (settings.authorizationStatus));
 }
 
 @end
@@ -287,7 +323,12 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
                 center.delegate = toastNotificationDelegate;
 
             [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionBadge | UNAuthorizationOptionSound)
-                                  completionHandler:^(BOOL, NSError*) {}];
+                                  completionHandler:^(BOOL result, NSError* error) {
+                if (result)
+                    yup::Logger::outputDebugString ("Got it!");
+                else
+                    yup::Logger::outputDebugString ("Broken! " + nsStringToYup ([error localizedDescription]));
+            }];
         });
     }
 
@@ -296,7 +337,8 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
 }
 
 //==============================================================================
-ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings&)
+ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings&,
+                                          std::function<void (const ResultValue<int64>&)> completion)
 {
     auto& state = getToastState();
 
@@ -307,24 +349,30 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
     NSString* requestIdentifier = [[NSUUID UUID] UUIDString];
     const String yupIdentifier = nsStringToYup (requestIdentifier);
 
-    // The block below runs asynchronously, after the caller's template may have
-    // been destroyed, so it must capture its own copy.
+    // The blocks below run asynchronously, after the caller's template may have
+    // been destroyed, so they must capture their own copy.
     const ToastTemplate toastCopy (toast);
 
+    // Removes the pending entry from the bookkeeping maps, used when the
+    // notification is never submitted (for example when permission is denied).
+    const auto removePendingNotification = ^
     {
         ScopedLock lock (state.lock);
-        state.idToIdentifier.emplace (id, yupIdentifier);
+        state.identifierToCallbacks.erase (yupIdentifier);
 
-        ToastCallbacks callbacks;
-        callbacks.onActivated = toastCopy.onActivated;
-        callbacks.onActivatedWithAction = toastCopy.onActivatedWithAction;
-        callbacks.onDismissed = toastCopy.onDismissed;
-        callbacks.onFailed = toastCopy.onFailed;
+        for (auto it = state.idToIdentifier.begin(); it != state.idToIdentifier.end(); ++it)
+        {
+            if (it->second == yupIdentifier)
+            {
+                state.idToIdentifier.erase (it);
+                break;
+            }
+        }
+    };
 
-        state.identifierToCallbacks.emplace (yupIdentifier, std::move (callbacks));
-    }
-
-    runOnMainQueue (^
+    // Builds the notification and submits it to the center, reporting the
+    // outcome through completion.
+    const auto submitNotification = ^ (UNUserNotificationCenter* center)
     {
         UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
 
@@ -342,18 +390,30 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
         if (toastCopy.hasHeroImage() || ! toastCopy.getImagePath().getFullPathName().isEmpty())
         {
-            NSURL* const imageURL = createNSURLFromFile (toastCopy.hasHeroImage() ? toastCopy.getHeroImagePath() : toastCopy.getImagePath());
-            NSError* attachmentError = nil;
-            UNNotificationAttachment* const attachment = [UNNotificationAttachment attachmentWithIdentifier:@"yup_image"
-                                                                                                      URL:imageURL
-                                                                                                  options:nil
-                                                                                                    error:&attachmentError];
+            const File sourceFile (toastCopy.hasHeroImage() ? toastCopy.getHeroImagePath() : toastCopy.getImagePath());
 
-            if (attachment != nil)
-                content.attachments = @[ attachment ];
+            const String extension = sourceFile.getFileExtension().isEmpty() ? ".img" : sourceFile.getFileExtension();
+            const File tempCopy = File::createTempFile (extension);
+
+            if (sourceFile.copyFileTo (tempCopy))
+            {
+                NSError* attachmentError = nil;
+                UNNotificationAttachment* const attachment = [UNNotificationAttachment attachmentWithIdentifier:@"yup_image"
+                                                                                                          URL:createNSURLFromFile (tempCopy)
+                                                                                                      options:nil
+                                                                                                        error:&attachmentError];
+
+                if (attachment != nil)
+                {
+                    content.attachments = @[ attachment ];
+                }
+                else
+                {
+                    tempCopy.deleteFile();
+                }
+            }
         }
 
-        UNUserNotificationCenter* const center = [UNUserNotificationCenter currentNotificationCenter];
         registerCategoryIfNeeded (center, toastCopy);
 
         UNNotificationRequest* const request = [UNNotificationRequest requestWithIdentifier:requestIdentifier
@@ -387,17 +447,79 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
                 if (callbacks.onFailed)
                     callbacks.onFailed();
+
+                if (completion)
+                    completion (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed)));
             }
-            else if (toastCopy.getExpiration() > 0)
+            else
             {
-                // UNUserNotificationCenter has no expiration concept, so remove
-                // the delivered notification after the requested timeout.
-                dispatch_after (dispatch_time (DISPATCH_TIME_NOW, (int64_t) toastCopy.getExpiration() * NSEC_PER_MSEC),
-                                dispatch_get_main_queue(), ^
+                if (completion)
+                    completion (makeResultValueOk (id));
+
+                if (toastCopy.getExpiration() > 0)
                 {
-                    UNUserNotificationCenter* const mainCenter = [UNUserNotificationCenter currentNotificationCenter];
-                    [mainCenter removeDeliveredNotificationsWithIdentifiers:@[ requestIdentifier ]];
-                });
+                    // UNUserNotificationCenter has no expiration concept, so remove
+                    // the delivered notification after the requested timeout.
+                    dispatch_after (dispatch_time (DISPATCH_TIME_NOW, (int64_t) toastCopy.getExpiration() * NSEC_PER_MSEC),
+                                    dispatch_get_main_queue(), ^
+                    {
+                        UNUserNotificationCenter* const mainCenter = [UNUserNotificationCenter currentNotificationCenter];
+                        [mainCenter removeDeliveredNotificationsWithIdentifiers:@[ requestIdentifier ]];
+                    });
+                }
+            }
+        }];
+    };
+
+    {
+        ScopedLock lock (state.lock);
+        state.idToIdentifier.emplace (id, yupIdentifier);
+
+        ToastCallbacks callbacks;
+        callbacks.onActivated = toastCopy.onActivated;
+        callbacks.onActivatedWithAction = toastCopy.onActivatedWithAction;
+        callbacks.onDismissed = toastCopy.onDismissed;
+        callbacks.onFailed = toastCopy.onFailed;
+
+        state.identifierToCallbacks.emplace (yupIdentifier, std::move (callbacks));
+    }
+
+    runOnMainQueue (^
+    {
+        UNUserNotificationCenter* const center = [UNUserNotificationCenter currentNotificationCenter];
+        __weak UNUserNotificationCenter* const weakCenter = center;
+
+        [weakCenter getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* settings)
+        {
+            switch (mapAuthorizationStatus (settings.authorizationStatus))
+            {
+                case ToastNotification::PermissionState::granted:
+                    submitNotification (weakCenter);
+                    break;
+
+                case ToastNotification::PermissionState::denied:
+                    removePendingNotification();
+                    if (completion)
+                        completion (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied)));
+                    break;
+
+                case ToastNotification::PermissionState::notDetermined:
+                    [weakCenter requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionBadge | UNAuthorizationOptionSound)
+                                             completionHandler:^(BOOL granted, NSError*)
+                    {
+                        if (! granted)
+                        {
+                            removePendingNotification();
+
+                            if (completion)
+                                completion (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied)));
+
+                            return;
+                        }
+
+                        submitNotification (weakCenter);
+                    }];
+                    break;
             }
         }];
     });
@@ -452,6 +574,67 @@ void toastNotificationClear()
         [center removeAllPendingNotificationRequests];
         [center removeAllDeliveredNotifications];
     });
+}
+
+//==============================================================================
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (! callback)
+        return;
+
+    runOnMainQueue (^
+    {
+        UNUserNotificationCenter* const center = [UNUserNotificationCenter currentNotificationCenter];
+
+        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* settings)
+        {
+            callback (mapAuthorizationStatus (settings.authorizationStatus));
+        }];
+    });
+}
+
+//==============================================================================
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (! callback)
+        return;
+
+    runOnMainQueue (^
+    {
+        UNUserNotificationCenter* const center = [UNUserNotificationCenter currentNotificationCenter];
+
+        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* settings)
+        {
+            const auto permission = mapAuthorizationStatus (settings.authorizationStatus);
+
+            if (permission != ToastNotification::PermissionState::notDetermined)
+            {
+                if (callback)
+                    callback (permission);
+
+                return;
+            }
+
+            [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionBadge | UNAuthorizationOptionSound)
+                                  completionHandler:^(BOOL, NSError*)
+            {
+                [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* newSettings)
+                {
+                    if (callback)
+                        callback (mapAuthorizationStatus (newSettings.authorizationStatus));
+                }];
+            }];
+        }];
+    });
+}
+
+//==============================================================================
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    auto& state = getToastState();
+
+    ScopedLock lock (state.lock);
+    state.permissionStateChangedCallback = std::move (callback);
 }
 
 } // namespace detail

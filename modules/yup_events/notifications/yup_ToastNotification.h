@@ -408,6 +408,16 @@ private:
         });
     @endcode
 
+    On platforms with a user-facing notification permission (Apple, Android 13+
+    and the browser on Emscripten), the permission is independent of
+    initialize(): use getPermissionState() to query it and requestPermission()
+    to ask for it at any time. showToast() and sendNotification() re-check the
+    permission before sending and request it automatically when it hasn't been
+    decided yet, so the simple one-call flow keeps working - but because the
+    user can deny or later revoke permission at any time, the authoritative
+    outcome of a send is delivered asynchronously through the completion
+    callback (see showToast()).
+
     All methods may be called from any thread. The configuration setters
     (setAppName, setAppUserModelId, setShortcutPolicy, setFallbackImage) are
     intended to be called before initialize() and are read without
@@ -415,7 +425,9 @@ private:
     notifications. The event callbacks (see ToastTemplate) and the result
     callbacks may be invoked on a platform-dependent thread, so applications
     that touch UI code inside them should marshal back to their UI thread
-    first.
+    first. On Emscripten the permission operations and showToast() marshal to
+    the browser's main thread, so they may briefly block the caller in pthread
+    builds.
 
     The singleton is deleted automatically when the application shuts down
     (see DeletedAtShutdown), so there is no need to call deleteInstance()
@@ -438,7 +450,29 @@ public:
         invalidParameters,
         invalidHandler,
         notDisplayed,
+
+        /** The user denied or revoked notification permission. */
+        permissionDenied,
         unknownError
+    };
+
+    /** The state of the platform's notification permission.
+
+        Not every platform has a user-facing permission (Windows and Linux/BSD
+        are always granted); on the others the user can deny the request or
+        revoke permission later from the system settings, so the state can
+        change at any time.
+    */
+    enum class PermissionState
+    {
+        /** The user hasn't decided yet (or the platform can't tell). */
+        notDetermined = 0,
+
+        /** Notifications are allowed. */
+        granted = 1,
+
+        /** The user denied or revoked notification permission. */
+        denied = 2
     };
 
     /** Policy for creating or validating the Windows start-menu shortcut that
@@ -483,6 +517,40 @@ public:
         held by the backend.
     */
     void clear();
+
+    //==============================================================================
+    /** Queries the current notification permission state, without showing any
+        dialog.
+
+        The callback is invoked (possibly asynchronously) with the current
+        state. On platforms without a user-facing permission (Windows,
+        Linux/BSD) it reports granted immediately.
+
+        @see requestPermission, PermissionState
+    */
+    static void getPermissionState (std::function<void (PermissionState)> callback);
+
+    /** Requests notification permission from the user, if needed.
+
+        If the permission has already been decided, the callback fires
+        immediately with the current state; otherwise the platform shows its
+        permission prompt and the callback fires with the outcome.
+
+        On Emscripten the browser requires this to be called from a user
+        gesture (for example a button click) for the prompt to appear.
+
+        @see getPermissionState, PermissionState
+    */
+    static void requestPermission (std::function<void (PermissionState)> callback);
+
+    /** Registers a callback invoked whenever the notification permission state
+        changes (for example when the user revokes it from the system settings).
+
+        This is best-effort: only Apple (macOS 12+ / iOS 15+) delivers change
+        events; other platforms never invoke it, so treat getPermissionState()
+        as the source of truth.
+    */
+    void setPermissionStateChangedCallback (std::function<void (PermissionState)> callback);
 
     //==============================================================================
     /** Sets the application name. This is used by the platform backends to
@@ -534,13 +602,32 @@ public:
         The backend keeps its own copy of the template (including the event
         callbacks) until the notification is dismissed, hidden or expired.
 
-        @param toast  The notification to display.
+        The permission is re-checked before sending; if it hasn't been decided
+        yet it is requested automatically, so a bare showToast() keeps working.
+        Because the user can deny or revoke permission asynchronously, the
+        synchronous return value only reports that the request was accepted
+        (the id is valid for hideToast()); the authoritative outcome is
+        delivered through completion.
+
+        @param toast       The notification to display.
+        @param completion  An optional callback invoked exactly once with the
+                           final outcome of the send attempt: ok(id) once the
+                           notification was accepted by the platform, or a
+                           failure (for example "permission denied") if it
+                           couldn't be shown. It may be invoked synchronously
+                           or asynchronously, on a platform-dependent thread.
+                           It is not invoked when the function returns a
+                           failure before any send attempt was made (for
+                           example when the backend isn't initialized).
 
         @returns A successful ResultValue containing the notification id, which
                  can be used with hideToast(), or a failed ResultValue
-                 describing the problem.
+                 describing an immediate problem (backend not initialized,
+                 invalid parameters, or synchronously-known permission
+                 denial).
     */
-    ResultValue<int64> showToast (const ToastTemplate& toast);
+    ResultValue<int64> showToast (const ToastTemplate& toast,
+                                  std::function<void (const ResultValue<int64>&)> completion = {});
 
     /** Hides the notification with the given id, if it is still displayed.
 
@@ -560,7 +647,9 @@ public:
         @param title                   The notification title.
         @param message                 The notification message.
         @param resultCallback          An optional callback invoked with the
-                                       result of the operation.
+                                       outcome of the operation (including
+                                       permission denial), possibly
+                                       asynchronously.
         @param expirationMilliseconds  An optional expiration time in
                                        milliseconds from now.
     */
@@ -609,8 +698,21 @@ struct ToastNotificationSettings
 /** Initializes the platform backend. Only one backend is compiled per platform. */
 Result toastNotificationInitialize (const ToastNotificationSettings& settings);
 
-/** Displays a notification described by the given template. */
-ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings);
+/** Queries the current notification permission state. */
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback);
+
+/** Requests notification permission, invoking the callback with the outcome. */
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback);
+
+/** Registers a callback invoked when the permission state changes (best-effort). */
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)> callback);
+
+/** Displays a notification described by the given template, reporting the
+    final outcome through completion.
+*/
+ResultValue<int64> toastNotificationShow (const ToastTemplate& toast,
+                                          const ToastNotificationSettings& settings,
+                                          std::function<void (const ResultValue<int64>&)> completion);
 
 /** Hides the notification with the given id, returning true if it was found. */
 bool toastNotificationHide (int64 id);

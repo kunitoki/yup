@@ -77,6 +77,50 @@ Event callbacks (`onActivated`, `onActivatedWithAction`, `onDismissed`,
 own copy until the notification is gone. They may be invoked on a
 platform-dependent thread - marshal back to your UI thread if needed.
 
+## Permissions
+
+On platforms with a user-facing notification permission (Apple, Android 13+,
+and the browser on Emscripten), permission is independent of `initialize()`:
+query it with `getPermissionState()` and ask for it with `requestPermission()`
+at any time:
+
+```cpp
+ToastNotification::getPermissionState ([] (ToastNotification::PermissionState state)
+{
+    // notDetermined | granted | denied
+});
+
+ToastNotification::requestPermission ([] (ToastNotification::PermissionState state)
+{
+    if (state == ToastNotification::PermissionState::granted)
+        sendIt();
+});
+```
+
+`showToast()` and `sendNotification()` re-check the permission before sending
+and request it automatically when it hasn't been decided yet, so the simple
+one-call flow keeps working. Because the user can deny or revoke permission at
+any time (including from the system settings), the synchronous return value of
+`showToast()` only reports that the request was accepted - the id is valid for
+`hideToast()` - while the authoritative outcome arrives through the optional
+completion callback:
+
+```cpp
+auto result = notifications.showToast (toast,
+                                       [] (const ResultValue<int64>& outcome)
+{
+    if (outcome.failed())
+        handleError (outcome.getErrorMessage()); // e.g. "permission denied"
+});
+
+if (result.failed())
+    handleError (result.getErrorMessage()); // immediate failure (not initialized, ...)
+```
+
+`setPermissionStateChangedCallback()` can observe permission changes (delivered
+on Apple macOS 12+ / iOS 15+ only; elsewhere treat `getPermissionState()` as
+the source of truth).
+
 ## Platform notes
 
 Not every field maps onto every backend:
@@ -85,7 +129,10 @@ Not every field maps onto every backend:
   (`setAppUserModelId`, `configureAUMI`) and the Start-menu shortcut policy
   (`setShortcutPolicy`).
 - **Apple** - everything except expiration, which has no native equivalent; the
-  backend removes the delivered notification after the timeout instead.
+  backend removes the delivered notification after the timeout instead. Images
+  are copied to a temporary file before creating the attachment, because
+  `UNUserNotificationCenter` deletes the file at the URL it is given - the
+  original image is preserved.
 - **Android** - action activation callbacks are not delivered (action buttons
   fire broadcasts); notifications need `POST_NOTIFICATIONS` on Android 13+
   (`RuntimePermissions::postNotifications`).

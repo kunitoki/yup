@@ -218,13 +218,9 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
 }
 
 //==============================================================================
-ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings)
+//==============================================================================
+ResultValue<int64> notifyNowImpl (const ToastTemplate& toast, const ToastNotificationSettings& settings, int64 id)
 {
-    auto& state = getToastState();
-
-    if (! state.initialized)
-        return makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notInitialized));
-
     auto* env = getEnv();
 
     const LocalRef<jobject> appContext (getAppContext());
@@ -279,7 +275,7 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
         env->CallObjectMethod (builder.get(), AndroidNotificationBuilder.setStyle, style.get());
     }
 
-    const int32 notificationId = (state.nextId += 1) - 1;
+    const auto notificationId = static_cast<int32> (id);
 
     // Tapping the notification opens the app's launcher activity.
     if (const LocalRef<jobject> launchIntent (createLaunchIntent (env)))
@@ -307,7 +303,49 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
     env->CallVoidMethod (notificationManager.get(), AndroidNotificationManager.notify, notificationId, notification.get());
 
-    return makeResultValueOk (static_cast<int64> (notificationId));
+    return makeResultValueOk (id);
+}
+
+//==============================================================================
+ResultValue<int64> notifyNow (const ToastTemplate& toast, const ToastNotificationSettings& settings, int64 id, std::function<void (const ResultValue<int64>&)> completion)
+{
+    const auto result = notifyNowImpl (toast, settings, id);
+
+    if (completion)
+        completion (result);
+
+    return result;
+}
+
+//==============================================================================
+ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings, std::function<void (const ResultValue<int64>&)> completion)
+{
+    auto& state = getToastState();
+
+    if (! state.initialized)
+        return makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notInitialized));
+
+    // Reserve the notification id up front so the synchronous return is always
+    // valid for hideToast(); the authoritative outcome arrives via completion.
+    const int64 id = (state.nextId += 1) - 1;
+
+    if (getAndroidSDKVersion() < 33 || RuntimePermissions::isGranted (RuntimePermissions::postNotifications))
+        return notifyNow (toast, settings, id, std::move (completion));
+
+    // The permission hasn't been granted yet: request it, then show (or fail).
+    RuntimePermissions::request (RuntimePermissions::postNotifications, [toast, settings, id, completion = std::move (completion)] (bool granted) mutable
+    {
+        if (granted)
+        {
+            notifyNow (toast, settings, id, std::move (completion));
+        }
+        else if (completion)
+        {
+            completion (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied)));
+        }
+    });
+
+    return makeResultValueOk (id);
 }
 
 //==============================================================================
@@ -339,6 +377,52 @@ void toastNotificationClear()
         return;
 
     env->CallVoidMethod (notificationManager.get(), AndroidNotificationManager.cancelAll);
+}
+
+//==============================================================================
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (! callback)
+        return;
+
+    if (getAndroidSDKVersion() < 33)
+    {
+        callback (ToastNotification::PermissionState::granted);
+        return;
+    }
+
+    // Android can't distinguish "never asked" from "denied", so a non-granted
+    // state is reported as notDetermined (the request can be re-issued).
+    callback (RuntimePermissions::isGranted (RuntimePermissions::postNotifications)
+                  ? ToastNotification::PermissionState::granted
+                  : ToastNotification::PermissionState::notDetermined);
+}
+
+//==============================================================================
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (getAndroidSDKVersion() < 33)
+    {
+        if (callback)
+            callback (ToastNotification::PermissionState::granted);
+
+        return;
+    }
+
+    RuntimePermissions::request (RuntimePermissions::postNotifications, [callback = std::move (callback)] (bool granted) mutable
+    {
+        if (callback)
+        {
+            callback (granted ? ToastNotification::PermissionState::granted
+                              : ToastNotification::PermissionState::denied);
+        }
+    });
+}
+
+//==============================================================================
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)>)
+{
+    // Android delivers no permission-change events; use getPermissionState().
 }
 
 } // namespace detail

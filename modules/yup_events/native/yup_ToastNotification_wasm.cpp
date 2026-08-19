@@ -61,6 +61,101 @@ bool isNotificationApiAvailable()
     }) != 0;
 }
 
+ToastNotification::PermissionState getPermissionStateSync()
+{
+    const auto permission = MAIN_THREAD_EM_ASM_INT ({
+        if (typeof Notification === "undefined")
+            return 0;
+
+        if (Notification.permission === "granted")
+            return 2;
+        if (Notification.permission === "denied")
+            return 1;
+        return 0;
+    });
+
+    switch (permission)
+    {
+        case 1:
+            return ToastNotification::PermissionState::denied;
+        case 2:
+            return ToastNotification::PermissionState::granted;
+        default:
+            return ToastNotification::PermissionState::notDetermined;
+    }
+}
+
+//==============================================================================
+// The browser reports the outcome of Notification.requestPermission() through
+// a JS promise. Since there is no JS->C++ bridge in this module, the result is
+// picked up by polling Notification.permission on the main thread until it
+// leaves the "default" state (or a timeout is reached).
+struct PermissionPollState
+{
+    std::vector<std::function<void (ToastNotification::PermissionState)>> callbacks;
+    int remainingTicks { 0 };
+    bool polling { false };
+};
+
+PermissionPollState& getPermissionPollState()
+{
+    static PermissionPollState state;
+    return state;
+}
+
+static void permissionPollTick (void*)
+{
+    auto& poll = getPermissionPollState();
+
+    const auto permission = getPermissionStateSync();
+
+    if (permission == ToastNotification::PermissionState::notDetermined && poll.remainingTicks-- > 0)
+    {
+        emscripten_async_call (&permissionPollTick, nullptr, 200);
+        return;
+    }
+
+    poll.polling = false;
+
+    auto callbacks = std::move (poll.callbacks);
+    poll.callbacks.clear();
+
+    for (auto& callback : callbacks)
+    {
+        if (callback)
+            callback (permission);
+    }
+}
+
+void requestPermissionInternal (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    const auto permission = getPermissionStateSync();
+
+    if (permission != ToastNotification::PermissionState::notDetermined)
+    {
+        if (callback)
+            callback (permission);
+
+        return;
+    }
+
+    auto& poll = getPermissionPollState();
+    poll.callbacks.push_back (std::move (callback));
+
+    if (poll.polling)
+        return; // an ongoing poll will deliver to all queued callbacks
+
+    poll.polling = true;
+    poll.remainingTicks = 40; // ~8 seconds at 200 ms per tick
+
+    MAIN_THREAD_EM_ASM ({
+        if (typeof Notification !== "undefined" && Notification.permission === "default")
+            Notification.requestPermission();
+    });
+
+    emscripten_async_call (&permissionPollTick, nullptr, 200);
+}
+
 } // namespace
 
 //==============================================================================
@@ -86,64 +181,111 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
 }
 
 //==============================================================================
-ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings)
+ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings, std::function<void (const ResultValue<int64>&)> completion)
 {
     auto& state = getToastState();
 
     if (! state.initialized)
         return makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notInitialized));
 
-    const int32 id = (state.nextId += 1) - 1;
+    const int64 id = (state.nextId += 1) - 1;
 
-    const String title = toast.getTextField (ToastTemplate::TextField::firstLine);
-    const String body = toast.getTextField (ToastTemplate::TextField::secondLine);
+    const auto showNow = [toast, settings, id]() -> ResultValue<int64>
+    {
+        const String title = toast.getTextField (ToastTemplate::TextField::firstLine);
+        const String body = toast.getTextField (ToastTemplate::TextField::secondLine);
 
-    File icon = toast.getImagePath();
-    if (! icon.existsAsFile() && settings.fallbackImage.has_value())
-        icon = *settings.fallbackImage;
+        File icon = toast.getImagePath();
+        if (! icon.existsAsFile() && settings.fallbackImage.has_value())
+            icon = *settings.fallbackImage;
 
-    const String iconPath = icon.existsAsFile() ? icon.getFullPathName() : String();
-    const int64 expiration = toast.getExpiration();
+        const String iconPath = icon.existsAsFile() ? icon.getFullPathName() : String();
+        const int64 expiration = toast.getExpiration();
 
-    MAIN_THREAD_EM_ASM ({
-        var id = $0;
-        var title = UTF8ToString ($1);
-        var body = UTF8ToString ($2);
-        var icon = UTF8ToString ($3);
-        var expirationMs = $4;
+        const auto created = MAIN_THREAD_EM_ASM_INT ({
+            var id = $0;
+            var title = UTF8ToString ($1);
+            var body = UTF8ToString ($2);
+            var icon = UTF8ToString ($3);
+            var expirationMs = $4;
 
-        if (typeof Notification === "undefined" || Notification.permission !== "granted")
-            return;
+            if (typeof Notification === "undefined" || Notification.permission !== "granted")
+                return 0;
 
-        var options = { body: body, tag: "yup-" + id };
-        if (icon.length > 0)
-            options.icon = icon;
+            var options = { body: body, tag: "yup-" + id };
+            if (icon.length > 0)
+                options.icon = icon;
 
-        var notification = new Notification (title, options);
+            var notification = new Notification (title, options);
 
-        if (typeof window.YupToastNotifications === "undefined")
-            window.YupToastNotifications = {};
+            if (typeof window.YupToastNotifications === "undefined")
+                window.YupToastNotifications = {};
 
-        window.YupToastNotifications[id] = notification;
+            window.YupToastNotifications[id] = notification;
 
-        notification.onclick = function ()
-        {
-            window.focus();
-            notification.close();
-            delete window.YupToastNotifications[id];
-        };
-
-        if (expirationMs > 0)
-        {
-            setTimeout (function ()
+            notification.onclick = function ()
             {
+                window.focus();
                 notification.close();
                 delete window.YupToastNotifications[id];
-            }, expirationMs);
-        }
-    }, id, title.toRawUTF8(), body.toRawUTF8(), iconPath.toRawUTF8(), static_cast<double> (expiration));
+            };
 
-    return makeResultValueOk (static_cast<int64> (id));
+            if (expirationMs > 0)
+            {
+                setTimeout (function ()
+                {
+                    notification.close();
+                    delete window.YupToastNotifications[id];
+                }, expirationMs);
+            }
+
+            return 1;
+        }, id, title.toRawUTF8(), body.toRawUTF8(), iconPath.toRawUTF8(), static_cast<double> (expiration));
+
+        return created != 0 ? makeResultValueOk (id)
+                            : makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::notDisplayed));
+    };
+
+    const auto complete = [completion] (const ResultValue<int64>& result)
+    {
+        if (completion)
+            completion (result);
+    };
+
+    switch (getPermissionStateSync())
+    {
+        case ToastNotification::PermissionState::granted:
+        {
+            const auto result = showNow();
+            complete (result);
+            return result;
+        }
+
+        case ToastNotification::PermissionState::denied:
+        {
+            const auto result = makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied));
+            complete (result);
+            return result;
+        }
+
+        case ToastNotification::PermissionState::notDetermined:
+        {
+            // The request must come from a user gesture; the caller should be
+            // inside one (e.g. a button click). The outcome arrives through
+            // completion once the permission state settles.
+            requestPermissionInternal ([showNow, complete] (ToastNotification::PermissionState permission)
+            {
+                if (permission == ToastNotification::PermissionState::granted)
+                    complete (showNow());
+                else
+                    complete (makeResultValueFail (ToastNotification::getErrorDescription (ToastNotification::Error::permissionDenied)));
+            });
+
+            return makeResultValueOk (id);
+        }
+    }
+
+    return makeResultValueOk (id);
 }
 
 //==============================================================================
@@ -175,6 +317,26 @@ void toastNotificationClear()
             delete window.YupToastNotifications[key];
         }
     });
+}
+
+//==============================================================================
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (callback)
+        callback (getPermissionStateSync());
+}
+
+//==============================================================================
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    requestPermissionInternal (std::move (callback));
+}
+
+//==============================================================================
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)>)
+{
+    // The browser reports permission changes to JS only, and there is no
+    // JS->C++ bridge in this module; use getPermissionState() instead.
 }
 
 } // namespace detail

@@ -178,6 +178,16 @@ public:
         };
         addAndMakeVisible (*clearButton);
 
+        permissionButton = std::make_unique<yup::TextButton> ("Permission");
+        permissionButton->onClick = [this]
+        {
+            yup::ToastNotification::requestPermission ([this] (yup::ToastNotification::PermissionState state)
+            {
+                updateStatusAsync (permissionStateDescription (state));
+            });
+        };
+        addAndMakeVisible (*permissionButton);
+
         hintLabel = std::make_unique<yup::Label> ("hintLabel");
         hintLabel->setText ("Delivered by the platform notification backend; on the web, permission must be granted first.");
         addAndMakeVisible (*hintLabel);
@@ -214,8 +224,10 @@ public:
 
         area.removeFromTop (pad);
 
-        // Second row: Hide Last / Clear
+        // Second row: Permission / Hide Last / Clear
         auto row2 = area.removeFromTop (btnH);
+        permissionButton->setBounds (row2.removeFromLeft (100).reduced (0, 2));
+        row2.removeFromLeft (pad);
         hideButton->setBounds (row2.removeFromLeft (90).reduced (0, 2));
         row2.removeFromLeft (pad);
         clearButton->setBounds (row2.removeFromLeft (90).reduced (0, 2));
@@ -230,6 +242,21 @@ public:
     }
 
 private:
+    static yup::String permissionStateDescription (yup::ToastNotification::PermissionState state)
+    {
+        switch (state)
+        {
+            case yup::ToastNotification::PermissionState::notDetermined:
+                return "Permission not determined yet.";
+            case yup::ToastNotification::PermissionState::granted:
+                return "Permission granted.";
+            case yup::ToastNotification::PermissionState::denied:
+                return "Permission denied.";
+        }
+
+        return {};
+    }
+
     void updateStatusAsync (const yup::String& text)
     {
         // Notification callbacks can arrive on a platform-dependent thread.
@@ -254,6 +281,7 @@ private:
     std::unique_ptr<yup::TextButton> imageButton;
     std::unique_ptr<yup::TextButton> hideButton;
     std::unique_ptr<yup::TextButton> clearButton;
+    std::unique_ptr<yup::TextButton> permissionButton;
 
     // Data
     yup::int64 lastToastId = -1;

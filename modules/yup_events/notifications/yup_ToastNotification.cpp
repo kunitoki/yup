@@ -206,6 +206,9 @@ String ToastNotification::getErrorDescription (Error error)
         case Error::notDisplayed:
             return "The toast was created correctly but could not be displayed";
 
+        case Error::permissionDenied:
+            return "The user denied or revoked notification permission";
+
         case Error::unknownError:
             return "Unknown error";
     }
@@ -215,7 +218,23 @@ String ToastNotification::getErrorDescription (Error error)
 }
 
 //==============================================================================
-ResultValue<int64> ToastNotification::showToast (const ToastTemplate& toast)
+void ToastNotification::getPermissionState (std::function<void (PermissionState)> callback)
+{
+    detail::toastNotificationGetPermissionState (std::move (callback));
+}
+
+void ToastNotification::requestPermission (std::function<void (PermissionState)> callback)
+{
+    detail::toastNotificationRequestPermission (std::move (callback));
+}
+
+void ToastNotification::setPermissionStateChangedCallback (std::function<void (PermissionState)> callback)
+{
+    detail::toastNotificationSetPermissionStateChangedCallback (std::move (callback));
+}
+
+//==============================================================================
+ResultValue<int64> ToastNotification::showToast (const ToastTemplate& toast, std::function<void (const ResultValue<int64>&)> completion)
 {
     if (state.load (std::memory_order_relaxed) != State::initialized)
         return makeResultValueFail (getErrorDescription (Error::notInitialized));
@@ -226,7 +245,7 @@ ResultValue<int64> ToastNotification::showToast (const ToastTemplate& toast)
     settings.shortcutPolicy = shortcutPolicy;
     settings.fallbackImage = fallbackImage;
 
-    return detail::toastNotificationShow (toast, settings);
+    return detail::toastNotificationShow (toast, settings, std::move (completion));
 }
 
 bool ToastNotification::hideToast (int64 id)
@@ -252,10 +271,11 @@ void ToastNotification::sendNotification (StringRef title, StringRef message, st
     if (expirationMilliseconds.has_value())
         toast.setExpiration (*expirationMilliseconds);
 
-    auto result = showToast (toast);
-
-    if (resultCallback)
-        resultCallback (result.wasOk() ? Result::ok() : Result::fail (result.getErrorMessage()));
+    showToast (toast, [resultCallback = std::move (resultCallback)] (const ResultValue<int64>& result)
+    {
+        if (resultCallback)
+            resultCallback (result.wasOk() ? Result::ok() : Result::fail (result.getErrorMessage()));
+    });
 }
 
 //==============================================================================
@@ -267,9 +287,29 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
     return Result::fail ("Toast notifications are not supported on this platform");
 }
 
-ResultValue<int64> toastNotificationShow (const ToastTemplate&, const ToastNotificationSettings&)
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
 {
-    return makeResultValueFail ("Toast notifications are not supported on this platform");
+    if (callback)
+        callback (ToastNotification::PermissionState::notDetermined);
+}
+
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (callback)
+        callback (ToastNotification::PermissionState::notDetermined);
+}
+
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)>)
+{
+}
+
+ResultValue<int64> toastNotificationShow (const ToastTemplate&, const ToastNotificationSettings&, std::function<void (const ResultValue<int64>&)> completion)
+{
+    const auto result = makeResultValueFail ("Toast notifications are not supported on this platform");
+    if (completion)
+        completion (result);
+
+    return result;
 }
 
 bool toastNotificationHide (int64)

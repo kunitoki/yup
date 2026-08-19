@@ -1219,7 +1219,7 @@ Result toastNotificationInitialize (const ToastNotificationSettings& settings)
 }
 
 //==============================================================================
-ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings)
+ResultValue<int64> showToastImpl (const ToastTemplate& toast, const ToastNotificationSettings& settings)
 {
     auto& state = getToastState();
 
@@ -1382,6 +1382,35 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
     }
 
     return makeResultValueOk (id);
+}
+
+//==============================================================================
+ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const ToastNotificationSettings& settings, std::function<void (const ResultValue<int64>&)> completion)
+{
+    const auto result = showToastImpl (toast, settings);
+
+    if (completion)
+        completion (result);
+
+    return result;
+}
+
+//==============================================================================
+void toastNotificationGetPermissionState (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (callback)
+        callback (ToastNotification::PermissionState::granted);
+}
+
+void toastNotificationRequestPermission (std::function<void (ToastNotification::PermissionState)> callback)
+{
+    if (callback)
+        callback (ToastNotification::PermissionState::granted);
+}
+
+void toastNotificationSetPermissionStateChangedCallback (std::function<void (ToastNotification::PermissionState)>)
+{
+    // Windows has no user-facing notification permission.
 }
 
 //==============================================================================
