@@ -418,6 +418,8 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #if YUP_CORE_INCLUDE_JNI_HELPERS && YUP_ANDROID
 #include <jni.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include "native/yup_JNIHelpers_android.h"
 #endif
 

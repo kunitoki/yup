@@ -57,7 +57,8 @@ ios IOS_PLATFORM="OS64":
 [doc("generate and open project for iOS Simulator macOS using Xcode")]
 [macos]
 ios_simulator IOS_PLATFORM="SIMULATORARM64":
-  @just ios {{IOS_PLATFORM}}
+  cmake -G Xcode -B build/ios_sim -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM={{IOS_PLATFORM}}
+  -open build/ios_sim/yup.xcodeproj
 
 [doc("generate and open project for Android using Android Studio (macos)")]
 [macos]

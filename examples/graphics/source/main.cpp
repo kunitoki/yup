@@ -55,6 +55,8 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 
 #if YUP_WASM
     basePath = yup::File ("/");
+#elif YUP_MOBILE
+    basePath = yup::File::getSpecialLocation (yup::File::bundleDirectory);
 #else
     basePath = yup::File (__FILE__)
                    .getParentDirectory()
