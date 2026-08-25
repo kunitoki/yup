@@ -171,7 +171,7 @@ LocalRef<jobject> createBitmapFromFile (JNIEnv* env, const File& file)
     LocalRef<jbyteArray> byteArray (env->NewByteArray (static_cast<jsize> (size)));
     env->SetByteArrayRegion (byteArray.get(), 0, static_cast<jsize> (size), reinterpret_cast<const jbyte*> (data.get()));
 
-    return { env->CallStaticObjectMethod (AndroidBitmapFactory, AndroidBitmapFactory.decodeByteArray, byteArray.get(), 0, static_cast<jsize> (size)) };
+    return LocalRef<jobject> (env->CallStaticObjectMethod (AndroidBitmapFactory, AndroidBitmapFactory.decodeByteArray, byteArray.get(), 0, static_cast<jsize> (size)));
 }
 
 LocalRef<jobject> createLaunchIntent (JNIEnv* env)
@@ -194,7 +194,7 @@ LocalRef<jobject> createPendingIntent (JNIEnv* env, jobject intent, int requestC
     const jint flags = getAndroidSDKVersion() >= 23 ? 0x04000000 | 0x08000000 // FLAG_IMMUTABLE | FLAG_UPDATE_CURRENT
                                                     : 0x08000000;             // FLAG_UPDATE_CURRENT
 
-    return { env->CallStaticObjectMethod (AndroidPendingIntent, AndroidPendingIntent.getActivity, getAppContext().get(), requestCode, intent, flags) };
+    return LocalRef<jobject> (env->CallStaticObjectMethod (AndroidPendingIntent, AndroidPendingIntent.getActivity, getAppContext().get(), requestCode, intent, flags));
 }
 
 } // namespace
@@ -278,7 +278,7 @@ ResultValue<int64> notifyNowImpl (const ToastTemplate& toast, const ToastNotific
     const auto notificationId = static_cast<int32> (id);
 
     // Tapping the notification opens the app's launcher activity.
-    if (const LocalRef<jobject> launchIntent (createLaunchIntent (env)))
+    if (const LocalRef<jobject> launchIntent { createLaunchIntent (env) })
     {
         const LocalRef<jobject> contentIntent (createPendingIntent (env, launchIntent.get(), notificationId));
         if (contentIntent)
@@ -293,7 +293,7 @@ ResultValue<int64> notifyNowImpl (const ToastTemplate& toast, const ToastNotific
         const LocalRef<jobject> actionIntent (env->NewObject (AndroidIntent, AndroidIntent.constructor));
         env->CallObjectMethod (actionIntent.get(), AndroidIntent.setAction, javaString ("yup_action_" + String (static_cast<int> (i))).get());
 
-        if (const LocalRef<jobject> actionPendingIntent (createPendingIntent (env, actionIntent.get(), 100 + static_cast<int> (i))))
+        if (const LocalRef<jobject> actionPendingIntent { createPendingIntent (env, actionIntent.get(), 100 + static_cast<int> (i)) })
             env->CallObjectMethod (builder.get(), AndroidNotificationBuilder.addAction, 0, javaString (toast.getActionLabel (i)).get(), actionPendingIntent.get());
     }
 
