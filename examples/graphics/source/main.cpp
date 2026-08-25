@@ -36,10 +36,6 @@
 #include <vector>
 #include <cmath> // For sine wave generation
 
-#if YUP_MOBILE
-#include <BinaryData.h>
-#endif
-
 // Enable this to enable leak detection tools on windows
 // #define YUP_ENABLE_WINDOWS_BREAK_ALLOC 277639
 
@@ -154,14 +150,9 @@ public:
         setTitle ("main");
 
         // Load the logo image
-#if YUP_WASM
-        auto baseFilePath = yup::File ("/data");
-#else
-        auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
-#endif
         {
             yup::MemoryBlock mb;
-            auto imageFile = baseFilePath.getChildFile ("logo.png");
+            auto imageFile = getAssetPath ("logo.png");
             if (imageFile.loadFileAsData (mb))
             {
                 auto loadedImage = yup::Image::loadFromData (mb.asBytes());
