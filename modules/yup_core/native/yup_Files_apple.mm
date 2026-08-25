@@ -290,6 +290,46 @@ bool File::isHidden() const
 const char* const* yup_argv = nullptr;
 int yup_argc = 0;
 
+namespace
+{
+File findBundleRoot(const File& executable)
+{
+    const File parent(executable.getParentDirectory());
+
+#if YUP_IOS
+    return parent;
+#else
+    return parent.getFullPathName().endsWithIgnoreCase("Contents/MacOS")
+                ? parent.getParentDirectory().getParentDirectory()
+                : parent;
+#endif
+}
+
+File resolveBundleResourceDir(const File& executable)
+{
+    const File bundleRoot(findBundleRoot(executable));
+
+    YUP_AUTORELEASEPOOL
+    {
+        if (NSBundle* bundle = [NSBundle bundleWithPath:yupStringToNS(bundleRoot.getFullPathName())])
+        {
+            if (NSString* resourcePath = [bundle resourcePath])
+            {
+                // bundleWithPath: returns a non-nil NSBundle for any existing directory, and
+                // resourcePath then returns a plausible-looking path even when there's no real
+                // bundle there (e.g. an unbundled command-line binary) - only trust it once that
+                // path actually exists.
+                const File resources(nsStringToYup(resourcePath));
+                if (resources.isDirectory())
+                    return resources;
+            }
+        }
+    }
+
+    return bundleRoot;
+}
+} // namespace
+
 File File::getSpecialLocation(const SpecialLocationType type)
 {
     YUP_AUTORELEASEPOOL
@@ -362,6 +402,19 @@ File File::getSpecialLocation(const SpecialLocationType type)
             case globalApplicationsDirectory:
                 resultPath = "/Applications";
                 break;
+
+            case bundleDirectory:
+                return resolveBundleResourceDir(yup_getExecutableFile());
+
+            case hostBundleDirectory:
+            {
+                unsigned int size = 8192;
+                HeapBlock<char> buffer;
+                buffer.calloc(size + 8);
+
+                _NSGetExecutablePath(buffer.get(), &size);
+                return resolveBundleResourceDir(File(String::fromUTF8(buffer, (int) size)));
+            }
 
             case invokedExecutableFile:
                 if (yup_argv != nullptr && yup_argc > 0)

@@ -96,6 +96,10 @@ private:
     void* fileHandle = nullptr;
     int64 currentPosition = 0;
     Result status { Result::ok() };
+#if YUP_ANDROID
+    bool assetBacked = false;
+    int64 cachedAssetLength = -1;
+#endif
 
     void openHandle();
     size_t readInternal (void*, size_t);

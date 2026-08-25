@@ -607,12 +607,7 @@ void main() {
 
     void initLottie()
     {
-#if YUP_MOBILE
-        yup::MemoryInputStream is (yup::LottieFile_data, yup::LottieFile_size, false);
-        auto anim = yup::Animation::loadFromStream (is);
-#else
         auto anim = yup::Animation::loadFromFile (getAssetPath (YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE));
-#endif
 
         if (! anim.isValid())
         {
