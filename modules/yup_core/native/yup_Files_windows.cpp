@@ -832,6 +832,12 @@ File YUP_CALLTYPE File::getSpecialLocation (const SpecialLocationType type)
             csidlType = CSIDL_PROGRAM_FILES;
             break;
 
+        case bundleDirectory:
+            return WindowsFileHelpers::getModuleFileName ((HINSTANCE) Process::getCurrentModuleInstanceHandle()).getParentDirectory();
+
+        case hostBundleDirectory:
+            return WindowsFileHelpers::getModuleFileName (nullptr).getParentDirectory();
+
         case globalApplicationsDirectoryX86:
             csidlType = CSIDL_PROGRAM_FILESX86;
             break;

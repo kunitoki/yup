@@ -203,6 +203,22 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case globalApplicationsDirectory:
             return File ("/usr");
 
+        case bundleDirectory:
+        {
+            const auto f = yup_getExecutableFile();
+            return (f.isSymbolicLink() ? f.getLinkedTarget() : f).getParentDirectory();
+        }
+
+        case hostBundleDirectory:
+        {
+#if YUP_BSD
+            return yup_getExecutableFile().getParentDirectory();
+#else
+            const File f ("/proc/self/exe");
+            return (f.isSymbolicLink() ? f.getLinkedTarget() : yup_getExecutableFile()).getParentDirectory();
+#endif
+        }
+
         case tempDirectory:
         {
             if (const char* tmpDir = getenv ("TMPDIR"))

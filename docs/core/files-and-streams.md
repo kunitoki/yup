@@ -50,6 +50,28 @@ auto temp    = File::getSpecialLocation (File::tempDirectory);
 auto home    = File::getSpecialLocation (File::userHomeDirectory);
 ```
 
+### Bundled resources
+
+`File::bundleDirectory` and `File::hostBundleDirectory` resolve to the resource root of a
+bundle/asset package rather than a regular filesystem directory - useful for reading files
+shipped with `yup_add_bundled_resources()` (see the [CMake API](../build-system/cmake-api.md)):
+
+```cpp
+auto asset = File::getSpecialLocation (File::bundleDirectory).getChildFile ("data/config.json");
+auto stream = asset.createInputStream();   // works on every platform, incl. Android
+```
+
+- `bundleDirectory` is the current YUP binary's own bundle: a plugin's own `.vst3` / `.component`
+  / `.clap`, an app's own `.app` bundle, or an Android APK's assets - never the host DAW when
+  running as a plugin.
+- `hostBundleDirectory` is the *host* application's bundle - the DAW hosting a plugin, or the
+  same location as `bundleDirectory` when the current binary is the standalone application.
+- On Android, files under `bundleDirectory`/`hostBundleDirectory` are read directly out of the
+  APK via `AAssetManager` - there is no first-run copy to disk - and the location is read-only:
+  `createOutputStream()`, `deleteFile()` and `createDirectory()` all fail cleanly. A directory
+  containing only subdirectories (no files of its own) reports `isDirectory() == false`, and
+  `findChildFiles()` / `DirectoryIterator` do not enumerate asset paths.
+
 ## Directory iteration
 
 Find children with a filter and wildcard, or iterate lazily with the

@@ -36,10 +36,6 @@
 #include <vector>
 #include <cmath> // For sine wave generation
 
-#if YUP_MOBILE
-#include <BinaryData.h>
-#endif
-
 //==============================================================================
 
 inline yup::File getAssetPath (yup::StringRef subPath = {})
@@ -48,6 +44,8 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 
 #if YUP_WASM
     basePath = yup::File ("/");
+#elif YUP_MOBILE
+    basePath = yup::File::getSpecialLocation (yup::File::bundleDirectory);
 #else
     basePath = yup::File (__FILE__)
                    .getParentDirectory()

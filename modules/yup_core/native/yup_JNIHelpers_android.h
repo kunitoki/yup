@@ -282,6 +282,10 @@ extern LocalRef<jobject> getAppContext() noexcept;
 extern LocalRef<jobject> getCurrentActivity() noexcept;
 extern LocalRef<jobject> getMainActivity() noexcept;
 
+extern AAssetManager* getAndroidAssetManager() noexcept;
+extern bool isAndroidAssetPath (const String& path) noexcept;
+extern String getAndroidAssetRelativePath (const String& path) noexcept;
+
 //==============================================================================
 struct SystemJavaClassComparator;
 
