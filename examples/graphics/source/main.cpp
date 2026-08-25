@@ -152,7 +152,7 @@ public:
         // Load the logo image
         {
             yup::MemoryBlock mb;
-            auto imageFile = getAssetPath ("logo.png");
+            auto imageFile = getAssetPath ("data/logo.png");
             if (imageFile.loadFileAsData (mb))
             {
                 auto loadedImage = yup::Image::loadFromData (mb.asBytes());
