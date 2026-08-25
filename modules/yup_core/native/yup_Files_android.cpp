@@ -748,6 +748,40 @@ static File getAppDataDir (bool dataDir)
     return File (yupString ((jstring) jString.get()));
 }
 
+namespace
+{
+constexpr char androidAssetPrefix[] = "/android_asset";
+constexpr int androidAssetPrefixLength = (int) (sizeof (androidAssetPrefix) - 1);
+} // namespace
+
+bool isAndroidAssetPath (const String& path) noexcept
+{
+    return path == androidAssetPrefix || path.startsWith (String (androidAssetPrefix) + "/");
+}
+
+String getAndroidAssetRelativePath (const String& path) noexcept
+{
+    auto relative = path.substring (androidAssetPrefixLength);
+    return relative.startsWithChar ('/') ? relative.substring (1) : relative;
+}
+
+AAssetManager* getAndroidAssetManager() noexcept
+{
+    static AAssetManager* manager = []() -> AAssetManager*
+    {
+        auto* env = getEnv();
+        auto context = getAppContext();
+
+        if (env == nullptr || context == nullptr)
+            return nullptr;
+
+        LocalRef<jobject> jAssetManager (env->CallObjectMethod (context.get(), AndroidContext.getAssets));
+        return jAssetManager != nullptr ? AAssetManager_fromJava (env, jAssetManager.get()) : nullptr;
+    }();
+
+    return manager;
+}
+
 File File::getSpecialLocation (const SpecialLocationType type)
 {
     switch (type)
@@ -787,6 +821,10 @@ File File::getSpecialLocation (const SpecialLocationType type)
 
         case globalApplicationsDirectory:
             return File ("/system/app");
+
+        case bundleDirectory:
+        case hostBundleDirectory:
+            return File ("/android_asset");
 
         case tempDirectory:
         {

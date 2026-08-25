@@ -291,6 +291,7 @@ also be used independently for non-plugin GUI applications.
 | `MODULES` | list | - | YUP module dependencies. |
 | `SOURCES` | list | - | Additional source files. |
 | `LINK_OPTIONS` | list | - | Additional linker options. |
+| `BUNDLE_RESOURCES` | list | - | Files to bundle for runtime access via `File::getSpecialLocation (File::bundleDirectory)`, as `"local/path@relative/dest"` pairs. See `yup_add_bundled_resources()` below. |
 
 ```{note}
 `yup_standalone_app` derives the macOS/app bundle identifier from
@@ -318,6 +319,62 @@ These arguments only affect the Emscripten build and are ignored elsewhere.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `CUSTOM_PLIST` | path | *(built-in)* | Custom `Info.plist` template for the app bundle. |
+
+---
+
+### `yup_add_bundled_resources`
+
+```cmake
+yup_add_bundled_resources(<target_name>
+    RESOURCES <path>@<relative-dest>...)
+```
+
+Bundles arbitrary files next to a target so they are read back at runtime through the normal
+`File`/`FileInputStream` API - via `File::getSpecialLocation (File::bundleDirectory)` - rather
+than compiled into the binary. Unlike `yup_add_embedded_binary_resources`, this does real file
+I/O at runtime (backed by `AAssetManager` on Android, with no first-run copy to disk), so bundled
+files stay read-only and are best suited to large or user-replaceable assets rather than tiny
+config blobs.
+
+Each entry is a `<source-path>@<relative-dest>` pair, using the same convention as the
+`PRELOAD_FILES` argument above. `relative-dest` is the path `getSpecialLocation
+(File::bundleDirectory).getChildFile (relative-dest)` must be given to find the file again, and
+it may rename the file relative to its source name.
+
+#### Arguments
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `<target_name>` | string | *(required)* | Target to bundle the resources with (first positional argument). |
+| `RESOURCES` | list | *(required)* | `<source-path>@<relative-dest>` pairs. |
+
+#### Platform behavior
+
+| Platform | Effect |
+|---|---|
+| macOS | `MACOSX_PACKAGE_LOCATION` is set to `Resources/<relative-dest-dir>`, so the file lands in the app/plugin bundle's `Contents/Resources` folder, preserving the destination's subdirectory structure. |
+| iOS | `MACOSX_PACKAGE_LOCATION` is set to `<relative-dest-dir>` (no `Resources/` prefix) - iOS app bundles are flat and `[NSBundle resourcePath]` resolves to the bundle root itself, not a `Resources` subfolder. |
+| Android | Copied into `${CMAKE_CURRENT_BINARY_DIR}/app/src/main/assets/<relative-dest>`, which the Android Gradle Plugin packages into the APK automatically - no manifest or `build.gradle` changes needed. |
+| Emscripten | Bridged to `--preload-file=<source>@<relative-dest>`, the same mechanism `PRELOAD_FILES` uses. |
+| Other desktop platforms | No-op - `bundleDirectory` there is the directory next to the executable, and desktop code typically reads assets straight from the source tree instead. |
+
+Normally called through `yup_standalone_app`'s `BUNDLE_RESOURCES` argument rather than directly;
+call it directly only when bundling resources with a target `yup_standalone_app` doesn't own.
+
+#### Example
+
+```cmake
+yup_standalone_app(
+    # ...
+    BUNDLE_RESOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/data/config.json@data/config.json"
+        "${CMAKE_CURRENT_LIST_DIR}/data/logo.png@images/logo.png")
+```
+
+```cpp
+auto config = yup::File::getSpecialLocation (yup::File::bundleDirectory).getChildFile ("data/config.json");
+auto stream = config.createInputStream();
+```
 
 ---
 

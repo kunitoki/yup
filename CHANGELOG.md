@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Core
 
+- Added `File::bundleDirectory` and `File::hostBundleDirectory` special locations: the resource root bundled with the current YUP binary itself (a plugin's own `.vst3`/`.component`/`.clap`, an app's own bundle, or an Android APK's assets) versus the host application's bundle when running as a plugin. On Android, files under `bundleDirectory` are read directly out of the APK via `AAssetManager` through the normal `File`/`FileInputStream` API - no first-run copy to disk - and are read-only (`createOutputStream()`, `deleteFile()`, `createDirectory()` fail cleanly). Files can be placed there with the new `yup_add_bundled_resources()` CMake function
 - Added a `YAML` class: a self-contained YAML parser and writer converting between YAML text and `var` (`parse`, `fromString`, `toString`, `writeToStream`, `FormatOptions`), with core-schema type resolution, block/flow collections, block scalars, and anchors/aliases/merge keys
 - Added a `CancelToken` class (`threads/yup_CancelToken.h`): a thread-safe, copyable observer token with `wasCancelled()`, blocking observation via `waitForCancellation()`, and callback observation via `registerCallback()`/`Registration`
 - Added a `CancelTokenSource` class (`threads/yup_CancelTokenSource.h`): a move-only RAII owner of a `CancelToken` that is the sole canceller, requesting cancellation automatically when destroyed (unless moved-from), with observer copies obtained via `getToken()`
@@ -165,6 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Build System
 
+- Added `yup_add_bundled_resources()` and a `BUNDLE_RESOURCES` argument on `yup_standalone_app()`, taking `<file>@<relative-dest>` pairs (same convention as `PRELOAD_FILES`) and placing them where `File::getSpecialLocation (File::bundleDirectory)` can find them at runtime: `Resources/<relative-dest>` in the app/plugin bundle on Apple, `app/src/main/assets/<relative-dest>` on Android, and preloaded into the Emscripten virtual filesystem
+- `examples/graphics`: the Rive artboard and Lottie demos now bundle their `.riv`/`.lottie` files via `BUNDLE_RESOURCES` (Android, iOS, Emscripten) and read them back through `File::getSpecialLocation (File::bundleDirectory)`, instead of compiling them into the binary with `yup_add_embedded_binary_resources()`
 - justfile recipes now use per-platform build directories (`build/mac`, `build/ios`, `build/android`, `build/emscripten`, `build/ninja`, `build/win`), so switching platforms no longer requires `just clean` and preserves downloaded FetchContent dependencies per platform. The `just build` recipe gains a `PLATFORM` parameter (default `mac`).
 - `yup_standalone_app` gains a `MAXIMUM_MEMORY` Emscripten argument (`-sMAXIMUM_MEMORY`); when set it caps the heap that `ALLOW_MEMORY_GROWTH` may reach.
 - `yup_tests` wasm build: raised `INITIAL_MEMORY` to 256 MB, added `MAXIMUM_MEMORY` cap of 1 GB, and reduced `STACK_SIZE` to 1 MB to give the heap room for concurrent pthread stress tests; fixes `RuntimeError: memory access out of bounds` in CI.

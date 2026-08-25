@@ -29,7 +29,7 @@ function (yup_standalone_app)
         INITIAL_MEMORY MAXIMUM_MEMORY PTHREAD_POOL_SIZE STACK_SIZE CUSTOM_PLIST CUSTOM_SHELL ENABLE_EMSCRIPTEN_WEBGPU ENABLE_EMSCRIPTEN_GL_DEBUGGING ENABLE_EMSCRIPTEN_NODERAWFS)
     set (multi_value_args
         # Globals
-        DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS
+        DEFINITIONS COMPILE_OPTIONS MODULES SOURCES LINK_OPTIONS BUNDLE_RESOURCES
         # Emscripten
         PRELOAD_FILES EMSCRIPTEN_LINK_OPTIONS)
 
@@ -76,6 +76,11 @@ function (yup_standalone_app)
         _yup_message (STATUS "${target_name} - Copying SDL java activity to application")
         _yup_fetch_sdl()
         _yup_android_copy_sdl_activity() # TODO - this should be ported to sdl3
+
+        if (YUP_ARG_BUNDLE_RESOURCES)
+            _yup_message (STATUS "${target_name} - Copying bundled resources into app assets")
+            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+        endif()
 
         return()
     endif()
@@ -172,6 +177,10 @@ function (yup_standalone_app)
                 RESOURCE                                       "${target_resources}"
                 XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER      "${target_app_identifier}")
 
+            if (YUP_ARG_BUNDLE_RESOURCES)
+                yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+            endif()
+
         endif()
 
         set_target_properties (${target_name} PROPERTIES
@@ -249,6 +258,10 @@ function (yup_standalone_app)
         foreach (preload_file IN ITEMS ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options "--preload-file=${preload_file}")
         endforeach()
+
+        if (YUP_ARG_BUNDLE_RESOURCES)
+            yup_add_bundled_resources (${target_name} RESOURCES ${YUP_ARG_BUNDLE_RESOURCES})
+        endif()
 
         set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
         add_custom_command(
