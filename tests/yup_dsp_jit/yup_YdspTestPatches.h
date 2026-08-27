@@ -378,6 +378,8 @@ inline constexpr auto electricPiano = R"YDSP(
         node trem = Tremolo;
 
         connection {
+            midi -> voices.midi;
+
             voices.out -> trem.in;
 
             trem.outL -> outL;

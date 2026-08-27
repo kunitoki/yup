@@ -1288,7 +1288,7 @@ constexpr const char* eventShapeIrSource = R"YDSP(
         event midi (e: controlChange) { i = e.control; f = e.value; }
         process { out = f; }
     }
-    graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+    graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
 )YDSP";
 
 } // namespace
@@ -1675,7 +1675,7 @@ TEST (YdspOptimizerTests, ResolvesActivityByteOffsetPastHiddenSlots)
                 out = smooth (env, 0.003) * z';
             }
         }
-        graph G { input stream x; input event midi; output stream y; node v = V[4]; connection { x -> v.in; v.out -> y; } }
+        graph G { input stream x; input event midi; output stream y; node v = V[4]; connection { x -> v.in; midi -> v.midi; v.out -> y; } }
     )YDSP",
                        diagnostics);
 
@@ -1714,7 +1714,7 @@ TEST (YdspOptimizerTests, LeavesActivityByteOffsetUnsetWithoutTheAnnotation)
             event midi (e: noteOn) { env = e.velocity; active = 1; }
             process { out = env * float (active); }
         }
-        graph G { input event midi; output stream y; node v = V[4]; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = V[4]; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                        diagnostics);
 

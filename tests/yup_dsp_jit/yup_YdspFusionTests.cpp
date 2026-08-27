@@ -630,7 +630,6 @@ TEST (YdspFusionTests, EventEdgeSurvivesCompactionAfterAnUnrelatedFusion)
         graph G {
             input stream x;
             input stream trig;
-            input event midi;
             output stream y;
             output stream v;
 

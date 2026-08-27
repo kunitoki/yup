@@ -463,7 +463,8 @@ TEST (YdspSubgraphTests, RejectsOversamplingAGraph)
 TEST (YdspSubgraphTests, RejectsAGraphWithAnEventInputUsedAsANode)
 {
     const auto message = subgraphCompileError (R"YDSP(
-        graph Sub { input event midi; input stream in; output stream out; node a = Gain; connection { in -> a.in; a.out -> out; } }
+        processor Tap { input event midi; process { } }
+        graph Sub { input event midi; input stream in; output stream out; node a = Gain; node t = Tap; connection { in -> a.in; a.out -> out; midi -> t.midi; } }
         graph Main [[ main ]] { input stream x; output stream y; node s = Sub; connection { x -> s.in; s.out -> y; } }
     )YDSP");
 
@@ -752,7 +753,6 @@ TEST (YdspSubgraphTests, RoutesASubgraphsOutputEventOntoAParentNodeAfterCompacti
         }
         graph Main [[ main ]] {
             input stream trig;
-            input event midi;
             output stream y;
             node pad1 = Silence;
             node pad2 = Silence;
@@ -805,7 +805,6 @@ TEST (YdspSubgraphTests, FansASubgraphsOutputEventToTwoParentDestinations)
         }
         graph Main [[ main ]] {
             input stream trig;
-            input event midi;
             output stream y;
             node s = Sub;
             node voiceA = Voice;

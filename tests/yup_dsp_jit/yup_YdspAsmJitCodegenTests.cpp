@@ -1282,7 +1282,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerWritingState)
             }
             process { out = freq; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);
@@ -1320,7 +1320,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerReadingParam)
             }
             process { out = amp; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);
@@ -1358,7 +1358,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerCallingFunc)
             }
             process { out = freq; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);
@@ -1396,7 +1396,7 @@ TEST (YdspAsmJitCodegenTests, CompilesNoteOffHandler)
             }
             process { out = env; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                                           "Voice.noteOff",
                                           diagnostics);
@@ -1446,7 +1446,7 @@ constexpr const char* everyEventShapeSource = R"YDSP(
 
         process { out = a + b + c; }
     }
-    graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+    graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
 )YDSP";
 
 } // namespace
@@ -1578,7 +1578,7 @@ TEST (YdspAsmJitCodegenTests, CompilesConstantBoundLoopInsideAnEventHandler)
 
             process { out = amp[0] * mul[0]; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);
@@ -1629,7 +1629,7 @@ TEST (YdspAsmJitCodegenTests, EmitEventCommitsAnOutputEventEntry)
 
             process { out = freq; }
         }
-        graph G { input event midi; output stream y; output event noteOn; node v = Voice; connection { v.out -> y; v.noteOn -> noteOn; } }
+        graph G { input event midi; output stream y; output event noteOn; node v = Voice; connection { midi -> v.midi; v.out -> y; v.noteOn -> noteOn; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);
@@ -1681,7 +1681,7 @@ TEST (YdspAsmJitCodegenTests, EmitEventDropsWhenTheQueueIsAtCapacity)
 
             process { out = freq; }
         }
-        graph G { input event midi; output stream y; output event noteOn; node v = Voice; connection { v.out -> y; v.noteOn -> noteOn; } }
+        graph G { input event midi; output stream y; output event noteOn; node v = Voice; connection { midi -> v.midi; v.out -> y; v.noteOn -> noteOn; } }
     )YDSP",
                                           "Voice.noteOn",
                                           diagnostics);

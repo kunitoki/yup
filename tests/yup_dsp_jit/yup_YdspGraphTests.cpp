@@ -1502,7 +1502,7 @@ TEST (YdspJitGraphTests, RoutesSeparateEventInputsByName)
             output stream y2;
             node a = A;
             node b = B;
-            connection { a.out -> y1; b.out -> y2; }
+            connection { midi1 -> a.midi1; midi2 -> b.midi2; a.out -> y1; b.out -> y2; }
         }
     )YDSP",
                                compiler);
@@ -1584,7 +1584,7 @@ TEST (YdspJitGraphTests, NoteOffOnOneEventInputDoesNotReleaseTheOtherInputsVoice
             input event inB;
             output stream y;
             node v = Voice[4];
-            connection { v.out -> y; }
+            connection { inA -> v.inA; inB -> v.inB; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -1646,7 +1646,7 @@ TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHe
             input event inB;
             output stream y;
             node v = Voice [[ mode: mono ]];
-            connection { v.out -> y; }
+            connection { inA -> v.inA; inB -> v.inB; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -1715,7 +1715,7 @@ TEST (YdspJitGraphTests, AllSoundOffOnEachInputSilencesAtItsOwnOffset)
             input event inB;
             output stream y;
             node v = Voice;
-            connection { v.out -> y; }
+            connection { inA -> v.inA; inB -> v.inB; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -1772,7 +1772,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesANoteRetriggeredAfterIt)
             input event inB;
             output stream y;
             node v = Voice;
-            connection { v.out -> y; }
+            connection { inA -> v.inA; inB -> v.inB; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -3473,7 +3473,7 @@ constexpr const char* activeVoiceGraph = R"YDSP(
         input event midi;
         output stream y;
         node v = ActiveVoice[4];
-        connection { v.out -> y; }
+        connection { midi -> v.midi; v.out -> y; }
     }
 )YDSP";
 
@@ -3505,7 +3505,7 @@ TEST (YdspJitGraphTests, MonosynthReceivesMidiNoteOn)
             input event midi;
             output stream y;
             node v = ActiveVoice[1];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -3702,7 +3702,7 @@ TEST (YdspJitGraphTests, AutomationEventChangesParamAtExactSampleOffset)
             input event midi;
             output stream y;
             node v = GainVoice;
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -3748,7 +3748,7 @@ TEST (YdspJitGraphTests, PolyphonicAutomationAppliesTheSameTimelineToEveryVoice)
             input event midi;
             output stream y;
             node v = GainVoice[4];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4059,7 +4059,7 @@ TEST (YdspJitGraphTests, BlockWithNoSplitPointsTakesSingleKernelCall)
             input event midi;
             output stream y;
             node c = Counter;
-            connection { c.out -> y; }
+            connection { midi -> c.midi; c.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4648,7 +4648,7 @@ TEST (YdspJitGraphTests, ControlChangeReachesEveryVoiceAtItsSampleOffset)
             input event midi;
             output stream y;
             node v = ControlVoice;
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4683,7 +4683,7 @@ TEST (YdspJitGraphTests, ProgramChangeReachesTheHandler)
             input event midi;
             output stream y;
             node v = ControlVoice;
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4715,7 +4715,7 @@ TEST (YdspJitGraphTests, ChannelPitchBendAndPressureBroadcastInLegacyMode)
             input event midi;
             output stream y;
             node v = ExpressiveVoice[2];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4756,7 +4756,7 @@ TEST (YdspJitGraphTests, PolyAftertouchFoldsIntoTheAffectedNotesPressure)
             input event midi;
             output stream y;
             node v = ExpressiveVoice[2];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4792,7 +4792,7 @@ TEST (YdspJitGraphTests, PerNoteMpeExpressionReachesOnlyTheOwningVoice)
             input event midi;
             output stream y;
             node v = ExpressiveVoice[4];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4837,7 +4837,7 @@ TEST (YdspJitGraphTests, ExpressionForAnUnownedNoteIsDiscardedAndCounted)
             input event midi;
             output stream y;
             node v = ExpressiveVoice[1] [[ stealing: none ]];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4885,7 +4885,7 @@ TEST (YdspJitGraphTests, StealingPolicySelectsWhichVoiceIsReused)
     {
         DspJitCompiler compiler;
 
-        auto graph = compilePatch (std::string (activeVoiceSource) + "graph G { input event midi; output stream y; node v = ActiveVoice[2] [[ " + policy.annotation + " ]]; connection { v.out -> y; } }", compiler);
+        auto graph = compilePatch (std::string (activeVoiceSource) + "graph G { input event midi; output stream y; node v = ActiveVoice[2] [[ " + policy.annotation + " ]]; connection { midi -> v.midi; v.out -> y; } }", compiler);
 
         ASSERT_TRUE (graph.isValid()) << policy.annotation;
         graph.prepare (44100.0, 64);
@@ -4917,7 +4917,7 @@ TEST (YdspJitGraphTests, MonoNodeFollowsTheHeldNoteStackWithLegato)
             input event midi;
             output stream y;
             node bass = MonoVoice [[ mode: mono, priority: last ]];
-            connection { bass.out -> y; }
+            connection { midi -> bass.midi; bass.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -4957,7 +4957,7 @@ TEST (YdspJitGraphTests, MonoNotePriorityChoosesTheSoundingNote)
     {
         DspJitCompiler compiler;
 
-        auto graph = compilePatch (std::string (monoVoiceSource) + "graph G { input event midi; output stream y; node bass = MonoVoice [[ mode: mono, priority: " + priority + " ]]; connection { bass.out -> y; } }", compiler);
+        auto graph = compilePatch (std::string (monoVoiceSource) + "graph G { input event midi; output stream y; node bass = MonoVoice [[ mode: mono, priority: " + priority + " ]]; connection { midi -> bass.midi; bass.out -> y; } }", compiler);
 
         ASSERT_TRUE (graph.isValid()) << priority;
         graph.prepare (44100.0, 256);
@@ -5088,7 +5088,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesAndReRunsInit)
             input event midi;
             output stream y;
             node v = InitVoice;
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5123,7 +5123,7 @@ TEST (YdspJitGraphTests, DenseMpeTrafficDoesNotAllocateDuringProcess)
             input event midi;
             output stream y;
             node v = ExpressiveVoice[8];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5215,6 +5215,7 @@ TEST (YdspJitGraphTests, PolySineCompilesAndRunsSampleAccurately)
             node voices = Voice[4];
 
             connection {
+                midi -> voices.midi;
                 voices.out -> out;
             }
         }
@@ -5478,6 +5479,8 @@ constexpr const char* expressiveSynthSource = R"YDSP(
         node bass = Bass    [[ mode: mono, priority: last ]];
 
         connection {
+            midi -> lead.midi;
+            midi -> bass.midi;
             lead.out -> leadOut;
             bass.out -> bassOut;
         }
@@ -5634,7 +5637,7 @@ TEST (YdspJitGraphTests, NoteOnCarriesCurrentPitchBend)
             input event midi;
             output stream y;
             node v = BendVoice[4] [[ mode: poly, stealing: oldest ]];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5690,7 +5693,7 @@ TEST (YdspJitGraphTests, MonoNoteOnCarriesCurrentPitchBend)
             input event midi;
             output stream y;
             node v = BendVoice [[ mode: mono, priority: last ]];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5939,7 +5942,7 @@ TEST (YdspJitGraphTests, IdleVoiceBankProducesExactSilence)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5969,7 +5972,7 @@ TEST (YdspJitGraphTests, GetActiveVoiceCountIsSafeBeforePrepare)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -5990,7 +5993,7 @@ TEST (YdspJitGraphTests, OnlySoundingVoicesContributeToTheMix)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6022,7 +6025,7 @@ TEST (YdspJitGraphTests, VoiceRunsToTheBlockBoundaryThenSleeps)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6067,7 +6070,7 @@ TEST (YdspJitGraphTests, NoteOnMidBlockRendersTheWholeBlock)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6100,7 +6103,7 @@ TEST (YdspJitGraphTests, WokenIdleVoiceLeavesNoStaleScratchBehind)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6153,7 +6156,7 @@ TEST (YdspJitGraphTests, AutomationStillAppliesToAFullyIdleVoiceBank)
             input event midi;
             output stream y;
             node voices = LevelProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6196,7 +6199,7 @@ TEST (YdspJitGraphTests, MonoVoiceSleepsWhenIdle)
             input event midi;
             output stream y;
             node voices = SleepProbe [[ mode: mono ]];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6242,7 +6245,7 @@ TEST (YdspJitGraphTests, HeldVoiceRunsEvenWithItsFlagCleared)
             input event midi;
             output stream y;
             node voices = LyingProbe[8];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6295,7 +6298,7 @@ TEST (YdspJitGraphTests, WriteOnlyActivityFlagStillPutsTheVoiceToSleep)
             input event midi;
             output stream y;
             node voices = DecayProbe[8];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6343,7 +6346,7 @@ TEST (YdspJitGraphTests, VoiceBankWithoutTheAnnotationRunsEveryVoice)
             input event midi;
             output stream y;
             node voices = PlainProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6373,7 +6376,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesAndSleepsTheVoices)
             input event midi;
             output stream y;
             node voices = SleepProbe[16];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6415,7 +6418,7 @@ TEST (YdspJitGraphTests, ActiveVoiceCountIsZeroForAnUnknownNode)
             input event midi;
             output stream y;
             node voices = SleepProbe[4];
-            connection { voices.out -> y; }
+            connection { midi -> voices.midi; voices.out -> y; }
         }
     )YDSP",
                                compiler);
@@ -6956,7 +6959,6 @@ TEST (YdspJitGraphTests, RoutedNoteOnSoundsTheDestinationVoiceAtTheRoutedPitch)
         }
         graph G {
             input stream trig;
-            input event midi;
             output stream y;
             node arp = Arp;
             node voice = Voice;
@@ -7012,7 +7014,6 @@ TEST (YdspJitGraphTests, AnImportedProcessorsEmitStatementSurvivesTheImportClone
         }
         graph G {
             input stream trig;
-            input event midi;
             output stream y;
             node arp = arpLib.Arp;
             node voice = Voice;
@@ -7069,7 +7070,7 @@ TEST (YdspJitGraphTests, MidiOnlyNodeReceivesEveryHeldNoteWithoutSyntheticSteali
         graph G {
             input event midi;
             node c = Collector;
-            connection { }
+            connection { midi -> c.midi; }
         }
     )YDSP",
                                compiler);
@@ -7127,7 +7128,6 @@ TEST (YdspJitGraphTests, TwoSourceNodesRoutingTheSamePitchDoNotCollideOnOneVoice
         graph G {
             input stream trigA;
             input stream trigB;
-            input event midi;
             output stream y;
             node arpA = ArpA;
             node arpB = ArpB;
@@ -7205,7 +7205,6 @@ TEST (YdspJitGraphTests, LatencyAnnotatedEmitterDelaysTheRoutedEventByItsDeclare
         }
         graph G {
             input stream trig;
-            input event midi;
             output stream y;
             node src = Source;
             node voice = Voice;
@@ -7255,7 +7254,6 @@ TEST (YdspJitGraphTests, ACompensatedEventStraddlingTheBlockBoundaryCarriesToThe
         }
         graph G {
             input stream trig;
-            input event midi;
             output stream y;
             node src = Source;
             node voice = Voice;
@@ -7309,7 +7307,6 @@ TEST (YdspJitGraphTests, CarryQueueOverflowIncrementsTheDroppedOutputEventCounte
         processor Sink { input event midi; output stream out; process { out = 0.0; } }
         graph G {
             input stream trig;
-            input event midi;
             output stream y;
             node src = Source;
             node s1 = Sink;

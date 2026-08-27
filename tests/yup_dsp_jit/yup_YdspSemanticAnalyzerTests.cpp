@@ -506,7 +506,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsIntegerArgumentsToMinMaxClampAbsSign)
                 out = float32 (mn + mx + cl + ab + sg);
             }
         }
-        graph G { input event midi; output stream y; node p = P; connection { p.out -> y; } }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -559,7 +559,7 @@ TEST (YdspSemanticAnalyzerTests, IntegerLiteralArgumentAloneStaysFloat)
             output stream out;
             process { out = min (3, 5); }
         }
-        graph G { input event midi; output stream y; node p = P; connection { p.out -> y; } }
+        graph G { output stream y; node p = P; connection { p.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -734,7 +734,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithMultipleFunctions)
                 out = polyBlep(phase, freq / sampleRate);
             }
         }
-        graph G { input event midi; output stream y; node p = P[1]; connection { p.out -> y; } }
+        graph G { input event midi; output stream y; node p = P[1]; connection { midi -> p.midi; p.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -1334,7 +1334,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesStreamFreeParameterProcessor)
             input value float decay = 0.25;
             process { out = decay; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { output stream y; node v = Voice; connection { v.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -1368,7 +1368,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesEventDrivenProcessor)
             input event midi;
             output stream y;
             node v = Voice[4];
-            connection { v.out -> y; }
+            connection { midi -> v.midi; v.out -> y; }
         }
     )YDSP",
                              diagnostics);
@@ -1402,7 +1402,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesEventFieldsToFloat32)
             }
             process { out = f; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -1465,7 +1465,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateEventEndpoint)
     EXPECT_TRUE (found);
 }
 
-TEST (YdspSemanticAnalyzerTests, RejectsNodeEventInputWithoutMatchingGraphInput)
+TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeEventInput)
 {
     DspJitDiagnostics diagnostics;
 
@@ -1487,7 +1487,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsNodeEventInputWithoutMatchingGraphInput)
 
     bool found = false;
     for (int i = 0; i < diagnostics.getCount(); ++i)
-        if (diagnostics.getItem (i).message.contains ("no matching 'input event midi'"))
+        if (diagnostics.getItem (i).message.contains ("Node 'p' input event 'midi' is not connected: it must be driven by at least one source"))
             found = true;
 
     EXPECT_TRUE (found);
@@ -1535,7 +1535,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSameShapeOnDifferentEventInputs)
             input event midi2;
             output stream y;
             node p = P;
-            connection { p.out -> y; }
+            connection { midi1 -> p.midi1; midi2 -> p.midi2; p.out -> y; }
         }
     )YDSP",
              diagnostics);
@@ -1655,7 +1655,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEveryProcessorScopeEventShape)
             event midi (e: programChange) { i = e.program; }
             process { out = f; }
         }
-        graph G { input event midi; output stream y; node v = Voice; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = Voice; connection { midi -> v.midi; v.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -1721,7 +1721,7 @@ TEST (YdspSemanticAnalyzerTests, ParsesVoiceModeAnnotationsOnNodes)
             output stream bassOut;
             node lead = Voice[4] [[ mode: poly, stealing: newest ]];
             node bass = Voice    [[ mode: mono, priority: low ]];
-            connection { lead.out -> leadOut; bass.out -> bassOut; }
+            connection { midi -> lead.midi; midi -> bass.midi; lead.out -> leadOut; bass.out -> bassOut; }
         }
     )YDSP",
                              diagnostics);
@@ -2172,7 +2172,7 @@ TEST (YdspSemanticAnalyzerTests, SmoothingAnnotationLeavesEventHandlersReadingTh
             event midi (e: noteOn) { env = e.velocity * decay; }
             process { out = env * decay; }
         }
-        graph G { input event midi; output stream y; node p = P; connection { p.out -> y; } }
+        graph G { input event midi; output stream y; node p = P; connection { midi -> p.midi; p.out -> y; } }
     )YDSP",
                              diagnostics);
 
@@ -2267,7 +2267,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsConstantLoopInEventHandler)
             input event midi;
             output stream y;
             node p = P;
-            connection { p.out -> y; }
+            connection { midi -> p.midi; p.out -> y; }
         }
     )YDSP",
                              diagnostics);
@@ -2424,7 +2424,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEventDrivenProcessorWithNoStreamsAtAll)
             input event midi;
             output event noteOn;
             node p = P;
-            connection { p.noteOn -> noteOn; }
+            connection { midi -> p.midi; p.noteOn -> noteOn; }
         }
     )YDSP",
                              diagnostics);
@@ -2655,7 +2655,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSamplePeriodBuiltin)
             event midi (e: noteOn) { phase = samplePeriod; }
             process { phase = phase + 100.0 * samplePeriod; out = in * phase; }
         }
-        graph G { input event midi; input stream a; output stream b; node p = P; connection { a -> p.in; p.out -> b; } }
+        graph G { input event midi; input stream a; output stream b; node p = P; connection { midi -> p.midi; a -> p.in; p.out -> b; } }
     )YDSP",
                              diagnostics);
 
@@ -2878,7 +2878,7 @@ String voiceActivitySource (StringRef activityDecl)
             event midi (e: noteOff) { env = 0.0; }
             process { out = env; }
         }
-        graph G { input event midi; output stream y; node v = V[4]; connection { v.out -> y; } }
+        graph G { input event midi; output stream y; node v = V[4]; connection { midi -> v.midi; v.out -> y; } }
     )YDSP";
 }
 
@@ -3915,7 +3915,6 @@ TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionForASpecificSh
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
         processor Sink { input event noteOn; output stream out; process { out = 0.0; } }
         graph G {
-            input event noteOn;
             output stream y;
             node src = Source;
             node snk = Sink;
@@ -3943,7 +3942,6 @@ TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionTargetingTheMi
         processor Source { output event pitchBend; process { emit pitchBend (bendSemitones: 2.0) -> pitchBend; } }
         processor Sink { input event midi; output stream out; process { out = 0.0; } }
         graph G {
-            input event midi;
             output stream y;
             node src = Source;
             node snk = Sink;
@@ -3966,7 +3964,6 @@ TEST (YdspSemanticAnalyzerTests, ResolvesAnEventConnectionAgainstASpecificInputE
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
         processor Sink { input event noteOff; output stream out; process { out = 0.0; } }
         graph G {
-            input event noteOff;
             output stream y;
             node src = Source;
             node snk = Sink;
@@ -4053,18 +4050,19 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphOutputEvent)
     EXPECT_TRUE (anyDiagnosticContains (diagnostics, "Graph output event 'noteOn' is not connected: it must be driven by at least one source"));
 }
 
-TEST (YdspSemanticAnalyzerTests, DoesNotRequireAnInputEventEndpointToBeConnected)
+TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedInputEventEndpoint)
 {
     DspJitDiagnostics diagnostics;
 
-    auto analyzed = analyze (R"YDSP(
+    analyze (R"YDSP(
         processor Sink { input event midi; output stream out; process { out = 0.0; } }
         graph G { input event midi; output stream y; node snk = Sink; connection { snk.out -> y; } }
     )YDSP",
-                             diagnostics);
+             diagnostics);
 
-    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
-    ASSERT_NE (nullptr, analyzed);
+    EXPECT_TRUE (diagnostics.hasErrors());
+    EXPECT_TRUE (anyDiagnosticContains (diagnostics, "Graph input event 'midi' is not connected: it must feed at least one destination"));
+    EXPECT_TRUE (anyDiagnosticContains (diagnostics, "Node 'snk' input event 'midi' is not connected: it must be driven by at least one source"));
 }
 
 //==============================================================================
@@ -4117,7 +4115,6 @@ TEST (YdspSemanticAnalyzerTests, TopoSortsAnAcyclicEventOnlyGraphWithNoAudio)
         processor Arp { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
         processor Voice { input event midi; process { } }
         graph G {
-            input event midi;
             node arp = Arp;
             node voice = Voice;
             connection { arp.noteOn -> voice.midi; }
@@ -4143,7 +4140,6 @@ TEST (YdspSemanticAnalyzerTests, CompensatesANodeToNodeEventEdgeByTheSourcesDecl
         processor Source [[ latency: 8 ]] { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
         processor Sink { input event noteOn; output stream out; process { out = 0.0; } }
         graph G {
-            input event noteOn;
             output stream y;
             node src = Source;
             node snk = Sink;
@@ -4193,7 +4189,6 @@ TEST (YdspSemanticAnalyzerTests, LeavesAnEventEdgeWithNoLatencyAnywhereUncompens
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
         processor Sink { input event noteOn; output stream out; process { out = 0.0; } }
         graph G {
-            input event noteOn;
             output stream y;
             node src = Source;
             node snk = Sink;
