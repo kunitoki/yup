@@ -428,13 +428,92 @@ By default these are no-ops. To receive mouse events, a component must opt in:
 
 ```cpp
 comp.setWantsMouseEvents (true, true);
-//                          ^^^^  ^^^^
-//                          self  children
+//                        ^^^^  ^^^^
+//                        self  children
 ```
 
 The first flag controls whether this component receives mouse events on itself.
 The second controls whether its children can receive them (useful for
 mouse-blocking overlays).
+
+### Multitouch (mobile and Emscripten on a mobile browser)
+
+On iOS, Android and Emscripten in a mobile browser, every finger is delivered
+through the same mouse callbacks, with the left button held. The first finger
+behaves exactly like a mouse; each additional finger produces parallel
+`mouseDown` / `mouseDrag` / `mouseUp` events. Distinguish fingers with
+`MouseEvent::isTouch()` and `MouseEvent::getTouchIndex()` - a dense, zero-based
+index that stays stable for a finger while it is in contact:
+
+```cpp
+class DragHandle : public Component
+{
+    int activeFinger = -1;
+
+    void mouseDown (const MouseEvent& e) override
+    {
+        if (e.isTouch() && e.getTouchIndex() > 0)   // track only extra fingers
+            activeFinger = e.getTouchIndex();
+    }
+
+    void mouseDrag (const MouseEvent& e) override
+    {
+        if (e.isTouch() && e.getTouchIndex() == activeFinger)
+            dragTo (e.getPosition());
+    }
+
+    void mouseUp (const MouseEvent& e) override
+    {
+        if (e.isTouch() && e.getTouchIndex() == activeFinger)
+            activeFinger = -1;
+    }
+};
+```
+
+Notes:
+
+- Touch events are only generated on `YUP_MOBILE` and `YUP_EMSCRIPTEN` targets.
+- `MouseEvent::getPressure()` reports the touch pressure in the range 0.0-1.0
+  (0.0 for mouse events).
+- Only the first finger takes keyboard focus, so an additional finger can never
+  steal it mid-gesture.
+- A finger cancelled by the system (e.g. a palm resting on the screen) is
+  delivered as a regular `mouseUp`.
+
+For a two-finger pinch, remember the position of every finger in `mouseDown`
+and compare the distance between them in `mouseDrag`:
+
+```cpp
+std::map<int, Point<float>> fingers; // touchIndex -> current position
+
+void mouseDown (const MouseEvent& e) override
+{
+    if (e.isTouch())
+        fingers[e.getTouchIndex()] = e.getPosition();
+}
+
+void mouseDrag (const MouseEvent& e) override
+{
+    if (e.isTouch())
+    {
+        fingers[e.getTouchIndex()] = e.getPosition();
+
+        if (fingers.size() == 2)
+        {
+            auto it = fingers.begin();
+            const auto a = it->second;
+            const auto b = (++it)->second;
+            // The distance between a and b is the current pinch span.
+        }
+    }
+}
+
+void mouseUp (const MouseEvent& e) override
+{
+    if (e.isTouch())
+        fingers.erase (e.getTouchIndex());
+}
+```
 
 ### Mouse cursor
 

@@ -78,6 +78,12 @@ SDLComponentNative::SDLComponentNative (Component& component,
     SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
+#if YUP_MOBILE || YUP_EMSCRIPTEN
+    // Touch input is delivered by YUP itself through the SDL_EVENT_FINGER_* handlers
+    // below, so don't let SDL also synthesize mouse events from the same touches.
+    SDL_SetHint (SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
+
     // Create the window, renderer and parent it
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: creating window: title=" << component.getTitle() << ", flags=" << String::toHexString (static_cast<int> (windowFlags)) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))));
 
@@ -1075,8 +1081,53 @@ bool SDLComponentNative::isRendering() const
 
 //==============================================================================
 
-void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
+void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger)
 {
+    if (touchFinger != nullptr)
+    {
+        const auto fingerId = touchFinger->fingerId;
+        touchFinger->position = position;
+
+        auto event = MouseEvent()
+                         .withButtons (touchFinger->buttons)
+                         .withModifiers (currentKeyModifiers)
+                         .withPosition (position)
+                         .withTouchIndex (touchFinger->index)
+                         .withPressure (touchFinger->pressure);
+
+        if (touchFinger->lastDownPosition)
+            event = event.withLastMouseDownPosition (*touchFinger->lastDownPosition);
+
+        if (touchFinger->lastDownTime)
+            event = event.withLastMouseDownTime (*touchFinger->lastDownTime);
+
+        if (auto* clickedComponent = touchFinger->clickedComponent.get())
+        {
+            event = event.withSourceComponent (clickedComponent);
+            clickedComponent->internalMouseDrag (event.withRelativePositionTo (clickedComponent));
+        }
+        else if (touchFinger->index == 0)
+        {
+            const auto previousComponent = touchFinger->componentUnderPointer;
+            const auto currentComponent = updateComponentUnderMouse (event, previousComponent);
+
+            const auto index = findTouchFingerIndex (fingerId);
+            if (index >= 0)
+            {
+                auto& finger = activeTouches.getReference (index);
+                finger.componentUnderPointer = currentComponent;
+
+                if (auto* underPointer = currentComponent.get())
+                {
+                    event = event.withSourceComponent (underPointer);
+                    underPointer->internalMouseMove (event.withRelativePositionTo (underPointer));
+                }
+            }
+        }
+
+        return;
+    }
+
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
@@ -1105,26 +1156,63 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
     lastMouseMovePosition = position;
 }
 
-void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
     currentKeyModifiers = modifiers;
+
+    if (touchFinger != nullptr)
+    {
+        const auto fingerId = touchFinger->fingerId;
+        touchFinger->position = position;
+        touchFinger->buttons = static_cast<MouseEvent::Buttons> (touchFinger->buttons | button);
+
+        if (touchFinger->buttons == button)
+            touchFinger->clickedComponent = findComponentForMouseEvent (position);
+        auto event = MouseEvent()
+                         .withButtons (touchFinger->buttons)
+                         .withModifiers (currentKeyModifiers)
+                         .withPosition (position)
+                         .withTouchIndex (touchFinger->index)
+                         .withPressure (touchFinger->pressure);
+
+        if (auto* clickedComponent = touchFinger->clickedComponent.get())
+        {
+            const auto currentMouseDownTime = yup::Time::getCurrentTime();
+            event = event.withSourceComponent (clickedComponent);
+
+            clickedComponent->internalMouseDown (event.withRelativePositionTo (clickedComponent));
+
+            // The user callback above may have reentered the event loop and reallocated
+            // activeTouches, so re-resolve the finger by id before touching its state.
+            const auto index = findTouchFingerIndex (fingerId);
+            if (index >= 0)
+            {
+                auto& finger = activeTouches.getReference (index);
+                finger.lastDownPosition = position;
+                finger.lastDownTime = currentMouseDownTime;
+            }
+        }
+
+        return;
+    }
+
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
+
+    if (currentMouseButtons == button)
+        lastComponentClicked = findComponentForMouseEvent (position);
 
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
 
-    if (currentMouseButtons == button)
-        lastComponentClicked = findComponentForMouseEvent (position);
-
-    if (lastComponentClicked != nullptr)
+    if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
 
-        event = event.withSourceComponent (lastComponentClicked);
+        event = event.withSourceComponent (clickedComponent);
 
-        lastComponentClicked->internalMouseDown (event.withRelativePositionTo (lastComponentClicked));
+        clickedComponent->internalMouseDown (event.withRelativePositionTo (clickedComponent));
 
         lastMouseDownPosition = position;
         lastMouseDownTime = currentMouseDownTime;
@@ -1137,10 +1225,80 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
     lastMouseMovePosition = position;
 }
 
-void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger, bool wasCanceled)
 {
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
     currentKeyModifiers = modifiers;
+
+    if (touchFinger != nullptr)
+    {
+        const auto fingerId = touchFinger->fingerId;
+        const auto touchIndex = touchFinger->index;
+        touchFinger->position = position;
+        touchFinger->buttons = static_cast<MouseEvent::Buttons> (touchFinger->buttons & ~button);
+
+        auto event = MouseEvent()
+                         .withButtons (touchFinger->buttons)
+                         .withModifiers (currentKeyModifiers)
+                         .withPosition (position)
+                         .withTouchIndex (touchIndex)
+                         .withPressure (touchFinger->pressure);
+
+        if (touchFinger->lastDownPosition)
+            event = event.withLastMouseDownPosition (*touchFinger->lastDownPosition);
+
+        if (touchFinger->lastDownTime)
+            event = event.withLastMouseDownTime (*touchFinger->lastDownTime);
+
+        if (auto* clickedComponent = touchFinger->clickedComponent.get())
+        {
+            const auto currentMouseDownTime = yup::Time::getCurrentTime();
+            const WeakReference<Component> clickedComponentReference (clickedComponent);
+            auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
+
+            event = event.withSourceComponent (clickedComponent);
+
+            const auto clickState = getTouchClickState (touchIndex);
+            if (! wasCanceled
+                && clickState.lastUpTime
+                && *clickState.lastUpTime > yup::Time()
+                && clickState.lastComponent.get() == clickedComponent
+                && currentMouseDownTime - *clickState.lastUpTime < doubleClickTime)
+            {
+                clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
+            }
+
+            if (! clickedComponentBailOut.shouldBailOut())
+                clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
+
+            // The user callbacks above may have reentered the event loop and reallocated
+            // the click-state array, so reacquire the state before touching it.
+            if (! wasCanceled)
+            {
+                auto& currentClickState = getTouchClickState (touchIndex);
+                currentClickState.lastUpTime = currentMouseDownTime;
+                currentClickState.lastComponent = clickedComponentReference;
+            }
+        }
+
+        if (touchIndex == 0)
+        {
+            const auto index = findTouchFingerIndex (fingerId);
+            if (index >= 0)
+            {
+                auto& finger = activeTouches.getReference (index);
+                const auto previousComponent = finger.componentUnderPointer;
+                const auto currentComponent = updateComponentUnderMouse (event, previousComponent);
+
+                const auto currentIndex = findTouchFingerIndex (fingerId);
+                if (currentIndex >= 0)
+                    activeTouches.getReference (currentIndex).componentUnderPointer = currentComponent;
+            }
+        }
+
+        return;
+    }
+
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
 
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1162,7 +1320,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
 
         event = event.withSourceComponent (clickedComponent);
 
-        if (lastMouseUpTime
+        if (! wasCanceled
+            && lastMouseUpTime
             && *lastMouseUpTime > yup::Time()
             && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
         {
@@ -1172,7 +1331,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (! clickedComponentBailOut.shouldBailOut())
             clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
 
-        lastMouseUpTime = currentMouseDownTime;
+        if (! wasCanceled)
+            lastMouseUpTime = currentMouseDownTime;
     }
 
     if (nativeBailOut.shouldBailOut())
@@ -1191,8 +1351,112 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
 
     lastMouseMovePosition = position;
 
-    if (isMouseOutsideWindow (window))
+    if (! event.isTouch() && isMouseOutsideWindow (window))
         handleFocusChanged (false);
+}
+
+//==============================================================================
+
+void SDLComponentNative::handleTouchDown (SDL_FingerID fingerId, const Point<float>& position, float pressure)
+{
+    if (findTouchFingerIndex (fingerId) >= 0)
+        return;
+
+    TouchFinger finger;
+    finger.fingerId = fingerId;
+    finger.index = getFreeTouchIndex();
+    finger.position = position;
+    finger.pressure = pressure;
+    finger.buttons = MouseEvent::leftButton;
+
+    activeTouches.add (finger);
+    handleMouseDown (position, MouseEvent::leftButton, KeyModifiers (SDL_GetModState()), &activeTouches.getReference (activeTouches.size() - 1));
+}
+
+void SDLComponentNative::handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure)
+{
+    const auto index = findTouchFingerIndex (fingerId);
+    if (index < 0)
+        return;
+
+    auto& finger = activeTouches.getReference (index);
+    finger.position = position;
+    finger.pressure = pressure;
+
+    handleMouseMoveOrDrag (position, &finger);
+}
+
+void SDLComponentNative::handleTouchUp (SDL_FingerID fingerId, const Point<float>& position, float pressure, bool wasCanceled)
+{
+    const auto index = findTouchFingerIndex (fingerId);
+    if (index < 0)
+        return;
+
+    auto& finger = activeTouches.getReference (index);
+    finger.position = position;
+    finger.pressure = pressure;
+
+    handleMouseUp (position, MouseEvent::leftButton, currentKeyModifiers, &finger, wasCanceled);
+
+    // The user callbacks above may have reentered the event loop and reallocated
+    // activeTouches, so re-resolve the finger by id before removing it.
+    const auto finalIndex = findTouchFingerIndex (fingerId);
+    if (finalIndex >= 0)
+        activeTouches.remove (finalIndex);
+}
+
+//==============================================================================
+
+Point<float> SDLComponentNative::getTouchPosition (const SDL_TouchFingerEvent& event) const
+{
+    const auto size = getContentSize().to<float>();
+    const auto scale = getWindowUnitsPerPoint (window);
+
+    return Point<float> (event.x * size.getWidth(), event.y * size.getHeight()) / scale;
+}
+
+//==============================================================================
+
+int SDLComponentNative::findTouchFingerIndex (SDL_FingerID fingerId) const
+{
+    for (int i = 0; i < activeTouches.size(); ++i)
+    {
+        if (activeTouches[i].fingerId == fingerId)
+            return i;
+    }
+
+    return -1;
+}
+
+int SDLComponentNative::getFreeTouchIndex() const
+{
+    for (int index = 0; index <= activeTouches.size(); ++index)
+    {
+        bool used = false;
+
+        for (int i = 0; i < activeTouches.size(); ++i)
+        {
+            if (activeTouches[i].index == index)
+            {
+                used = true;
+                break;
+            }
+        }
+
+        if (! used)
+            return index;
+    }
+
+    jassertfalse;
+    return 0;
+}
+
+SDLComponentNative::TouchClickState& SDLComponentNative::getTouchClickState (int touchIndex)
+{
+    while (touchClickStates.size() <= touchIndex)
+        touchClickStates.add ({});
+
+    return touchClickStates.getReference (touchIndex);
 }
 
 //==============================================================================
@@ -1602,27 +1866,32 @@ Component* SDLComponentNative::findComponentForMouseEvent (const Point<float>& p
 
 void SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
+    lastComponentUnderMouse = updateComponentUnderMouse (event, lastComponentUnderMouse);
+}
+
+WeakReference<Component> SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent)
+{
     Component* child = findComponentForMouseEvent (event.getPosition());
 
     if (child != nullptr)
     {
-        if (lastComponentUnderMouse == nullptr)
+        if (previousComponent == nullptr)
         {
             child->internalMouseEnter (event.withRelativePositionTo (child));
         }
-        else if (lastComponentUnderMouse != child)
+        else if (previousComponent != child)
         {
-            lastComponentUnderMouse->internalMouseExit (event.withRelativePositionTo (lastComponentUnderMouse));
+            previousComponent->internalMouseExit (event.withRelativePositionTo (previousComponent));
             child->internalMouseEnter (event.withRelativePositionTo (child));
         }
     }
     else
     {
-        if (lastComponentUnderMouse != nullptr)
-            lastComponentUnderMouse->internalMouseExit (event.withRelativePositionTo (lastComponentUnderMouse));
+        if (previousComponent != nullptr)
+            previousComponent->internalMouseExit (event.withRelativePositionTo (previousComponent));
     }
 
-    lastComponentUnderMouse = child;
+    return child;
 }
 
 //==============================================================================
@@ -1812,6 +2081,61 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             break;
         }
+
+#if YUP_MOBILE || YUP_EMSCRIPTEN
+        case SDL_EVENT_FINGER_DOWN:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_DOWN " << static_cast<int64> (event->tfinger.fingerID));
+
+            if (event->tfinger.windowID == SDL_GetWindowID (window))
+            {
+                handleTouchDown (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
+            }
+
+            break;
+        }
+
+        case SDL_EVENT_FINGER_MOTION:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_MOTION " << static_cast<int64> (event->tfinger.fingerID));
+
+            if (event->tfinger.windowID == SDL_GetWindowID (window)
+                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            {
+                handleTouchMove (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
+            }
+
+            break;
+        }
+
+        case SDL_EVENT_FINGER_UP:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_UP " << static_cast<int64> (event->tfinger.fingerID));
+
+            if (event->tfinger.windowID == SDL_GetWindowID (window)
+                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            {
+                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure);
+            }
+
+            break;
+        }
+
+        case SDL_EVENT_FINGER_CANCELED:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_CANCELED " << static_cast<int64> (event->tfinger.fingerID));
+
+            if (event->tfinger.windowID == SDL_GetWindowID (window)
+                || findTouchFingerIndex (event->tfinger.fingerID) >= 0)
+            {
+                // Deliver the finger up so components can clean up, but never as a
+                // click: a cancel must not feed double-click detection.
+                handleTouchUp (event->tfinger.fingerID, getTouchPosition (event->tfinger), event->tfinger.pressure, true);
+            }
+
+            break;
+        }
+#endif
 
         case SDL_EVENT_KEY_DOWN:
         {
