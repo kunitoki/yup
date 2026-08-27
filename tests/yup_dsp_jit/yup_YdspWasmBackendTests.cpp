@@ -231,7 +231,7 @@ TEST (YdspWasmBackendTests, PolyphonicVoiceBankWithMidiEvents)
                 out = env * phase;
             }
         }
-        graph G { input event midi; output stream y; node p = P[4]; connection { p.out -> y; } }
+        graph G { input event midi; output stream y; node p = P[4]; connection { midi -> p.midi; p.out -> y; } }
     )YDSP",
                                compiler);
 
