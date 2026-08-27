@@ -454,7 +454,7 @@ TEST (YdspJitGraphTests, RunsTanhAndMathIntrinsics)
     for (int i = 0; i < 64; ++i)
     {
         const auto x = input[static_cast<size_t> (i)];
-        const auto expected = std::tanhf (x) * std::sqrtf (std::fabsf (x) + 1.0f);
+        const auto expected = tanhf (x) * sqrtf (fabsf (x) + 1.0f);
         EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-4f);
     }
 
@@ -1996,7 +1996,7 @@ TEST (YdspJitGraphTests, SetsAndReadsParameters)
     for (int i = 0; i < 16; ++i)
         EXPECT_NEAR (input[static_cast<size_t> (i)] * 0.25f, output[static_cast<size_t> (i)], 1e-5f);
 
-    EXPECT_NEAR (std::fabsf (output[15]), graph.getOutputValue ("g.level"), 1e-6f);
+    EXPECT_NEAR (fabsf (output[15]), graph.getOutputValue ("g.level"), 1e-6f);
 
     dumpAsmOnFailure (graph);
 }
@@ -2048,7 +2048,7 @@ TEST (YdspJitGraphTests, RunsMultiNodeGraphWithSidechain)
     {
         const auto x = dry[static_cast<size_t> (i)];
         const auto side = sc[static_cast<size_t> (i)];
-        const auto expected = 0.5f * std::tanhf (x * (1.0f + 0.5f * side));
+        const auto expected = 0.5f * tanhf (x * (1.0f + 0.5f * side));
         EXPECT_NEAR (expected, wet[static_cast<size_t> (i)], 1e-4f);
     }
 
@@ -2348,7 +2348,7 @@ TEST (YdspJitGraphTests, RunsRingModulator)
     float phase = 0.0f;
     for (int i = 0; i < 64; ++i)
     {
-        const auto expected = std::sinf (phase);
+        const auto expected = sinf (phase);
         EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-4f);
         phase += 0.1f;
     }

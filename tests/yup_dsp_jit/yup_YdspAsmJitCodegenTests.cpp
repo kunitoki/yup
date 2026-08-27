@@ -305,7 +305,7 @@ TEST (YdspAsmJitCodegenTests, CompilesTanhClipper)
     for (int i = 0; i < 64; ++i)
     {
         const auto x = input[static_cast<size_t> (i)];
-        const auto expected = std::tanhf (x);
+        const auto expected = tanhf (x);
         EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-4f);
     }
 
@@ -490,7 +490,7 @@ TEST (YdspAsmJitCodegenTests, CompilesMathIntrinsics)
     for (int i = 0; i < 64; ++i)
     {
         const auto x = input[static_cast<size_t> (i)];
-        const auto expected = std::sqrtf (std::fabsf (x) + 1.0f) * std::sinf (x);
+        const auto expected = sqrtf (fabsf (x) + 1.0f) * sinf (x);
         EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-4f);
     }
 
@@ -954,7 +954,7 @@ TEST (YdspAsmJitCodegenTests, CompilesFmodIntrinsic)
     for (int i = 0; i < 64; ++i)
     {
         const auto x = input[static_cast<size_t> (i)];
-        const auto expected = std::fmodf (x, 2.0f);
+        const auto expected = fmodf (x, 2.0f);
         EXPECT_NEAR (expected, output[static_cast<size_t> (i)], 1e-4f);
     }
 
