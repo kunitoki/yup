@@ -234,7 +234,7 @@ function (yup_standalone_app)
             -sNODERAWFS=$<IF:$<BOOL:${YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS}>,1,0>
             -sWASMFS=1
             -sFETCH=1
-            -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
+            -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,wasmMemory
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file=${YUP_ARG_CUSTOM_SHELL})
 
