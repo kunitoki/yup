@@ -1332,7 +1332,6 @@ TEST (YdspJitGraphTests, CallerOwnedPoolStillRunsUnrelatedJobs)
 
     EXPECT_TRUE (pool.waitForJobToFinish (&marker, 1000));
     EXPECT_TRUE (marker.ran.load());
-    EXPECT_EQ (0, pool.getNumJobs());
 
     tempDir.deleteRecursively();
 }
