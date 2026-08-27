@@ -85,7 +85,7 @@ public:
     */
     void setSyntaxDefinition (const SyntaxDefinition& definition);
 
-    /** Sets a built-in syntax definition by language name ("cpp", "glsl", "python", "xml").
+    /** Sets a built-in syntax definition by language name ("cpp", "glsl", "python", "xml", "ydsp").
 
         @param languageName The language name.
     */

@@ -1,0 +1,190 @@
+/*
+  A pitch-ordered arpeggiator: a MIDI-only processor with no stream endpoints
+  at all. It keeps every currently held note in a small fixed slot array,
+  keyed by pitch rather than press order, and on every tick of its own `rate`
+  clock releases whichever pitch it was sounding and steps to the next one in
+  the chosen direction - up, down, or up-down (bouncing between the held
+  extremes). Holding a chord arpeggiates it; holding one note re-triggers it.
+*/
+
+processor Arp {
+    input event midiIn;
+    output event midiOut;
+
+    input value float rate = 8.0 [[ name: "Rate", min: 1.0, max: 20.0, unit: "Hz" ]];
+    input value float mode = 0 [[ name: "Mode", min: 0.0, max: 2.0, values: { "Up", "Down", "Up-Down" } ]];
+
+    state int slotPitch[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+    state float slotBend[8];
+    state float slotVelocity[8];
+    state int soundingPitch = -1;
+    state float soundingVelocity;
+    state int arpDirection = 1;
+    state float clockPhase;
+
+    event midiIn (e: noteOn) {
+        int pitch = int (e.pitch);
+        int wasEmpty = 1;
+
+        for i in 0..8 {
+            if (slotPitch[i] >= 0) { wasEmpty = 0; }
+        }
+
+        int found = 0;
+
+        for i in 0..8 {
+            if (found == 0) {
+                if (slotPitch[i] < 0) {
+                    slotPitch[i] = pitch;
+                    slotBend[i] = e.bendSemitones;
+                    slotVelocity[i] = e.velocity;
+                    found = 1;
+                }
+            }
+        }
+
+        if (wasEmpty == 1) {
+            arpDirection = 1;
+            clockPhase = 1.0;
+        }
+    }
+
+    event midiIn (e: noteOff) {
+        int pitch = int (e.pitch);
+
+        for i in 0..8 {
+            if (slotPitch[i] == pitch) {
+                slotPitch[i] = -1;
+                slotBend[i] = 0.0;
+                slotVelocity[i] = 0.0;
+            }
+        }
+    }
+
+    process {
+        clockPhase = clockPhase + rate * samplePeriod;
+
+        if (clockPhase >= 1.0) {
+            clockPhase = clockPhase - 1.0;
+
+            if (soundingPitch >= 0) {
+                emit noteOff (pitch: float (soundingPitch), velocity: soundingVelocity) -> midiOut;
+            }
+
+            // Scan the held pitches once for every candidate a direction
+            // change could need: the nearest held pitch above/below the one
+            // just released, and the topmost/bottommost held pitch to wrap
+            // (or bounce, for up-down) to when there is nothing further that way.
+            int upNext = -1;
+            int foundUpNext = 0;
+            int downNext = -1;
+            int foundDownNext = 0;
+            int wrapMin = -1;
+            int foundWrapMin = 0;
+            int wrapMax = -1;
+            int foundWrapMax = 0;
+
+            for i in 0..8 {
+                if (slotPitch[i] >= 0) {
+                    if (foundWrapMin == 0) {
+                        wrapMin = slotPitch[i];
+                        foundWrapMin = 1;
+                    } else {
+                        if (slotPitch[i] < wrapMin) { wrapMin = slotPitch[i]; }
+                    }
+
+                    if (foundWrapMax == 0) {
+                        wrapMax = slotPitch[i];
+                        foundWrapMax = 1;
+                    } else {
+                        if (slotPitch[i] > wrapMax) { wrapMax = slotPitch[i]; }
+                    }
+
+                    if (slotPitch[i] > soundingPitch) {
+                        if (foundUpNext == 0) {
+                            upNext = slotPitch[i];
+                            foundUpNext = 1;
+                        } else {
+                            if (slotPitch[i] < upNext) { upNext = slotPitch[i]; }
+                        }
+                    }
+
+                    if (slotPitch[i] < soundingPitch) {
+                        if (foundDownNext == 0) {
+                            downNext = slotPitch[i];
+                            foundDownNext = 1;
+                        } else {
+                            if (slotPitch[i] > downNext) { downNext = slotPitch[i]; }
+                        }
+                    }
+                }
+            }
+
+            int nextPitch = -1;
+            int found = 0;
+
+            int xmode = int (mode + 0.5);
+            if (xmode == 0) {
+                if (foundUpNext == 1) {
+                    nextPitch = upNext;
+                    found = 1;
+                } else if (foundWrapMin == 1) {
+                    nextPitch = wrapMin;
+                    found = 1;
+                }
+            } else if (xmode == 1) {
+                if (foundDownNext == 1) {
+                    nextPitch = downNext;
+                    found = 1;
+                } else if (foundWrapMax == 1) {
+                    nextPitch = wrapMax;
+                    found = 1;
+                }
+            } else {
+                if (arpDirection == 1) {
+                    if (foundUpNext == 1) {
+                        nextPitch = upNext;
+                        found = 1;
+                    } else if (foundDownNext == 1) {
+                        nextPitch = downNext;
+                        found = 1;
+                        arpDirection = -1;
+                    } else if (foundWrapMin == 1) {
+                        nextPitch = wrapMin;
+                        found = 1;
+                    }
+                } else {
+                    if (foundDownNext == 1) {
+                        nextPitch = downNext;
+                        found = 1;
+                    } else if (foundUpNext == 1) {
+                        nextPitch = upNext;
+                        found = 1;
+                        arpDirection = 1;
+                    } else if (foundWrapMax == 1) {
+                        nextPitch = wrapMax;
+                        found = 1;
+                    }
+                }
+            }
+
+            if (found == 1) {
+                float nextVelocity = 0.0;
+                float nextBend = 0.0;
+
+                for i in 0..8 {
+                    if (slotPitch[i] == nextPitch) {
+                        nextVelocity = slotVelocity[i];
+                        nextBend = slotBend[i];
+                    }
+                }
+
+                emit noteOn (pitch: float (nextPitch), velocity: nextVelocity, bendSemitones: nextBend) -> midiOut;
+                soundingPitch = nextPitch;
+                soundingVelocity = nextVelocity;
+            } else {
+                soundingPitch = -1;
+            }
+        }
+    }
+}

@@ -451,7 +451,8 @@ void AudioGraphComponent::paint (Graphics& g)
 //==============================================================================
 void AudioGraphComponent::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     const auto screenPos = eventPositionInThisComponent (event);
     mouseDownScreen = screenPos;

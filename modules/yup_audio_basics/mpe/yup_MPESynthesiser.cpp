@@ -74,7 +74,7 @@ void MPESynthesiser::stopVoice (MPESynthesiserVoice* voice, MPENote noteToStop, 
 //==============================================================================
 void MPESynthesiser::noteAdded (MPENote newNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     if (auto* voice = findFreeVoice (newNote, shouldStealVoices))
         startVoice (voice, newNote);
@@ -82,7 +82,7 @@ void MPESynthesiser::noteAdded (MPENote newNote)
 
 void MPESynthesiser::notePressureChanged (MPENote changedNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -96,7 +96,7 @@ void MPESynthesiser::notePressureChanged (MPENote changedNote)
 
 void MPESynthesiser::notePitchbendChanged (MPENote changedNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -110,7 +110,7 @@ void MPESynthesiser::notePitchbendChanged (MPENote changedNote)
 
 void MPESynthesiser::noteTimbreChanged (MPENote changedNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -124,7 +124,7 @@ void MPESynthesiser::noteTimbreChanged (MPENote changedNote)
 
 void MPESynthesiser::noteKeyStateChanged (MPENote changedNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -138,7 +138,7 @@ void MPESynthesiser::noteKeyStateChanged (MPENote changedNote)
 
 void MPESynthesiser::noteReleased (MPENote finishedNote)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto i = voices.size(); --i >= 0;)
     {
@@ -153,7 +153,7 @@ void MPESynthesiser::setCurrentPlaybackSampleRate (const double newRate)
 {
     MPESynthesiserBase::setCurrentPlaybackSampleRate (newRate);
 
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     turnOffAllVoices (false);
 
@@ -173,7 +173,7 @@ void MPESynthesiser::handleMidiEvent (const MidiMessage& m)
 
 MPESynthesiserVoice* MPESynthesiser::findFreeVoice (MPENote noteToFindVoiceFor, bool stealIfNoneAvailable) const
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -203,7 +203,7 @@ MPESynthesiserVoice* MPESynthesiser::findVoiceToSteal (MPENote noteToStealVoiceF
     // All major OSes use double-locking so this will be lock- and wait-free as long as stealLock is not
     // contended. This is always the case if you do not call findVoiceToSteal on multiple threads at
     // the same time.
-    const ScopedLock sl (stealLock);
+    const AudioLockType::ScopedLockType sl (stealLock);
 
     // this is a list of voices we can steal, sorted by how long they've been running
     usableVoicesToStealArray.clear();
@@ -277,32 +277,32 @@ MPESynthesiserVoice* MPESynthesiser::findVoiceToSteal (MPENote noteToStealVoiceF
 void MPESynthesiser::addVoice (MPESynthesiserVoice* const newVoice)
 {
     {
-        const ScopedLock sl (voicesLock);
+        const AudioLockType::ScopedLockType sl (voicesLock);
         newVoice->setCurrentSampleRate (getSampleRate());
         voices.add (newVoice);
     }
 
     {
-        const ScopedLock sl (stealLock);
+        const AudioLockType::ScopedLockType sl (stealLock);
         usableVoicesToStealArray.ensureStorageAllocated (voices.size() + 1);
     }
 }
 
 void MPESynthesiser::clearVoices()
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
     voices.clear();
 }
 
 MPESynthesiserVoice* MPESynthesiser::getVoice (const int index) const
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
     return voices[index];
 }
 
 void MPESynthesiser::removeVoice (const int index)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
     voices.remove (index);
 }
 
@@ -311,7 +311,7 @@ void MPESynthesiser::reduceNumVoices (const int newNumVoices)
     // we can't possibly get to a negative number of voices...
     jassert (newNumVoices >= 0);
 
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     while (voices.size() > newNumVoices)
     {
@@ -325,7 +325,7 @@ void MPESynthesiser::reduceNumVoices (const int newNumVoices)
 void MPESynthesiser::turnOffAllVoices (bool allowTailOff)
 {
     {
-        const ScopedLock sl (voicesLock);
+        const AudioLockType::ScopedLockType sl (voicesLock);
 
         // first turn off all voices (it's more efficient to do this immediately
         // rather than to go through the MPEInstrument for this).
@@ -345,7 +345,7 @@ void MPESynthesiser::turnOffAllVoices (bool allowTailOff)
 //==============================================================================
 void MPESynthesiser::renderNextSubBlock (AudioBuffer<float>& buffer, int startSample, int numSamples)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {
@@ -356,7 +356,7 @@ void MPESynthesiser::renderNextSubBlock (AudioBuffer<float>& buffer, int startSa
 
 void MPESynthesiser::renderNextSubBlock (AudioBuffer<double>& buffer, int startSample, int numSamples)
 {
-    const ScopedLock sl (voicesLock);
+    const AudioLockType::ScopedLockType sl (voicesLock);
 
     for (auto* voice : voices)
     {

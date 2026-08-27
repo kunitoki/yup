@@ -110,6 +110,7 @@ TEST (SyntaxDefinitionTests, BuiltInForExtension)
     EXPECT_EQ (String ("Python"), SyntaxDefinition::getBuiltInForExtension ("py")->getName());
     EXPECT_EQ (String ("XML"), SyntaxDefinition::getBuiltInForExtension ("xml")->getName());
     EXPECT_EQ (String ("XML"), SyntaxDefinition::getBuiltInForExtension ("svg")->getName());
+    EXPECT_EQ (String ("YDSP"), SyntaxDefinition::getBuiltInForExtension ("ydsp")->getName());
     EXPECT_EQ (nullptr, SyntaxDefinition::getBuiltInForExtension ("xyz"));
 }
 
@@ -143,6 +144,39 @@ TEST (SyntaxDefinitionTests, BuiltInXmlLoads)
     EXPECT_TRUE (definition.isOperator ("<!"));
     EXPECT_TRUE (definition.isOperator ("]]>"));
     EXPECT_TRUE (definition.isOperator ("="));
+    EXPECT_FALSE (definition.isOperator ("word"));
+}
+
+// ==============================================================================
+// Built-in YDSP
+// ==============================================================================
+
+TEST (SyntaxDefinitionTests, BuiltInYdspLoads)
+{
+    const auto& definition = SyntaxDefinition::getBuiltIn ("ydsp");
+
+    EXPECT_EQ (String ("YDSP"), definition.getName());
+    EXPECT_TRUE (definition.isKeyword ("processor"));
+    EXPECT_TRUE (definition.isKeyword ("graph"));
+    EXPECT_TRUE (definition.isKeyword ("import"));
+    EXPECT_TRUE (definition.isKeyword ("as"));
+
+    EXPECT_TRUE (definition.isType ("float32"));
+    EXPECT_TRUE (definition.isType ("int64"));
+    EXPECT_FALSE (definition.isType ("processor"));
+
+    EXPECT_EQ (String ("//"), definition.getLineCommentPrefix());
+    ASSERT_TRUE (definition.getBlockComment().has_value());
+    EXPECT_EQ (String ("/*"), definition.getBlockComment()->start);
+    EXPECT_EQ (String ("*/"), definition.getBlockComment()->end);
+
+    // Faust-style composition algebra operators.
+    EXPECT_TRUE (definition.isOperator ("<:"));
+    EXPECT_TRUE (definition.isOperator (":>"));
+    EXPECT_TRUE (definition.isOperator ("~"));
+    EXPECT_TRUE (definition.isOperator ("->"));
+    EXPECT_TRUE (definition.isOperator ("[["));
+    EXPECT_TRUE (definition.isOperator ("]]"));
     EXPECT_FALSE (definition.isOperator ("word"));
 }
 

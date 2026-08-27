@@ -214,10 +214,12 @@ private:
                            .getParentDirectory()
                            .getChildFile ("data");
 
-        yup::File audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.flac");
+        yup::File audioFile = dataDir
+                                  .getChildFile ("audio")
+                                  .getChildFile ("break_boomblastic_92bpm.flac");
         if (! audioFile.existsAsFile())
         {
-            std::cerr << "Could not find break_boomblastic_92bpm.flac" << std::endl;
+            std::cerr << "Could not find audio/break_boomblastic_92bpm.flac" << std::endl;
             return;
         }
 
@@ -250,7 +252,9 @@ private:
                            .getParentDirectory()
                            .getChildFile ("data");
 
-        yup::File irFile = dataDir.getChildFile ("ir_e112_g12_dyn_us_6v6.wav");
+        yup::File irFile = dataDir
+                               .getChildFile ("audio")
+                               .getChildFile ("ir_e112_g12_dyn_us_6v6.wav");
         loadImpulseResponseFromFile (irFile);
     }
 

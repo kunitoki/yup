@@ -1,0 +1,55 @@
+{
+  "name": "vscode-ydsp",
+  "displayName": "YDSP - YUP DSP Language",
+  "description": "Syntax highlighting, snippets and editing support for YDSP, the realtime JIT-compiled audio DSP language of the YUP library.",
+  "version": "1.0.0",
+  "publisher": "yup",
+  "license": "ISC",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "ydsp",
+    "yup",
+    "dsp",
+    "audio",
+    "jit",
+    "syntax"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kunitoki/yup"
+  },
+  "homepage": "https://github.com/kunitoki/yup",
+  "contributes": {
+    "languages": [
+      {
+        "id": "ydsp",
+        "aliases": [
+          "YDSP",
+          "ydsp"
+        ],
+        "extensions": [
+          ".ydsp"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ydsp",
+        "scopeName": "source.ydsp",
+        "path": "./syntaxes/ydsp.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "ydsp",
+        "path": "./snippets/ydsp.code-snippets"
+      }
+    ]
+  }
+}

@@ -1,0 +1,220 @@
+/*
+  The oscillator bench: six sources behind one selector, an organ-style gate
+  envelope that holds while the key is down, and no effect at all - the patch is
+  deliberately dry so what you hear is the oscillator and nothing else.
+
+  - saw       (0): naive ramp minus the polyBLEP residual at the phase wrap.
+  - square    (1): a pulse at `width` - rise at the wrap, fall at `width`.
+  - triangle  (2): a naive ramp pair whose four corners are rounded by the exact
+              antiderivative of the two edge residuals.
+  - pulse     (3): the same pulse generator as the square, morphed by `width`
+              (a square *is* a pulse at 50% width, so the two positions exist to
+              A/B the default against a width-morphed one).
+  - noise     (4): a hand-rolled linear congruential generator. There is no RNG
+              intrinsic in the language, but `state int` plus the bitwise
+              operators are enough to write one.
+  - supersaw  (5): three polyBLEP saws detuned around the note.
+*/
+
+declare name "Wave Lab";
+declare description "Six band-limited oscillators behind one selector, dry, with a peak meter.";
+
+processor WaveLabVoice {
+    output stream out;
+
+    input value float wave = 5.0 [[ name: "Waveform", min: 0.0, max: 5.0,
+                                    values: { "Saw", "Square", "Triangle", "Pulse", "Noise", "Supersaw" } ]];
+
+    input value float width = 0.5 [[ name: "Pulse Width", min: 0.02, max: 0.98, smoothing: 0.02 ]];
+    input value float detune = 14.0 [[ name: "Supersaw Detune", min: 0.0, max: 40.0, unit: "cents" ]];
+    input value float cutoff = 4000.0 [[ name: "Cutoff", min: 60.0, max: 12000.0 ]];
+    input value float release = 0.06 [[ name: "Release", min: 0.01, max: 1.0, unit: "s" ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase;
+    state float phaseB;
+    state float phaseC;
+    state float freq;
+    state float z1;
+
+    state float env;
+    state float level;
+    state float attackCoeff;
+    state float releaseCoeff;
+    state int released;
+
+    state int rng;
+
+    state int progWave;
+    state int progSet;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func polyBlep (t: float, dt: float) : float {
+        float r = 0.0;
+        if (t < dt) {
+            t = t / dt;
+            r = t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            r = t * t + t + t + 1.0;
+        }
+        return r;
+    }
+
+    func blepInt (x: float, dt: float) : float {
+        float u = x - 1.0 + dt;
+        float r = select (x < dt, x * x / dt - x * x * x / (3.0 * dt * dt) - x, -dt / 3.0);
+        r = select (x > 1.0 - dt, -dt / 3.0 + u * u * u / (3.0 * dt * dt), r);
+        return select (x > 1.0, 0.0, r);
+    }
+
+    event midi (e: noteOn) {
+        freq  = noteToFreq (e.pitch);
+        level = e.velocity;
+
+        attackCoeff = 1.0 - exp (-1.0 / (0.002 * sampleRate));
+        released    = 0;
+        active      = 1;
+
+        rng = rng ^ (int (e.pitch) * 1103515245);
+
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    event midi (e: programChange) {
+        progWave = e.program % 6;
+        progSet  = 1;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+                          * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        float dt = freq * pitchFactor * samplePeriod;
+        float ratio = pow (2.0, detune / 1200.0);
+        float dtB = dt * ratio;
+        float dtC = dt / ratio;
+
+        phase = phase + dt;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+        phaseB = phaseB + dtB;
+        if (phaseB >= 1.0) { phaseB = phaseB - 1.0; }
+        phaseC = phaseC + dtC;
+        if (phaseC >= 1.0) { phaseC = phaseC - 1.0; }
+
+        float osc = 0.0;
+        float falling = phase < width ? phase - width + 1.0 : phase - width;
+
+        float sel = select (progSet != 0, float (progWave), wave);
+        if (sel < 0.5) {
+            float saw = 2.0 * phase - 1.0 - polyBlep (phase, dt);
+            osc = saw;
+        } else if (sel < 1.5) {
+            float square = (phase < width ? 1.0 : -1.0)
+                         + polyBlep (phase, dt)
+                         - polyBlep (falling, dt);
+            osc = square;
+        } else if (sel < 2.5) {
+            float triCorr = blepInt (phase, dt)
+                          - (select (phase < 0.5, blepInt (phase + 0.5, dt), blepInt (phase - 0.5, dt)) + dt / 3.0);
+            float tri = select (phase < 0.5, 1.0 - 4.0 * phase, 4.0 * phase - 3.0) - 4.0 * triCorr;
+            osc = tri;
+        } else if (sel < 3.5) {
+            float pulse = (phase < width ? 1.0 : -1.0)
+                        + polyBlep (phase, dt)
+                        - polyBlep (falling, dt);
+            osc = pulse;
+        } else if (sel < 4.5) {
+            float noise = float (rng >> 8) * 1.1920929e-7;
+            osc = noise;
+        } else {
+            float sawA = 2.0 * phase - 1.0 - polyBlep (phase, dt);
+            float sawB = 2.0 * phaseB - 1.0 - polyBlep (phaseB, dtB);
+            float sawC = 2.0 * phaseC - 1.0 - polyBlep (phaseC, dtC);
+            float supersaw = (sawA + sawB + sawC) * 0.4;
+            osc = supersaw;
+        }
+
+        rng = rng * 1664525 + 1013904223;
+
+        float k = smooth (1.0 - exp (-2.0 * pi * cutoff * samplePeriod), 0.02);
+        z1 = z1 + k * (osc - z1);
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + (level - env) * attackCoeff;
+        }
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = z1 * env;
+    }
+}
+
+processor OutputStage {
+    input stream in;
+    output stream out;
+
+    input value float level = 0.8 [[ name: "Output", min: 0.0, max: 1.5, smoothing: 0.02 ]];
+
+    output value float peak;
+
+    state float held;
+
+    process {
+        float y = in * level;
+
+        float mag = abs (y);
+        held = select (mag > held, mag, held * 0.9999);
+
+        peak = held;
+        out = y;
+    }
+}
+
+graph WaveLab {
+    input event midi;
+    output stream out;
+
+    output value float peak;
+
+    node voices = WaveLabVoice[6];
+    node stage = OutputStage;
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> stage.in;
+        stage.out -> out;
+
+        stage.peak -> peak;
+    }
+}

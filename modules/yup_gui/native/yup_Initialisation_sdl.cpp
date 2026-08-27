@@ -38,6 +38,15 @@ String getSDLVersionString (int version)
 
 //==============================================================================
 
+void getGlobalMouseState (float& x, float& y)
+{
+#if YUP_EMSCRIPTEN
+    SDL_GetMouseState (&x, &y);
+#else
+    SDL_GetGlobalMouseState (&x, &y);
+#endif
+}
+
 bool displayEventDispatcher (void* userdata, SDL_Event* event)
 {
     auto desktop = static_cast<Desktop*> (userdata);
@@ -76,7 +85,7 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         case SDL_EVENT_MOUSE_MOTION:
         {
             float x = 0.0f, y = 0.0f;
-            SDL_GetGlobalMouseState (&x, &y);
+            getGlobalMouseState (x, y);
 
             const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
             const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
@@ -101,7 +110,7 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {
             float x = 0.0f, y = 0.0f;
-            SDL_GetGlobalMouseState (&x, &y);
+            getGlobalMouseState (x, y);
 
             const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
             const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
@@ -122,7 +131,7 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
             float x = 0.0f, y = 0.0f;
-            SDL_GetGlobalMouseState (&x, &y);
+            getGlobalMouseState (x, y);
 
             const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
             const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));
@@ -143,7 +152,7 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
         case SDL_EVENT_MOUSE_WHEEL:
         {
             float x = 0.0f, y = 0.0f;
-            SDL_GetGlobalMouseState (&x, &y);
+            getGlobalMouseState (x, y);
 
             const SDL_Point pt { static_cast<int> (x), static_cast<int> (y) };
             const auto displayScale = getDisplayUnitsPerPoint (SDL_GetDisplayForPoint (&pt));

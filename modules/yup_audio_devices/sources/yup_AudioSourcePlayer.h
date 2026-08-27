@@ -115,7 +115,7 @@ public:
 
 private:
     //==============================================================================
-    CriticalSection readLock;
+    AudioLockType readLock;
     AudioSource* source = nullptr;
     double sampleRate = 0;
     int bufferSize = 0;

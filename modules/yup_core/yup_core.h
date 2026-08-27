@@ -362,6 +362,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "misc/yup_RuntimePermissions.h"
 #include "misc/yup_WindowsRegistry.h"
 #include "threads/yup_ChildProcess.h"
+#include "threads/yup_CountDownLatch.h"
 #include "threads/yup_DynamicLibrary.h"
 #include "threads/yup_InterProcessLock.h"
 #include "threads/yup_Process.h"

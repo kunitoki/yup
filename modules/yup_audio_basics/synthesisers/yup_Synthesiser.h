@@ -565,7 +565,7 @@ public:
 protected:
     //==============================================================================
     /** This is used to control access to the rendering callback and the note trigger methods. */
-    CriticalSection lock;
+    AudioLockType lock;
 
     ReferenceCountedArray<SynthesiserVoice> voices;
     ReferenceCountedArray<SynthesiserSound> sounds;
@@ -634,7 +634,7 @@ private:
     bool subBlockSubdivisionIsStrict = false;
     bool shouldStealNotes = true;
     BigInteger sustainPedalsDown;
-    mutable CriticalSection stealLock;
+    mutable AudioLockType stealLock;
     mutable Array<SynthesiserVoice*> usableVoicesToStealArray;
 
     template <typename floatType>

@@ -1003,6 +1003,22 @@ public:
     Component* findComponentAt (const Point<float>& p);
 
     /**
+        Find the topmost component at a given point that is willing to receive mouse events.
+
+        Like findComponentAt(), this walks the hierarchy depth-first preferring the
+        topmost (last added) child whose bounds contain the point, but a component
+        that has opted out of mouse events via setWantsMouseEvents() is skipped in
+        favor of the next sibling underneath it, and the search bubbles up to this
+        component itself (or returns nullptr) when nothing in a given subtree wants
+        the event.
+
+        @param p The point to find the component at, in this component's local coordinates.
+
+        @returns The component that should receive the mouse event, or nullptr if none does.
+     */
+    Component* findComponentAtForMouseEvent (const Point<float>& p);
+
+    /**
         Returns the top level component.
     */
     Component* getTopLevelComponent();

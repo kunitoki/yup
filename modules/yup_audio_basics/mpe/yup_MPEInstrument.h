@@ -230,6 +230,15 @@ public:
     */
     void releaseAllNotes();
 
+    /** Preallocates room for the given number of simultaneously playing notes.
+
+        Note tracking never shrinks its storage, so once this has been called
+        from the control thread, processNextMidiEvent() (and the noteOn/noteOff
+        methods) allocate nothing until more than `numNotes` notes play at once.
+        Call this before feeding an instrument from an audio callback.
+    */
+    void reserveNotes (int numNotes);
+
     //==============================================================================
     /** Returns the number of MPE notes currently played by the instrument. */
     int getNumPlayingNotes() const noexcept;
@@ -374,7 +383,7 @@ public:
 
 protected:
     //==============================================================================
-    CriticalSection lock;
+    AudioLockType lock;
 
 private:
     //==============================================================================

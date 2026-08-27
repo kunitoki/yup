@@ -51,7 +51,7 @@ MidiMessageCollector::~MidiMessageCollector()
 //==============================================================================
 void MidiMessageCollector::reset (const double newSampleRate)
 {
-    const ScopedLock sl (midiCallbackLock);
+    const AudioLockType::ScopedLockType sl (midiCallbackLock);
 
     jassert (newSampleRate > 0);
 
@@ -65,7 +65,7 @@ void MidiMessageCollector::reset (const double newSampleRate)
 
 void MidiMessageCollector::addMessageToQueue (const MidiMessage& message)
 {
-    const ScopedLock sl (midiCallbackLock);
+    const AudioLockType::ScopedLockType sl (midiCallbackLock);
 
 #if YUP_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object
@@ -88,7 +88,7 @@ void MidiMessageCollector::addMessageToQueue (const MidiMessage& message)
 void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
                                                       const int numSamples)
 {
-    const ScopedLock sl (midiCallbackLock);
+    const AudioLockType::ScopedLockType sl (midiCallbackLock);
 
 #if YUP_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object

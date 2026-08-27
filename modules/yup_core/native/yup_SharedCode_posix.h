@@ -1263,10 +1263,12 @@ void YUP_CALLTYPE Thread::setCurrentThreadName (const String& name)
 #endif
 }
 
+#if ! YUP_WASM
 Thread::ThreadID YUP_CALLTYPE Thread::getCurrentThreadId()
 {
     return (ThreadID) pthread_self();
 }
+#endif
 
 void YUP_CALLTYPE Thread::yield()
 {

@@ -916,6 +916,27 @@ Component* Component::findComponentAt (const Point<float>& p)
     return this;
 }
 
+Component* Component::findComponentAtForMouseEvent (const Point<float>& p)
+{
+    if (! options.isVisible || ! boundsInParent.withZeroPosition().contains (p))
+        return nullptr;
+
+    if (doesWantChildrenMouseEvents())
+    {
+        for (int index = children.size(); --index >= 0;)
+        {
+            auto child = children.getUnchecked (index);
+            if (! child->isVisible() || ! child->boundsInParent.contains (p))
+                continue;
+
+            if (auto* hit = child->findComponentAtForMouseEvent (p - child->boundsInParent.getPosition()))
+                return hit;
+        }
+    }
+
+    return doesWantSelfMouseEvents() ? this : nullptr;
+}
+
 Component* Component::getTopLevelComponent()
 {
     auto currentComponent = this;
@@ -1380,6 +1401,11 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 {
     options.isRepainting = true;
 
+    const ErasedScopeGuard resetIsRepainting ([&]
+    {
+        options.isRepainting = false;
+    });
+
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
 
@@ -1453,8 +1479,6 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
             paintChildrenAndOverChildren (g, clipArea, renderContinuous);
         }
     }
-
-    options.isRepainting = false;
 }
 
 //==============================================================================
@@ -1530,6 +1554,11 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         options.isRepainting = true;
 
+        const ErasedScopeGuard resetIsRepainting ([&]
+        {
+            options.isRepainting = false;
+        });
+
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
@@ -1543,8 +1572,6 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             else
                 paint (g);
         }
-
-        options.isRepainting = false;
 
         paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
         return;

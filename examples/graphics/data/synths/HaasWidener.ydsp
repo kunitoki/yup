@@ -1,0 +1,187 @@
+/*
+  A stereo Haas widener built entirely out of graph wiring, over an inharmonic
+  shimmer pad.
+
+  One mono tone chain feeds *both* graph outputs, with a short inline delay on
+  the right-hand edge. Below about 30 ms the ear reads that delay as direction
+  rather than as an echo, so the note appears wide without any extra DSP: the
+  whole stereo effect is two edges and a `[N]`.
+*/
+
+declare name "Haas Widener";
+declare description "Inharmonic shimmer pad fanned out to both outputs, with a short inline delay on the right.";
+
+let partials = 6;
+let chunkSteps = 64;
+
+processor ShimmerVoice {
+    output stream out;
+
+    input value float attack = 0.8 [[ name: "Attack", min: 0.01, max: 6.0, unit: "s" ]];
+    input value float release = 2.5 [[ name: "Release", min: 0.1, max: 10.0, unit: "s" ]];
+    input value float spread = 1.4 [[ name: "Inharmonicity", min: 0.0, max: 2.0 ]];
+    input value float shimmer = 0.6 [[ name: "Shimmer", min: 0.0, max: 1.0 ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float ratios[partials] = { 1.0, 2.756, 5.404, 8.933, 13.345, 18.64 };
+
+    state float freq;
+    state float phase[partials];
+    state float inc[partials];
+    state float partialRatio[partials];
+    state float weight[partials];
+    state float gain[partials];
+    state float lfoPhase[partials];
+    state float lfoInc[partials];
+
+    state float env;
+    state float level;
+    state float attackRate;
+    state float releaseCoeff;
+    state int released;
+    state int chunkCount;
+
+    state float brightness = 0.5;
+
+    state int active [[ role: voiceActivity ]];
+
+    event midi (e: noteOn) {
+        freq = 440.0 * pow (2.0, (e.pitch - 69.0) / 12.0);
+
+        level      = e.velocity;
+        attackRate = e.velocity / (attack * sampleRate);
+        released   = 0;
+        chunkCount = 0;
+        active     = 1;
+
+        brightness = 0.5;
+
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+
+        for i in 0..partials {
+            let partial = lerp (float (i + 1), ratios[i], clamp (spread * 0.5, 0.0, 1.0));
+
+            phase[i] = 0.0;
+            partialRatio[i] = partial;
+            inc[i] = freq * partial * samplePeriod;
+
+            weight[i] = 1.0 / (1.0 + 1.4 * float (i));
+            gain[i] = 0.0;
+
+            lfoPhase[i] = float (i) * 0.17;
+            lfoInc[i] = (0.07 + 0.041 * float (i)) * float (chunkSteps) * samplePeriod;
+        }
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    event midi (e: slide) {
+        brightness = e.slide;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + attackRate;
+            if (env >= level) { env = level; }
+        }
+
+        if (chunkCount <= 0) {
+            chunkCount = chunkSteps;
+
+            vibratoPhase = vibratoPhase + 5.5 * float (chunkSteps) * samplePeriod;
+            vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+            float pitchFactor = bendFactor
+                * (1.0 + 0.02888113 * modWheel * sin (vibratoPhase * 2.0 * pi));
+
+            let base = freq * pitchFactor * samplePeriod;
+
+            let tilt = 0.55 + 0.9 * brightness;
+
+            float loudest = 0.0;
+
+            for i in 0..partials {
+                lfoPhase[i] = lfoPhase[i] + lfoInc[i];
+                lfoPhase[i] = lfoPhase[i] - floor (lfoPhase[i]);
+
+                let wobble = 1.0 - shimmer + shimmer * (0.5 + 0.5 * sin (lfoPhase[i] * 2.0 * pi));
+
+                inc[i] = base * partialRatio[i];
+
+                let audible = select (inc[i] < 0.5, 1.0, 0.0);
+
+                gain[i] = weight[i] * wobble * pow (tilt, float (i)) * audible;
+                loudest = max (loudest, gain[i]);
+            }
+
+            active = select (loudest * env < 0.000001, 0, 1);
+        }
+
+        chunkCount = chunkCount - 1;
+
+        float sum = 0.0;
+
+        for i in 0..partials {
+            phase[i] = phase[i] + inc[i];
+            phase[i] = phase[i] - floor (phase[i]);
+            sum = sum + sin (phase[i] * 2.0 * pi) * gain[i];
+        }
+
+        out = sum * env * 0.8;
+    }
+}
+
+processor Tone {
+    input stream in;
+    output stream out;
+
+    input value float cutoff = 3000.0 [[ name: "Cutoff", min: 200.0, max: 12000.0 ]];
+    input value float drive = 1.5 [[ name: "Drive", min: 1.0, max: 8.0, smoothing: 0.02 ]];
+
+    state float z1;
+
+    process {
+        float k = smooth (1.0 - exp (-6.283185307 * cutoff / sampleRate), 0.02);
+        z1 = z1 + k * (in - z1);
+
+        out = tanh (z1 * drive) * 0.7;
+    }
+}
+
+graph HaasWidener {
+    input event midi;
+
+    output stream left;
+    output stream right;
+
+    node voices = ShimmerVoice[6] [[ mode: poly, stealing: oldest ]];
+    node tone = Tone;
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> tone.in;
+
+        tone.out -> left;
+        tone.out -> [576] -> right;
+    }
+}

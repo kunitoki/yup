@@ -60,7 +60,7 @@ void MixerAudioSource::addInputSource (AudioSource* input, const bool deleteWhen
         int localBufferSize;
 
         {
-            const ScopedLock sl (lock);
+            const AudioLockType::ScopedLockType sl (lock);
             localRate = currentSampleRate;
             localBufferSize = bufferSizeExpected;
         }
@@ -68,7 +68,7 @@ void MixerAudioSource::addInputSource (AudioSource* input, const bool deleteWhen
         if (localRate > 0.0)
             input->prepareToPlay (localBufferSize, localRate);
 
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
 
         inputsToDelete.setBit (inputs.size(), deleteWhenRemoved);
         inputs.add (input);
@@ -82,7 +82,7 @@ void MixerAudioSource::removeInputSource (AudioSource* const input)
         std::unique_ptr<AudioSource> toDelete;
 
         {
-            const ScopedLock sl (lock);
+            const AudioLockType::ScopedLockType sl (lock);
             const int index = inputs.indexOf (input);
 
             if (index < 0)
@@ -104,7 +104,7 @@ void MixerAudioSource::removeAllInputs()
     OwnedArray<AudioSource> toDelete;
 
     {
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
 
         for (int i = inputs.size(); --i >= 0;)
             if (inputsToDelete[i])
@@ -121,7 +121,7 @@ void MixerAudioSource::prepareToPlay (int samplesPerBlockExpected, double sample
 {
     tempBuffer.setSize (2, samplesPerBlockExpected);
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     currentSampleRate = sampleRate;
     bufferSizeExpected = samplesPerBlockExpected;
@@ -132,7 +132,7 @@ void MixerAudioSource::prepareToPlay (int samplesPerBlockExpected, double sample
 
 void MixerAudioSource::releaseResources()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (int i = inputs.size(); --i >= 0;)
         inputs.getUnchecked (i)->releaseResources();
@@ -145,7 +145,7 @@ void MixerAudioSource::releaseResources()
 
 void MixerAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (inputs.size() > 0)
     {

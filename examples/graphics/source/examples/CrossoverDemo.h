@@ -239,10 +239,12 @@ private:
                            .getParentDirectory()
                            .getChildFile ("data");
 
-        yup::File audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.mp3");
+        yup::File audioFile = dataDir
+                                  .getChildFile ("audio")
+                                  .getChildFile ("break_boomblastic_92bpm.mp3");
         if (! audioFile.existsAsFile())
         {
-            std::cerr << "Could not find break_boomblastic_92bpm.mp3" << std::endl;
+            std::cerr << "Could not find audio/break_boomblastic_92bpm.mp3" << std::endl;
             return;
         }
 

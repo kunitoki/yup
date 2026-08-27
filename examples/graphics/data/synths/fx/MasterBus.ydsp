@@ -1,0 +1,61 @@
+/*
+  A reusable master bus: a compressor, then a reverb blended against a parallel
+  dry path.
+
+  This is a `graph`, not a `processor`, so it can only be used as a node inside
+  another graph - the compiler inlines it away and the runtime only ever sees
+  the processors it contains. Its own parameters forward to the inner nodes, so
+  a patch can set `threshold` here without knowing which processor ends up
+  owning it.
+
+  The dry/wet is expressed in the *graph*: `compressor.out` fans out to a dry
+  trim and to the reverb, and both branches are summed back into `out`. The
+  reverb therefore runs fully wet (`mix = 1.0`) and `reverbMix` is a real
+  graph-level balance rather than a value forwarded into one processor's own
+  internal mix. That is what lets `Reverb` stay a reverb instead of also being
+  a mixer, and it is the shape every effect in `fx/` would use if it were
+  written today.
+*/
+
+import Compressor as comp;
+import Reverb as verb;
+
+processor DryWetLevel {
+    input stream dry;
+    input stream wet;
+    output stream out;
+
+    input value float mix = 0.25 [[ name: "Dry/Wet", smoothing: 0.02 ]];
+
+    process { out = dry * (1.0 - mix) + wet * mix; }
+}
+
+graph MasterBus {
+    input stream in;
+    output stream out;
+
+    input value float threshold = -18.0 [[ name: "Threshold", min: -60.0, max: 0.0, unit: "dB" ]];
+    input value float ratio = 4.0 [[ name: "Ratio", min: 1.0, max: 20.0 ]];
+    input value float reverbMix = 0.25 [[ name: "Reverb Mix", min: 0.0, max: 1.0 ]];
+    input value float roomSize = 0.7 [[ name: "Room Size", min: 0.0, max: 1.0 ]];
+
+    node compressor = comp.Compressor (attack = 0.005, release = 0.12, makeup = 1.2);
+    node reverb = verb.Reverb (damping = 0.5, mix = 1.0);
+    node dryWet = DryWetLevel;
+
+    connection {
+        in -> compressor.in;
+
+        compressor.out -> dryWet.dry;
+        compressor.out -> reverb.in;
+
+        reverb.out -> dryWet.wet;
+
+        dryWet.out -> out;
+
+        threshold -> compressor.threshold;
+        ratio -> compressor.ratio;
+        roomSize -> reverb.roomSize;
+        reverbMix -> dryWet.mix;
+    }
+}

@@ -150,6 +150,11 @@ Component* hit = parent.findComponentAt (clickPoint);
 
 Return value is the deepest visible child under the point, or `nullptr`.
 
+To find the component that would actually receive a mouse event at a point
+(honoring `setWantsMouseEvents()`, see below), use `findComponentAtForMouseEvent()`
+instead — it skips a component or subtree that opted out of mouse events in
+favor of the sibling underneath it.
+
 ### Lifecycle callbacks
 
 Override these to react to tree changes:

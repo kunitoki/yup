@@ -1,0 +1,30 @@
+/*
+  A purely event-only graph: `midi.Arp` collects held notes - single notes or
+  chords - and steps through them at its `rate`, `midi.Transpose` shifts every
+  emitted note by a fixed interval, and the transposed notes reach the graph's
+  own `midiOut` boundary - no audio stream anywhere in the patch.
+
+  The graph's one host-facing event input, `midiIn`, is wired explicitly to
+  `arp` alone; `xpose` only ever sees arp's routed, arpeggiated notes.
+*/
+
+import midi.Arp as arpLib;
+import midi.Transpose as xposeLib;
+
+declare name "Arp Transpose";
+declare description "midi.Arp's arpeggiated notes shifted up by midi.Transpose, with no audio anywhere in the patch.";
+
+graph ArpTranspose {
+    input event midiIn;
+    output event midiOut;
+
+    node arp = arpLib.Arp;
+    node xpose = xposeLib.Transpose (semitones = 7.0);
+
+    connection {
+        midiIn -> arp.midiIn;
+
+        arp.midiOut -> xpose.xposeIn;
+        xpose.midiOut -> midiOut;
+    }
+}

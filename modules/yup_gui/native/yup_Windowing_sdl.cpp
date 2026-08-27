@@ -1116,7 +1116,7 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
                      .withPosition (position);
 
     if (currentMouseButtons == button)
-        lastComponentClicked = findComponentForMouseEvent (position);
+        lastComponentClicked = component.findComponentAtForMouseEvent (position);
 
     if (lastComponentClicked != nullptr)
     {
@@ -1304,13 +1304,13 @@ void SDLComponentNative::handleTextInput (const String& textInput)
 
 void SDLComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
 {
-    if (Component* target = findComponentForMouseEvent (position))
+    if (Component* target = component.findComponentAtForMouseEvent (position))
         target->internalItemsDropped (data, position);
 }
 
 void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
 {
-    Component* target = findComponentForMouseEvent (position);
+    Component* target = component.findComponentAtForMouseEvent (position);
 
     if (target != nullptr)
     {
@@ -1571,38 +1571,9 @@ void SDLComponentNative::handleUserTriedToCloseWindow()
 
 //==============================================================================
 
-Component* SDLComponentNative::findComponentForMouseEvent (const Point<float>& position)
-{
-    Component* child = component.findComponentAt (position);
-    if (child == nullptr)
-        return nullptr;
-
-    Component* current = child;
-    while (current != nullptr)
-    {
-        if (current->doesWantSelfMouseEvents())
-        {
-            Component* parent = current->getParentComponent();
-            while (parent != nullptr)
-            {
-                if (! parent->doesWantChildrenMouseEvents())
-                    return parent;
-
-                parent = parent->getParentComponent();
-            }
-
-            return current;
-        }
-
-        current = current->getParentComponent();
-    }
-
-    return nullptr;
-}
-
 void SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
-    Component* child = findComponentForMouseEvent (event.getPosition());
+    Component* child = component.findComponentAtForMouseEvent (event.getPosition());
 
     if (child != nullptr)
     {
@@ -1655,7 +1626,7 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            //handleResized (windowEvent.data1, windowEvent.data2);
+            handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:

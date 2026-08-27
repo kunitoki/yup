@@ -30,6 +30,33 @@ building blocks now have their own dedicated
 - **Plugins** - hosting third-party plugins (`yup_audio_plugin_host`) and
   wrapping your own as CLAP / VST3 (`yup_audio_plugin_client`).
 
+## Web MIDI (WASM)
+
+On Emscripten builds, MIDI I/O is backed by the browser's
+[Web MIDI API](https://www.w3.org/TR/webmidi/) (`yup_Midi_wasm.cpp`). A few
+behaviors differ from desktop platforms:
+
+- **Permission is asynchronous.** `requestMIDIAccess()` is a browser prompt, so
+  call `MidiInput::getAvailableDevices()` (or `MidiOutput::getAvailableDevices()`)
+  once early in startup to trigger it. Until the user grants access, device
+  lists are empty and `openDevice()` returns an empty object; once granted, the
+  lists populate and `MidiDeviceListConnection` listeners fire.
+- **SysEx is enabled.** The backend requests `{ sysex: true }`, so incoming and
+  outgoing system exclusive messages are not masked by the browser (the prompt
+  is the slightly stronger "MIDI + SysEx" permission).
+- **Devices are MIDI 1.0.** Web MIDI exposes MIDI 1.0 byte streams only. Ports
+  are reported with `PacketProtocol::MIDI_1_0`; opening an input with a
+  `MIDI_2_0` protocol and an `ump::Receiver` converts the stream to UMP on the
+  way in, and `ump::View` / `ump::Packets` are converted to MIDI 1.0 bytes on
+  the way out. `createNewDevice()` is unsupported (the Web MIDI API cannot
+  create virtual ports) and returns an empty object.
+- **Threading.** Incoming messages arrive on the browser main thread. Sending
+  (`sendMessageNow`) is thread-safe: calls from other threads are proxied to the
+  main thread synchronously.
+- **Environment.** Web MIDI requires a secure context (HTTPS or `localhost`)
+  and a browser that supports the API; on other WASM targets MIDI remains
+  unimplemented and all queries return empty results.
+
 ## Related
 
 - [Building audio plugins](../build-system/building-plugins.md)

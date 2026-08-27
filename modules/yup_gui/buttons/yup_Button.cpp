@@ -58,7 +58,8 @@ void Button::mouseDown (const MouseEvent& event)
 {
     isButtonCurrentlyDown = true;
 
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     repaint();
 }

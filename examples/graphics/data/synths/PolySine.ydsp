@@ -1,0 +1,107 @@
+/*
+  The corpus's minimal reference patch: one sine per voice, no filter, and an
+  attack/release envelope that actually *sustains* - a held key holds its level
+  instead of decaying away.
+*/
+
+import fx.Delay as fx;
+
+declare name "Poly Sine";
+declare description "8-voice sine with a sustaining AR envelope and an aftertouch swell.";
+
+processor SineVoice {
+    output stream out;
+
+    input value float attack = 0.02 [[ name: "Attack", min: 0.001, max: 2.0, unit: "s" ]];
+    input value float release = 0.45 [[ name: "Release", min: 0.02, max: 4.0, unit: "s" ]];
+    input value float swell = 1.0 [[ name: "Pressure Swell", min: 0.0, max: 3.0 ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase;
+    state float freq;
+
+    state float env;
+    state float level;
+    state float attackCoeff;
+    state float releaseCoeff;
+    state int released;
+
+    state float press;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    event midi (e: noteOn) {
+        freq         = noteToFreq (e.pitch);
+        level        = e.velocity;
+        attackCoeff  = 1.0 - exp (-1.0 / (attack * sampleRate));
+        released     = 0;
+        active       = 1;
+        press        = 0.0;
+        bendFactor   = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    event midi (e: pressure) {
+        press = e.pressure;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+            * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        phase = phase + freq * pitchFactor * samplePeriod;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + (level - env) * attackCoeff;
+        }
+
+        float gain = env * (1.0 + swell * smooth (press, 0.03));
+
+        active = select (gain < 0.000001, 0, 1);
+
+        out = sin (phase * 2.0 * pi) * gain * 0.4;
+    }
+}
+
+graph PolySine {
+    input event midi;
+    output stream out;
+
+    node voices = SineVoice[8];
+    node delay = fx.Delay (time = 0.35, feedback = 0.4, damping = 0.5, mix = 0.28);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> delay.in;
+        delay.out -> out;
+    }
+}

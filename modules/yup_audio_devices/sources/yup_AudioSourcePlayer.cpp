@@ -59,7 +59,7 @@ void AudioSourcePlayer::setSource (AudioSource* newSource)
             newSource->prepareToPlay (bufferSize, sampleRate);
 
         {
-            const ScopedLock sl (readLock);
+            const AudioLockType::ScopedLockType sl (readLock);
             source = newSource;
         }
 
@@ -83,7 +83,7 @@ void AudioSourcePlayer::audioDeviceIOCallbackWithContext (const float* const* in
     // these should have been prepared by audioDeviceAboutToStart()...
     jassert (sampleRate > 0 && bufferSize > 0);
 
-    const ScopedLock sl (readLock);
+    const AudioLockType::ScopedLockType sl (readLock);
 
     if (source != nullptr)
     {

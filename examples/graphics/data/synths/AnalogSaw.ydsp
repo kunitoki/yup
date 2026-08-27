@@ -1,0 +1,210 @@
+/*
+  The analog polysynth: a seven-saw supersaw stack per voice through a resonant
+  state-variable filter, with a full ADSR on the amplitude and a second envelope
+  on the cutoff. A held key *sustains* - this is the corpus's reference for a note
+  that does not decay on its own.
+*/
+
+import fx.Distortion as fx;
+import fx.MasterBus as bus;
+
+declare name "Analog Saw";
+declare description "A seven-saw supersaw stack through a resonant TPT filter, with amp and filter envelopes.";
+
+let sidePairs = 3;
+let unison = 2 * sidePairs + 1;
+
+let unisonSteps = 64;
+
+processor SawVoice {
+    output stream out;
+
+    input value float attack = 0.01 [[ name: "Attack", min: 0.001, max: 3.0, unit: "s" ]];
+    input value float decay = 0.5 [[ name: "Decay", min: 0.005, max: 4.0, unit: "s" ]];
+    input value float sustain = 0.65 [[ name: "Sustain", min: 0.0, max: 1.0 ]];
+    input value float release = 0.5 [[ name: "Release", min: 0.02, max: 4.0, unit: "s" ]];
+
+    input value float detune = 28.0 [[ name: "Detune", min: 0.0, max: 100.0, unit: "cents" ]];
+    input value float unisonMix = 0.75 [[ name: "Unison Mix", min: 0.0, max: 1.0 ]];
+
+    input value float cutoff = 700.0 [[ name: "Cutoff", min: 30.0, max: 12000.0 ]];
+    input value float resonance = 0.55 [[ name: "Resonance", min: 0.0, max: 0.97, smoothing: 0.02 ]];
+    input value float keyTrack = 0.5 [[ name: "Key Track", min: 0.0, max: 1.0 ]];
+
+    input value float filterDecay = 0.3 [[ name: "Filter Decay", min: 0.005, max: 4.0, unit: "s" ]];
+    input value float filterSustain = 0.2 [[ name: "Filter Sustain", min: 0.0, max: 1.0 ]];
+    input value float filterAmount = 8.0 [[ name: "Filter Amount", min: 0.0, max: 24.0 ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase[unison] = {
+        0.000000, 0.618034, 0.236068, 0.854102, 0.472136, 0.090170, 0.708204
+    };
+
+    state float inc[unison];
+    state int chunkCount;
+
+    state float freq;
+    state float keyFactor;
+    state int stage;
+    state int released;
+
+    state float env;
+    state float fenv;
+
+    state float peak;
+    state float attackRate;
+    state float fAttackRate;
+    state float decayCoeff;
+    state float fDecayCoeff;
+    state float releaseCoeff;
+    state float sustainLevel;
+
+    state float ic1;
+    state float ic2;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    event midi (e: noteOn) {
+        freq = noteToFreq (e.pitch);
+        keyFactor = pow (2.0, ((e.pitch - 60.0) / 12.0) * keyTrack);
+
+        peak = e.velocity;
+
+        attackRate = peak / (attack * sampleRate);
+        fAttackRate = 1.0 / (attack * sampleRate);
+        decayCoeff = 1.0 - exp (-1.0 / (decay * sampleRate));
+        fDecayCoeff = 1.0 - exp (-1.0 / (filterDecay * sampleRate));
+        sustainLevel = sustain * peak;
+
+        chunkCount = 0;
+
+        stage = 0;
+        released = 0;
+        active = 1;
+
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released = 1;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        if (chunkCount <= 0) {
+            chunkCount = unisonSteps;
+
+            vibratoPhase = vibratoPhase + 5.5 * float (unisonSteps) * samplePeriod;
+            vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+            float pitchFactor = bendFactor
+                * (1.0 + 0.02888113 * modWheel * sin (vibratoPhase * 2.0 * pi));
+
+            let dtBase = max (freq * pitchFactor * samplePeriod, 1.0e-9);
+
+            for i in 0..unison {
+                let rel = float (i - sidePairs) / float (sidePairs);
+                let curve = rel * (0.6 + 0.4 * abs (rel));
+
+                inc[i] = dtBase * pow (2.0, detune * curve / 1200.0);
+            }
+        }
+
+        chunkCount = chunkCount - 1;
+
+        float total = 0.0;
+        float centre = 0.0;
+
+        for i in 0..unison {
+            phase[i] = phase[i] + inc[i];
+            phase[i] = phase[i] - floor (phase[i]);
+
+            let t = phase[i];
+            let dt = inc[i];
+
+            let a = t / dt;
+            let b = (t - 1.0) / dt;
+
+            let residual = select (t < dt, a + a - a * a - 1.0,
+                           select (t > 1.0 - dt, b * b + b + b + 1.0, 0.0));
+
+            let s = 2.0 * t - 1.0 - residual;
+
+            total = total + s;
+            centre = select (i == sidePairs, s, centre);
+        }
+
+        float side = smooth (unisonMix, 0.02);
+        float norm = 1.0 / sqrt (1.0 + float (unison - 1) * side * side);
+        float saw = (centre + (total - centre) * side) * norm;
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+            fenv = fenv * releaseCoeff;
+        } else if (stage == 0) {
+            env = env + attackRate;
+            fenv = fenv + fAttackRate;
+            if (env >= peak) { env = peak; stage = 1; }
+            if (fenv > 1.0) { fenv = 1.0; }
+        } else {
+            env = env + (sustainLevel - env) * decayCoeff;
+            fenv = fenv + (filterSustain - fenv) * fDecayCoeff;
+        }
+
+        float g = clamp (smooth (tan (pi * cutoff * samplePeriod), 0.02)
+                             * keyFactor * (1.0 + filterAmount * fenv),
+                         0.0005,
+                         8.0);
+
+        float k = 2.0 - 2.0 * resonance;
+        float a1 = 1.0 / (1.0 + g * (g + k));
+        float a2 = g * a1;
+        float a3 = g * a2;
+        float v3 = saw - ic2;
+        float v1 = a1 * ic1 + a2 * v3;
+        float v2 = ic2 + a2 * ic1 + a3 * v3;
+
+        ic1 = 2.0 * v1 - ic1;
+        ic2 = 2.0 * v2 - ic2;
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = v2 * env * 1.4;
+    }
+}
+
+graph AnalogSaw {
+    input event midi;
+    output stream out;
+
+    node voices = SawVoice[8] [[ mode: poly, stealing: oldest ]];
+    node distortion = fx.Distortion (drive = 1.0, tone = 0.45, mix = 0.45);
+
+    node master = bus.MasterBus (threshold = -24.0, reverbMix = 0.18);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> distortion.in;
+        distortion.out -> master.in;
+        master.out -> out;
+    }
+}

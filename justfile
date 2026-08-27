@@ -117,6 +117,12 @@ shader_bundler *COMPILE_ARGS:
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
+[doc("build and install the YDSP VSCode extension")]
+[working-directory: 'modules/yup_dsp_jit/tools/vscode-ydsp']
+vscode:
+  npx --yes @vscode/vsce package -o vscode-ydsp.vsix
+  code --install-extension vscode-ydsp.vsix
+
 rive_update REF="runtime-v0.1.62":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
 

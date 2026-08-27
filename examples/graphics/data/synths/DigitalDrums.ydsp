@@ -1,0 +1,240 @@
+/*
+  Parallel saturation over a drum voice, and the patch that delay compensation
+  exists for.
+
+  One key of the keyboard per drum C-4 (kick), C#4 (snare), D-4 (hat), D#4 (tom).
+*/
+
+declare name "Digital Drums";
+declare description "A digital drum voice split into clean and oversampled-clipped paths, with the 48-sample skew compensated.";
+
+processor DrumVoice {
+    output stream out;
+
+    input value float kit = 1.0 [[ name: "Kit", min: 0.0, max: 3.0,
+                                   values: { "Tight", "Room", "Deep", "Lo-Fi" } ]];
+
+    input value float tune = 1.0 [[ name: "Tune", min: 0.5, max: 2.0 ]];
+    input value float decayScale = 1.0 [[ name: "Decay", min: 0.25, max: 3.0 ]];
+    input value float tone = 0.5 [[ name: "Noise/Tone", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase;
+    state float baseFreq;
+
+    state float toneMix;
+    state float sweepAmount;
+    state float hpAmount;
+
+    state float env;
+    state float ampCoeff;
+    state float pitchEnv;
+    state float pitchCoeff;
+
+    state float nz;
+    state int rng;
+
+    state int progKit;
+    state int progSet;
+
+    state int active [[ role: voiceActivity ]];
+
+    event midi (e: noteOn) {
+        int note = int (e.pitch);
+
+        float ampSeconds = 0.2;
+        float sweepSeconds = 0.02;
+
+        if (note == 49) {
+            // Snare: a tuned shell tone under a broadband crack. The noise is
+            // most of it, which is why `toneMix` is low.
+            baseFreq = 185.0;
+            toneMix = 0.35;
+            sweepAmount = 0.6;
+            hpAmount = 0.45;
+            ampSeconds = 0.19;
+            sweepSeconds = 0.02;
+        } else if (note == 50) {
+            // Hat: all noise, brightly highpassed, and very short.
+            baseFreq = 320.0;
+            toneMix = 0.0;
+            sweepAmount = 0.0;
+            hpAmount = 1.0;
+            ampSeconds = 0.055;
+            sweepSeconds = 0.01;
+        } else if (note == 51) {
+            // Tom: a sine with a gentler sweep and a longer body than the kick.
+            baseFreq = 120.0;
+            toneMix = 0.85;
+            sweepAmount = 1.4;
+            hpAmount = 0.15;
+            ampSeconds = 0.34;
+            sweepSeconds = 0.06;
+        } else /* note == 48 */ {
+            // Kick: a deep sine with a fast, deep downward pitch sweep and no
+            // noise at all. The sweep is the beater; the body is the tail.
+            baseFreq = 52.0;
+            toneMix = 1.0;
+            sweepAmount = 3.2;
+            hpAmount = 0.0;
+            ampSeconds = 0.42;
+            sweepSeconds = 0.045;
+        }
+
+        int chosen = int (kit);
+        if (progSet != 0) { chosen = progKit; }
+
+        float kitDecay = 1.0;
+        float kitPitch = 1.0;
+
+        if (chosen == 0) {
+            kitDecay = 0.6;
+            kitPitch = 1.15;
+        } else if (chosen == 2) {
+            kitDecay = 2.2;
+            kitPitch = 0.72;
+        } else if (chosen == 3) {
+            kitDecay = 1.4;
+            kitPitch = 0.9;
+            hpAmount = hpAmount * 0.5;
+            toneMix = toneMix * 0.7;
+        }
+
+        baseFreq = baseFreq * kitPitch * tune;
+
+        ampCoeff = pow (0.001, 1.0 / (ampSeconds * kitDecay * decayScale * sampleRate));
+        pitchCoeff = pow (0.001, 1.0 / (sweepSeconds * sampleRate));
+
+        phase = 0.0;
+        env = e.velocity;
+        pitchEnv = 1.0;
+        active = 1;
+
+        rng = rng ^ (int (e.pitch) * 1103515245);
+
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: programChange) {
+        progKit = e.program % 4;
+        progSet = 1;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        pitchEnv = pitchEnv * pitchCoeff;
+        env = env * ampCoeff;
+
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+            * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        float freq = baseFreq * (1.0 + sweepAmount * pitchEnv) * pitchFactor;
+
+        phase = phase + freq * samplePeriod;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        float osc = sin (phase * 2.0 * pi);
+
+        rng = rng * 1664525 + 1013904223;
+        float noise = float (rng >> 8) * 1.1920929e-7;
+
+        float nk = 1.0 - exp (-2.0 * pi * 1200.0 * samplePeriod);
+        nz = nz + nk * (noise - nz);
+        float shaped = lerp (nz, noise - nz, hpAmount);
+
+        float balance = clamp (toneMix + 2.0 * (tone - 0.5), 0.0, 1.0);
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = (osc * balance + shaped * (1.0 - balance)) * env;
+    }
+}
+
+processor CleanPath {
+    input stream in;
+    output stream out;
+
+    input value float level = 0.5 [[ name: "Clean Level", min: 0.0, max: 2.0, smoothing: 0.02 ]];
+
+    process { out = in * level; }
+}
+
+processor HardClip {
+    input stream in;
+    output stream out;
+
+    input value float drive = 4.0 [[ name: "Drive", min: 1.0, max: 20.0, smoothing: 0.02 ]];
+    input value float level = 0.5 [[ name: "Drive Level", min: 0.0, max: 2.0, smoothing: 0.02 ]];
+
+    process { out = clamp (in * drive, -1.0, 1.0) * level; }
+}
+
+processor Lookahead [[ latency: 32 ]] {
+    input stream in;
+    output stream out;
+
+    input value float ceiling = 0.8 [[ name: "Ceiling", min: 0.1, max: 1.0, smoothing: 0.02 ]];
+
+    output value float reduction;
+
+    state float env;
+
+    process {
+        float peak = abs (in);
+        env = select (peak > env, peak, env * 0.9995);
+
+        float safeEnv = max (env, 0.000001);
+        float gain = select (env > ceiling, ceiling / safeEnv, 1.0);
+
+        reduction = 1.0 - gain;
+
+        out = (in @ 32) * gain;
+    }
+}
+
+graph ParallelDrive {
+    input event midi;
+    output stream out;
+
+    input value float kit = 1.0 [[ name: "Kit", min: 0.0, max: 3.0,
+                                   values: { "Tight", "Room", "Deep", "Lo-Fi" } ]];
+
+    output value float reduction;
+
+    node voices = DrumVoice[8] [[ mode: poly, stealing: oldest ]];
+    node clean = CleanPath;
+    node drive = HardClip * 4;
+    node limiter = Lookahead;
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> clean.in;
+        voices.out -> drive.in;
+
+        drive.out -> limiter.in;
+
+        clean.out -> out;
+        limiter.out -> out;
+
+        kit -> voices.kit;
+
+        limiter.reduction -> reduction;
+    }
+}

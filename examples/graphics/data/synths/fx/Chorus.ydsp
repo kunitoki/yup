@@ -1,0 +1,35 @@
+/*
+  A chorus built from a modulated delay line: a sine LFO sweeps the read
+  position around a ~20 ms base delay and the delayed signal is mixed with the
+  dry signal.
+*/
+
+processor Chorus {
+    input stream in;
+    output stream out;
+
+    input value float rate = 1.5 [[ name: "Rate", min: 0.05, max: 8.0, unit: "Hz" ]];
+    input value float depth = 0.004 [[ name: "Depth", min: 0.0, max: 0.02, unit: "s", smoothing: 0.02 ]];
+    input value float mix = 0.5 [[ name: "Mix", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    state float buf[4096];
+    state int wp;
+    state float lfoPhase;
+
+    process {
+        buf[wp] = in;
+        wp = wp + 1;
+        if (wp >= 4096) { wp = 0; }
+
+        lfoPhase = lfoPhase + rate / sampleRate;
+        if (lfoPhase >= 1.0) { lfoPhase = lfoPhase - 1.0; }
+
+        float lfo = sin (lfoPhase * 6.283185307);
+        float delaySamples = clamp (0.02 * sampleRate + depth * sampleRate * lfo, 0.0, 4000.0);
+
+        int readIdx = wp - int (delaySamples);
+        if (readIdx < 0) { readIdx = readIdx + 4096; }
+
+        out = (1.0 - mix) * in + mix * buf[readIdx];
+    }
+}

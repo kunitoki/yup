@@ -45,6 +45,9 @@ available in the build.
   the `CircularBuffer` helper.
 - [Time-stretching & pitch-shifting](time-stretching.md) - the
   `TimeStretchProcessor` with its time-domain and Bungee backends.
+- [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
+  JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
+  realtime contract, and the public C++ API.
 
 ## Key building blocks
 
@@ -99,4 +102,5 @@ onsets
 convolution-and-delay
 resampling
 time-stretching
+yup-dsp-language
 ```

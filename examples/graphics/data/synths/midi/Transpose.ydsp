@@ -1,0 +1,22 @@
+/*
+  The simplest event-only processor in the corpus: takes MIDI in, shifts every
+  note's pitch by a fixed number of semitones, and re-emits it directly from
+  inside the handler - no state, no process-tick logic at all.
+*/
+
+processor Transpose {
+    input event xposeIn;
+    output event midiOut;
+
+    input value float semitones = 0.0 [[ name: "Semitones", min: -24.0, max: 24.0 ]];
+
+    event xposeIn (e: noteOn) {
+        emit noteOn (pitch: e.pitch + semitones, velocity: e.velocity) -> midiOut;
+    }
+
+    event xposeIn (e: noteOff) {
+        emit noteOff (pitch: e.pitch + semitones, velocity: e.velocity) -> midiOut;
+    }
+
+    process { }
+}

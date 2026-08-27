@@ -319,6 +319,22 @@ flowchart LR
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
 
+### yup_dsp_jit
+
+YDSP, a realtime JIT-compiled audio DSP language: a lexer/parser, a type
+system with realtime-safety enforcement, an optimiser, and an AsmJit backend
+(x86-64 and AArch64) that compiles patches to native machine code running
+zero-allocation in the audio callback.
+
+```mermaid
+flowchart LR
+    yup_dsp_jit:::self --> yup_core
+    yup_dsp_jit --> yup_dsp
+    yup_dsp_jit --> asmjit_library:::ext
+    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
+```
+
 ### yup_audio_processors
 
 The `AudioProcessor` model - the unit of audio processing that plugins and the

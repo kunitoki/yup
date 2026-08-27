@@ -60,37 +60,100 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 
 //==============================================================================
 
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
 #include "examples/Artboard.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_AI
 #include "examples/AI.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
 #include "examples/Audio.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
 #include "examples/AudioFileDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Clipboard
 #include "examples/ClipboardDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
 #include "examples/ColorLab.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
 #include "examples/ComponentEffectsDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ComputeParticles
 #include "examples/ComputeParticlesDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Convolution
 #include "examples/ConvolutionDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Crossover
 #include "examples/CrossoverDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
 #include "examples/CodeEditor.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
 #include "examples/FilterDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
 #include "examples/GpuAudioProcessingDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
 #include "examples/LayoutFonts.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
 #include "examples/LottieDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
 #include "examples/OffscreenRenderDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
 #include "examples/OpaqueDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
 #include "examples/PaintProfilerDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
 #include "examples/Paths.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
 #include "examples/PopupMenu.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
 #include "examples/ScrollBarDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
 #include "examples/SliderDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
 #include "examples/SpectrumAnalyzer.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_SpinningCube
 #include "examples/SpinningCubeDemo.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Svg
 #include "examples/Svg.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
 #include "examples/VariableFonts.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
 #include "examples/Widgets.h"
-#if YUP_MODULE_AVAILABLE_yup_python
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
+#include "examples/YdspSynths.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Python && YUP_MODULE_AVAILABLE_yup_python
 #include "examples/Python.h"
 #endif
 
@@ -172,54 +235,124 @@ public:
         };
 
         // clang-format off
+#if YUP_EXAMPLE_GRAPHICS_DEMO_AI
         addDemo ("AI", [] { return std::make_unique<AIDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
         addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
         addDemo ("Audio", [] { return std::make_unique<AudioExample>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
         addDemo ("Audio File", [] { return std::make_unique<AudioFileDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Clipboard
         addDemo ("Clipboard", [] { return std::make_unique<ClipboardDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
         addDemo ("Color Lab", [] { return std::make_unique<ColorLabDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
         addDemo ("Component Effects", [] { return std::make_unique<ComponentEffectsDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ComputeParticles
         addDemo ("Compute Particles", [] { return std::make_unique<ComputeParticlesDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Convolution
         addDemo ("Convolution Demo", [] { return std::make_unique<ConvolutionDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Crossover
         addDemo ("Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
         addDemo ("Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
         addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
         addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
         addDemo ("Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
         addDemo ("Paint Profiler", [] { return std::make_unique<PaintProfilerDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
         addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
         addDemo ("Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
         addDemo ("ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
         addDemo ("Sliders", [] { return std::make_unique<SliderDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
         addDemo ("FFT Analyzer", [] { return std::make_unique<SpectrumAnalyzerDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_SpinningCube
         addDemo ("Spinning Cube", [] { return std::make_unique<SpinningCubeDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Svg
         addDemo ("SVG", [] { return std::make_unique<SvgDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Widgets
         addDemo ("Widgets", [] { return std::make_unique<WidgetsDemo>(); });
-#if YUP_MODULE_AVAILABLE_yup_python
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_YdspSynths && YUP_MODULE_AVAILABLE_yup_dsp_jit
+        addDemo ("YDSP Synths", [] { return std::make_unique<YdspSynthDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Python && YUP_MODULE_AVAILABLE_yup_python
         addDemo ("Python", [] { return std::make_unique<PythonDemo>(); });
 #endif
         // clang-format on
 
-        // Create the ListBox with the demo names
-        listModel = std::make_unique<DemoListModel> (demoNames);
-        listModel->onSelectionChanged = [this] (int index)
-        {
-            selectComponent (index);
-        };
+        // A single-demo build (see YUP_EXAMPLE_GRAPHICS_DEMO in CMakeLists.txt) only registers one
+        // demo, so skip the picker entirely and let that demo fill the whole window.
+        singleDemoMode = (demoNames.size() == 1);
 
-        listBox = std::make_unique<yup::ListBox>();
-        listBox->setModel (listModel.get());
-        listBox->setRowHeight (30);
-        listBox->setRowWidth (200);
-        listBox->selectRow (0, false, yup::dontSendNotification);
-        addAndMakeVisible (listBox.get());
+        if (! singleDemoMode)
+        {
+            // Create the ListBox with the demo names
+            listModel = std::make_unique<DemoListModel> (demoNames);
+            listModel->onSelectionChanged = [this] (int index)
+            {
+                selectComponent (index);
+            };
+
+            listBox = std::make_unique<yup::ListBox>();
+            listBox->setModel (listModel.get());
+            listBox->setRowHeight (30);
+            listBox->setRowWidth (200);
+            listBox->selectRow (0, false, yup::dontSendNotification);
+            addAndMakeVisible (listBox.get());
+        }
 
         selectComponent (0);
 
@@ -240,34 +373,37 @@ public:
         auto width = bounds.getWidth();
         auto height = bounds.getHeight();
 
-        // Landscape orientation (width > height): vertical ListBox on the left
-        if (width > height)
+        if (! singleDemoMode)
         {
-            listBox->setOrientation (yup::ListBox::Orientation::vertical);
-            listBox->setRowHeight (30);
-            listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
-            listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+            // Landscape orientation (width > height): vertical ListBox on the left
+            if (width > height)
+            {
+                listBox->setOrientation (yup::ListBox::Orientation::vertical);
+                listBox->setRowHeight (30);
+                listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
+                listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
 
-            auto listBoxBounds = bounds.removeFromLeft (listBoxWidth);
-            listBox->setBounds (listBoxBounds);
+                auto listBoxBounds = bounds.removeFromLeft (listBoxWidth);
+                listBox->setBounds (listBoxBounds);
 
-            // Add margin between ListBox and demo components
-            bounds.removeFromLeft (margin);
-        }
-        // Portrait orientation (width <= height): horizontal ListBox on top
-        else
-        {
-            listBox->setOrientation (yup::ListBox::Orientation::horizontal);
-            listBox->setRowWidth (80);
-            listBox->setRowHeight (listBoxHeight);
-            listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
-            listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
+                // Add margin between ListBox and demo components
+                bounds.removeFromLeft (margin);
+            }
+            // Portrait orientation (width <= height): horizontal ListBox on top
+            else
+            {
+                listBox->setOrientation (yup::ListBox::Orientation::horizontal);
+                listBox->setRowWidth (80);
+                listBox->setRowHeight (listBoxHeight);
+                listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
+                listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
 
-            auto listBoxBounds = bounds.removeFromTop (listBoxHeight);
-            listBox->setBounds (listBoxBounds);
+                auto listBoxBounds = bounds.removeFromTop (listBoxHeight);
+                listBox->setBounds (listBoxBounds);
 
-            // Add margin between ListBox and demo components
-            bounds.removeFromTop (margin);
+                // Add margin between ListBox and demo components
+                bounds.removeFromTop (margin);
+            }
         }
 
         // Demo components take the remaining space
@@ -357,6 +493,7 @@ private:
     std::unique_ptr<yup::ListBox> listBox;
     yup::OwnedArray<yup::Component> components;
     yup::Image image;
+    bool singleDemoMode = false;
 };
 
 //==============================================================================

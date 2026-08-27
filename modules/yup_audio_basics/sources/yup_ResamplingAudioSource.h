@@ -99,7 +99,7 @@ private:
     double subSampleOffset = 0.0;
     double coefficients[6];
     SpinLock ratioLock;
-    CriticalSection callbackLock;
+    AudioLockType callbackLock;
     const int numChannels;
     HeapBlock<float*> destBuffers;
     HeapBlock<const float*> srcBuffers;

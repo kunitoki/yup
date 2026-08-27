@@ -1,0 +1,155 @@
+/*
+  A hard-sync lead through a ring modulator, and the demo's `control` (MIDI CC)
+  example.
+
+  Sync is two oscillators where the second is locked to the first. Here the slave
+  is a pure function of the master's phase - `frac(phase * ratio)` - so it runs
+  `ratio` cycles for every one of the master's, and the whole thing is windowed
+  by the master's own cycle. Sweeping `ratio` moves a formant-like peak that
+  stays locked to the note's pitch, which is the sound the patch exists for.
+*/
+
+import fx.Chorus as fx;
+
+declare name "Wobble Lead";
+declare description "Hard-sync saw through a ring modulator, swept by an LFO under mod-wheel control.";
+
+processor WobbleVoice {
+    output stream out;
+
+    input value float syncMin = 1.0 [[ name: "Sync Min", min: 1.0, max: 6.0 ]];
+    input value float syncMax = 5.5 [[ name: "Sync Max", min: 1.0, max: 14.0 ]];
+    input value float lfoRate = 3.2 [[ name: "LFO Rate", min: 0.05, max: 20.0, unit: "Hz" ]];
+
+    input value float ring = 0.45 [[ name: "Ring Mod", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float ringRatio = 1.5 [[ name: "Ring Ratio", min: 0.25, max: 8.0 ]];
+
+    input value float highpass = 160.0 [[ name: "Highpass", min: 20.0, max: 2000.0 ]];
+
+    input value float attack = 0.006 [[ name: "Attack", min: 0.001, max: 0.5, unit: "s" ]];
+    input value float release = 0.25 [[ name: "Release", min: 0.02, max: 3.0, unit: "s" ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float vibratoPhase;
+
+    state float phase;
+    state float ringPhase;
+    state float lfoPhase;
+    state float freq;
+    state float hp;
+
+    state float env;
+    state float level;
+    state float attackRate;
+    state float releaseCoeff;
+    state int released;
+
+    state float modWheel;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func polyBlep (t: float, dt: float) : float {
+        float r = 0.0;
+        if (t < dt) {
+            t = t / dt;
+            r = t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            r = t * t + t + t + 1.0;
+        }
+        return r;
+    }
+
+    event midi (e: noteOn) {
+        freq         = noteToFreq (e.pitch);
+        level        = e.velocity;
+        attackRate   = e.velocity / (attack * sampleRate);
+        released     = 0;
+        active       = 1;
+        bendFactor   = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    process {
+        float depth = smooth (modWheel, 0.05);
+
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+            * (1.0 + 0.02888113 * depth * sin (vibratoPhase * 2.0 * pi));
+
+        float dt = freq * pitchFactor * samplePeriod;
+
+        phase = phase + dt;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        lfoPhase = lfoPhase + lfoRate * samplePeriod;
+        if (lfoPhase >= 1.0) { lfoPhase = lfoPhase - 1.0; }
+        float lfo = 0.5 + 0.5 * sin (lfoPhase * 2.0 * pi);
+        float ratio = syncMin + (syncMax - syncMin) * lfo * depth;
+
+        float slave = phase * ratio;
+        float slavePhase = slave - floor (slave);
+        float dtSlave = dt * ratio;
+
+        float slaveSaw = 2.0 * slavePhase - 1.0 - polyBlep (slavePhase, dtSlave);
+        float window = 0.5 - 0.5 * cos (phase * 2.0 * pi);
+
+        float saw = slaveSaw * window;
+
+        ringPhase = ringPhase + dt * ringRatio;
+        ringPhase = ringPhase - floor (ringPhase);
+
+        float modulator = sin (ringPhase * 2.0 * pi);
+        float y = saw * (1.0 - ring + ring * modulator);
+
+        float k = smooth (1.0 - exp (-2.0 * pi * highpass * samplePeriod), 0.02);
+        hp = hp + k * (y - hp);
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + attackRate;
+            if (env >= level) { env = level; }
+        }
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = (y - hp) * env * 0.7;
+    }
+}
+
+graph WobbleLead {
+    input event midi;
+    output stream out;
+
+    node voices = WobbleVoice[6] [[ mode: poly, stealing: oldest ]];
+    node chorus = fx.Chorus (rate = 1.2, depth = 0.005, mix = 0.5);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> chorus.in;
+        chorus.out -> out;
+    }
+}

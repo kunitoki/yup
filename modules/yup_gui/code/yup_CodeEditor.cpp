@@ -106,7 +106,8 @@ public:
 
     void mouseDown (const MouseEvent& event) override
     {
-        editor.takeKeyboardFocus();
+        if (editor.getWantsKeyboardFocus())
+            editor.takeKeyboardFocus();
         scrollToPosition (event.getPosition().to<float>());
     }
 
@@ -1012,7 +1013,8 @@ void CodeEditor::enablementChanged()
 
 void CodeEditor::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     if (document == nullptr)
         return;
@@ -1055,7 +1057,8 @@ void CodeEditor::mouseUp (const MouseEvent&)
 
 void CodeEditor::mouseDoubleClick (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     if (document == nullptr)
         return;

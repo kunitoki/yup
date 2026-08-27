@@ -353,7 +353,8 @@ void TextEditor::focusLost()
 
 void TextEditor::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     auto position = event.getPosition().to<float>();
     int newCaretPos = getGlyphIndexAtPosition (position);

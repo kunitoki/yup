@@ -205,7 +205,8 @@ void ComboBox::resized()
 
 void ComboBox::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     if (ignoreMouseDownAfterPopupDismissal)
     {
@@ -279,7 +280,8 @@ void ComboBox::showPopup()
             });
         }
 
-        takeKeyboardFocus();
+        if (getWantsKeyboardFocus())
+            takeKeyboardFocus();
     });
 }
 

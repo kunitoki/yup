@@ -1,0 +1,38 @@
+/*
+  A feedback delay with a one-pole lowpass (damping) in the feedback path and
+  a dry/wet mix.
+*/
+
+processor Delay {
+    input stream in;
+    output stream out;
+
+    input value float time = 0.375 [[ name: "Delay Time", min: 0.01, max: 2.0, unit: "s" ]];
+    input value float feedback = 0.4 [[ name: "Feedback", min: 0.0, max: 0.95, smoothing: 0.02 ]];
+    input value float damping = 0.5 [[ name: "Damping", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float mix = 0.35 [[ name: "Mix", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    state float buf[96000];
+    state int wp;
+    state float damped;
+
+    process {
+        int delaySamples = int (time * sampleRate);
+        if (delaySamples > 96000) { delaySamples = 96000; }
+
+        float delayed = 0.0;
+        if (delaySamples > 0) {
+            int readIdx = wp - delaySamples;
+            if (readIdx < 0) { readIdx = readIdx + 96000; }
+            delayed = buf[readIdx];
+        }
+
+        damped = damped * damping + delayed * (1.0 - damping);
+
+        buf[wp] = in + feedback * damped;
+        wp = wp + 1;
+        if (wp >= 96000) { wp = 0; }
+
+        out = (1.0 - mix) * in + mix * delayed;
+    }
+}

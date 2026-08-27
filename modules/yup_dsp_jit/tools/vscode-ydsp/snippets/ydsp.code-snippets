@@ -1,0 +1,128 @@
+{
+  "Processor": {
+    "prefix": "processor",
+    "body": [
+      "processor ${1:Name} {",
+      "    input  stream in;",
+      "    output stream out;",
+      "",
+      "    input  value float ${2:param} = ${3:0.5};",
+      "",
+      "    state  float ${4:z};",
+      "",
+      "    process {",
+      "        ${5:out = in * $2;}",
+      "    }",
+      "}",
+      ""
+    ],
+    "description": "A YDSP processor with one stream in/out, a parameter, scalar state and a per-sample process body"
+  },
+  "ProcessorBlock": {
+    "prefix": "processor-block",
+    "body": [
+      "processor ${1:Name} {",
+      "    input  stream in;",
+      "    output stream out;",
+      "",
+      "    process block {",
+      "        for i in 0..blockSize {",
+      "            ${2:out[i] = in[i];}",
+      "        }",
+      "    }",
+      "}",
+      ""
+    ],
+    "description": "A YDSP processor with a per-block process body"
+  },
+  "GraphConnection": {
+    "prefix": "graph",
+    "body": [
+      "graph ${1:Name} {",
+      "    input  stream in;",
+      "    output stream out;",
+      "",
+      "    input  value float ${2:param} = ${3:0.5};",
+      "",
+      "    node ${4:proc} = ${5:Processor} (${2:param} = $3);",
+      "",
+      "    connection {",
+      "        in -> $4.in;",
+      "        $4.out -> out;",
+      "        $2 -> $4.${2:param};",
+      "    }",
+      "}",
+      ""
+    ],
+    "description": "A YDSP graph wired with a connection block (nodes, audio edges, parameter aliasing)"
+  },
+  "GraphAlgebra": {
+    "prefix": "graph-algebra",
+    "body": [
+      "graph ${1:Name} {",
+      "    input  stream in;",
+      "    output stream out;",
+      "",
+      "    node ${2:proc} = ${3:Processor};",
+      "",
+      "    process = in : $2 : out;",
+      "}",
+      ""
+    ],
+    "description": "A YDSP graph wired with the Faust-style composition algebra (process = expr;)"
+  },
+  "EventHandler": {
+    "prefix": "event",
+    "body": [
+      "event midi (${1:e}: ${2:noteOn|noteOff|pitchBend|pressure|slide|controlChange|programChange}) {",
+      "    ${3}",
+      "}",
+      ""
+    ],
+    "description": "A YDSP event handler: binds an input to an event shape (noteOn, noteOff, pitchBend, pressure, slide, controlChange, programChange)"
+  },
+  "Func": {
+    "prefix": "func",
+    "body": [
+      "func ${1:name} (${2:x: float}) : float {",
+      "    ${3:return x;}",
+      "}",
+      ""
+    ],
+    "description": "A YDSP function declaration"
+  },
+  "ForLoop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:i} in 0..${2:blockSize} {",
+      "    ${3}",
+      "}",
+      ""
+    ],
+    "description": "A statically bounded YDSP for loop"
+  },
+  "StateArray": {
+    "prefix": "state-array",
+    "body": [
+      "state float ${1:buf}[${2:256}];",
+      ""
+    ],
+    "description": "A YDSP history array (delay memory) declaration"
+  },
+  "Declare": {
+    "prefix": "declare",
+    "body": [
+      "declare ${1:name} \"${2:value}\";",
+      ""
+    ],
+    "description": "A YDSP metadata declaration (name, author, version, license, description)"
+  },
+  "Annotation": {
+    "prefix": "annotation",
+    "body": [
+      "[[ name: \"${1:Label}\", min: ${2:0}, max: ${3:1} ]]",
+      ""
+    ],
+    "description": "A YDSP endpoint annotation block (UI metadata)"
+  }
+}
