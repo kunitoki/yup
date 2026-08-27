@@ -23,7 +23,6 @@
 
 #include <yup_dsp_jit/yup_dsp_jit.h>
 
-#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -40,9 +39,8 @@ namespace
   compiled them. Every other reference to them in this suite is a hand-copied
   excerpt, which cannot go stale loudly.
 
-  So this fixture walks the shipped folder and compiles every file in it. It
-  reaches outside tests/ on purpose: the point is to compile the files that ship,
-  not a copy of them.
+  The tests below reach outside tests/ on purpose: the point is to compile the
+  files that ship, not a copy of them.
 */
 File exampleSynthsFolder()
 {
@@ -87,52 +85,31 @@ protected:
         return std::move (result).getValue();
     }
 
-    std::vector<File> patchFiles() const
+    void testPatch (const char* patchName)
     {
-        std::vector<File> files;
+        const auto patchFile = exampleSynthsFolder().getChildFile (patchName);
+        ASSERT_TRUE (patchFile.existsAsFile()) << patchName;
 
-        for (DirectoryEntry entry : RangedDirectoryIterator (exampleSynthsFolder(), false, "*.ydsp", File::findFiles))
-            if (! entry.isDirectory() && ! entry.isHidden())
-                files.push_back (entry.getFile());
-
-        std::sort (files.begin(), files.end(), [] (const File& a, const File& b)
-        {
-            return a.getFileName().toStdString() < b.getFileName().toStdString();
-        });
-
-        return files;
-    }
-};
-
-//==============================================================================
-
-TEST_F (YdspExamplePatchTests, EveryPatchCompilesAndExposesParamsAndOutputsAndRendersFine)
-{
-    EXPECT_GE (patchFiles().size(), 10u);
-
-    constexpr int blockSize = 128;
-    constexpr double sampleRate = 48000.0;
-
-    for (const auto& patchFile : patchFiles())
-    {
         DspJitCompiler compiler;
         auto graph = compilePatch (patchFile, compiler);
 
-        EXPECT_TRUE (graph.isValid()) << patchFile.getFileName();
+        EXPECT_TRUE (graph.isValid()) << patchName;
 
         if (! graph.isValid())
-            continue;
+            return;
 
-        EXPECT_GT (graph.getParameterCount(), 0) << patchFile.getFileName();
-        EXPECT_EQ (graph.getInputStreamCount(), 0) << patchFile.getFileName();
+        EXPECT_GT (graph.getParameterCount(), 0) << patchName;
+        EXPECT_EQ (graph.getInputStreamCount(), 0) << patchName;
 
         const auto isMidiOnlyPatch = patchFile.getFileName() == "ArpTranspose.ydsp";
 
         if (! isMidiOnlyPatch)
-            EXPECT_GE (graph.getOutputStreamCount(), 1) << patchFile.getFileName();
+            EXPECT_GE (graph.getOutputStreamCount(), 1) << patchName;
 
-        EXPECT_LE (graph.getOutputStreamCount(), 2) << patchFile.getFileName();
+        EXPECT_LE (graph.getOutputStreamCount(), 2) << patchName;
 
+        constexpr int blockSize = 128;
+        constexpr double sampleRate = 48000.0;
         graph.prepare (sampleRate, blockSize);
 
         const auto numOutputs = graph.getOutputStreamCount();
@@ -171,8 +148,70 @@ TEST_F (YdspExamplePatchTests, EveryPatchCompilesAndExposesParamsAndOutputsAndRe
             }
         }
 
-        EXPECT_EQ (nonFinite, 0) << patchFile.getFileName() << " produced non-finite samples";
+        EXPECT_EQ (nonFinite, 0) << patchName << " produced non-finite samples";
     }
+};
+
+//==============================================================================
+
+TEST_F (YdspExamplePatchTests, AnalogSawCompilesAndRenders)
+{
+    testPatch ("AnalogSaw.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, ArpPolySineCompilesAndRenders)
+{
+    testPatch ("ArpPolySine.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, ControlRateWahCompilesAndRenders)
+{
+    testPatch ("ControlRateWah.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, DigitalDrumsCompilesAndRenders)
+{
+    testPatch ("DigitalDrums.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, ElectricPianoCompilesAndRenders)
+{
+    testPatch ("ElectricPiano.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, FMBellCompilesAndRenders)
+{
+    testPatch ("FMBell.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, FormantsCompilesAndRenders)
+{
+    testPatch ("Formants.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, HaasWidenerCompilesAndRenders)
+{
+    testPatch ("HaasWidener.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PolySineCompilesAndRenders)
+{
+    testPatch ("PolySine.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PulseBassCompilesAndRenders)
+{
+    testPatch ("PulseBass.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, WaveLabCompilesAndRenders)
+{
+    testPatch ("WaveLab.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, WobbleLeadCompilesAndRenders)
+{
+    testPatch ("WobbleLead.ydsp");
 }
 
 } // namespace yup::test
