@@ -427,6 +427,36 @@ TEST (YdspJitGraphTests, StatePersistsAcrossBlocks)
     dumpAsmOnFailure (graph);
 }
 
+TEST (YdspJitGraphTests, RunsTanhIntrinsic)
+{
+    DspJitCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor Tanh {
+            input stream in;
+            output stream out;
+            process { out = tanh (in); }
+        }
+        graph G { input stream x; output stream y; node t = Tanh; connection { x -> t.in; t.out -> y; } }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (48000.0, 64);
+
+    auto input = makeRamp (64, -0.5f);
+    std::vector<float> output (64, 0.0f);
+    const float* inPtrs[] = { input.data() };
+    float* outPtrs[] = { output.data() };
+
+    runProcess32 (graph, inPtrs, outPtrs, 64);
+
+    for (int i = 0; i < 64; ++i)
+        EXPECT_NEAR (tanhf (input[static_cast<size_t> (i)]), output[static_cast<size_t> (i)], 1e-5f);
+
+    dumpAsmOnFailure (graph);
+}
+
 TEST (YdspJitGraphTests, RunsTanhAndMathIntrinsics)
 {
     DspJitCompiler compiler;
