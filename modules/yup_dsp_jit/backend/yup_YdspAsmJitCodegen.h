@@ -233,12 +233,12 @@ protected:
 
     YdspFp newFp (const char* name)
     {
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32, name);
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x1, name);
     }
 
     YdspFp newFp64 (const char* name)
     {
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64, name);
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64x1, name);
     }
 
     YdspFp newFpOfType (YdspValueType type, const char* name)

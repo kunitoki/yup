@@ -31,14 +31,26 @@ namespace
 // (AArch64 lowers these natively with sdiv/msub). Division by zero yields 0
 // for both the quotient and the remainder, matching the explicit zero-guard
 // used in the AArch64 lowering.
-int32_t yupDspIdiv (int32_t a, int32_t b) { return b != 0 ? a / b : 0; }
+int32_t yupDspIdiv (int32_t a, int32_t b)
+{
+    return b != 0 && ! (a == std::numeric_limits<int32_t>::min() && b == -1) ? a / b : 0;
+}
 
-int32_t yupDspImod (int32_t a, int32_t b) { return b != 0 ? a % b : 0; }
+int32_t yupDspImod (int32_t a, int32_t b)
+{
+    return b != 0 && ! (a == std::numeric_limits<int32_t>::min() && b == -1) ? a % b : 0;
+}
 
 // 64-bit integer div/mod helpers for the x86 backend (AArch64 lowers natively).
-int64_t yupDspIdiv64 (int64_t a, int64_t b) { return b != 0 ? a / b : 0; }
+int64_t yupDspIdiv64 (int64_t a, int64_t b)
+{
+    return b != 0 && ! (a == std::numeric_limits<int64_t>::min() && b == -1) ? a / b : 0;
+}
 
-int64_t yupDspImod64 (int64_t a, int64_t b) { return b != 0 ? a % b : 0; }
+int64_t yupDspImod64 (int64_t a, int64_t b)
+{
+    return b != 0 && ! (a == std::numeric_limits<int64_t>::min() && b == -1) ? a % b : 0;
+}
 
 } // namespace
 
@@ -52,7 +64,8 @@ bool YdspAsmJitCodegenX64::isDoubleFloat (const YdspFp& reg) const
     if (! cc->is_virt_reg_valid (reg))
         return false;
 
-    return cc->virt_reg_by_reg (reg)->type_id() == asmjit::TypeId::kFloat64;
+    const auto type = cc->virt_reg_by_reg (reg)->type_id();
+    return type == asmjit::TypeId::kFloat64 || type == asmjit::TypeId::kFloat64x1;
 }
 
 //==============================================================================
@@ -206,7 +219,10 @@ void YdspAsmJitCodegenX64::emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp
     // YdspOptimizer::setTargetHasFusedMultiplyAdd), so the fallback is one
     // switch away if it turns out to be a loss.
     moveFloat (dst, a);
-    cc->vfmadd213ss (dst, b, c);
+    if (isDoubleFloat (dst))
+        cc->vfmadd213sd (dst, b, c);
+    else
+        cc->vfmadd213ss (dst, b, c);
 }
 
 void YdspAsmJitCodegenX64::floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type)
@@ -436,10 +452,13 @@ void YdspAsmJitCodegenX64::emitIntDivision (YdspIrOp op, const YdspGp& dst, cons
     }
     else
     {
+        YdspGp target = cc->new_gp64 ("fn");
+        cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (op == YdspIrOp::divI
+                                                            ? reinterpret_cast<void*> (&yupDspIdiv)
+                                                            : reinterpret_cast<void*> (&yupDspImod))));
+
         auto err = cc->invoke (asmjit::Out (divInvoke),
-                               asmjit::Imm (ydspFnPtrToInt64 (op == YdspIrOp::divI
-                                                                  ? reinterpret_cast<void*> (&yupDspIdiv)
-                                                                  : reinterpret_cast<void*> (&yupDspImod))),
+                               target,
                                asmjit::FuncSignature::build<int32_t, int32_t, int32_t>());
 
         if (err == asmjit::kErrorOk && divInvoke != nullptr)
