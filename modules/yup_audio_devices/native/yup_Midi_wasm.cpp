@@ -31,12 +31,15 @@ namespace yup
 EM_JS (void, yupWebMidiRequestAccess, (), {
     if (typeof navigator === 'undefined' || typeof navigator.requestMIDIAccess !== 'function')
     {
+        Module.yupMidiRequestPending = false;
         Module._yupWebMidiAccessRejected();
         return;
     }
 
+    Module.yupMidiRequestPending = true;
     navigator.requestMIDIAccess ({ sysex: true }).then (function (access)
     {
+        Module.yupMidiRequestPending = false;
         Module.yupMidiAccess = access;
         Module.yupMidiInputs = new Map();
         Module.yupMidiOutputs = new Map();
@@ -69,6 +72,7 @@ EM_JS (void, yupWebMidiRequestAccess, (), {
         Module._yupWebMidiAccessResolved (access.sysexEnabled ? 1 : 0);
     }).catch (function (error)
     {
+        Module.yupMidiRequestPending = false;
         console.error ('Web MIDI access denied or unavailable:', error);
         Module._yupWebMidiAccessRejected();
     });

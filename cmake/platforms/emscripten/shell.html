@@ -135,6 +135,10 @@
         border-color: rgba(255, 107, 90, 0.3);
       }
 
+      .chip[data-state="pending"] {
+        color: var(--muted);
+      }
+
       /* --------------------------------------------------------------- stage */
 
       .stage {
@@ -166,6 +170,43 @@
       body.is-running canvas#canvas {
         opacity: 1;
         transform: none;
+      }
+
+      .audio-hint {
+        position: absolute;
+        z-index: 2;
+        display: none;
+        padding: 10px 16px;
+        border: 2px solid rgba(10, 132, 255, 0.65);
+        border-radius: 12px;
+        background: rgba(14, 18, 26, 0.86);
+        box-shadow: 0 16px 40px -18px rgba(0, 0, 0, 0.9), 0 0 30px -8px rgba(10, 132, 255, 1);
+        backdrop-filter: blur(10px);
+        color: var(--ink);
+        font-family: var(--mono);
+        font-size: 18px;
+        letter-spacing: 0.06em;
+        pointer-events: none;
+        animation: audio-hint-pulse 1.8s ease-in-out infinite;
+      }
+
+      body.is-running.audio-waiting .audio-hint { display: block; }
+
+      .audio-hint::before {
+        content: "";
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin: 0 10px 1px 0;
+        border-radius: 50%;
+        background: var(--glow-soft);
+        box-shadow: 0 0 12px 3px rgba(10, 132, 255, 0.8);
+        vertical-align: middle;
+      }
+
+      @keyframes audio-hint-pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.025); }
       }
 
       /* Full window and fullscreen: the chrome steps aside, the canvas takes over. */
@@ -359,7 +400,8 @@
 
       @media (max-width: 780px) {
         .rail { padding: 0 12px; gap: 8px; }
-        .chips { display: none; }
+        .chips { gap: 4px; }
+        #chip-isolation, #chip-threads { display: none; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -385,11 +427,15 @@
       <div class="chips">
         <span class="chip" id="chip-isolation">checking</span>
         <span class="chip" id="chip-threads">threads</span>
+        <span class="chip" id="chip-audio" data-state="pending">audio off</span>
+        <span class="chip" id="chip-midi" data-state="pending">midi off</span>
       </div>
     </header>
 
     <main class="stage">
       <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+      <div class="audio-hint" role="status">Click the canvas to enable audio</div>
 
       <div class="boot" id="boot">
         <svg class="orbit" viewBox="0 0 120 120" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
@@ -432,6 +478,35 @@
       var percentElement = document.getElementById('percent');
       var arcElement = document.getElementById('arc');
       var ejectElement = document.getElementById('eject');
+      var audioChipElement = document.getElementById('chip-audio');
+      var midiChipElement = document.getElementById('chip-midi');
+
+      function setAudioState(state) {
+        var isOn = state === 'on';
+        var isWaiting = state === 'waiting';
+        var label = isOn ? 'audio on' : isWaiting ? 'audio waiting' : 'audio off';
+        audioChipElement.textContent = label;
+        audioChipElement.dataset.state = isOn ? 'on' : isWaiting ? 'pending' : 'off';
+        document.body.classList.toggle('audio-waiting', isWaiting);
+      }
+
+      function pollAudioState() {
+        var context = Module.yupAudioContext;
+        setAudioState (!context || context.state === 'closed'
+                         ? 'off'
+                         : context.state === 'running' ? 'on' : 'waiting');
+      }
+
+      function pollMidiState() {
+        setMidiState (Module.yupMidiAccess ? 'on' : Module.yupMidiRequestPending ? 'requesting' : 'off');
+      }
+
+      function setMidiState(state) {
+        var isOn = state === 'on';
+        var isRequesting = state === 'requesting';
+        midiChipElement.textContent = isOn ? 'midi on' : isRequesting ? 'midi requesting' : 'midi off';
+        midiChipElement.dataset.state = isOn ? 'on' : isRequesting ? 'pending' : 'off';
+      }
 
       (function reportRuntime() {
         var isolation = document.getElementById('chip-isolation');
@@ -558,6 +633,12 @@
           Module.setStatus(left ? 'Preparing (' + (totalDependencies - left) + '/' + totalDependencies + ')' : 'Starting');
         }
       };
+      pollMidiState();
+      pollAudioState();
+      window.setInterval(function () {
+        pollAudioState();
+        pollMidiState();
+      }, 250);
       Module.setStatus('Downloading module');
       window.onerror = (event) => {
         document.body.classList.add('has-error');

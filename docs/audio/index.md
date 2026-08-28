@@ -57,6 +57,15 @@ behaviors differ from desktop platforms:
   and a browser that supports the API; on other WASM targets MIDI remains
   unimplemented and all queries return empty results.
 
+## Web Audio activation (Emscripten)
+
+Browser autoplay policy initially suspends the Web Audio context. Applications
+using the default Emscripten standalone shell show a hint over the canvas after
+startup; click the canvas once to resume the shared audio worklet. The shell's
+top-right `audio` and `midi` indicators show the current browser permission and
+runtime state. This activation is provided by the shell and audio-device
+backend, so individual examples do not need their own browser-specific button.
+
 ## Related
 
 - [Building audio plugins](../build-system/building-plugins.md)

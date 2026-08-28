@@ -131,6 +131,9 @@ public:
         callback.store (nullptr, std::memory_order_release);
         underruns = 0;
 
+        EM_ASM ({ Module.yupAudioContext = emscriptenGetAudioObject ($0);
+        }, context);
+
         emscripten_start_wasm_audio_worklet_thread_async (
             context, audioThreadStack, sizeof (audioThreadStack), &audioThreadInitializedCallback, this);
 
@@ -150,6 +153,12 @@ public:
                 EM_ASM ({ emscriptenGetAudioObject ($0).disconnect();
                 }, audioWorkletNode);
             }
+
+            EM_ASM ({
+                if (Module.yupAudioContext === emscriptenGetAudioObject ($0))
+                    Module.yupAudioContext = null;
+            },
+                    context);
 
             audioWorkletNode = {};
 
