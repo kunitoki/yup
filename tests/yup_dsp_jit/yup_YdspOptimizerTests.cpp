@@ -32,7 +32,7 @@ using namespace yup;
 namespace
 {
 
-std::unique_ptr<YdspIrProgram> buildIr (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspIrProgram> buildIr (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -81,7 +81,7 @@ bool hasConstF (const YdspIrFunction& fn, double value)
 
 TEST (YdspOptimizerTests, BuildsSampleLoopIR)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -105,7 +105,7 @@ TEST (YdspOptimizerTests, BuildsSampleLoopIR)
 
 TEST (YdspOptimizerTests, BuildsBlockModeLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -134,7 +134,7 @@ TEST (YdspOptimizerTests, BuildsBlockModeLoop)
 
 TEST (YdspOptimizerTests, ConstantFoldsArithmetic)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in + (2.0 + 3.0); } }
@@ -154,7 +154,7 @@ TEST (YdspOptimizerTests, ConstantFoldsArithmetic)
 
 TEST (YdspOptimizerTests, ConstantFoldsArithmeticInsideSampleLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in + (2.0 * 3.0); } }
@@ -174,7 +174,7 @@ TEST (YdspOptimizerTests, ConstantFoldsArithmeticInsideSampleLoop)
 
 TEST (YdspOptimizerTests, ConstantFoldingDoesNotDivideInt64MinByMinusOne)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -200,7 +200,7 @@ TEST (YdspOptimizerTests, ConstantFoldingDoesNotDivideInt64MinByMinusOne)
 
 TEST (YdspOptimizerTests, ConstantFoldingDoesNotShiftInt64ByAnOutOfRangeAmount)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -222,7 +222,7 @@ TEST (YdspOptimizerTests, ConstantFoldingDoesNotShiftInt64ByAnOutOfRangeAmount)
 
 TEST (YdspOptimizerTests, ConstantFoldingWrapsInt64OverflowInsteadOfInvokingUB)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -258,7 +258,7 @@ TEST (YdspOptimizerTests, ConstantFoldingWrapsInt64OverflowInsteadOfInvokingUB)
 
 TEST (YdspOptimizerTests, ConstantFoldingKeepsSampleLoopInductionLive)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -278,7 +278,7 @@ TEST (YdspOptimizerTests, ConstantFoldingKeepsSampleLoopInductionLive)
 
 TEST (YdspOptimizerTests, ConstantFoldingKeepsBoundedLoopInductionLive)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -308,7 +308,7 @@ TEST (YdspOptimizerTests, ConstantFoldingKeepsBoundedLoopInductionLive)
 
 TEST (YdspOptimizerTests, AlgebraicSimplifiesMulByOne)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in * 1.0; } }
@@ -327,7 +327,7 @@ TEST (YdspOptimizerTests, AlgebraicSimplifiesMulByOne)
 
 TEST (YdspOptimizerTests, AlgebraicSimplifiesMulByZero)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in * 0; } }
@@ -350,7 +350,7 @@ TEST (YdspOptimizerTests, DoesNotSimplifyAgainstAnOverwrittenLiteral)
     // in one block. Treating the literal as `t`'s value would fold `t + 1.0` to
     // a constant and drop the input entirely - the IR is not SSA, so a constant
     // writing a register does not mean the register holds it at a later use.
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -380,7 +380,7 @@ TEST (YdspOptimizerTests, DoesNotSimplifyAgainstAnOverwrittenLiteral)
 
 TEST (YdspOptimizerTests, CopyPropagatesFunctionParameterCopies)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -425,7 +425,7 @@ TEST (YdspOptimizerTests, CopyPropagatesFunctionParameterCopies)
 
 TEST (YdspOptimizerTests, DeadCodeEliminationRemovesUnusedComputation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -456,7 +456,7 @@ TEST (YdspOptimizerTests, DeadCodeEliminationRemovesUnusedComputation)
 
 TEST (YdspOptimizerTests, HoistsInvariantParamComputation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -491,7 +491,7 @@ TEST (YdspOptimizerTests, HoistsInvariantParamComputation)
 
 TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsInputLoadsInLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -527,7 +527,7 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsInputLoadsInLoop)
 
 TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsInductionUpdateInLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -561,7 +561,7 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsInductionUpdateInLoop)
 
 TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsSampleInductionInLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -590,7 +590,7 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsSampleInductionInLoop)
 
 TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsPathDependentValuesInLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -632,7 +632,7 @@ TEST (YdspOptimizerTests, LoopInvariantCodeMotionKeepsPathDependentValuesInLoop)
 
 TEST (YdspOptimizerTests, LowersPrevIntoHiddenState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -656,7 +656,7 @@ TEST (YdspOptimizerTests, LowersPrevIntoHiddenState)
 
 TEST (YdspOptimizerTests, LowersDelayIntoRingBuffer)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in @ 3; } }
@@ -675,7 +675,7 @@ TEST (YdspOptimizerTests, LowersDelayIntoRingBuffer)
 
 TEST (YdspOptimizerTests, BuildsExecutionReport)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor Taps {
@@ -692,7 +692,7 @@ TEST (YdspOptimizerTests, BuildsExecutionReport)
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
     ASSERT_NE (nullptr, ir);
 
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
     YdspOptimizer::buildReport (*ir, report);
 
     ASSERT_EQ (1u, report.getKernels().size());
@@ -708,7 +708,7 @@ TEST (YdspOptimizerTests, BuildsExecutionReport)
 
 TEST (YdspOptimizerTests, RecordsEachNestedLoopsOwnBound)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The outer loop's bound is resolved before its body is lowered, but only
     // recorded afterwards - so lowering the inner loop in between must not
@@ -733,7 +733,7 @@ TEST (YdspOptimizerTests, RecordsEachNestedLoopsOwnBound)
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
     ASSERT_NE (nullptr, ir);
 
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
     YdspOptimizer::buildReport (*ir, report);
 
     ASSERT_EQ (1u, report.getKernels().size());
@@ -751,7 +751,7 @@ TEST (YdspOptimizerTests, RecordsEachNestedLoopsOwnBound)
 
 TEST (YdspOptimizerTests, LowersDelayWrapWithoutAnIntegerDivision)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The `@` ring wrap used to emit modI, which on x86-64 is a call into a
     // helper - once per delay tap per sample. The write pointer is provably
@@ -774,7 +774,7 @@ TEST (YdspOptimizerTests, LowersDelayWrapWithoutAnIntegerDivision)
 
 TEST (YdspOptimizerTests, ConvertsAShortElselessIfIntoSelects)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -814,7 +814,7 @@ TEST (YdspOptimizerTests, ConvertsAShortElselessIfIntoSelects)
 
 TEST (YdspOptimizerTests, DoesNotIfConvertABodyThatTouchesMemory)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The array read is guarded: running it unconditionally would index the
     // array with whatever `idx` holds when the guard is false.
@@ -859,7 +859,7 @@ TEST (YdspOptimizerTests, DoesNotIfConvertABodyThatTouchesMemory)
 
 TEST (YdspOptimizerTests, HoistsInnerLoopInvariantWorkIntoItsOwnPreheader)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // `drive` does not depend on `i`, so it belongs in the inner loop's
     // preheader - but it *does* depend on `env`, which changes every sample, so
@@ -934,7 +934,7 @@ TEST (YdspOptimizerTests, HoistsInnerLoopInvariantWorkIntoItsOwnPreheader)
 
 TEST (YdspOptimizerTests, ForwardsAStoredArrayElementToALaterLoad)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // `bank[i]` is written and read back in the same iteration, with a write to
     // a *different* array through the same index in between - which cannot
@@ -978,7 +978,7 @@ TEST (YdspOptimizerTests, ForwardsAStoredArrayElementToALaterLoad)
 
 TEST (YdspOptimizerTests, DoesNotForwardAcrossAPossiblyAliasingStore)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The intervening write uses a *different* index into the same array, so
     // `bank[j]` may be `bank[i]` at runtime and the read has to stay a load.
@@ -1017,7 +1017,7 @@ TEST (YdspOptimizerTests, DoesNotForwardAcrossAPossiblyAliasingStore)
 
 TEST (YdspOptimizerTests, DoesNotForwardTheDelayRingRead)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // `@` writes the ring at the write pointer and reads it one slot later, so
     // the two indices differ and the read must not be forwarded - that would
@@ -1039,7 +1039,7 @@ TEST (YdspOptimizerTests, DoesNotForwardTheDelayRingRead)
 
 TEST (YdspOptimizerTests, PromotesScalarStateOutOfTheSampleLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor OnePole {
@@ -1080,7 +1080,7 @@ TEST (YdspOptimizerTests, PromotesScalarStateOutOfTheSampleLoop)
 
 TEST (YdspOptimizerTests, LowersFloat64AndInt64Values)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -1153,7 +1153,7 @@ TEST (YdspOptimizerTests, LowersFloat64AndInt64Values)
 
 TEST (YdspOptimizerTests, KeepsFloat64StateArraysSeparate)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -1179,7 +1179,7 @@ TEST (YdspOptimizerTests, KeepsFloat64StateArraysSeparate)
 
 TEST (YdspOptimizerTests, CopyPropagationDoesNotClobberDelayWritePointerSlots)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor ReverbLike {
@@ -1295,7 +1295,7 @@ constexpr const char* eventShapeIrSource = R"YDSP(
 
 TEST (YdspOptimizerTests, LowersEventFieldsToOffsetCarryingLoads)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (eventShapeIrSource, diagnostics);
 
@@ -1382,7 +1382,7 @@ bool isDefinedByOp (const YdspIrFunction& fn, int valueId, YdspIrOp op)
 
 TEST (YdspOptimizerTests, EmitZeroFillsFieldsOmittedFromTheEmitCall)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -1444,7 +1444,7 @@ TEST (YdspOptimizerTests, EmitZeroFillsFieldsOmittedFromTheEmitCall)
 
 TEST (YdspOptimizerTests, HoistsSmoothCoefficientOutOfSampleLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -1484,7 +1484,7 @@ TEST (YdspOptimizerTests, HoistsSmoothCoefficientOutOfSampleLoop)
 
 TEST (YdspOptimizerTests, SmoothingAnnotationLowersIdenticallyToExplicitSmoothLocal)
 {
-    DspJitDiagnostics sugarDiagnostics;
+    YdspDiagnostics sugarDiagnostics;
 
     auto sugar = buildIr (R"YDSP(
         processor P {
@@ -1497,7 +1497,7 @@ TEST (YdspOptimizerTests, SmoothingAnnotationLowersIdenticallyToExplicitSmoothLo
     )YDSP",
                           sugarDiagnostics);
 
-    DspJitDiagnostics explicitDiagnostics;
+    YdspDiagnostics explicitDiagnostics;
 
     auto explicitForm = buildIr (R"YDSP(
         processor P {
@@ -1551,7 +1551,7 @@ TEST (YdspOptimizerTests, SmoothingAnnotationLowersIdenticallyToExplicitSmoothLo
 
 TEST (YdspOptimizerTests, SmoothAllocatesOneHiddenSlotPairPerCallSite)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor P {
@@ -1588,7 +1588,7 @@ TEST (YdspOptimizerTests, SmoothAllocatesOneHiddenSlotPairPerCallSite)
 
 TEST (YdspOptimizerTests, ParameterDerivedCoefficientIsHoistedOutOfSampleLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // Parameters are sampled once per kernel invocation - the builder loads
     // them in the prologue, and automation is applied *between* invocations
@@ -1651,7 +1651,7 @@ TEST (YdspOptimizerTests, ParameterDerivedCoefficientIsHoistedOutOfSampleLoop)
 
 TEST (YdspOptimizerTests, ResolvesActivityByteOffsetPastHiddenSlots)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // Two declared f32 scalars, then a ' and a smooth() - both of which
     // allocate hidden f32 slots *past* the declared layout and so push the i32
@@ -1703,7 +1703,7 @@ TEST (YdspOptimizerTests, ResolvesActivityByteOffsetPastHiddenSlots)
 
 TEST (YdspOptimizerTests, LeavesActivityByteOffsetUnsetWithoutTheAnnotation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildIr (R"YDSP(
         processor V {
@@ -1733,7 +1733,7 @@ namespace
 {
 
 /** buildIr with the unroller switched on, as the compiler runs it natively. */
-std::unique_ptr<YdspIrProgram> buildUnrolledIr (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspIrProgram> buildUnrolledIr (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -1755,7 +1755,7 @@ std::unique_ptr<YdspIrProgram> buildUnrolledIr (StringRef source, DspJitDiagnost
 }
 
 /** buildIr with the native transforms on, optionally including the split. */
-std::unique_ptr<YdspIrProgram> buildNativeIr (StringRef source, DspJitDiagnostics& diagnostics, bool splitReductions)
+std::unique_ptr<YdspIrProgram> buildNativeIr (StringRef source, YdspDiagnostics& diagnostics, bool splitReductions)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -1810,7 +1810,7 @@ const YdspIrLoop* innerLoop (const YdspIrFunction& fn)
 
 TEST (YdspOptimizerTests, FullyUnrollsAConstantTripCountLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {
@@ -1853,7 +1853,7 @@ TEST (YdspOptimizerTests, FullyUnrollsAConstantTripCountLoop)
 
 TEST (YdspOptimizerTests, HalvesAWidenedAccumulator)
 {
-    DspJitDiagnostics rolledUpDiagnostics, splitDiagnostics;
+    YdspDiagnostics rolledUpDiagnostics, splitDiagnostics;
 
     auto single = buildNativeIr (accumulatingBankSource, rolledUpDiagnostics, false);
     auto split = buildNativeIr (accumulatingBankSource, splitDiagnostics, true);
@@ -1886,7 +1886,7 @@ TEST (YdspOptimizerTests, HalvesAWidenedAccumulator)
 
 TEST (YdspOptimizerTests, HalvesALongAccumulatorRepeatedly)
 {
-    DspJitDiagnostics singleDiagnostics, splitDiagnostics;
+    YdspDiagnostics singleDiagnostics, splitDiagnostics;
 
     // 32 modes over four lanes is eight links. Halving once leaves a suffix on
     // the accumulator that is still four links long, so it halves again - two
@@ -1928,11 +1928,11 @@ TEST (YdspOptimizerTests, HalvesALongAccumulatorRepeatedly)
 
 TEST (YdspOptimizerTests, LeavesAScalarAccumulatorAlone)
 {
-    DspJitDiagnostics plainDiagnostics, splitDiagnostics;
+    YdspDiagnostics plainDiagnostics, splitDiagnostics;
 
     // No vectoriser, so the accumulator never becomes a widened one - and a
     // scalar sum carries no licence to be re-associated.
-    const auto build = [] (DspJitDiagnostics& diagnostics, bool splitReductions)
+    const auto build = [] (YdspDiagnostics& diagnostics, bool splitReductions)
     {
         YdspLexer lexer (accumulatingBankSource, diagnostics);
         auto tokens = lexer.tokenize();
@@ -1968,7 +1968,7 @@ TEST (YdspOptimizerTests, LeavesAScalarAccumulatorAlone)
 
 TEST (YdspOptimizerTests, ReportsWhetherAKernelWasUnrolled)
 {
-    DspJitDiagnostics rolledDiagnostics, unrolledDiagnostics;
+    YdspDiagnostics rolledDiagnostics, unrolledDiagnostics;
 
     constexpr auto source = R"YDSP(
         processor P {
@@ -1991,7 +1991,7 @@ TEST (YdspOptimizerTests, ReportsWhetherAKernelWasUnrolled)
     ASSERT_NE (nullptr, rolled);
     ASSERT_NE (nullptr, unrolled);
 
-    DspJitExecutionReport rolledReport, unrolledReport;
+    YdspExecutionReport rolledReport, unrolledReport;
     YdspOptimizer::buildReport (*rolled, rolledReport);
     YdspOptimizer::buildReport (*unrolled, unrolledReport);
 
@@ -2007,7 +2007,7 @@ TEST (YdspOptimizerTests, ReportsWhetherAKernelWasUnrolled)
 
 TEST (YdspOptimizerTests, LeavesARuntimeBoundLoopRolled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {
@@ -2035,7 +2035,7 @@ TEST (YdspOptimizerTests, LeavesARuntimeBoundLoopRolled)
 
 TEST (YdspOptimizerTests, LeavesALoopTooLargeToUnrollRolled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {
@@ -2069,7 +2069,7 @@ TEST (YdspOptimizerTests, LeavesALoopTooLargeToUnrollRolled)
 
 TEST (YdspOptimizerTests, LeavesAHighPressureScalarLoopRolled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {
@@ -2103,7 +2103,7 @@ TEST (YdspOptimizerTests, LeavesAHighPressureScalarLoopRolled)
 
 TEST (YdspOptimizerTests, LeavesAScalarLoopWithNativeCallsRolled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {
@@ -2133,7 +2133,7 @@ TEST (YdspOptimizerTests, LeavesAScalarLoopWithNativeCallsRolled)
 
 TEST (YdspOptimizerTests, LeavesANestedLoopRolled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = buildUnrolledIr (R"YDSP(
         processor P {

@@ -39,7 +39,7 @@ namespace
 using yup::test::patches::compilePatch;
 using yup::test::patches::makeRamp;
 
-void runWasmProcess (DspJitGraph& graph,
+void runWasmProcess (YdspAudioGraph& graph,
                      const float* const* inputs,
                      int numInputs,
                      float* const* outputs,
@@ -47,20 +47,20 @@ void runWasmProcess (DspJitGraph& graph,
                      int numSamples,
                      const yup::MidiBuffer* midi = nullptr)
 {
-    std::vector<DspJitInputBuffer> inputBuffers;
+    std::vector<YdspInputBuffer> inputBuffers;
     inputBuffers.reserve (static_cast<size_t> (numInputs));
 
     for (int i = 0; i < numInputs; ++i)
         inputBuffers.emplace_back (yup::Span<const float> (inputs[i], static_cast<size_t> (numSamples)));
 
-    std::vector<DspJitOutputBuffer> outputBuffers;
+    std::vector<YdspOutputBuffer> outputBuffers;
     outputBuffers.reserve (static_cast<size_t> (numOutputs));
 
     for (int i = 0; i < numOutputs; ++i)
         outputBuffers.emplace_back (yup::Span<float> (outputs[i], static_cast<size_t> (numSamples)));
 
     const auto result = graph.process (inputBuffers, outputBuffers, numSamples, midi, nullptr, 0);
-    EXPECT_EQ (DspJitProcessResult::ok, result);
+    EXPECT_EQ (YdspProcessResult::ok, result);
 }
 
 constexpr const char* wasmPassThroughSource = R"YDSP(
@@ -121,7 +121,7 @@ constexpr const char* wasmSubgraphSource = R"YDSP(
 
 TEST (YdspWasmBackendTests, CompilesAndRunsPassThrough)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmPassThroughSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -143,7 +143,7 @@ TEST (YdspWasmBackendTests, CompilesAndRunsPassThrough)
 
 TEST (YdspWasmBackendTests, StateAccumulatesAcrossBlocks)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmAccumulateSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -168,7 +168,7 @@ TEST (YdspWasmBackendTests, StateAccumulatesAcrossBlocks)
 
 TEST (YdspWasmBackendTests, ParamsDriveTheKernel)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmParamSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -190,7 +190,7 @@ TEST (YdspWasmBackendTests, ParamsDriveTheKernel)
 
 TEST (YdspWasmBackendTests, SinIntrinsicMatchesHostMath)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmSinSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -210,7 +210,7 @@ TEST (YdspWasmBackendTests, SinIntrinsicMatchesHostMath)
 
 TEST (YdspWasmBackendTests, PolyphonicVoiceBankWithMidiEvents)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (R"YDSP(
         processor P {
             output stream out;
@@ -267,7 +267,7 @@ TEST (YdspWasmBackendTests, PolyphonicVoiceBankWithMidiEvents)
 
 TEST (YdspWasmBackendTests, ElectricPianoRunsInWasm)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (yup::test::patches::electricPiano, compiler);
 
@@ -302,7 +302,7 @@ TEST (YdspWasmBackendTests, ElectricPianoRunsInWasm)
 
 TEST (YdspWasmBackendTests, SmoothedParameterRampsAcrossBlocks)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmSmoothSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -334,7 +334,7 @@ TEST (YdspWasmBackendTests, SmoothedParameterRampsAcrossBlocks)
 
 TEST (YdspWasmBackendTests, DelayRingWrapsWithoutIntegerDivision)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmDelaySource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -368,7 +368,7 @@ TEST (YdspWasmBackendTests, DelayRingWrapsWithoutIntegerDivision)
 
 TEST (YdspWasmBackendTests, IntegerMinMaxClampAbsSignMatchTheComposedSelectLowering)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -415,7 +415,7 @@ TEST (YdspWasmBackendTests, IntegerMinMaxClampAbsSignMatchTheComposedSelectLower
 
 TEST (YdspWasmBackendTests, SubgraphIsInlinedBeforeCodegen)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = compilePatch (wasmSubgraphSource, compiler);
 
     ASSERT_TRUE (graph.isValid());

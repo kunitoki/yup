@@ -29,13 +29,13 @@ namespace yup::test
 namespace
 {
 
-std::vector<YdspToken> tokenize (StringRef source, DspJitDiagnostics& diagnostics)
+std::vector<YdspToken> tokenize (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     return lexer.tokenize();
 }
 
-std::unique_ptr<YdspProgram> parse (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspProgram> parse (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -60,7 +60,7 @@ std::vector<YdspTokenType> typesOf (const std::vector<YdspToken>& tokens)
 
 TEST (YdspLexerTests, TokenizesKeywordsAndIdentifiers)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("processor Saturator { input stream in; }", diagnostics);
 
@@ -80,7 +80,7 @@ TEST (YdspLexerTests, TokenizesKeywordsAndIdentifiers)
 
 TEST (YdspLexerTests, TokenizesNumbersAndRange)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("0..blockSize 1.5 2e3 42", diagnostics);
 
@@ -98,7 +98,7 @@ TEST (YdspLexerTests, TokenizesNumbersAndRange)
 
 TEST (YdspLexerTests, TokenizesLeadingAndTrailingDotFloats)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize (".5 1. 0..blockSize 1.sin", diagnostics);
 
@@ -121,7 +121,7 @@ TEST (YdspLexerTests, TokenizesLeadingAndTrailingDotFloats)
 
 TEST (YdspLexerTests, TokenizesHexBinaryAndDigitSeparatorIntegers)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("0x1F 0b1010 1_000 _", diagnostics);
 
@@ -141,18 +141,18 @@ TEST (YdspLexerTests, TokenizesHexBinaryAndDigitSeparatorIntegers)
 
 TEST (YdspLexerTests, ReportsErrorOnHexOrBinaryLiteralWithNoDigits)
 {
-    DspJitDiagnostics hexDiagnostics;
+    YdspDiagnostics hexDiagnostics;
     tokenize ("0x", hexDiagnostics);
     EXPECT_TRUE (hexDiagnostics.hasErrors());
 
-    DspJitDiagnostics binDiagnostics;
+    YdspDiagnostics binDiagnostics;
     tokenize ("0b", binDiagnostics);
     EXPECT_TRUE (binDiagnostics.hasErrors());
 }
 
 TEST (YdspLexerTests, ParsesStringEscapes)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize (R"(  "a\nb\t\"c\"\\d"  )", diagnostics);
 
@@ -164,7 +164,7 @@ TEST (YdspLexerTests, ParsesStringEscapes)
 
 TEST (YdspLexerTests, ReportsErrorOnUnknownStringEscape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize (R"( "a\qb" )", diagnostics);
 
@@ -173,7 +173,7 @@ TEST (YdspLexerTests, ReportsErrorOnUnknownStringEscape)
 
 TEST (YdspLexerTests, TokenizesSpecialOperators)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("<: :> ~ @ ' -> [[ ]] .. _ ? && || ! ==", diagnostics);
 
@@ -200,7 +200,7 @@ TEST (YdspLexerTests, TokenizesSpecialOperators)
 
 TEST (YdspLexerTests, TokenizesBitwiseOperators)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("a & b | c ^ d << e >> f ~g &= |= ^= <<= >>= 1 < 2 > 3", diagnostics);
 
@@ -235,7 +235,7 @@ TEST (YdspLexerTests, TokenizesBitwiseOperators)
 
 TEST (YdspLexerTests, TokenizesDivideAndModuloCompoundAssignment)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("a /= b % c %= d", diagnostics);
 
@@ -254,7 +254,7 @@ TEST (YdspLexerTests, TokenizesDivideAndModuloCompoundAssignment)
 
 TEST (YdspLexerTests, SkipsCommentsAndTracksLines)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("// line comment\nprocessor /* block\ncomment */ a", diagnostics);
 
@@ -267,7 +267,7 @@ TEST (YdspLexerTests, SkipsCommentsAndTracksLines)
 
 TEST (YdspLexerTests, DoesNotEndACommentEarlyOnANonAsciiCharacterThatLooksLikeNewlineWhenTruncated)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize (String (CharPointer_UTF8 ("// abc\xC4\x8A"
                                                       "def\nprocessor")),
@@ -281,7 +281,7 @@ TEST (YdspLexerTests, DoesNotEndACommentEarlyOnANonAsciiCharacterThatLooksLikeNe
 
 TEST (YdspLexerTests, PreservesNonAsciiCharactersInStringLiterals)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize (String (CharPointer_UTF8 ("\"a\xC4\x8A"
                                                       "b\"")),
@@ -296,7 +296,7 @@ TEST (YdspLexerTests, PreservesNonAsciiCharactersInStringLiterals)
 
 TEST (YdspLexerTests, ReportsErrorOnUnknownCharacter)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("a $ b", diagnostics);
 
@@ -308,7 +308,7 @@ TEST (YdspLexerTests, ReportsErrorOnUnknownCharacter)
 
 TEST (YdspLexerTests, ReportsErrorOnUnterminatedString)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("\"hello", diagnostics);
 
@@ -321,7 +321,7 @@ TEST (YdspLexerTests, ReportsErrorOnUnterminatedString)
 
 TEST (YdspLexerTests, TokenizesFuncAndReturnKeywords)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("func return", diagnostics);
 
@@ -335,7 +335,7 @@ TEST (YdspLexerTests, TokenizesFuncAndReturnKeywords)
 
 TEST (YdspLexerTests, TokenizesImportKeyword)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("import \"filters.ydsp\" as flt;", diagnostics);
 
@@ -354,7 +354,7 @@ TEST (YdspLexerTests, TokenizesImportKeyword)
 
 TEST (YdspParserTests, ParsesProcessorWithEndpointsStateAndProcess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Saturator {
@@ -405,7 +405,7 @@ TEST (YdspParserTests, ParsesProcessorWithEndpointsStateAndProcess)
 
 TEST (YdspParserTests, ParsesBracedListAnnotationValue)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Selector {
@@ -435,7 +435,7 @@ TEST (YdspParserTests, ParsesBracedListAnnotationValue)
 
 TEST (YdspParserTests, DoesNotPushANullStatementIntoTheProcessBody)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -456,7 +456,7 @@ TEST (YdspParserTests, DoesNotPushANullStatementIntoTheProcessBody)
 
 TEST (YdspParserTests, ReportsDeeplyNestedExpressionsInsteadOfOverflowingTheStack)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     String source = "processor P { output stream out; process { out = ";
 
@@ -477,7 +477,7 @@ TEST (YdspParserTests, ReportsDeeplyNestedExpressionsInsteadOfOverflowingTheStac
 
 TEST (YdspParserTests, ParsesBlockProcessWithForLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Delay {
@@ -509,7 +509,7 @@ TEST (YdspParserTests, ParsesBlockProcessWithForLoop)
 
 TEST (YdspParserTests, DesugarsCompoundAssignmentOnIndexedAndMemberTargets)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -540,7 +540,7 @@ TEST (YdspParserTests, DesugarsCompoundAssignmentOnIndexedAndMemberTargets)
     EXPECT_EQ ("buf", assign.value->children[0]->children[0]->text);
     EXPECT_EQ ("i", assign.value->children[0]->children[1]->text);
 
-    DspJitDiagnostics memberDiagnostics;
+    YdspDiagnostics memberDiagnostics;
 
     auto memberProgram = parse (R"YDSP(
         processor P {
@@ -568,7 +568,7 @@ TEST (YdspParserTests, DesugarsCompoundAssignmentOnIndexedAndMemberTargets)
 
 TEST (YdspParserTests, ParsesDivideAndModuloCompoundAssignment)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -597,7 +597,7 @@ TEST (YdspParserTests, ParsesDivideAndModuloCompoundAssignment)
 
 TEST (YdspParserTests, ParsesExpressions)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -641,7 +641,7 @@ TEST (YdspParserTests, ParsesExpressions)
 
 TEST (YdspParserTests, ParsesGraphWithConnections)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph MyPatch {
@@ -686,7 +686,7 @@ TEST (YdspParserTests, ParsesGraphWithConnections)
 
 TEST (YdspParserTests, ParsesGraphWithAlgebra)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph Chain {
@@ -721,7 +721,7 @@ TEST (YdspParserTests, ParsesGraphWithAlgebra)
 
 TEST (YdspParserTests, ParsesAlgebraWithParallelSplitAndRecursion)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph G {
@@ -739,7 +739,7 @@ TEST (YdspParserTests, ParsesAlgebraWithParallelSplitAndRecursion)
 
 TEST (YdspParserTests, ParsesDeclareMetadata)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         declare name "MyPatch";
@@ -759,7 +759,7 @@ TEST (YdspParserTests, ParsesDeclareMetadata)
 
 TEST (YdspParserTests, ReportsMissingClosingBrace)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse ("processor P { input stream in;", diagnostics);
 
@@ -770,7 +770,7 @@ TEST (YdspParserTests, ReportsMissingClosingBrace)
 
 TEST (YdspParserTests, ParsesMultipleGraphsAndTheMainAnnotation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph A { input stream i; output stream o; process = i : o; }
@@ -790,7 +790,7 @@ TEST (YdspParserTests, ParsesMultipleGraphsAndTheMainAnnotation)
 
 TEST (YdspParserTests, RejectsStatementOutsideProcess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse ("processor P { out = in; }", diagnostics);
 
@@ -799,7 +799,7 @@ TEST (YdspParserTests, RejectsStatementOutsideProcess)
 
 TEST (YdspParserTests, ReportsExpressionErrorWithLocation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse ("processor P { input stream in; output stream out; process { out = + ; } }", diagnostics);
 
@@ -809,7 +809,7 @@ TEST (YdspParserTests, ReportsExpressionErrorWithLocation)
 
 TEST (YdspParserTests, ParsesFunctionDeclaration)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor WithFunc {
@@ -842,7 +842,7 @@ TEST (YdspParserTests, ParsesFunctionDeclaration)
 
 TEST (YdspParserTests, RejectsLegacyTypeFirstFunctionParameters)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor WithFunc {
@@ -870,7 +870,7 @@ TEST (YdspParserTests, RejectsLegacyTypeFirstFunctionParameters)
 
 TEST (YdspParserTests, ParsesFunctionWithoutReturnType)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -891,7 +891,7 @@ TEST (YdspParserTests, ParsesFunctionWithoutReturnType)
 
 TEST (YdspParserTests, ParsesFunctionCallInProcess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -917,7 +917,7 @@ TEST (YdspParserTests, ParsesFunctionCallInProcess)
 
 TEST (YdspParserTests, ParsesImportDirective)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         import filters as flt;
@@ -935,7 +935,7 @@ TEST (YdspParserTests, ParsesImportDirective)
 
 TEST (YdspParserTests, ParsesImportWithoutAlias)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         import lib.utils;
@@ -953,7 +953,7 @@ TEST (YdspParserTests, ParsesImportWithoutAlias)
 
 TEST (YdspParserTests, ParsesNamespacedNodeProcessorName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph G { input stream x; output stream y; node d = fx.Delay (time = 0.5); connection { x -> d.in; d.out -> y; } }
@@ -970,7 +970,7 @@ TEST (YdspParserTests, ParsesNamespacedNodeProcessorName)
 
 TEST (YdspParserTests, ParsesNamespacedAlgebraProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph G { input stream x; output stream y; process = x : fx.Delay : y; }
@@ -998,7 +998,7 @@ TEST (YdspParserTests, ParsesNamespacedAlgebraProcessor)
 
 TEST (YdspParserTests, ParsesNodeWithOversampling)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Sat { input stream in; output stream out; process { out = tanh(in); } }
@@ -1021,7 +1021,7 @@ TEST (YdspParserTests, ParsesNodeWithOversampling)
 
 TEST (YdspParserTests, ParsesNodeWithUndersampling)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Sat { input stream in; output stream out; process { out = tanh(in); } }
@@ -1044,7 +1044,7 @@ TEST (YdspParserTests, ParsesNodeWithUndersampling)
 
 TEST (YdspParserTests, ParsesStructAndInitDeclarations)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1083,7 +1083,7 @@ TEST (YdspParserTests, ParsesStructAndInitDeclarations)
 
 TEST (YdspParserTests, ParsesFloatIntAliasesAs32BitTypes)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1124,7 +1124,7 @@ TEST (YdspParserTests, ParsesFloatIntAliasesAs32BitTypes)
 
 TEST (YdspParserTests, ParsesExplicit32And64BitTypes)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1176,7 +1176,7 @@ TEST (YdspParserTests, ParsesExplicit32And64BitTypes)
 
 TEST (YdspParserTests, ReportsUnknownTypeName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1212,7 +1212,7 @@ TEST (YdspParserTests, ToStringRoundTripsTypeNames)
 
 TEST (YdspLexerTests, TokenizesEventKeyword)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto tokens = tokenize ("event noteOn", diagnostics);
 
@@ -1225,7 +1225,7 @@ TEST (YdspLexerTests, TokenizesEventKeyword)
 
 TEST (YdspParserTests, ParsesInputEventEndpoints)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Voice {
@@ -1263,7 +1263,7 @@ TEST (YdspParserTests, ParsesInputEventEndpoints)
 
 TEST (YdspParserTests, ParsesOutputEventEndpointAtProcessorScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1285,7 +1285,7 @@ TEST (YdspParserTests, ParsesOutputEventEndpointAtProcessorScope)
 
 TEST (YdspParserTests, ParsesOutputEventEndpointAtGraphScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         graph G {
@@ -1306,7 +1306,7 @@ TEST (YdspParserTests, ParsesOutputEventEndpointAtGraphScope)
 
 TEST (YdspParserTests, ParsesEmitStatementInProcessBody)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1337,7 +1337,7 @@ TEST (YdspParserTests, ParsesEmitStatementInProcessBody)
 
 TEST (YdspParserTests, ParsesEmitStatementInEventHandlerBody)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1368,7 +1368,7 @@ TEST (YdspParserTests, ParsesEmitStatementInEventHandlerBody)
 
 TEST (YdspParserTests, ParsesEmitStatementWithEmptyFieldList)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1397,7 +1397,7 @@ TEST (YdspParserTests, ParsesEmitStatementWithEmptyFieldList)
 
 TEST (YdspParserTests, ParsesEventHandlerDeclarations)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Voice {
@@ -1430,7 +1430,7 @@ TEST (YdspParserTests, ParsesEventHandlerDeclarations)
 
 TEST (YdspParserTests, ParsesVoiceBankNodeGrammar)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Voice {
@@ -1461,7 +1461,7 @@ TEST (YdspParserTests, ParsesVoiceBankNodeGrammar)
 
 TEST (YdspParserTests, ParsesNodeVoiceAnnotations)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor Voice {
@@ -1501,7 +1501,7 @@ TEST (YdspParserTests, ParsesNodeVoiceAnnotations)
 
 TEST (YdspParserTests, ParsesReservedWordsAsMemberNames)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {
@@ -1523,7 +1523,7 @@ TEST (YdspParserTests, ParsesReservedWordsAsMemberNames)
 
 TEST (YdspParserTests, ParsesStateAnnotations)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto program = parse (R"YDSP(
         processor P {

@@ -1116,7 +1116,7 @@ private:
 class YdspWasmCodegenImpl
 {
 public:
-    std::vector<uint8_t> compile (const YdspIrFunction& fn, DspJitDiagnostics& diagnostics)
+    std::vector<uint8_t> compile (const YdspIrFunction& fn, YdspDiagnostics& diagnostics)
     {
         this->fn = &fn;
         this->diagnostics = &diagnostics;
@@ -2320,7 +2320,7 @@ private:
     //==============================================================================
 
     const YdspIrFunction* fn = nullptr;
-    DspJitDiagnostics* diagnostics = nullptr;
+    YdspDiagnostics* diagnostics = nullptr;
 
     YdspWasmEmitter emitter;
 
@@ -2371,7 +2371,7 @@ private:
 
 //==============================================================================
 
-std::vector<uint8_t> YdspWasmCodegen::compile (const YdspIrFunction& fn, DspJitDiagnostics& diagnostics)
+std::vector<uint8_t> YdspWasmCodegen::compile (const YdspIrFunction& fn, YdspDiagnostics& diagnostics)
 {
     // There is no `simd128` lowering here, so a widened function would emit
     // scalar code for packed values and silently compute the wrong thing. The

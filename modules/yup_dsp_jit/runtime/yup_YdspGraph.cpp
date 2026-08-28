@@ -24,19 +24,19 @@ namespace yup
 
 //==============================================================================
 
-// DspJitExecutionReport
+// YdspExecutionReport
 
-const std::vector<DspJitKernelReport>& DspJitExecutionReport::getKernels() const noexcept
+const std::vector<YdspKernelReport>& YdspExecutionReport::getKernels() const noexcept
 {
     return kernels;
 }
 
-std::vector<DspJitKernelReport>& DspJitExecutionReport::getKernels() noexcept
+std::vector<YdspKernelReport>& YdspExecutionReport::getKernels() noexcept
 {
     return kernels;
 }
 
-int DspJitExecutionReport::getTotalBoundedIterations() const noexcept
+int YdspExecutionReport::getTotalBoundedIterations() const noexcept
 {
     int total = 0;
 
@@ -46,7 +46,7 @@ int DspJitExecutionReport::getTotalBoundedIterations() const noexcept
     return total;
 }
 
-bool DspJitExecutionReport::isProvenRealtimeSafe() const noexcept
+bool YdspExecutionReport::isProvenRealtimeSafe() const noexcept
 {
     for (const auto& kernel : kernels)
         if (! kernel.provenRealtimeSafe)
@@ -81,25 +81,25 @@ extern "C" void EMSCRIPTEN_KEEPALIVE ydspCommitOutputEventWasm (YdspOutputEventQ
 
 //==============================================================================
 
-// DspJitGraph
+// YdspAudioGraph
 
-DspJitGraph::DspJitGraph() = default;
+YdspAudioGraph::YdspAudioGraph() = default;
 
-DspJitGraph::~DspJitGraph() = default;
+YdspAudioGraph::~YdspAudioGraph() = default;
 
-DspJitGraph::DspJitGraph (DspJitGraph&&) noexcept = default;
-DspJitGraph& DspJitGraph::operator= (DspJitGraph&&) noexcept = default;
+YdspAudioGraph::YdspAudioGraph (YdspAudioGraph&&) noexcept = default;
+YdspAudioGraph& YdspAudioGraph::operator= (YdspAudioGraph&&) noexcept = default;
 
 //==============================================================================
 
-bool DspJitGraph::isValid() const noexcept
+bool YdspAudioGraph::isValid() const noexcept
 {
     return pimpl != nullptr && pimpl->valid;
 }
 
 //==============================================================================
 
-void DspJitGraph::prepare (double sampleRate, int maxBlockSize, int maxEventsPerVoicePerBlock, int maxAutomationPerNodePerBlock, int maxOutputEventsPerBlock)
+void YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEventsPerVoicePerBlock, int maxAutomationPerNodePerBlock, int maxOutputEventsPerBlock)
 {
     if (pimpl == nullptr)
         return;
@@ -327,7 +327,7 @@ void DspJitGraph::prepare (double sampleRate, int maxBlockSize, int maxEventsPer
 
 //==============================================================================
 
-void DspJitGraph::reset()
+void YdspAudioGraph::reset()
 {
     if (pimpl == nullptr || ! pimpl->valid)
         return;
@@ -391,7 +391,7 @@ void DspJitGraph::reset()
 
 //==============================================================================
 
-void DspJitGraph::setMpeZoneLayout (const yup::MPEZoneLayout& layout)
+void YdspAudioGraph::setMpeZoneLayout (const yup::MPEZoneLayout& layout)
 {
     if (pimpl == nullptr)
         return;
@@ -404,7 +404,7 @@ void DspJitGraph::setMpeZoneLayout (const yup::MPEZoneLayout& layout)
     pimpl->setExpressionTrackingMode (yup::MPEInstrument::lastNotePlayedOnChannel);
 }
 
-void DspJitGraph::setLegacyMidiMode (int pitchbendRangeSemitones)
+void YdspAudioGraph::setLegacyMidiMode (int pitchbendRangeSemitones)
 {
     if (pimpl == nullptr)
         return;
@@ -422,7 +422,7 @@ void DspJitGraph::setLegacyMidiMode (int pitchbendRangeSemitones)
 
 //==============================================================================
 
-void DspJitGraph::prewarmKernels()
+void YdspAudioGraph::prewarmKernels()
 {
 #if YUP_WASM
     if (pimpl == nullptr || pimpl->wasmModules.empty())
@@ -434,18 +434,18 @@ void DspJitGraph::prewarmKernels()
 
 //==============================================================================
 
-DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inputs, yup::Span<DspJitOutputBuffer> outputs, int numSamples)
+YdspProcessResult YdspAudioGraph::process (yup::Span<const YdspInputBuffer> inputs, yup::Span<YdspOutputBuffer> outputs, int numSamples)
 {
     return process (inputs, outputs, numSamples, nullptr, nullptr, 0);
 }
 
 //==============================================================================
 
-DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inputs,
-                                          yup::Span<DspJitOutputBuffer> outputs,
+YdspProcessResult YdspAudioGraph::process (yup::Span<const YdspInputBuffer> inputs,
+                                          yup::Span<YdspOutputBuffer> outputs,
                                           int numSamples,
                                           const yup::MidiBuffer* midiIn,
-                                          const DspJitAutomationEvent* automation,
+                                          const YdspAutomationEvent* automation,
                                           int numAutomationEvents)
 {
     const yup::MidiBuffer* buffers[] = { midiIn };
@@ -454,21 +454,21 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
     return process (inputs, outputs, numSamples, yup::Span<const yup::MidiBuffer*> (buffers, numEventInputs > 0 ? 1 : 0), automation, numAutomationEvents);
 }
 
-DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inputs,
-                                          yup::Span<DspJitOutputBuffer> outputs,
+YdspProcessResult YdspAudioGraph::process (yup::Span<const YdspInputBuffer> inputs,
+                                          yup::Span<YdspOutputBuffer> outputs,
                                           int numSamples,
                                           yup::Span<const yup::MidiBuffer*> eventInputs,
-                                          const DspJitAutomationEvent* automation,
+                                          const YdspAutomationEvent* automation,
                                           int numAutomationEvents)
 {
     return process (inputs, outputs, numSamples, eventInputs, automation, numAutomationEvents, nullptr);
 }
 
-DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inputs,
-                                          yup::Span<DspJitOutputBuffer> outputs,
+YdspProcessResult YdspAudioGraph::process (yup::Span<const YdspInputBuffer> inputs,
+                                          yup::Span<YdspOutputBuffer> outputs,
                                           int numSamples,
                                           const yup::MidiBuffer* midiIn,
-                                          const DspJitAutomationEvent* automation,
+                                          const YdspAutomationEvent* automation,
                                           int numAutomationEvents,
                                           yup::MidiBuffer* midiOut)
 {
@@ -478,26 +478,26 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
     return process (inputs, outputs, numSamples, yup::Span<const yup::MidiBuffer*> (buffers, numEventInputs > 0 ? 1 : 0), automation, numAutomationEvents, midiOut);
 }
 
-DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inputs,
-                                          yup::Span<DspJitOutputBuffer> outputs,
+YdspProcessResult YdspAudioGraph::process (yup::Span<const YdspInputBuffer> inputs,
+                                          yup::Span<YdspOutputBuffer> outputs,
                                           int numSamples,
                                           yup::Span<const yup::MidiBuffer*> eventInputs,
-                                          const DspJitAutomationEvent* automation,
+                                          const YdspAutomationEvent* automation,
                                           int numAutomationEvents,
                                           yup::MidiBuffer* midiOut)
 {
     if (pimpl == nullptr || ! pimpl->valid)
-        return DspJitProcessResult::invalidGraph;
+        return YdspProcessResult::invalidGraph;
 
     const int blockSize = std::min (numSamples, pimpl->maxBlockSize);
 
     if (blockSize == 0)
-        return DspJitProcessResult::ok;
+        return YdspProcessResult::ok;
 
     if (inputs.size() != pimpl->inputStreamTypes.size()
         || outputs.size() != pimpl->outputStreamTypes.size())
     {
-        return DspJitProcessResult::invalidBufferCount;
+        return YdspProcessResult::invalidBufferCount;
     }
 
     for (size_t i = 0; i < inputs.size(); ++i)
@@ -505,10 +505,10 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
         const auto view = detail::getStreamBufferView (inputs[i]);
 
         if (view.type != detail::toElementType (pimpl->inputStreamTypes[i]))
-            return DspJitProcessResult::bufferTypeMismatch;
+            return YdspProcessResult::bufferTypeMismatch;
 
         if (view.numElements < static_cast<size_t> (blockSize))
-            return DspJitProcessResult::bufferTooShort;
+            return YdspProcessResult::bufferTooShort;
     }
 
     for (size_t i = 0; i < outputs.size(); ++i)
@@ -516,10 +516,10 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
         const auto view = detail::getStreamBufferView (outputs[i]);
 
         if (view.type != detail::toElementType (pimpl->outputStreamTypes[i]))
-            return DspJitProcessResult::bufferTypeMismatch;
+            return YdspProcessResult::bufferTypeMismatch;
 
         if (view.numElements < static_cast<size_t> (blockSize))
-            return DspJitProcessResult::bufferTooShort;
+            return YdspProcessResult::bufferTooShort;
     }
 
     for (auto& node : pimpl->nodes)
@@ -574,7 +574,7 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
     const auto numEventInputs = pimpl->eventInputNames.size();
 
     if (eventInputs.size() > numEventInputs)
-        return DspJitProcessResult::invalidBufferCount;
+        return YdspProcessResult::invalidBufferCount;
 
     for (size_t s = 0; s < eventInputs.size(); ++s)
     {
@@ -741,7 +741,7 @@ DspJitProcessResult DspJitGraph::process (yup::Span<const DspJitInputBuffer> inp
 
     pimpl->mixGraphOutputs (inputs, outputs, blockSize);
 
-    return DspJitProcessResult::ok;
+    return YdspProcessResult::ok;
 }
 
 } // namespace yup

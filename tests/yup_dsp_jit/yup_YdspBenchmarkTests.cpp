@@ -180,13 +180,13 @@ void benchmarkReport (const char* name, const BenchmarkTiming& jit, const Benchm
               << benchmarkLine ("ratio", ratio (jit.best, native.best), ratio (jit.worst, native.worst), ratio (jit.average, native.average)) << "\n";
 }
 
-void benchmarkRunGraph (DspJitGraph& graph, const std::vector<float>& input, std::vector<float>& output)
+void benchmarkRunGraph (YdspAudioGraph& graph, const std::vector<float>& input, std::vector<float>& output)
 {
     const auto hasInput = graph.getInputStreamCount() > 0;
     const auto blockSize = static_cast<size_t> (benchmarkBlockSize);
 
-    std::vector<DspJitInputBuffer> inputs;
-    std::vector<DspJitOutputBuffer> outputs;
+    std::vector<YdspInputBuffer> inputs;
+    std::vector<YdspOutputBuffer> outputs;
 
     if (hasInput)
         inputs.emplace_back (Span<const float> (input.data(), blockSize));
@@ -207,17 +207,17 @@ void benchmarkRunGraph (DspJitGraph& graph, const std::vector<float>& input, std
 }
 
 /** Runs a 1-in/2-out graph for the standard benchmark length. */
-void benchmarkRunSplitGraph (DspJitGraph& graph,
+void benchmarkRunSplitGraph (YdspAudioGraph& graph,
                              const std::vector<float>& input,
                              std::vector<float>& outputA,
                              std::vector<float>& outputB)
 {
     const auto blockSize = static_cast<size_t> (benchmarkBlockSize);
 
-    std::vector<DspJitInputBuffer> inputs { DspJitInputBuffer (Span<const float> (input.data(), blockSize)) };
-    std::vector<DspJitOutputBuffer> outputs {
-        DspJitOutputBuffer (Span<float> (outputA.data(), blockSize)),
-        DspJitOutputBuffer (Span<float> (outputB.data(), blockSize))
+    std::vector<YdspInputBuffer> inputs { YdspInputBuffer (Span<const float> (input.data(), blockSize)) };
+    std::vector<YdspOutputBuffer> outputs {
+        YdspOutputBuffer (Span<float> (outputA.data(), blockSize)),
+        YdspOutputBuffer (Span<float> (outputB.data(), blockSize))
     };
 
     for (int block = 0; block < benchmarkBlockCount; ++block)
@@ -274,7 +274,7 @@ struct BenchmarkListingStats
     stack traffic is counted too, and the line count includes labels the
     assembler never emits.
 */
-BenchmarkListingStats benchmarkAnalyzeListing (const DspJitGraph& graph)
+BenchmarkListingStats benchmarkAnalyzeListing (const YdspAudioGraph& graph)
 {
     BenchmarkListingStats stats;
 
@@ -1288,15 +1288,15 @@ void benchmarkReportContraction (const char* name,
     The MIDI only lands in the first block: the notes are then held for the rest
     of the run, so the steady state being measured is "two voices sounding".
 */
-void benchmarkRunVoiceGraph (DspJitGraph& graph,
+void benchmarkRunVoiceGraph (YdspAudioGraph& graph,
                              std::vector<float>& left,
                              std::vector<float>& right,
                              const MidiBuffer& firstBlockMidi)
 {
     const auto blockSize = static_cast<size_t> (benchmarkBlockSize);
 
-    std::vector<DspJitInputBuffer> inputs;
-    std::vector<DspJitOutputBuffer> outputs;
+    std::vector<YdspInputBuffer> inputs;
+    std::vector<YdspOutputBuffer> outputs;
 
     outputs.emplace_back (Span<float> (left.data(), blockSize));
     outputs.emplace_back (Span<float> (right.data(), blockSize));
@@ -1347,7 +1347,7 @@ protected:
         }
     }
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     std::vector<float> input;
     std::vector<float> jitOutput;
@@ -1613,6 +1613,89 @@ TEST_F (YdspBenchmarkTests, ModalBankAgainstNative)
     report ("modal bank (loop-invariant inner work)", jitTiming, nativeTiming, benchmarkModalBankLimit);
 }
 
+TEST_F (YdspBenchmarkTests, AutomaticTierAgainstBaseline)
+{
+    YdspCompileOptions automaticOptions;
+    automaticOptions.emitOptimizationReport = true;
+
+    YdspCompiler automaticCompiler;
+    auto automaticResult = automaticCompiler.compile (benchmarkModalNoSumSource, automaticOptions);
+    ASSERT_TRUE (automaticResult.wasOk()) << automaticCompiler.getDiagnostics().toString();
+
+    const auto automaticReport = automaticCompiler.getOptimizationReport();
+    auto automatic = std::move (automaticResult).getValue();
+
+    YdspCompileOptions baselineOptions;
+    baselineOptions.optimizationTier = YdspOptimizationTier::baseline;
+    baselineOptions.targetPolicy = YdspTargetPolicy::baseline;
+    baselineOptions.baselineTarget = YdspNativeTarget::scalar;
+    baselineOptions.emitOptimizationReport = true;
+
+    YdspCompiler baselineCompiler;
+    auto baselineResult = baselineCompiler.compile (benchmarkModalNoSumSource, baselineOptions);
+    ASSERT_TRUE (baselineResult.wasOk()) << baselineCompiler.getDiagnostics().toString();
+
+    const auto baselineReport = baselineCompiler.getOptimizationReport();
+    auto baseline = std::move (baselineResult).getValue();
+
+    automatic.prepare (benchmarkSampleRate, benchmarkBlockSize);
+    baseline.prepare (benchmarkSampleRate, benchmarkBlockSize);
+
+    std::vector<float> automaticOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
+    std::vector<float> baselineOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
+
+    const auto automaticTiming = benchmarkTimeRepeats ([&]
+    {
+        automatic.reset();
+        benchmarkRunGraph (automatic, input, automaticOutput);
+    });
+
+    const auto baselineTiming = benchmarkTimeRepeats ([&]
+    {
+        baseline.reset();
+        benchmarkRunGraph (baseline, input, baselineOutput);
+    });
+
+    // This variant exposes only scalar env state, so it can compare strict
+    // automatic and baseline outputs exactly while the otherwise independent
+    // mode-bank stores exercise the automatic tier's packed loop lowering.
+    EXPECT_EQ (automaticOutput, baselineOutput);
+    EXPECT_TRUE (automaticReport.vectorizationEnabled);
+    EXPECT_TRUE (automaticReport.unrollingEnabled);
+    EXPECT_EQ (YdspNativeTarget::scalar, baselineReport.selectedIsa);
+    EXPECT_EQ (1, baselineReport.vectorWidth);
+    EXPECT_FALSE (baselineReport.vectorizationEnabled);
+    EXPECT_FALSE (baselineReport.unrollingEnabled);
+
+    const auto modalKernel = [] (const YdspAudioGraph& graph)
+    {
+        for (const auto& kernel : graph.getExecutionReport().getKernels())
+            if (kernel.name == "Modal")
+                return kernel;
+
+        return YdspKernelReport {};
+    };
+
+    const auto automaticKernel = modalKernel (automatic);
+    const auto baselineKernel = modalKernel (baseline);
+
+    EXPECT_TRUE (automaticKernel.vectorized);
+    EXPECT_EQ (automaticReport.vectorWidth, automaticKernel.vectorWidth);
+    EXPECT_FALSE (baselineKernel.vectorized);
+    EXPECT_FALSE (baselineKernel.unrolled);
+
+    std::cout << "  | automatic | " << automaticReport.vectorWidth << " lanes"
+              << ", " << automaticReport.generatedCodeSize << " bytes\n"
+              << "  | baseline  | " << baselineReport.vectorWidth << " lane"
+              << ", " << baselineReport.generatedCodeSize << " bytes\n";
+
+    benchmarkReportVariants ("modal bank: automatic tier against scalar baseline",
+                             "automatic",
+                             automaticTiming,
+                             "baseline",
+                             baselineTiming);
+}
+
 // What the widened reduction costs, isolated: the same bank with and without
 // its accumulation. Read the two rows, not the ratio - the answer is the
 // difference in ns/sample, and it decides whether splitting the accumulator
@@ -1673,19 +1756,19 @@ TEST_F (YdspBenchmarkTests, ModalBankReductionCost)
     // and the no-sum one is the smaller kernel. Assert it rather than assume it:
     // the first run of this shape measured the no-sum variant as the slower of
     // the two, which cannot be true of strictly less work.
-    const auto modalKernel = [] (const DspJitGraph& graph)
+    const auto modalKernel = [] (const YdspAudioGraph& graph)
     {
         for (const auto& kernel : graph.getExecutionReport().getKernels())
             if (kernel.name == "Modal")
                 return kernel;
 
-        return DspJitKernelReport {};
+        return YdspKernelReport {};
     };
 
     const auto withSumKernel = modalKernel (withSum);
     const auto noSumKernel = modalKernel (noSum);
 
-    const auto describe = [] (const DspJitKernelReport& kernel)
+    const auto describe = [] (const YdspKernelReport& kernel)
     {
         return String (kernel.instructionCount) + " insts, vectorized "
              + (kernel.vectorized ? "yes" : "no") + " x" + String (kernel.vectorWidth)
@@ -1914,7 +1997,7 @@ TEST_F (YdspBenchmarkTests, GraphLevelDryWetAgainstAnInlinedDryWet)
     // land it does not analyze, so this reports the inline baseline and skips
     // rather than failing the suite - and starts comparing on its own once the
     // analyzer accepts the shape.
-    DspJitCompiler fannedCompiler;
+    YdspCompiler fannedCompiler;
     auto fannedResult = fannedCompiler.compile (benchmarkFannedDryWetSource);
 
     auto inlined = compilePatch (benchmarkInlineDryWetSource, compiler);

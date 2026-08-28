@@ -44,7 +44,7 @@ namespace yup::test::patches
     benchmark test suites, which were each carrying a byte-for-byte identical
     copy of this function.
 */
-inline DspJitGraph compilePatch (StringRef source, DspJitCompiler& compiler)
+inline YdspAudioGraph compilePatch (StringRef source, YdspCompiler& compiler)
 {
     auto result = compiler.compile (source);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -73,7 +73,7 @@ namespace detail
 
 struct CachedPatch
 {
-    DspJitGraph graph;
+    YdspAudioGraph graph;
     String diagnostics;
 };
 
@@ -94,7 +94,7 @@ inline CachedPatch& cachedPatchEntry (StringRef source)
     if (it != cache.end())
         return it->second;
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (source);
 
     CachedPatch entry;
@@ -117,7 +117,7 @@ inline CachedPatch& cachedPatchEntry (StringRef source)
     failure) themselves - see restoreFreshState() for the accompanying
     per-test state reset.
 */
-inline DspJitGraph& cachedPatch (StringRef source)
+inline YdspAudioGraph& cachedPatch (StringRef source)
 {
     return detail::cachedPatchEntry (source).graph;
 }
@@ -134,11 +134,11 @@ inline const String& cachedPatchDiagnostics (StringRef source)
     reset(), then every parameter is written back to its declared default.
 
     The explicit parameter write-back is required because reset() leaves
-    parameter values untouched by design (see DspJitGraph::reset()) - without
+    parameter values untouched by design (see YdspAudioGraph::reset()) - without
     it, a test that changes a parameter would leak that change into the next
     test sharing the same cached graph.
 */
-inline void restoreFreshState (DspJitGraph& graph, double sampleRate, int blockSize)
+inline void restoreFreshState (YdspAudioGraph& graph, double sampleRate, int blockSize)
 {
     graph.prepare (sampleRate, blockSize);
     graph.reset();
@@ -149,20 +149,20 @@ inline void restoreFreshState (DspJitGraph& graph, double sampleRate, int blockS
 
         switch (info.type)
         {
-            case DspJitElementType::float32:
+            case YdspElementType::float32:
                 graph.setParameter (info.name, static_cast<float> (info.defaultValue));
                 break;
 
-            case DspJitElementType::float64:
+            case YdspElementType::float64:
                 graph.setDoubleParameter (info.name, info.defaultValue);
                 break;
 
-            case DspJitElementType::int32:
-            case DspJitElementType::int64:
+            case YdspElementType::int32:
+            case YdspElementType::int64:
                 graph.setIntParameter (info.name, static_cast<int64_t> (info.defaultValue));
                 break;
 
-            case DspJitElementType::boolean:
+            case YdspElementType::boolean:
                 break;
         }
     }

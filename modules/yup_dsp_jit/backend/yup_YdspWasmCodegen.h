@@ -49,7 +49,7 @@ class YdspWasmCodegen
 public:
     /** Compiles the IR function into a wasm module; returns empty bytes and
         records a diagnostic on failure. */
-    static std::vector<uint8_t> compile (const YdspIrFunction& fn, DspJitDiagnostics& diagnostics);
+    static std::vector<uint8_t> compile (const YdspIrFunction& fn, YdspDiagnostics& diagnostics);
 
     /** Renders an emitted module in the WebAssembly text format (a readable
         debug dump of types, imports, exports, locals and instructions).

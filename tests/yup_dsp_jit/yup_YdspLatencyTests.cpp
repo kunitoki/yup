@@ -38,7 +38,7 @@ constexpr const char* latencyProcessors =
     "processor Ident { input stream in; output stream out; process { out = in; } }\n"
     "processor Diff { input stream a; input stream b; output stream out; process { out = a - b; } }\n";
 
-DspJitGraph latencyCompile (StringRef body, DspJitCompiler& compiler)
+YdspAudioGraph latencyCompile (StringRef body, YdspCompiler& compiler)
 {
     auto result = compiler.compile (String (latencyProcessors) + body);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -51,7 +51,7 @@ DspJitGraph latencyCompile (StringRef body, DspJitCompiler& compiler)
 
 String latencyCompileError (StringRef body)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (String (latencyProcessors) + body);
 
     EXPECT_FALSE (result.wasOk());
@@ -79,7 +79,7 @@ double latencyRms (const float* data, int count)
     return std::sqrt (sum / static_cast<double> (count));
 }
 
-std::vector<std::vector<float>> latencyRunBlocks (DspJitGraph& graph,
+std::vector<std::vector<float>> latencyRunBlocks (YdspAudioGraph& graph,
                                                   const std::vector<float>& input,
                                                   int blockSize,
                                                   int blockCount,
@@ -92,11 +92,11 @@ std::vector<std::vector<float>> latencyRunBlocks (DspJitGraph& graph,
     {
         const auto offset = static_cast<size_t> (block * blockSize);
 
-        std::vector<DspJitInputBuffer> inputs {
-            DspJitInputBuffer (Span<const float> (input.data() + offset, static_cast<size_t> (blockSize)))
+        std::vector<YdspInputBuffer> inputs {
+            YdspInputBuffer (Span<const float> (input.data() + offset, static_cast<size_t> (blockSize)))
         };
 
-        std::vector<DspJitOutputBuffer> outputBuffers;
+        std::vector<YdspOutputBuffer> outputBuffers;
         for (auto& channel : outputs)
             outputBuffers.emplace_back (Span<float> (channel.data(), channel.size()));
 
@@ -106,12 +106,12 @@ std::vector<std::vector<float>> latencyRunBlocks (DspJitGraph& graph,
     return outputs;
 }
 
-std::vector<std::vector<float>> latencyRunOnce (DspJitGraph& graph, const std::vector<float>& input, int numOutputs)
+std::vector<std::vector<float>> latencyRunOnce (YdspAudioGraph& graph, const std::vector<float>& input, int numOutputs)
 {
     return latencyRunBlocks (graph, input, static_cast<int> (input.size()), 1, numOutputs);
 }
 
-bool latencyGraphHasFusedKernel (const DspJitGraph& graph)
+bool latencyGraphHasFusedKernel (const YdspAudioGraph& graph)
 {
     for (const auto& kernel : graph.getExecutionReport().getKernels())
         if (kernel.name.startsWith ("fused("))
@@ -126,7 +126,7 @@ bool latencyGraphHasFusedKernel (const DspJitGraph& graph)
 
 TEST (YdspLatencyTests, CancelsAnOversampledBranchAgainstADryOne)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -160,7 +160,7 @@ TEST (YdspLatencyTests, CancelsAnOversampledBranchAgainstADryOne)
 
 TEST (YdspLatencyTests, AlignsAnImpulseAcrossTwoGraphOutputs)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -203,7 +203,7 @@ TEST (YdspLatencyTests, AlignsAnImpulseAcrossTwoGraphOutputs)
 
 TEST (YdspLatencyTests, PreservesAHaasSkewAndReportsNoLatency)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -239,7 +239,7 @@ TEST (YdspLatencyTests, PreservesAHaasSkewAndReportsNoLatency)
 
 TEST (YdspLatencyTests, ADelayEffectReportsNoLatency)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Echo {
@@ -262,7 +262,7 @@ TEST (YdspLatencyTests, ADelayEffectReportsNoLatency)
 
 TEST (YdspLatencyTests, APlainChainReportsNoLatency)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -283,7 +283,7 @@ TEST (YdspLatencyTests, APlainChainReportsNoLatency)
 
 TEST (YdspLatencyTests, ReportsADeclaredProcessorLatency)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Slow [[ latency: 64 ]] {
@@ -306,7 +306,7 @@ TEST (YdspLatencyTests, ReportsADeclaredProcessorLatency)
 
 TEST (YdspLatencyTests, DividesADeclaredLatencyByTheOversamplingFactor)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Slow [[ latency: 64 ]] {
@@ -389,7 +389,7 @@ TEST (YdspLatencyTests, RejectsANonIntegerDeclaredLatency)
 
 TEST (YdspLatencyTests, SumsDeclaredLatencyAcrossAFusedChainAndStillFuses)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Stage [[ latency: 8 ]] {
@@ -418,7 +418,7 @@ TEST (YdspLatencyTests, SumsDeclaredLatencyAcrossAFusedChainAndStillFuses)
 
 TEST (YdspLatencyTests, CompensatesEachBranchOfAThreeWaySplitToTheLongest)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -454,7 +454,7 @@ TEST (YdspLatencyTests, CompensatesEachBranchOfAThreeWaySplitToTheLongest)
 
 TEST (YdspLatencyTests, AccumulatesOversamplingAndDeclaredLatencyInSeries)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Look [[ latency: 32 ]] {
@@ -497,7 +497,7 @@ TEST (YdspLatencyTests, AccumulatesOversamplingAndDeclaredLatencyInSeries)
 
 TEST (YdspLatencyTests, UndersampledNodePassesLowFrequencyContentThrough)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -541,7 +541,7 @@ TEST (YdspLatencyTests, UndersampledNodePassesLowFrequencyContentThrough)
 
 TEST (YdspLatencyTests, UndersampledNodeSurvivesABlockSizeThatIsNotAMultipleOfTheFactor)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -574,7 +574,7 @@ TEST (YdspLatencyTests, UndersampledNodeSurvivesABlockSizeThatIsNotAMultipleOfTh
 
 TEST (YdspLatencyTests, CompensatesAnUndersampledBranchAgainstADryOne)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {
@@ -608,7 +608,7 @@ TEST (YdspLatencyTests, CompensatesAnUndersampledBranchAgainstADryOne)
 
 TEST (YdspLatencyTests, ARateChangedKernelReportsItsOwnSampleRate)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         processor Report { input stream in; output stream out; process { out = sampleRate; } }
@@ -657,7 +657,7 @@ TEST (YdspLatencyTests, RejectsAnUnsupportedUndersamplingFactor)
 
 TEST (YdspLatencyTests, LeavesAPlainFanInUncompensated)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = latencyCompile (R"YDSP(
         graph G {

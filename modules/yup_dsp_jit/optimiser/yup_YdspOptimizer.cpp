@@ -34,7 +34,7 @@ int YdspIrFunction::getInstructionCount() const noexcept
 
 //==============================================================================
 
-YdspOptimizer::YdspOptimizer (DspJitDiagnostics& diagnostics)
+YdspOptimizer::YdspOptimizer (YdspDiagnostics& diagnostics)
     : diagnostics (diagnostics)
 {
 }
@@ -133,13 +133,13 @@ std::unique_ptr<YdspIrProgram> YdspOptimizer::build (const YdspAnalyzedProgram& 
 
 //==============================================================================
 
-void YdspOptimizer::buildReport (const YdspIrProgram& program, DspJitExecutionReport& report)
+void YdspOptimizer::buildReport (const YdspIrProgram& program, YdspExecutionReport& report)
 {
     report.getKernels().clear();
 
     for (const auto& kernel : program.kernels)
     {
-        DspJitKernelReport entry;
+        YdspKernelReport entry;
         entry.name = String (kernel->name);
         entry.instructionCount = kernel->getInstructionCount();
 
@@ -193,7 +193,7 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // once, and none of the passes above knows what a lane is - constant
     // folding a `vsplat` of a literal, say, would silently drop its width.
     if (vectorizationEnabled)
-        if (YdspVectorizer::run (fn))
+        if (YdspVectorizer::run (fn, vectorWidth))
             deadCodeElimination (fn);
 
     // After the vectoriser, so a widened loop is unrolled at its widened trip
@@ -212,9 +212,9 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     if (reductionSplittingEnabled)
         splitWidenedReductionChains (fn);
 
-    // After the loop transforms, deliberately: contraction skips widened values
-    // (there is no portable packed fused form to fall back on), so running it
-    // earlier would only let it fuse work the vectoriser was about to widen and
+    // After the loop transforms, deliberately: contraction forms a widened
+    // operation only when the selected target supports packed FMA. Running it
+    // earlier would otherwise fuse work the vectoriser was about to widen and
     // then have to decline. The dead-code pass collects the multiplies it
     // orphans - without it the pass adds an instruction rather than removing
     // one.

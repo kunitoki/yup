@@ -41,7 +41,7 @@ public:
     
         @param diagnostics The diagnostics object to report errors and warnings into.
     */
-    explicit YdspSemanticAnalyzer (DspJitDiagnostics& diagnostics);
+    explicit YdspSemanticAnalyzer (YdspDiagnostics& diagnostics);
 
     /** Analyzes a parsed program; takes ownership of the AST to keep
         analysis pointers valid. Returns nullptr on any error.
@@ -134,7 +134,7 @@ private:
 
     //==============================================================================
 
-    DspJitDiagnostics& diagnostics;
+    YdspDiagnostics& diagnostics;
 
     std::unordered_map<String, YdspConstValue> programConstants;
     std::unordered_map<String, YdspSymbolInfo> symbols;

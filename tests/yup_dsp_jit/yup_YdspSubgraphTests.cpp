@@ -34,7 +34,7 @@ namespace
 constexpr const char* subgraphGainProcessor =
     "processor Gain { input stream in; output stream out; input value float g = 2.0; process { out = in * g; } }\n";
 
-DspJitGraph subgraphCompile (StringRef source, DspJitCompiler& compiler)
+YdspAudioGraph subgraphCompile (StringRef source, YdspCompiler& compiler)
 {
     auto result = compiler.compile (String (subgraphGainProcessor) + source);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -47,7 +47,7 @@ DspJitGraph subgraphCompile (StringRef source, DspJitCompiler& compiler)
 
 String subgraphCompileError (StringRef source)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (String (subgraphGainProcessor) + source);
 
     EXPECT_FALSE (result.wasOk());
@@ -55,12 +55,12 @@ String subgraphCompileError (StringRef source)
     return compiler.getDiagnostics().toString();
 }
 
-std::vector<float> subgraphRun (DspJitGraph& graph, std::vector<float> input)
+std::vector<float> subgraphRun (YdspAudioGraph& graph, std::vector<float> input)
 {
     std::vector<float> output (input.size(), 0.0f);
 
-    std::vector<DspJitInputBuffer> inputBuffers { DspJitInputBuffer (Span<const float> (input.data(), input.size())) };
-    std::vector<DspJitOutputBuffer> outputBuffers { DspJitOutputBuffer (Span<float> (output.data(), output.size())) };
+    std::vector<YdspInputBuffer> inputBuffers { YdspInputBuffer (Span<const float> (input.data(), input.size())) };
+    std::vector<YdspOutputBuffer> outputBuffers { YdspOutputBuffer (Span<float> (output.data(), output.size())) };
 
     graph.process (inputBuffers, outputBuffers, static_cast<int> (input.size()));
 
@@ -75,7 +75,7 @@ const std::vector<float> subgraphInput { 1.0f, 2.0f, -0.5f, 0.25f, 4.0f, 0.0f, -
 
 TEST (YdspSubgraphTests, InlinesASubgraphUnderTheParentNodeNamePrefix)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -108,7 +108,7 @@ TEST (YdspSubgraphTests, InlinesASubgraphUnderTheParentNodeNamePrefix)
 
 TEST (YdspSubgraphTests, SingleGraphNeedsNoMainAnnotation)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Only {
@@ -153,7 +153,7 @@ TEST (YdspSubgraphTests, RejectsTwoMainAnnotations)
 
 TEST (YdspSubgraphTests, NodeOverrideSetsTheInnerNodeDefault)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -185,7 +185,7 @@ TEST (YdspSubgraphTests, NodeOverrideSetsTheInnerNodeDefault)
 
 TEST (YdspSubgraphTests, InstantiatesTheSameSubgraphTwiceIndependently)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -219,7 +219,7 @@ TEST (YdspSubgraphTests, InstantiatesTheSameSubgraphTwiceIndependently)
 
 TEST (YdspSubgraphTests, ParentGraphParameterAliasesThroughASubgraph)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -257,7 +257,7 @@ TEST (YdspSubgraphTests, ParentGraphParameterAliasesThroughASubgraph)
 
 TEST (YdspSubgraphTests, SubgraphParameterDrivesSeveralInnerNodes)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -294,7 +294,7 @@ TEST (YdspSubgraphTests, SubgraphParameterDrivesSeveralInnerNodes)
 
 TEST (YdspSubgraphTests, MeterAliasesOutThroughASubgraph)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         processor Peak {
@@ -330,7 +330,7 @@ TEST (YdspSubgraphTests, MeterAliasesOutThroughASubgraph)
 
 TEST (YdspSubgraphTests, NestsTwoLevelsDeep)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Inner {
@@ -369,7 +369,7 @@ TEST (YdspSubgraphTests, NestsTwoLevelsDeep)
 
 TEST (YdspSubgraphTests, AccumulatesInlineDelaysAcrossTheBoundary)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -398,7 +398,7 @@ TEST (YdspSubgraphTests, AccumulatesInlineDelaysAcrossTheBoundary)
 
 TEST (YdspSubgraphTests, ResolvesAGraphLeafInTheAlgebraForm)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -507,7 +507,7 @@ TEST (YdspSubgraphTests, ImportsAGraphUnderItsAlias)
         }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getChildFile ("Patch.ydsp").getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -531,7 +531,7 @@ TEST (YdspSubgraphTests, ImportsAGraphUnderItsAlias)
 
 TEST (YdspSubgraphTests, SplicesFanOutAndFanInInsideASubgraph)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -561,7 +561,7 @@ TEST (YdspSubgraphTests, SplicesFanOutAndFanInInsideASubgraph)
 
 TEST (YdspSubgraphTests, SplicesSeveralParentSourcesIntoASubgraphInput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -592,7 +592,7 @@ TEST (YdspSubgraphTests, SplicesSeveralParentSourcesIntoASubgraphInput)
 
 TEST (YdspSubgraphTests, SplicesASubgraphOutputReadFromSeveralPlaces)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -623,7 +623,7 @@ TEST (YdspSubgraphTests, SplicesASubgraphOutputReadFromSeveralPlaces)
 
 TEST (YdspSubgraphTests, SplicesAPassThroughSubgraphFannedOnBothSides)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Wire {
@@ -664,7 +664,7 @@ TEST (YdspSubgraphTests, SplicesAPassThroughSubgraphFannedOnBothSides)
 
 TEST (YdspSubgraphTests, AccumulatesInlineDelaysAcrossAFannedBoundary)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         graph Sub {
@@ -726,7 +726,7 @@ TEST (YdspSubgraphTests, AccumulatesInlineDelaysAcrossAFannedBoundary)
 
 TEST (YdspSubgraphTests, RoutesASubgraphsOutputEventOntoAParentNodeAfterCompaction)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         processor Arp {
@@ -782,7 +782,7 @@ TEST (YdspSubgraphTests, RoutesASubgraphsOutputEventOntoAParentNodeAfterCompacti
 
 TEST (YdspSubgraphTests, FansASubgraphsOutputEventToTwoParentDestinations)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = subgraphCompile (R"YDSP(
         processor Arp {

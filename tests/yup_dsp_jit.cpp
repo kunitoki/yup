@@ -20,6 +20,7 @@
 */
 
 #include "yup_dsp_jit/yup_YdspDiagnosticsTests.cpp"
+#include "yup_dsp_jit/yup_YdspCompilerOptionsTests.cpp"
 #include "yup_dsp_jit/yup_YdspExamplePatchTests.cpp"
 #include "yup_dsp_jit/yup_YdspFusionTests.cpp"
 #include "yup_dsp_jit/yup_YdspFusedMultiplyAddTests.cpp"
@@ -35,5 +36,6 @@
 #include "yup_dsp_jit/yup_YdspWasmTests.cpp"
 #if ! YUP_WASM
 #include "yup_dsp_jit/yup_YdspAsmJitCodegenTests.cpp"
-#include "yup_dsp_jit/yup_YdspBenchmarkTests.cpp"
 #endif
+
+#include "yup_dsp_jit/yup_YdspBenchmarkTests.cpp"

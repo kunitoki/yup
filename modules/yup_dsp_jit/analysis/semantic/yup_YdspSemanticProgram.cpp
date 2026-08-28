@@ -75,7 +75,7 @@ void renameIdentifier (YdspStmt& stmt, const String& from, const String& to)
             renameIdentifier (*child, from, to);
 }
 
-void validateDiscreteValuesAnnotation (const YdspEndpointDecl& endpoint, DspJitDiagnostics& diagnostics)
+void validateDiscreteValuesAnnotation (const YdspEndpointDecl& endpoint, YdspDiagnostics& diagnostics)
 {
     const auto* annotation = findAnnotation (endpoint, "values");
 
@@ -98,7 +98,7 @@ void validateDiscreteValuesAnnotation (const YdspEndpointDecl& endpoint, DspJitD
         diagnostics.addError (endpoint.location.line, endpoint.location.column, "[[ values ]] requires a list of at least two labels, but is '{ " + *annotation + " }'");
 }
 
-void validateStreamChannelCount (const YdspEndpointDecl& endpoint, DspJitDiagnostics& diagnostics)
+void validateStreamChannelCount (const YdspEndpointDecl& endpoint, YdspDiagnostics& diagnostics)
 {
     if ((endpoint.kind != YdspEndpointKind::inputStream && endpoint.kind != YdspEndpointKind::outputStream)
         || endpoint.channelCount == 1)
@@ -110,7 +110,7 @@ void validateStreamChannelCount (const YdspEndpointDecl& endpoint, DspJitDiagnos
                               + " channels, but YDSP streams are mono-only (see spec section 8)");
 }
 
-void validateEndpointAnnotationKeys (const YdspEndpointDecl& endpoint, DspJitDiagnostics& diagnostics)
+void validateEndpointAnnotationKeys (const YdspEndpointDecl& endpoint, YdspDiagnostics& diagnostics)
 {
     static constexpr std::array<const char*, 9> allowedEndpointKeys = {
         "name", "min", "max", "values", "init", "smoothing", "unit", "step", "style"

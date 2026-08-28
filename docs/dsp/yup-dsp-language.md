@@ -81,7 +81,7 @@ declare description "A saturating delay";
 ```
 
 Allowed keys: `name`, `author`, `version`, `license`, `description`. Metadata
-is surfaced through `DspJitDiagnostics`/the compiler result and is otherwise
+is surfaced through `YdspDiagnostics`/the compiler result and is otherwise
 ignored by code generation.
 
 ### 1.2 Comments and literals
@@ -119,7 +119,7 @@ import fx.Delay as fx;
 - Paths resolve relative to the importing file: nested imports inside an
   imported file resolve against that file's folder, and the top-level
   program's imports resolve against the `importBasePath` argument of
-  `DspJitCompiler::compile()` (falling back to the process's current working
+  `YdspCompiler::compile()` (falling back to the process's current working
   directory when it is empty — see [6](#6-public-api-c)). Circular imports are
   an error, as is importing two different files that would share a namespace
   (use `as` to disambiguate); importing the same file twice is fine. The same
@@ -187,7 +187,7 @@ input value float cutoff = 1500.0 [[ name: "Cutoff", min: 60.0, max: 12000.0, sm
 ```
 
 `[[ values: { "a", "b", ... } ]]` marks a parameter as **discrete**: the list's
-labels are exposed through the public API (`DspJitParameterInfo::discreteValues`)
+labels are exposed through the public API (`YdspParameterInfo::discreteValues`)
 and sit evenly spaced over `[min, max]`, so a UI snaps the control to those
 steps and shows the matching label instead of the raw number. It is legal on any
 `input value` parameter — of a processor or of a graph — and needs at least two
@@ -219,7 +219,7 @@ connected to (`<name> -> node.event;` in a `connection { }` block - see
 `state` variables persist across blocks. They may be scalars (`float`, `int`)
 or arrays of compile-time constant size (`float buf[256]`, or `float buf[N]`
 for a program constant `N` — see [1.0](#10-program-constants)). State memory is
-allocated once in `DspJitGraph::prepare()` and lives for the lifetime of the
+allocated once in `YdspAudioGraph::prepare()` and lives for the lifetime of the
 graph, and is zeroed by `prepare()` and `reset()`.
 
 A `state` declaration may carry an initialiser:
@@ -353,12 +353,13 @@ sibling loops may reuse the same name.
 #### Automatic vectorisation
 
 On the native (asmjit) backends the optimiser widens a constant-bound loop over
-parallel `state` arrays to four float32 lanes, which is the shape an oscillator
-bank, a modal filter bank or a partial bank has:
+parallel `state` arrays to the selected float32 width: four lanes for the
+portable SSE2/ASIMD targets and eight lanes for AVX2. This is the shape an
+oscillator bank, a modal filter bank or a partial bank has:
 
 ```ydsp
 for i in 0..16 {
-    z[i] = z[i] * coeff + in;   // one packed multiply-add per four modes
+    z[i] = z[i] * coeff + in;   // one packed operation per target lane group
     sum = sum + z[i];           // one packed add, folded once after the loop
 }
 ```
@@ -367,12 +368,13 @@ This is an optimisation, not a language feature: nothing in the patch selects
 it, and a loop that does not qualify simply stays scalar. A loop is widened only
 when **all** of the following hold:
 
-- the trip count is a constant and a whole multiple of four (so there is no
-  scalar remainder to run);
+- the trip count is a constant and a whole multiple of the selected vector
+  width (so there is no scalar remainder to run);
 - the body is a single block — no `if`, no nested loop;
 - every array element is reached through the loop variable itself (`z[i]`, not
   `z[j]` or `z[wp]`), and the loop variable is used for nothing else (`float (i)`
-  disqualifies the loop, because the widened counter advances four at a time);
+  disqualifies the loop, because the widened counter advances by the selected
+  vector width);
 - the only value carried between iterations is an accumulation (`sum = sum + x`),
   one per accumulator;
 - the body touches no stream (`in[i]`), no scalar `state`, and no `'`, `@` or
@@ -383,16 +385,19 @@ when **all** of the following hold:
   loop (a shared `exp`-derived coefficient, say) has already been hoisted into
   the loop's preheader by then, so it stays scalar and is broadcast once.
 
-**An accumulation is not bit-exact.** Lane *j* accumulates elements *j*, *j+4*,
-*j+8* … and the four lanes are then added pairwise, which reassociates the sum —
-that reassociation is also what removes the serial dependency between
+**An accumulation is not bit-exact.** Lane *j* accumulates elements *j*,
+*j+W*, *j+2W* … and the lanes are then added in a target-specific tree. That
+reassociates the sum and also removes the serial dependency between
 iterations, and so most of the speedup. Element-wise work (a loop with no
 accumulator) is bit-exact.
 
-The wasm backend has no SIMD lowering and stays scalar, so a patch with an
-accumulating bank loop can differ in the last bits between a desktop build and a
-browser build. `DspJitGraph::getExecutionReport()` reports which kernels were
-widened and at what lane count (see
+The current WebAssembly backend has no SIMD lowering and stays scalar. A future
+portable f32x4 lowering must be enabled with Emscripten's `-msimd128`, preserve
+strict floating-point semantics, and treat relaxed SIMD FMA as fast math only.
+It is deliberately separate from the x86 and AArch64 host target selection.
+An accumulating bank loop can therefore differ in the last bits between a
+desktop build and a browser build. `YdspAudioGraph::getExecutionReport()` reports
+which kernels were widened and at what lane count (see
 [7](#7-realtime-safety-and-the-execution-report)).
 
 #### Automatic loop unrolling
@@ -400,7 +405,7 @@ widened and at what lane count (see
 On the same native backends, a small loop whose trip count is a compile-time
 constant is then written out in full, so the per-iteration bound compare and
 back edge disappear. This runs *after* widening, and so unrolls at the widened
-trip count — `for i in 0..16` over four lanes is four copies, not sixteen — and
+trip count - `for i in 0..16` over four lanes is four copies, not sixteen - and
 it declines a loop that is nested, runtime-bound, or large enough that the
 copies would cost more in instruction cache than the branches cost in issue
 slots. The wasm path stays rolled: a module is downloaded and parsed before it
@@ -410,7 +415,7 @@ It is bit-exact by construction: the body is copied verbatim, in order,
 including the loop variable's own increment, so the unrolled code is the
 identical instruction sequence the loop executed. Nothing about it is visible to
 a patch, and the execution report still states the worst-case iteration count
-rather than 1 — `DspJitKernelReport::unrolled` is what tells the two forms
+rather than 1 — `YdspKernelReport::unrolled` is what tells the two forms
 apart.
 
 Once the copies exist, a **widened accumulator** is halved: the odd copies add
@@ -497,11 +502,11 @@ does not return the mathematical absolute value.
 
 `fma(a,b,c)` is `a * b + c` with a **single** rounding rather than two.
 
-You rarely need to write it. The compiler contracts `a * b + c` into the same
-operation automatically wherever it can — where the multiply feeds nothing but
-the add, and can be moved down to it unchanged. Spelling `fma` out is for the
-cases the pass declines: a multiply with a second reader, or one defined in a
-different block.
+You rarely need to write it. When `YdspCompileOptions::fastMath` is enabled,
+the compiler contracts `a * b + c` into the same operation where the multiply
+feeds nothing but the add and can be moved down to it unchanged. Strict mode
+keeps the two operations separate. Spelling `fma` out is for the cases the pass
+declines: a multiply with a second reader, or one defined in a different block.
 
 Contraction is normally a *precision* liberty, and YDSP does not take those,
 because a patch has to produce identical samples on every backend it can be
@@ -523,10 +528,11 @@ Two consequences worth knowing:
   That is the price of the guarantee above, and it is paid on WebAssembly.
 
 Where it pays is a per-sample recurrence, in which the multiply and the add are
-consecutive links of the loop-carried chain and fusing them removes one — a
-one-pole `y = y * a + x * b`, or a ladder stage `z = z + g * (x - z)`. In a bank
-loop that the vectoriser widens it is not applied: there is no portable packed
-fused form to fall back on.
+consecutive links of the loop-carried chain and fusing them removes one - a
+one-pole `y = y * a + x * b`, or a ladder stage `z = z + g * (x - z)`. A widened
+bank loop can contract only on a target with packed FMA support (AArch64 ASIMD
+or AVX2 with FMA). A target without it retains the packed multiply and add,
+because the scalar exact fallback cannot preserve the vector loop shape.
 
 In v1 the arithmetic intrinsics (`sqrt`, `abs`, `min`, `max`, `floor`,
 `ceil`) lower to native instructions; `fmod` and the transcendentals (`sin`,
@@ -704,7 +710,7 @@ YDSP is a complete MIDI and MPE instrument host: seven fixed event shapes, a
 named `input event <name>;` per processor (several are allowed, like streams)
 with one `event` handler per shape, a voice-bank suffix on node
 instantiations, and voice behaviour declared as node annotations. MIDI byte
-decoding and voice allocation happen in the C++ runtime (`DspJitGraph`), not
+decoding and voice allocation happen in the C++ runtime (`YdspAudioGraph`), not
 in the language.
 
 ```ydsp
@@ -954,7 +960,7 @@ The rules:
   where it left off rather than from where it would have been. That is inherent
   to skipping the kernel.
 
-`DspJitGraph::getActiveVoiceCount ("nodeName")` reports how many voices of a
+`YdspAudioGraph::getActiveVoiceCount ("nodeName")` reports how many voices of a
 node will run on the next block, using the scheduler's own predicate (`held`
 term included) so the count can never disagree with what actually ran. It
 returns the full voice count for a processor that declares no flag, and 0 for
@@ -987,7 +993,7 @@ keeps this structural broadcast behaviour:
 - **Note-scoped** (`noteOn`, `noteOff`, `pitchBend`, `pressure`, `slide`) —
   delivered to the single voice holding that note. Expression for a note with
   no allocated voice is discarded and counted in
-  `DspJitGraph::getDroppedEventCount()`.
+  `YdspAudioGraph::getDroppedEventCount()`.
 - **Graph-scoped** (`controlChange`, `programChange`) — broadcast to every voice of
   every event-driven node that declares a handler for the shape.
 
@@ -1026,8 +1032,8 @@ inside a block is applied once per voice and every voice observes the same
 pre/post timeline — the value changes at the same sample in all of them.
 
 Automation is **stepped**, not interpolated: the host resolves a parameter
-slot once on the control thread (`DspJitGraph::getParameterSlot("node.param")`),
-then delivers `DspJitAutomationEvent { slot, sampleOffset, value }` triples
+slot once on the control thread (`YdspAudioGraph::getParameterSlot("node.param")`),
+then delivers `YdspAutomationEvent { slot, sampleOffset, value }` triples
 to the audio-thread `process()`. De-zippering is the patch's job: use
 `smooth (param, tau)` or `[[ smoothing: tau ]]` on the endpoint (see
 [2.9](#29-delay-and-smoothing-primitives)).
@@ -1352,7 +1358,7 @@ scratch buffer.
 Once paths can reconverge, misalignment matters: an oversampled branch summed
 against a dry one is comb-filtered rather than merely late. The compiler
 therefore equalises the branches automatically and reports what is left to the
-host via `DspJitGraph::getLatencySamples()`.
+host via `YdspAudioGraph::getLatencySamples()`.
 
 The rule is a principle, not a list of syntax. Latency is an **artifact** when
 the sample count is a leaked consequence of an implementation choice the author
@@ -1446,8 +1452,8 @@ sizes, negative `@` delays, and any use of recursion or dynamic allocation.
 ## 5. Realtime contract
 
 Compilation and code generation happen on the **control thread**
-(`DspJitCompiler::compile`, `DspJitGraph::prepare`). The audio callback only
-calls `DspJitGraph::process`, which:
+(`YdspCompiler::compile`, `YdspAudioGraph::prepare`). The audio callback only
+calls `YdspAudioGraph::process`, which:
 
 1. never allocates, locks, or throws;
 2. walks the compiled nodes in topological order;
@@ -1526,11 +1532,11 @@ analysed by the report in v1.
 ```cpp
 #include <yup_dsp_jit/yup_dsp_jit.h>
 
-yup::DspJitCompiler compiler;
+yup::YdspCompiler compiler;
 auto result = compiler.compile (sourceString);   // control thread
 if (result.wasOk())
 {
-    auto graph = std::move (result).getValue();  // DspJitGraph (move-only)
+    auto graph = std::move (result).getValue();  // YdspAudioGraph (move-only)
     graph.prepare (44100.0, 512);                // preallocates everything
     graph.setParameter ("sat.drive", 1.5f);          // host write between blocks
     graph.process (inputs, outputs, 512);        // audio thread, zero-alloc
@@ -1538,62 +1544,71 @@ if (result.wasOk())
 }
 ```
 
-- `DspJitCompiler::compile(source, importBasePath = {}, threadPool = nullptr)
-  -> ResultValue<DspJitGraph>` plus `DspJitDiagnostics`
+- `YdspCompiler::compile(source, importBasePath = {}, threadPool = nullptr)
+  -> ResultValue<YdspAudioGraph>` plus `YdspDiagnostics`
   (line/column/message/severity) on failure. `importBasePath` anchors the
   top-level imports (see [1.3](#13-imports)). When `threadPool` is non-null,
   reading, lexing and parsing the imported files runs in parallel on that
   pool — the merge into the program stays single-threaded, the results are
   identical to the sequential path, and the pool remains caller-owned (the
   compiler never removes jobs it did not add).
-- `DspJitGraph::prepare(sampleRate, maxBlockSize, maxEventsPerVoicePerBlock =
+- `YdspCompiler::compile(source, options, importBasePath = {}, threadPool =
+  nullptr)` selects native-code policy for one compilation. The default
+  `YdspOptimizationTier::automatic` uses the host target; use
+  `YdspTargetPolicy::baseline` with `baselineTarget` for deterministic
+  portability checks. `fastMath` defaults to false, so the compiler does not
+  contract `a * b + c`; setting it true permits scalar or packed FMA where the
+  selected target supports it. Set `emitOptimizationReport` to inspect the
+  selected ISA, lane width, rejected transforms, generated code size and
+  compile time with `YdspCompiler::getOptimizationReport()`.
+- `YdspAudioGraph::prepare(sampleRate, maxBlockSize, maxEventsPerVoicePerBlock =
   64, maxAutomationPerNodePerBlock = 32)` preallocates state, buffers and
   parameter storage; must be called before `process`. Each distinct event
   offset costs one extra kernel invocation per voice, so the per-voice
   capacity bounds the worst-case dispatch cost of a block.
-- `DspJitGraph::setLegacyMidiMode(pitchbendRangeSemitones = 2)` /
-  `DspJitGraph::setMpeZoneLayout(layout)` — choose how incoming MIDI is
+- `YdspAudioGraph::setLegacyMidiMode(pitchbendRangeSemitones = 2)` /
+  `YdspAudioGraph::setMpeZoneLayout(layout)` — choose how incoming MIDI is
   decoded (see [2.11](#211-events)). Legacy (plain MIDI) is the default; both
   are control-thread calls that discard every playing note (voice *state* is
   left alone, so pair them with `reset()` when switching mid-playback).
-- `DspJitGraph::process(yup::Span<const DspJitInputBuffer> inputs,
-  yup::Span<DspJitOutputBuffer> outputs, int numSamples)` — realtime-safe.
+- `YdspAudioGraph::process(yup::Span<const YdspInputBuffer> inputs,
+  yup::Span<YdspOutputBuffer> outputs, int numSamples)` — realtime-safe.
   Stream buffers are typed spans (one per declared stream): the active
   variant alternative carries the element type, so a buffer of the wrong type
   cannot be silently reinterpreted — mismatches are ignored and the call
-  reports the problem through the returned `DspJitProcessResult` value
+  reports the problem through the returned `YdspProcessResult` value
   (never asserted, so hosts may probe freely).
-- `DspJitGraph::process(inputs, outputs, numSamples, const yup::MidiBuffer*,
-  const DspJitAutomationEvent*, int)` — the same call plus MIDI events and
+- `YdspAudioGraph::process(inputs, outputs, numSamples, const yup::MidiBuffer*,
+  const YdspAutomationEvent*, int)` — the same call plus MIDI events and
   sample-accurate parameter automation (see [2.12](#212-sample-accurate-dispatch-and-automation)).
   Passing null/empty MIDI and automation is exactly equivalent to the
   3-argument overload and takes the identical fast path.
-- `DspJitGraph::process(inputs, outputs, numSamples,
+- `YdspAudioGraph::process(inputs, outputs, numSamples,
   yup::Span<const yup::MidiBuffer*> eventInputs, automation, numAutomationEvents)` —
   the same call with one `MidiBuffer` per graph event input, in declaration
   order. Each input is decoded and routed independently to whichever nodes
   the patch explicitly wired it to (`connection { }`); a shorter span or a
   null entry means no events on that input. The single-buffer overload above
   is equivalent to feeding the patch's first event input.
-- `DspJitGraph::getEventInputCount()` / `getEventInputName(index)` — enumerate
+- `YdspAudioGraph::getEventInputCount()` / `getEventInputName(index)` — enumerate
   the graph's event inputs (declaration order), so a host can build the
   `eventInputs` span for the overload above.
-- `DspJitGraph::getParameterSlot("node.param")` — resolves a parameter's integer
-  slot once on the control thread for use in `DspJitAutomationEvent`;
+- `YdspAudioGraph::getParameterSlot("node.param")` — resolves a parameter's integer
+  slot once on the control thread for use in `YdspAutomationEvent`;
   returns -1 for unknown names.
-- `DspJitGraph::getParameterCount()` / `DspJitGraph::getParameterInfo(slot)` — build a
-  host UI from the patch: one `DspJitParameterInfo` per parameter (in slot
+- `YdspAudioGraph::getParameterCount()` / `YdspAudioGraph::getParameterInfo(slot)` — build a
+  host UI from the patch: one `YdspParameterInfo` per parameter (in slot
   order), carrying the qualified name, the annotation style `[[ name: ... ]]`
   display name, the type, the declared default value and the `[[ min: ... ]]`
   / `[[ max: ... ]]` bounds (falling back to `0`/`1` when unannotated).
-- `DspJitGraph::getInputStreamCount()` / `getOutputStreamCount()` — stream
+- `YdspAudioGraph::getInputStreamCount()` / `getOutputStreamCount()` — stream
   counts (0 for a MIDI-only synth patch).
-- `DspJitGraph::getDroppedEventCount()` — how many MIDI/automation events were
+- `YdspAudioGraph::getDroppedEventCount()` — how many MIDI/automation events were
   dropped because a fixed-capacity per-block queue overflowed (never
   allocated on the audio thread).
-- `DspJitGraph::getParameter(name)` / `setParameter(name, value)` — host-side,
+- `YdspAudioGraph::getParameter(name)` / `setParameter(name, value)` — host-side,
   atomic; `getOutputValue(name)` for meters.
-- `DspJitGraph::getExecutionReport()` — the optimiser's worst-case report
+- `YdspAudioGraph::getExecutionReport()` — the optimiser's worst-case report
   (see below).
 
 ## 7. Realtime safety and the execution report
@@ -1611,7 +1626,7 @@ After optimisation the compiler emits, per kernel:
 - a boolean "proven realtime-safe" that is `true` only if every loop bound is
   statically known and no realtime-unsafe construct remains.
 
-`DspJitGraph::getExecutionReport()` exposes this data so a host can verify,
+`YdspAudioGraph::getExecutionReport()` exposes this data so a host can verify,
 before starting audio, that the patch fits its CPU budget.
 
 ## 8. Known limitations (v1)
@@ -1659,7 +1674,7 @@ before starting audio, that the patch fits its CPU budget.
   intrinsics are imported from `env` backed by `Math.*` with C-exact
   semantics for `round`/`copysign`/`fmod`. Kernels are instantiated per JS
   realm (the main thread and the audio-worklet thread each get their own
-  copy); `DspJitGraph::prewarmKernels()` pre-registers them in the
+  copy); `YdspAudioGraph::prewarmKernels()` pre-registers them in the
   calling realm to avoid a one-time cost on the first audio block.
 - The recursion operator `~` is parsed and arity-checked but rejected (needs
   cross-node fusion, planned).

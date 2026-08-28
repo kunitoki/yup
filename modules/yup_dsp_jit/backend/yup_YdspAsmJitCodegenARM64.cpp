@@ -29,7 +29,7 @@ namespace
 
 // Adds an arbitrary 32-bit immediate to a pointer register (used for array
 // base offsets on AArch64, whose add-immediate is limited to 12 bits).
-void addGpImm (YdspCompiler& cc, const YdspGp& dst, const YdspGp& src, int32_t imm)
+void addGpImm (YdspAsm& cc, const YdspGp& dst, const YdspGp& src, int32_t imm)
 {
     if (imm == 0)
     {
@@ -302,6 +302,13 @@ void YdspAsmJitCodegenARM64::emitFusedMultiplyAdd (const YdspFp& dst, const Ydsp
     cc->fmadd (dst, a, b, c);
 }
 
+void YdspAsmJitCodegenARM64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    // FMLA is dst += a * b, so seed the accumulator from c.
+    moveVector (dst, c);
+    cc->fmla (dst.s4(), a.s4(), b.s4());
+}
+
 void YdspAsmJitCodegenARM64::floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type)
 {
     (void) type;
@@ -532,8 +539,7 @@ void YdspAsmJitCodegenARM64::emitSelectIntOnFlags (YdspCond cond, const YdspGp& 
 
 void YdspAsmJitCodegenARM64::emitWrapInt (const YdspGp& dst, const YdspGp& value, const YdspGp& bound)
 {
-    YdspGp zero = value.is_gp64() ? cc->new_gp64 ("zero") : cc->new_gp32 ("zero");
-    cc->mov (zero, asmjit::Imm (0));
+    const auto zero = value.is_gp64() ? asmjit::a64::xzr : asmjit::a64::wzr;
 
     cc->cmp (value, bound);
     cc->csel (dst, value, zero, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));

@@ -50,7 +50,7 @@ class YdspOptimizer
 {
 public:
     /** Constructs an optimizer reporting into the given diagnostics. */
-    explicit YdspOptimizer (DspJitDiagnostics& diagnostics);
+    explicit YdspOptimizer (YdspDiagnostics& diagnostics);
 
     /** Builds and optimises the IR for the given analyzed program. */
     std::unique_ptr<YdspIrProgram> build (const YdspAnalyzedProgram& program);
@@ -64,6 +64,13 @@ public:
         @see YdspVectorizer
     */
     void setVectorizationEnabled (bool shouldVectorize) noexcept { vectorizationEnabled = shouldVectorize; }
+
+    /** Sets the float32 lane count used by the vectoriser when enabled.
+
+        Native callers use 4 for SSE2/ASIMD and 8 for AVX2. Invalid widths
+        leave the function scalar rather than producing malformed IR.
+    */
+    void setVectorWidth (int width) noexcept { vectorWidth = width; }
 
     /** Enables the constant-trip-count loop unroller (off by default).
 
@@ -101,8 +108,9 @@ public:
         makes both disagree with the unfused build, which is why it is opt-in
         rather than the default.
 
-        Runs after the vectoriser and the unroller and skips anything widened,
-        so a bank loop is unaffected: the shapes this exists for are the scalar
+        Runs after the vectoriser and the unroller. It forms a widened FMA only
+        when setTargetHasPackedFusedMultiplyAdd() permits it; otherwise it
+        leaves a bank loop unchanged. The scalar shapes this exists for are
         per-sample recurrences, where it removes a link from the critical path
         rather than an instruction from a throughput-bound body.
 
@@ -131,8 +139,16 @@ public:
     */
     void setTargetHasFusedMultiplyAdd (bool isSupported) noexcept { targetHasFusedMultiplyAdd = isSupported; }
 
+    /** Tells the optimiser whether this target can lower packed float32 FMA.
+
+        The contraction pass only forms a widened fmaF when this is true;
+        lowerFusedMultiplyAdd() has an exact scalar fallback but deliberately
+        does not scalarise a vector operation.
+    */
+    void setTargetHasPackedFusedMultiplyAdd (bool isSupported) noexcept { targetHasPackedFusedMultiplyAdd = isSupported; }
+
     /** Populates the execution report from an optimised IR program. */
-    static void buildReport (const YdspIrProgram& program, DspJitExecutionReport& report);
+    static void buildReport (const YdspIrProgram& program, YdspExecutionReport& report);
 
     /** Runs the constant-folding pass over the given function.
 
@@ -253,7 +269,8 @@ public:
 
         Only where the multiply is read by nothing but the add, is defined
         exactly once, and can be moved down to the add's position without any
-        of its operands having changed in between. Scalar float32 only.
+        of its operands having changed in between. Handles scalar float32 and
+        packed float32 when the target has a packed FMA instruction.
 
         When both of the add's operands are such multiplies, only one can be
         fused, and which one is a latency decision - see the comment at the
@@ -277,12 +294,14 @@ public:
 private:
     void runPasses (YdspIrFunction& fn);
 
-    DspJitDiagnostics& diagnostics;
+    YdspDiagnostics& diagnostics;
     bool vectorizationEnabled = false;
+    int vectorWidth = YdspVectorizer::vectorWidth;
     bool unrollingEnabled = false;
     bool reductionSplittingEnabled = false;
     bool contractionEnabled = false;
     bool targetHasFusedMultiplyAdd = true;
+    bool targetHasPackedFusedMultiplyAdd = false;
 };
 
 } // namespace yup

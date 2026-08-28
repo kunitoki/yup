@@ -48,7 +48,7 @@ struct CompiledKernel
     String asmName;
 };
 
-CompiledKernel compileKernel (StringRef source, const char* kernelName, DspJitDiagnostics& diagnostics)
+CompiledKernel compileKernel (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics)
 {
     // Lexer
     YdspLexer lexer (source, diagnostics);
@@ -238,7 +238,7 @@ void dumpAsmOnFailureCodegen (const CompiledKernel& kernel)
 
 TEST (YdspAsmJitCodegenTests, CompilesPassThroughAndProducesCorrectOutput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -264,7 +264,7 @@ TEST (YdspAsmJitCodegenTests, CompilesPassThroughAndProducesCorrectOutput)
 
 TEST (YdspAsmJitCodegenTests, CompilesGainKernel)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Gain { input stream in; output stream out; input value float g = 2; process { out = in * g; } }
@@ -287,7 +287,7 @@ TEST (YdspAsmJitCodegenTests, CompilesGainKernel)
 
 TEST (YdspAsmJitCodegenTests, CompilesTanhClipper)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Clip { input stream in; output stream out; process { out = tanh (in); } }
@@ -314,7 +314,7 @@ TEST (YdspAsmJitCodegenTests, CompilesTanhClipper)
 
 TEST (YdspAsmJitCodegenTests, CompilesTwoInputTanhClipper)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor SidechainClip {
@@ -362,7 +362,7 @@ TEST (YdspAsmJitCodegenTests, CompilesTwoInputTanhClipper)
 
 TEST (YdspAsmJitCodegenTests, CompilesSampleModeOnePoleWithPrev)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor OnePole {
@@ -395,7 +395,7 @@ TEST (YdspAsmJitCodegenTests, CompilesSampleModeOnePoleWithPrev)
 
 TEST (YdspAsmJitCodegenTests, StatePersistsAcrossBlocks)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor OnePole {
@@ -460,7 +460,7 @@ TEST (YdspAsmJitCodegenTests, StatePersistsAcrossBlocks)
 
 TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor BlockGain {
@@ -490,7 +490,7 @@ TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithLoop)
 
 TEST (YdspAsmJitCodegenTests, CompilesFixedDelay)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Delay3 { input stream in; output stream out; process { out = in @ 3; } }
@@ -516,7 +516,7 @@ TEST (YdspAsmJitCodegenTests, CompilesFixedDelay)
 
 TEST (YdspAsmJitCodegenTests, CompilesMathIntrinsics)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Maths {
@@ -547,7 +547,7 @@ TEST (YdspAsmJitCodegenTests, CompilesMathIntrinsics)
 
 TEST (YdspAsmJitCodegenTests, CompilesSignIntrinsic)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Sign { input stream in; output stream out; process { out = sign (in); } }
@@ -578,7 +578,7 @@ TEST (YdspAsmJitCodegenTests, CompilesIntegerMinMaxClampAbsSign)
     // min/max/clamp/abs/sign have an integer overload (minI/maxI/clampI/
     // absI/signI) alongside the existing float intrinsics: an int-typed
     // argument must select it, not silently fall back to the float form.
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor IntMath {
@@ -633,7 +633,7 @@ TEST (YdspAsmJitCodegenTests, IntegerAbsOfIntMinReturnsIntMin)
     // would not reproduce the hardware's 32-bit wraparound the way the real
     // subI/absI codegen below does. This exercises that codegen, not the
     // folder.
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor AbsIntMin {
@@ -665,7 +665,7 @@ TEST (YdspAsmJitCodegenTests, IntegerAbsOfIntMinReturnsIntMin)
 
 TEST (YdspAsmJitCodegenTests, CompilesTernaryExpression)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Gate {
@@ -696,7 +696,7 @@ TEST (YdspAsmJitCodegenTests, CompilesTernaryExpression)
 
 TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithStateArray)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor DelayLine {
@@ -732,7 +732,7 @@ TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithStateArray)
 
 TEST (YdspAsmJitCodegenTests, StateSizeIsPositiveForKernelWithState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernelNoState = compileKernel (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -768,7 +768,7 @@ TEST (YdspAsmJitCodegenTests, StateSizeIsPositiveForKernelWithState)
 
 TEST (YdspAsmJitCodegenTests, CompilesStereoProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor StereoGain {
@@ -818,7 +818,7 @@ TEST (YdspAsmJitCodegenTests, CompilesStereoProcessor)
 
 TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithConstantLoopBound)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Taps {
@@ -852,7 +852,7 @@ TEST (YdspAsmJitCodegenTests, CompilesBlockModeWithConstantLoopBound)
 
 TEST (YdspAsmJitCodegenTests, CompilesLetBindings)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor WithLet {
@@ -887,7 +887,7 @@ TEST (YdspAsmJitCodegenTests, CompilesLetBindings)
 
 TEST (YdspAsmJitCodegenTests, CompilesComparisonOperators)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Compare {
@@ -945,7 +945,7 @@ TEST (YdspAsmJitCodegenTests, CompilesComparisonOperators)
 
 TEST (YdspAsmJitCodegenTests, CompilesLogicalOperators)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Logic {
@@ -981,7 +981,7 @@ TEST (YdspAsmJitCodegenTests, CompilesLogicalOperators)
 
 TEST (YdspAsmJitCodegenTests, CompilesFmodIntrinsic)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor FmodTest { input stream in; output stream out; process { out = fmod (in, 2.0); } }
@@ -1011,7 +1011,7 @@ TEST (YdspAsmJitCodegenTests, CompilesFmodIntrinsic)
 
 TEST (YdspAsmJitCodegenTests, IntDivModByRuntimeZeroDivisorReturnsZero)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The divisor is derived from the input stream (int (in)) rather than a
     // literal, so the optimizer cannot constant-fold the div/mod away - this
@@ -1052,7 +1052,7 @@ TEST (YdspAsmJitCodegenTests, IntDivModByRuntimeZeroDivisorReturnsZero)
 
 TEST (YdspAsmJitCodegenTests, CompilesFloat64StreamsAndMath)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor F64Proc {
@@ -1111,7 +1111,7 @@ TEST (YdspAsmJitCodegenTests, CompilesFloat64StreamsAndMath)
 
 TEST (YdspAsmJitCodegenTests, CompilesInt64ArithmeticAndConversion)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor I64Proc {
@@ -1144,7 +1144,7 @@ TEST (YdspAsmJitCodegenTests, CompilesInt64ArithmeticAndConversion)
 
 TEST (YdspAsmJitCodegenTests, CompilesConversionRoundTripThroughFloat64)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor Conv {
@@ -1178,7 +1178,7 @@ TEST (YdspAsmJitCodegenTests, CompilesConversionRoundTripThroughFloat64)
 
 TEST (YdspAsmJitCodegenTests, EmitEventFromProcessCommitsOneEntryPerSample)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto kernel = compileKernel (R"YDSP(
         processor P {
@@ -1255,7 +1255,7 @@ struct CompiledEventHandler
     int numParams = 0;
 };
 
-CompiledEventHandler compileEventHandlerFn (StringRef source, const char* handlerName, DspJitDiagnostics& diagnostics)
+CompiledEventHandler compileEventHandlerFn (StringRef source, const char* handlerName, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -1316,7 +1316,7 @@ YdspEventContext makeEventContext (const CompiledEventHandler& handler,
 
 TEST (YdspAsmJitCodegenTests, CompilesEventHandlerWritingState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {
@@ -1355,7 +1355,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerWritingState)
 
 TEST (YdspAsmJitCodegenTests, CompilesEventHandlerReadingParam)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {
@@ -1391,7 +1391,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerReadingParam)
 
 TEST (YdspAsmJitCodegenTests, CompilesEventHandlerCallingFunc)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {
@@ -1429,7 +1429,7 @@ TEST (YdspAsmJitCodegenTests, CompilesEventHandlerCallingFunc)
 
 TEST (YdspAsmJitCodegenTests, CompilesNoteOffHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {
@@ -1552,7 +1552,7 @@ TEST (YdspAsmJitCodegenTests, EachEventShapeReadsItsOwnPayloadFields)
 
     for (const auto& testCase : cases)
     {
-        DspJitDiagnostics diagnostics;
+        YdspDiagnostics diagnostics;
 
         auto handler = compileEventHandlerFn (everyEventShapeSource, testCase.handlerName, diagnostics);
 
@@ -1576,7 +1576,7 @@ TEST (YdspAsmJitCodegenTests, IsLegatoReadsBitZeroOfTheEventFlags)
 {
     for (const bool legato : { false, true })
     {
-        DspJitDiagnostics diagnostics;
+        YdspDiagnostics diagnostics;
 
         auto handler = compileEventHandlerFn (everyEventShapeSource, "Voice.noteOn", diagnostics);
 
@@ -1604,7 +1604,7 @@ TEST (YdspAsmJitCodegenTests, IsLegatoReadsBitZeroOfTheEventFlags)
 // voice's noteOn uses to seed its oscillator bank.
 TEST (YdspAsmJitCodegenTests, CompilesConstantBoundLoopInsideAnEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         let partials = 4;
@@ -1661,7 +1661,7 @@ TEST (YdspAsmJitCodegenTests, CompilesConstantBoundLoopInsideAnEventHandler)
 
 TEST (YdspAsmJitCodegenTests, EmitEventCommitsAnOutputEventEntry)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {
@@ -1713,7 +1713,7 @@ TEST (YdspAsmJitCodegenTests, EmitEventCommitsAnOutputEventEntry)
 
 TEST (YdspAsmJitCodegenTests, EmitEventDropsWhenTheQueueIsAtCapacity)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto handler = compileEventHandlerFn (R"YDSP(
         processor Voice {

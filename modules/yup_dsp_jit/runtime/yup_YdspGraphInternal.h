@@ -34,23 +34,23 @@ int elementSize (YdspValueType type) noexcept
     return (type == YdspValueType::float64Type || type == YdspValueType::int64Type) ? 8 : 4;
 }
 
-DspJitElementType toElementType (YdspValueType type) noexcept
+YdspElementType toElementType (YdspValueType type) noexcept
 {
     switch (type)
     {
         case YdspValueType::float32Type:
-            return DspJitElementType::float32;
+            return YdspElementType::float32;
         case YdspValueType::float64Type:
-            return DspJitElementType::float64;
+            return YdspElementType::float64;
         case YdspValueType::int32Type:
-            return DspJitElementType::int32;
+            return YdspElementType::int32;
         case YdspValueType::int64Type:
-            return DspJitElementType::int64;
+            return YdspElementType::int64;
         case YdspValueType::boolType:
-            return DspJitElementType::boolean;
+            return YdspElementType::boolean;
     }
 
-    return DspJitElementType::float32;
+    return YdspElementType::float32;
 }
 
 void writeConstValue (uint8_t* dst, const YdspConstValue& value)
@@ -139,32 +139,32 @@ double constDefaultAsDouble (const YdspConstValue& value)
 }
 
 //==============================================================================
-struct DspJitBufferView
+struct YdspBufferView
 {
     const void* data = nullptr;
-    DspJitElementType type = DspJitElementType::float32;
+    YdspElementType type = YdspElementType::float32;
     size_t numElements = 0;
 };
 
 template <typename BufferVariant>
-DspJitBufferView getStreamBufferView (const BufferVariant& buffer)
+YdspBufferView getStreamBufferView (const BufferVariant& buffer)
 {
-    return std::visit ([] (const auto& span) -> DspJitBufferView
+    return std::visit ([] (const auto& span) -> YdspBufferView
     {
         using Element = std::remove_cv_t<std::remove_pointer_t<decltype (span.data())>>;
 
-        DspJitBufferView view;
+        YdspBufferView view;
         view.data = span.data();
         view.numElements = span.size();
 
         if constexpr (std::is_same_v<Element, float>)
-            view.type = DspJitElementType::float32;
+            view.type = YdspElementType::float32;
         else if constexpr (std::is_same_v<Element, double>)
-            view.type = DspJitElementType::float64;
+            view.type = YdspElementType::float64;
         else if constexpr (std::is_same_v<Element, int32_t>)
-            view.type = DspJitElementType::int32;
+            view.type = YdspElementType::int32;
         else
-            view.type = DspJitElementType::int64;
+            view.type = YdspElementType::int64;
 
         return view;
     },
@@ -189,7 +189,7 @@ struct YdspEventPayload
 
 //==============================================================================
 
-struct DspJitGraph::Pimpl
+struct YdspAudioGraph::Pimpl
 {
     Pimpl();
     ~Pimpl();
@@ -432,8 +432,8 @@ struct DspJitGraph::Pimpl
     asmjit::JitRuntime runtime;
 #endif
 
-    DspJitExecutionReport report;
-    DspJitDiagnostics diagnostics;
+    YdspExecutionReport report;
+    YdspDiagnostics diagnostics;
 
     std::vector<Node> nodes;
     std::vector<int> topoOrder;
@@ -445,7 +445,7 @@ struct DspJitGraph::Pimpl
 
     std::vector<String> meterSlotNames;
 
-    std::vector<DspJitParameterInfo> paramInfos;
+    std::vector<YdspParameterInfo> paramInfos;
     std::vector<int> paramOffsets;
     std::vector<YdspValueType> paramSlotTypes;
     std::vector<YdspValueType> meterSlotTypes;
@@ -581,7 +581,7 @@ struct DspJitGraph::Pimpl
         return delayed;
     }
 
-    const void* connectionSourceData (const StreamConnection& connection, Span<const DspJitInputBuffer> inputs) const noexcept
+    const void* connectionSourceData (const StreamConnection& connection, Span<const YdspInputBuffer> inputs) const noexcept
     {
         if (connection.srcNode < 0)
             return detail::getStreamBufferView (inputs[static_cast<size_t> (connection.srcIndex)]).data;
@@ -589,9 +589,9 @@ struct DspJitGraph::Pimpl
         return nodes[static_cast<size_t> (connection.srcNode)].runtimeOutputs[static_cast<size_t> (connection.srcIndex)];
     }
 
-    void resolveNodeInputs (Node& node, Span<const DspJitInputBuffer> inputs, int blockSize);
+    void resolveNodeInputs (Node& node, Span<const YdspInputBuffer> inputs, int blockSize);
 
-    void mixGraphOutputs (Span<const DspJitInputBuffer> inputs, Span<DspJitOutputBuffer> outputs, int blockSize);
+    void mixGraphOutputs (Span<const YdspInputBuffer> inputs, Span<YdspOutputBuffer> outputs, int blockSize);
 
     //==========================================================================
     // Sample-accurate sub-block execution.

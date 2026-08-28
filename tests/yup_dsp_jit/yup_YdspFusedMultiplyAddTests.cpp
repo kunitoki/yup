@@ -45,14 +45,15 @@ namespace
 // answer as the instruction rather than merely to be well-formed.
 
 /** Builds IR the way the native compile path does, with the passes a test asks
-    for. Deliberately drives YdspOptimizer rather than DspJitCompiler: the
-    contraction switch is not part of the compiler's surface (it belongs to the
-    compilation options being added to compile()), and every other pass here is
-    already tested this way. */
+    for. Deliberately drives YdspOptimizer to exercise individual lowering
+    capabilities; YdspCompileOptions supplies those capabilities in normal
+    compilation. */
 std::unique_ptr<YdspIrProgram> fmaBuildIr (StringRef source,
-                                           DspJitDiagnostics& diagnostics,
+                                           YdspDiagnostics& diagnostics,
                                            bool contract,
-                                           bool targetHasFma = true)
+                                           bool targetHasFma = true,
+                                           bool targetHasPackedFma = false,
+                                           bool vectorize = false)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -70,6 +71,8 @@ std::unique_ptr<YdspIrProgram> fmaBuildIr (StringRef source,
     YdspOptimizer optimizer (diagnostics);
     optimizer.setContractionEnabled (contract);
     optimizer.setTargetHasFusedMultiplyAdd (targetHasFma);
+    optimizer.setTargetHasPackedFusedMultiplyAdd (targetHasPackedFma);
+    optimizer.setVectorizationEnabled (vectorize);
 
     return optimizer.build (*analyzed);
 }
@@ -102,7 +105,7 @@ const YdspIrFunction* fmaKernel (const YdspIrProgram& ir)
 /** Compiles and runs a patch over one block, returning the output. */
 std::vector<float> fmaRun (StringRef source, const std::vector<float>& input)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (source);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -115,8 +118,8 @@ std::vector<float> fmaRun (StringRef source, const std::vector<float>& input)
 
     std::vector<float> output (input.size(), 0.0f);
 
-    std::vector<DspJitInputBuffer> inputs { DspJitInputBuffer (Span<const float> (input.data(), input.size())) };
-    std::vector<DspJitOutputBuffer> outputs { DspJitOutputBuffer (Span<float> (output.data(), output.size())) };
+    std::vector<YdspInputBuffer> inputs { YdspInputBuffer (Span<const float> (input.data(), input.size())) };
+    std::vector<YdspOutputBuffer> outputs { YdspOutputBuffer (Span<float> (output.data(), output.size())) };
 
     graph.process (inputs, outputs, static_cast<int> (input.size()));
 
@@ -148,13 +151,29 @@ constexpr auto fmaIntrinsicSource = R"(
     }
 )";
 
+constexpr auto fmaVectorBankSource = R"(
+    processor P {
+        input stream in;
+        output stream out;
+        state float z[16];
+        process {
+            float sum = 0.0;
+            for i in 0..16 {
+                z[i] = z[i] * 0.9 + in;
+                sum = sum + z[i];
+            }
+            out = sum;
+        }
+    }
+)";
+
 } // namespace
 
 //==============================================================================
 
 TEST (YdspFusedMultiplyAddTests, LowersTheIntrinsicToASingleOp)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     const auto ir = fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -177,7 +196,7 @@ TEST (YdspFusedMultiplyAddTests, LowersTheIntrinsicToASingleOp)
 
 TEST (YdspFusedMultiplyAddTests, RejectsFloat64Operands)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -198,7 +217,7 @@ TEST (YdspFusedMultiplyAddTests, RejectsFloat64Operands)
 
 TEST (YdspFusedMultiplyAddTests, ExpandsToFloat64WhenTheTargetHasNoInstruction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     const auto ir = fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -226,7 +245,7 @@ TEST (YdspFusedMultiplyAddTests, ExpandsToFloat64WhenTheTargetHasNoInstruction)
 
 TEST (YdspFusedMultiplyAddTests, DoesNotExpandWhenTheTargetHasTheInstruction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     const auto ir = fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -252,7 +271,7 @@ TEST (YdspFusedMultiplyAddTests, DoesNotExpandWhenTheTargetHasTheInstruction)
 
 TEST (YdspFusedMultiplyAddTests, ContractionDoesNothingUnlessEnabled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     const auto ir = fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -274,7 +293,7 @@ TEST (YdspFusedMultiplyAddTests, ContractionDoesNothingUnlessEnabled)
 
 TEST (YdspFusedMultiplyAddTests, ContractionFusesAMultiplyFeedingAnAdd)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     const auto ir = fmaBuildIr (fmaPatch (R"(
         processor P {
@@ -306,7 +325,7 @@ TEST (YdspFusedMultiplyAddTests, ContractionFusesAMultiplyFeedingAnAdd)
 
 TEST (YdspFusedMultiplyAddTests, ContractionFusesTheMultiplyOnTheRecurrence)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // The wave folder's one-pole, and the case the choice exists for: *both*
     // operands of the add are fusable multiplies, only one can be fused, and
@@ -366,7 +385,7 @@ TEST (YdspFusedMultiplyAddTests, ContractionFusesTheMultiplyOnTheRecurrence)
 
 TEST (YdspFusedMultiplyAddTests, ContractionLeavesAMultiplyWithASecondReader)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     // `scaled` is read by the add *and* by the output, so folding the multiply
     // into the add would delete a value something else still needs.
@@ -395,44 +414,14 @@ TEST (YdspFusedMultiplyAddTests, ContractionLeavesAMultiplyWithASecondReader)
     EXPECT_EQ (1, fmaCountInst (*kernel, YdspIrOp::mulF));
 }
 
-TEST (YdspFusedMultiplyAddTests, ContractionDoesNotWidenABankLoop)
+TEST (YdspFusedMultiplyAddTests, ContractionLeavesABankLoopUnfusedWithoutPackedFma)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
-    // Contraction runs after the vectoriser and skips anything widened, so a
-    // bank keeps its packed multiply and add rather than acquiring a scalar
-    // fused op that no packed form backs.
-    YdspLexer lexer (fmaPatch (R"(
-        processor P {
-            input stream in;
-            output stream out;
-            state float z[16];
-            process {
-                float sum = 0.0;
-                for i in 0..16 {
-                    z[i] = z[i] * 0.9 + in;
-                    sum = sum + z[i];
-                }
-                out = sum;
-            }
-        }
-    )"),
-                     diagnostics);
-
-    auto tokens = lexer.tokenize();
-    YdspParser parser (std::move (tokens), diagnostics);
-    auto program = parser.parseProgram();
-    ASSERT_NE (nullptr, program);
-
-    YdspSemanticAnalyzer analyzer (diagnostics);
-    auto analyzed = analyzer.analyze (std::move (program));
-    ASSERT_NE (nullptr, analyzed);
-
-    YdspOptimizer optimizer (diagnostics);
-    optimizer.setVectorizationEnabled (true);
-    optimizer.setContractionEnabled (true);
-
-    const auto ir = optimizer.build (*analyzed);
+    // A non-FMA vector target retains packed multiply then add. It must not
+    // form fmaF and rely on the scalar exact fallback, which cannot lower a
+    // whole vector without changing the loop shape.
+    const auto ir = fmaBuildIr (fmaPatch (fmaVectorBankSource), diagnostics, true, true, false, true);
     ASSERT_NE (nullptr, ir);
 
     const auto* kernel = fmaKernel (*ir);
@@ -440,6 +429,21 @@ TEST (YdspFusedMultiplyAddTests, ContractionDoesNotWidenABankLoop)
     ASSERT_TRUE (kernel->vectorized);
 
     EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::fmaF));
+}
+
+TEST (YdspFusedMultiplyAddTests, ContractionFormsPackedFmaWhenTargetSupportsIt)
+{
+    YdspDiagnostics diagnostics;
+
+    const auto ir = fmaBuildIr (fmaPatch (fmaVectorBankSource), diagnostics, true, true, true, true);
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto* kernel = fmaKernel (*ir);
+    ASSERT_NE (nullptr, kernel);
+    ASSERT_TRUE (kernel->vectorized);
+
+    EXPECT_EQ (1, fmaCountInst (*kernel, YdspIrOp::fmaF));
 }
 
 //==============================================================================
@@ -475,8 +479,8 @@ TEST (YdspFusedMultiplyAddTests, TheExpansionMatchesTheInstruction)
 {
     // Both lowerings of one source. The portability property the whole design
     // rests on is that these are the same value, so the comparison is exact.
-    DspJitDiagnostics withInstruction;
-    DspJitDiagnostics withExpansion;
+    YdspDiagnostics withInstruction;
+    YdspDiagnostics withExpansion;
 
     const auto source = fmaPatch (fmaIntrinsicSource);
 

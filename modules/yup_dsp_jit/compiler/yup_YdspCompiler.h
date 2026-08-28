@@ -26,7 +26,7 @@ namespace yup
 
 //==============================================================================
 /** Severity of a YDSP compilation diagnostic. */
-enum class DspJitSeverity
+enum class YdspSeverity
 {
     error,
     warning,
@@ -35,9 +35,9 @@ enum class DspJitSeverity
 
 //==============================================================================
 /** A single YDSP compilation diagnostic (message + source location). */
-struct DspJitDiagnostic
+struct YdspDiagnostic
 {
-    DspJitSeverity severity = DspJitSeverity::error;
+    YdspSeverity severity = YdspSeverity::error;
     int line = 0;
     int column = 0;
     String message;
@@ -48,14 +48,14 @@ struct DspJitDiagnostic
 
     Diagnostics are line/column-annotated messages: syntax errors, type
     errors, realtime-safety violations, and informational notes. A compile
-    only produces a runnable DspJitGraph when no error diagnostics are
+    only produces a runnable YdspAudioGraph when no error diagnostics are
     present.
 */
-class DspJitDiagnostics
+class YdspDiagnostics
 {
 public:
     /** Default constructor. */
-    DspJitDiagnostics() = default;
+    YdspDiagnostics() = default;
 
     //==============================================================================
     /** Returns true if any error diagnostics are present. */
@@ -65,7 +65,7 @@ public:
     int getCount() const noexcept;
 
     /** Returns the diagnostic at the given index. */
-    const DspJitDiagnostic& getItem (int index) const noexcept;
+    const YdspDiagnostic& getItem (int index) const noexcept;
 
     //==============================================================================
     /** Stores the source text so that toString() can render source lines with
@@ -102,8 +102,85 @@ public:
     String toString() const;
 
 private:
-    std::vector<DspJitDiagnostic> items;
+    std::vector<YdspDiagnostic> items;
     String sourceText;
+};
+
+//==============================================================================
+/** The optimisation policy applied to a YDSP compilation.
+
+    `automatic` selects the native target available on the compiler's host.
+    It is spelt out instead of `auto`, which is a C++ keyword.
+*/
+enum class YdspOptimizationTier
+{
+    baseline,
+    automatic,
+    aggressive
+};
+
+//==============================================================================
+/** Chooses whether compilation follows the host CPU or a portable baseline. */
+enum class YdspTargetPolicy
+{
+    host,
+    baseline
+};
+
+//==============================================================================
+/** Native instruction-set targets supported by the YDSP compiler. */
+enum class YdspNativeTarget
+{
+    scalar,
+    sse2,
+    avx2,
+    avx512,
+    asimd
+};
+
+//==============================================================================
+/** Options controlling one YdspCompiler::compile() call.
+
+    The default is the host-selected `automatic` tier. `fastMath` is disabled
+    by default, so a source expression keeps its strict floating-point
+    evaluation order. Set it only when fused multiply-add contraction and its
+    resulting rounding difference are acceptable for the patch. The current
+    WebAssembly backend is scalar; its future portable f32x4 SIMD lowering is
+    independent of native host target selection.
+*/
+struct YdspCompileOptions
+{
+    YdspOptimizationTier optimizationTier = YdspOptimizationTier::automatic;
+    bool fastMath = false;
+    YdspTargetPolicy targetPolicy = YdspTargetPolicy::host;
+    YdspNativeTarget baselineTarget = YdspNativeTarget::scalar;
+    bool emitOptimizationReport = false;
+};
+
+//==============================================================================
+/** The native-code decisions made by the most recent compilation.
+
+    The report is populated when YdspCompileOptions::emitOptimizationReport
+    is true. It records the target actually emitted after capability and
+    profitability checks, rather than merely echoing the requested target.
+*/
+struct YdspOptimizationReport
+{
+    YdspOptimizationTier optimizationTier = YdspOptimizationTier::automatic;
+    bool fastMath = false;
+    YdspNativeTarget selectedIsa = YdspNativeTarget::scalar;
+    String selectedMicroarchitecture;
+    int vectorWidth = 1;
+    bool vectorizationEnabled = false;
+    bool unrollingEnabled = false;
+    bool reductionSplittingEnabled = false;
+    bool contractionEnabled = false;
+    StringArray rejectedTransforms;
+    size_t generatedCodeSize = 0;
+    double compileTimeMilliseconds = 0.0;
+    bool cacheHit = false;
+    String cacheDecision;
+    String benchmarkDecision;
 };
 
 //==============================================================================
@@ -166,7 +243,7 @@ private:
     kernel's loop bodies can execute per block - and provenRealtimeSafe is
     true only when every bound is statically known.
 */
-struct DspJitKernelReport
+struct YdspKernelReport
 {
     /** The name of the kernel. */
     String name;
@@ -208,17 +285,17 @@ struct DspJitKernelReport
 //==============================================================================
 /** The worst-case execution report of a compiled YDSP patch.
 
-    Exposed through DspJitGraph::getExecutionReport() so a host can verify,
+    Exposed through YdspAudioGraph::getExecutionReport() so a host can verify,
     before starting audio, that the patch fits its realtime CPU budget.
 */
-class DspJitExecutionReport
+class YdspExecutionReport
 {
 public:
     /** Returns the per-kernel worst-case analyses (const). */
-    const std::vector<DspJitKernelReport>& getKernels() const noexcept;
+    const std::vector<YdspKernelReport>& getKernels() const noexcept;
 
     /** Returns the per-kernel worst-case analyses (mutable, for the optimizer). */
-    std::vector<DspJitKernelReport>& getKernels() noexcept;
+    std::vector<YdspKernelReport>& getKernels() noexcept;
 
     /** Returns the total worst-case loop iterations across all kernels. */
     int getTotalBoundedIterations() const noexcept;
@@ -227,9 +304,9 @@ public:
     bool isProvenRealtimeSafe() const noexcept;
 
 private:
-    friend class DspJitGraph;
+    friend class YdspAudioGraph;
 
-    std::vector<DspJitKernelReport> kernels;
+    std::vector<YdspKernelReport> kernels;
 };
 
 //==============================================================================
@@ -238,7 +315,7 @@ private:
     Mirrors the YDSP primitive types on the host side; kernels address their
     buffers with the matching element size.
 */
-enum class DspJitElementType
+enum class YdspElementType
 {
     float32, // 4-byte IEEE float (the default for streams and params)
     float64, // 8-byte IEEE double
@@ -248,14 +325,14 @@ enum class DspJitElementType
 };
 
 //==============================================================================
-/** The outcome of a DspJitGraph::process() call.
+/** The outcome of a YdspAudioGraph::process() call.
 
     process() never asserts, throws or allocates: caller-side problems with the
     supplied stream buffers are reported through this value and the call is
     otherwise ignored (the graph is left untouched), so hosts may validate and
     log at their leisure.
 */
-enum class DspJitProcessResult
+enum class YdspProcessResult
 {
     ok,                 // the block was processed
     invalidGraph,       // the graph is null or failed to compile
@@ -272,19 +349,19 @@ enum class DspJitProcessResult
     site and no way to silently pass a buffer of the wrong element type.
 
     The active alternative must match the graph's declared stream type (see
-    DspJitGraph::getInputStreamType()) and hold at least `numSamples`
+    YdspAudioGraph::getInputStreamType()) and hold at least `numSamples`
     elements; mismatches are silently ignored rather than touching the buffer. Boolean streams (stored as
     int32 0/1) use the int32 alternative.
 */
-using DspJitInputBuffer = std::variant<
+using YdspInputBuffer = std::variant<
     yup::Span<const float>,
     yup::Span<const double>,
     yup::Span<const int32_t>,
     yup::Span<const int64_t>>;
 
 /** A typed, non-owning view of one output stream buffer (the mutable
-    counterpart of DspJitInputBuffer). */
-using DspJitOutputBuffer = std::variant<
+    counterpart of YdspInputBuffer). */
+using YdspOutputBuffer = std::variant<
     yup::Span<float>,
     yup::Span<double>,
     yup::Span<int32_t>,
@@ -294,16 +371,16 @@ using DspJitOutputBuffer = std::variant<
 /** A sample-accurate, stepped parameter change for the audio thread.
 
     Resolve the target slot once, on the control thread, via
-    DspJitGraph::getParameterSlot() and then deliver the (slot, sampleOffset,
-    value) triple to DspJitGraph::process(). The runtime applies the value as
+    YdspAudioGraph::getParameterSlot() and then deliver the (slot, sampleOffset,
+    value) triple to YdspAudioGraph::process(). The runtime applies the value as
     an exact-sample step change: every sub-block after `sampleOffset` sees the
     new value. Automation is deliberately *not* interpolated: de-zippering is
     the patch's job, via the `smooth (param, tau)` intrinsic or the
     `[[ smoothing: tau ]]` endpoint annotation.
 */
-struct DspJitAutomationEvent
+struct YdspAutomationEvent
 {
-    int parameterSlot = -1; // resolved via DspJitGraph::getParameterSlot()
+    int parameterSlot = -1; // resolved via YdspAudioGraph::getParameterSlot()
     int sampleOffset = 0;   // sample index within the block (0 <= offset < numSamples)
     float value = 0.0f;     // the new float32 value
 };
@@ -329,11 +406,11 @@ struct DspJitAutomationEvent
     to use as it sees fit (e.g. a unit suffix, a slider increment, or a hint
     about which control to render). All three are empty/zero when absent.
 */
-struct DspJitParameterInfo
+struct YdspParameterInfo
 {
     String name;        // qualified name ("node.param" or graph-level "param")
     String displayName; // [[ name: "..." ]] annotation, else the endpoint name
-    DspJitElementType type = DspJitElementType::float32;
+    YdspElementType type = YdspElementType::float32;
     double defaultValue = 0.0;
     double minValue = 0.0;
     double maxValue = 1.0;
@@ -364,23 +441,23 @@ struct DspJitParameterInfo
 //==============================================================================
 /** A compiled YDSP patch ready to run in the audio callback.
 
-    Creation (DspJitCompiler::compile) and prepare() must happen on the
+    Creation (YdspCompiler::compile) and prepare() must happen on the
     control thread. process() is the realtime entry point: it performs no
     heap allocation, takes no locks, and never throws.
 
-    @see DspJitCompiler
+    @see YdspCompiler
 */
-class YUP_API DspJitGraph
+class YUP_API YdspAudioGraph
 {
 public:
     /** Constructs an invalid graph (as returned by a failed compile). */
-    DspJitGraph();
+    YdspAudioGraph();
 
     /** Destructor. */
-    ~DspJitGraph();
+    ~YdspAudioGraph();
 
-    DspJitGraph (DspJitGraph&&) noexcept;
-    DspJitGraph& operator= (DspJitGraph&&) noexcept;
+    YdspAudioGraph (YdspAudioGraph&&) noexcept;
+    YdspAudioGraph& operator= (YdspAudioGraph&&) noexcept;
 
     //==============================================================================
     /** Switches MIDI ingestion to MPE, using the given zone layout.
@@ -463,26 +540,26 @@ public:
     /** Runs the patch for one block. Realtime-safe (no allocation, no locking).
 
         Stream buffers are passed as typed spans (one per declared stream, in
-        declaration order): the active alternative of each DspJitInputBuffer /
-        DspJitOutputBuffer must match the stream's declared element type
+        declaration order): the active alternative of each YdspInputBuffer /
+        YdspOutputBuffer must match the stream's declared element type
         (getInputStreamType/getOutputStreamType). On a mismatch the call is
         ignored and the problem is reported through the returned error value
         (never through asserts or exceptions, so hosts may probe freely).
 
-        @param inputs   one DspJitInputBuffer per graph input stream, in
+        @param inputs   one YdspInputBuffer per graph input stream, in
                         declaration order (empty for a patch with no inputs,
                         e.g. a MIDI-only synth)
-        @param outputs  one DspJitOutputBuffer per graph output stream, in
+        @param outputs  one YdspOutputBuffer per graph output stream, in
                         declaration order
         @param numSamples  number of samples in this block (must be <= the
                         maxBlockSize passed to prepare(); every buffer must
                         hold at least numSamples elements)
 
-        @returns DspJitProcessResult::ok when the block was processed;
+        @returns YdspProcessResult::ok when the block was processed;
                  a descriptive error otherwise (the graph was not touched).
     */
-    DspJitProcessResult process (yup::Span<const DspJitInputBuffer> inputs,
-                                 yup::Span<DspJitOutputBuffer> outputs,
+    YdspProcessResult process (yup::Span<const YdspInputBuffer> inputs,
+                                 yup::Span<YdspOutputBuffer> outputs,
                                  int numSamples);
 
     /** Runs the patch for one block with MIDI and sample-accurate parameter
@@ -508,23 +585,23 @@ public:
         Passing null/empty for both `midiIn` and `automation` is equivalent to
         the 3-argument process() overload (and takes the identical fast path).
 
-        @param inputs   one DspJitInputBuffer per graph input stream (see the
+        @param inputs   one YdspInputBuffer per graph input stream (see the
                         3-argument overload)
-        @param outputs  one DspJitOutputBuffer per graph output stream
+        @param outputs  one YdspOutputBuffer per graph output stream
         @param numSamples  number of samples in this block
         @param midiIn      incoming MIDI buffer (may be nullptr); events must
                         be sorted by timestamp, in sample order
-        @param automation array of DspJitAutomationEvent (may be nullptr)
+        @param automation array of YdspAutomationEvent (may be nullptr)
         @param numAutomationEvents  number of automation events
 
-        @returns DspJitProcessResult::ok when the block was processed;
+        @returns YdspProcessResult::ok when the block was processed;
                  a descriptive error otherwise (the graph was not touched).
     */
-    DspJitProcessResult process (yup::Span<const DspJitInputBuffer> inputs,
-                                 yup::Span<DspJitOutputBuffer> outputs,
+    YdspProcessResult process (yup::Span<const YdspInputBuffer> inputs,
+                                 yup::Span<YdspOutputBuffer> outputs,
                                  int numSamples,
                                  const yup::MidiBuffer* midiIn,
-                                 const DspJitAutomationEvent* automation,
+                                 const YdspAutomationEvent* automation,
                                  int numAutomationEvents);
 
     /** Runs the patch for one block with per-input MIDI and sample-accurate
@@ -542,11 +619,11 @@ public:
         @param eventInputs  one MidiBuffer per graph event input, in
                             declaration order; may be shorter or contain nulls
     */
-    DspJitProcessResult process (yup::Span<const DspJitInputBuffer> inputs,
-                                 yup::Span<DspJitOutputBuffer> outputs,
+    YdspProcessResult process (yup::Span<const YdspInputBuffer> inputs,
+                                 yup::Span<YdspOutputBuffer> outputs,
                                  int numSamples,
                                  yup::Span<const yup::MidiBuffer*> eventInputs,
-                                 const DspJitAutomationEvent* automation,
+                                 const YdspAutomationEvent* automation,
                                  int numAutomationEvents);
 
     /** Runs the patch for one block with MIDI, sample-accurate parameter
@@ -560,19 +637,19 @@ public:
 
         @param midiIn      incoming MIDI buffer (may be nullptr); see the
                         single-buffer overload above
-        @param automation array of DspJitAutomationEvent (may be nullptr)
+        @param automation array of YdspAutomationEvent (may be nullptr)
         @param numAutomationEvents  number of automation events
         @param midiOut     buffer to receive routed/boundary output events for
                         this block (may be nullptr to collect nothing)
 
-        @returns DspJitProcessResult::ok when the block was processed;
+        @returns YdspProcessResult::ok when the block was processed;
                  a descriptive error otherwise (the graph was not touched).
     */
-    DspJitProcessResult process (yup::Span<const DspJitInputBuffer> inputs,
-                                 yup::Span<DspJitOutputBuffer> outputs,
+    YdspProcessResult process (yup::Span<const YdspInputBuffer> inputs,
+                                 yup::Span<YdspOutputBuffer> outputs,
                                  int numSamples,
                                  const yup::MidiBuffer* midiIn,
-                                 const DspJitAutomationEvent* automation,
+                                 const YdspAutomationEvent* automation,
                                  int numAutomationEvents,
                                  yup::MidiBuffer* midiOut);
 
@@ -587,19 +664,19 @@ public:
 
         @param eventInputs  one MidiBuffer per graph event input, in
                             declaration order; may be shorter or contain nulls
-        @param automation array of DspJitAutomationEvent (may be nullptr)
+        @param automation array of YdspAutomationEvent (may be nullptr)
         @param numAutomationEvents  number of automation events
         @param midiOut     buffer to receive routed/boundary output events for
                         this block (may be nullptr to collect nothing)
 
-        @returns DspJitProcessResult::ok when the block was processed;
+        @returns YdspProcessResult::ok when the block was processed;
                  a descriptive error otherwise (the graph was not touched).
     */
-    DspJitProcessResult process (yup::Span<const DspJitInputBuffer> inputs,
-                                 yup::Span<DspJitOutputBuffer> outputs,
+    YdspProcessResult process (yup::Span<const YdspInputBuffer> inputs,
+                                 yup::Span<YdspOutputBuffer> outputs,
                                  int numSamples,
                                  yup::Span<const yup::MidiBuffer*> eventInputs,
-                                 const DspJitAutomationEvent* automation,
+                                 const YdspAutomationEvent* automation,
                                  int numAutomationEvents,
                                  yup::MidiBuffer* midiOut);
 
@@ -669,13 +746,13 @@ public:
     int getInputStreamCount() const noexcept;
 
     /** Returns the element type of a graph input stream (0-based index). */
-    DspJitElementType getInputStreamType (int index) const noexcept;
+    YdspElementType getInputStreamType (int index) const noexcept;
 
     /** Returns the number of output streams declared by the graph. */
     int getOutputStreamCount() const noexcept;
 
     /** Returns the element type of a graph output stream (0-based index). */
-    DspJitElementType getOutputStreamType (int index) const noexcept;
+    YdspElementType getOutputStreamType (int index) const noexcept;
 
     /** Returns the number of event inputs declared by the graph. */
     int getEventInputCount() const noexcept;
@@ -694,15 +771,15 @@ public:
         returned by getParameterSlot(); iterate from 0 to getParameterCount() - 1 to
         build a host UI. Returns an empty default when the slot is invalid.
     */
-    const DspJitParameterInfo& getParameterInfo (int slot) const noexcept;
+    const YdspParameterInfo& getParameterInfo (int slot) const noexcept;
 
     /** Returns the element type of a parameter ("node.param" or "param"). */
-    DspJitElementType getParameterType (StringRef qualifiedName) const noexcept;
+    YdspElementType getParameterType (StringRef qualifiedName) const noexcept;
 
     /** Resolves a parameter's integer slot for sample-accurate automation.
 
         Call once on the control thread, before the audio-thread process()
-        loop begins, then hand the returned slot to DspJitAutomationEvent.
+        loop begins, then hand the returned slot to YdspAutomationEvent.
         Returns -1 when the parameter does not exist.
     */
     int getParameterSlot (StringRef qualifiedName) const noexcept;
@@ -763,39 +840,39 @@ public:
 
     //==============================================================================
     /** Returns the optimiser's worst-case execution report. */
-    const DspJitExecutionReport& getExecutionReport() const noexcept;
+    const YdspExecutionReport& getExecutionReport() const noexcept;
 
     /** Returns the diagnostics produced during compilation (empty on success). */
-    const DspJitDiagnostics& getDiagnostics() const noexcept;
+    const YdspDiagnostics& getDiagnostics() const noexcept;
 
 private:
-    friend class DspJitCompiler;
+    friend class YdspCompiler;
 
     struct Pimpl;
     std::unique_ptr<Pimpl> pimpl;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DspJitGraph)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YdspAudioGraph)
 };
 
 //==============================================================================
-/** Compiles YDSP source text into a realtime-runnable DspJitGraph.
+/** Compiles YDSP source text into a realtime-runnable YdspAudioGraph.
 
     Compilation is a control-thread operation (it allocates and generates
-    machine code); the resulting DspJitGraph runs in the audio callback.
+    machine code); the resulting YdspAudioGraph runs in the audio callback.
 
-    @see DspJitGraph
+    @see YdspAudioGraph
 */
-class YUP_API DspJitCompiler
+class YUP_API YdspCompiler
 {
 public:
     /** Constructor. */
-    DspJitCompiler();
+    YdspCompiler();
 
     /** Destructor. */
-    ~DspJitCompiler();
+    ~YdspCompiler();
 
-    DspJitCompiler (DspJitCompiler&&) = default;
-    DspJitCompiler& operator= (DspJitCompiler&&) = default;
+    YdspCompiler (YdspCompiler&&) = default;
+    YdspCompiler& operator= (YdspCompiler&&) = default;
 
     //==============================================================================
     /** Compiles YDSP source text into a runnable graph.
@@ -818,16 +895,31 @@ public:
         On failure the returned ResultValue is a failure and the detailed
         diagnostics are available through getDiagnostics().
     */
-    ResultValue<DspJitGraph> compile (StringRef source, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
+    ResultValue<YdspAudioGraph> compile (StringRef source, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
+
+    /** Compiles YDSP source text with an explicit native-code policy.
+
+        The import and thread-pool arguments have the same meaning as the
+        backward-compatible overload above. `baselineTarget` is only used
+        when options.targetPolicy is YdspTargetPolicy::baseline.
+    */
+    ResultValue<YdspAudioGraph> compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
 
     /** Returns the diagnostics of the most recent compile. */
-    const DspJitDiagnostics& getDiagnostics() const noexcept;
+    const YdspDiagnostics& getDiagnostics() const noexcept;
+
+    /** Returns the native-code report of the most recent compile.
+
+        When the most recent options did not request a report, this returns an
+        empty report whose generatedCodeSize and compileTimeMilliseconds are 0.
+    */
+    const YdspOptimizationReport& getOptimizationReport() const noexcept;
 
 private:
     struct Pimpl;
     std::unique_ptr<Pimpl> pimpl;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DspJitCompiler)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YdspCompiler)
 };
 
 } // namespace yup

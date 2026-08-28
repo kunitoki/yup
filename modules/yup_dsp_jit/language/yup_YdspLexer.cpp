@@ -86,7 +86,7 @@ bool isHexDigit (int c)
 
 //==============================================================================
 
-YdspLexer::YdspLexer (StringRef source, DspJitDiagnostics& diagnostics)
+YdspLexer::YdspLexer (StringRef source, YdspDiagnostics& diagnostics)
     : source (String (source))
     , diagnostics (diagnostics)
 {

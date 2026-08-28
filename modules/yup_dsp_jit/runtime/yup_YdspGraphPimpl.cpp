@@ -70,7 +70,7 @@ uint16_t makeSyntheticNoteId (int sourceNodeIndex, int pitch) noexcept
 
 //==============================================================================
 
-DspJitGraph::Pimpl::Pimpl()
+YdspAudioGraph::Pimpl::Pimpl()
 {
     // The per-event-input MPE instruments are created in ensureEventInputs()
     // (called from prepare() and the control-thread MIDI mode setters), so the
@@ -78,7 +78,7 @@ DspJitGraph::Pimpl::Pimpl()
     // tracking mode, matching the historical single-stream behaviour.
 }
 
-void DspJitGraph::Pimpl::setExpressionTrackingMode (yup::MPEInstrument::TrackingMode mode)
+void YdspAudioGraph::Pimpl::setExpressionTrackingMode (yup::MPEInstrument::TrackingMode mode)
 {
     expressionTrackingMode = mode;
 
@@ -90,7 +90,7 @@ void DspJitGraph::Pimpl::setExpressionTrackingMode (yup::MPEInstrument::Tracking
     }
 }
 
-void DspJitGraph::Pimpl::ensureEventInputs()
+void YdspAudioGraph::Pimpl::ensureEventInputs()
 {
     const auto count = eventInputNames.size();
 
@@ -123,7 +123,7 @@ void DspJitGraph::Pimpl::ensureEventInputs()
     }
 }
 
-DspJitGraph::Pimpl::~Pimpl()
+YdspAudioGraph::Pimpl::~Pimpl()
 {
     for (size_t i = 0; i < mpeInstruments.size(); ++i)
         mpeInstruments[i]->removeListener (&eventIngests[i]);
@@ -136,12 +136,12 @@ DspJitGraph::Pimpl::~Pimpl()
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::EventIngest::noteAdded (yup::MPENote note)
+void YdspAudioGraph::Pimpl::EventIngest::noteAdded (yup::MPENote note)
 {
     owner.routeEvent (YdspEventShape::noteOn, note.noteID, detail::payloadFromNote (note), owner.currentSampleOffset, eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::EventIngest::noteReleased (yup::MPENote note)
+void YdspAudioGraph::Pimpl::EventIngest::noteReleased (yup::MPENote note)
 {
     auto payload = detail::payloadFromNote (note);
     payload.velocity = note.noteOffVelocity.asUnsignedFloat();
@@ -149,24 +149,24 @@ void DspJitGraph::Pimpl::EventIngest::noteReleased (yup::MPENote note)
     owner.routeEvent (YdspEventShape::noteOff, note.noteID, payload, owner.currentSampleOffset, eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::EventIngest::notePitchbendChanged (yup::MPENote note)
+void YdspAudioGraph::Pimpl::EventIngest::notePitchbendChanged (yup::MPENote note)
 {
     owner.routeEvent (YdspEventShape::pitchBend, note.noteID, detail::payloadFromNote (note), owner.currentSampleOffset, eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::EventIngest::notePressureChanged (yup::MPENote note)
+void YdspAudioGraph::Pimpl::EventIngest::notePressureChanged (yup::MPENote note)
 {
     owner.routeEvent (YdspEventShape::pressure, note.noteID, detail::payloadFromNote (note), owner.currentSampleOffset, eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::EventIngest::noteTimbreChanged (yup::MPENote note)
+void YdspAudioGraph::Pimpl::EventIngest::noteTimbreChanged (yup::MPENote note)
 {
     owner.routeEvent (YdspEventShape::slide, note.noteID, detail::payloadFromNote (note), owner.currentSampleOffset, eventInputIndex);
 }
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::ingestChannelMessage (const yup::MidiMessage& message, int eventInputIndex)
+void YdspAudioGraph::Pimpl::ingestChannelMessage (const yup::MidiMessage& message, int eventInputIndex)
 {
     if (message.isProgramChange())
     {
@@ -202,7 +202,7 @@ void DspJitGraph::Pimpl::ingestChannelMessage (const yup::MidiMessage& message, 
     routeEvent (YdspEventShape::controlChange, 0, payload, currentSampleOffset, eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::scheduleAllSoundOff (int eventInputIndex)
+void YdspAudioGraph::Pimpl::scheduleAllSoundOff (int eventInputIndex)
 {
     for (const auto& route : graphInputRouting[static_cast<size_t> (eventInputIndex)])
     {
@@ -242,7 +242,7 @@ void DspJitGraph::Pimpl::scheduleAllSoundOff (int eventInputIndex)
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::routeEvent (YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::routeEvent (YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     // eventInputIndex here is the graph input port the host event arrived on;
     // translated below to each explicitly-connected node's own local
@@ -261,7 +261,7 @@ void DspJitGraph::Pimpl::routeEvent (YdspEventShape shape, uint16_t noteId, cons
     }
 }
 
-void DspJitGraph::Pimpl::dispatchEventToNode (Node& node, YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::dispatchEventToNode (Node& node, YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     if (node.isMidiOnly)
     {
@@ -317,7 +317,7 @@ void DspJitGraph::Pimpl::dispatchEventToNode (Node& node, YdspEventShape shape, 
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::drainOutputEvents (Node& node, int srcNodeIndex, int blockSize, yup::MidiBuffer* midiOut)
+void YdspAudioGraph::Pimpl::drainOutputEvents (Node& node, int srcNodeIndex, int blockSize, yup::MidiBuffer* midiOut)
 {
     for (const auto& carried : node.carryQueue)
         deliverResolvedEvent (carried.dstNode, carried.dstEventInputIndex, srcNodeIndex, carried.shapeTag, carried.fields, carried.sampleOffset - blockSize, blockSize, midiOut);
@@ -348,7 +348,7 @@ void DspJitGraph::Pimpl::drainOutputEvents (Node& node, int srcNodeIndex, int bl
     }
 }
 
-void DspJitGraph::Pimpl::deliverResolvedEvent (int dstNode, int dstEventInputIndex, int srcNodeIndex, int64_t shapeTag, const YdspEventContext& fields, int sampleOffset, int blockSize, yup::MidiBuffer* midiOut)
+void YdspAudioGraph::Pimpl::deliverResolvedEvent (int dstNode, int dstEventInputIndex, int srcNodeIndex, int64_t shapeTag, const YdspEventContext& fields, int sampleOffset, int blockSize, yup::MidiBuffer* midiOut)
 {
     // A carried record more than one block stale resolves in a single carry
     // step rather than re-carrying, so the offset is bounded to this block.
@@ -429,7 +429,7 @@ void DspJitGraph::Pimpl::deliverResolvedEvent (int dstNode, int dstEventInputInd
         {
             // No per-instrument pitchbend range survives to this delivery path (a
             // routed bend is not bound to any MPE note/instrument), so the MIDI
-            // default of 2 semitones (see DspJitGraph::setLegacyMidiMode's own
+            // default of 2 semitones (see YdspAudioGraph::setLegacyMidiMode's own
             // default) is used to encode the 14-bit wheel position.
             constexpr float pitchBendRangeSemitones = 2.0f;
             const auto normalized = std::clamp (payload.bend / pitchBendRangeSemitones, -1.0f, 1.0f);
@@ -461,7 +461,7 @@ void DspJitGraph::Pimpl::deliverResolvedEvent (int dstNode, int dstEventInputInd
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::resolveNodeInputs (Node& node, Span<const DspJitInputBuffer> inputs, int blockSize)
+void YdspAudioGraph::Pimpl::resolveNodeInputs (Node& node, Span<const YdspInputBuffer> inputs, int blockSize)
 {
     for (int s = 0; s < node.numInputs; ++s)
     {
@@ -500,7 +500,7 @@ void DspJitGraph::Pimpl::resolveNodeInputs (Node& node, Span<const DspJitInputBu
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::mixGraphOutputs (Span<const DspJitInputBuffer> inputs, Span<DspJitOutputBuffer> outputs, int blockSize)
+void YdspAudioGraph::Pimpl::mixGraphOutputs (Span<const YdspInputBuffer> inputs, Span<YdspOutputBuffer> outputs, int blockSize)
 {
     const auto numOutputs = static_cast<int> (outputStreamTypes.size());
 
@@ -532,7 +532,7 @@ void DspJitGraph::Pimpl::mixGraphOutputs (Span<const DspJitInputBuffer> inputs, 
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::runInitKernels()
+void YdspAudioGraph::Pimpl::runInitKernels()
 {
     YdspKernelContext ctx;
     ctx.sampleRate = static_cast<float> (sampleRate);
@@ -562,7 +562,7 @@ void DspJitGraph::Pimpl::runInitKernels()
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::pushPendingCall (Node& node, int voice, int sampleOffset, YdspEventShape shape, const YdspEventPayload& payload, int eventInputIndex)
+void YdspAudioGraph::Pimpl::pushPendingCall (Node& node, int voice, int sampleOffset, YdspEventShape shape, const YdspEventPayload& payload, int eventInputIndex)
 {
     if (! handlesShape (node, eventInputIndex, shape))
         return;
@@ -580,7 +580,7 @@ void DspJitGraph::Pimpl::pushPendingCall (Node& node, int voice, int sampleOffse
 
 //==============================================================================
 
-int DspJitGraph::Pimpl::findVoiceForNote (const Node& node, uint16_t noteId, int eventInputIndex) const
+int YdspAudioGraph::Pimpl::findVoiceForNote (const Node& node, uint16_t noteId, int eventInputIndex) const
 {
     for (int v = 0; v < node.voiceCount; ++v)
     {
@@ -595,7 +595,7 @@ int DspJitGraph::Pimpl::findVoiceForNote (const Node& node, uint16_t noteId, int
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::resolveNoteOn (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::resolveNoteOn (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     int chosen = -1;
     uint64_t oldestRelease = std::numeric_limits<uint64_t>::max();
@@ -656,7 +656,7 @@ void DspJitGraph::Pimpl::resolveNoteOn (Node& node, uint16_t noteId, const YdspE
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::resolveNoteOff (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::resolveNoteOff (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     const auto chosen = findVoiceForNote (node, noteId, eventInputIndex);
 
@@ -672,7 +672,7 @@ void DspJitGraph::Pimpl::resolveNoteOff (Node& node, uint16_t noteId, const Ydsp
 
 //==============================================================================
 
-int DspJitGraph::Pimpl::chooseMonoNote (const Node& node) const
+int YdspAudioGraph::Pimpl::chooseMonoNote (const Node& node) const
 {
     if (node.numMonoHeldNotes == 0)
         return -1;
@@ -695,7 +695,7 @@ int DspJitGraph::Pimpl::chooseMonoNote (const Node& node) const
     return chosen;
 }
 
-void DspJitGraph::Pimpl::soundMonoNote (Node& node, int heldIndex, int sampleOffset, bool isLegato)
+void YdspAudioGraph::Pimpl::soundMonoNote (Node& node, int heldIndex, int sampleOffset, bool isLegato)
 {
     const auto& held = node.monoHeldNotes[static_cast<size_t> (heldIndex)];
 
@@ -715,7 +715,7 @@ void DspJitGraph::Pimpl::soundMonoNote (Node& node, int heldIndex, int sampleOff
     pushPendingCall (node, 0, sampleOffset, YdspEventShape::noteOn, payload, held.eventInputIndex);
 }
 
-void DspJitGraph::Pimpl::resolveMonoNoteOn (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::resolveMonoNoteOn (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     if (node.numMonoHeldNotes >= Node::maxMonoHeldNotes)
     {
@@ -739,7 +739,7 @@ void DspJitGraph::Pimpl::resolveMonoNoteOn (Node& node, uint16_t noteId, const Y
     soundMonoNote (node, chosen, sampleOffset, wasSounding);
 }
 
-void DspJitGraph::Pimpl::resolveMonoNoteOff (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
+void YdspAudioGraph::Pimpl::resolveMonoNoteOff (Node& node, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex)
 {
     int index = -1;
 
@@ -783,7 +783,7 @@ void DspJitGraph::Pimpl::resolveMonoNoteOff (Node& node, uint16_t noteId, const 
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::runKernelSubBlock (Node& node, YdspKernelContext& ctx, int offset, int length, bool polyphonic)
+void YdspAudioGraph::Pimpl::runKernelSubBlock (Node& node, YdspKernelContext& ctx, int offset, int length, bool polyphonic)
 {
     ctx.numSamples = length;
 
@@ -811,7 +811,7 @@ void DspJitGraph::Pimpl::runKernelSubBlock (Node& node, YdspKernelContext& ctx, 
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::applyAutomation (Node& node, const Node::PendingAutomation& autoEvent, const YdspKernelContext& ctx)
+void YdspAudioGraph::Pimpl::applyAutomation (Node& node, const Node::PendingAutomation& autoEvent, const YdspKernelContext& ctx)
 {
     const auto byteOffset = node.paramByteOffsets[static_cast<size_t> (autoEvent.localParamIndex)];
     std::memcpy (static_cast<uint8_t*> (ctx.params) + byteOffset, &autoEvent.value, sizeof (autoEvent.value));
@@ -822,7 +822,7 @@ void DspJitGraph::Pimpl::applyAutomation (Node& node, const Node::PendingAutomat
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::snapshotAutomationParams (Node& node, const YdspKernelContext& ctx)
+void YdspAudioGraph::Pimpl::snapshotAutomationParams (Node& node, const YdspKernelContext& ctx)
 {
     node.automationParamSnapshot.clear();
 
@@ -835,7 +835,7 @@ void DspJitGraph::Pimpl::snapshotAutomationParams (Node& node, const YdspKernelC
     }
 }
 
-void DspJitGraph::Pimpl::restoreAutomationParams (Node& node, const YdspKernelContext& ctx)
+void YdspAudioGraph::Pimpl::restoreAutomationParams (Node& node, const YdspKernelContext& ctx)
 {
     for (const auto& [localParamIndex, value] : node.automationParamSnapshot)
     {
@@ -846,7 +846,7 @@ void DspJitGraph::Pimpl::restoreAutomationParams (Node& node, const YdspKernelCo
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::invokeEventHandler (Node& node, const Node::PendingHandlerCall& call, const YdspKernelContext& ctx)
+void YdspAudioGraph::Pimpl::invokeEventHandler (Node& node, const Node::PendingHandlerCall& call, const YdspKernelContext& ctx)
 {
     const auto shapeIndex = eventShapeIndex (call.shape);
     jassert (shapeIndex >= 0);
@@ -881,7 +881,7 @@ void DspJitGraph::Pimpl::invokeEventHandler (Node& node, const Node::PendingHand
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::silenceVoice (Node& node, YdspKernelContext& ctx)
+void YdspAudioGraph::Pimpl::silenceVoice (Node& node, YdspKernelContext& ctx)
 {
     std::memset (ctx.state, 0, node.stateSize);
 
@@ -891,7 +891,7 @@ void DspJitGraph::Pimpl::silenceVoice (Node& node, YdspKernelContext& ctx)
 
 //==============================================================================
 
-void DspJitGraph::Pimpl::processNodeWithSplits (Node& node, YdspKernelContext& ctx, int blockSize)
+void YdspAudioGraph::Pimpl::processNodeWithSplits (Node& node, YdspKernelContext& ctx, int blockSize)
 {
     const bool polyphonic = node.voiceCount > 1;
 

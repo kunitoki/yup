@@ -225,6 +225,14 @@ void YdspAsmJitCodegenX64::emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp
         cc->vfmadd213ss (dst, b, c);
 }
 
+void YdspAsmJitCodegenX64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    // `vfmadd213ps x, y, z` is x = y * x + z, so seed dst from a first.
+    // This is only emitted for an AVX2+FMA target selected by the compiler.
+    moveVector (dst, a);
+    cc->vfmadd213ps (dst, b, c);
+}
+
 void YdspAsmJitCodegenX64::floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type)
 {
     (void) type; // the register's own type id carries the width
@@ -271,7 +279,7 @@ void YdspAsmJitCodegenX64::floatUnary (YdspIrOp op, const YdspFp& dst, const Yds
 }
 
 //==============================================================================
-// Packed float32 (SSE2)
+// Packed float32 (SSE2 / AVX2)
 //
 // Loads and stores are unaligned unconditionally: a state array's region base
 // is only 4-byte aligned, and correctness must never depend on where the
@@ -280,21 +288,59 @@ void YdspAsmJitCodegenX64::floatUnary (YdspIrOp op, const YdspFp& dst, const Yds
 
 void YdspAsmJitCodegenX64::loadVectorFromMem (const YdspFp& dst, const YdspMem& src)
 {
-    cc->movups (dst, src);
+    if (activeVectorWidth > 4)
+        cc->vmovups (dst, src);
+    else
+        cc->movups (dst, src);
 }
 
 void YdspAsmJitCodegenX64::storeVectorToMem (const YdspMem& dst, const YdspFp& src)
 {
-    cc->movups (dst, src);
+    if (activeVectorWidth > 4)
+        cc->vmovups (dst, src);
+    else
+        cc->movups (dst, src);
 }
 
 void YdspAsmJitCodegenX64::moveVector (const YdspFp& dst, const YdspFp& src)
 {
-    cc->movaps (dst, src);
+    if (activeVectorWidth > 4)
+        cc->vmovaps (dst, src);
+    else
+        cc->movaps (dst, src);
 }
 
 void YdspAsmJitCodegenX64::vectorBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB)
 {
+    if (activeVectorWidth > 4)
+    {
+        switch (op)
+        {
+            case YdspIrOp::addF:
+                cc->vaddps (dst, srcA, srcB);
+                break;
+            case YdspIrOp::subF:
+                cc->vsubps (dst, srcA, srcB);
+                break;
+            case YdspIrOp::mulF:
+                cc->vmulps (dst, srcA, srcB);
+                break;
+            case YdspIrOp::divF:
+                cc->vdivps (dst, srcA, srcB);
+                break;
+            case YdspIrOp::minF:
+                cc->vminps (dst, srcA, srcB);
+                break;
+            case YdspIrOp::maxF:
+                cc->vmaxps (dst, srcA, srcB);
+                break;
+            default:
+                break;
+        }
+
+        return;
+    }
+
     moveVector (dst, srcA);
 
     switch (op)
@@ -324,6 +370,29 @@ void YdspAsmJitCodegenX64::vectorBinary (YdspIrOp op, const YdspFp& dst, const Y
 
 void YdspAsmJitCodegenX64::vectorUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src)
 {
+    if (activeVectorWidth > 4)
+    {
+        switch (op)
+        {
+            case YdspIrOp::sqrtF:
+                cc->vsqrtps (dst, src);
+                break;
+
+            case YdspIrOp::negF:
+                cc->vxorps (dst, src, vectorConstMem (0x80000000u));
+                break;
+
+            case YdspIrOp::absF:
+                cc->vandps (dst, src, vectorConstMem (0x7fffffffu));
+                break;
+
+            default:
+                break;
+        }
+
+        return;
+    }
+
     switch (op)
     {
         case YdspIrOp::sqrtF:
@@ -350,12 +419,56 @@ void YdspAsmJitCodegenX64::vectorUnary (YdspIrOp op, const YdspFp& dst, const Yd
 
 void YdspAsmJitCodegenX64::emitSplatFloat (const YdspFp& dst, const YdspFp& src)
 {
+    if (activeVectorWidth > 4)
+    {
+        cc->vbroadcastss (dst, src);
+        return;
+    }
+
     moveVector (dst, src);
     cc->shufps (dst, dst, asmjit::Imm (0x00)); // every lane = lane 0
 }
 
 void YdspAsmJitCodegenX64::emitReduceAddFloat (const YdspFp& dst, const YdspFp& src)
 {
+    if (activeVectorWidth > 4)
+    {
+        // AVX2 has no horizontal eight-lane add. First combine its two 128-bit
+        // halves, then use a 128-bit tree. AVX-512 follows the same tree over
+        // four extracted 128-bit quarters. The tree is intentionally explicit:
+        // it keeps the reassociation local to the vectoriser's documented
+        // reduction contract rather than relying on a target-dependent hadd.
+        YdspFp reduced = newFp128 ("reduce128");
+        YdspFp part = newFp128 ("reducePart");
+
+        if (activeVectorWidth == 16)
+        {
+            cc->vextractf32x4 (reduced, src, asmjit::Imm (0));
+
+            for (int lane = 1; lane < 4; ++lane)
+            {
+                cc->vextractf32x4 (part, src, asmjit::Imm (lane));
+                cc->vaddps (reduced, reduced, part);
+            }
+        }
+        else
+        {
+            cc->vmovaps (reduced, src.xmm());
+            cc->vextractf128 (part, src, asmjit::Imm (1));
+            cc->vaddps (reduced, reduced, part);
+        }
+
+        YdspFp swapped = newFp128 ("reduceSwap");
+        YdspFp halves = newFp128 ("reduceHalves");
+
+        cc->vshufps (swapped, reduced, reduced, asmjit::Imm (0xB1)); // [b a d c]
+        cc->vaddps (swapped, swapped, reduced);
+        cc->vshufps (halves, swapped, swapped, asmjit::Imm (0x4E)); // swap the 64-bit halves
+        cc->vaddss (swapped, swapped, halves);
+        cc->vmovss (dst, dst, swapped);
+        return;
+    }
+
     // SSE2 has no horizontal add (haddps is SSE3), so fold the four lanes with
     // two shuffles: [a b c d] -> [a+b a+b c+d c+d] -> (a+b) + (c+d) in lane 0.
     YdspFp swapped = newFpVector ("reduceSwap");

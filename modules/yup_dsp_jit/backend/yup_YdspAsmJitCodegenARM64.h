@@ -59,6 +59,7 @@ protected:
     void floatBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
     void floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type) override;
     void emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
+    void emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
 
     void loadVectorFromMem (const YdspFp& dst, const YdspMem& src) override;
     void storeVectorToMem (const YdspMem& dst, const YdspFp& src) override;

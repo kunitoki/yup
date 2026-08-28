@@ -40,18 +40,18 @@ namespace
 using patches::compilePatch;
 using patches::makeRamp;
 
-void runProcess32 (yup::DspJitGraph& graph,
+void runProcess32 (yup::YdspAudioGraph& graph,
                    const float* const* inputs,
                    float* const* outputs,
                    int numSamples)
 {
-    std::vector<yup::DspJitInputBuffer> inputBuffers;
+    std::vector<yup::YdspInputBuffer> inputBuffers;
     inputBuffers.reserve (static_cast<size_t> (graph.getInputStreamCount()));
 
     for (int i = 0; i < graph.getInputStreamCount(); ++i)
         inputBuffers.emplace_back (yup::Span<const float> (inputs[i], static_cast<size_t> (numSamples)));
 
-    std::vector<yup::DspJitOutputBuffer> outputBuffers;
+    std::vector<yup::YdspOutputBuffer> outputBuffers;
     outputBuffers.reserve (static_cast<size_t> (graph.getOutputStreamCount()));
 
     for (int i = 0; i < graph.getOutputStreamCount(); ++i)
@@ -60,23 +60,23 @@ void runProcess32 (yup::DspJitGraph& graph,
     graph.process (inputBuffers, outputBuffers, numSamples);
 }
 
-void runProcess (yup::DspJitGraph& graph,
+void runProcess (yup::YdspAudioGraph& graph,
                  const float* const* inputs,
                  int numInputs,
                  float* const* outputs,
                  int numOutputs,
                  int numSamples,
                  const yup::MidiBuffer* midi = nullptr,
-                 const yup::DspJitAutomationEvent* automation = nullptr,
+                 const yup::YdspAutomationEvent* automation = nullptr,
                  int numAutomationEvents = 0)
 {
-    std::vector<yup::DspJitInputBuffer> inputBuffers;
+    std::vector<yup::YdspInputBuffer> inputBuffers;
     inputBuffers.reserve (static_cast<size_t> (numInputs));
 
     for (int i = 0; i < numInputs; ++i)
         inputBuffers.emplace_back (yup::Span<const float> (inputs[i], static_cast<size_t> (numSamples)));
 
-    std::vector<yup::DspJitOutputBuffer> outputBuffers;
+    std::vector<yup::YdspOutputBuffer> outputBuffers;
     outputBuffers.reserve (static_cast<size_t> (numOutputs));
 
     for (int i = 0; i < numOutputs; ++i)
@@ -85,7 +85,7 @@ void runProcess (yup::DspJitGraph& graph,
     graph.process (inputBuffers, outputBuffers, numSamples, midi, automation, numAutomationEvents);
 }
 
-void dumpAsmOnFailure (const DspJitGraph& graph)
+void dumpAsmOnFailure (const YdspAudioGraph& graph)
 {
     if (::testing::Test::HasFailure())
     {
@@ -103,7 +103,7 @@ void dumpAsmOnFailure (const DspJitGraph& graph)
 
 TEST (YdspJitGraphTests, ArrayReadBackAfterWriteMatchesMemory)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         let size = 4;
@@ -180,7 +180,7 @@ TEST (YdspJitGraphTests, ArrayReadBackAfterWriteMatchesMemory)
 
 TEST (YdspJitGraphTests, SelectsSharingAndReusingComparisons)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Selects {
@@ -238,7 +238,7 @@ TEST (YdspJitGraphTests, SelectsSharingAndReusingComparisons)
 
 TEST (YdspJitGraphTests, NegatingZeroProducesNegativeZero)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Neg {
@@ -271,7 +271,7 @@ TEST (YdspJitGraphTests, NegatingZeroProducesNegativeZero)
 
 TEST (YdspJitGraphTests, RunsGainKernel)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain {
@@ -301,7 +301,7 @@ TEST (YdspJitGraphTests, RunsGainKernel)
 
 TEST (YdspJitGraphTests, RunsOversampledNodeThroughResampler)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Pass {
@@ -349,7 +349,7 @@ TEST (YdspJitGraphTests, RunsOversampledNodeThroughResampler)
 
 TEST (YdspJitGraphTests, RunsOnePoleWithPrevState)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor OnePole {
@@ -386,7 +386,7 @@ TEST (YdspJitGraphTests, RunsOnePoleWithPrevState)
 
 TEST (YdspJitGraphTests, StatePersistsAcrossBlocks)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor OnePole {
@@ -429,7 +429,7 @@ TEST (YdspJitGraphTests, StatePersistsAcrossBlocks)
 
 TEST (YdspJitGraphTests, RunsTanhIntrinsic)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Tanh {
@@ -459,7 +459,7 @@ TEST (YdspJitGraphTests, RunsTanhIntrinsic)
 
 TEST (YdspJitGraphTests, RunsTanhAndMathIntrinsics)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor SoftClip {
@@ -493,7 +493,7 @@ TEST (YdspJitGraphTests, RunsTanhAndMathIntrinsics)
 
 TEST (YdspJitGraphTests, RunsFixedDelayPrimitive)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Delay3 {
@@ -526,7 +526,7 @@ TEST (YdspJitGraphTests, RunsFixedDelayPrimitive)
 
 TEST (YdspJitGraphTests, GraphParameterDrivesSeveralNodeParameters)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain { input stream in; output stream out; input value float g = 1.0; process { out = in * g; } }
@@ -564,7 +564,7 @@ TEST (YdspJitGraphTests, GraphParameterDrivesSeveralNodeParameters)
 
 TEST (YdspJitGraphTests, AutomationReachesEveryNodeAGraphParameterDrives)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain { input stream in; output stream out; input value float g = 1.0; process { out = in * g; } }
@@ -585,7 +585,7 @@ TEST (YdspJitGraphTests, AutomationReachesEveryNodeAGraphParameterDrives)
     const auto slot = graph.getParameterSlot ("master");
     ASSERT_GE (slot, 0);
 
-    const DspJitAutomationEvent events[] = { { slot, 8, 2.0f } };
+    const YdspAutomationEvent events[] = { { slot, 8, 2.0f } };
 
     std::vector<float> input (16, 1.0f);
     std::vector<float> output (16, 0.0f);
@@ -602,7 +602,7 @@ TEST (YdspJitGraphTests, AutomationReachesEveryNodeAGraphParameterDrives)
 
 TEST (YdspJitGraphTests, RunsInlineConnectionDelay)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Pass { input stream in; output stream out; process { out = in; } }
@@ -635,7 +635,7 @@ TEST (YdspJitGraphTests, RunsInlineConnectionDelay)
 
 TEST (YdspJitGraphTests, RejectsAnInlineDelayOnANonFloat32Stream)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         processor Pass { input stream float64 in; output stream float64 out; process { out = in; } }
@@ -648,7 +648,7 @@ TEST (YdspJitGraphTests, RejectsAnInlineDelayOnANonFloat32Stream)
 
 TEST (YdspJitGraphTests, PreparesTwiceAtDifferentBlockSizesWithAnInlineDelay)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Pass { input stream in; output stream out; process { out = in; } }
@@ -681,7 +681,7 @@ TEST (YdspJitGraphTests, PreparesTwiceAtDifferentBlockSizesWithAnInlineDelay)
 
 TEST (YdspJitGraphTests, ResetClearsTheInlineDelayRing)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Pass { input stream in; output stream out; process { out = in; } }
@@ -747,7 +747,7 @@ TEST (YdspJitGraphTests, ResolvesImportsRelativeToBasePath)
 
     // Without a base path the import resolves against the CWD and must fail.
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
         auto result = compiler.compile (patch);
         EXPECT_FALSE (result.wasOk());
     }
@@ -755,7 +755,7 @@ TEST (YdspJitGraphTests, ResolvesImportsRelativeToBasePath)
     // With the base path (given as a file path inside the folder) the import
     // and its nested import resolve and the graph runs.
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
         auto result = compiler.compile (patch, tempDir.getChildFile ("Patch.ydsp").getFullPathName());
         ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -786,7 +786,7 @@ TEST (YdspJitGraphTests, ResolvesImportsRelativeToBasePath)
 
 TEST (YdspJitGraphTests, CallsTopLevelFunctionFromProcessorBody)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         func scale (x: float) : float { return x * 2.0; }
@@ -831,7 +831,7 @@ TEST (YdspJitGraphTests, CallsImportedLibraryFunctions)
         graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -873,7 +873,7 @@ TEST (YdspJitGraphTests, ImportedProcessorCallsItsLibraryFunctions)
         graph G { input stream x; output stream y; node p = u.P; connection { x -> p.in; p.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -918,7 +918,7 @@ TEST (YdspJitGraphTests, ImportedProcessorLocalFunctionCallsItsLibraryFunctions)
         graph G { input stream x; output stream y; node p = u.P; connection { x -> p.in; p.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -941,7 +941,7 @@ TEST (YdspJitGraphTests, ImportedProcessorLocalFunctionCallsItsLibraryFunctions)
 
 TEST (YdspJitGraphTests, ProcessorFunctionShadowsTopLevelFunction)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         func scale (x: float) : float { return x * 2.0; }
@@ -973,7 +973,7 @@ TEST (YdspJitGraphTests, ProcessorFunctionShadowsTopLevelFunction)
 
 TEST (YdspJitGraphTests, ReportsUnknownNamespacedFunctionCall)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         processor P { input stream in; output stream out; process { out = fx.missing (in); } }
@@ -992,7 +992,7 @@ TEST (YdspJitGraphTests, ReportsUnknownNamespacedFunctionCall)
 
 TEST (YdspJitGraphTests, ReportsRecursiveTopLevelFunction)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         func loop (x: float) : float { return loop (x); }
@@ -1012,7 +1012,7 @@ TEST (YdspJitGraphTests, ReportsRecursiveTopLevelFunction)
 
 TEST (YdspJitGraphTests, ReportsRecursiveFunctionHiddenInAConditionalBody)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         func loop (x: float) : float {
@@ -1035,7 +1035,7 @@ TEST (YdspJitGraphTests, ReportsRecursiveFunctionHiddenInAConditionalBody)
 
 TEST (YdspJitGraphTests, ReportsRecursiveFunctionHiddenInANestedExpression)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         func loop (x: float) : float { return loop (x) + 1.0; }
@@ -1069,7 +1069,7 @@ TEST (YdspJitGraphTests, ImportDottedPathMapsToFileAndLastSegmentNamespace)
         graph G { input stream x; output stream y; node d = Delay.Delay; connection { x -> d.in; d.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1106,7 +1106,7 @@ TEST (YdspJitGraphTests, ImportAliasOverridesDefaultNamespace)
         graph G { input stream x; output stream y; node d = w.Delay; connection { x -> d.in; d.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1148,7 +1148,7 @@ TEST (YdspJitGraphTests, ReportsImportNamespaceCollision)
         graph G { input stream x; output stream y; node a = A.A; connection { x -> a.in; a.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     EXPECT_FALSE (result.wasOk());
 
@@ -1180,7 +1180,7 @@ TEST (YdspJitGraphTests, SameFileImportedTwiceIsNotAnError)
         graph G { input stream x; output stream y; node g = Gain.Gain; connection { x -> g.in; g.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1206,7 +1206,7 @@ TEST (YdspJitGraphTests, ReportsCircularImport)
         graph G { input stream x; output stream y; node a = A.A; connection { x -> a.in; a.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     EXPECT_FALSE (result.wasOk());
 
@@ -1236,7 +1236,7 @@ TEST (YdspJitGraphTests, ReportsSyntaxErrorsInImportedFiles)
         graph G { input stream x; output stream y; node p = b.Broken; connection { x -> p.in; p.out -> y; } }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     EXPECT_FALSE (result.wasOk());
 
@@ -1285,7 +1285,7 @@ TEST (YdspJitGraphTests, ParallelImportCompilationMatchesSequential)
 
     const auto runPatch = [&] (ThreadPool* pool) -> std::vector<float>
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
         auto result = compiler.compile (patch, tempDir.getFullPathName(), pool);
         EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1356,7 +1356,7 @@ TEST (YdspJitGraphTests, CallerOwnedPoolStillRunsUnrelatedJobs)
     MarkerJob marker;
     pool.addJob (&marker, false);
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName(), &pool);
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1395,7 +1395,7 @@ TEST (YdspJitGraphTests, ImportsTheSameLibraryFromTwoFilesUnderDifferentNamespac
         }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -1459,7 +1459,7 @@ TEST (YdspJitGraphTests, ParallelImportsMatchSequentialForDiamondsAndFailures)
         bool sequentialOk = false;
 
         {
-            DspJitCompiler compiler;
+            YdspCompiler compiler;
             auto sequential = compiler.compile (patch, tempDir.getFullPathName());
             sequentialOk = sequential.wasOk();
 
@@ -1473,7 +1473,7 @@ TEST (YdspJitGraphTests, ParallelImportsMatchSequentialForDiamondsAndFailures)
         }
 
         ThreadPool pool;
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
         auto parallel = compiler.compile (patch, tempDir.getFullPathName(), &pool);
 
         String parallelMessages;
@@ -1507,7 +1507,7 @@ TEST (YdspJitGraphTests, ParallelImportsMatchSequentialForDiamondsAndFailures)
 
 TEST (YdspJitGraphTests, RoutesSeparateEventInputsByName)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor A {
@@ -1551,20 +1551,20 @@ TEST (YdspJitGraphTests, RoutesSeparateEventInputsByName)
 
     const auto run = [&] (const yup::MidiBuffer* in1, const yup::MidiBuffer* in2, std::vector<float>& out1, std::vector<float>& out2)
     {
-        std::vector<yup::DspJitOutputBuffer> outputBuffers;
+        std::vector<yup::YdspOutputBuffer> outputBuffers;
         outputBuffers.emplace_back (yup::Span<float> (out1.data(), static_cast<size_t> (32)));
         outputBuffers.emplace_back (yup::Span<float> (out2.data(), static_cast<size_t> (32)));
 
         const yup::MidiBuffer* buffers[] = { in1, in2 };
 
-        const auto result = graph.process (yup::Span<const yup::DspJitInputBuffer>(),
-                                           yup::Span<yup::DspJitOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+        const auto result = graph.process (yup::Span<const yup::YdspInputBuffer>(),
+                                           yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
                                            32,
                                            yup::Span<const yup::MidiBuffer*> (buffers, 2),
                                            nullptr,
                                            0);
 
-        EXPECT_EQ (yup::DspJitProcessResult::ok, result);
+        EXPECT_EQ (yup::YdspProcessResult::ok, result);
     };
 
     {
@@ -1594,7 +1594,7 @@ TEST (YdspJitGraphTests, RoutesSeparateEventInputsByName)
 
 TEST (YdspJitGraphTests, NoteOffOnOneEventInputDoesNotReleaseTheOtherInputsVoice)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -1634,12 +1634,12 @@ TEST (YdspJitGraphTests, NoteOffOnOneEventInputDoesNotReleaseTheOtherInputsVoice
 
     const yup::MidiBuffer* buffers[] = { &inA, &inB };
 
-    std::vector<yup::DspJitOutputBuffer> outputBuffers;
+    std::vector<yup::YdspOutputBuffer> outputBuffers;
     outputBuffers.emplace_back (yup::Span<float> (output.data(), static_cast<size_t> (512)));
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok,
-               graph.process (yup::Span<const yup::DspJitInputBuffer>(),
-                              yup::Span<yup::DspJitOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+    EXPECT_EQ (yup::YdspProcessResult::ok,
+               graph.process (yup::Span<const yup::YdspInputBuffer>(),
+                              yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
                               512,
                               yup::Span<const yup::MidiBuffer*> (buffers, 2),
                               nullptr,
@@ -1656,7 +1656,7 @@ TEST (YdspJitGraphTests, NoteOffOnOneEventInputDoesNotReleaseTheOtherInputsVoice
 
 TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHeldNote)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -1691,11 +1691,11 @@ TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHe
 
         const yup::MidiBuffer* buffers[] = { a, b };
 
-        std::vector<yup::DspJitOutputBuffer> outputBuffers;
+        std::vector<yup::YdspOutputBuffer> outputBuffers;
         outputBuffers.emplace_back (yup::Span<float> (output.data(), static_cast<size_t> (512)));
 
-        return graph.process (yup::Span<const yup::DspJitInputBuffer>(),
-                              yup::Span<yup::DspJitOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+        return graph.process (yup::Span<const yup::YdspInputBuffer>(),
+                              yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
                               512,
                               yup::Span<const yup::MidiBuffer*> (buffers, 2),
                               nullptr,
@@ -1706,7 +1706,7 @@ TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHe
         yup::MidiBuffer inB;
         inB.addEvent (yup::MidiMessage::noteOn (1, 60, static_cast<uint8> (100)), 0);
 
-        EXPECT_EQ (yup::DspJitProcessResult::ok, runBlock (nullptr, &inB));
+        EXPECT_EQ (yup::YdspProcessResult::ok, runBlock (nullptr, &inB));
 
         for (int i = 0; i < 512; ++i)
             EXPECT_FLOAT_EQ (160.0f, output[static_cast<size_t> (i)]) << "B's note sounding at " << i;
@@ -1717,7 +1717,7 @@ TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHe
         inA.addEvent (yup::MidiMessage::noteOn (1, 60, static_cast<uint8> (100)), 0);
         inA.addEvent (yup::MidiMessage::noteOff (1, 60), 10);
 
-        EXPECT_EQ (yup::DspJitProcessResult::ok, runBlock (&inA, nullptr));
+        EXPECT_EQ (yup::YdspProcessResult::ok, runBlock (&inA, nullptr));
 
         for (int i = 10; i < 512; ++i)
             EXPECT_FLOAT_EQ (160.0f, output[static_cast<size_t> (i)]) << "B's note survives A's release at " << i;
@@ -1728,7 +1728,7 @@ TEST (YdspJitGraphTests, MonoNoteOffOnOneEventInputDoesNotRemoveTheOtherInputsHe
 
 TEST (YdspJitGraphTests, AllSoundOffOnEachInputSilencesAtItsOwnOffset)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -1763,12 +1763,12 @@ TEST (YdspJitGraphTests, AllSoundOffOnEachInputSilencesAtItsOwnOffset)
 
     const yup::MidiBuffer* buffers[] = { &inA, &inB };
 
-    std::vector<yup::DspJitOutputBuffer> outputBuffers;
+    std::vector<yup::YdspOutputBuffer> outputBuffers;
     outputBuffers.emplace_back (yup::Span<float> (output.data(), static_cast<size_t> (512)));
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok,
-               graph.process (yup::Span<const yup::DspJitInputBuffer>(),
-                              yup::Span<yup::DspJitOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+    EXPECT_EQ (yup::YdspProcessResult::ok,
+               graph.process (yup::Span<const yup::YdspInputBuffer>(),
+                              yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
                               512,
                               yup::Span<const yup::MidiBuffer*> (buffers, 2),
                               nullptr,
@@ -1785,7 +1785,7 @@ TEST (YdspJitGraphTests, AllSoundOffOnEachInputSilencesAtItsOwnOffset)
 
 TEST (YdspJitGraphTests, AllSoundOffSilencesANoteRetriggeredAfterIt)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -1821,12 +1821,12 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesANoteRetriggeredAfterIt)
 
     const yup::MidiBuffer* buffers[] = { &inA, &inB };
 
-    std::vector<yup::DspJitOutputBuffer> outputBuffers;
+    std::vector<yup::YdspOutputBuffer> outputBuffers;
     outputBuffers.emplace_back (yup::Span<float> (output.data(), static_cast<size_t> (512)));
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok,
-               graph.process (yup::Span<const yup::DspJitInputBuffer>(),
-                              yup::Span<yup::DspJitOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
+    EXPECT_EQ (yup::YdspProcessResult::ok,
+               graph.process (yup::Span<const yup::YdspInputBuffer>(),
+                              yup::Span<yup::YdspOutputBuffer> (outputBuffers.data(), outputBuffers.size()),
                               512,
                               yup::Span<const yup::MidiBuffer*> (buffers, 2),
                               nullptr,
@@ -1849,7 +1849,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesANoteRetriggeredAfterIt)
 
 TEST (YdspJitGraphTests, AssemblesKernelsWithLargeStateLayouts)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor DelayLine {
@@ -1896,7 +1896,7 @@ TEST (YdspJitGraphTests, AssemblesKernelsWithLargeStateLayouts)
 
 TEST (YdspJitGraphTests, RunsReverbStyleMultipleDelays)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor ReverbLike {
@@ -1954,7 +1954,7 @@ TEST (YdspJitGraphTests, RunsReverbStyleMultipleDelays)
 
 TEST (YdspJitGraphTests, RunsBlockModeWithLoop)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor BlockGain {
@@ -1987,7 +1987,7 @@ TEST (YdspJitGraphTests, RunsBlockModeWithLoop)
 
 TEST (YdspJitGraphTests, SetsAndReadsParameters)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain {
@@ -2032,7 +2032,7 @@ TEST (YdspJitGraphTests, SetsAndReadsParameters)
 
 TEST (YdspJitGraphTests, RunsMultiNodeGraphWithSidechain)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Saturator {
@@ -2086,8 +2086,8 @@ TEST (YdspJitGraphTests, RunsMultiNodeGraphWithSidechain)
 
 TEST (YdspJitGraphTests, AlgebraAndConnectionsProduceSameResult)
 {
-    DspJitCompiler compilerA;
-    DspJitCompiler compilerB;
+    YdspCompiler compilerA;
+    YdspCompiler compilerB;
 
     auto graphA = compilePatch (R"YDSP(
         processor Gain { input stream in; output stream out; input value float g = 1; process { out = in * g; } }
@@ -2135,7 +2135,7 @@ TEST (YdspJitGraphTests, AlgebraAndConnectionsProduceSameResult)
 
 TEST (YdspJitGraphTests, ReportsCompileErrors)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(processor P { input stream in; output stream out; process { out = missing; } }
         graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
@@ -2148,7 +2148,7 @@ TEST (YdspJitGraphTests, ReportsCompileErrors)
 
 TEST (YdspJitGraphTests, ExposesExecutionReport)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Taps {
@@ -2176,7 +2176,7 @@ TEST (YdspJitGraphTests, ExposesExecutionReport)
 
 TEST (YdspJitGraphTests, RunsBiquadLowpass)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor BiquadLP {
@@ -2222,7 +2222,7 @@ TEST (YdspJitGraphTests, RunsBiquadLowpass)
 
 TEST (YdspJitGraphTests, RunsBiquadHighpass)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor BiquadHP {
@@ -2268,7 +2268,7 @@ TEST (YdspJitGraphTests, RunsBiquadHighpass)
 
 TEST (YdspJitGraphTests, RunsEnvelopeFollower)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor EnvFollower {
@@ -2313,7 +2313,7 @@ TEST (YdspJitGraphTests, RunsEnvelopeFollower)
 
 TEST (YdspJitGraphTests, RunsPeakDetector)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor PeakDet {
@@ -2347,7 +2347,7 @@ TEST (YdspJitGraphTests, RunsPeakDetector)
 
 TEST (YdspJitGraphTests, RunsRingModulator)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor RingMod {
@@ -2387,7 +2387,7 @@ TEST (YdspJitGraphTests, RunsRingModulator)
 
 TEST (YdspJitGraphTests, ParameterModulationFromHost)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor ModGain {
@@ -2430,7 +2430,7 @@ TEST (YdspJitGraphTests, ParameterModulationFromHost)
 
 TEST (YdspJitGraphTests, MeterOutputsReflectLastBlock)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor RMS {
@@ -2467,7 +2467,7 @@ TEST (YdspJitGraphTests, MeterOutputsReflectLastBlock)
 
 TEST (YdspJitGraphTests, MultiBlockAccumulation)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Acc {
@@ -2504,7 +2504,7 @@ TEST (YdspJitGraphTests, MultiBlockAccumulation)
 
 TEST (YdspJitGraphTests, GraphWithMultipleInputsAndOutputs)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Mixer {
@@ -2554,7 +2554,7 @@ TEST (YdspJitGraphTests, GraphWithMultipleInputsAndOutputs)
 
 TEST (YdspJitGraphTests, BlockModeCircularBufferDelay)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor CircDelay {
@@ -2596,7 +2596,7 @@ TEST (YdspJitGraphTests, BlockModeCircularBufferDelay)
 
 TEST (YdspJitGraphTests, IdenticalGraphsProduceIdenticalOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto source = R"YDSP(
         processor P { input stream in; output stream out; input value float g = 1; process { out = tanh (in * g); } }
@@ -2604,7 +2604,7 @@ TEST (YdspJitGraphTests, IdenticalGraphsProduceIdenticalOutput)
     )YDSP";
 
     auto graphA = compilePatch (source, compiler);
-    DspJitCompiler compilerB;
+    YdspCompiler compilerB;
     auto graphB = compilePatch (source, compilerB);
 
     ASSERT_TRUE (graphA.isValid());
@@ -2630,7 +2630,7 @@ TEST (YdspJitGraphTests, IdenticalGraphsProduceIdenticalOutput)
 
 TEST (YdspJitGraphTests, HandlesSmallBlockSize)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P { input stream in; output stream out; process { out = in * 2; } }
@@ -2655,7 +2655,7 @@ TEST (YdspJitGraphTests, HandlesSmallBlockSize)
 
 TEST (YdspJitGraphTests, HandlesLargeBlockSize)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -2681,26 +2681,26 @@ TEST (YdspJitGraphTests, HandlesLargeBlockSize)
 
 TEST (YdspJitGraphTests, InvalidGraphReturnsFalse)
 {
-    DspJitGraph graph;
+    YdspAudioGraph graph;
     EXPECT_FALSE (graph.isValid());
 }
 
 TEST (YdspJitGraphTests, GetParamOnNonexistentReturnsZero)
 {
-    DspJitGraph graph;
+    YdspAudioGraph graph;
     EXPECT_EQ (0.0f, graph.getParameter ("nonexistent"));
     EXPECT_FALSE (graph.hasParameter ("nonexistent"));
 }
 
 TEST (YdspJitGraphTests, GetOutputValueOnNonexistentReturnsZero)
 {
-    DspJitGraph graph;
+    YdspAudioGraph graph;
     EXPECT_EQ (0.0f, graph.getOutputValue ("nonexistent"));
 }
 
 TEST (YdspJitGraphTests, HandlesPatchWithoutGraph)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -2711,7 +2711,7 @@ TEST (YdspJitGraphTests, HandlesPatchWithoutGraph)
 
 TEST (YdspJitGraphTests, RunsProcessorWithFunctionCall)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -2744,7 +2744,7 @@ TEST (YdspJitGraphTests, RunsProcessorWithFunctionCall)
 
 TEST (YdspJitGraphTests, RunsProcessorWithMultiParamFunction)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -2782,7 +2782,7 @@ TEST (YdspJitGraphTests, RunsProcessorWithMultiParamFunction)
 
 TEST (YdspJitGraphTests, FunctionParameterMutationDoesNotClobberCallerLocal)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -2819,7 +2819,7 @@ TEST (YdspJitGraphTests, FunctionParameterMutationDoesNotClobberCallerLocal)
 
 TEST (YdspJitGraphTests, FunctionParameterMutationPreservesStateStore)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -2862,7 +2862,7 @@ TEST (YdspJitGraphTests, FunctionParameterMutationPreservesStateStore)
 
 TEST (YdspJitGraphTests, CompoundAssignmentOnAnIndexedTargetComputesCorrectly)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -2901,7 +2901,7 @@ TEST (YdspJitGraphTests, CompoundAssignmentOnAnIndexedTargetComputesCorrectly)
 
 TEST (YdspJitGraphTests, RejectsRecursionTheAnalyzerMissesInsteadOfCrashing)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto result = compiler.compile (R"YDSP(
         processor P {
@@ -2923,7 +2923,7 @@ TEST (YdspJitGraphTests, RejectsRecursionTheAnalyzerMissesInsteadOfCrashing)
 
 TEST (YdspJitGraphTests, RunsFloat64StreamGraph)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor F64Gain {
@@ -2944,10 +2944,10 @@ TEST (YdspJitGraphTests, RunsFloat64StreamGraph)
 
     ASSERT_TRUE (graph.isValid());
 
-    EXPECT_EQ (DspJitElementType::float64, graph.getInputStreamType (0));
-    EXPECT_EQ (DspJitElementType::float64, graph.getOutputStreamType (0));
-    EXPECT_EQ (DspJitElementType::float64, graph.getParameterType ("master"));
-    EXPECT_EQ (DspJitElementType::float64, graph.getParameterType ("g.gain"));
+    EXPECT_EQ (YdspElementType::float64, graph.getInputStreamType (0));
+    EXPECT_EQ (YdspElementType::float64, graph.getOutputStreamType (0));
+    EXPECT_EQ (YdspElementType::float64, graph.getParameterType ("master"));
+    EXPECT_EQ (YdspElementType::float64, graph.getParameterType ("g.gain"));
 
     graph.prepare (44100.0, 32);
 
@@ -2961,8 +2961,8 @@ TEST (YdspJitGraphTests, RunsFloat64StreamGraph)
 
     std::vector<double> output (32, 0.0);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const double> (input.data(), 32) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<double> (output.data(), 32) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const double> (input.data(), 32) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<double> (output.data(), 32) };
 
     graph.process (inputBuffers, outputBuffers, 32);
 
@@ -2980,7 +2980,7 @@ TEST (YdspJitGraphTests, RunsFloat64StreamGraph)
 
 TEST (YdspJitGraphTests, RunsInt64ParamAndState)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Counter {
@@ -3005,7 +3005,7 @@ TEST (YdspJitGraphTests, RunsInt64ParamAndState)
 
     ASSERT_TRUE (graph.isValid());
 
-    EXPECT_EQ (DspJitElementType::int64, graph.getParameterType ("seed"));
+    EXPECT_EQ (YdspElementType::int64, graph.getParameterType ("seed"));
     EXPECT_EQ (100, graph.getIntParameter ("seed"));
 
     graph.prepare (44100.0, 16);
@@ -3033,7 +3033,7 @@ TEST (YdspJitGraphTests, RunsInt64ParamAndState)
 
 TEST (YdspJitGraphTests, RunsBitwiseInt32Ops)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Bit {
@@ -3074,7 +3074,7 @@ TEST (YdspJitGraphTests, RunsBitwiseInt32Ops)
 
 TEST (YdspJitGraphTests, RunsHexAndBinaryIntegerLiterals)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Bit {
@@ -3109,7 +3109,7 @@ TEST (YdspJitGraphTests, RunsHexAndBinaryIntegerLiterals)
 
 TEST (YdspJitGraphTests, RunsBitwiseInt64Ops)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Bit64 {
@@ -3151,7 +3151,7 @@ TEST (YdspJitGraphTests, RunsBitwiseInt64Ops)
 
 TEST (YdspJitGraphTests, BitwisePrecedenceMatchesC)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Pre {
@@ -3189,7 +3189,7 @@ TEST (YdspJitGraphTests, BitwisePrecedenceMatchesC)
 
 TEST (YdspJitGraphTests, RunsCompoundBitwiseAssignment)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Acc {
@@ -3230,7 +3230,7 @@ TEST (YdspJitGraphTests, RunsCompoundBitwiseAssignment)
 
 TEST (YdspJitGraphTests, RunsLfsrNoiseGenerator)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Lfsr {
@@ -3278,7 +3278,7 @@ TEST (YdspJitGraphTests, RunsLfsrNoiseGenerator)
 
 TEST (YdspJitGraphTests, RunsMaskedRingBuffer)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Ring {
@@ -3324,7 +3324,7 @@ TEST (YdspJitGraphTests, RunsMaskedRingBuffer)
 
 TEST (YdspJitGraphTests, RunsStructState)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor S {
@@ -3371,7 +3371,7 @@ TEST (YdspJitGraphTests, RunsStructState)
 
 TEST (YdspJitGraphTests, RunsStructArray)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor SA {
@@ -3405,7 +3405,7 @@ TEST (YdspJitGraphTests, RunsStructArray)
 
 TEST (YdspJitGraphTests, RunsInitBlock)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor I {
@@ -3437,7 +3437,7 @@ TEST (YdspJitGraphTests, RunsInitBlock)
 
 TEST (YdspJitGraphTests, RunsInitWithStructFieldsAndReset)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor R {
@@ -3527,7 +3527,7 @@ yup::MidiBuffer makeNoteBuffer (const std::vector<std::tuple<int, int, float>>& 
 
 TEST (YdspJitGraphTests, MonosynthReceivesMidiNoteOn)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + R"YDSP(
         graph G {
@@ -3557,7 +3557,7 @@ TEST (YdspJitGraphTests, MonosynthReceivesMidiNoteOn)
 
 TEST (YdspJitGraphTests, FourNoteOnsLandInFourDistinctVoices)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3579,7 +3579,7 @@ TEST (YdspJitGraphTests, FourNoteOnsLandInFourDistinctVoices)
 
 TEST (YdspJitGraphTests, HeldNotesSurviveEventFreeBlocks)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3606,7 +3606,7 @@ TEST (YdspJitGraphTests, HeldNotesSurviveEventFreeBlocks)
 
 TEST (YdspJitGraphTests, FifthNoteOnStealsOldestTriggeredVoice)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3628,7 +3628,7 @@ TEST (YdspJitGraphTests, FifthNoteOnStealsOldestTriggeredVoice)
 
 TEST (YdspJitGraphTests, SecondNoteOnAtSamePitchAndChannelRetriggers)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3653,7 +3653,7 @@ TEST (YdspJitGraphTests, SecondNoteOnAtSamePitchAndChannelRetriggers)
 
 TEST (YdspJitGraphTests, SamePitchOnTwoMpeMemberChannelsStaysIndependent)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3686,7 +3686,7 @@ TEST (YdspJitGraphTests, SamePitchOnTwoMpeMemberChannelsStaysIndependent)
 
 TEST (YdspJitGraphTests, NoteOnAndNoteOffInSameBlockFireAtExactSampleOffsets)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -3714,7 +3714,7 @@ TEST (YdspJitGraphTests, NoteOnAndNoteOffInSameBlockFireAtExactSampleOffsets)
 
 TEST (YdspJitGraphTests, AutomationEventChangesParamAtExactSampleOffset)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor GainVoice {
@@ -3747,7 +3747,7 @@ TEST (YdspJitGraphTests, AutomationEventChangesParamAtExactSampleOffset)
     const auto gainSlot = graph.getParameterSlot ("v.gain");
     ASSERT_GE (gainSlot, 0);
 
-    DspJitAutomationEvent automation { gainSlot, 100, 1.0f };
+    YdspAutomationEvent automation { gainSlot, 100, 1.0f };
 
     runProcess (graph, nullptr, 0, outPtrs, 1, 512, &midi, &automation, 1);
 
@@ -3762,7 +3762,7 @@ TEST (YdspJitGraphTests, AutomationEventChangesParamAtExactSampleOffset)
 
 TEST (YdspJitGraphTests, PolyphonicAutomationAppliesTheSameTimelineToEveryVoice)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor GainVoice {
@@ -3793,7 +3793,7 @@ TEST (YdspJitGraphTests, PolyphonicAutomationAppliesTheSameTimelineToEveryVoice)
     const auto gainSlot = graph.getParameterSlot ("v.gain");
     ASSERT_GE (gainSlot, 0);
 
-    const DspJitAutomationEvent automation { gainSlot, 100, 1.0f };
+    const YdspAutomationEvent automation { gainSlot, 100, 1.0f };
 
     runProcess (graph, nullptr, 0, outPtrs, 1, 512, &midi, &automation, 1);
 
@@ -3810,7 +3810,7 @@ TEST (YdspJitGraphTests, PolyphonicAutomationAppliesTheSameTimelineToEveryVoice)
 
 TEST (YdspJitGraphTests, SmoothedAutomationRampsInsteadOfStepping)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain {
@@ -3840,7 +3840,7 @@ TEST (YdspJitGraphTests, SmoothedAutomationRampsInsteadOfStepping)
     const auto gainSlot = graph.getParameterSlot ("p.gain");
     ASSERT_GE (gainSlot, 0);
 
-    DspJitAutomationEvent automation { gainSlot, 100, 1.0f };
+    YdspAutomationEvent automation { gainSlot, 100, 1.0f };
 
     std::fill (output.begin(), output.end(), 0.0f);
     runProcess (graph, inPtrs, 1, outPtrs, 1, 512, nullptr, &automation, 1);
@@ -3869,7 +3869,7 @@ TEST (YdspJitGraphTests, SmoothedAutomationRampsInsteadOfStepping)
 
 TEST (YdspJitGraphTests, ResetRePrimesSmoothedParameter)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain {
@@ -3905,7 +3905,7 @@ TEST (YdspJitGraphTests, ResetRePrimesSmoothedParameter)
 
 TEST (YdspJitGraphTests, SmoothsAProcessorParameterDrivenByAGraphEndpoint)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain {
@@ -3941,7 +3941,7 @@ TEST (YdspJitGraphTests, SmoothsAProcessorParameterDrivenByAGraphEndpoint)
     const auto levelSlot = graph.getParameterSlot ("level");
     ASSERT_GE (levelSlot, 0);
 
-    DspJitAutomationEvent automation { levelSlot, 100, 1.0f };
+    YdspAutomationEvent automation { levelSlot, 100, 1.0f };
 
     std::fill (output.begin(), output.end(), 0.0f);
     runProcess (graph, inPtrs, 1, outPtrs, 1, 512, nullptr, &automation, 1);
@@ -3958,7 +3958,7 @@ TEST (YdspJitGraphTests, SmoothsAProcessorParameterDrivenByAGraphEndpoint)
 
 TEST (YdspJitGraphTests, ConstantSmoothedParameterMatchesUnsmoothedOutput)
 {
-    DspJitCompiler smoothedCompiler;
+    YdspCompiler smoothedCompiler;
 
     auto smoothed = compilePatch (R"YDSP(
         processor Gain {
@@ -3971,7 +3971,7 @@ TEST (YdspJitGraphTests, ConstantSmoothedParameterMatchesUnsmoothedOutput)
     )YDSP",
                                   smoothedCompiler);
 
-    DspJitCompiler steppedCompiler;
+    YdspCompiler steppedCompiler;
 
     auto stepped = compilePatch (R"YDSP(
         processor Gain {
@@ -4009,7 +4009,7 @@ TEST (YdspJitGraphTests, ConstantSmoothedParameterMatchesUnsmoothedOutput)
 
 TEST (YdspJitGraphTests, SmoothIntrinsicMatchesSmoothingAnnotation)
 {
-    DspJitCompiler sugarCompiler;
+    YdspCompiler sugarCompiler;
 
     auto sugar = compilePatch (R"YDSP(
         processor Gain {
@@ -4022,7 +4022,7 @@ TEST (YdspJitGraphTests, SmoothIntrinsicMatchesSmoothingAnnotation)
     )YDSP",
                                sugarCompiler);
 
-    DspJitCompiler intrinsicCompiler;
+    YdspCompiler intrinsicCompiler;
 
     auto intrinsic = compilePatch (R"YDSP(
         processor Gain {
@@ -4057,8 +4057,8 @@ TEST (YdspJitGraphTests, SmoothIntrinsicMatchesSmoothingAnnotation)
     ASSERT_GE (sugarSlot, 0);
     ASSERT_GE (intrinsicSlot, 0);
 
-    const DspJitAutomationEvent sugarAutomation { sugarSlot, 64, 1.0f };
-    const DspJitAutomationEvent intrinsicAutomation { intrinsicSlot, 64, 1.0f };
+    const YdspAutomationEvent sugarAutomation { sugarSlot, 64, 1.0f };
+    const YdspAutomationEvent intrinsicAutomation { intrinsicSlot, 64, 1.0f };
 
     runProcess (sugar, inPtrs, 1, sugarPtrs, 1, 512, nullptr, &sugarAutomation, 1);
     runProcess (intrinsic, inPtrs, 1, intrinsicPtrs, 1, 512, nullptr, &intrinsicAutomation, 1);
@@ -4071,7 +4071,7 @@ TEST (YdspJitGraphTests, SmoothIntrinsicMatchesSmoothingAnnotation)
 
 TEST (YdspJitGraphTests, BlockWithNoSplitPointsTakesSingleKernelCall)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Counter {
@@ -4126,7 +4126,7 @@ TEST (YdspJitGraphTests, BlockWithNoSplitPointsTakesSingleKernelCall)
 
 TEST (YdspJitGraphTests, ThreeArgProcessMatchesNewOverloadWithNullEvents)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor OnePole {
@@ -4147,9 +4147,9 @@ TEST (YdspJitGraphTests, ThreeArgProcessMatchesNewOverloadWithNullEvents)
     std::vector<float> outA (64, 0.0f);
     std::vector<float> outB (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (input.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuffersA { yup::Span<float> (outA.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuffersB { yup::Span<float> (outB.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (input.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuffersA { yup::Span<float> (outA.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuffersB { yup::Span<float> (outB.data(), 64) };
 
     for (int b = 0; b < 4; ++b)
     {
@@ -4168,7 +4168,7 @@ TEST (YdspJitGraphTests, ThreeArgProcessMatchesNewOverloadWithNullEvents)
 
 TEST (YdspJitGraphTests, MidiOutOverloadsForwardAndLeaveBufferEmptyWithoutOutputEvents)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor OnePole {
@@ -4189,16 +4189,16 @@ TEST (YdspJitGraphTests, MidiOutOverloadsForwardAndLeaveBufferEmptyWithoutOutput
     std::vector<float> outA (64, 0.0f);
     std::vector<float> outB (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (input.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuffersA { yup::Span<float> (outA.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuffersB { yup::Span<float> (outB.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (input.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuffersA { yup::Span<float> (outA.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuffersB { yup::Span<float> (outB.data(), 64) };
 
     yup::MidiBuffer midiOut;
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outBuffersA, 64, nullptr, nullptr, 0));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outBuffersA, 64, nullptr, nullptr, 0));
     graph.reset();
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outBuffersB, 64, nullptr, nullptr, 0, &midiOut));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outBuffersB, 64, nullptr, nullptr, 0, &midiOut));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (outA[static_cast<size_t> (i)], outB[static_cast<size_t> (i)]);
@@ -4210,7 +4210,7 @@ TEST (YdspJitGraphTests, MidiOutOverloadsForwardAndLeaveBufferEmptyWithoutOutput
 
 TEST (YdspJitGraphTests, IgnoresMismatchedStreamBuffers)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -4224,34 +4224,34 @@ TEST (YdspJitGraphTests, IgnoresMismatchedStreamBuffers)
     std::vector<float> input (64, 0.5f);
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitOutputBuffer> outBuf { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuf { yup::Span<float> (output.data(), 64) };
 
     std::vector<double> wrongInput (64, 0.5);
-    std::vector<yup::DspJitInputBuffer> wrongIn { yup::Span<const double> (wrongInput.data(), 64) };
+    std::vector<yup::YdspInputBuffer> wrongIn { yup::Span<const double> (wrongInput.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::bufferTypeMismatch, graph.process (wrongIn, outBuf, 64));
+    EXPECT_EQ (yup::YdspProcessResult::bufferTypeMismatch, graph.process (wrongIn, outBuf, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (0.0f, output[static_cast<size_t> (i)]);
 
     std::vector<float> shortInput (32, 0.5f);
-    std::vector<yup::DspJitInputBuffer> shortIn { yup::Span<const float> (shortInput.data(), 32) };
+    std::vector<yup::YdspInputBuffer> shortIn { yup::Span<const float> (shortInput.data(), 32) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::bufferTooShort, graph.process (shortIn, outBuf, 64));
+    EXPECT_EQ (yup::YdspProcessResult::bufferTooShort, graph.process (shortIn, outBuf, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (0.0f, output[static_cast<size_t> (i)]);
 
-    std::vector<yup::DspJitInputBuffer> extraIn {
+    std::vector<yup::YdspInputBuffer> extraIn {
         yup::Span<const float> (input.data(), 64),
         yup::Span<const float> (input.data(), 64)
     };
 
-    EXPECT_EQ (yup::DspJitProcessResult::invalidBufferCount, graph.process (extraIn, outBuf, 64));
+    EXPECT_EQ (yup::YdspProcessResult::invalidBufferCount, graph.process (extraIn, outBuf, 64));
 
-    std::vector<yup::DspJitInputBuffer> okIn { yup::Span<const float> (input.data(), 64) };
+    std::vector<yup::YdspInputBuffer> okIn { yup::Span<const float> (input.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (okIn, outBuf, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (okIn, outBuf, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (1.0f, output[static_cast<size_t> (i)]);
@@ -4261,7 +4261,7 @@ TEST (YdspJitGraphTests, IgnoresMismatchedStreamBuffers)
 
 TEST (YdspJitGraphTests, ExposesParamMetadataForUi)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -4287,7 +4287,7 @@ TEST (YdspJitGraphTests, ExposesParamMetadataForUi)
     const auto master = graph.getParameterInfo (0);
     EXPECT_EQ ("master", master.name);
     EXPECT_EQ ("Master Volume", master.displayName);
-    EXPECT_EQ (DspJitElementType::float32, master.type);
+    EXPECT_EQ (YdspElementType::float32, master.type);
     EXPECT_NEAR (0.8, master.defaultValue, 1e-6);
     EXPECT_NEAR (0.0, master.minValue, 1e-6);
     EXPECT_NEAR (1.0, master.maxValue, 1e-6);
@@ -4335,7 +4335,7 @@ TEST (YdspJitGraphTests, ExposesParamMetadataForUi)
 
 TEST (YdspJitGraphTests, ExposesUnitStepAndStyleForUi)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -4366,7 +4366,7 @@ TEST (YdspJitGraphTests, ExposesUnitStepAndStyleForUi)
 TEST (YdspJitGraphTests, ExposesDiscreteValuesForUi)
 
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Voice {
@@ -4426,7 +4426,7 @@ TEST (YdspJitGraphTests, ExposesDiscreteValuesForUi)
 
 TEST (YdspJitGraphTests, RejectsMalformedDiscreteValuesAnnotation)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto tooFew = compiler.compile (R"YDSP(
         processor Voice {
@@ -4465,7 +4465,7 @@ TEST (YdspJitGraphTests, RejectsMalformedDiscreteValuesAnnotation)
 
 TEST (YdspJitGraphTests, ExposesDiscreteValuesOnAGraphParameterAliasedOntoNodes)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Band {
@@ -4522,7 +4522,7 @@ TEST (YdspJitGraphTests, ExposesDiscreteValuesOnAGraphParameterAliasedOntoNodes)
 
 TEST (YdspJitGraphTests, DroppedEventsAreCountedNotAllocated)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -4544,7 +4544,7 @@ TEST (YdspJitGraphTests, DroppedEventsAreCountedNotAllocated)
 
 TEST (YdspJitGraphTests, AutomatingANonFloat32ParameterIsCountedAsDropped)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -4568,7 +4568,7 @@ TEST (YdspJitGraphTests, AutomatingANonFloat32ParameterIsCountedAsDropped)
     const float* inPtrs[] = { input.data() };
     float* outPtrs[] = { output.data() };
 
-    const DspJitAutomationEvent automation[] = { { slot, 0, 1.0f } };
+    const YdspAutomationEvent automation[] = { { slot, 0, 1.0f } };
 
     const auto droppedBefore = graph.getDroppedEventCount();
 
@@ -4670,7 +4670,7 @@ constexpr const char* monoVoiceSource = R"YDSP(
 
 TEST (YdspJitGraphTests, ControlChangeReachesEveryVoiceAtItsSampleOffset)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (controlVoiceSource) + R"YDSP(
         graph G {
@@ -4705,7 +4705,7 @@ TEST (YdspJitGraphTests, ControlChangeReachesEveryVoiceAtItsSampleOffset)
 
 TEST (YdspJitGraphTests, ProgramChangeReachesTheHandler)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (controlVoiceSource) + R"YDSP(
         graph G {
@@ -4737,7 +4737,7 @@ TEST (YdspJitGraphTests, ProgramChangeReachesTheHandler)
 
 TEST (YdspJitGraphTests, ChannelPitchBendAndPressureBroadcastInLegacyMode)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (expressiveVoiceSource) + R"YDSP(
         graph G {
@@ -4778,7 +4778,7 @@ TEST (YdspJitGraphTests, ChannelPitchBendAndPressureBroadcastInLegacyMode)
 
 TEST (YdspJitGraphTests, PolyAftertouchFoldsIntoTheAffectedNotesPressure)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (expressiveVoiceSource) + R"YDSP(
         graph G {
@@ -4814,7 +4814,7 @@ TEST (YdspJitGraphTests, PolyAftertouchFoldsIntoTheAffectedNotesPressure)
 
 TEST (YdspJitGraphTests, PerNoteMpeExpressionReachesOnlyTheOwningVoice)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (expressiveVoiceSource) + R"YDSP(
         graph G {
@@ -4859,7 +4859,7 @@ TEST (YdspJitGraphTests, PerNoteMpeExpressionReachesOnlyTheOwningVoice)
 
 TEST (YdspJitGraphTests, ExpressionForAnUnownedNoteIsDiscardedAndCounted)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (expressiveVoiceSource) + R"YDSP(
         graph G {
@@ -4912,7 +4912,7 @@ TEST (YdspJitGraphTests, StealingPolicySelectsWhichVoiceIsReused)
                                 Policy { "stealing: newest", 1.0f, 1.0f },
                                 Policy { "stealing: none", 1.0f, 0.0f } })
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
 
         auto graph = compilePatch (std::string (activeVoiceSource) + "graph G { input event midi; output stream y; node v = ActiveVoice[2] [[ " + policy.annotation + " ]]; connection { midi -> v.midi; v.out -> y; } }", compiler);
 
@@ -4939,7 +4939,7 @@ TEST (YdspJitGraphTests, StealingPolicySelectsWhichVoiceIsReused)
 
 TEST (YdspJitGraphTests, MonoNodeFollowsTheHeldNoteStackWithLegato)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (monoVoiceSource) + R"YDSP(
         graph G {
@@ -4984,7 +4984,7 @@ TEST (YdspJitGraphTests, MonoNotePriorityChoosesTheSoundingNote)
     for (const auto& [priority, expected] : { std::pair<const char*, float> { "low", 40.0f },
                                               std::pair<const char*, float> { "high", 1052.0f } })
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
 
         auto graph = compilePatch (std::string (monoVoiceSource) + "graph G { input event midi; output stream y; node bass = MonoVoice [[ mode: mono, priority: " + priority + " ]]; connection { midi -> bass.midi; bass.out -> y; } }", compiler);
 
@@ -5008,7 +5008,7 @@ TEST (YdspJitGraphTests, MonoNotePriorityChoosesTheSoundingNote)
 
 TEST (YdspJitGraphTests, SustainPedalHoldsAReleasedNoteWithoutYdspSustainState)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -5037,7 +5037,7 @@ TEST (YdspJitGraphTests, SustainPedalHoldsAReleasedNoteWithoutYdspSustainState)
 
 TEST (YdspJitGraphTests, SostenutoPedalHoldsOnlyTheNotesHeldWhenItWentDown)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -5073,7 +5073,7 @@ TEST (YdspJitGraphTests, AllNotesOffAndResetAllControllersReleaseWithoutZeroingS
 {
     for (const int controller : { 123, 121 })
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
 
         auto graph = compilePatch (std::string (activeVoiceSource) + activeVoiceGraph, compiler);
 
@@ -5100,7 +5100,7 @@ TEST (YdspJitGraphTests, AllNotesOffAndResetAllControllersReleaseWithoutZeroingS
 
 TEST (YdspJitGraphTests, AllSoundOffSilencesAndReRunsInit)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor InitVoice {
@@ -5145,7 +5145,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesAndReRunsInit)
 
 TEST (YdspJitGraphTests, DenseMpeTrafficDoesNotAllocateDuringProcess)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (std::string (expressiveVoiceSource) + R"YDSP(
         graph G {
@@ -5198,7 +5198,7 @@ TEST (YdspJitGraphTests, DenseMpeTrafficDoesNotAllocateDuringProcess)
 
 TEST (YdspJitGraphTests, PolySineCompilesAndRunsSampleAccurately)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         declare name "PolySine";
@@ -5382,7 +5382,7 @@ TEST (YdspJitGraphTests, PolySineCompilesAndRunsSampleAccurately)
     std::vector<float> slowOut (blockSize, 0.0f);
     float* slowPtrs[] = { slowOut.data() };
 
-    DspJitAutomationEvent decayAutomation { decaySlot, 100, 4.0f };
+    YdspAutomationEvent decayAutomation { decaySlot, 100, 4.0f };
 
     runProcess (graph, nullptr, 0, slowPtrs, 1, blockSize, &lateMidi, &decayAutomation, 1);
 
@@ -5530,7 +5530,7 @@ float blockEnergy (const std::vector<float>& block, int from, int to)
 
 TEST (YdspJitGraphTests, ExpressiveMpeSynthRespondsToEveryEventClass)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (expressiveSynthSource, compiler);
 
@@ -5652,7 +5652,7 @@ TEST (YdspJitGraphTests, ExpressiveMpeSynthRespondsToEveryEventClass)
 
 TEST (YdspJitGraphTests, NoteOnCarriesCurrentPitchBend)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor BendVoice {
@@ -5708,7 +5708,7 @@ TEST (YdspJitGraphTests, NoteOnCarriesCurrentPitchBend)
 
 TEST (YdspJitGraphTests, MonoNoteOnCarriesCurrentPitchBend)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor BendVoice {
@@ -5753,7 +5753,7 @@ TEST (YdspJitGraphTests, MonoNoteOnCarriesCurrentPitchBend)
 
 TEST (YdspJitGraphTests, LoopNestedInsideAnIfRunsExactlyOnce)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor P {
@@ -5848,7 +5848,7 @@ protected:
         return energy;
     }
 
-    DspJitGraph& graph;
+    YdspAudioGraph& graph;
 
     std::vector<float> left = std::vector<float> (blockSize, 0.0f);
     std::vector<float> right = std::vector<float> (blockSize, 0.0f);
@@ -5964,7 +5964,7 @@ float sumOf (const std::vector<float>& block, int from, int to)
 
 TEST (YdspJitGraphTests, IdleVoiceBankProducesExactSilence)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -5994,7 +5994,7 @@ TEST (YdspJitGraphTests, IdleVoiceBankProducesExactSilence)
 
 TEST (YdspJitGraphTests, GetActiveVoiceCountIsSafeBeforePrepare)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6015,7 +6015,7 @@ TEST (YdspJitGraphTests, GetActiveVoiceCountIsSafeBeforePrepare)
 
 TEST (YdspJitGraphTests, OnlySoundingVoicesContributeToTheMix)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6047,7 +6047,7 @@ TEST (YdspJitGraphTests, OnlySoundingVoicesContributeToTheMix)
 
 TEST (YdspJitGraphTests, VoiceRunsToTheBlockBoundaryThenSleeps)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6092,7 +6092,7 @@ TEST (YdspJitGraphTests, VoiceRunsToTheBlockBoundaryThenSleeps)
 
 TEST (YdspJitGraphTests, NoteOnMidBlockRendersTheWholeBlock)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6125,7 +6125,7 @@ TEST (YdspJitGraphTests, NoteOnMidBlockRendersTheWholeBlock)
 
 TEST (YdspJitGraphTests, WokenIdleVoiceLeavesNoStaleScratchBehind)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6169,7 +6169,7 @@ TEST (YdspJitGraphTests, WokenIdleVoiceLeavesNoStaleScratchBehind)
 
 TEST (YdspJitGraphTests, AutomationStillAppliesToAFullyIdleVoiceBank)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor LevelProbe {
@@ -6199,7 +6199,7 @@ TEST (YdspJitGraphTests, AutomationStillAppliesToAFullyIdleVoiceBank)
     const auto levelSlot = graph.getParameterSlot ("voices.level");
     ASSERT_GE (levelSlot, 0);
 
-    const DspJitAutomationEvent automation { levelSlot, 100, 2.0f };
+    const YdspAutomationEvent automation { levelSlot, 100, 2.0f };
 
     ASSERT_EQ (0, graph.getActiveVoiceCount ("voices"));
 
@@ -6221,7 +6221,7 @@ TEST (YdspJitGraphTests, AutomationStillAppliesToAFullyIdleVoiceBank)
 
 TEST (YdspJitGraphTests, MonoVoiceSleepsWhenIdle)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6259,7 +6259,7 @@ TEST (YdspJitGraphTests, MonoVoiceSleepsWhenIdle)
 
 TEST (YdspJitGraphTests, HeldVoiceRunsEvenWithItsFlagCleared)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor LyingProbe {
@@ -6307,7 +6307,7 @@ TEST (YdspJitGraphTests, HeldVoiceRunsEvenWithItsFlagCleared)
 
 TEST (YdspJitGraphTests, WriteOnlyActivityFlagStillPutsTheVoiceToSleep)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor DecayProbe {
@@ -6360,7 +6360,7 @@ TEST (YdspJitGraphTests, WriteOnlyActivityFlagStillPutsTheVoiceToSleep)
 
 TEST (YdspJitGraphTests, VoiceBankWithoutTheAnnotationRunsEveryVoice)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor PlainProbe {
@@ -6398,7 +6398,7 @@ TEST (YdspJitGraphTests, VoiceBankWithoutTheAnnotationRunsEveryVoice)
 
 TEST (YdspJitGraphTests, AllSoundOffSilencesAndSleepsTheVoices)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6440,7 +6440,7 @@ TEST (YdspJitGraphTests, AllSoundOffSilencesAndSleepsTheVoices)
 
 TEST (YdspJitGraphTests, ActiveVoiceCountIsZeroForAnUnknownNode)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (String (sleepProbeSource) + R"YDSP(
         graph G {
@@ -6469,14 +6469,14 @@ constexpr const char* fanProcessors =
     "processor Gain { input stream in; output stream out; input value float g = 1.0; process { out = in * g; } }\n"
     "processor Sub { input stream a; input stream b; output stream out; process { out = a - b; } }\n";
 
-DspJitGraph fanCompile (StringRef body, DspJitCompiler& compiler)
+YdspAudioGraph fanCompile (StringRef body, YdspCompiler& compiler)
 {
     return compilePatch (String (fanProcessors) + body, compiler);
 }
 
 const std::vector<float> fanInput { 1.0f, 2.0f, -0.5f, 0.25f, 4.0f, 0.0f, -3.0f, 1.5f };
 
-std::vector<std::vector<float>> fanRun (DspJitGraph& graph,
+std::vector<std::vector<float>> fanRun (YdspAudioGraph& graph,
                                         const std::vector<std::vector<float>>& inputs,
                                         int numOutputs)
 {
@@ -6507,7 +6507,7 @@ std::vector<std::vector<float>> fanRun (DspJitGraph& graph,
 
 TEST (YdspJitGraphTests, FansOutAGraphInputToTwoNodes)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6537,7 +6537,7 @@ TEST (YdspJitGraphTests, FansOutAGraphInputToTwoNodes)
 
 TEST (YdspJitGraphTests, SumsTwoSourcesIntoANodeInput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6564,7 +6564,7 @@ TEST (YdspJitGraphTests, SumsTwoSourcesIntoANodeInput)
 
 TEST (YdspJitGraphTests, SumsTwoSourcesIntoAGraphOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6590,7 +6590,7 @@ TEST (YdspJitGraphTests, SumsTwoSourcesIntoAGraphOutput)
 
 TEST (YdspJitGraphTests, SumsThreeSourcesIntoOneSlot)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6618,7 +6618,7 @@ TEST (YdspJitGraphTests, SumsThreeSourcesIntoOneSlot)
 
 TEST (YdspJitGraphTests, NodeOutputFeedsAGraphOutputAndANode)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6648,7 +6648,7 @@ TEST (YdspJitGraphTests, NodeOutputFeedsAGraphOutputAndANode)
 
 TEST (YdspJitGraphTests, NodeOutputFeedsANodeAndAGraphOutputInTheOtherOrder)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6678,7 +6678,7 @@ TEST (YdspJitGraphTests, NodeOutputFeedsANodeAndAGraphOutputInTheOtherOrder)
 
 TEST (YdspJitGraphTests, NodeOutputDrivesTwoGraphOutputs)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6707,7 +6707,7 @@ TEST (YdspJitGraphTests, NodeOutputDrivesTwoGraphOutputs)
 
 TEST (YdspJitGraphTests, AppliesPerEdgeDelayBeforeSumming)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6735,7 +6735,7 @@ TEST (YdspJitGraphTests, AppliesPerEdgeDelayBeforeSumming)
 
 TEST (YdspJitGraphTests, SumsIntoOneSlotWithoutDisturbingTheOther)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6762,7 +6762,7 @@ TEST (YdspJitGraphTests, SumsIntoOneSlotWithoutDisturbingTheOther)
 
 TEST (YdspJitGraphTests, AppliesADelayOnAnEdgeIntoAGraphOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6787,7 +6787,7 @@ TEST (YdspJitGraphTests, AppliesADelayOnAnEdgeIntoAGraphOutput)
 
 TEST (YdspJitGraphTests, WiresAGraphInputStraightToAGraphOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6816,7 +6816,7 @@ TEST (YdspJitGraphTests, WiresAGraphInputStraightToAGraphOutput)
 
 TEST (YdspJitGraphTests, SumsAGraphInputAndANodeOutputIntoOneGraphOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6841,7 +6841,7 @@ TEST (YdspJitGraphTests, SumsAGraphInputAndANodeOutputIntoOneGraphOutput)
 
 TEST (YdspJitGraphTests, SumsFanInOnAFloat64Stream)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor WideGain { input stream float64 in; output stream float64 out; input value float64 g = 1.0; process { out = in * g; } }
@@ -6861,10 +6861,10 @@ TEST (YdspJitGraphTests, SumsFanInOnAFloat64Stream)
     std::vector<double> input (fanInput.begin(), fanInput.end());
     std::vector<double> output (input.size(), 0.0);
 
-    std::vector<DspJitInputBuffer> inputs { DspJitInputBuffer (Span<const double> (input.data(), input.size())) };
-    std::vector<DspJitOutputBuffer> outputs { DspJitOutputBuffer (Span<double> (output.data(), output.size())) };
+    std::vector<YdspInputBuffer> inputs { YdspInputBuffer (Span<const double> (input.data(), input.size())) };
+    std::vector<YdspOutputBuffer> outputs { YdspOutputBuffer (Span<double> (output.data(), output.size())) };
 
-    ASSERT_EQ (DspJitProcessResult::ok, graph.process (inputs, outputs, static_cast<int> (input.size())));
+    ASSERT_EQ (YdspProcessResult::ok, graph.process (inputs, outputs, static_cast<int> (input.size())));
 
     for (size_t i = 0; i < input.size(); ++i)
         EXPECT_NEAR (input[i] * 5.0, output[i], 1e-12) << "sample " << i;
@@ -6872,7 +6872,7 @@ TEST (YdspJitGraphTests, SumsFanInOnAFloat64Stream)
 
 TEST (YdspJitGraphTests, FanInSurvivesASecondPrepareAtADifferentBlockSize)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6902,8 +6902,8 @@ TEST (YdspJitGraphTests, FanInSurvivesASecondPrepareAtADifferentBlockSize)
 
 TEST (YdspJitGraphTests, SplitMergeAlgebraMatchesTheHandWrittenConnectionBlock)
 {
-    DspJitCompiler algebraCompiler;
-    DspJitCompiler wiredCompiler;
+    YdspCompiler algebraCompiler;
+    YdspCompiler wiredCompiler;
 
     auto algebra = fanCompile (R"YDSP(
         graph G {
@@ -6943,7 +6943,7 @@ TEST (YdspJitGraphTests, SplitMergeAlgebraMatchesTheHandWrittenConnectionBlock)
 
 TEST (YdspJitGraphTests, SplitMergeCarriesTheIdentityFanThroughToRealEdges)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fanCompile (R"YDSP(
         graph G {
@@ -6970,7 +6970,7 @@ TEST (YdspJitGraphTests, SplitMergeCarriesTheIdentityFanThroughToRealEdges)
 
 TEST (YdspJitGraphTests, RoutedNoteOnSoundsTheDestinationVoiceAtTheRoutedPitch)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Arp {
@@ -7004,10 +7004,10 @@ TEST (YdspJitGraphTests, RoutedNoteOnSoundsTheDestinationVoiceAtTheRoutedPitch)
 
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (72.0f, output[static_cast<size_t> (i)]) << "at " << i;
@@ -7050,7 +7050,7 @@ TEST (YdspJitGraphTests, AnImportedProcessorsEmitStatementSurvivesTheImportClone
         }
     )YDSP";
 
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto result = compiler.compile (patch, tempDir.getChildFile ("Patch.ydsp").getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
@@ -7063,10 +7063,10 @@ TEST (YdspJitGraphTests, AnImportedProcessorsEmitStatementSurvivesTheImportClone
 
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (72.0f, output[static_cast<size_t> (i)]) << "at " << i;
@@ -7085,7 +7085,7 @@ TEST (YdspJitGraphTests, MidiOnlyNodeReceivesEveryHeldNoteWithoutSyntheticSteali
     // that manages its own polyphony (an arpeggiator's held-note table) must
     // see every noteOn/noteOff exactly once, verbatim, with no synthetic
     // releases injected by voice stealing.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Collector {
@@ -7125,7 +7125,7 @@ TEST (YdspJitGraphTests, MidiOnlyNodeReceivesEveryHeldNoteWithoutSyntheticSteali
 
 TEST (YdspJitGraphTests, TwoSourceNodesRoutingTheSamePitchDoNotCollideOnOneVoiceBank)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor ArpA {
@@ -7184,13 +7184,13 @@ TEST (YdspJitGraphTests, TwoSourceNodesRoutingTheSamePitchDoNotCollideOnOneVoice
 
     std::vector<float> outputBlock1 (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inBuf1 {
+    std::vector<yup::YdspInputBuffer> inBuf1 {
         yup::Span<const float> (trigAOn.data(), 64),
         yup::Span<const float> (trigBOn.data(), 64)
     };
-    std::vector<yup::DspJitOutputBuffer> outBuf1 { yup::Span<float> (outputBlock1.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuf1 { yup::Span<float> (outputBlock1.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inBuf1, outBuf1, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inBuf1, outBuf1, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_NEAR (120.3f, outputBlock1[static_cast<size_t> (i)], 1e-3f) << "block 1 at " << i;
@@ -7201,13 +7201,13 @@ TEST (YdspJitGraphTests, TwoSourceNodesRoutingTheSamePitchDoNotCollideOnOneVoice
 
     std::vector<float> outputBlock2 (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inBuf2 {
+    std::vector<yup::YdspInputBuffer> inBuf2 {
         yup::Span<const float> (trigAOff.data(), 64),
         yup::Span<const float> (trigBOff.data(), 64)
     };
-    std::vector<yup::DspJitOutputBuffer> outBuf2 { yup::Span<float> (outputBlock2.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuf2 { yup::Span<float> (outputBlock2.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inBuf2, outBuf2, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inBuf2, outBuf2, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_NEAR (60.1f, outputBlock2[static_cast<size_t> (i)], 1e-3f) << "block 2 at " << i;
@@ -7217,7 +7217,7 @@ TEST (YdspJitGraphTests, TwoSourceNodesRoutingTheSamePitchDoNotCollideOnOneVoice
 
 TEST (YdspJitGraphTests, LatencyAnnotatedEmitterDelaysTheRoutedEventByItsDeclaredLatency)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Source [[ latency: 8 ]] {
@@ -7250,10 +7250,10 @@ TEST (YdspJitGraphTests, LatencyAnnotatedEmitterDelaysTheRoutedEventByItsDeclare
 
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
 
     for (int i = 0; i < 8; ++i)
         EXPECT_FLOAT_EQ (0.0f, output[static_cast<size_t> (i)]) << "before compensated onset at " << i;
@@ -7266,7 +7266,7 @@ TEST (YdspJitGraphTests, LatencyAnnotatedEmitterDelaysTheRoutedEventByItsDeclare
 
 TEST (YdspJitGraphTests, ACompensatedEventStraddlingTheBlockBoundaryCarriesToTheNextBlock)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Source [[ latency: 100 ]] {
@@ -7301,18 +7301,18 @@ TEST (YdspJitGraphTests, ACompensatedEventStraddlingTheBlockBoundaryCarriesToThe
     std::vector<float> outputBlock1 (64, 0.0f);
     std::vector<float> outputBlock2 (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inBuf1 { yup::Span<const float> (trigOn.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuf1 { yup::Span<float> (outputBlock1.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inBuf1 { yup::Span<const float> (trigOn.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuf1 { yup::Span<float> (outputBlock1.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inBuf1, outBuf1, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inBuf1, outBuf1, 64));
 
     for (int i = 0; i < 64; ++i)
         EXPECT_FLOAT_EQ (0.0f, outputBlock1[static_cast<size_t> (i)]) << "block 1 at " << i;
 
-    std::vector<yup::DspJitInputBuffer> inBuf2 { yup::Span<const float> (trigOff.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outBuf2 { yup::Span<float> (outputBlock2.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inBuf2 { yup::Span<const float> (trigOff.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outBuf2 { yup::Span<float> (outputBlock2.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inBuf2, outBuf2, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inBuf2, outBuf2, 64));
 
     for (int i = 0; i < 36; ++i)
         EXPECT_FLOAT_EQ (0.0f, outputBlock2[static_cast<size_t> (i)]) << "block 2 before carried onset at " << i;
@@ -7325,7 +7325,7 @@ TEST (YdspJitGraphTests, ACompensatedEventStraddlingTheBlockBoundaryCarriesToThe
 
 TEST (YdspJitGraphTests, CarryQueueOverflowIncrementsTheDroppedOutputEventCounter)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Source [[ latency: 2000 ]] {
@@ -7355,10 +7355,10 @@ TEST (YdspJitGraphTests, CarryQueueOverflowIncrementsTheDroppedOutputEventCounte
 
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64));
 
     EXPECT_EQ (before + 1, graph.getDroppedOutputEventCount());
 
@@ -7367,7 +7367,7 @@ TEST (YdspJitGraphTests, CarryQueueOverflowIncrementsTheDroppedOutputEventCounte
 
 TEST (YdspJitGraphTests, RoutedNoteOnReachesTheHostMidiOutBuffer)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = compilePatch (R"YDSP(
         processor Arp {
@@ -7398,12 +7398,12 @@ TEST (YdspJitGraphTests, RoutedNoteOnReachesTheHostMidiOutBuffer)
 
     std::vector<float> output (64, 0.0f);
 
-    std::vector<yup::DspJitInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
-    std::vector<yup::DspJitOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
+    std::vector<yup::YdspInputBuffer> inputBuffers { yup::Span<const float> (trig.data(), 64) };
+    std::vector<yup::YdspOutputBuffer> outputBuffers { yup::Span<float> (output.data(), 64) };
 
     yup::MidiBuffer midiOut;
 
-    EXPECT_EQ (yup::DspJitProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64, nullptr, nullptr, 0, &midiOut));
+    EXPECT_EQ (yup::YdspProcessResult::ok, graph.process (inputBuffers, outputBuffers, 64, nullptr, nullptr, 0, &midiOut));
 
     ASSERT_FALSE (midiOut.isEmpty());
 

@@ -33,7 +33,7 @@ namespace yup::test
 namespace
 {
 
-DspJitGraph fusionCompile (StringRef source, DspJitCompiler& compiler)
+YdspAudioGraph fusionCompile (StringRef source, YdspCompiler& compiler)
 {
     auto result = compiler.compile (source);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -45,7 +45,7 @@ DspJitGraph fusionCompile (StringRef source, DspJitCompiler& compiler)
 }
 
 /** True when the compiled graph contains a synthesized fused kernel. */
-bool fusionHappened (const DspJitGraph& graph)
+bool fusionHappened (const YdspAudioGraph& graph)
 {
     for (const auto& kernel : graph.getExecutionReport().getKernels())
         if (kernel.name.startsWith ("fused("))
@@ -59,7 +59,7 @@ bool fusionHappened (const DspJitGraph& graph)
     The fused kernel is synthesized, so when its output is wrong there is no
     source to read - the listing is the only way to see what was actually
     built. */
-void fusionDumpOnFailure (const DspJitGraph& graph)
+void fusionDumpOnFailure (const YdspAudioGraph& graph)
 {
     if (! ::testing::Test::HasFailure())
         return;
@@ -71,12 +71,12 @@ void fusionDumpOnFailure (const DspJitGraph& graph)
                   << text << std::endl;
 }
 
-void fusionRun (DspJitGraph& graph, const float* input, float* output, int numSamples)
+void fusionRun (YdspAudioGraph& graph, const float* input, float* output, int numSamples)
 {
-    std::vector<DspJitInputBuffer> inputs;
+    std::vector<YdspInputBuffer> inputs;
     inputs.emplace_back (Span<const float> (input, static_cast<size_t> (numSamples)));
 
-    std::vector<DspJitOutputBuffer> outputs;
+    std::vector<YdspOutputBuffer> outputs;
     outputs.emplace_back (Span<float> (output, static_cast<size_t> (numSamples)));
 
     graph.process (inputs, outputs, numSamples, nullptr, nullptr, 0);
@@ -171,7 +171,7 @@ constexpr auto fusionEquivalentSource = R"YDSP(
 
 TEST (YdspFusionTests, FusesAChainOfThreeNodes)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = fusionCompile (fusionChainSource, compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -180,7 +180,7 @@ TEST (YdspFusionTests, FusesAChainOfThreeNodes)
 
 TEST (YdspFusionTests, FusedChainMatchesTheEquivalentSingleProcessor)
 {
-    DspJitCompiler chainCompiler, wholeCompiler;
+    YdspCompiler chainCompiler, wholeCompiler;
 
     auto chain = fusionCompile (fusionChainSource, chainCompiler);
     auto whole = fusionCompile (fusionEquivalentSource, wholeCompiler);
@@ -214,7 +214,7 @@ TEST (YdspFusionTests, FusedChainMatchesTheEquivalentSingleProcessor)
 TEST (YdspFusionTests, FusesTheAlgebraFormIdenticallyToTheConnectionForm)
 {
     // Both syntaxes converge on the same analyzed edges, so both fuse.
-    DspJitCompiler algebraCompiler, connectionCompiler;
+    YdspCompiler algebraCompiler, connectionCompiler;
 
     auto algebra = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; state float z; process { z = z * 0.5 + in; out = z; } }
@@ -265,7 +265,7 @@ TEST (YdspFusionTests, DropsTheKernelsOfTheMembersItAbsorbed)
     // A member the fused body absorbed is no longer instantiated anywhere, so
     // compiling it would be dead machine code - and it would show up in the
     // report as a kernel the patch appears to run.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = fusionCompile (fusionChainSource, compiler);
 
     ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
@@ -287,7 +287,7 @@ TEST (YdspFusionTests, KeepsAMemberKernelStillInstantiatedElsewhere)
     // `Half` is used twice: once inside the chain that fuses and once on its own
     // branch. Absorbing the first instance must not take the processor away from
     // the second, so exactly the fused kernel and `Half` survive.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -327,7 +327,7 @@ TEST (YdspFusionTests, KeepsAMemberKernelStillInstantiatedElsewhere)
 
 TEST (YdspFusionTests, ParameterNamesSurviveFusion)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Gain {
@@ -383,7 +383,7 @@ TEST (YdspFusionTests, ParameterNamesSurviveFusion)
 
 TEST (YdspFusionTests, GraphParameterAliasStillDrivesAFusedMember)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Gain {
@@ -428,7 +428,7 @@ TEST (YdspFusionTests, GraphParameterAliasStillDrivesAFusedMember)
 
 TEST (YdspFusionTests, FusesMembersCarryingStateInitialisersAndFunctions)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Scaled {
@@ -490,7 +490,7 @@ TEST (YdspFusionTests, MeterNamesSurviveFusion)
     // distinct on the last sample - a name that survives but resolves to the
     // wrong slot is a different failure from one that stops resolving, and only
     // a patch with more than one meter can tell them apart.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Metered {
@@ -556,7 +556,7 @@ TEST (YdspFusionTests, MeterEdgeToAGraphMeterSurvivesFusion)
     // The edge itself has to be rerouted onto the fused node, not just the name:
     // the compaction that follows maps a still-dead source node to -1 without a
     // word in release builds, so a missed edge stops reporting silently.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Twice { input stream in; output stream out; process { out = in * 2.0; } }
@@ -606,7 +606,7 @@ TEST (YdspFusionTests, EventEdgeSurvivesCompactionAfterAnUnrelatedFusion)
     // it is their indices the fusion pass's own compaction has to shift. A
     // missing (or wrong) `liveIndex` remap on `graph.eventEdges` would resolve
     // the routed event against stale, pre-compaction node indices.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -655,13 +655,13 @@ TEST (YdspFusionTests, EventEdgeSurvivesCompactionAfterAnUnrelatedFusion)
     std::vector<float> output (static_cast<size_t> (fusionBlockSize), 0.0f);
     std::vector<float> voiceOut (static_cast<size_t> (fusionBlockSize), 0.0f);
 
-    std::vector<DspJitInputBuffer> inputs {
-        DspJitInputBuffer (Span<const float> (input.data(), input.size())),
-        DspJitInputBuffer (Span<const float> (trig.data(), trig.size()))
+    std::vector<YdspInputBuffer> inputs {
+        YdspInputBuffer (Span<const float> (input.data(), input.size())),
+        YdspInputBuffer (Span<const float> (trig.data(), trig.size()))
     };
-    std::vector<DspJitOutputBuffer> outputs {
-        DspJitOutputBuffer (Span<float> (output.data(), output.size())),
-        DspJitOutputBuffer (Span<float> (voiceOut.data(), voiceOut.size()))
+    std::vector<YdspOutputBuffer> outputs {
+        YdspOutputBuffer (Span<float> (output.data(), output.size())),
+        YdspOutputBuffer (Span<float> (voiceOut.data(), voiceOut.size()))
     };
 
     graph.process (inputs, outputs, fusionBlockSize);
@@ -687,7 +687,7 @@ TEST (YdspFusionTests, DoesNotFuseIntoAMultipleInputNode)
     // the two mixer inputs on distinct producers, which is what this test is
     // about - one producer feeding both would now be legal but would be testing
     // fan-out instead.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -751,8 +751,8 @@ constexpr auto fusionHiddenStateBody =
 
 TEST (YdspFusionTests, FusingAMemberWithHiddenDelayStateMatchesTheUnfusedChain)
 {
-    DspJitCompiler fusedCompiler;
-    DspJitCompiler splitCompiler;
+    YdspCompiler fusedCompiler;
+    YdspCompiler splitCompiler;
 
     auto fused = fusionCompile (String (fusionHiddenStateBody) + R"YDSP(
         graph G {
@@ -807,12 +807,12 @@ TEST (YdspFusionTests, FusingAMemberWithHiddenDelayStateMatchesTheUnfusedChain)
         fusionRun (fused, input.data(), fusedOut.data(), blockSize);
 
         {
-            std::vector<DspJitInputBuffer> inputs {
-                DspJitInputBuffer (Span<const float> (input.data(), input.size()))
+            std::vector<YdspInputBuffer> inputs {
+                YdspInputBuffer (Span<const float> (input.data(), input.size()))
             };
-            std::vector<DspJitOutputBuffer> outputs {
-                DspJitOutputBuffer (Span<float> (splitOut.data(), splitOut.size())),
-                DspJitOutputBuffer (Span<float> (splitTap.data(), splitTap.size()))
+            std::vector<YdspOutputBuffer> outputs {
+                YdspOutputBuffer (Span<float> (splitOut.data(), splitOut.size())),
+                YdspOutputBuffer (Span<float> (splitTap.data(), splitTap.size()))
             };
             split.process (inputs, outputs, blockSize);
         }
@@ -831,7 +831,7 @@ TEST (YdspFusionTests, ReverbSizedDelayRingsWorkWithoutFusion)
     // processor, alone in the graph so there is no chain to fuse. If this
     // crashes too then fusion is irrelevant and the bug is in large multi-ring
     // state on its own; if it passes, fusion is genuinely implicated.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Combs {
@@ -891,7 +891,7 @@ TEST (YdspFusionTests, FusesTwoMembersEachOwningLargeDelayRings)
     // `smooth` anywhere. If this crashes but the smoothed version does not (or
     // vice versa) that isolates whether the hidden int32 write pointers and the
     // hidden `smooth` slots are interfering with each other's allocation.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor CombA {
@@ -957,7 +957,7 @@ TEST (YdspFusionTests, FusesAMemberWithReverbSizedDelayRings)
     // The shape that crashed: rings of the size a Schroeder reverb uses, so an
     // out-of-bounds state-array store lands well outside the node's slice rather
     // than merely corrupting a neighbouring scalar.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Combs {
@@ -1027,7 +1027,7 @@ TEST (YdspFusionTests, DoesNotFuseATappedIntermediate)
     // is observable and the h -> t link cannot become a register. This is the
     // `fanOut != 1` half of the fusion rule, unreachable before node outputs
     // could fan out.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -1055,10 +1055,10 @@ TEST (YdspFusionTests, DoesNotFuseATappedIntermediate)
     std::vector<float> out (8, 0.0f);
     std::vector<float> tap (8, 0.0f);
 
-    std::vector<DspJitInputBuffer> inputs { DspJitInputBuffer (Span<const float> (input.data(), input.size())) };
-    std::vector<DspJitOutputBuffer> outputs {
-        DspJitOutputBuffer (Span<float> (out.data(), out.size())),
-        DspJitOutputBuffer (Span<float> (tap.data(), tap.size()))
+    std::vector<YdspInputBuffer> inputs { YdspInputBuffer (Span<const float> (input.data(), input.size())) };
+    std::vector<YdspOutputBuffer> outputs {
+        YdspOutputBuffer (Span<float> (out.data(), out.size())),
+        YdspOutputBuffer (Span<float> (tap.data(), tap.size()))
     };
 
     graph.process (inputs, outputs, 8);
@@ -1074,7 +1074,7 @@ TEST (YdspFusionTests, DoesNotFuseAcrossAnInlineDelay)
 {
     // Only the runtime's delay buffer can hold samples between the two stages;
     // a register cannot.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -1096,7 +1096,7 @@ TEST (YdspFusionTests, DoesNotFuseAcrossAnInlineDelay)
 
 TEST (YdspFusionTests, DoesNotFuseABlockModeNode)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -1124,7 +1124,7 @@ TEST (YdspFusionTests, DoesNotFuseAnOversampledNode)
 {
     // The runtime resamples around the kernel call, which one fused loop cannot
     // reproduce.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }
@@ -1151,7 +1151,7 @@ TEST (YdspFusionTests, DoesNotFuseANodeThatOnlyEmitsAnOutputEvent)
     // would otherwise qualify for fusion (1 audio in, 1 audio out, sample
     // mode, voice count 1, no oversampling) and this whole three-node chain
     // would collapse into one fused kernel.
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
 
     auto graph = fusionCompile (R"YDSP(
         processor Half { input stream in; output stream out; process { out = in * 0.5; } }

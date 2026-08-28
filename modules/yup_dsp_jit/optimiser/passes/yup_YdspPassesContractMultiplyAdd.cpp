@@ -91,12 +91,12 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
 {
     const YdspValueUseCounts counts (fn);
 
-    const auto isScalarFloat32 = [&fn] (int value)
+    const auto isFusableFloat32 = [this, &fn] (int value)
     {
         return value >= 0
             && static_cast<size_t> (value) < fn.valueTypes.size()
             && fn.valueTypes[static_cast<size_t> (value)] == YdspValueType::float32Type
-            && fn.laneCountOf (value) == 1;
+            && (fn.laneCountOf (value) == 1 || targetHasPackedFusedMultiplyAdd);
     };
 
     for (auto& block : fn.blocks)
@@ -105,14 +105,14 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
 
         for (size_t i = 0; i < insts.size(); ++i)
         {
-            if (insts[i].op != YdspIrOp::addF || ! isScalarFloat32 (insts[i].result))
+            if (insts[i].op != YdspIrOp::addF || ! isFusableFloat32 (insts[i].result))
                 continue;
 
             // A candidate is a multiply this add consumes and nothing else does,
             // and which can be moved down to the add's position unchanged.
             const auto findMultiply = [&] (int operand) -> std::optional<size_t>
             {
-                if (! isScalarFloat32 (operand) || ! counts.definedOnce (operand) || counts.useCount (operand) != 1)
+                if (! isFusableFloat32 (operand) || ! counts.definedOnce (operand) || counts.useCount (operand) != 1)
                     return std::nullopt;
 
                 for (size_t j = i; j-- > 0;)
@@ -120,7 +120,7 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
                     if (insts[j].result != operand)
                         continue;
 
-                    if (insts[j].op != YdspIrOp::mulF || ! isScalarFloat32 (insts[j].a) || ! isScalarFloat32 (insts[j].b))
+                    if (insts[j].op != YdspIrOp::mulF || ! isFusableFloat32 (insts[j].a) || ! isFusableFloat32 (insts[j].b))
                         return std::nullopt;
 
                     // The multiply is about to happen later than it did, so
@@ -179,10 +179,10 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             const auto factorB = insts[chosen].b;
             const auto addend = (insts[chosen].result == insts[i].a) ? insts[i].b : insts[i].a;
 
-            // Checked rather than inferred from the add's result being scalar:
-            // `vreduceAddF` produces a scalar from a widened operand, so a
-            // scalar result does not by itself prove every operand is one.
-            if (! isScalarFloat32 (addend))
+            // `vreduceAddF` produces a scalar from a widened operand, so the
+            // add result alone cannot establish that every FMA operand is
+            // scalar or that the target can lower the packed operation.
+            if (! isFusableFloat32 (addend))
                 continue;
 
             insts[i].op = YdspIrOp::fmaF;

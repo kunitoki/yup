@@ -223,7 +223,7 @@ YdspExprPtr clone (const YdspExpr& expr)
 
 //==============================================================================
 
-YdspParser::YdspParser (std::vector<YdspToken> tokens, DspJitDiagnostics& diagnostics)
+YdspParser::YdspParser (std::vector<YdspToken> tokens, YdspDiagnostics& diagnostics)
     : tokens (std::move (tokens))
     , diagnostics (diagnostics)
 {

@@ -27,13 +27,13 @@ namespace yup
 //==============================================================================
 // Internal per-architecture type aliases shared by the native (asmjit) backends.
 #if ASMJIT_ARCH_X86
-using YdspCompiler = asmjit::x86::Compiler;
+using YdspAsm = asmjit::x86::Compiler;
 using YdspGp = asmjit::x86::Gp;
 using YdspFp = asmjit::x86::Vec;
 using YdspMem = asmjit::x86::Mem;
 using YdspCond = asmjit::x86::CondCode;
 #elif ASMJIT_ARCH_ARM
-using YdspCompiler = asmjit::a64::Compiler;
+using YdspAsm = asmjit::a64::Compiler;
 using YdspGp = asmjit::a64::Gp;
 using YdspFp = asmjit::a64::Vec;
 using YdspMem = asmjit::a64::Mem;
@@ -61,10 +61,10 @@ class YdspAsmJitCodegen
 {
 public:
     /** Compiles the IR function; returns nullptr and records a diagnostic on failure. */
-    static YdspKernelFn compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics);
+    static YdspKernelFn compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, size_t* generatedCodeSize = nullptr);
 
     /** Compiles an event-handler IR function; returns nullptr and records a diagnostic on failure. */
-    static YdspEventHandlerFn compileEventHandler (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics);
+    static YdspEventHandlerFn compileEventHandler (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, size_t* generatedCodeSize = nullptr);
 
     /** Returns the state memory size in bytes for the given function. */
     static size_t stateSize (const YdspIrFunction& fn);
@@ -89,7 +89,7 @@ class YdspAsmJitCodegenImpl
 {
 public:
     /** Compiles the IR function; returns nullptr and records a diagnostic on failure. */
-    YdspKernelFn compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics, bool isEventHandler = false);
+    YdspKernelFn compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, bool isEventHandler = false, size_t* generatedCodeSize = nullptr);
 
 protected:
     virtual ~YdspAsmJitCodegenImpl() = default;
@@ -158,12 +158,15 @@ protected:
     */
     virtual void emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
 
+    /** dst = a * b + c in packed float32 lanes (YdspIrOp::fmaF). */
+    virtual void emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
+
     //==============================================================================
     // Packed float32 forms, used when the vectoriser widened a value. The lane
-    // count is not passed: it is fixed at YdspVectorizer::vectorWidth, and the
-    // dispatch happens in emitInstruction() from YdspIrFunction::valueLanes
-    // rather than by inspecting the register, so a target needs no register
-    // introspection to tell a scalar apart from a vector.
+    // count belongs to the active IR function and is reflected in the virtual
+    // register type. Dispatch happens in emitInstruction() from
+    // YdspIrFunction::valueLanes, so a target needs no register introspection
+    // to tell a scalar apart from a vector.
 
     virtual void loadVectorFromMem (const YdspFp& dst, const YdspMem& src) = 0;
     virtual void storeVectorToMem (const YdspMem& dst, const YdspFp& src) = 0;
@@ -249,7 +252,24 @@ protected:
 
     YdspFp newFpVector (const char* name)
     {
+#if ASMJIT_ARCH_X86
+        if (activeVectorWidth == 16)
+            return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x16, name);
+
+        if (activeVectorWidth == 8)
+            return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x8, name);
+#endif
+
         return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
+    }
+
+    YdspFp newFp128 (const char* name)
+    {
+#if ASMJIT_ARCH_X86
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
+#else
+        return newFpVector (name);
+#endif
     }
 
     /** True when the vectoriser widened this value id. */
@@ -309,6 +329,10 @@ protected:
         operand, so a sign mask consumed directly by one of them cannot come
         from a 4- or 8-byte pool entry. */
     YdspMem packedConstMem (uint64_t bits, bool is64);
+
+    /** Returns a constant-pool operand with a float32 bit pattern in every
+        lane of the active vector width. */
+    YdspMem vectorConstMem (uint32_t bits);
 
     /** Works out which `selectB`s can consume a comparison's flags directly.
 
@@ -379,7 +403,7 @@ protected:
     //==============================================================================
     // Shared state
 
-    YdspCompiler* cc = nullptr;
+    YdspAsm* cc = nullptr;
 
     YdspGp inputsReg;
     YdspGp outputsReg;
@@ -406,6 +430,7 @@ protected:
     int int64ArrayOffset = 0;
 
     bool isEventHandler = false;
+    int activeVectorWidth = YdspVectorizer::vectorWidth;
     YdspGp eventCtxReg; // the YdspEventContext pointer, addressed by byte offset
 
     std::vector<int> paramOffsets;    // byte offset per param slot (heterogeneous)

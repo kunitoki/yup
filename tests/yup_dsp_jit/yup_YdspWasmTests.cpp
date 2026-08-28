@@ -246,7 +246,7 @@ bool containsSubsequence (const std::vector<uint8_t>& haystack, const std::vecto
 // Runs the full YDSP pipeline (lexer -> parser -> analyzer -> optimizer) and
 // emits the wasm module for the named kernel.
 
-std::vector<uint8_t> compileWasm (StringRef source, const char* kernelName, DspJitDiagnostics& diagnostics)
+std::vector<uint8_t> compileWasm (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -486,7 +486,7 @@ TEST (WasmEmitterTests, LocalRunsAreCompressed)
 
 TEST (YdspWasmTests, CompilesPassThroughToAValidModule)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (passThroughSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -504,7 +504,7 @@ TEST (YdspWasmTests, CompilesPassThroughToAValidModule)
 
 TEST (YdspWasmTests, ImportsHostMemoryFirst)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (passThroughSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -523,7 +523,7 @@ TEST (YdspWasmTests, ImportsHostMemoryFirst)
 
 TEST (YdspWasmTests, ExportsKernelFunction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (passThroughSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -541,7 +541,7 @@ TEST (YdspWasmTests, ExportsKernelFunction)
 
 TEST (YdspWasmTests, ToTextRendersReadableWasmListing)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (passThroughSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -560,7 +560,7 @@ TEST (YdspWasmTests, ToTextRendersReadableWasmListing)
 
 TEST (YdspWasmTests, ToTextIncludesLibmImportsAndCalls)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (sinF32Source, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -572,7 +572,7 @@ TEST (YdspWasmTests, ToTextIncludesLibmImportsAndCalls)
 
 TEST (YdspWasmTests, CompilesIfElseIfChainInsideInlinedFunction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (R"YDSP(
         processor P {
             input stream in;
@@ -613,7 +613,7 @@ TEST (YdspWasmTests, CompilesIfElseIfChainInsideInlinedFunction)
 
 TEST (YdspWasmTests, SinF32IsImportedFromEnv)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (sinF32Source, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -634,7 +634,7 @@ TEST (YdspWasmTests, SinF32IsImportedFromEnv)
 
 TEST (YdspWasmTests, SinF64IsImportedAsSin)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (sinF64Source, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -652,7 +652,7 @@ TEST (YdspWasmTests, SinF64IsImportedAsSin)
 
 TEST (YdspWasmTests, PowIsABinaryFunctionImport)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (powSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -670,7 +670,7 @@ TEST (YdspWasmTests, PowIsABinaryFunctionImport)
 
 TEST (YdspWasmTests, EmitEventImportsTheCommitFunctionFromEnv)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (emitEventSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -695,7 +695,7 @@ TEST (YdspWasmTests, EmitEventImportsTheCommitFunctionFromEnv)
 
 TEST (YdspWasmTests, IntegerDivisionGuardsZeroDivisor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (intDivSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -708,7 +708,7 @@ TEST (YdspWasmTests, IntegerDivisionGuardsZeroDivisor)
 
 TEST (YdspWasmTests, FloatModuloUsesTruncOpcode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (modSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -720,7 +720,7 @@ TEST (YdspWasmTests, FloatModuloUsesTruncOpcode)
 
 TEST (YdspWasmTests, StateAccessLoadsTheStatePointerFromCtx)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (stateSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -732,7 +732,7 @@ TEST (YdspWasmTests, StateAccessLoadsTheStatePointerFromCtx)
 
 TEST (YdspWasmTests, IfElseEmitsBlockAndIfElse)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (ifElseSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -746,7 +746,7 @@ TEST (YdspWasmTests, IfElseEmitsBlockAndIfElse)
 
 TEST (YdspWasmTests, LoopsEmitBlockLoopBrIfAndBr)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (forLoopSource, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -761,7 +761,7 @@ TEST (YdspWasmTests, LoopsEmitBlockLoopBrIfAndBr)
 
 TEST (YdspWasmTests, DoubleKernelDeclaresF64Locals)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto bytes = compileWasm (sinF64Source, "P", diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();

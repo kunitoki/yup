@@ -116,7 +116,7 @@ private:
 //==============================================================================
 /** Plays the YDSP synth patches found in `data/synths/` with extension `.ydsp`.
 
-    Each patch is compiled lazily with yup::DspJitCompiler. Its `input value`
+    Each patch is compiled lazily with yup::YdspCompiler. Its `input value`
     endpoints drive the on-screen sliders, using the `[[ name, min, max ]]`
     annotations (and the declared default / type) so a patch can describe its
     own UI. The MIDI keyboard feeds note events into the JIT graph, which
@@ -480,7 +480,7 @@ public:
             return;
         }
 
-        static thread_local const yup::DspJitGraph* wasmPrewarmedGraph = nullptr;
+        static thread_local const yup::YdspAudioGraph* wasmPrewarmedGraph = nullptr;
         if (wasmPrewarmedGraph != graph.get())
         {
             graph->prewarmKernels();
@@ -500,12 +500,12 @@ public:
             return;
         }
 
-        yup::DspJitOutputBuffer outputBuffers[] = {
+        yup::YdspOutputBuffer outputBuffers[] = {
             yup::Span<float> (renderBuffer.data(), static_cast<size_t> (numSamples)),
             yup::Span<float> (renderBufferRight.data(), static_cast<size_t> (numSamples))
         };
 
-        graph->process ({}, yup::Span<yup::DspJitOutputBuffer> (outputBuffers, static_cast<size_t> (graphOutputs)), numSamples, &midiMessages, nullptr, 0);
+        graph->process ({}, yup::Span<yup::YdspOutputBuffer> (outputBuffers, static_cast<size_t> (graphOutputs)), numSamples, &midiMessages, nullptr, 0);
 
         const AudioLockType::ScopedLockType sl (renderMutex);
 
@@ -663,7 +663,7 @@ private:
         yup::Rectangle<float> bounds;
     };
 
-    void rebuildMeters (const yup::DspJitGraph& graph)
+    void rebuildMeters (const yup::YdspAudioGraph& graph)
     {
         meters.clear();
 
@@ -763,7 +763,7 @@ private:
         codeEditor.setText (yup::String (synthSources[static_cast<size_t> (index)].source));
         hideCompileError();
 
-        std::shared_ptr<yup::DspJitGraph> graph;
+        std::shared_ptr<yup::YdspAudioGraph> graph;
 
         auto& cached = compiledSynths[static_cast<size_t> (index)];
 
@@ -771,7 +771,7 @@ private:
         {
             YUP_DBG ("Compiling '" << synthSources[static_cast<size_t> (index)].name << "'...");
 
-            yup::DspJitCompiler compiler;
+            yup::YdspCompiler compiler;
             auto result = compiler.compile (synthSources[static_cast<size_t> (index)].source,
                                             synthSources[static_cast<size_t> (index)].path);
             if (! result.wasOk())
@@ -782,7 +782,7 @@ private:
 
             auto compiled = std::move (result).getValue();
 
-            cached = std::make_shared<yup::DspJitGraph> (std::move (compiled));
+            cached = std::make_shared<yup::YdspAudioGraph> (std::move (compiled));
         }
 
         graph = cached;
@@ -800,7 +800,7 @@ private:
         rebuildParamUI (*graph);
     }
 
-    std::shared_ptr<yup::DspJitGraph> getCurrentGraph() const
+    std::shared_ptr<yup::YdspAudioGraph> getCurrentGraph() const
     {
         const AudioLockType::ScopedLockType sl (graphLock);
         return currentGraph;
@@ -870,7 +870,7 @@ private:
 
         const auto source = codeEditor.getText();
 
-        yup::DspJitCompiler compiler;
+        yup::YdspCompiler compiler;
         auto result = compiler.compile (source, synthSources[static_cast<size_t> (index)].path);
 
         if (! result.wasOk())
@@ -879,7 +879,7 @@ private:
             return;
         }
 
-        auto graph = std::make_shared<yup::DspJitGraph> (std::move (result).getValue());
+        auto graph = std::make_shared<yup::YdspAudioGraph> (std::move (result).getValue());
 
         if (deviceBufferSize > 0)
             graph->prepare (deviceSampleRate, deviceBufferSize);
@@ -917,7 +917,7 @@ private:
     //==============================================================================
     // Parameter sliders
 
-    void rebuildParamUI (const yup::DspJitGraph& graph)
+    void rebuildParamUI (const yup::YdspAudioGraph& graph)
     {
         paramSliders.clear();
         paramLabels.clear();
@@ -933,7 +933,7 @@ private:
         for (int i = 0; i < graph.getParameterCount(); ++i)
         {
             const auto& info = graph.getParameterInfo (i);
-            if (info.type != yup::DspJitElementType::float32)
+            if (info.type != yup::YdspElementType::float32)
                 continue;
 
             const auto step = info.isDiscrete()
@@ -1122,7 +1122,7 @@ private:
         {
             const auto& item = diagnostics.getItem (i);
 
-            if (item.severity == yup::DspJitSeverity::info)
+            if (item.severity == yup::YdspSeverity::info)
                 yup::Logger::outputDebugString (item.message);
         }
     }
@@ -1136,14 +1136,14 @@ private:
 
     // The patch currently being processed
     mutable AudioLockType graphLock;
-    std::shared_ptr<yup::DspJitGraph> currentGraph;
+    std::shared_ptr<yup::YdspAudioGraph> currentGraph;
 
     // Lazily compiled patches, cached per combo index
-    std::vector<std::shared_ptr<yup::DspJitGraph>> compiledSynths;
+    std::vector<std::shared_ptr<yup::YdspAudioGraph>> compiledSynths;
     std::vector<SynthSource> synthSources;
 
     // Graphs retired by a live recompile
-    std::vector<std::shared_ptr<yup::DspJitGraph>> retiredGraphs;
+    std::vector<std::shared_ptr<yup::YdspAudioGraph>> retiredGraphs;
 
     // MIDI keyboard, hardware input and the on-screen expression controls, all
     // merged into one collector that the audio callback drains.

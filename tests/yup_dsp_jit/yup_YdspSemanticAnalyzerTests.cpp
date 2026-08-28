@@ -28,7 +28,7 @@ using namespace yup;
 namespace
 {
 
-std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -49,7 +49,7 @@ std::unique_ptr<YdspAnalyzedProgram> analyze (StringRef source, DspJitDiagnostic
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesPassThroughGraph)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -78,7 +78,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesPassThroughGraph)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesSampleProcessorWithPrevAndParams)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor OnePole {
@@ -112,7 +112,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesSampleProcessorWithPrevAndParams)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesBlockProcessorWithLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Delay {
@@ -144,7 +144,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesBlockProcessorWithLoop)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesConstantLoopBound)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Taps {
@@ -168,7 +168,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesConstantLoopBound)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesGraphWithAlgebra)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Gain { input stream in; output stream out; input value float g = 1; process { out = in * g; } }
@@ -201,7 +201,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesGraphWithAlgebra)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesValueAndMeterEdges)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Sat {
@@ -244,7 +244,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesValueAndMeterEdges)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesIdentityAlgebra)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         graph G {
@@ -269,7 +269,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesIdentityAlgebra)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownSymbol)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { out = missing; } }
@@ -283,7 +283,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownSymbol)
 
 TEST (YdspSemanticAnalyzerTests, RejectsTypeMismatch)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { int x = 1.5; out = x; } }
@@ -296,7 +296,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsTypeMismatch)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnboundedLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -316,7 +316,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnboundedLoop)
 
 TEST (YdspSemanticAnalyzerTests, RejectsParamWriteInSampleMode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -334,7 +334,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsParamWriteInSampleMode)
 
 TEST (YdspSemanticAnalyzerTests, AllowsParamWriteInBlockMode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -352,7 +352,7 @@ TEST (YdspSemanticAnalyzerTests, AllowsParamWriteInBlockMode)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInBlockMode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -371,7 +371,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInBlockMode)
 
 TEST (YdspSemanticAnalyzerTests, RejectsStreamIndexInSampleMode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { out[0] = in; } }
@@ -384,7 +384,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsStreamIndexInSampleMode)
 
 TEST (YdspSemanticAnalyzerTests, RejectsArityMismatchInAlgebra)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Mix { input stream a; input stream b; output stream out; process { out = a + b; } }
@@ -401,7 +401,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsArityMismatchInAlgebra)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnconnectedGraphInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -420,7 +420,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnconnectedGraphInput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDuplicateSymbol)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -439,7 +439,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateSymbol)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownProcessorInGraph)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         graph G {
@@ -456,7 +456,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownProcessorInGraph)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMultiChannelStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -473,7 +473,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsMultiChannelStream)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSingleChannelStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -491,7 +491,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSingleChannelStream)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsIntegerArgumentsToMinMaxClampAbsSign)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -516,7 +516,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsIntegerArgumentsToMinMaxClampAbsSign)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMixedIntAndFloatArgumentsToMin)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -534,7 +534,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsMixedIntAndFloatArgumentsToMin)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMixedIntAndFloatArgumentsToClamp)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -552,7 +552,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsMixedIntAndFloatArgumentsToClamp)
 
 TEST (YdspSemanticAnalyzerTests, IntegerLiteralArgumentAloneStaysFloat)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -569,7 +569,7 @@ TEST (YdspSemanticAnalyzerTests, IntegerLiteralArgumentAloneStaysFloat)
 
 TEST (YdspSemanticAnalyzerTests, WarnsOnUnknownEndpointAnnotationKey)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -590,7 +590,7 @@ TEST (YdspSemanticAnalyzerTests, WarnsOnUnknownEndpointAnnotationKey)
     {
         const auto& item = diagnostics.getItem (i);
 
-        if (item.severity == DspJitSeverity::warning
+        if (item.severity == YdspSeverity::warning
             && item.message.contains ("mim")
             && item.message.contains ("name")
             && item.message.contains ("style"))
@@ -604,7 +604,7 @@ TEST (YdspSemanticAnalyzerTests, WarnsOnUnknownEndpointAnnotationKey)
 
 TEST (YdspSemanticAnalyzerTests, DoesNotWarnOnKnownEndpointAnnotationKeys)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -626,7 +626,7 @@ TEST (YdspSemanticAnalyzerTests, DoesNotWarnOnKnownEndpointAnnotationKeys)
 
 TEST (YdspSemanticAnalyzerTests, RejectsRecursionOperator)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor F { input stream a; input stream b; output stream out; process { out = a + b; } }
@@ -643,7 +643,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsRecursionOperator)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAssignmentToLet)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -664,7 +664,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAssignmentToLet)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithFunctionCall)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -685,7 +685,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithFunctionCall)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithMultiParamFunction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -706,7 +706,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithMultiParamFunction)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithMultipleFunctions)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -744,7 +744,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesProcessorWithMultipleFunctions)
 
 TEST (YdspSemanticAnalyzerTests, RejectsRecursiveFunction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -764,7 +764,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsRecursiveFunction)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesFloat64AndInt64Program)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -822,7 +822,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesFloat64AndInt64Program)
 
 TEST (YdspSemanticAnalyzerTests, AllowsLiteralAdaptationAcrossWidths)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -844,7 +844,7 @@ TEST (YdspSemanticAnalyzerTests, AllowsLiteralAdaptationAcrossWidths)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMixedWidthBinary)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -870,7 +870,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsMixedWidthBinary)
 
 TEST (YdspSemanticAnalyzerTests, RejectsImplicitIntFloatMix)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -890,7 +890,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsImplicitIntFloatMix)
 
 TEST (YdspSemanticAnalyzerTests, RejectsIntCondition)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -910,7 +910,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsIntCondition)
 
 TEST (YdspSemanticAnalyzerTests, RejectsInt64Index)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -928,7 +928,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsInt64Index)
 
     ASSERT_FALSE (diagnostics.hasErrors());
 
-    DspJitDiagnostics diagnostics2;
+    YdspDiagnostics diagnostics2;
     auto analyzed2 = analyze (R"YDSP(
         processor P {
             input stream in;
@@ -948,7 +948,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsInt64Index)
 
 TEST (YdspSemanticAnalyzerTests, RejectsNarrowingAssignment)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -969,7 +969,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsNarrowingAssignment)
 
 TEST (YdspSemanticAnalyzerTests, CastsFixStrictViolations)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -995,7 +995,7 @@ TEST (YdspSemanticAnalyzerTests, CastsFixStrictViolations)
 
 TEST (YdspSemanticAnalyzerTests, RejectsStreamTypeMismatchInGraph)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream float64 in; output stream out; process { out = float32(in); } }
@@ -1008,7 +1008,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsStreamTypeMismatchInGraph)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesStructStateAndInit)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1041,7 +1041,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesStructStateAndInit)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownStructType)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1065,7 +1065,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownStructType)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownStructField)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1090,7 +1090,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownStructField)
 
 TEST (YdspSemanticAnalyzerTests, ResetsStateIndexAcrossProcessors)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor A {
@@ -1120,7 +1120,7 @@ TEST (YdspSemanticAnalyzerTests, ResetsStateIndexAcrossProcessors)
 
 TEST (YdspSemanticAnalyzerTests, RejectsStreamAccessInInit)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1146,7 +1146,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsStreamAccessInInit)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInInit)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1164,7 +1164,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInInit)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBareStructStateAccess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1182,7 +1182,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBareStructStateAccess)
 
 TEST (YdspSemanticAnalyzerTests, RejectsIndexingScalarStructField)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1200,7 +1200,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsIndexingScalarStructField)
 
 TEST (YdspSemanticAnalyzerTests, RejectsIntrinsicOnNonFloat)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1220,7 +1220,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsIntrinsicOnNonFloat)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsBitwiseOpsOnInts)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1251,7 +1251,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsBitwiseOpsOnInts)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBitwiseOpsOnFloats)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1277,7 +1277,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBitwiseOpsOnFloats)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBitwiseNotOnFloats)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1303,7 +1303,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBitwiseNotOnFloats)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMixedWidthBitwiseOps)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -1326,7 +1326,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsMixedWidthBitwiseOps)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesStreamFreeParameterProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Voice {
@@ -1346,7 +1346,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesStreamFreeParameterProcessor)
 
 TEST (YdspSemanticAnalyzerTests, AnalyzesEventDrivenProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Voice {
@@ -1390,7 +1390,7 @@ TEST (YdspSemanticAnalyzerTests, AnalyzesEventDrivenProcessor)
 
 TEST (YdspSemanticAnalyzerTests, ResolvesEventFieldsToFloat32)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Voice {
@@ -1412,7 +1412,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesEventFieldsToFloat32)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsNamedEventInputsAtProcessorScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1429,7 +1429,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsNamedEventInputsAtProcessorScope)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSingleMidiInputAtProcessorScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1445,7 +1445,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSingleMidiInputAtProcessorScope)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDuplicateEventEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1467,7 +1467,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateEventEndpoint)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeEventInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1495,7 +1495,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeEventInput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDuplicateMidiEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P { process { } }
@@ -1518,7 +1518,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateMidiEndpoint)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSameShapeOnDifferentEventInputs)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1545,7 +1545,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSameShapeOnDifferentEventInputs)
 
 TEST (YdspSemanticAnalyzerTests, RejectsHandlerForUnknownEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1567,7 +1567,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsHandlerForUnknownEndpoint)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownShapeInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1589,7 +1589,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownShapeInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDuplicateShapeHandlerOnSameInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1612,7 +1612,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateShapeHandlerOnSameInput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEventFieldAccess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1638,7 +1638,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEventFieldAccess)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEveryProcessorScopeEventShape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Voice {
@@ -1688,7 +1688,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsFieldBelongingToAnotherShape)
                                   Case { "pitchBend", "pitch", "'bendSemitones'" },
                                   Case { "controlChange", "pressure", "'control', 'value'" } })
     {
-        DspJitDiagnostics diagnostics;
+        YdspDiagnostics diagnostics;
 
         analyze ("processor P { output stream out; input event midi; state float f; event midi (e: " + String (testCase.shape) + ") { f = e." + String (testCase.field) + "; } process { out = f; } } graph G { input event midi; output stream y; node p = P; connection { p.out -> y; } }",
                  diagnostics);
@@ -1705,7 +1705,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsFieldBelongingToAnotherShape)
 
 TEST (YdspSemanticAnalyzerTests, ParsesVoiceModeAnnotationsOnNodes)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Voice {
@@ -1743,7 +1743,7 @@ TEST (YdspSemanticAnalyzerTests, ParsesVoiceModeAnnotationsOnNodes)
 
 TEST (YdspSemanticAnalyzerTests, RejectsMonoModeWithAVoiceBank)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Voice {
@@ -1783,7 +1783,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownNodeAnnotations)
                                   Case { "priority: middle", "Unknown note priority 'middle'" },
                                   Case { "glide: 5", "Unknown node annotation 'glide'" } })
     {
-        DspJitDiagnostics diagnostics;
+        YdspDiagnostics diagnostics;
 
         analyze ("processor Voice { output stream out; input event midi; state float f; event midi (e: noteOn) { f = e.pitch; } process { out = f; } } graph G { input event midi; output stream y; node v = Voice [[ " + String (testCase.annotation) + " ]]; connection { v.out -> y; } }",
                  diagnostics);
@@ -1799,7 +1799,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownNodeAnnotations)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBareEventValue)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1824,7 +1824,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBareEventValue)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAssignmentToEventValue)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1848,7 +1848,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAssignmentToEventValue)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1873,7 +1873,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDelayPrimitiveInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1899,7 +1899,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothInsideLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1925,7 +1925,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothInsideLoop)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothInBlockModeBody)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1949,7 +1949,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothInBlockModeBody)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothWithWrongArity)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1972,7 +1972,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothWithWrongArity)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothWithNonFloatOperand)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -1994,7 +1994,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothWithNonFloatOperand)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSmoothingAnnotationOnFloatParameter)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2016,7 +2016,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSmoothingAnnotationOnFloatParameter)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnOutputValue)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2039,7 +2039,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnOutputValue)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnInputStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2061,7 +2061,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnInputStream)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnNonFloat32Parameter)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2084,7 +2084,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnNonFloat32Parameter
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationWithNonPositiveTimeConstant)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2107,7 +2107,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationWithNonPositiveTimeCo
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationInBlockModeProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2132,7 +2132,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationInBlockModeProcessor)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnGraphEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2161,7 +2161,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSmoothingAnnotationOnGraphEndpoint)
 
 TEST (YdspSemanticAnalyzerTests, SmoothingAnnotationLeavesEventHandlersReadingTheRawTarget)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2182,7 +2182,7 @@ TEST (YdspSemanticAnalyzerTests, SmoothingAnnotationLeavesEventHandlersReadingTh
 
 TEST (YdspSemanticAnalyzerTests, RejectsStreamAccessInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2202,7 +2202,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsStreamAccessInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBlockSizeInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2222,7 +2222,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBlockSizeInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsNonConstantLoopBoundInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2249,7 +2249,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsNonConstantLoopBoundInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsConstantLoopInEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2278,7 +2278,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsConstantLoopInEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, RejectsVoiceBankOnNonEventProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2303,7 +2303,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsVoiceBankOnNonEventProcessor)
 
 TEST (YdspSemanticAnalyzerTests, RejectsVoiceBankWithOversampling)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Voice {
@@ -2330,7 +2330,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsVoiceBankWithOversampling)
 
 TEST (YdspSemanticAnalyzerTests, RejectsZeroVoiceCount)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Voice {
@@ -2356,7 +2356,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsZeroVoiceCount)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEventParamShadowing)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2381,7 +2381,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEventParamShadowing)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEventDrivenProcessorWithInputStreamButNoOutputStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2409,7 +2409,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEventDrivenProcessorWithInputStreamButNo
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEventDrivenProcessorWithNoStreamsAtAll)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2439,7 +2439,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEventDrivenProcessorWithNoStreamsAtAll)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsTopLevelLetAsArraySizeLoopBoundAndValue)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         let taps = 8;
@@ -2475,7 +2475,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsTopLevelLetAsArraySizeLoopBoundAndValue)
 
 TEST (YdspSemanticAnalyzerTests, FoldsLetDefinedFromEarlierConstants)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         let base = 4;
@@ -2498,7 +2498,7 @@ TEST (YdspSemanticAnalyzerTests, FoldsLetDefinedFromEarlierConstants)
 
 TEST (YdspSemanticAnalyzerTests, RejectsNonConstantLet)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         let bad = sampleRate;
@@ -2517,7 +2517,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsNonConstantLet)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDeclarationShadowingAProgramConstant)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         let taps = 8;
@@ -2541,7 +2541,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDeclarationShadowingAProgramConstant)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownConstantAsArraySize)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2567,7 +2567,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownConstantAsArraySize)
 
 TEST (YdspSemanticAnalyzerTests, LowersStateInitialisersIntoTheInitBlock)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2591,7 +2591,7 @@ TEST (YdspSemanticAnalyzerTests, LowersStateInitialisersIntoTheInitBlock)
 
 TEST (YdspSemanticAnalyzerTests, StateInitialisersRunBeforeAnExplicitInitBlock)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2618,7 +2618,7 @@ TEST (YdspSemanticAnalyzerTests, StateInitialisersRunBeforeAnExplicitInitBlock)
 
 TEST (YdspSemanticAnalyzerTests, RejectsTooManyStateInitialisers)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2644,7 +2644,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsTooManyStateInitialisers)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSamplePeriodBuiltin)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2665,7 +2665,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSamplePeriodBuiltin)
 
 TEST (YdspSemanticAnalyzerTests, InitAnnotationSuppliesTheParameterDefault)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { input stream in; output stream out; process { out = in; } }
@@ -2693,7 +2693,7 @@ TEST (YdspSemanticAnalyzerTests, InitAnnotationSuppliesTheParameterDefault)
 
 TEST (YdspSemanticAnalyzerTests, SiblingLoopsMayReuseTheSameVariableName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2717,7 +2717,7 @@ TEST (YdspSemanticAnalyzerTests, SiblingLoopsMayReuseTheSameVariableName)
 
 TEST (YdspSemanticAnalyzerTests, RejectsLoopVariableUseAfterTheLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2745,7 +2745,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsLoopVariableUseAfterTheLoop)
 
 TEST (YdspSemanticAnalyzerTests, RejectsANestedBlockRedeclaringAnOuterLocal)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2771,7 +2771,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsANestedBlockRedeclaringAnOuterLocal)
 
 TEST (YdspSemanticAnalyzerTests, SiblingIfElseBranchesMayReuseTheSameLocalName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2792,7 +2792,7 @@ TEST (YdspSemanticAnalyzerTests, SiblingIfElseBranchesMayReuseTheSameLocalName)
 
 TEST (YdspSemanticAnalyzerTests, SiblingIfElseBranchesMayDeclareDifferentTypesForTheSameName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2813,7 +2813,7 @@ TEST (YdspSemanticAnalyzerTests, SiblingIfElseBranchesMayDeclareDifferentTypesFo
 
 TEST (YdspSemanticAnalyzerTests, SiblingPlainBlocksMayReuseTheSameLocalName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -2834,7 +2834,7 @@ TEST (YdspSemanticAnalyzerTests, SiblingPlainBlocksMayReuseTheSameLocalName)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUseOfABlockScopedLocalAfterItsBlockEnds)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -2883,7 +2883,7 @@ String voiceActivitySource (StringRef activityDecl)
 }
 
 /** Returns true if any diagnostic message contains `fragment`. */
-bool anyDiagnosticContains (const DspJitDiagnostics& diagnostics, StringRef fragment)
+bool anyDiagnosticContains (const YdspDiagnostics& diagnostics, StringRef fragment)
 {
     for (int i = 0; i < diagnostics.getCount(); ++i)
         if (diagnostics.getItem (i).message.contains (fragment))
@@ -2896,7 +2896,7 @@ bool anyDiagnosticContains (const DspJitDiagnostics& diagnostics, StringRef frag
 
 TEST (YdspSemanticAnalyzerTests, RecordsVoiceActivityState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (voiceActivitySource ("state int active [[ role: voiceActivity ]];"), diagnostics);
 
@@ -2912,7 +2912,7 @@ TEST (YdspSemanticAnalyzerTests, RecordsVoiceActivityState)
 
 TEST (YdspSemanticAnalyzerTests, LeavesVoiceActivityUnsetWithoutTheAnnotation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (voiceActivitySource ("state int active;"), diagnostics);
 
@@ -2925,7 +2925,7 @@ TEST (YdspSemanticAnalyzerTests, LeavesVoiceActivityUnsetWithoutTheAnnotation)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownStateRole)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state int active [[ role: whatever ]];"), diagnostics);
 
@@ -2935,7 +2935,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownStateRole)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUnknownStateAnnotationKey)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state int active [[ rol: voiceActivity ]];"), diagnostics);
 
@@ -2945,7 +2945,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUnknownStateAnnotationKey)
 
 TEST (YdspSemanticAnalyzerTests, RejectsTwoVoiceActivityStates)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state int active [[ role: voiceActivity ]];\n"
                                   "            state int alsoActive [[ role: voiceActivity ]];"),
@@ -2957,7 +2957,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsTwoVoiceActivityStates)
 
 TEST (YdspSemanticAnalyzerTests, RejectsNonIntVoiceActivityState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state float active [[ role: voiceActivity ]];"), diagnostics);
 
@@ -2967,7 +2967,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsNonIntVoiceActivityState)
 
 TEST (YdspSemanticAnalyzerTests, RejectsBoolVoiceActivityState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state bool active [[ role: voiceActivity ]];"), diagnostics);
 
@@ -2977,7 +2977,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsBoolVoiceActivityState)
 
 TEST (YdspSemanticAnalyzerTests, RejectsArrayVoiceActivityState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state int active[4] [[ role: voiceActivity ]];"), diagnostics);
 
@@ -2987,7 +2987,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsArrayVoiceActivityState)
 
 TEST (YdspSemanticAnalyzerTests, RejectsInitialisedVoiceActivityState)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (voiceActivitySource ("state int active = 1 [[ role: voiceActivity ]];"), diagnostics);
 
@@ -2997,7 +2997,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsInitialisedVoiceActivityState)
 
 TEST (YdspSemanticAnalyzerTests, RejectsVoiceActivityStateWithoutEventHandlers)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3019,7 +3019,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsVoiceActivityStateWithoutEventHandlers)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsUndersamplingOnANode)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Sat { input stream in; output stream out; process { out = in * 0.5; } }
@@ -3036,7 +3036,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsUndersamplingOnANode)
 
 TEST (YdspSemanticAnalyzerTests, RejectsUndersamplingOnANonFloat32Stream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Sat { input stream float64 in; output stream float64 out; process { out = in * 0.5; } }
@@ -3050,7 +3050,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsUndersamplingOnANonFloat32Stream)
 
 TEST (YdspSemanticAnalyzerTests, RejectsOversamplingOnANonFloat32Stream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Sat { input stream float64 in; output stream float64 out; process { out = in * 0.5; } }
@@ -3065,7 +3065,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsOversamplingOnANonFloat32Stream)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsOversamplingOnFloat32Streams)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Sat { input stream in; output stream out; process { out = in * 0.5; } }
@@ -3084,7 +3084,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsOversamplingOnFloat32Streams)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAFeedbackCycleWithoutOfferingADelayAsTheFix)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Fork { input stream a; input stream b; output stream c; output stream d; process { c = a + b; d = a - b; } }
@@ -3109,7 +3109,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAFeedbackCycleWithoutOfferingADelayAsThe
 
 TEST (YdspSemanticAnalyzerTests, RejectsSequencingPastAGraphOutputStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -3123,7 +3123,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSequencingPastAGraphOutputStream)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSequencingIntoAGraphInputStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -3137,7 +3137,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSequencingIntoAGraphInputStream)
 
 TEST (YdspSemanticAnalyzerTests, RejectsIdentityMixedWithAProcessorInsideParallel)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -3157,7 +3157,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsIdentityMixedWithAProcessorInsideParalle
 
 TEST (YdspSemanticAnalyzerTests, RejectsIdentityOnEitherSideOfParallel)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -3177,7 +3177,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsIdentityOnEitherSideOfParallel)
 
 TEST (YdspSemanticAnalyzerTests, StillAcceptsIdentityOnBothSidesOfParallel)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Gain { input stream in; output stream out; process { out = in * 2; } }
@@ -3206,7 +3206,7 @@ constexpr const char* fanGainProcessor =
     "processor Gain { input stream in; output stream out; input value float g = 1.0; process { out = in * g; } }\n"
     "processor Mix { input stream a; input stream b; output stream out; process { out = a + b; } }\n";
 
-std::unique_ptr<YdspAnalyzedProgram> analyzeFan (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspAnalyzedProgram> analyzeFan (StringRef source, YdspDiagnostics& diagnostics)
 {
     return analyze (String (fanGainProcessor) + source, diagnostics);
 }
@@ -3215,7 +3215,7 @@ std::unique_ptr<YdspAnalyzedProgram> analyzeFan (StringRef source, DspJitDiagnos
 
 TEST (YdspSemanticAnalyzerTests, AcceptsFanOutFromAGraphInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeFan (R"YDSP(
         graph G {
@@ -3243,7 +3243,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsFanOutFromAGraphInput)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsFanOutFromANodeOutput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeFan (R"YDSP(
         graph G {
@@ -3271,7 +3271,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsFanOutFromANodeOutput)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInIntoANodeInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeFan (R"YDSP(
         graph G {
@@ -3298,7 +3298,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInIntoANodeInput)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInIntoAGraphOutput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeFan (R"YDSP(
         graph G {
@@ -3325,7 +3325,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInIntoAGraphOutput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeFan (R"YDSP(
         graph G {
@@ -3344,7 +3344,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphInput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphOutput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeFan (R"YDSP(
         graph G {
@@ -3363,7 +3363,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphOutput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeInput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeFan (R"YDSP(
         graph G {
@@ -3381,7 +3381,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeInput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeOutput)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeFan (R"YDSP(
         graph G {
@@ -3400,7 +3400,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeOutput)
 
 TEST (YdspSemanticAnalyzerTests, RejectsSummingFanInOnANonFloatStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Bump { input stream int32 in; output stream int32 out; process { out = in + 1; } }
@@ -3420,7 +3420,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsSummingFanInOnANonFloatStream)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsFanOutOnANonFloatStream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Bump { input stream int32 in; output stream int32 out; process { out = in + 1; } }
@@ -3442,7 +3442,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsFanOutOnANonFloatStream)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSummingFanInOnAFloat64Stream)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Wide { input stream float64 in; output stream float64 out; process { out = in * 2.0; } }
@@ -3472,7 +3472,7 @@ constexpr const char* splitMergeProcessors =
     "processor Fork { input stream in; output stream a; output stream b; process { a = in; b = in * 0.5; } }\n"
     "processor Pair { input stream a; input stream b; output stream out; process { out = a + b; } }\n";
 
-std::unique_ptr<YdspAnalyzedProgram> analyzeSplitMerge (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspAnalyzedProgram> analyzeSplitMerge (StringRef source, YdspDiagnostics& diagnostics)
 {
     return analyze (String (splitMergeProcessors) + source, diagnostics);
 }
@@ -3503,7 +3503,7 @@ int countEdgesIntoGraphOutput (const YdspAnalyzedGraph& graph, int index)
 
 TEST (YdspSemanticAnalyzerTests, SplitsAndMergesAroundAParallelPair)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3524,7 +3524,7 @@ TEST (YdspSemanticAnalyzerTests, SplitsAndMergesAroundAParallelPair)
 
 TEST (YdspSemanticAnalyzerTests, SplitRepeatsTheSourceChannelsCyclically)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3564,7 +3564,7 @@ TEST (YdspSemanticAnalyzerTests, SplitRepeatsTheSourceChannelsCyclically)
 
 TEST (YdspSemanticAnalyzerTests, RejectsANonDividingSplitArity)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3581,7 +3581,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsANonDividingSplitArity)
 
 TEST (YdspSemanticAnalyzerTests, RejectsANonDividingMergeArity)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3598,7 +3598,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsANonDividingMergeArity)
 
 TEST (YdspSemanticAnalyzerTests, IdentityDefaultsToArityOneOnTheSplitSide)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3619,7 +3619,7 @@ TEST (YdspSemanticAnalyzerTests, IdentityDefaultsToArityOneOnTheSplitSide)
 
 TEST (YdspSemanticAnalyzerTests, IdentityDefaultsToArityOneOnTheMergeSide)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3640,7 +3640,7 @@ TEST (YdspSemanticAnalyzerTests, IdentityDefaultsToArityOneOnTheMergeSide)
 
 TEST (YdspSemanticAnalyzerTests, SequentialCompositionStillRequiresEqualArities)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyzeSplitMerge (R"YDSP(
         graph G {
@@ -3660,7 +3660,7 @@ TEST (YdspSemanticAnalyzerTests, SequentialCompositionStillRequiresEqualArities)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsOutputEventDeclarationMatchingShapeName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3679,7 +3679,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsOutputEventDeclarationMatchingShapeName)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsOutputEventDeclarationWithAnArbitraryChannelName)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3698,7 +3698,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsOutputEventDeclarationWithAnArbitraryCha
 
 TEST (YdspSemanticAnalyzerTests, RegistersOutputEventAtGraphScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -3720,7 +3720,7 @@ TEST (YdspSemanticAnalyzerTests, RegistersOutputEventAtGraphScope)
 
 TEST (YdspSemanticAnalyzerTests, RejectsDuplicateOutputEventAtGraphScope)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         graph G {
@@ -3739,7 +3739,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsDuplicateOutputEventAtGraphScope)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEmitWithUnknownShape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3756,7 +3756,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEmitWithUnknownShape)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEmitWithUnknownField)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3773,7 +3773,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEmitWithUnknownField)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEmitToUnknownTarget)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3790,7 +3790,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEmitToUnknownTarget)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEmitOfAnyShapeToAnEventChannelNamedAfterADifferentShape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3808,7 +3808,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEmitOfAnyShapeToAnEventChannelNamedAfter
 
 TEST (YdspSemanticAnalyzerTests, RejectsEmitInInit)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3826,7 +3826,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEmitInInit)
 
 TEST (YdspSemanticAnalyzerTests, RejectsEmitInBlockModeProcess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor P {
@@ -3843,7 +3843,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsEmitInBlockModeProcess)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideForLoopInSampleModeProcess)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3864,7 +3864,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideForLoopInSampleModeProcess)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideEventHandler)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3885,7 +3885,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideEventHandler)
 
 TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideEventHandlerOnBlockModeProcessor)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor P {
@@ -3909,7 +3909,7 @@ TEST (YdspSemanticAnalyzerTests, AcceptsEmitInsideEventHandlerOnBlockModeProcess
 
 TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionForASpecificShape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -3936,7 +3936,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionForASpecificSh
 
 TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionTargetingTheMidiPolymorphicEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source { output event pitchBend; process { emit pitchBend (bendSemitones: 2.0) -> pitchBend; } }
@@ -3958,7 +3958,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesNodeToNodeEventConnectionTargetingTheMi
 
 TEST (YdspSemanticAnalyzerTests, ResolvesAnEventConnectionAgainstASpecificInputEventNamedAfterADifferentShape)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -3979,7 +3979,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesAnEventConnectionAgainstASpecificInputE
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnInlineDelayOnAnEventConnection)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4000,7 +4000,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnInlineDelayOnAnEventConnection)
 
 TEST (YdspSemanticAnalyzerTests, ResolvesNodeToGraphBoundaryOutputEventConnection)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4025,7 +4025,7 @@ TEST (YdspSemanticAnalyzerTests, ResolvesNodeToGraphBoundaryOutputEventConnectio
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeOutputEvent)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4039,7 +4039,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedNodeOutputEvent)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphOutputEvent)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         graph G { input stream x; output stream y; output event noteOn; connection { x -> y; } }
@@ -4052,7 +4052,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedGraphOutputEvent)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedInputEventEndpoint)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Sink { input event midi; output stream out; process { out = 0.0; } }
@@ -4070,7 +4070,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAnUnconnectedInputEventEndpoint)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAPureEventFeedbackCycle)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor A { input event midi; output event noteOn; state float f; event midi (e: noteOn) { f = e.pitch; } process { } }
@@ -4089,7 +4089,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAPureEventFeedbackCycle)
 
 TEST (YdspSemanticAnalyzerTests, RejectsAMixedAudioAndEventFeedbackCycle)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     analyze (R"YDSP(
         processor Fork { input stream a; output stream c; output event noteOn; process { c = a; emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4109,7 +4109,7 @@ TEST (YdspSemanticAnalyzerTests, RejectsAMixedAudioAndEventFeedbackCycle)
 
 TEST (YdspSemanticAnalyzerTests, TopoSortsAnAcyclicEventOnlyGraphWithNoAudio)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Arp { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4134,7 +4134,7 @@ TEST (YdspSemanticAnalyzerTests, TopoSortsAnAcyclicEventOnlyGraphWithNoAudio)
 
 TEST (YdspSemanticAnalyzerTests, CompensatesANodeToNodeEventEdgeByTheSourcesDeclaredLatency)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source [[ latency: 8 ]] { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4157,7 +4157,7 @@ TEST (YdspSemanticAnalyzerTests, CompensatesANodeToNodeEventEdgeByTheSourcesDecl
 
 TEST (YdspSemanticAnalyzerTests, CompensatesANodeToGraphBoundaryEventEdgeByTheGraphsOverallLatency)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source [[ latency: 8 ]] { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }
@@ -4183,7 +4183,7 @@ TEST (YdspSemanticAnalyzerTests, CompensatesANodeToGraphBoundaryEventEdgeByTheGr
 
 TEST (YdspSemanticAnalyzerTests, LeavesAnEventEdgeWithNoLatencyAnywhereUncompensated)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto analyzed = analyze (R"YDSP(
         processor Source { output event noteOn; process { emit noteOn (pitch: 60, velocity: 0.8) -> noteOn; } }

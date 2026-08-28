@@ -183,7 +183,7 @@ bool isIntrinsicName (StringRef name) noexcept
 
 //==============================================================================
 
-YdspSemanticAnalyzer::YdspSemanticAnalyzer (DspJitDiagnostics& diagnostics)
+YdspSemanticAnalyzer::YdspSemanticAnalyzer (YdspDiagnostics& diagnostics)
     : diagnostics (diagnostics)
 {
 }

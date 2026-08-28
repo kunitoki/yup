@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -118,9 +119,11 @@
 #include "native/yup_YdspWasmRuntime_emscripten.cpp"
 #endif
 
-// Compiler and Graph: the realtime runtime
-#include "runtime/graph/yup_YdspGraphInternal.h"
-#include "runtime/graph/yup_YdspGraph.cpp"
-#include "runtime/graph/yup_YdspGraphPimpl.cpp"
-#include "runtime/graph/yup_YdspGraphQuery.cpp"
-#include "runtime/yup_DspJitCompiler.cpp"
+// Runtime: the realtime graph
+#include "runtime/yup_YdspGraphInternal.h"
+#include "runtime/yup_YdspGraph.cpp"
+#include "runtime/yup_YdspGraphPimpl.cpp"
+#include "runtime/yup_YdspGraphQuery.cpp"
+
+// Compiler: the control-thread compiler
+#include "compiler/yup_YdspCompiler.cpp"

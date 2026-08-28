@@ -144,7 +144,7 @@ struct YdspToken
 
     Produces the full token stream up front (the parser then walks it) and
     records lexing errors (unterminated strings, stray characters) in the
-    provided DspJitDiagnostics.
+    provided YdspDiagnostics.
 */
 class YdspLexer
 {
@@ -154,7 +154,7 @@ public:
      * @param source The source text to tokenize.
      * @param diagnostics The diagnostics object to record lexing errors.
     */
-    YdspLexer (StringRef source, DspJitDiagnostics& diagnostics);
+    YdspLexer (StringRef source, YdspDiagnostics& diagnostics);
 
     /** Tokenizes the whole source and returns the token stream.
     
@@ -174,7 +174,7 @@ private:
     YdspToken lexSymbol();
 
     String source;
-    DspJitDiagnostics& diagnostics;
+    YdspDiagnostics& diagnostics;
 
     size_t pos = 0;
     int line = 1;

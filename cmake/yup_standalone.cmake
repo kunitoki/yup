@@ -211,6 +211,7 @@ function (yup_standalone_app)
             $<$<CONFIG:RELEASE>:-O3>
             -fexceptions
             -pthread
+            -msimd128
             -Wno-nontrivial-memcall
             -sDISABLE_EXCEPTION_CATCHING=0)
 

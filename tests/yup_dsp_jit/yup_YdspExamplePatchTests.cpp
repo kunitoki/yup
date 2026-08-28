@@ -71,7 +71,7 @@ protected:
 
     // Compiles one patch with its own path as the import base, which is what the
     // demo app does, so a patch's relative `import fx.Delay` resolves.
-    DspJitGraph compilePatch (const File& patchFile, DspJitCompiler& compiler)
+    YdspAudioGraph compilePatch (const File& patchFile, YdspCompiler& compiler)
     {
         auto result = compiler.compile (patchFile.loadFileAsString(), patchFile.getFullPathName());
 
@@ -80,7 +80,7 @@ protected:
             << compiler.getDiagnostics().toString();
 
         if (! result.wasOk())
-            return DspJitGraph {};
+            return YdspAudioGraph {};
 
         return std::move (result).getValue();
     }
@@ -90,7 +90,7 @@ protected:
         const auto patchFile = exampleSynthsFolder().getChildFile (patchName);
         ASSERT_TRUE (patchFile.existsAsFile()) << patchName;
 
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
         auto graph = compilePatch (patchFile, compiler);
 
         EXPECT_TRUE (graph.isValid()) << patchName;
@@ -117,7 +117,7 @@ protected:
         std::vector<float> left (blockSize, 0.0f);
         std::vector<float> right (blockSize, 0.0f);
 
-        DspJitOutputBuffer outputs[] = {
+        YdspOutputBuffer outputs[] = {
             Span<float> (left.data(), left.size()),
             Span<float> (right.data(), right.size())
         };
@@ -130,7 +130,7 @@ protected:
         for (int block = 0; block < 8; ++block)
         {
             graph.process ({},
-                           Span<DspJitOutputBuffer> (outputs, static_cast<size_t> (numOutputs)),
+                           Span<YdspOutputBuffer> (outputs, static_cast<size_t> (numOutputs)),
                            blockSize,
                            &midi,
                            nullptr,

@@ -29,12 +29,12 @@ namespace yup::test
 {
 
 //==============================================================================
-// DspJitDiagnosticsTests
+// YdspDiagnosticsTests
 //==============================================================================
 
 TEST (YdspJitDiagnosticsTests, StartsEmptyWithNoErrors)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     EXPECT_FALSE (diagnostics.hasErrors());
     EXPECT_EQ (0, diagnostics.getCount());
@@ -42,7 +42,7 @@ TEST (YdspJitDiagnosticsTests, StartsEmptyWithNoErrors)
 
 TEST (YdspJitDiagnosticsTests, AddErrorAndQuery)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addError (1, 5, "syntax error: unexpected token");
 
@@ -50,7 +50,7 @@ TEST (YdspJitDiagnosticsTests, AddErrorAndQuery)
     EXPECT_EQ (1, diagnostics.getCount());
 
     const auto& item = diagnostics.getItem (0);
-    EXPECT_EQ (DspJitSeverity::error, item.severity);
+    EXPECT_EQ (YdspSeverity::error, item.severity);
     EXPECT_EQ (1, item.line);
     EXPECT_EQ (5, item.column);
     EXPECT_EQ ("syntax error: unexpected token", item.message);
@@ -58,7 +58,7 @@ TEST (YdspJitDiagnosticsTests, AddErrorAndQuery)
 
 TEST (YdspJitDiagnosticsTests, AddWarningDoesNotSetHasErrors)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addWarning (3, 10, "unused variable 'x'");
 
@@ -66,7 +66,7 @@ TEST (YdspJitDiagnosticsTests, AddWarningDoesNotSetHasErrors)
     EXPECT_EQ (1, diagnostics.getCount());
 
     const auto& item = diagnostics.getItem (0);
-    EXPECT_EQ (DspJitSeverity::warning, item.severity);
+    EXPECT_EQ (YdspSeverity::warning, item.severity);
     EXPECT_EQ (3, item.line);
     EXPECT_EQ (10, item.column);
     EXPECT_EQ ("unused variable 'x'", item.message);
@@ -74,7 +74,7 @@ TEST (YdspJitDiagnosticsTests, AddWarningDoesNotSetHasErrors)
 
 TEST (YdspJitDiagnosticsTests, AddInfoDoesNotSetHasErrors)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addInfo (2, 1, "loop bound inferred as blockSize");
 
@@ -82,12 +82,12 @@ TEST (YdspJitDiagnosticsTests, AddInfoDoesNotSetHasErrors)
     EXPECT_EQ (1, diagnostics.getCount());
 
     const auto& item = diagnostics.getItem (0);
-    EXPECT_EQ (DspJitSeverity::info, item.severity);
+    EXPECT_EQ (YdspSeverity::info, item.severity);
 }
 
 TEST (YdspJitDiagnosticsTests, ErrorsDetectedAmongMixedSeverities)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addInfo (1, 1, "parsing program");
     diagnostics.addWarning (2, 1, "implicit float conversion");
@@ -97,15 +97,15 @@ TEST (YdspJitDiagnosticsTests, ErrorsDetectedAmongMixedSeverities)
     EXPECT_TRUE (diagnostics.hasErrors());
     EXPECT_EQ (4, diagnostics.getCount());
 
-    EXPECT_EQ (DspJitSeverity::info, diagnostics.getItem (0).severity);
-    EXPECT_EQ (DspJitSeverity::warning, diagnostics.getItem (1).severity);
-    EXPECT_EQ (DspJitSeverity::error, diagnostics.getItem (2).severity);
-    EXPECT_EQ (DspJitSeverity::info, diagnostics.getItem (3).severity);
+    EXPECT_EQ (YdspSeverity::info, diagnostics.getItem (0).severity);
+    EXPECT_EQ (YdspSeverity::warning, diagnostics.getItem (1).severity);
+    EXPECT_EQ (YdspSeverity::error, diagnostics.getItem (2).severity);
+    EXPECT_EQ (YdspSeverity::info, diagnostics.getItem (3).severity);
 }
 
 TEST (YdspJitDiagnosticsTests, ToStringWithoutSourceRendersMessages)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addError (1, 5, "syntax error");
     diagnostics.addWarning (2, 8, "unused variable");
@@ -123,7 +123,7 @@ TEST (YdspJitDiagnosticsTests, ToStringWithoutSourceRendersMessages)
 
 TEST (YdspJitDiagnosticsTests, ToStringWithSourceRendersCaret)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.setSource ("processor P {\n  out = in;\n}");
     diagnostics.addError (2, 3, "expected ';'");
@@ -145,7 +145,7 @@ TEST (YdspJitDiagnosticsTests, ToStringWithSourceRendersCaret)
 
 TEST (YdspJitDiagnosticsTests, MultipleItemsAtSameLocation)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.addError (1, 10, "type mismatch");
     diagnostics.addError (1, 10, "cannot assign to let");
@@ -161,7 +161,7 @@ TEST (YdspJitDiagnosticsTests, MultipleItemsAtSameLocation)
 
 TEST (YdspJitDiagnosticsTests, ClearingSourceThenToString)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     diagnostics.setSource ("processor P { }");
     diagnostics.addError (1, 1, "error");
@@ -177,12 +177,12 @@ TEST (YdspJitDiagnosticsTests, ClearingSourceThenToString)
 }
 
 //==============================================================================
-// DspJitExecutionReportTests
+// YdspExecutionReportTests
 //==============================================================================
 
 TEST (YdspJitExecutionReportTests, EmptyReportIsSafe)
 {
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
 
     EXPECT_TRUE (report.getKernels().empty());
     EXPECT_EQ (0, report.getTotalBoundedIterations());
@@ -191,7 +191,7 @@ TEST (YdspJitExecutionReportTests, EmptyReportIsSafe)
 
 TEST (YdspJitExecutionReportTests, SingleKernelReportFields)
 {
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
 
     auto& kernels = report.getKernels();
     kernels.push_back ({ "MyKernel", 42, 128, true, { "blockSize" } });
@@ -209,7 +209,7 @@ TEST (YdspJitExecutionReportTests, SingleKernelReportFields)
 
 TEST (YdspJitExecutionReportTests, MultipleKernelsAggregateCorrectly)
 {
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
 
     auto& kernels = report.getKernels();
     kernels.push_back ({ "A", 10, 32, true, {} });
@@ -221,7 +221,7 @@ TEST (YdspJitExecutionReportTests, MultipleKernelsAggregateCorrectly)
 
 TEST (YdspJitExecutionReportTests, OneUnsafeKernelMakesReportUnsafe)
 {
-    DspJitExecutionReport report;
+    YdspExecutionReport report;
 
     auto& kernels = report.getKernels();
     kernels.push_back ({ "Safe", 10, 64, true, {} });

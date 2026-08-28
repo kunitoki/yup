@@ -205,7 +205,7 @@ YdspStateLayout computeStateLayout (const YdspAnalyzedProcessor& processor)
 
 //==============================================================================
 
-YdspIrBuilder::YdspIrBuilder (YdspIrFunction& fn, const YdspAnalyzedProcessor& processor, DspJitDiagnostics& diagnostics, const detail::YdspStateLayout& layout, Config config)
+YdspIrBuilder::YdspIrBuilder (YdspIrFunction& fn, const YdspAnalyzedProcessor& processor, YdspDiagnostics& diagnostics, const detail::YdspStateLayout& layout, Config config)
     : fn (fn)
     , processor (processor)
     , diagnostics (diagnostics)

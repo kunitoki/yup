@@ -917,15 +917,23 @@ private:
 
 bool YdspVectorizer::run (YdspIrFunction& fn)
 {
+    return run (fn, vectorWidth);
+}
+
+bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth)
+{
+    if (targetVectorWidth != 4 && targetVectorWidth != 8 && targetVectorWidth != 16)
+        return false;
+
     bool changed = false;
 
     for (const auto& loop : fn.loops)
-        changed |= LoopWidener (fn, loop, vectorWidth).tryWiden();
+        changed |= LoopWidener (fn, loop, targetVectorWidth).tryWiden();
 
     if (changed)
     {
         fn.vectorized = true;
-        fn.vectorWidth = vectorWidth;
+        fn.vectorWidth = targetVectorWidth;
     }
 
     return changed;

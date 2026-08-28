@@ -386,58 +386,58 @@ void mergeImportedDecls (YdspProgram& prog, YdspProgram& importedProg, const Str
 
 } // namespace
 
-bool DspJitDiagnostics::hasErrors() const noexcept
+bool YdspDiagnostics::hasErrors() const noexcept
 {
     for (const auto& item : items)
-        if (item.severity == DspJitSeverity::error)
+        if (item.severity == YdspSeverity::error)
             return true;
 
     return false;
 }
 
-int DspJitDiagnostics::getCount() const noexcept
+int YdspDiagnostics::getCount() const noexcept
 {
     return static_cast<int> (items.size());
 }
 
-const DspJitDiagnostic& DspJitDiagnostics::getItem (int index) const noexcept
+const YdspDiagnostic& YdspDiagnostics::getItem (int index) const noexcept
 {
     jassert (static_cast<size_t> (index) < items.size());
     return items[static_cast<size_t> (index)];
 }
 
-void DspJitDiagnostics::setSource (StringRef source)
+void YdspDiagnostics::setSource (StringRef source)
 {
     sourceText = String (source);
 }
 
-void DspJitDiagnostics::addError (int line, int column, StringRef message)
+void YdspDiagnostics::addError (int line, int column, StringRef message)
 {
-    items.push_back ({ DspJitSeverity::error, line, column, String (message) });
+    items.push_back ({ YdspSeverity::error, line, column, String (message) });
 }
 
-void DspJitDiagnostics::addWarning (int line, int column, StringRef message)
+void YdspDiagnostics::addWarning (int line, int column, StringRef message)
 {
-    items.push_back ({ DspJitSeverity::warning, line, column, String (message) });
+    items.push_back ({ YdspSeverity::warning, line, column, String (message) });
 }
 
-void DspJitDiagnostics::addInfo (int line, int column, StringRef message)
+void YdspDiagnostics::addInfo (int line, int column, StringRef message)
 {
-    items.push_back ({ DspJitSeverity::info, line, column, String (message) });
+    items.push_back ({ YdspSeverity::info, line, column, String (message) });
 }
 
-int DspJitDiagnostics::mark() const noexcept
+int YdspDiagnostics::mark() const noexcept
 {
     return static_cast<int> (items.size());
 }
 
-void DspJitDiagnostics::rollbackTo (int marker)
+void YdspDiagnostics::rollbackTo (int marker)
 {
     if (marker >= 0 && static_cast<size_t> (marker) < items.size())
         items.resize (static_cast<size_t> (marker));
 }
 
-String DspJitDiagnostics::toString() const
+String YdspDiagnostics::toString() const
 {
     String result;
 
@@ -448,13 +448,13 @@ String DspJitDiagnostics::toString() const
 
         switch (item.severity)
         {
-            case DspJitSeverity::error:
+            case YdspSeverity::error:
                 result += "error";
                 break;
-            case DspJitSeverity::warning:
+            case YdspSeverity::warning:
                 result += "warning";
                 break;
-            case DspJitSeverity::info:
+            case YdspSeverity::info:
                 result += "info";
                 break;
         }
@@ -499,34 +499,255 @@ String DspJitDiagnostics::toString() const
 
 //==============================================================================
 
-// DspJitCompiler
+// YdspCompiler
 
-struct DspJitCompiler::Pimpl
+namespace
 {
-    DspJitDiagnostics diagnostics;
+
+struct YdspHostTargetInfo
+{
+    YdspNativeTarget preferredTarget = YdspNativeTarget::scalar;
+    bool supportsFusedMultiplyAdd = false;
+    bool supportsSse2 = false;
+    bool supportsAvx2 = false;
+    bool supportsAvx512 = false;
+    String microarchitecture;
+};
+
+struct YdspTargetSelection
+{
+    YdspNativeTarget target = YdspNativeTarget::scalar;
+    int vectorWidth = 1;
+    bool supportsFusedMultiplyAdd = false;
+    StringArray rejectedTransforms;
+};
+
+class YdspCompileTimer
+{
+public:
+    YdspCompileTimer (YdspOptimizationReport& reportToUpdate, bool shouldRecord) noexcept
+        : report (reportToUpdate)
+        , enabled (shouldRecord)
+        , start (std::chrono::steady_clock::now())
+    {
+    }
+
+    ~YdspCompileTimer()
+    {
+        if (enabled)
+            report.compileTimeMilliseconds = std::chrono::duration<double, std::milli> (std::chrono::steady_clock::now() - start).count();
+    }
+
+private:
+    YdspOptimizationReport& report;
+    bool enabled = false;
+    std::chrono::steady_clock::time_point start;
+};
+
+YdspHostTargetInfo detectHostTarget()
+{
+    YdspHostTargetInfo result;
+
+#if YUP_WASM
+    result.microarchitecture = "WebAssembly";
+#elif ASMJIT_ARCH_X86
+    const auto& cpu = asmjit::CpuInfo::host();
+    const auto& features = cpu.features().x86();
+
+    result.supportsFusedMultiplyAdd = features.has_fma();
+    result.supportsSse2 = features.has_sse2();
+    result.supportsAvx2 = features.has_avx2();
+    result.supportsAvx512 = features.has_avx512_f() && features.has_avx512_dq() && features.has_avx512_vl();
+    result.preferredTarget = result.supportsAvx2 ? YdspNativeTarget::avx2
+                                                 : (result.supportsSse2 ? YdspNativeTarget::sse2 : YdspNativeTarget::scalar);
+    result.microarchitecture = String (cpu.brand());
+
+    if (result.microarchitecture.isEmpty())
+        result.microarchitecture = "x86-64";
+#elif ASMJIT_ARCH_ARM
+    result.preferredTarget = YdspNativeTarget::asimd;
+    result.supportsFusedMultiplyAdd = true;
+    result.microarchitecture = "AArch64";
+#else
+    result.microarchitecture = "Unknown";
+#endif
+
+    return result;
+}
+
+bool targetIsAvailable (YdspNativeTarget target, const YdspHostTargetInfo& host) noexcept
+{
+    switch (target)
+    {
+        case YdspNativeTarget::scalar:
+            return true;
+
+        case YdspNativeTarget::sse2:
+#if ! YUP_WASM && ASMJIT_ARCH_X86
+            return host.supportsSse2;
+#else
+            return false;
+#endif
+
+        case YdspNativeTarget::avx2:
+#if ! YUP_WASM && ASMJIT_ARCH_X86
+            return host.supportsAvx2;
+#else
+            return false;
+#endif
+
+        case YdspNativeTarget::avx512:
+#if ! YUP_WASM && ASMJIT_ARCH_X86
+            return host.supportsAvx512;
+#else
+            return false;
+#endif
+
+        case YdspNativeTarget::asimd:
+#if ! YUP_WASM && ASMJIT_ARCH_ARM
+            return true;
+#else
+            return false;
+#endif
+    }
+
+    return false;
+}
+
+String targetName (YdspNativeTarget target)
+{
+    switch (target)
+    {
+        case YdspNativeTarget::scalar: return "scalar";
+        case YdspNativeTarget::sse2: return "SSE2";
+        case YdspNativeTarget::avx2: return "AVX2";
+        case YdspNativeTarget::avx512: return "AVX-512";
+        case YdspNativeTarget::asimd: return "ASIMD";
+    }
+
+    return "unknown";
+}
+
+YdspTargetSelection selectTarget (const YdspCompileOptions& options, const YdspHostTargetInfo& host)
+{
+    YdspTargetSelection result;
+    auto requested = options.targetPolicy == YdspTargetPolicy::host ? host.preferredTarget : options.baselineTarget;
+
+    if (options.targetPolicy == YdspTargetPolicy::host && host.supportsAvx512)
+        result.rejectedTransforms.add ("AVX-512 was rejected because no empirical microarchitecture cost model is available");
+
+    // AVX-512 can lower clock frequency on several CPU families. Until the
+    // compiler has target-class benchmark feedback, selecting it would turn a
+    // capability check into an unjustified profitability claim. Keep AVX2 as
+    // the wide x86 path and record the decision for callers that asked for it.
+    if (requested == YdspNativeTarget::avx512)
+    {
+        if (options.targetPolicy != YdspTargetPolicy::host)
+            result.rejectedTransforms.add ("AVX-512 was rejected because no empirical microarchitecture cost model is available");
+
+        requested = host.supportsAvx2 ? YdspNativeTarget::avx2 : YdspNativeTarget::sse2;
+    }
+
+    if (! targetIsAvailable (requested, host))
+    {
+        result.rejectedTransforms.add ("Requested " + targetName (requested) + " target is unavailable on this host; using scalar code");
+        requested = YdspNativeTarget::scalar;
+    }
+
+    result.target = requested;
+
+    switch (requested)
+    {
+        case YdspNativeTarget::sse2:
+        case YdspNativeTarget::asimd:
+            result.vectorWidth = 4;
+            break;
+
+        case YdspNativeTarget::avx2:
+            result.vectorWidth = 8;
+            result.supportsFusedMultiplyAdd = host.supportsFusedMultiplyAdd;
+            break;
+
+        case YdspNativeTarget::scalar:
+            break;
+
+        case YdspNativeTarget::avx512:
+            jassertfalse;
+            break;
+    }
+
+    if (requested == YdspNativeTarget::asimd)
+        result.supportsFusedMultiplyAdd = true;
+
+    return result;
+}
+
+} // namespace
+
+struct YdspCompiler::Pimpl
+{
+    Pimpl()
+        : hostTarget (detectHostTarget())
+    {
+    }
+
+    YdspDiagnostics diagnostics;
+    YdspOptimizationReport optimizationReport;
+    YdspHostTargetInfo hostTarget;
 };
 
 //==============================================================================
 
-DspJitCompiler::DspJitCompiler()
+YdspCompiler::YdspCompiler()
     : pimpl (std::make_unique<Pimpl>())
 {
 }
 
-DspJitCompiler::~DspJitCompiler() = default;
+YdspCompiler::~YdspCompiler() = default;
 
 //==============================================================================
 
-const DspJitDiagnostics& DspJitCompiler::getDiagnostics() const noexcept
+const YdspDiagnostics& YdspCompiler::getDiagnostics() const noexcept
 {
     return pimpl->diagnostics;
 }
 
 //==============================================================================
 
-ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef importBasePath, ThreadPool* threadPool)
+const YdspOptimizationReport& YdspCompiler::getOptimizationReport() const noexcept
 {
-    pimpl->diagnostics = DspJitDiagnostics();
+    return pimpl->optimizationReport;
+}
+
+//==============================================================================
+
+ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, StringRef importBasePath, ThreadPool* threadPool)
+{
+    return compile (source, YdspCompileOptions {}, importBasePath, threadPool);
+}
+
+//==============================================================================
+
+ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool)
+{
+    pimpl->diagnostics = YdspDiagnostics();
+    pimpl->optimizationReport = YdspOptimizationReport {};
+
+    auto& optimizationReport = pimpl->optimizationReport;
+    YdspCompileTimer compileTimer (optimizationReport, options.emitOptimizationReport);
+    const auto target = selectTarget (options, pimpl->hostTarget);
+
+    if (options.emitOptimizationReport)
+    {
+        optimizationReport.optimizationTier = options.optimizationTier;
+        optimizationReport.fastMath = options.fastMath;
+        optimizationReport.selectedIsa = target.target;
+        optimizationReport.selectedMicroarchitecture = pimpl->hostTarget.microarchitecture;
+        optimizationReport.vectorWidth = target.vectorWidth;
+        optimizationReport.rejectedTransforms = target.rejectedTransforms;
+        optimizationReport.cacheDecision = "No persistent native-code cache is configured";
+        optimizationReport.benchmarkDecision = "No benchmark feedback was supplied";
+    }
 
     auto& diagnostics = pimpl->diagnostics;
     diagnostics.setSource (source);
@@ -536,13 +757,13 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     auto tokens = lexer.tokenize();
 
     if (diagnostics.hasErrors())
-        return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
     // 2. Parse
     YdspParser parser (std::move (tokens), diagnostics);
     auto program = parser.parseProgram();
     if (program == nullptr || diagnostics.hasErrors())
-        return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
     // 2b. Resolve imports
     if (! program->imports.empty())
@@ -598,7 +819,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
 
                 // Lex and parse the imported source. Each job owns its lexer,
                 // parser and diagnostics, so no shared state is touched here.
-                DspJitDiagnostics importDiagnostics;
+                YdspDiagnostics importDiagnostics;
                 YdspLexer importLexer (importedSource, importDiagnostics);
                 auto importTokens = importLexer.tokenize();
 
@@ -793,47 +1014,65 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     YdspSemanticAnalyzer analyzer (diagnostics);
     auto analyzed = analyzer.analyze (std::move (program));
     if (analyzed == nullptr || diagnostics.hasErrors())
-        return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
     // 4. Build + optimise IR
     YdspOptimizer optimizer (diagnostics);
 
-#if ! YUP_WASM
-    // Only the asmjit backends lower packed lanes; the wasm emitter has no
-    // 0xFD-prefix opcode family, so that path stays scalar.
-    optimizer.setVectorizationEnabled (true);
+    const bool useNativeTier = options.optimizationTier != YdspOptimizationTier::baseline;
 
-    // Trading code size for branches pays where the code is already resident. A
-    // wasm module is downloaded and parsed before it runs, and the browser's own
-    // engine re-optimises the loop regardless, so that path stays rolled.
-    optimizer.setUnrollingEnabled (true);
-
-    // Halves the serial depth of an unrolled bank's accumulator for the cost of
-    // one instruction. Whether that wins depends on the reduction being
-    // latency-bound rather than throughput-bound, which `ModalBankReductionCost`
-    // is what measures - it is a switch precisely so the answer can change.
-    optimizer.setReductionSplittingEnabled (true);
-#endif
-
-    optimizer.setContractionEnabled (true);
-
-    // Whether `fmaF` survives to the backend or gets expanded into float64
-    // arithmetic that rounds once. AArch64 always has `fmadd`; x86-64 needs
-    // FMA3 and the host is what says; wasm has no fused form at all.
 #if YUP_WASM
-    optimizer.setTargetHasFusedMultiplyAdd (false);
-#elif ASMJIT_ARCH_X86
-    optimizer.setTargetHasFusedMultiplyAdd (asmjit::CpuInfo::host().features().x86().has_fma());
+    constexpr bool hasNativeLoopTransforms = false;
 #else
-    optimizer.setTargetHasFusedMultiplyAdd (true);
+    constexpr bool hasNativeLoopTransforms = true;
 #endif
+
+    const bool enableVectorization = useNativeTier && hasNativeLoopTransforms && target.vectorWidth > 1;
+    const bool enableUnrolling = useNativeTier && hasNativeLoopTransforms;
+    const bool enableReductionSplitting = useNativeTier && hasNativeLoopTransforms;
+
+    // Only fast-math compilation may change an expression's evaluation order.
+    // An explicit YDSP fma() remains a one-rounding operation in every tier;
+    // targetHasFusedMultiplyAdd selects its native or exact float64 lowering.
+    optimizer.setContractionEnabled (options.fastMath);
+    optimizer.setTargetHasFusedMultiplyAdd (target.supportsFusedMultiplyAdd);
+    optimizer.setTargetHasPackedFusedMultiplyAdd (target.supportsFusedMultiplyAdd && target.vectorWidth > 1);
+
+#if ! YUP_WASM
+    // The asmjit backends lower packed lanes. The wasm emitter stays scalar
+    // until its SIMD opcode support and corresponding validation are present.
+    optimizer.setVectorizationEnabled (enableVectorization);
+    optimizer.setVectorWidth (target.vectorWidth);
+
+    // These transforms are benchmarked by the native test suite and retain the
+    // established automatic-tier behavior. The baseline tier keeps its compact
+    // rolled scalar form for reproducibility and portability checks.
+    optimizer.setUnrollingEnabled (enableUnrolling);
+    optimizer.setReductionSplittingEnabled (enableReductionSplitting);
+#endif
+
+    if (options.emitOptimizationReport)
+    {
+        optimizationReport.vectorizationEnabled = enableVectorization;
+        optimizationReport.unrollingEnabled = enableUnrolling;
+        optimizationReport.reductionSplittingEnabled = enableReductionSplitting;
+        optimizationReport.contractionEnabled = options.fastMath;
+
+#if YUP_WASM
+        if (useNativeTier)
+            optimizationReport.rejectedTransforms.add ("WASM SIMD lowering is not implemented; portable f32x4 SIMD requires a dedicated strict-semantics backend");
+#endif
+
+        if (options.optimizationTier == YdspOptimizationTier::aggressive)
+            optimizationReport.rejectedTransforms.add ("Advanced loop versioning, masked tails and e-graph rewrites require benchmark validation and are not enabled");
+    }
 
     auto ir = optimizer.build (*analyzed);
     if (ir == nullptr || diagnostics.hasErrors())
-        return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
     // 5. Codegen into the graph's runtime
-    auto graphPimpl = std::make_unique<DspJitGraph::Pimpl>();
+    auto graphPimpl = std::make_unique<YdspAudioGraph::Pimpl>();
 
     const auto& analyzedGraph = analyzed->graph;
 
@@ -868,12 +1107,15 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     // Compiles an IR function to a wasm module and registers it in the
     // current (main) JS realm; the graph keeps the bytes for re-registration
     // in other realms and owns the handle.
-    auto compileWasmFn = [&graphPimpl] (const YdspIrFunction& irFn, DspJitDiagnostics& diag) -> YdspCompiledKernel
+    auto compileWasmFn = [&graphPimpl, &optimizationReport, &options] (const YdspIrFunction& irFn, YdspDiagnostics& diag) -> YdspCompiledKernel
     {
         auto bytes = YdspWasmCodegen::compile (irFn, diag);
 
         if (bytes.empty() || diag.hasErrors())
             return {};
+
+        if (options.emitOptimizationReport)
+            optimizationReport.generatedCodeSize += bytes.size();
 
         String errorMessage;
         const auto handle = YdspWasmRuntime::registerKernel (bytes.data(), bytes.size(), errorMessage);
@@ -910,11 +1152,15 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
 #if YUP_WASM
         info.kernel = compileWasmFn (*kernel, diagnostics);
 #else
-        info.kernel = YdspCompiledKernel (YdspAsmJitCodegen::compile (graphPimpl->runtime, *kernel, diagnostics));
+        size_t generatedCodeSize = 0;
+        info.kernel = YdspCompiledKernel (YdspAsmJitCodegen::compile (graphPimpl->runtime, *kernel, diagnostics, &generatedCodeSize));
+
+        if (options.emitOptimizationReport)
+            optimizationReport.generatedCodeSize += generatedCodeSize;
 #endif
 
         if (! info.kernel.isValid())
-            return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+            return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
         kernelInfos.push_back (std::move (info));
     }
@@ -925,11 +1171,15 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
 #if YUP_WASM
         auto handlerFn = compileWasmFn (*handler, diagnostics);
 #else
-        auto handlerFn = YdspCompiledKernel (YdspAsmJitCodegen::compileEventHandler (graphPimpl->runtime, *handler, diagnostics));
+        size_t generatedCodeSize = 0;
+        auto handlerFn = YdspCompiledKernel (YdspAsmJitCodegen::compileEventHandler (graphPimpl->runtime, *handler, diagnostics, &generatedCodeSize));
+
+        if (options.emitOptimizationReport)
+            optimizationReport.generatedCodeSize += generatedCodeSize;
 #endif
 
         if (! handlerFn.isValid())
-            return ResultValue<DspJitGraph>::fail (diagnostics.getItem (0).message);
+            return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
 
         const auto shapeIndex = eventShapeIndex (handler->eventShape);
 
@@ -978,7 +1228,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     // ---- Build node table ----
     for (const auto& node : analyzedGraph.nodes)
     {
-        DspJitGraph::Pimpl::Node runtimeNode;
+        YdspAudioGraph::Pimpl::Node runtimeNode;
         runtimeNode.instanceName = node.instanceName;
         runtimeNode.processorName = node.processor->name;
 
@@ -994,7 +1244,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
         }
 
         if (kernelInfo == nullptr)
-            return ResultValue<DspJitGraph>::fail ("Unknown processor '" + node.processor->name + "' referenced in graph");
+            return ResultValue<YdspAudioGraph>::fail ("Unknown processor '" + node.processor->name + "' referenced in graph");
 
         runtimeNode.kernel = kernelInfo->kernel;
         runtimeNode.numInputs = kernelInfo->numInputs;
@@ -1033,7 +1283,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
 
             if (table != kernelInfo->eventHandlerTables.end())
             {
-                DspJitGraph::Pimpl::Node::EventInputBinding binding;
+                YdspAudioGraph::Pimpl::Node::EventInputBinding binding;
                 binding.eventInputSlot = localEventInputSlot;
                 binding.handlers = table->handlers;
                 runtimeNode.eventInputs.push_back (std::move (binding));
@@ -1083,7 +1333,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     // mapping.
     for (const auto& edge : analyzedGraph.eventEdges)
     {
-        DspJitGraph::Pimpl::Node::RoutedEventEdge routed;
+        YdspAudioGraph::Pimpl::Node::RoutedEventEdge routed;
         routed.compensationSamples = edge.compensationSamples;
 
         if (edge.dstNode >= 0)
@@ -1172,7 +1422,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
 
     for (const auto& edge : analyzedGraph.edges)
     {
-        DspJitGraph::Pimpl::StreamConnection connection;
+        YdspAudioGraph::Pimpl::StreamConnection connection;
         connection.srcNode = edge.srcNode;
         connection.srcIndex = edge.srcStream;
         // The one place the two delays are summed: `delaySamples` is what the
@@ -1242,7 +1492,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
         const auto* endpoint = analyzedGraph.inputValues[i];
         const auto type = toStorageType (endpoint->type);
 
-        DspJitParameterInfo info;
+        YdspParameterInfo info;
         info.name = endpoint->name;
         info.displayName = detail::annotationString (*endpoint, "name", endpoint->name);
         info.type = detail::toElementType (type);
@@ -1299,7 +1549,7 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
             graphPimpl->paramOffsets.push_back (paramByteCursor);
             paramByteCursor += detail::elementSize (type);
 
-            DspJitParameterInfo info;
+            YdspParameterInfo info;
             info.name = publicName (paramIndex, endpoint);
             info.displayName = detail::annotationString (endpoint, "name", endpoint.name);
             info.type = detail::toElementType (type);
@@ -1445,10 +1695,10 @@ ResultValue<DspJitGraph> DspJitCompiler::compile (StringRef source, StringRef im
     graphPimpl->valid = true;
     graphPimpl->diagnostics = std::move (diagnostics);
 
-    DspJitGraph graph;
+    YdspAudioGraph graph;
     graph.pimpl = std::move (graphPimpl);
 
-    return ResultValue<DspJitGraph>::ok (std::move (graph));
+    return ResultValue<YdspAudioGraph>::ok (std::move (graph));
 }
 
 } // namespace yup

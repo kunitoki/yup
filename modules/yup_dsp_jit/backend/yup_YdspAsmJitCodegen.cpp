@@ -145,8 +145,11 @@ public:
 
 //==============================================================================
 
-YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics, bool isEventHandler)
+YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, bool isEventHandler, size_t* generatedCodeSize)
 {
+    if (generatedCodeSize != nullptr)
+        *generatedCodeSize = 0;
+
     asmjit::CodeHolder code;
 
     // Attach diagnostics so asmjit logs are captured for error reporting
@@ -164,7 +167,7 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
         return nullptr;
     }
 
-    YdspCompiler cc (&code);
+    YdspAsm cc (&code);
 
     // Enable verbose register allocator diagnostics for error reporting
     cc.add_diagnostic_options (asmjit::DiagnosticOptions::kRAAnnotate | asmjit::DiagnosticOptions::kRADebugAll);
@@ -178,6 +181,19 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
         diagnostics.addError (0, 0, msg);
         return nullptr;
     }
+
+#if ASMJIT_ARCH_X86
+    const bool hasFusedMultiplyAdd = std::any_of (fn.blocks.begin(), fn.blocks.end(), [] (const YdspIrBlock& block)
+    {
+        return std::any_of (block.insts.begin(), block.insts.end(), [] (const YdspIrInst& inst)
+        {
+            return inst.op == YdspIrOp::fmaF;
+        });
+    });
+
+    if (fn.vectorWidth > YdspVectorizer::vectorWidth || hasFusedMultiplyAdd)
+        funcNode->frame().set_avx_cleanup();
+#endif
 
 #if ASMJIT_ARCH_ARM == 64
     // Keep the register allocator's hands off x30 (LR).
@@ -206,6 +222,7 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
 
     this->cc = &cc;
     this->isEventHandler = isEventHandler;
+    activeVectorWidth = fn.vectorWidth == 8 || fn.vectorWidth == 16 ? fn.vectorWidth : YdspVectorizer::vectorWidth;
 
     YdspGp ctxReg = cc.new_gp64 ("ctx");
     funcNode->set_arg (0, ctxReg);
@@ -237,16 +254,53 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
     }
     else
     {
-        loadGpFromMem (inputsReg, memPtr (ctxReg, offsetof (YdspKernelContext, inputs)));
-        loadGpFromMem (outputsReg, memPtr (ctxReg, offsetof (YdspKernelContext, outputs)));
-        loadGpFromMem (paramsReg, memPtr (ctxReg, offsetof (YdspKernelContext, params)));
-        loadGpFromMem (paramOutReg, memPtr (ctxReg, offsetof (YdspKernelContext, paramOut)));
-        loadGpFromMem (stateReg, memPtr (ctxReg, offsetof (YdspKernelContext, state)));
-        loadGpFromMem (stateArraysReg, memPtr (ctxReg, offsetof (YdspKernelContext, stateArrays)));
+        bool needsInputs = false;
+        bool needsOutputs = false;
+        bool needsParams = false;
+        bool needsParamOut = false;
+        bool needsState = false;
+        bool needsStateArrays = false;
+        bool needsBlockSize = false;
+        bool needsSampleRate = false;
+        bool needsOutputEvents = false;
 
-        loadGpFromMem (numSamplesReg, memPtr (ctxReg, offsetof (YdspKernelContext, numSamples)));
-        loadFloatFromMem (sampleRateReg, memPtr (ctxReg, offsetof (YdspKernelContext, sampleRate)));
-        loadGpFromMem (outputEventsReg, memPtr (ctxReg, offsetof (YdspKernelContext, outputEvents)));
+        for (const auto& block : fn.blocks)
+        {
+            for (const auto& inst : block.insts)
+            {
+                needsParams = needsParams || inst.op == YdspIrOp::loadParam || inst.op == YdspIrOp::storeParam;
+                needsParamOut = needsParamOut || inst.op == YdspIrOp::loadParamOut || inst.op == YdspIrOp::storeParamOut;
+                needsInputs = needsInputs || inst.op == YdspIrOp::loadInput;
+                needsOutputs = needsOutputs || inst.op == YdspIrOp::loadOutput || inst.op == YdspIrOp::storeOutput;
+                needsState = needsState || inst.op == YdspIrOp::loadStateF || inst.op == YdspIrOp::storeStateF
+                             || inst.op == YdspIrOp::loadStateI || inst.op == YdspIrOp::storeStateI;
+                needsStateArrays = needsStateArrays || inst.op == YdspIrOp::loadStateArrayF || inst.op == YdspIrOp::storeStateArrayF
+                                   || inst.op == YdspIrOp::loadStateArrayI || inst.op == YdspIrOp::storeStateArrayI;
+                needsBlockSize = needsBlockSize || inst.op == YdspIrOp::loadBlockSize;
+                needsSampleRate = needsSampleRate || inst.op == YdspIrOp::loadSampleRate;
+                needsOutputEvents = needsOutputEvents || inst.op == YdspIrOp::emitEvent
+                                    || inst.op == YdspIrOp::storeEventFieldF || inst.op == YdspIrOp::storeEventFieldI;
+            }
+        }
+
+        if (needsInputs)
+            loadGpFromMem (inputsReg, memPtr (ctxReg, offsetof (YdspKernelContext, inputs)));
+        if (needsOutputs)
+            loadGpFromMem (outputsReg, memPtr (ctxReg, offsetof (YdspKernelContext, outputs)));
+        if (needsParams)
+            loadGpFromMem (paramsReg, memPtr (ctxReg, offsetof (YdspKernelContext, params)));
+        if (needsParamOut)
+            loadGpFromMem (paramOutReg, memPtr (ctxReg, offsetof (YdspKernelContext, paramOut)));
+        if (needsState)
+            loadGpFromMem (stateReg, memPtr (ctxReg, offsetof (YdspKernelContext, state)));
+        if (needsStateArrays)
+            loadGpFromMem (stateArraysReg, memPtr (ctxReg, offsetof (YdspKernelContext, stateArrays)));
+        if (needsBlockSize)
+            loadGpFromMem (numSamplesReg, memPtr (ctxReg, offsetof (YdspKernelContext, numSamples)));
+        if (needsSampleRate)
+            loadFloatFromMem (sampleRateReg, memPtr (ctxReg, offsetof (YdspKernelContext, sampleRate)));
+        if (needsOutputEvents)
+            loadGpFromMem (outputEventsReg, memPtr (ctxReg, offsetof (YdspKernelContext, outputEvents)));
 
         // Hoist the per-stream channel pointers out of the sample loop: they
         // are fixed for the whole call, so re-deriving them at every access
@@ -422,6 +476,9 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
         return nullptr;
     }
 
+    if (generatedCodeSize != nullptr)
+        *generatedCodeSize = code.code_size();
+
     YdspKernelFn fnPtr = nullptr;
 
     auto addErr = runtime.add (&fnPtr, &code);
@@ -563,6 +620,14 @@ YdspMem YdspAsmJitCodegenImpl::packedConstMem (uint64_t bits, bool is64)
     }
 
     return cc->new_const (asmjit::ConstPoolScope::kLocal, lanes, 16);
+}
+
+YdspMem YdspAsmJitCodegenImpl::vectorConstMem (uint32_t bits)
+{
+    std::array<uint32_t, 16> lanes {};
+
+    std::fill_n (lanes.begin(), static_cast<size_t> (activeVectorWidth), bits);
+    return cc->new_const (asmjit::ConstPoolScope::kLocal, lanes.data(), static_cast<size_t> (activeVectorWidth) * sizeof (uint32_t));
 }
 
 void YdspAsmJitCodegenImpl::loadFloatConst (const YdspFp& dst, double value, YdspValueType type)
@@ -877,10 +942,11 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
             return;
 
         case YdspIrOp::fmaF:
-            // Scalar float32 only, and it never arrives widened: the vectoriser
-            // declines a loop whose body fuses (fmaF is not a packed float op)
-            // and contraction skips anything with lanes > 1.
-            emitFusedMultiplyAdd (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+            if (isVectorValue (inst.result))
+                emitVectorFusedMultiplyAdd (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+            else
+                emitFusedMultiplyAdd (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+
             return;
 
         case YdspIrOp::lerpF:
@@ -1304,7 +1370,7 @@ void YdspAsmJitCodegenImpl::emitTerminator (const YdspIrBlock& block, int blockI
 
 //==============================================================================
 
-YdspKernelFn YdspAsmJitCodegen::compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics)
+YdspKernelFn YdspAsmJitCodegen::compile (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, size_t* generatedCodeSize)
 {
 #if ASMJIT_ARCH_X86
     YdspAsmJitCodegenX64 impl;
@@ -1314,10 +1380,10 @@ YdspKernelFn YdspAsmJitCodegen::compile (asmjit::JitRuntime& runtime, const Ydsp
 #error "yup_dsp_jit requires an x86-64 or AArch64 backend"
 #endif
 
-    return impl.compile (runtime, fn, diagnostics);
+    return impl.compile (runtime, fn, diagnostics, false, generatedCodeSize);
 }
 
-YdspEventHandlerFn YdspAsmJitCodegen::compileEventHandler (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, DspJitDiagnostics& diagnostics)
+YdspEventHandlerFn YdspAsmJitCodegen::compileEventHandler (asmjit::JitRuntime& runtime, const YdspIrFunction& fn, YdspDiagnostics& diagnostics, size_t* generatedCodeSize)
 {
 #if ASMJIT_ARCH_X86
     YdspAsmJitCodegenX64 impl;
@@ -1329,7 +1395,7 @@ YdspEventHandlerFn YdspAsmJitCodegen::compileEventHandler (asmjit::JitRuntime& r
 
     // Both ABIs are `void (*) (void*)` at the machine level; the impl returns
     // the kernel-typed pointer and the caller casts to the handler ABI.
-    return ydspFnPtrCast<YdspEventHandlerFn> (impl.compile (runtime, fn, diagnostics, true));
+    return ydspFnPtrCast<YdspEventHandlerFn> (impl.compile (runtime, fn, diagnostics, true, generatedCodeSize));
 }
 
 } // namespace yup

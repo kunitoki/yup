@@ -67,7 +67,7 @@ namespace yup
 class YdspVectorizer
 {
 public:
-    /** The one supported lane count: SSE2 / ASIMD baseline. */
+    /** The compatibility lane count: SSE2 / ASIMD baseline. */
     static constexpr int vectorWidth = 4;
 
     /** Widens every qualifying loop in the function.
@@ -76,6 +76,13 @@ public:
         `fn.vectorized` is set and `fn.valueLanes` is populated.
     */
     static bool run (YdspIrFunction& fn);
+
+    /** Widens every qualifying loop using a target-derived float32 width.
+
+        Only 4, 8 and 16 lanes are accepted. The 4-lane overload above is
+        retained for IR clients that target the portable SSE2 / ASIMD subset.
+    */
+    static bool run (YdspIrFunction& fn, int targetVectorWidth);
 };
 
 } // namespace yup

@@ -34,7 +34,7 @@ namespace
 
 //==============================================================================
 
-std::unique_ptr<YdspIrProgram> vectorizerBuildIr (StringRef source, DspJitDiagnostics& diagnostics)
+std::unique_ptr<YdspIrProgram> vectorizerBuildIr (StringRef source, YdspDiagnostics& diagnostics)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -75,7 +75,7 @@ int vectorizerCountInst (const YdspIrFunction& fn, YdspIrOp op)
 
 bool vectorizerWidens (StringRef processorBody)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto ir = vectorizerBuildIr (vectorizerPatch (processorBody), diagnostics);
 
     EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -87,7 +87,7 @@ bool vectorizerWidens (StringRef processorBody)
     return ir->kernels[0]->vectorized;
 }
 
-DspJitGraph vectorizerCompileGraph (StringRef source, DspJitCompiler& compiler)
+YdspAudioGraph vectorizerCompileGraph (StringRef source, YdspCompiler& compiler)
 {
     auto result = compiler.compile (source);
     EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
@@ -98,12 +98,12 @@ DspJitGraph vectorizerCompileGraph (StringRef source, DspJitCompiler& compiler)
     return std::move (result).getValue();
 }
 
-void vectorizerRunBlock (DspJitGraph& graph, const float* input, float* output, int numSamples)
+void vectorizerRunBlock (YdspAudioGraph& graph, const float* input, float* output, int numSamples)
 {
-    std::vector<DspJitInputBuffer> inputs;
+    std::vector<YdspInputBuffer> inputs;
     inputs.emplace_back (Span<const float> (input, static_cast<size_t> (numSamples)));
 
-    std::vector<DspJitOutputBuffer> outputs;
+    std::vector<YdspOutputBuffer> outputs;
     outputs.emplace_back (Span<float> (output, static_cast<size_t> (numSamples)));
 
     graph.process (inputs, outputs, numSamples, nullptr, nullptr, 0);
@@ -156,7 +156,7 @@ constexpr auto vectorizerElementWiseSource = R"YDSP(
 
 TEST (YdspVectorizerTests, WidensAConstantBoundBankLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto ir = vectorizerBuildIr (vectorizerPatch (vectorizerBankSource), diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -183,7 +183,7 @@ TEST (YdspVectorizerTests, WidensAConstantBoundBankLoop)
 
 TEST (YdspVectorizerTests, WidensAnElementWiseLoopWithNoReduction)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
     auto ir = vectorizerBuildIr (vectorizerPatch (vectorizerElementWiseSource), diagnostics);
 
     ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
@@ -198,7 +198,7 @@ TEST (YdspVectorizerTests, WidensAnElementWiseLoopWithNoReduction)
 
 TEST (YdspVectorizerTests, IsOffUnlessEnabled)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     YdspLexer lexer (vectorizerPatch (vectorizerBankSource), diagnostics);
     auto tokens = lexer.tokenize();
@@ -417,7 +417,7 @@ TEST (YdspVectorizerTests, RejectsALoopUsingIntegerMin)
 
 TEST (YdspVectorizerTests, RejectsAnEmitInsideTheLoop)
 {
-    DspJitDiagnostics diagnostics;
+    YdspDiagnostics diagnostics;
 
     auto ir = vectorizerBuildIr (R"YDSP(
         processor P {
@@ -447,7 +447,7 @@ TEST (YdspVectorizerTests, RejectsAnEmitInsideTheLoop)
 
 TEST (YdspVectorizerTests, WidenedBankProducesTheExpectedOutput)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerBankSource), compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -474,7 +474,7 @@ TEST (YdspVectorizerTests, SplitAccumulatorBankProducesTheExpectedOutput)
 {
     for (const int modes : { 16, 32 })
     {
-        DspJitCompiler compiler;
+        YdspCompiler compiler;
 
         auto graph = vectorizerCompileGraph (vectorizerPatch (String ("let modes = ") + String (modes) + R"YDSP(;
 
@@ -523,7 +523,7 @@ TEST (YdspVectorizerTests, SplitAccumulatorBankProducesTheExpectedOutput)
 
 TEST (YdspVectorizerTests, WidenedElementWiseLoopIsBitExact)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerElementWiseSource), compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -548,7 +548,7 @@ TEST (YdspVectorizerTests, WidenedElementWiseLoopIsBitExact)
 
 TEST (YdspVectorizerTests, ReportsTheLaneCountPerKernel)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerBankSource), compiler);
 
     ASSERT_TRUE (graph.isValid());
@@ -565,7 +565,7 @@ TEST (YdspVectorizerTests, ReportsTheLaneCountPerKernel)
             continue;
 
         foundVectorized = true;
-        EXPECT_EQ (YdspVectorizer::vectorWidth, kernel.vectorWidth);
+        EXPECT_TRUE (kernel.vectorWidth == 4 || kernel.vectorWidth == 8);
 
         EXPECT_EQ (8, kernel.boundedIterationCount);
     }
@@ -581,7 +581,7 @@ TEST (YdspVectorizerTests, ReportsTheLaneCountPerKernel)
 
 TEST (YdspVectorizerTests, EmitsPackedInstructions)
 {
-    DspJitCompiler compiler;
+    YdspCompiler compiler;
     auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerBankSource), compiler);
 
     ASSERT_TRUE (graph.isValid());

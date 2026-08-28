@@ -77,7 +77,7 @@
 //==============================================================================
 
 #include "backend/yup_YdspAbi.h"
-#include "runtime/yup_DspJitCompiler.h"
+#include "compiler/yup_YdspCompiler.h"
 #include "language/yup_YdspAst.h"
 #include "language/yup_YdspLexer.h"
 #include "language/yup_YdspParser.h"

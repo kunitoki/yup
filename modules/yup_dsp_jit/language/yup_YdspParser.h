@@ -29,7 +29,7 @@ namespace yup
 
     Produces a YdspProgram AST. Most syntax errors are recovered from
     (synchronize() skips to the next statement/declaration boundary) and
-    recorded in the provided DspJitDiagnostics, so the returned program is
+    recorded in the provided YdspDiagnostics, so the returned program is
     usually non-null and structurally complete even when errors were
     reported - check diagnostics.hasErrors(), not just the return value, to
     decide whether the program is usable. Supports both graph body forms:
@@ -39,7 +39,7 @@ class YdspParser
 {
 public:
     /** Constructs a parser over a token stream. */
-    YdspParser (std::vector<YdspToken> tokens, DspJitDiagnostics& diagnostics);
+    YdspParser (std::vector<YdspToken> tokens, YdspDiagnostics& diagnostics);
 
     /** Parses a whole program. Almost always non-null, even when syntax
         errors were recorded - check diagnostics.hasErrors(), not this return
@@ -156,7 +156,7 @@ private:
     //==============================================================================
 
     std::vector<YdspToken> tokens;
-    DspJitDiagnostics& diagnostics;
+    YdspDiagnostics& diagnostics;
     size_t index = 0;
 
     int recursionDepth = 0;

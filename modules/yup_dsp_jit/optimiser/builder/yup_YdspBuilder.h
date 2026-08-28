@@ -88,7 +88,7 @@ public:
         const std::vector<YdspAnalyzedFunc>* programFunctions = nullptr;
     };
 
-    YdspIrBuilder (YdspIrFunction& fn, const YdspAnalyzedProcessor& processor, DspJitDiagnostics& diagnostics, const detail::YdspStateLayout& layout, Config config);
+    YdspIrBuilder (YdspIrFunction& fn, const YdspAnalyzedProcessor& processor, YdspDiagnostics& diagnostics, const detail::YdspStateLayout& layout, Config config);
 
     void build();
 
@@ -392,7 +392,7 @@ private:
 
     YdspIrFunction& fn;
     const YdspAnalyzedProcessor& processor;
-    DspJitDiagnostics& diagnostics;
+    YdspDiagnostics& diagnostics;
     const detail::YdspStateLayout& layout;
 
     const std::vector<YdspAnalyzedFunc>* programFunctions = nullptr;

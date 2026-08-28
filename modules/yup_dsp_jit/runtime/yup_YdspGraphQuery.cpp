@@ -22,38 +22,38 @@
 namespace yup
 {
 
-DspJitElementType DspJitGraph::getInputStreamType (int index) const noexcept
+YdspElementType YdspAudioGraph::getInputStreamType (int index) const noexcept
 {
     if (pimpl == nullptr || index < 0 || static_cast<size_t> (index) >= pimpl->inputStreamTypes.size())
-        return DspJitElementType::float32;
+        return YdspElementType::float32;
 
     return detail::toElementType (pimpl->inputStreamTypes[static_cast<size_t> (index)]);
 }
 
-DspJitElementType DspJitGraph::getOutputStreamType (int index) const noexcept
+YdspElementType YdspAudioGraph::getOutputStreamType (int index) const noexcept
 {
     if (pimpl == nullptr || index < 0 || static_cast<size_t> (index) >= pimpl->outputStreamTypes.size())
-        return DspJitElementType::float32;
+        return YdspElementType::float32;
 
     return detail::toElementType (pimpl->outputStreamTypes[static_cast<size_t> (index)]);
 }
 
-int DspJitGraph::getInputStreamCount() const noexcept
+int YdspAudioGraph::getInputStreamCount() const noexcept
 {
     return pimpl != nullptr ? static_cast<int> (pimpl->inputStreamTypes.size()) : 0;
 }
 
-int DspJitGraph::getOutputStreamCount() const noexcept
+int YdspAudioGraph::getOutputStreamCount() const noexcept
 {
     return pimpl != nullptr ? static_cast<int> (pimpl->outputStreamTypes.size()) : 0;
 }
 
-int DspJitGraph::getEventInputCount() const noexcept
+int YdspAudioGraph::getEventInputCount() const noexcept
 {
     return pimpl != nullptr ? static_cast<int> (pimpl->eventInputNames.size()) : 0;
 }
 
-String DspJitGraph::getEventInputName (int index) const noexcept
+String YdspAudioGraph::getEventInputName (int index) const noexcept
 {
     if (pimpl == nullptr || index < 0 || static_cast<size_t> (index) >= pimpl->eventInputNames.size())
         return {};
@@ -61,19 +61,19 @@ String DspJitGraph::getEventInputName (int index) const noexcept
     return pimpl->eventInputNames[static_cast<size_t> (index)];
 }
 
-int DspJitGraph::getLatencySamples() const noexcept
+int YdspAudioGraph::getLatencySamples() const noexcept
 {
     return pimpl != nullptr ? pimpl->latencySamples : 0;
 }
 
-int DspJitGraph::getParameterCount() const noexcept
+int YdspAudioGraph::getParameterCount() const noexcept
 {
     return pimpl != nullptr ? static_cast<int> (pimpl->paramInfos.size()) : 0;
 }
 
-const DspJitParameterInfo& DspJitGraph::getParameterInfo (int slot) const noexcept
+const YdspParameterInfo& YdspAudioGraph::getParameterInfo (int slot) const noexcept
 {
-    static const DspJitParameterInfo empty;
+    static const YdspParameterInfo empty;
 
     if (pimpl == nullptr || slot < 0 || static_cast<size_t> (slot) >= pimpl->paramInfos.size())
         return empty;
@@ -81,25 +81,25 @@ const DspJitParameterInfo& DspJitGraph::getParameterInfo (int slot) const noexce
     return pimpl->paramInfos[static_cast<size_t> (slot)];
 }
 
-DspJitElementType DspJitGraph::getParameterType (StringRef qualifiedName) const noexcept
+YdspElementType YdspAudioGraph::getParameterType (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
-        return DspJitElementType::float32;
+        return YdspElementType::float32;
 
     const auto slot = pimpl->paramSlot (qualifiedName);
 
     if (slot < 0 || static_cast<size_t> (slot) >= pimpl->paramSlotTypes.size())
-        return DspJitElementType::float32;
+        return YdspElementType::float32;
 
     return detail::toElementType (pimpl->paramSlotTypes[static_cast<size_t> (slot)]);
 }
 
-bool DspJitGraph::hasParameter (StringRef qualifiedName) const noexcept
+bool YdspAudioGraph::hasParameter (StringRef qualifiedName) const noexcept
 {
     return pimpl != nullptr && pimpl->paramSlot (qualifiedName) >= 0;
 }
 
-float DspJitGraph::getParameter (StringRef qualifiedName) const noexcept
+float YdspAudioGraph::getParameter (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0.0f;
@@ -115,7 +115,7 @@ float DspJitGraph::getParameter (StringRef qualifiedName) const noexcept
     return value;
 }
 
-void DspJitGraph::setParameter (StringRef qualifiedName, float value)
+void YdspAudioGraph::setParameter (StringRef qualifiedName, float value)
 {
     if (pimpl == nullptr)
         return;
@@ -129,7 +129,7 @@ void DspJitGraph::setParameter (StringRef qualifiedName, float value)
     std::memcpy (pimpl->params.data() + pimpl->paramOffsets[static_cast<size_t> (slot)], &value, sizeof (value));
 }
 
-double DspJitGraph::getDoubleParameter (StringRef qualifiedName) const noexcept
+double YdspAudioGraph::getDoubleParameter (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0.0;
@@ -145,7 +145,7 @@ double DspJitGraph::getDoubleParameter (StringRef qualifiedName) const noexcept
     return value;
 }
 
-void DspJitGraph::setDoubleParameter (StringRef qualifiedName, double value)
+void YdspAudioGraph::setDoubleParameter (StringRef qualifiedName, double value)
 {
     if (pimpl == nullptr)
         return;
@@ -159,7 +159,7 @@ void DspJitGraph::setDoubleParameter (StringRef qualifiedName, double value)
     std::memcpy (pimpl->params.data() + pimpl->paramOffsets[static_cast<size_t> (slot)], &value, sizeof (value));
 }
 
-int64_t DspJitGraph::getIntParameter (StringRef qualifiedName) const noexcept
+int64_t YdspAudioGraph::getIntParameter (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0;
@@ -175,7 +175,7 @@ int64_t DspJitGraph::getIntParameter (StringRef qualifiedName) const noexcept
     return value;
 }
 
-void DspJitGraph::setIntParameter (StringRef qualifiedName, int64_t value)
+void YdspAudioGraph::setIntParameter (StringRef qualifiedName, int64_t value)
 {
     if (pimpl == nullptr)
         return;
@@ -189,17 +189,17 @@ void DspJitGraph::setIntParameter (StringRef qualifiedName, int64_t value)
     std::memcpy (pimpl->params.data() + pimpl->paramOffsets[static_cast<size_t> (slot)], &value, sizeof (value));
 }
 
-int DspJitGraph::getParameterSlot (StringRef qualifiedName) const noexcept
+int YdspAudioGraph::getParameterSlot (StringRef qualifiedName) const noexcept
 {
     return pimpl != nullptr ? pimpl->paramSlot (qualifiedName) : -1;
 }
 
-uint64_t DspJitGraph::getDroppedEventCount() const noexcept
+uint64_t YdspAudioGraph::getDroppedEventCount() const noexcept
 {
     return pimpl != nullptr ? pimpl->droppedEventCount.load (std::memory_order_relaxed) : 0;
 }
 
-uint64_t DspJitGraph::getDroppedOutputEventCount() const noexcept
+uint64_t YdspAudioGraph::getDroppedOutputEventCount() const noexcept
 {
     if (pimpl == nullptr)
         return 0;
@@ -212,12 +212,12 @@ uint64_t DspJitGraph::getDroppedOutputEventCount() const noexcept
     return total;
 }
 
-int DspJitGraph::getOutputValueCount() const noexcept
+int YdspAudioGraph::getOutputValueCount() const noexcept
 {
     return pimpl != nullptr ? static_cast<int> (pimpl->meterSlotNames.size()) : 0;
 }
 
-String DspJitGraph::getOutputValueName (int slot) const noexcept
+String YdspAudioGraph::getOutputValueName (int slot) const noexcept
 {
     if (pimpl == nullptr || slot < 0 || static_cast<size_t> (slot) >= pimpl->meterSlotNames.size())
         return {};
@@ -225,7 +225,7 @@ String DspJitGraph::getOutputValueName (int slot) const noexcept
     return pimpl->meterSlotNames[static_cast<size_t> (slot)];
 }
 
-float DspJitGraph::getOutputValue (StringRef qualifiedName) const noexcept
+float YdspAudioGraph::getOutputValue (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0.0f;
@@ -245,7 +245,7 @@ float DspJitGraph::getOutputValue (StringRef qualifiedName) const noexcept
     return value;
 }
 
-double DspJitGraph::getDoubleOutputValue (StringRef qualifiedName) const noexcept
+double YdspAudioGraph::getDoubleOutputValue (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0.0;
@@ -265,7 +265,7 @@ double DspJitGraph::getDoubleOutputValue (StringRef qualifiedName) const noexcep
     return value;
 }
 
-int64_t DspJitGraph::getIntOutputValue (StringRef qualifiedName) const noexcept
+int64_t YdspAudioGraph::getIntOutputValue (StringRef qualifiedName) const noexcept
 {
     if (pimpl == nullptr)
         return 0;
@@ -285,7 +285,7 @@ int64_t DspJitGraph::getIntOutputValue (StringRef qualifiedName) const noexcept
     return value;
 }
 
-int DspJitGraph::getActiveVoiceCount (StringRef nodeName) const noexcept
+int YdspAudioGraph::getActiveVoiceCount (StringRef nodeName) const noexcept
 {
     if (pimpl == nullptr)
         return 0;
@@ -311,16 +311,16 @@ int DspJitGraph::getActiveVoiceCount (StringRef nodeName) const noexcept
     return 0;
 }
 
-const DspJitExecutionReport& DspJitGraph::getExecutionReport() const noexcept
+const YdspExecutionReport& YdspAudioGraph::getExecutionReport() const noexcept
 {
-    static DspJitExecutionReport empty;
+    static YdspExecutionReport empty;
 
     return pimpl != nullptr ? pimpl->report : empty;
 }
 
-const DspJitDiagnostics& DspJitGraph::getDiagnostics() const noexcept
+const YdspDiagnostics& YdspAudioGraph::getDiagnostics() const noexcept
 {
-    static DspJitDiagnostics empty;
+    static YdspDiagnostics empty;
 
     return pimpl != nullptr ? pimpl->diagnostics : empty;
 }
