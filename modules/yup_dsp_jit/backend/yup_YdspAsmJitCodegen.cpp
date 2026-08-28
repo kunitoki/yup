@@ -947,11 +947,16 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
             return;
 
         case YdspIrOp::clampI:
+        {
+            const auto dst = gp (inst.result);
+            YdspGp maxed = dst.is_gp64() ? cc->new_gp64 ("clampMax") : cc->new_gp32 ("clampMax");
+
             emitIntCompareToFlags (gp (inst.a), gp (inst.b));
-            emitSelectIntOnFlags (YdspCond::kSignedGT, gp (inst.result), gp (inst.a), gp (inst.b));
-            emitIntCompareToFlags (gp (inst.result), gp (inst.c));
-            emitSelectIntOnFlags (YdspCond::kSignedLT, gp (inst.result), gp (inst.result), gp (inst.c));
+            emitSelectIntOnFlags (YdspCond::kSignedGT, maxed, gp (inst.a), gp (inst.b));
+            emitIntCompareToFlags (maxed, gp (inst.c));
+            emitSelectIntOnFlags (YdspCond::kSignedLT, dst, maxed, gp (inst.c));
             return;
+        }
 
         case YdspIrOp::absI:
         {

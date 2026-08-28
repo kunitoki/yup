@@ -414,13 +414,11 @@ void YdspAsmJitCodegenX64::intBinary (YdspIrOp op, const YdspGp& dst, const Ydsp
             break;
         case YdspIrOp::shlI:
             moveGp (dst, srcA);
-            cc->mov (asmjit::x86::cl, srcB.r8());
-            cc->shl (dst, asmjit::x86::cl);
+            cc->shl (dst, srcB);
             break;
         case YdspIrOp::shrI:
             moveGp (dst, srcA);
-            cc->mov (asmjit::x86::cl, srcB.r8());
-            cc->sar (dst, asmjit::x86::cl);
+            cc->sar (dst, srcB);
             break;
         default:
             break;

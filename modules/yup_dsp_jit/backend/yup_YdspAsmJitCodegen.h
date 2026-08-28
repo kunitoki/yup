@@ -233,12 +233,20 @@ protected:
 
     YdspFp newFp (const char* name)
     {
+#if ASMJIT_ARCH_X86
         return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x1, name);
+#else
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32, name);
+#endif
     }
 
     YdspFp newFp64 (const char* name)
     {
+#if ASMJIT_ARCH_X86
         return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64x1, name);
+#else
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64, name);
+#endif
     }
 
     YdspFp newFpOfType (YdspValueType type, const char* name)
