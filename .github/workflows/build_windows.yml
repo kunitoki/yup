@@ -28,6 +28,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  ACTION_RUNNER: github-actions
+
 jobs:
   build_tests_debug:
     runs-on: windows-latest

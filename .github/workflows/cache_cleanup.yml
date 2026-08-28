@@ -5,6 +5,9 @@ on:
     types:
       - closed
 
+env:
+  ACTION_RUNNER: github-actions
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
