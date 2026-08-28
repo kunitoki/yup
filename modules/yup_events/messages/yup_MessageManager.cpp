@@ -141,6 +141,9 @@ void MessageManager::runDispatchLoop()
         {
             loopCallback();
 
+            if (quitMessageReceived.get() != 0)
+                break;
+
             if (! yup_dispatchNextMessageOnSystemQueue (false))
                 Thread::sleep (1);
         }
@@ -153,10 +156,9 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
-    quitMessageReceived = true;
-    quitMessagePosted = true;
-
     (new QuitMessage())->post();
+
+    quitMessagePosted = true;
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED
