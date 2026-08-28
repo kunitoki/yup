@@ -2067,6 +2067,40 @@ TEST (YdspOptimizerTests, LeavesALoopTooLargeToUnrollRolled)
     EXPECT_EQ (YdspIrTerm::branchIf, fn.blocks[static_cast<size_t> (loop->headerBlock)].term);
 }
 
+TEST (YdspOptimizerTests, LeavesAHighPressureScalarLoopRolled)
+{
+    DspJitDiagnostics diagnostics;
+
+    auto ir = buildUnrolledIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[16];
+            process {
+                float sum = 0.0;
+                for i in 0..16 {
+                    z[i] = z[i] * 0.9 + in * 0.1 + z[i] * z[i] * 0.01 - in * in * 0.02;
+                    sum = sum + z[i] * 0.5 + z[i] * 0.25;
+                }
+                out = sum;
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                               diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels[0];
+    const auto* loop = innerLoop (fn);
+
+    ASSERT_NE (nullptr, loop);
+    EXPECT_FALSE (loop->unrolled);
+    EXPECT_EQ (YdspIrTerm::branchIf, fn.blocks[static_cast<size_t> (loop->headerBlock)].term);
+}
+
 TEST (YdspOptimizerTests, LeavesANestedLoopRolled)
 {
     DspJitDiagnostics diagnostics;

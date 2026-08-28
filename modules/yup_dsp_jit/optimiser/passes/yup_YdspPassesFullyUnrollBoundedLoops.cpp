@@ -79,6 +79,11 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
     // 32-partial bank at ~190 instructions, and that shape then moved by ~2%,
     // which is inside its own spread. Treat 256 as unproven above 128.
     constexpr int maxUnrolledInstructions = 256;
+    // Scalar loops keep more independent values live across the whole body;
+    // keeping their budget at the measured limit avoids turning a compact
+    // source loop into a high-pressure native basic block. Widened loops have
+    // already reduced that pressure by running fewer iterations.
+    constexpr int maxScalarUnrolledInstructions = 128;
     constexpr int maxTripCount = 32;
 
     // A one-shot init kernel runs before audio does, so trading its code size
@@ -173,8 +178,13 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
 
         const auto tripCount = span / *step;
         const auto bodySize = static_cast<int> (bodyBlock.insts.size());
+        const bool hasWidenedValue = std::any_of (bodyBlock.insts.begin(), bodyBlock.insts.end(), [&fn] (const YdspIrInst& inst)
+        {
+            return fn.laneCountOf (inst.result) > 1;
+        });
+        const auto instructionBudget = hasWidenedValue ? maxUnrolledInstructions : maxScalarUnrolledInstructions;
 
-        if (tripCount < 1 || tripCount > maxTripCount || tripCount * bodySize > maxUnrolledInstructions)
+        if (tripCount < 1 || tripCount > maxTripCount || tripCount * bodySize > instructionBudget)
             continue;
 
         // ---- Rewrite ----

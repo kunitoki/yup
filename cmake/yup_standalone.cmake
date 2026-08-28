@@ -183,6 +183,10 @@ function (yup_standalone_app)
 
         endif()
 
+        target_compile_options (${target_name} PRIVATE
+            -fno-unwind-tables
+            -fno-asynchronous-unwind-tables)
+
         set_target_properties (${target_name} PROPERTIES
             #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
             XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
