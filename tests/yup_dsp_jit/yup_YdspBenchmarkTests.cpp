@@ -1333,7 +1333,7 @@ protected:
 
         if (jit.best / native.best > limit)
         {
-            if (SystemStats::getEnvironmentVariable ("ACTION_RUNNER") == "github-actions")
+            if (SystemStats::getEnvironmentVariable ("ACTION_RUNNER", {}) == "github-actions")
             {
                 std::cerr << "  WARNING - " << name << ": JIT kernel is more than "
                           << limit << "x slower than the equivalent compiled routine\n";
