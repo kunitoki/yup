@@ -138,6 +138,13 @@ protected:
         whole thing into one addressing mode and does nothing here. */
     virtual void prepareStateAddressing (const YdspIrFunction& fn) { (void) fn; }
 
+    /** Whether stream channel pointers may be kept live across calls.
+
+        The x86-64 backend reloads them at each access until its indirect-call
+        register preservation path is hardened. AArch64 keeps the hoisted path.
+    */
+    virtual bool hoistStreamBases() const noexcept { return true; }
+
     virtual void loadGpFromMem (const YdspGp& dst, const YdspMem& src) = 0;
     virtual void storeGpToMem (const YdspMem& dst, const YdspGp& src) = 0;
     virtual void loadFloatFromMem (const YdspFp& dst, const YdspMem& src) = 0;
