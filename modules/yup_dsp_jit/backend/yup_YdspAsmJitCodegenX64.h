@@ -89,8 +89,6 @@ protected:
     void emitExtendFloat (const YdspFp& dst, const YdspFp& src) override;
     void emitTruncateFloat (const YdspFp& dst, const YdspFp& src) override;
 
-    bool hoistStreamBases() const noexcept override { return false; }
-
     void jump (const asmjit::Label& target) override;
     void branchIfZero (const YdspGp& cond, const asmjit::Label& target) override;
     void branchIfNotZero (const YdspGp& cond, const asmjit::Label& target) override;

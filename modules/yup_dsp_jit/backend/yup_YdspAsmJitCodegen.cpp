@@ -256,30 +256,27 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
         // the init kernel declares the processor's endpoints but is invoked
         // with inputs/outputs set to null (runInitKernels), so hoisting a
         // stream it never reads would fault on the null channel array.
-        if (hoistStreamBases())
+        inputBaseRegs.assign (static_cast<size_t> (fn.numInputs), YdspGp {});
+        outputBaseRegs.assign (static_cast<size_t> (fn.numOutputs), YdspGp {});
+
+        for (const auto& block : fn.blocks)
         {
-            inputBaseRegs.assign (static_cast<size_t> (fn.numInputs), YdspGp {});
-            outputBaseRegs.assign (static_cast<size_t> (fn.numOutputs), YdspGp {});
-
-            for (const auto& block : fn.blocks)
+            for (const auto& inst : block.insts)
             {
-                for (const auto& inst : block.insts)
-                {
-                    const bool isInput = inst.op == YdspIrOp::loadInput;
-                    const bool isOutput = inst.op == YdspIrOp::loadOutput || inst.op == YdspIrOp::storeOutput;
+                const bool isInput = inst.op == YdspIrOp::loadInput;
+                const bool isOutput = inst.op == YdspIrOp::loadOutput || inst.op == YdspIrOp::storeOutput;
 
-                    if (! isInput && ! isOutput)
-                        continue;
+                if (! isInput && ! isOutput)
+                    continue;
 
-                    auto& bases = isInput ? inputBaseRegs : outputBaseRegs;
-                    const auto slot = static_cast<size_t> (inst.memIndex);
+                auto& bases = isInput ? inputBaseRegs : outputBaseRegs;
+                const auto slot = static_cast<size_t> (inst.memIndex);
 
-                    if (slot >= bases.size() || bases[slot].is_valid())
-                        continue;
+                if (slot >= bases.size() || bases[slot].is_valid())
+                    continue;
 
-                    bases[slot] = cc.new_gp64 (isInput ? "inStream" : "outStream");
-                    loadGpFromMem (bases[slot], memPtr (isInput ? inputsReg : outputsReg, inst.memIndex * 8));
-                }
+                bases[slot] = cc.new_gp64 (isInput ? "inStream" : "outStream");
+                loadGpFromMem (bases[slot], memPtr (isInput ? inputsReg : outputsReg, inst.memIndex * 8));
             }
         }
     }
@@ -781,24 +778,14 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
             const auto& bases = isInput ? inputBaseRegs : outputBaseRegs;
             const auto slot = static_cast<size_t> (inst.memIndex);
 
-            YdspGp base;
+            // compile() pre-loaded a base for every stream slot referenced by
+            // the IR, so a miss here means the two scans disagree.
+            jassert (slot < bases.size() && bases[slot].is_valid());
 
-            if (hoistStreamBases())
-            {
-                // compile() pre-loaded a base for every stream slot referenced
-                // by the IR, so a miss here means the two scans disagree.
-                jassert (slot < bases.size() && bases[slot].is_valid());
+            if (slot >= bases.size() || ! bases[slot].is_valid())
+                return;
 
-                if (slot >= bases.size() || ! bases[slot].is_valid())
-                    return;
-
-                base = bases[slot];
-            }
-            else
-            {
-                base = cc->new_gp64 (isInput ? "inStream" : "outStream");
-                loadGpFromMem (base, memPtr (isInput ? inputsReg : outputsReg, inst.memIndex * 8));
-            }
+            const YdspGp base = bases[slot];
 
             const uint32_t scale = is64BitValueType (type) ? 3u : 2u;
             const YdspMem mem = memPtrIndexed (base, gp (inst.a), scale, 0);
