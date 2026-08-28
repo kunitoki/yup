@@ -2101,6 +2101,36 @@ TEST (YdspOptimizerTests, LeavesAHighPressureScalarLoopRolled)
     EXPECT_EQ (YdspIrTerm::branchIf, fn.blocks[static_cast<size_t> (loop->headerBlock)].term);
 }
 
+TEST (YdspOptimizerTests, LeavesAScalarLoopWithNativeCallsRolled)
+{
+    DspJitDiagnostics diagnostics;
+
+    auto ir = buildUnrolledIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[4];
+            process {
+                for i in 0..4 { z[i] = pow (abs (z[i]) + 1.0, 0.5) + in; }
+                out = z[0];
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                               diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels[0];
+    const auto* loop = innerLoop (fn);
+
+    ASSERT_NE (nullptr, loop);
+    EXPECT_FALSE (loop->unrolled);
+    EXPECT_EQ (YdspIrTerm::branchIf, fn.blocks[static_cast<size_t> (loop->headerBlock)].term);
+}
+
 TEST (YdspOptimizerTests, LeavesANestedLoopRolled)
 {
     DspJitDiagnostics diagnostics;

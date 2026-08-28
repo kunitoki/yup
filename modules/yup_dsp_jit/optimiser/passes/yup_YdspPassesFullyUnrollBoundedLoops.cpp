@@ -86,6 +86,37 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
     constexpr int maxScalarUnrolledInstructions = 128;
     constexpr int maxTripCount = 32;
 
+    const auto hasNativeCall = [] (const YdspIrInst& inst)
+    {
+        switch (inst.op)
+        {
+            case YdspIrOp::sinF:
+            case YdspIrOp::cosF:
+            case YdspIrOp::tanF:
+            case YdspIrOp::asinF:
+            case YdspIrOp::acosF:
+            case YdspIrOp::atanF:
+            case YdspIrOp::sinhF:
+            case YdspIrOp::coshF:
+            case YdspIrOp::tanhF:
+            case YdspIrOp::asinhF:
+            case YdspIrOp::acoshF:
+            case YdspIrOp::atanhF:
+            case YdspIrOp::roundF:
+            case YdspIrOp::expF:
+            case YdspIrOp::logF:
+            case YdspIrOp::log10F:
+            case YdspIrOp::powF:
+            case YdspIrOp::fmodF:
+            case YdspIrOp::atan2F:
+            case YdspIrOp::copysignF:
+                return true;
+
+            default:
+                return false;
+        }
+    };
+
     // A one-shot init kernel runs before audio does, so trading its code size
     // for branches buys nothing that can be heard.
     if (fn.isInit)
@@ -178,6 +209,10 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
 
         const auto tripCount = span / *step;
         const auto bodySize = static_cast<int> (bodyBlock.insts.size());
+
+        if (std::any_of (bodyBlock.insts.begin(), bodyBlock.insts.end(), hasNativeCall))
+            continue;
+
         const bool hasWidenedValue = std::any_of (bodyBlock.insts.begin(), bodyBlock.insts.end(), [&fn] (const YdspIrInst& inst)
         {
             return fn.laneCountOf (inst.result) > 1;
