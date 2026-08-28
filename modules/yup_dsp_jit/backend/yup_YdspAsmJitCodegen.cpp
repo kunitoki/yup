@@ -1191,14 +1191,22 @@ void YdspAsmJitCodegenImpl::emitLibmUnary (float (*f32fn) (float), double (*f64f
 {
     const bool is64 = valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::float64Type;
 
-    // AArch64's BLR only takes a register operand, so the target address
-    // must be materialized rather than passed as an immediate.
-    YdspGp target = cc->new_gp64 ("fn");
-    cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))));
-
     asmjit::InvokeNode* node = nullptr;
 
+#if ASMJIT_ARCH_X86
+    // Keep the call target out of the virtual register allocator. A target
+    // register becomes fragile on Win64 when several stream bases are live
+    // across the call; x86 can encode this invoke from an immediate target.
+    auto err = cc->invoke (asmjit::Out (node),
+                           asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))),
+                           is64 ? asmjit::FuncSignature::build<double, double>() : asmjit::FuncSignature::build<float, float>());
+#else
+    // AArch64's BLR only takes a register operand, so the target address must
+    // be materialized rather than passed as an immediate.
+    YdspGp target = cc->new_gp64 ("fn");
+    cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))));
     auto err = cc->invoke (asmjit::Out (node), target, is64 ? asmjit::FuncSignature::build<double, double>() : asmjit::FuncSignature::build<float, float>());
+#endif
 
     if (err == asmjit::kErrorOk && node != nullptr)
     {
@@ -1211,14 +1219,20 @@ void YdspAsmJitCodegenImpl::emitLibmBinary (float (*f32fn) (float, float), doubl
 {
     const bool is64 = valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::float64Type;
 
-    // AArch64's BLR only takes a register operand, so the target address
-    // must be materialized rather than passed as an immediate.
-    YdspGp target = cc->new_gp64 ("fn");
-    cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))));
-
     asmjit::InvokeNode* node = nullptr;
 
+#if ASMJIT_ARCH_X86
+    // See emitLibmUnary: avoid adding a call-target GP live range on Win64.
+    auto err = cc->invoke (asmjit::Out (node),
+                           asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))),
+                           is64 ? asmjit::FuncSignature::build<double, double, double>() : asmjit::FuncSignature::build<float, float, float>());
+#else
+    // AArch64's BLR only takes a register operand, so the target address must
+    // be materialized rather than passed as an immediate.
+    YdspGp target = cc->new_gp64 ("fn");
+    cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (is64 ? reinterpret_cast<void*> (f64fn) : reinterpret_cast<void*> (f32fn))));
     auto err = cc->invoke (asmjit::Out (node), target, is64 ? asmjit::FuncSignature::build<double, double, double>() : asmjit::FuncSignature::build<float, float, float>());
+#endif
 
     if (err == asmjit::kErrorOk && node != nullptr)
     {
