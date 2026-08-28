@@ -27,6 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ACTION_RUNNER: github-actions
   JAVA_VERSION: 17
   JAVA_DISTRIBUTION: 'temurin'
   NDK_VERSION: r27c
