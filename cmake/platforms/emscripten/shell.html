@@ -4,119 +4,513 @@
     <meta charset="utf-8">
     <script src="mini-coi.js"></script>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
     <title>YUP! On Emscripten</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 21 21 12 16.4 3 21Z' fill='%230A84FF'/%3E%3C/svg%3E">
     <style>
+      :root {
+        --void: #07090E;
+        --surface: #0E121A;
+        --edge: #1B2230;
+        --ink: #E6EAF2;
+        --muted: #7C8798;
+        --glow: #0A84FF;
+        --glow-soft: #6FB6FF;
+        --danger: #FF6B5A;
+
+        --rail: 52px;
+        --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      }
+
       *, *::before, *::after {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
       }
 
+      html, body {
+        height: 100%;
+      }
+
       body {
-        background-color: #272822;
-        color: #F8F8F2;
-        font-family: 'Courier New', Courier, monospace;
+        background: var(--void);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
         display: flex;
         flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* Ambient bloom: the stage appears to light the page from behind. */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(58vw 48vh at 50% 46%, rgba(10, 132, 255, 0.22), transparent 70%),
+          radial-gradient(90vw 60vh at 50% 118%, rgba(10, 132, 255, 0.1), transparent 70%);
+        opacity: 0.6;
+        transition: opacity 900ms ease;
+      }
+
+      body.is-running::before { opacity: 1; }
+
+      /* ---------------------------------------------------------------- rails */
+
+      .rail {
+        position: relative;
+        z-index: 2;
+        flex: 0 0 auto;
+        height: var(--rail);
+        display: flex;
         align-items: center;
-        padding: 20px;
-        margin: 0px;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 20px;
+        background: linear-gradient(var(--surface), rgba(14, 18, 26, 0.6));
       }
 
-      hr {
-        width: 100%;
-        border: none;
-        border-top: 1px solid #75715E;
-        margin: 20px 0;
+      .rail--top { border-bottom: 1px solid var(--edge); }
+
+      .rail--bottom {
+        justify-content: flex-end;
+        border-top: 1px solid var(--edge);
+        background: linear-gradient(rgba(14, 18, 26, 0.6), var(--surface));
       }
 
-      .emscripten { padding-right: 0; margin-left: auto; margin-right: auto; display: block; }
-      div.emscripten { text-align: center; }
-      canvas.emscripten { border: 0px none; background-color: black; }
-
-      .logo {
-        display: inline-block;
-        margin: 0;
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
-      .spinner {
-        height: 50px;
-        width: 50px;
-        margin: 0px auto;
-        animation: rotation 0.8s linear infinite;
-        border: 6px solid transparent;
-        border-top-color: #AE81FF;
-        border-right-color: #66D9EF;
-        border-bottom-color: #A6E22E;
-        border-left-color: #F92672;
-        border-radius: 50%;
-      }
-
-      @keyframes rotation {
-        from {transform: rotate(0deg);}
-        to {transform: rotate(360deg);}
-      }
-
-      #status {
-        display: inline-block;
-        vertical-align: top;
-        margin-top: 0px;
-        margin-bottom: 0px;
-        font-weight: bold;
-        color: rgb(120, 120, 120);
-      }
-
-      #progress {
-        width: 300px;
+      .brand svg {
+        width: 20px;
         height: 20px;
+        filter: drop-shadow(0 0 8px rgba(10, 132, 255, 0.55));
       }
 
-      #controls {
-        display: inline-block;
-        float: right;
-        vertical-align: top;
-        margin-top: 20px;
-        margin-bottom: 20px;
+      .brand b {
+        font-size: 15px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+
+      .brand b i {
+        font-style: normal;
+        color: var(--glow);
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+      }
+
+      .chip {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        padding: 4px 10px;
+        white-space: nowrap;
+      }
+
+      .chip[data-state="on"] {
+        color: var(--glow-soft);
+        border-color: rgba(10, 132, 255, 0.35);
+        background: rgba(10, 132, 255, 0.08);
+      }
+
+      .chip[data-state="off"] {
+        color: var(--danger);
+        border-color: rgba(255, 107, 90, 0.3);
+      }
+
+      /* --------------------------------------------------------------- stage */
+
+      .stage {
+        position: relative;
+        z-index: 1;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 24px;
+      }
+
+      canvas#canvas {
+        display: block;
+        border: 0 none;
+        border-radius: 12px;
+        background: #05070B;
+        outline: none;
+        opacity: 0;
+        transform: scale(0.985);
+        transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        box-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.06),
+          0 0 0 6px rgba(10, 132, 255, 0.04),
+          0 40px 90px -30px rgba(10, 132, 255, 0.45);
+      }
+
+      body.is-running canvas#canvas {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* Full window and fullscreen: the chrome steps aside, the canvas takes over. */
+      body:not([data-mode="embedded"]) .rail { display: none; }
+      body:not([data-mode="embedded"]) .stage {
+        padding: 0;
+        overflow: hidden;
+      }
+
+      /* Positioned against the stage so both percentages resolve against a definite
+         box: as a centered grid item the canvas would fall back to its own aspect
+         ratio and overflow the viewport. */
+      body:not([data-mode="embedded"]) canvas#canvas {
+        position: absolute;
+        inset: 0;
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0;
+        box-shadow: none;
+        transform: none;
+      }
+
+      /* --------------------------------------------------------------- eject */
+
+      .eject {
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 3;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        height: 28px;
+        padding: 0 12px;
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        background: rgba(14, 18, 26, 0.72);
+        backdrop-filter: blur(8px);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        opacity: 0.28;
+        transition: opacity 200ms ease, color 200ms ease, border-color 200ms ease;
+      }
+
+      body:not([data-mode="embedded"]) .eject { display: inline-flex; }
+
+      .eject:hover, .eject:focus-visible {
+        opacity: 1;
+        color: var(--ink);
+        border-color: rgba(10, 132, 255, 0.5);
+      }
+
+      /* ---------------------------------------------------------------- boot */
+
+      .boot {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 22px;
+        pointer-events: none;
+        transition: opacity 500ms ease, filter 500ms ease;
+      }
+
+      body.is-running .boot {
+        opacity: 0;
+        filter: blur(10px);
+        visibility: hidden;
+      }
+
+      .orbit { width: 120px; height: 120px; }
+
+      .orbit .track {
+        fill: none;
+        stroke: var(--edge);
+        stroke-width: 1.5;
+      }
+
+      .orbit .arc {
+        fill: none;
+        stroke: var(--glow);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 22 78;
+        stroke-dashoffset: 0;
+        filter: drop-shadow(0 0 5px rgba(10, 132, 255, 0.7));
+        animation: trace 2.8s linear infinite;
+      }
+
+      .orbit .dart {
+        fill: var(--glow);
+        filter: drop-shadow(0 0 10px rgba(10, 132, 255, 0.6));
+      }
+
+      .orbit .dot {
+        fill: var(--glow-soft);
+        filter: drop-shadow(0 0 7px var(--glow));
+      }
+
+      body.is-determinate .orbit .arc {
+        animation: none;
+        stroke-dasharray: 100;
+        stroke-dashoffset: 100;
+        transition: stroke-dashoffset 220ms ease;
+      }
+
+      body.is-determinate .orbit .dot { display: none; }
+
+      @keyframes trace {
+        to { stroke-dashoffset: -100; }
+      }
+
+      .boot-status {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+
+      #status { color: var(--ink); }
+
+      #percent {
+        color: var(--glow-soft);
+        font-variant-numeric: tabular-nums;
+      }
+
+      #percent:empty { display: none; }
+
+      body.has-error #status { color: var(--danger); }
+      body.has-error .orbit .arc,
+      body.has-error .orbit .dot { display: none; }
+      body.has-error .orbit .dart { fill: var(--danger); filter: none; }
+
+      /* ------------------------------------------------------------ controls */
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        transition: opacity 300ms ease;
+      }
+
+      body:not(.is-running) .controls {
+        opacity: 0.35;
+        pointer-events: none;
+      }
+
+      .segmented {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .seg {
+        appearance: none;
+        border: 0 none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        height: 26px;
+        padding: 0 12px;
+        cursor: pointer;
+        transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+      }
+
+      .seg:hover { color: var(--ink); }
+
+      .seg[aria-pressed="true"] {
+        color: var(--ink);
+        background: rgba(10, 132, 255, 0.16);
+        box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.4), 0 0 18px -6px rgba(10, 132, 255, 0.9);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--glow);
+        outline-offset: 3px;
+      }
+
+      @media (max-width: 780px) {
+        .rail { padding: 0 12px; gap: 8px; }
+        .chips { display: none; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+        }
+        .orbit .dot { display: none; }
+        .orbit .arc { stroke-dasharray: 100; stroke-dashoffset: 70; }
       }
     </style>
   </head>
-  <body>
-    <div class="logo">YUP! On Emscripten</div>
+  <body data-mode="embedded">
+    <header class="rail rail--top">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <ellipse cx="12" cy="11" rx="10.2" ry="5.4" transform="rotate(-24 12 11)" fill="none" stroke="#0A84FF" stroke-width="1.6" opacity="0.65"/>
+          <path d="M12 2 21 21 12 16.4 3 21Z" fill="#0A84FF"/>
+        </svg>
+        <b>YUP<i>!</i></b>
+      </div>
+      <div class="chips">
+        <span class="chip" id="chip-isolation">checking</span>
+        <span class="chip" id="chip-threads">threads</span>
+      </div>
+    </header>
 
-    <hr/>
+    <main class="stage">
+      <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-    <div class="spinner" id='spinner'></div>
-    <div class="emscripten" id="status">Downloading...</div>
-    <div class="emscripten">
-      <progress value="0" max="100" id="progress" hidden=1></progress>
-    </div>
+      <div class="boot" id="boot">
+        <svg class="orbit" viewBox="0 0 120 120" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">
+          <g transform="rotate(-24 60 60)">
+            <path id="orbitPath" class="track" pathLength="100"
+                  d="M 8 60 a 52 28 0 1 0 104 0 a 52 28 0 1 0 -104 0"/>
+            <path class="arc" id="arc" pathLength="100"
+                  d="M 8 60 a 52 28 0 1 0 104 0 a 52 28 0 1 0 -104 0"/>
+            <circle class="dot" r="3.4">
+              <animateMotion dur="2.8s" repeatCount="indefinite" rotate="auto">
+                <mpath href="#orbitPath" xlink:href="#orbitPath"/>
+              </animateMotion>
+            </circle>
+          </g>
+          <path class="dart" transform="rotate(-12 60 60) translate(36 37) scale(2)"
+                d="M12 2 21 21 12 16.4 3 21Z"/>
+        </svg>
 
-    <hr/>
+        <p class="boot-status">
+          <span id="status">Downloading module</span>
+          <span id="percent"></span>
+        </p>
+      </div>
+    </main>
 
-    <span id='controls'>
-      <span><input type="checkbox" id="resize">Resize canvas</span>
-      <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer</span>
-      <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked,
-                                                                                      document.getElementById('resize').checked)">
-      </span>
-    </span>
+    <footer class="rail rail--bottom">
+      <div class="controls">
+        <div class="segmented" role="group" aria-label="Canvas display">
+          <button class="seg" type="button" data-mode="embedded" aria-pressed="true">Embedded</button>
+          <button class="seg" type="button" data-mode="window" aria-pressed="false">Full window</button>
+          <button class="seg" type="button" data-mode="fullscreen" aria-pressed="false">Fullscreen</button>
+        </div>
+      </div>
+    </footer>
 
-    <hr/>
-
-    <div class="emscripten">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
+    <button class="eject" type="button" id="eject">Exit full window</button>
 
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
-      var progressElement = document.getElementById('progress');
-      var spinnerElement = document.getElementById('spinner');
+      var percentElement = document.getElementById('percent');
+      var arcElement = document.getElementById('arc');
+      var ejectElement = document.getElementById('eject');
+
+      (function reportRuntime() {
+        var isolation = document.getElementById('chip-isolation');
+        var isolated = (typeof crossOriginIsolated !== 'undefined') && crossOriginIsolated;
+        isolation.textContent = isolated ? 'isolated' : 'not isolated';
+        isolation.dataset.state = isolated ? 'on' : 'off';
+
+        var cores = navigator.hardwareConcurrency || 1;
+        document.getElementById('chip-threads').textContent = cores + ' threads';
+      })();
+
+      // ---------------------------------------------------------- display modes
+
+      var layoutMode = 'embedded';
+
+      function isFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+      }
+
+      function applyMode(mode) {
+        document.body.dataset.mode = mode;
+        ejectElement.textContent = mode === 'fullscreen' ? 'Exit fullscreen' : 'Exit full window';
+        document.querySelectorAll('.seg').forEach(function (button) {
+          button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+        });
+        window.dispatchEvent(new Event('resize'));
+      }
+
+      function setMode(mode) {
+        if (mode === 'fullscreen') {
+          var root = document.documentElement;
+          var request = (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+          if (request && request.catch)
+            request.catch(function (e) { console.warn('Fullscreen request denied: ' + e); });
+          return;
+        }
+
+        layoutMode = mode;
+
+        if (isFullscreen())
+          (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        else
+          applyMode(mode);
+      }
+
+      function onFullscreenChange() {
+        applyMode(isFullscreen() ? 'fullscreen' : layoutMode);
+      }
+
+      document.querySelectorAll('.seg').forEach(function (button) {
+        button.addEventListener('click', function () { setMode(button.dataset.mode); });
+      });
+
+      ejectElement.addEventListener('click', function () { setMode('embedded'); });
+
+      document.addEventListener('fullscreenchange', onFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+      // -------------------------------------------------------------- progress
+
+      function setProgress(ratio) {
+        if (ratio === null) {
+          document.body.classList.remove('is-determinate');
+          percentElement.textContent = '';
+          return;
+        }
+        var clamped = Math.max(0, Math.min(1, ratio));
+        document.body.classList.add('is-determinate');
+        arcElement.style.strokeDashoffset = (100 - clamped * 100).toFixed(1);
+        percentElement.textContent = Math.round(clamped * 100) + '%';
+      }
+
+      var totalDependencies = 0;
 
       var Module = {
         preRun: [
           function () {
             if (typeof navigator === 'undefined' || !navigator.gpu)
-              return; // WebGL build or unsupported browser: nothing to do
+              return;
             addRunDependency('webgpu-device');
             navigator.gpu.requestAdapter().then(function (adapter) {
               if (adapter == null) throw new Error('WebGPU: no adapter');
@@ -139,9 +533,6 @@
         })(),
         canvas: (() => {
           var canvas = document.getElementById('canvas');
-          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-          // application robust, you may want to override this behavior before shipping!
-          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
           canvas.addEventListener("webglcontextlost", (e) => { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
           return canvas;
         })(),
@@ -154,29 +545,23 @@
           Module.setStatus.last.time = now;
           Module.setStatus.last.text = text;
           if (m) {
-            text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
-            progressElement.hidden = false;
-            spinnerElement.hidden = false;
+            setProgress(parseFloat(m[2]) / parseFloat(m[4]));
+            text = m[1].trim();
           } else {
-            progressElement.value = null;
-            progressElement.max = null;
-            progressElement.hidden = true;
-            if (!text) spinnerElement.style.display = 'none';
+            setProgress(null);
           }
-          statusElement.innerHTML = text;
+          statusElement.textContent = text;
+          if (!text) document.body.classList.add('is-running');
         },
-        totalDependencies: 0,
         monitorRunDependencies: (left) => {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+          totalDependencies = Math.max(totalDependencies, left);
+          Module.setStatus(left ? 'Preparing (' + (totalDependencies - left) + '/' + totalDependencies + ')' : 'Starting');
         }
       };
-      Module.setStatus('Downloading...');
+      Module.setStatus('Downloading module');
       window.onerror = (event) => {
-        Module.setStatus('Exception thrown, see JavaScript console');
-        spinnerElement.style.display = 'none';
+        document.body.classList.add('has-error');
+        Module.setStatus('Runtime error. Check the browser console.');
         Module.setStatus = (text) => {
           if (text) console.error('[post-exception status] ' + text);
         };

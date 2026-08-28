@@ -312,6 +312,54 @@ TEST (YdspAsmJitCodegenTests, CompilesTanhClipper)
     dumpAsmOnFailureCodegen (kernel);
 }
 
+TEST (YdspAsmJitCodegenTests, CompilesTwoInputTanhClipper)
+{
+    DspJitDiagnostics diagnostics;
+
+    auto kernel = compileKernel (R"YDSP(
+        processor SidechainClip {
+            input stream in;
+            input stream side;
+            output stream out;
+            process { out = tanh (in * (1 + 0.5 * side)); }
+        }
+        graph G {
+            input stream dry;
+            input stream sc;
+            output stream wet;
+            node c = SidechainClip;
+            connection { dry -> c.in; sc -> c.side; c.out -> wet; }
+        }
+    )YDSP",
+                                 "SidechainClip",
+                                 diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+    EXPECT_EQ (2, kernel.numInputs);
+    EXPECT_EQ (1, kernel.numOutputs);
+
+    constexpr int numSamples = 64;
+    std::vector<float> input (static_cast<size_t> (numSamples * 2));
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        input[static_cast<size_t> (i)] = static_cast<float> (i) * 0.01f - 0.25f;
+        input[static_cast<size_t> (numSamples + i)] = 0.1f + static_cast<float> (i) * 0.005f;
+    }
+
+    auto output = runKernel (kernel, input, numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto dry = input[static_cast<size_t> (i)];
+        const auto side = input[static_cast<size_t> (numSamples + i)];
+        EXPECT_NEAR (tanhf (dry * (1.0f + 0.5f * side)), output[static_cast<size_t> (i)], 1e-5f);
+    }
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
 TEST (YdspAsmJitCodegenTests, CompilesSampleModeOnePoleWithPrev)
 {
     DspJitDiagnostics diagnostics;

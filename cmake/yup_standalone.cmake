@@ -220,7 +220,6 @@ function (yup_standalone_app)
             -pthread
             -Wno-pthreads-mem-growth
             -sWASM=1
-            #-sASYNCIFY=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
             -sSHARED_MEMORY=1
