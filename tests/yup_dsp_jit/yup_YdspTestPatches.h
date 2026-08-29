@@ -55,6 +55,15 @@ inline YdspAudioGraph compilePatch (StringRef source, YdspCompiler& compiler)
     return std::move (result).getValue();
 }
 
+inline YdspAudioGraph compilePatch (StringRef source, YdspCompiler& compiler, const YdspCompileOptions& options)
+{
+    auto result = compiler.compile (source, options);
+    EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+    if (! result.wasOk())
+        return {};
+    return std::move (result).getValue();
+}
+
 /** Returns a ramp of `size` samples starting at `start` and increasing by
     0.01 per sample. Shared by the graph and wasm test suites.
 */

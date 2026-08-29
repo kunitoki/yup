@@ -67,7 +67,9 @@ protected:
     void floatBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
     void floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type) override;
     void emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
+    void emitFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
     void emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
+    void emitVectorFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) override;
 
     void loadVectorFromMem (const YdspFp& dst, const YdspMem& src) override;
     void storeVectorToMem (const YdspMem& dst, const YdspFp& src) override;
@@ -94,6 +96,7 @@ protected:
     void emitSelectFloatOnFlags (YdspCond cond, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) override;
     void emitSelectIntOnFlags (YdspCond cond, const YdspGp& dst, const YdspGp& whenTrue, const YdspGp& whenFalse) override;
     void emitWrapInt (const YdspGp& dst, const YdspGp& value, const YdspGp& bound) override;
+    void emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& value, int32_t bound) override;
 
     void emitIntToFloat (const YdspFp& dst, const YdspGp& src) override;
     void emitFloatToInt (const YdspGp& dst, const YdspFp& src) override;

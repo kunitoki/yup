@@ -99,7 +99,7 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
 
         for (size_t i = 0; i < insts.size(); ++i)
         {
-            if (insts[i].op != YdspIrOp::addF || ! isFusableFloat32 (insts[i].result))
+            if ((insts[i].op != YdspIrOp::addF && insts[i].op != YdspIrOp::subF) || ! isFusableFloat32 (insts[i].result))
                 continue;
 
             const auto findMultiply = [&] (int operand) -> std::optional<size_t>
@@ -152,10 +152,23 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             if (! isFusableFloat32 (addend))
                 continue;
 
-            insts[i].op = YdspIrOp::fmaF;
-            insts[i].a = factorA;
-            insts[i].b = factorB;
-            insts[i].c = addend;
+            if (insts[i].op == YdspIrOp::subF && insts[chosen].result == insts[i].b)
+            {
+                insts[i].op = YdspIrOp::fmsubF;
+                insts[i].a = factorA;
+                insts[i].b = factorB;
+                insts[i].c = addend;
+            }
+            else if (insts[i].op == YdspIrOp::subF)
+                continue;
+            else
+                insts[i].op = YdspIrOp::fmaF;
+            if (insts[i].op == YdspIrOp::fmaF)
+            {
+                insts[i].a = factorA;
+                insts[i].b = factorB;
+                insts[i].c = addend;
+            }
         }
     }
 }

@@ -524,15 +524,17 @@ idiom, so `abs(INT_MIN)` returns `INT_MIN` unchanged: the true magnitude does
 not fit in the same width, and this is the one input for which the intrinsic
 does not return the mathematical absolute value.
 
-`fma(a,b,c)` is `a * b + c` with a **single** rounding rather than two.
+`fma(a,b,c)` is `a * b + c` with a **single** rounding rather than two. The
+fast-math contraction pass also recognises `c - a * b` and uses the equivalent
+fused subtract-multiply operation.
 
 You rarely need to write it. When `YdspCompileOptions::fastMath` is enabled,
-the compiler contracts `a * b + c` into the same operation where the multiply
+the compiler contracts `a * b + c` and `c - a * b` into the same operation where the multiply
 feeds nothing but the add and can be moved down to it unchanged. Strict mode
 keeps the two operations separate. Spelling `fma` out is for the cases the pass
 declines: a multiply with a second reader, or one defined in a different block.
 
-Contraction is normally a *precision* liberty, and YDSP does not take those,
+Contraction is normally a *precision* liberty: it changes rounding, and YDSP does not take those,
 because a patch has to produce identical samples on every backend it can be
 compiled for. This one is exempt because it is not per-target: the fused
 operation has **one defined value**, and a target without the instruction

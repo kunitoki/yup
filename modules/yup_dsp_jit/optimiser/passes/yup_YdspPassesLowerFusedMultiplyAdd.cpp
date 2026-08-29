@@ -42,7 +42,7 @@ void YdspOptimizer::lowerFusedMultiplyAdd (YdspIrFunction& fn)
     {
         if (std::none_of (block.insts.begin(), block.insts.end(), [] (const YdspIrInst& inst)
         {
-            return inst.op == YdspIrOp::fmaF;
+            return inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF;
         }))
             continue;
 
@@ -51,7 +51,7 @@ void YdspOptimizer::lowerFusedMultiplyAdd (YdspIrFunction& fn)
 
         for (const auto& inst : block.insts)
         {
-            if (inst.op != YdspIrOp::fmaF)
+            if (inst.op != YdspIrOp::fmaF && inst.op != YdspIrOp::fmsubF)
             {
                 lowered.push_back (inst);
                 continue;
@@ -67,7 +67,9 @@ void YdspOptimizer::lowerFusedMultiplyAdd (YdspIrFunction& fn)
             lowered.push_back ({ YdspIrOp::extF, wideB, inst.b });
             lowered.push_back ({ YdspIrOp::extF, wideC, inst.c });
             lowered.push_back ({ YdspIrOp::mulF, product, wideA, wideB });
-            lowered.push_back ({ YdspIrOp::addF, sum, product, wideC });
+            lowered.push_back ({ inst.op == YdspIrOp::fmaF ? YdspIrOp::addF : YdspIrOp::subF,
+                                 sum, inst.op == YdspIrOp::fmaF ? product : wideC,
+                                 inst.op == YdspIrOp::fmaF ? wideC : product });
             lowered.push_back ({ YdspIrOp::truncF, inst.result, sum });
         }
 

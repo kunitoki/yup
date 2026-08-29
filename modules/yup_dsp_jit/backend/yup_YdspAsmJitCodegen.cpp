@@ -187,7 +187,7 @@ YdspKernelFn YdspAsmJitCodegenImpl::compile (asmjit::JitRuntime& runtime, const 
     {
         return std::any_of (block.insts.begin(), block.insts.end(), [] (const YdspIrInst& inst)
         {
-            return inst.op == YdspIrOp::fmaF;
+            return inst.op == YdspIrOp::fmaF || inst.op == YdspIrOp::fmsubF;
         });
     });
 
@@ -960,6 +960,12 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
                 emitFusedMultiplyAdd (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
 
             return;
+        case YdspIrOp::fmsubF:
+            if (isVectorValue (inst.result))
+                emitVectorFusedMultiplySubtract (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+            else
+                emitFusedMultiplySubtract (fp (inst.result), fp (inst.a), fp (inst.b), fp (inst.c));
+            return;
 
         case YdspIrOp::lerpF:
             // a + (b - a) * t
@@ -999,6 +1005,9 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
 
         case YdspIrOp::wrapI:
             emitWrapInt (gp (inst.result), gp (inst.a), gp (inst.b));
+            return;
+        case YdspIrOp::advanceWrapI:
+            emitAdvanceWrapInt (gp (inst.result), gp (inst.a), static_cast<int32_t> (inst.ivalue));
             return;
 
         case YdspIrOp::minI:

@@ -755,7 +755,7 @@ TEST (YdspOptimizerTests, LowersDelayWrapWithoutAnIntegerDivision)
 
     // The `@` ring wrap used to emit modI, which on x86-64 is a call into a
     // helper - once per delay tap per sample. The write pointer is provably
-    // within [0, n], so wrapI (compare + conditional move) is equivalent.
+    // within [0, n], so the dedicated increment-and-wrap operation is exact.
     auto ir = buildIr (R"YDSP(
         processor P { input stream in; output stream out; process { out = in @ 8; } }
         graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
@@ -767,7 +767,8 @@ TEST (YdspOptimizerTests, LowersDelayWrapWithoutAnIntegerDivision)
 
     const auto& fn = *ir->kernels[0];
 
-    EXPECT_EQ (1, countInst (fn, YdspIrOp::wrapI));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::advanceWrapI));
+    EXPECT_EQ (0, countInst (fn, YdspIrOp::wrapI));
     EXPECT_EQ (0, countInst (fn, YdspIrOp::modI));
     EXPECT_EQ (0, countInst (fn, YdspIrOp::divI));
 }

@@ -109,6 +109,7 @@ bool hasValueResult (YdspIrOp op)
         case YdspIrOp::clampF:
         case YdspIrOp::lerpF:
         case YdspIrOp::fmaF:
+        case YdspIrOp::fmsubF:
         case YdspIrOp::selectB:
         case YdspIrOp::movF:
         case YdspIrOp::movI:

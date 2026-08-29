@@ -97,6 +97,7 @@ enum class YdspIrOp
     // exactly `a % b` - but it lowers to a compare plus a conditional move
     // instead of an integer division (a helper *call* on x86-64).
     wrapI,
+    advanceWrapI, // increment a and wrap to zero at immediate bound
 
     minI,
     maxI,
@@ -182,6 +183,7 @@ enum class YdspIrOp
     //
     // @see YdspOptimizer::lowerFusedMultiplyAdd, YdspOptimizer::contractMultiplyAdd
     fmaF, // a * b + c
+    fmsubF, // c - a * b
 
     // Additional float intrinsics
     asinhF,
@@ -260,6 +262,7 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::clampF:
         case YdspIrOp::lerpF:
         case YdspIrOp::fmaF:
+        case YdspIrOp::fmsubF:
         case YdspIrOp::movF:
         case YdspIrOp::extF:
         case YdspIrOp::truncF:
@@ -278,6 +281,7 @@ inline YdspValueType inferTypeFromOp (YdspIrOp op) noexcept
         case YdspIrOp::divI:
         case YdspIrOp::modI:
         case YdspIrOp::wrapI:
+        case YdspIrOp::advanceWrapI:
         case YdspIrOp::negI:
         case YdspIrOp::minI:
         case YdspIrOp::maxI:

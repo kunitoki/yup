@@ -162,9 +162,11 @@ protected:
         @see YdspOptimizer::setTargetHasFusedMultiplyAdd
     */
     virtual void emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
+    virtual void emitFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
 
     /** dst = a * b + c in packed float32 lanes (YdspIrOp::fmaF). */
     virtual void emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
+    virtual void emitVectorFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c) = 0;
 
     //==============================================================================
     // Packed float32 forms, used when the vectoriser widened a value. The lane
@@ -217,6 +219,7 @@ protected:
 
     /** dst = (value >= bound) ? 0 : value, without a branch (see YdspIrOp::wrapI). */
     virtual void emitWrapInt (const YdspGp& dst, const YdspGp& value, const YdspGp& bound) = 0;
+    virtual void emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& value, int32_t bound) = 0;
 
     virtual void emitIntToFloat (const YdspFp& dst, const YdspGp& src) = 0;
     virtual void emitFloatToInt (const YdspGp& dst, const YdspFp& src) = 0;

@@ -121,7 +121,7 @@
 
 // Runtime: the realtime graph
 #include "runtime/yup_YdspGraphInternal.h"
-#include "runtime/yup_YdspGraph.cpp"
+#include "runtime/yup_YdspAudioGraph.cpp"
 #include "runtime/yup_YdspGraphPimpl.cpp"
 #include "runtime/yup_YdspGraphQuery.cpp"
 

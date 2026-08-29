@@ -52,6 +52,7 @@ bool isSpeculatable (YdspIrOp op) noexcept
         case YdspIrOp::clampF:
         case YdspIrOp::lerpF:
         case YdspIrOp::fmaF:
+        case YdspIrOp::fmsubF:
         case YdspIrOp::addI:
         case YdspIrOp::subI:
         case YdspIrOp::mulI:

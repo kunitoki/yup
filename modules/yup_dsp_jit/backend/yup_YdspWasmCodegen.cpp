@@ -2279,6 +2279,38 @@ private:
                 return;
             }
 
+            case YdspIrOp::advanceWrapI:
+            {
+                const auto type = valueType (inst.result);
+                const bool is64 = is64BitValueType (type);
+                pushValue (inst.a);
+                if (is64)
+                    emitter.i64Const (1);
+                else
+                    emitter.i32Const (1);
+                emitter.op (is64 ? YdspWasmEmitter::opI64Add : YdspWasmEmitter::opI32Add);
+                if (is64)
+                    emitter.i64Const (inst.ivalue);
+                else
+                    emitter.i32Const (static_cast<int32_t> (inst.ivalue));
+                emitter.op (is64 ? YdspWasmEmitter::opI64LtS : YdspWasmEmitter::opI32LtS);
+                emitter.ifValue (is64 ? ValType::i64 : ValType::i32);
+                pushValue (inst.a);
+                if (is64)
+                    emitter.i64Const (1);
+                else
+                    emitter.i32Const (1);
+                emitter.op (is64 ? YdspWasmEmitter::opI64Add : YdspWasmEmitter::opI32Add);
+                emitter.else_();
+                if (is64)
+                    emitter.i64Const (0);
+                else
+                    emitter.i32Const (0);
+                emitter.end();
+                setValue (inst.result);
+                return;
+            }
+
             case YdspIrOp::minI:
             case YdspIrOp::maxI:
             {

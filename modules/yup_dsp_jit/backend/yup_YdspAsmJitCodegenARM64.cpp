@@ -27,6 +27,8 @@ namespace yup
 namespace
 {
 
+constexpr int32_t aarch64ImmediateLimit = 4095;
+
 // Adds an arbitrary 32-bit immediate to a pointer register (used for array
 // base offsets on AArch64, whose add-immediate is limited to 12 bits).
 void addGpImm (YdspAsm& cc, const YdspGp& dst, const YdspGp& src, int32_t imm)
@@ -341,11 +343,24 @@ void YdspAsmJitCodegenARM64::emitFusedMultiplyAdd (const YdspFp& dst, const Ydsp
     cc->fmadd (dst, a, b, c);
 }
 
+void YdspAsmJitCodegenARM64::emitFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    YdspFp product = newFp ("fmsubProduct");
+    cc->fmul (product, a, b);
+    cc->fsub (dst, c, product);
+}
+
 void YdspAsmJitCodegenARM64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
 {
     // FMLA is dst += a * b, so seed the accumulator from c.
     moveVector (dst, c);
     cc->fmla (dst.s4(), a.s4(), b.s4());
+}
+
+void YdspAsmJitCodegenARM64::emitVectorFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    moveVector (dst, c);
+    cc->fmls (dst.s4(), a.s4(), b.s4());
 }
 
 void YdspAsmJitCodegenARM64::floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type)
@@ -582,6 +597,23 @@ void YdspAsmJitCodegenARM64::emitWrapInt (const YdspGp& dst, const YdspGp& value
 
     cc->cmp (value, bound);
     cc->csel (dst, value, zero, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));
+}
+
+void YdspAsmJitCodegenARM64::emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& value, int32_t bound)
+{
+    if (bound > 0 && bound <= aarch64ImmediateLimit)
+        cc->add (dst, value, asmjit::Imm (1));
+    else
+    {
+        YdspGp boundReg = cc->new_gp32 ("wrapBound");
+        cc->mov (boundReg, asmjit::Imm (bound));
+        cc->add (dst, value, asmjit::Imm (1));
+        cc->cmp (dst, boundReg);
+        cc->csel (dst, dst, asmjit::a64::wzr, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));
+        return;
+    }
+    cc->cmp (dst, asmjit::Imm (bound));
+    cc->csel (dst, dst, asmjit::a64::wzr, asmjit::Imm (static_cast<uint32_t> (asmjit::arm::CondCode::kLT)));
 }
 
 //==============================================================================

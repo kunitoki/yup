@@ -259,12 +259,27 @@ void YdspAsmJitCodegenX64::emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp
         cc->vfmadd213ss (dst, b, c);
 }
 
+void YdspAsmJitCodegenX64::emitFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    moveFloat (dst, c);
+    if (isDoubleFloat (dst))
+        cc->vfnmadd231sd (dst, a, b);
+    else
+        cc->vfnmadd231ss (dst, a, b);
+}
+
 void YdspAsmJitCodegenX64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
 {
     // `vfmadd213ps x, y, z` is x = y * x + z, so seed dst from a first.
     // This is only emitted for an AVX2+FMA target selected by the compiler.
     moveVector (dst, a);
     cc->vfmadd213ps (dst, b, c);
+}
+
+void YdspAsmJitCodegenX64::emitVectorFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
+{
+    moveVector (dst, c);
+    cc->vfnmadd231ps (dst, a, b);
 }
 
 void YdspAsmJitCodegenX64::floatUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src, YdspValueType type)
@@ -767,6 +782,16 @@ void YdspAsmJitCodegenX64::emitWrapInt (const YdspGp& dst, const YdspGp& value, 
 
     moveGp (dst, value);
     cc->cmp (dst, bound);
+    cc->cmov (YdspCond::kSignedGE, dst, zero);
+}
+
+void YdspAsmJitCodegenX64::emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& value, int32_t bound)
+{
+    moveGp (dst, value);
+    cc->add (dst, asmjit::Imm (1));
+    YdspGp zero = cc->new_gp32 ("zero");
+    cc->xor_ (zero, zero);
+    cc->cmp (dst, asmjit::Imm (bound));
     cc->cmov (YdspCond::kSignedGE, dst, zero);
 }
 

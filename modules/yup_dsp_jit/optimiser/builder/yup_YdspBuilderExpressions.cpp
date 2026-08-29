@@ -232,12 +232,9 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
             const auto wp = promoteHiddenSlot (wpSlot, YdspValueType::int32Type);
             emitInst ({ YdspIrOp::storeStateArrayF, -1, wp, signal, -1, ringBase });
 
-            const auto one = emitConstI (1);
-            const auto size = emitConstI (n + 1);
-            const auto next = emitInst ({ YdspIrOp::addI, newValue (YdspValueType::int32Type), wp, one });
-
-            const auto wrapped = emitInst ({ YdspIrOp::wrapI, newValue (YdspValueType::int32Type), next, size });
-            writeHiddenSlot (wpSlot, wp, wrapped, YdspValueType::int32Type);
+            const auto wrapped = emitInst ({ YdspIrOp::advanceWrapI, wp, wp, -1, -1, -1, 0.0, n + 1 });
+            if (! fn.isSampleMode)
+                writeHiddenSlot (wpSlot, wp, wrapped, YdspValueType::int32Type);
 
             const auto read = emitInst ({ YdspIrOp::loadStateArrayF, newValue (YdspValueType::float32Type), wrapped, -1, -1, ringBase });
 

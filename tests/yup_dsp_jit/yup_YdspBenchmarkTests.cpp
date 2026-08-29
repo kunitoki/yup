@@ -26,6 +26,7 @@
 #include "yup_YdspTestPatches.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -142,7 +143,7 @@ BenchmarkTiming benchmarkTimeRepeats (Fn&& fn)
     return timing;
 }
 
-constexpr int benchmarkColumnWidth = 9;
+constexpr int benchmarkColumnWidth = 24;
 
 String benchmarkLine (StringRef label, StringRef best, StringRef worst, StringRef average)
 {
@@ -172,12 +173,15 @@ void benchmarkReport (const char* name, const BenchmarkTiming& jit, const Benchm
     };
 
     const auto rule = String::repeatedString ("-", benchmarkColumnWidth);
-    std::cout << "--- BENCH: " << name << "\n"
+    const auto value = [&] (double seconds, double nativeSeconds)
+    {
+        return perSample (seconds) + " (" + ratio (seconds, nativeSeconds) + "x)";
+    };
+    std::cout << "\n  |==== BENCH ==== (" << name << ")\n"
               << benchmarkLine ("ns/sample", "best", "worst", "avg") << "\n"
               << benchmarkLine (rule, rule, rule, rule) << "\n"
-              << benchmarkLine ("jit", perSample (jit.best), perSample (jit.worst), perSample (jit.average)) << "\n"
-              << benchmarkLine ("c++", perSample (native.best), perSample (native.worst), perSample (native.average)) << "\n"
-              << benchmarkLine ("ratio", ratio (jit.best, native.best), ratio (jit.worst, native.worst), ratio (jit.average, native.average)) << "\n";
+              << benchmarkLine ("jit", value (jit.best, native.best), value (jit.worst, native.worst), value (jit.average, native.average)) << "\n"
+              << benchmarkLine ("c++", perSample (native.best), perSample (native.worst), perSample (native.average)) << "\n";
 }
 
 void benchmarkRunGraph (YdspAudioGraph& graph, const std::vector<float>& input, std::vector<float>& output)
@@ -386,6 +390,54 @@ private:
 
     std::vector<float> ring1, ring2, ring3;
     int w1 = 0, w2 = 0, w3 = 0;
+};
+
+constexpr auto benchmarkBiquadSource = R"YDSP(
+    processor Biquad {
+        input stream in;
+        output stream out;
+        state float x1;
+        state float x2;
+        state float y1;
+        state float y2;
+        process {
+            let y = 0.206572 * in + 0.413144 * x1 + 0.206572 * x2
+                  + 0.369527 * y1 - 0.195816 * y2;
+            x2 = x1;
+            x1 = in;
+            y2 = y1;
+            y1 = y;
+            out = y;
+        }
+    }
+    graph G {
+        input stream x;
+        output stream y;
+        node b = Biquad;
+        connection { x -> b.in; b.out -> y; }
+    }
+)YDSP";
+
+class BenchmarkNativeBiquad
+{
+public:
+    void process (const float* in, float* out, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const auto x = in[i];
+            const auto y = 0.206572f * x + 0.413144f * x1 + 0.206572f * x2
+                         + 0.369527f * y1 - 0.195816f * y2;
+            x2 = x1;
+            x1 = x;
+            y2 = y1;
+            y1 = y;
+            out[i] = y;
+        }
+    }
+
+private:
+    float x1 = 0.0f, x2 = 0.0f, y1 = 0.0f, y2 = 0.0f;
 };
 
 //==============================================================================
@@ -1247,12 +1299,48 @@ void benchmarkReportVariants (const char* name,
     };
 
     const auto rule = String::repeatedString ("-", benchmarkColumnWidth);
-    std::cout << "--- BENCH: " << name << "\n"
+    const auto value = [] (double seconds)
+    {
+        return String (seconds * 1.0e9 / static_cast<double> (benchmarkTotalSamples), 3);
+    };
+    std::cout << "\n  |==== BENCH ==== (" << name << ")\n"
               << benchmarkLine ("ns/sample", "best", "worst", "avg") << "\n"
               << benchmarkLine (rule, rule, rule, rule) << "\n"
-              << benchmarkLine (labelA, perSample (a.best), perSample (a.worst), perSample (a.average)) << "\n"
-              << benchmarkLine (labelB, perSample (b.best), perSample (b.worst), perSample (b.average)) << "\n"
+              << benchmarkLine (labelA, value (a.best), value (a.worst), value (a.average)) << "\n"
+              << benchmarkLine (labelB, value (b.best), value (b.worst), value (b.average)) << "\n"
               << benchmarkLine ("ratio", ratio (a.best, b.best), ratio (a.worst, b.worst), ratio (a.average, b.average)) << "\n";
+}
+
+void benchmarkReportPolicies (const char* name,
+                              const std::array<const char*, 4>& labels,
+                              const std::array<BenchmarkTiming, 4>& timings,
+                              const BenchmarkTiming& native,
+                              double limit = benchmarkRatioLimit)
+{
+    const auto perSample = [] (double seconds)
+    {
+        return String (seconds * 1.0e9 / static_cast<double> (benchmarkTotalSamples), 3);
+    };
+    const auto ratio = [] (double lhs, double rhs)
+    {
+        return String (lhs / rhs, 3);
+    };
+    const auto value = [&] (double seconds, double nativeSeconds)
+    {
+        return perSample (seconds) + " (" + ratio (seconds, nativeSeconds) + "x)";
+    };
+    const auto rule = String::repeatedString ("-", benchmarkColumnWidth);
+    std::cout << "\n  |==== BENCH ==== (" << name << ")\n"
+              << benchmarkLine ("ns/sample", "best", "worst", "avg") << "\n"
+              << benchmarkLine (rule, rule, rule, rule) << "\n";
+    for (size_t i = 0; i < labels.size(); ++i)
+        std::cout << benchmarkLine (labels[i],
+                                    value (timings[i].best, native.best),
+                                    value (timings[i].worst, native.worst),
+                                    value (timings[i].average, native.average)) << "\n";
+    std::cout << benchmarkLine ("c++", perSample (native.best), perSample (native.worst), perSample (native.average)) << "\n";
+    for (const auto& timing : timings)
+        EXPECT_LT (timing.best / native.best, limit);
 }
 
 /** Says whether the contraction pragma changed a reference's output.
@@ -1319,6 +1407,47 @@ void benchmarkRunVoiceGraph (YdspAudioGraph& graph,
 class YdspBenchmarkTests : public ::testing::Test
 {
 protected:
+    static YdspCompileOptions allOptimizations()
+    {
+        YdspCompileOptions options;
+        options.fastMath = true;
+        return options;
+    }
+
+    static YdspCompileOptions noVectorisation()
+    {
+        YdspCompileOptions options;
+        options.optimizationTier = YdspOptimizationTier::baseline;
+        return options;
+    }
+
+    std::array<BenchmarkTiming, 4> benchmarkPolicies (StringRef source)
+    {
+        const auto baselineOptions = noVectorisation();
+        auto baselineFastOptions = baselineOptions;
+        baselineFastOptions.fastMath = true;
+        const auto hostOptions = YdspCompileOptions {};
+        const auto hostFastOptions = allOptimizations();
+        const std::array<YdspCompileOptions, 4> options { baselineOptions, baselineFastOptions, hostOptions, hostFastOptions };
+        std::array<BenchmarkTiming, 4> timings;
+
+        for (size_t i = 0; i < options.size(); ++i)
+        {
+            auto graph = compilePatch (source, compiler, options[i]);
+            EXPECT_TRUE (graph.isValid());
+            if (! graph.isValid())
+                continue;
+            graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
+            timings[i] = benchmarkTimeRepeats ([&]
+            {
+                graph.reset();
+                benchmarkRunGraph (graph, input, jitOutput);
+            });
+        }
+
+        return timings;
+    }
+
     void SetUp() override
     {
         input = benchmarkNoise (benchmarkTotalSamples);
@@ -1356,9 +1485,12 @@ protected:
 
 //==============================================================================
 
+// Native-reference benchmarks. Keep these together so each algorithm has a
+// direct C++ baseline before the policy and graph-shape comparisons below.
+
 TEST_F (YdspBenchmarkTests, DelayTapsAgainstNative)
 {
-    auto graph = compilePatch (benchmarkDelaySource, compiler);
+    auto graph = compilePatch (benchmarkDelaySource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1381,7 +1513,7 @@ TEST_F (YdspBenchmarkTests, DelayTapsAgainstNative)
 
     EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (jitOutput), 1.0);
 
-    report ("delay taps (@)", jitTiming, nativeTiming);
+    benchmarkReportPolicies ("delay taps (@)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkDelaySource), nativeTiming);
 
     // The one shape here that is throughput-bound rather than latency-bound:
     // three independent ring chains, and the only loop-carried dependency is
@@ -1391,11 +1523,19 @@ TEST_F (YdspBenchmarkTests, DelayTapsAgainstNative)
     // what is measured. The listing is what closes that gap or shows it is
     // spills instead.
     benchmarkReportListing ("delay", benchmarkAnalyzeListing (graph));
+
+    auto baseline = compilePatch (benchmarkDelaySource, compiler, noVectorisation());
+    ASSERT_TRUE (baseline.isValid());
+    baseline.prepare (benchmarkSampleRate, benchmarkBlockSize);
+    std::vector<float> baselineOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
+    baseline.reset();
+    benchmarkRunGraph (baseline, input, baselineOutput);
+    EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (baselineOutput), 1.0);
 }
 
 TEST_F (YdspBenchmarkTests, LadderFilterAgainstNative)
 {
-    auto graph = compilePatch (benchmarkLadderSource, compiler);
+    auto graph = compilePatch (benchmarkLadderSource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1418,7 +1558,7 @@ TEST_F (YdspBenchmarkTests, LadderFilterAgainstNative)
 
     EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (jitOutput), 1.0);
 
-    report ("ladder filter (state)", jitTiming, nativeTiming);
+    benchmarkReportPolicies ("ladder filter (state)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkLadderSource), nativeTiming);
 
     // How much of that ratio is the reference fusing four multiply-adds the JIT
     // refuses to fuse. See BenchmarkNativeLadderUncontracted.
@@ -1448,7 +1588,7 @@ TEST_F (YdspBenchmarkTests, LadderFilterAgainstNative)
     // And the same patch written with the fused form, which is the arithmetic
     // the `c++` row is running. Read this against `c++`, not against `jit`: if
     // fusing is the whole story here, the two land together.
-    auto fused = compilePatch (benchmarkLadderFusedSource, compiler);
+    auto fused = compilePatch (benchmarkLadderFusedSource, compiler, allOptimizations());
     ASSERT_TRUE (fused.isValid());
     fused.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1480,9 +1620,57 @@ TEST_F (YdspBenchmarkTests, LadderFilterAgainstNative)
                              jitTiming);
 }
 
+TEST_F (YdspBenchmarkTests, RepresentativePatchesAcrossOptimizationPolicies)
+{
+    const std::array<StringRef, 4> sources { benchmarkDelaySource,
+                                             benchmarkLadderSource,
+                                             benchmarkShaperSource,
+                                             benchmarkFolderSource };
+
+    for (const auto source : sources)
+    {
+        auto optimized = compilePatch (source, compiler, allOptimizations());
+        auto baseline = compilePatch (source, compiler, noVectorisation());
+        ASSERT_TRUE (optimized.isValid());
+        ASSERT_TRUE (baseline.isValid());
+
+        optimized.prepare (benchmarkSampleRate, benchmarkBlockSize);
+        baseline.prepare (benchmarkSampleRate, benchmarkBlockSize);
+
+        std::vector<float> optimizedOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
+        std::vector<float> baselineOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
+        optimized.reset();
+        baseline.reset();
+        benchmarkRunGraph (optimized, input, optimizedOutput);
+        benchmarkRunGraph (baseline, input, baselineOutput);
+
+        EXPECT_TRUE (std::isfinite (benchmarkChecksum (optimizedOutput)));
+        EXPECT_TRUE (std::isfinite (benchmarkChecksum (baselineOutput)));
+    }
+}
+
+TEST_F (YdspBenchmarkTests, BiquadAgainstNativeAcrossOptimizationPolicies)
+{
+    const std::array<const char*, 4> labels { "baseline", "baseline + fastMath", "host", "host + fastMath" };
+    const auto timings = benchmarkPolicies (benchmarkBiquadSource);
+
+    const auto nativeTiming = benchmarkTimeRepeats ([&]
+    {
+        BenchmarkNativeBiquad reference;
+        for (int block = 0; block < benchmarkBlockCount; ++block)
+        {
+            const auto offset = static_cast<size_t> (block * benchmarkBlockSize);
+            reference.process (input.data() + offset, nativeOutput.data() + offset, benchmarkBlockSize);
+        }
+    });
+
+    benchmarkReportPolicies ("biquad low-pass", labels, timings, nativeTiming);
+    EXPECT_TRUE (std::isfinite (benchmarkChecksum (nativeOutput)));
+}
+
 TEST_F (YdspBenchmarkTests, HarmonicBankAgainstNative)
 {
-    auto graph = compilePatch (benchmarkBankSource, compiler);
+    auto graph = compilePatch (benchmarkBankSource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1507,7 +1695,7 @@ TEST_F (YdspBenchmarkTests, HarmonicBankAgainstNative)
     // chaotic in float32), so only assert that both actually produced signal.
     EXPECT_GT (benchmarkChecksum (nativeOutput) * benchmarkChecksum (nativeOutput), 0.0);
 
-    report ("harmonic bank (32 partials)", jitTiming, nativeTiming);
+    benchmarkReportPolicies ("harmonic bank (32 partials)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkBankSource), nativeTiming);
 
     // Both loop transforms should be firing here. Printed rather than asserted:
     // the unroller declines a body that would exceed its instruction budget,
@@ -1519,7 +1707,7 @@ TEST_F (YdspBenchmarkTests, HarmonicBankAgainstNative)
             continue;
 
         // The process kernel is emitted before the init one, so this is it.
-        std::cout << "  | kernel    | " << kernel.instructionCount << " insts, vectorized "
+        std::cout << "\n  | kernel    | " << kernel.instructionCount << " insts, vectorized "
                   << (kernel.vectorized ? "yes" : "no") << " x" << kernel.vectorWidth
                   << ", unrolled " << (kernel.unrolled ? "yes" : "no") << "\n";
         break;
@@ -1528,7 +1716,7 @@ TEST_F (YdspBenchmarkTests, HarmonicBankAgainstNative)
 
 TEST_F (YdspBenchmarkTests, WaveShaperAgainstNative)
 {
-    auto graph = compilePatch (benchmarkShaperSource, compiler);
+    auto graph = compilePatch (benchmarkShaperSource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1551,7 +1739,7 @@ TEST_F (YdspBenchmarkTests, WaveShaperAgainstNative)
 
     EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (jitOutput), 1.0);
 
-    report ("wave shaper (compare + select)", jitTiming, nativeTiming);
+    benchmarkReportPolicies ("wave shaper (compare + select)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkShaperSource), nativeTiming);
 
     // The control row: this shape's recurrence has no add to fuse into, so if
     // the two references agree, the shaper's ratio is not about FMA at all.
@@ -1582,7 +1770,7 @@ TEST_F (YdspBenchmarkTests, WaveShaperAgainstNative)
 
 TEST_F (YdspBenchmarkTests, ModalBankAgainstNative)
 {
-    auto graph = compilePatch (benchmarkModalSource, compiler);
+    auto graph = compilePatch (benchmarkModalSource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1610,8 +1798,11 @@ TEST_F (YdspBenchmarkTests, ModalBankAgainstNative)
     ASSERT_GT (native, 0.0);
     EXPECT_NEAR (native, benchmarkMagnitude (jitOutput), 1.0e-3 * native);
 
-    report ("modal bank (loop-invariant inner work)", jitTiming, nativeTiming, benchmarkModalBankLimit);
+    benchmarkReportPolicies ("modal bank (loop-invariant inner work)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkModalSource), nativeTiming, benchmarkModalBankLimit);
 }
+
+//==============================================================================
+// Optimisation-policy and graph-shape comparisons (no independent C++ row).
 
 TEST_F (YdspBenchmarkTests, AutomaticTierAgainstBaseline)
 {
@@ -1792,8 +1983,13 @@ TEST_F (YdspBenchmarkTests, ModalBankReductionCost)
     // The ratio below is what sizes the reduction, and it halved when the
     // accumulator was split - so the split silently ceasing to fire would show
     // up there as a number rather than a failure. Assert the flag instead: it
-    // says the same thing without depending on a timing threshold.
-    EXPECT_TRUE (withSumKernel.reductionSplit) << "the widened accumulator is no longer being split";
+    // says the same thing without depending on a timing threshold. The split
+    // halves the *unrolled* chain, which only pays off from four links on
+    // (splitWidenedReductionChains::minChainLength): 16 modes at 4 lanes
+    // unrolls to four copies, at 8 AVX2 lanes to only two - a chain a split
+    // cannot shorten - so on 8-lane targets the pass correctly declines.
+    EXPECT_EQ (4 <= 16 / withSumKernel.vectorWidth, withSumKernel.reductionSplit)
+        << "the split must fire exactly when the unrolled reduction chain has at least four links";
     EXPECT_FALSE (noSumKernel.reductionSplit) << "there is no accumulator here to split";
 
     // What the instruction count leaves out. Both variants call `exp` once per
@@ -1859,7 +2055,7 @@ TEST_F (YdspBenchmarkTests, ChainedNodesAgainstAFusedProcessor)
 
 TEST_F (YdspBenchmarkTests, WaveFolderAgainstNative)
 {
-    auto graph = compilePatch (benchmarkFolderSource, compiler);
+    auto graph = compilePatch (benchmarkFolderSource, compiler, allOptimizations());
     ASSERT_TRUE (graph.isValid());
     graph.prepare (benchmarkSampleRate, benchmarkBlockSize);
 
@@ -1882,7 +2078,7 @@ TEST_F (YdspBenchmarkTests, WaveFolderAgainstNative)
 
     EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (jitOutput), 1.0);
 
-    report ("wave folder (branchy if/else)", jitTiming, nativeTiming);
+    benchmarkReportPolicies ("wave folder (branchy if/else)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkFolderSource), nativeTiming);
 
     // How much of that ratio is the reference fusing its multiply-add and the
     // JIT refusing to. See BenchmarkNativeFolderUncontracted.
@@ -1902,45 +2098,6 @@ TEST_F (YdspBenchmarkTests, WaveFolderAgainstNative)
     EXPECT_NEAR (benchmarkChecksum (uncontractedOutput), benchmarkChecksum (jitOutput), 1.0);
 
     benchmarkReportContraction ("wave folder", nativeOutput, uncontractedOutput);
-
-    benchmarkReportVariants ("wave folder: the JIT against a reference that also cannot fuse mul+add",
-                             "jit",
-                             jitTiming,
-                             "c++ nofma",
-                             uncontractedTiming);
-
-    // The folder's two diamonds should have become `fcmp`/`fcsel` pairs via
-    // if-conversion plus planCompareSelectFusion(). That they qualify is an
-    // inference from the pass conditions, not an observation - and a branch
-    // surviving on random input would cost more than everything else here. The
-    // listing is the only thing that can say which happened.
-    benchmarkReportListing ("folder", benchmarkAnalyzeListing (graph));
-
-    // The same patch with its one-pole fused. Multiplying by 0.5 is exact, so
-    // this produces bit-identical samples to the unfused form - the only thing
-    // that can move is the time, which makes this the cleanest reading of what
-    // one link of a recurrence costs anywhere in the suite.
-    auto fused = compilePatch (benchmarkFolderFusedSource, compiler);
-    ASSERT_TRUE (fused.isValid());
-    fused.prepare (benchmarkSampleRate, benchmarkBlockSize);
-
-    std::vector<float> fusedOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
-
-    const auto fusedTiming = benchmarkTimeRepeats ([&]
-    {
-        fused.reset();
-        benchmarkRunGraph (fused, input, fusedOutput);
-    });
-
-    EXPECT_EQ (benchmarkChecksum (jitOutput), benchmarkChecksum (fusedOutput));
-
-    benchmarkReportVariants ("wave folder: fma() against the same patch written as mul + add",
-                             "jit fma",
-                             fusedTiming,
-                             "jit",
-                             jitTiming);
-
-    benchmarkReportListing ("folder fma", benchmarkAnalyzeListing (fused));
 }
 
 TEST_F (YdspBenchmarkTests, IdleVoiceSkippingAgainstEveryVoiceRunning)
@@ -2018,7 +2175,7 @@ TEST_F (YdspBenchmarkTests, GraphLevelDryWetAgainstAnInlinedDryWet)
 
     if (! fannedResult.wasOk())
     {
-        std::cout << "--- BENCH: graph-level dry/wet (fan-out + fan-in)\n"
+        std::cout << "\n  |==== BENCH ==== (graph-level dry/wet - fan-out + fan-in)\n"
                   << "  inline baseline: "
                   << String (inlinedTiming.best * 1.0e9 / static_cast<double> (benchmarkTotalSamples), 3)
                   << " ns/sample; the fanned patch does not analyze yet, so the comparison is skipped\n";
