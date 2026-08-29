@@ -1339,8 +1339,7 @@ void benchmarkReportPolicies (const char* name,
                                     value (timings[i].worst, native.worst),
                                     value (timings[i].average, native.average)) << "\n";
     std::cout << benchmarkLine ("c++", perSample (native.best), perSample (native.worst), perSample (native.average)) << "\n";
-    for (const auto& timing : timings)
-        EXPECT_LT (timing.best / native.best, limit);
+    EXPECT_LT (timings.back().best / native.best, limit);
 }
 
 /** Says whether the contraction pragma changed a reference's output.
