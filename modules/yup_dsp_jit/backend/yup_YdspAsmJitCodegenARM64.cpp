@@ -83,6 +83,29 @@ asmjit::Imm conditionImm (YdspCond cond) noexcept
 } // namespace
 
 //==============================================================================
+// Register allocation
+
+YdspFp YdspAsmJitCodegenARM64::newFp (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32, name);
+}
+
+YdspFp YdspAsmJitCodegenARM64::newFp64 (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64, name);
+}
+
+YdspFp YdspAsmJitCodegenARM64::newFp128 (const char* name)
+{
+    return newFpVector (name);
+}
+
+YdspFp YdspAsmJitCodegenARM64::newFpVector (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
+}
+
+//==============================================================================
 // Memory addressing
 
 YdspMem YdspAsmJitCodegenARM64::memPtr (const YdspGp& base, int32_t offset) const
@@ -212,6 +235,22 @@ YdspMem YdspAsmJitCodegenARM64::emitVectorStateMem (int base, int indexValue)
     YdspGp addr = cc->new_gp64 ("addr");
     addGpImm (*cc, addr, stateArraysReg, base);
     return asmjit::a64::ptr (addr, scaled->second);
+}
+
+YdspMem YdspAsmJitCodegenARM64::emitVectorStreamMem (const YdspGp& base, int indexValue)
+{
+    auto scaled = vectorIndexRegs.find (indexValue);
+
+    if (scaled == vectorIndexRegs.end())
+    {
+        YdspGp offset = cc->new_gp64 ("vecIndex");
+        cc->sxtw (offset, gp (indexValue));
+        cc->lsl (offset, offset, asmjit::Imm (2));
+
+        scaled = vectorIndexRegs.emplace (indexValue, offset).first;
+    }
+
+    return asmjit::a64::ptr (base, scaled->second);
 }
 
 void YdspAsmJitCodegenARM64::beginBlock (int blockIndex)

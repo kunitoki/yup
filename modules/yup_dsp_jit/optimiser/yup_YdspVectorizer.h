@@ -29,38 +29,24 @@ namespace yup
 
     An IR → IR pass, so it is testable without a JIT and every backend sees the
     same widened IR. It does not introduce a new instruction set: a widened
-    value simply carries `lanes > 1` in YdspIrFunction::valueLanes, and the
-    existing arithmetic opcodes are reused (`addF` on a 4-lane value *is* a
-    packed add). Only two opcodes are added, for the two places where the
-    operand and result lane counts differ: `vsplat` and `vreduceAddF`.
+    value simply carries `lanes > 1`, and the existing arithmetic opcodes are
+    reused (`addF` on a 4-lane value *is* a packed add). Only two opcodes are
+    added, for the two places where the operand and result lane counts differ:
+    `vsplat` and `vreduceAddF`.
 
-    The target shape is a bank of parallel `state float[N]` arrays stepped once
-    per sample - an additive oscillator bank, a modal filter bank - which is a
-    unit-stride, same-index read-then-write loop, usually with one accumulating
-    reduction.
+    The target shapes are a bank of parallel `state float[N]` arrays stepped
+    once per sample - an additive oscillator bank, a modal filter bank - and
+    the per-sample stream loop (`out[i] = in[i] * k`, or a block-mode
+    `for i in 0..blockSize` over streams), both unit-stride, same-index
+    read-then-write loops, usually with one accumulating reduction.
 
     Deliberate restrictions, each of which keeps a whole class of risk out:
 
-    - **Only constant trip counts divisible by the width.** There is therefore
-      no scalar epilogue and no vector loop to insert, so no block is created,
-      emptied or reordered and the CFG-linear block layout both backends depend
-      on is preserved by construction rather than by care.
-    - **Only a single-block loop body**, so there is no control flow to
-      if-convert and no nested loop to reason about.
-    - **Only state-array accesses are widened.** Stream accesses (`in[i]`,
-      `out[i]`) are always block-size bound in practice, and widening them
-      would need the epilogue this pass does not have.
+    - **Only a single-block loop body**
+    - **Scalar tails only for constant bounds and constant starts.**
+    - **Stream accesses are widened only at the induction variable.**
     - **A transcendental, a comparison or a `select` on a widened value
-      disqualifies the loop** rather than being scalarised through
-      extract/insert. In the shapes this exists for, the transcendentals are
-      loop-invariant and loop-invariant code motion has already hoisted them
-      into the preheader, where they stay scalar and are splatted once.
-
-    Reductions reassociate: lane `j` accumulates elements `j, j + W, j + 2W …`
-    and the lanes are then summed pairwise, so a reduction is *not* bit-exact
-    against the scalar order. Element-wise work is bit-exact. The vector
-    accumulator is also what breaks the reduction's serial dependency chain,
-    which is the larger half of the win.
+      disqualifies the loop**
 
     @see YdspOptimizer::setVectorizationEnabled
 */
@@ -83,6 +69,15 @@ public:
         retained for IR clients that target the portable SSE2 / ASIMD subset.
     */
     static bool run (YdspIrFunction& fn, int targetVectorWidth);
+
+    /** Widens every qualifying loop, recording each loop's outcome.
+
+        Same behaviour as run (fn, targetVectorWidth); additionally, every
+        original loop gets a YdspVectorizationResult - `widened` with its lane
+        count, or the exact reason it stayed scalar - which is also stored on
+        fn.vectorizationResults for the execution report.
+    */
+    static bool run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report);
 };
 
 } // namespace yup

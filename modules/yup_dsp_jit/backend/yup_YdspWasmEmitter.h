@@ -43,9 +43,13 @@ namespace yup
 
     The emitter is deliberately low-level: it owns a byte buffer and a set of
     LEB128/section/opcode helpers. It does not interpret the YDSP IR - that is
-    the job of YdspWasmCodegen. The MVP subset (no multi-value, no SIMD, no
-    bulk memory) is sufficient for every YdspIrOp and is universally supported
-    by browsers, node and emscripten's WebAssembly runtime.
+    the job of YdspWasmCodegen. The MVP subset (no multi-value, no bulk memory)
+    is sufficient for every scalar YdspIrOp and is universally supported by
+    browsers, node and emscripten's WebAssembly runtime. When compiled with
+    `-msimd128` (the emscripten default, which defines `__wasm_simd128__`), the
+    emitter additionally exposes the 128-bit SIMD prefix (`0xFD`) and the f32x4
+    subset the YDSP vectorized IR lowers to; without it, the emitter stays
+    byte-identical to a pure MVP writer.
 
     @internal
 */
@@ -60,6 +64,9 @@ public:
         i64 = 0x7E,
         f32 = 0x7D,
         f64 = 0x7C
+#if defined (__wasm_simd128__)
+        , v128 = 0x7B
+#endif
     };
 
     //==============================================================================
@@ -225,6 +232,29 @@ public:
     /** Appends `unreachable`. */
     void unreachable();
 
+#if defined (__wasm_simd128__)
+    //==============================================================================
+    // SIMD instructions (0xFD prefix, available with -msimd128)
+
+    /** Appends a 0xFD-prefixed SIMD instruction with the given subopcode. */
+    void simdOp (uint32_t subopcode);
+
+    /** Appends a SIMD memory load (e.g. `v128.load`) with a memarg. */
+    void simdLoad (uint32_t subopcode, uint32_t alignLog2, uint32_t offset);
+
+    /** Appends a SIMD memory store (e.g. `v128.store`) with a memarg. */
+    void simdStore (uint32_t subopcode, uint32_t alignLog2, uint32_t offset);
+
+    /** Appends `v128.const` with a raw 16-byte lane payload. */
+    void v128Const (const uint8_t data[16]);
+
+    /** Appends `i8x16.shuffle` with a 16-byte lane mask. */
+    void i8x16Shuffle (const uint8_t mask[16]);
+
+    /** Appends `f32x4.extract_lane <lane>`. */
+    void f32x4ExtractLane (uint32_t lane);
+#endif
+
     //==============================================================================
     // Result
 
@@ -382,6 +412,36 @@ public:
     static constexpr uint8_t opI64Store = 0x37;
     static constexpr uint8_t opF32Store = 0x38;
     static constexpr uint8_t opF64Store = 0x39;
+
+#if defined (__wasm_simd128__)
+    // SIMD (Table D, 0xFD prefix; subopcodes per the WebAssembly SIMD spec)
+    static constexpr uint8_t simdPrefix = 0xFD;
+
+    // Memory
+    static constexpr uint32_t opV128Load = 0x00;
+    static constexpr uint32_t opV128Store = 0x0B;
+
+    // Lane manipulation
+    static constexpr uint32_t opI8x16Shuffle = 0x0D;
+    static constexpr uint32_t opF32x4Splat = 0x13;
+    static constexpr uint32_t opF32x4ExtractLane = 0x1F;
+
+    // Rounding
+    static constexpr uint32_t opF32x4Ceil = 0x67;
+    static constexpr uint32_t opF32x4Floor = 0x68;
+    static constexpr uint32_t opF32x4Nearest = 0x6A;
+
+    // Float arithmetic (f32x4)
+    static constexpr uint32_t opF32x4Abs = 0xE0;
+    static constexpr uint32_t opF32x4Neg = 0xE1;
+    static constexpr uint32_t opF32x4Sqrt = 0xE3;
+    static constexpr uint32_t opF32x4Add = 0xE4;
+    static constexpr uint32_t opF32x4Sub = 0xE5;
+    static constexpr uint32_t opF32x4Mul = 0xE6;
+    static constexpr uint32_t opF32x4Div = 0xE7;
+    static constexpr uint32_t opF32x4Min = 0xE8;
+    static constexpr uint32_t opF32x4Max = 0xE9;
+#endif
 
     //==============================================================================
     // Section ids

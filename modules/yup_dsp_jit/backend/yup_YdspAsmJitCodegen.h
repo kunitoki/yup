@@ -115,6 +115,11 @@ protected:
         element index cannot be scaled in the addressing mode at all. */
     virtual YdspMem emitVectorStateMem (int base, int indexValue) = 0;
 
+    /** Builds the effective address of a packed float32 stream access through
+        the pre-loaded channel base register. Same rationale as
+        emitVectorStateMem(): AArch64 cannot scale a Q-register access. */
+    virtual YdspMem emitVectorStreamMem (const YdspGp& base, int indexValue) = 0;
+
     /** Called before each block is emitted, so a target can drop any addressing
         it memoized for the block just finished. */
     virtual void beginBlock (int blockIndex) { (void) blockIndex; }
@@ -224,129 +229,25 @@ protected:
     virtual void branchIfZero (const YdspGp& cond, const asmjit::Label& target) = 0;
     virtual void branchIfNotZero (const YdspGp& cond, const asmjit::Label& target) = 0;
 
+    virtual YdspFp newFp (const char* name) = 0;
+    virtual YdspFp newFp64 (const char* name) = 0;
+    virtual YdspFp newFpVector (const char* name) = 0;
+    virtual YdspFp newFp128 (const char* name) = 0;
+
     //==============================================================================
     // Shared helpers (architecture-independent)
 
-    YdspFp newFp (const char* name)
-    {
-#if ASMJIT_ARCH_X86
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x1, name);
-#else
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32, name);
-#endif
-    }
+    bool isVectorValue (int value) const noexcept;
+    YdspFp newFpOfType (YdspValueType type, const char* name);
+    asmjit::Reg newRegFor (const std::vector<YdspValueType>& types, const YdspIrInst& inst);
+    YdspGp gp (int value) const;
+    YdspFp fp (int value) const;
+    void moveGp (const YdspGp& dst, const YdspGp& src);
 
-    YdspFp newFp64 (const char* name)
-    {
-#if ASMJIT_ARCH_X86
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64x1, name);
-#else
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64, name);
-#endif
-    }
-
-    YdspFp newFpOfType (YdspValueType type, const char* name)
-    {
-        return type == YdspValueType::float64Type ? newFp64 (name) : newFp (name);
-    }
-
-    YdspFp newFpVector (const char* name)
-    {
-#if ASMJIT_ARCH_X86
-        if (activeVectorWidth == 16)
-            return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x16, name);
-
-        if (activeVectorWidth == 8)
-            return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x8, name);
-#endif
-
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
-    }
-
-    YdspFp newFp128 (const char* name)
-    {
-#if ASMJIT_ARCH_X86
-        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
-#else
-        return newFpVector (name);
-#endif
-    }
-
-    /** True when the vectoriser widened this value id. */
-    bool isVectorValue (int value) const noexcept
-    {
-        return value >= 0
-            && static_cast<size_t> (value) < valueLanes.size()
-            && valueLanes[static_cast<size_t> (value)] > 1;
-    }
-
-    asmjit::Reg newRegFor (const std::vector<YdspValueType>& types, const YdspIrInst& inst)
-    {
-        const auto type = types[static_cast<size_t> (inst.result)];
-
-        if (isVectorValue (inst.result))
-            return newFpVector ("v");
-
-        if (type == YdspValueType::float64Type)
-            return newFp64 ("v");
-
-        if (type == YdspValueType::float32Type)
-            return newFp ("v");
-
-        if (type == YdspValueType::int64Type)
-            return cc->new_gp64 ("v");
-
-        return cc->new_gp32 ("v");
-    }
-
-    YdspGp gp (int value) const
-    {
-        return regs[static_cast<size_t> (value)].as<YdspGp>();
-    }
-
-    YdspFp fp (int value) const
-    {
-        return regs[static_cast<size_t> (value)].as<YdspFp>();
-    }
-
-    void moveGp (const YdspGp& dst, const YdspGp& src)
-    {
-        cc->mov (dst, src);
-    }
-
-    /** Returns a read-only constant-pool operand holding `bits` (4 or 8 bytes).
-
-        AsmJit deduplicates identical entries, so repeating a constant costs
-        nothing, and a constant consumed straight from memory occupies no
-        register - which matters because LICM hoists every constant to the entry
-        block, where it would otherwise stay live across the whole kernel. */
     YdspMem rawConstMem (uint64_t bits, bool is64);
-
-    /** Returns a 16-byte-aligned constant-pool operand with `bits` replicated
-        across the whole 128-bit lane.
-
-        The packed SSE bitwise ops (andps/xorps/...) only take an aligned m128
-        operand, so a sign mask consumed directly by one of them cannot come
-        from a 4- or 8-byte pool entry. */
     YdspMem packedConstMem (uint64_t bits, bool is64);
-
-    /** Returns a constant-pool operand with a float32 bit pattern in every
-        lane of the active vector width. */
     YdspMem vectorConstMem (uint32_t bits);
 
-    /** Works out which `selectB`s can consume a comparison's flags directly.
-
-        A comparison normally has to land in a general-purpose register as 0/1,
-        which the select then turns back into flags - `fcmp`, `cset`, `cmp`,
-        `fcsel` where two instructions would do, and two extra links on a
-        dependency chain that in a recurrence is the critical path.
-
-        The comparison is re-emitted immediately before the select rather than
-        moved, so no instruction in between can clobber the flags. That is only
-        equivalent while the comparison's operands still hold the same values,
-        so a candidate needs: both defined once, the comparison used only by
-        this select, both in the same block, and no write to either operand in
-        between. */
     void planCompareSelectFusion (const YdspIrFunction& fn);
 
     void loadFloatConst (const YdspFp& dst, double value, YdspValueType type);
@@ -358,47 +259,8 @@ protected:
     void emitLibmBinary (float (*f32fn) (float, float), double (*f64fn) (double, double), const YdspIrInst& inst);
     void emitEmitEvent (const YdspIrInst& inst);
 
-    // Byte offset of a scalar state slot within the scalar segment (the layout
-    // head). Scalars of every type live here, so scalar accesses stay small
-    // regardless of how large the array state grows. float64/int64 slots may
-    // end up 4-mod-8 unaligned after odd f32/i32 counts; both targets permit
-    // unaligned scalar loads/stores.
-    int stateScalarBase (YdspValueType type, int slot) const
-    {
-        switch (type)
-        {
-            case YdspValueType::float32Type:
-                return slot * 4;
-            case YdspValueType::float64Type:
-                return float64ScalarOffset + slot * 8;
-            case YdspValueType::int32Type:
-                return int32ScalarOffset + slot * 4;
-            case YdspValueType::int64Type:
-                return int64ScalarOffset + slot * 8;
-            default:
-                return slot * 4;
-        }
-    }
-
-    // Byte offset of an array element index within the array segment (after
-    // all scalars, addressed from stateArraysReg). Per-type array regions are
-    // laid out back to back, so element indices stay per-type 0-based.
-    int stateArrayBase (YdspValueType type, int element) const
-    {
-        switch (type)
-        {
-            case YdspValueType::float32Type:
-                return element * 4;
-            case YdspValueType::float64Type:
-                return float64ArrayOffset + element * 8;
-            case YdspValueType::int32Type:
-                return int32ArrayOffset + element * 4;
-            case YdspValueType::int64Type:
-                return int64ArrayOffset + element * 8;
-            default:
-                return element * 4;
-        }
-    }
+    int stateScalarBase (YdspValueType type, int slot) const;
+    int stateArrayBase (YdspValueType type, int element) const;
 
     //==============================================================================
     // Shared state

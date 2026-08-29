@@ -69,6 +69,35 @@ bool YdspAsmJitCodegenX64::isDoubleFloat (const YdspFp& reg) const
 }
 
 //==============================================================================
+// Register allocation
+
+YdspFp YdspAsmJitCodegenX64::newFp (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x1, name);
+}
+
+YdspFp YdspAsmJitCodegenX64::newFp64 (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat64x1, name);
+}
+
+YdspFp YdspAsmJitCodegenX64::newFp128 (const char* name)
+{
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
+}
+
+YdspFp YdspAsmJitCodegenX64::newFpVector (const char* name)
+{
+    if (activeVectorWidth == 16)
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x16, name);
+
+    if (activeVectorWidth == 8)
+        return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x8, name);
+
+    return cc->new_reg<YdspFp> (asmjit::TypeId::kFloat32x4, name);
+}
+
+//==============================================================================
 // Memory addressing
 
 YdspMem YdspAsmJitCodegenX64::memPtr (const YdspGp& base, int32_t offset) const
@@ -96,6 +125,11 @@ YdspMem YdspAsmJitCodegenX64::emitVectorStateMem (int base, int indexValue)
     // A packed access reaches the same element, so the addressing mode is the
     // one a scalar float32 access uses - only the operand width differs.
     return asmjit::x86::ptr (stateArraysReg, gp (indexValue), 2u, base);
+}
+
+YdspMem YdspAsmJitCodegenX64::emitVectorStreamMem (const YdspGp& base, int indexValue)
+{
+    return asmjit::x86::ptr (base, gp (indexValue), 2u, 0);
 }
 
 //==============================================================================

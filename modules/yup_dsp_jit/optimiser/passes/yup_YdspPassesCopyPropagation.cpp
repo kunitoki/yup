@@ -40,10 +40,6 @@ void YdspOptimizer::copyPropagation (YdspIrFunction& fn)
             const int dst = mov.result;
             const int src = mov.a;
 
-            // Scan forward in this block; propagate only while neither src nor
-            // dst is redefined. Stopping at dst redefinition matters for
-            // pass-by-value parameter copies (`mov t, phase` ... `mov t, t2`):
-            // uses of t after the reassignment refer to t2, not to phase.
             bool srcRedefined = false;
 
             for (size_t j = i + 1; j < block.insts.size(); ++j)
@@ -59,9 +55,6 @@ void YdspOptimizer::copyPropagation (YdspIrFunction& fn)
                 if (use.result == dst)
                     break;
 
-                // Only rewrite fields that hold value ids: for the param/
-                // state loads the `a` field is a slot index, which must not
-                // be conflated with a mov's value id (see isValueIdOperand).
                 if (isValueIdOperand (use.op, 0) && use.a == dst)
                     use.a = src;
                 if (isValueIdOperand (use.op, 1) && use.b == dst)
@@ -72,8 +65,6 @@ void YdspOptimizer::copyPropagation (YdspIrFunction& fn)
 
             if (! srcRedefined && block.termCond == dst)
                 block.termCond = src;
-
-            // The mov itself is left in place; DCE removes it if dst is unused elsewhere.
         }
     }
 }

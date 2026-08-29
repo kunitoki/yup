@@ -29,8 +29,6 @@ namespace yup
 struct YdspIrProgram
 {
     std::vector<std::unique_ptr<YdspIrFunction>> kernels;
-
-    // Event-handler functions, one per analyzed handler, in program order.
     std::vector<std::unique_ptr<YdspIrFunction>> eventHandlers;
 
     const YdspAnalyzedProgram* analyzed = nullptr;
@@ -49,12 +47,15 @@ struct YdspIrProgram
 class YdspOptimizer
 {
 public:
+    //==============================================================================
     /** Constructs an optimizer reporting into the given diagnostics. */
     explicit YdspOptimizer (YdspDiagnostics& diagnostics);
 
+    //==============================================================================
     /** Builds and optimises the IR for the given analyzed program. */
     std::unique_ptr<YdspIrProgram> build (const YdspAnalyzedProgram& program);
 
+    //==============================================================================
     /** Enables the bounded-loop vectoriser (off by default).
 
         Only the native backends lower `lanes > 1`, so the caller enables this
@@ -147,9 +148,7 @@ public:
     */
     void setTargetHasPackedFusedMultiplyAdd (bool isSupported) noexcept { targetHasPackedFusedMultiplyAdd = isSupported; }
 
-    /** Populates the execution report from an optimised IR program. */
-    static void buildReport (const YdspIrProgram& program, YdspExecutionReport& report);
-
+    //==============================================================================
     /** Runs the constant-folding pass over the given function.
 
         Folds instructions whose operands are all compile-time constants into
@@ -290,6 +289,9 @@ public:
         @see setTargetHasFusedMultiplyAdd
     */
     void lowerFusedMultiplyAdd (YdspIrFunction& fn);
+
+    /** Populates the execution report from an optimised IR program. */
+    static void buildReport (const YdspIrProgram& program, YdspExecutionReport& report);
 
 private:
     void runPasses (YdspIrFunction& fn);

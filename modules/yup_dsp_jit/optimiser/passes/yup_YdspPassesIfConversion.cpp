@@ -27,10 +27,6 @@ namespace yup
 namespace
 {
 
-// Executing a then-body unconditionally is only sound for instructions that
-// cannot fault, trap or be observed: no memory access (a guarded index may be
-// out of range when the guard is false), no call, and nothing expensive enough
-// that paying for it on both paths would be a loss.
 bool isSpeculatable (YdspIrOp op) noexcept
 {
     switch (op)
@@ -110,7 +106,6 @@ bool isMove (YdspIrOp op) noexcept
 
 void YdspOptimizer::ifConversion (YdspIrFunction& fn)
 {
-    // Executing both paths is only a win while the body is short.
     constexpr size_t maxSpeculatedInstructions = 8;
 
     if (fn.blocks.size() < 3)
@@ -121,10 +116,6 @@ void YdspOptimizer::ifConversion (YdspIrFunction& fn)
         const auto thenIndex = static_cast<int> (c) + 1;
         const auto joinIndex = static_cast<int> (c) + 2;
 
-        // The shape lowerStatement() emits for an else-less `if` whose body is
-        // a single block: branch into the next block, or straight to the one
-        // after it. Anything larger (an else arm, a nested if or loop) puts the
-        // join further along and is left alone.
         if (fn.blocks[c].term != YdspIrTerm::branchIf
             || fn.blocks[c].termCond < 0
             || fn.blocks[c].termTarget != thenIndex
@@ -146,8 +137,6 @@ void YdspOptimizer::ifConversion (YdspIrFunction& fn)
         }))
             continue;
 
-        // Construction only ever branches into the body from here, but a stray
-        // edge would make the merge unsound, so check rather than assume.
         const auto reachedElsewhere = [&fn, thenIndex, c]
         {
             for (size_t b = 0; b < fn.blocks.size(); ++b)
@@ -175,10 +164,6 @@ void YdspOptimizer::ifConversion (YdspIrFunction& fn)
 
         for (auto& inst : merged)
         {
-            // An assignment becomes `reg = cond ? new : reg`. Keeping the
-            // original order matters: a later instruction in the body that
-            // reads the register sees the conditionally-updated value, exactly
-            // as it would have inside the branch.
             if (isMove (inst.op) && inst.result >= 0 && inst.a >= 0)
             {
                 YdspIrInst select;
@@ -198,8 +183,6 @@ void YdspOptimizer::ifConversion (YdspIrFunction& fn)
 
         fn.blocks[static_cast<size_t> (thenIndex)].insts.clear();
 
-        // Both blocks now fall through, so no index moves and the emptied block
-        // costs nothing on either backend.
         for (const auto block : { c, static_cast<size_t> (thenIndex) })
         {
             fn.blocks[block].term = YdspIrTerm::fallthrough;

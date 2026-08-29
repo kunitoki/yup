@@ -26,13 +26,6 @@ namespace yup
 
 void YdspOptimizer::algebraicSimplification (YdspIrFunction& fn)
 {
-    // The IR is not SSA, so finding a constant that writes a register proves
-    // nothing on its own: the register may be written again before the use
-    // being simplified. `float t = 0.0; t = in * 2.0; out = t + 1.0;` binds `t`
-    // to the literal 0 and then reassigns it, and folding `t + 1.0` to `1.0`
-    // there is simply wrong. Only a register written exactly once in the whole
-    // function can be treated as its literal - the same guard constantFolding
-    // documents and relies on.
     std::unordered_map<int, int> definitionCount;
 
     for (const auto& block : fn.blocks)
@@ -49,7 +42,6 @@ void YdspOptimizer::algebraicSimplification (YdspIrFunction& fn)
             if (result < 0)
                 continue;
 
-            // We can only look at literal operands.
             auto literalOf = [&] (int id) -> const YdspIrInst*
             {
                 if (const auto count = definitionCount.find (id); count == definitionCount.end() || count->second != 1)

@@ -235,6 +235,78 @@ private:
 };
 
 //==============================================================================
+/** Why a bounded loop was widened, or left scalar, by the vectoriser.
+
+    One entry per original loop, in loop order, produced only when the
+    vectoriser actually ran for the kernel (the automatic/aggressive tiers on
+    a target with a packed float unit). `widened` means the loop now runs at
+    `laneCount` float32 lanes; any other value is the exact reason the loop
+    stayed scalar - the "why is this loop scalar?" answer a host can show or
+    log directly.
+*/
+enum class YdspVectorizationReason
+{
+    widened,                     //!< the loop was widened to `laneCount` lanes
+    notVectorizable,             //!< malformed IR; no more specific cause is known
+    unsupportedLoopBound,        //!< the bound is neither a constant nor blockSize
+    multiBlockBody,              //!< the body contains an `if` or a nested loop
+    nonConstantStart,            //!< the loop start is not a compile-time constant
+    nonzeroStart,                //!< a blockSize loop must start at 0
+    shortTripCount,              //!< the loop span is shorter than one vector
+    missingHeaderCompare,        //!< the header does not hold exactly one `i < bound`
+    unrecognizedInductionUpdate, //!< the body does not end with `next = i + 1; i = next`
+    inductionUsedAsValue,        //!< the loop variable is used outside an array/stream index
+    indirectAccess,              //!< an element is reached through a non-loop-variable index
+    unrecognizedAccumulation,    //!< a carried value is not of the form `acc = acc + x`
+    loopCarriedValue,            //!< the body writes a value that escapes the loop
+    unsupportedWidenedOp,        //!< a select, comparison, transcendental or rounding consumes a widened value
+    unsupportedWidenedType,      //!< a widened value is not float32
+    stateWriteInBody,            //!< the body writes scalar state, a param or an event field
+    invariantStreamStore,        //!< a stream store does not go through the loop variable
+    emitInBody,                  //!< the body emits an output event
+    nothingToWiden,              //!< the body has no array or stream access
+    runtimeBoundWithoutStreams   //!< a blockSize loop needs a stream access at the loop variable
+};
+
+//==============================================================================
+/** The outcome of trying to widen one bounded loop. */
+struct YdspVectorizationResult
+{
+    /** The loop's index into YdspIrFunction::loops (stable across the pass). */
+    int loopId = -1;
+
+    /** widened, or the exact reason the loop stayed scalar. */
+    YdspVectorizationReason reason = YdspVectorizationReason::notVectorizable;
+
+    /** The widened lane count when reason == widened, else 1. */
+    int laneCount = 1;
+
+    /** True when the loop was widened to SIMD lanes. */
+    bool widened() const noexcept
+    {
+        return reason == YdspVectorizationReason::widened;
+    }
+
+    /** Renders "loop 2 was widened to 4 lanes" or
+        "loop 2 was not vectorized: <reason text>". */
+    String describe() const;
+};
+
+//==============================================================================
+/** The vectoriser's outcome for one kernel: one entry per original loop. */
+struct YdspVectorizationReport
+{
+    /** Per-loop outcomes, parallel to the kernel's original loops. */
+    std::vector<YdspVectorizationResult> loops;
+
+    /** The number of loops that were widened. */
+    int countWidened() const noexcept;
+
+    /** The distinct "stayed scalar" reasons, deduplicated, as human text. */
+    StringArray rejectionReasons() const;
+};
+
+//==============================================================================
 /** The optimiser's worst-case execution analysis for one generated kernel.
 
     After optimisation the compiler proves that every loop in the kernel is
@@ -267,6 +339,12 @@ struct YdspKernelReport
         `vectorized` is not bit-identical to the scalar one. */
     bool vectorized = false;
     int vectorWidth = 1;
+
+    /** Per-loop widening outcomes: `widened` or the exact reason each *original*
+        loop stayed scalar - the loops that existed before the vectoriser ran,
+        in their order (synthetic scalar tail loops the vectoriser appends are
+        not reported). Empty when the vectoriser did not run for this kernel. */
+    yup::YdspVectorizationReport loopVectorization;
 
     /** True when at least one loop was fully unrolled. `boundedIterationCount`
         above is unaffected - it still answers "how many iterations could this

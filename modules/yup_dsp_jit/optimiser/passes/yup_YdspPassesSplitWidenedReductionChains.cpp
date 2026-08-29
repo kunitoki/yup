@@ -26,16 +26,8 @@ namespace yup
 
 void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
 {
-    // Below four links there is nothing to halve: three adds become two plus a
-    // combine, which is the same depth for one more instruction. It is also
-    // what stops the repeated halving below, since n links leave n/2 + 1.
     constexpr size_t minChainLength = 4;
 
-    // Only a widened accumulator is touched. Its association has *already* been
-    // changed by the vectoriser - lane j sums elements j, j+4, j+8 ... and the
-    // lanes are folded pairwise - and that is documented as not bit-exact. A
-    // scalar chain carries no such licence, so splitting one would newly break
-    // a promise the language makes.
     if (! fn.vectorized || fn.valueLanes.empty())
         return;
 
@@ -49,13 +41,10 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
         return id;
     };
 
-    // One link of the chain. The vectoriser leaves an accumulation as the pair
-    // `addF t, acc, x` / `movF acc, t` rather than a self-add, so a link is two
-    // instructions in general and one when something upstream has collapsed it.
     struct Link
     {
         size_t addIndex = 0;
-        size_t moveIndex = 0; // == addIndex when the add writes the accumulator
+        size_t moveIndex = 0;
     };
 
     for (auto& block : fn.blocks)
@@ -67,8 +56,6 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
             if (insts[start].op != YdspIrOp::addF)
                 continue;
 
-            // The accumulator is whichever operand the add reads and, one way
-            // or another, writes back.
             int accumulator = -1;
 
             for (const auto candidate : { insts[start].a, insts[start].b })
@@ -88,23 +75,19 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
             if (accumulator < 0)
                 continue;
 
-            // Collect the run of accumulations that begins here.
             std::vector<Link> links;
 
             for (size_t i = start; i < insts.size(); ++i)
             {
                 const auto& inst = insts[i];
 
-                // Reading the accumulator part-way through would observe a
-                // partial sum that the split no longer produces. A slot index
-                // is not a value id, so it cannot be that read.
                 const auto reads =
                     (isValueIdOperand (inst.op, 0) && inst.a == accumulator)
                     || (isValueIdOperand (inst.op, 1) && inst.b == accumulator)
                     || (isValueIdOperand (inst.op, 2) && inst.c == accumulator);
 
                 if (! reads && inst.result != accumulator)
-                    continue; // ordinary body work between two links
+                    continue;
 
                 if (inst.op == YdspIrOp::addF && inst.result == accumulator
                     && (inst.a == accumulator || inst.b == accumulator))
@@ -120,20 +103,17 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
                     && insts[i + 1].a == inst.result)
                 {
                     links.push_back ({ i, i + 1 });
-                    ++i; // the move is part of this link
+                    ++i;
                     continue;
                 }
 
-                break; // anything else ends the chain
+                break;
             }
 
             if (links.size() < minChainLength)
                 continue;
 
             // ---- Rewrite ----
-            // Odd links move to a second accumulator, so the two run side by
-            // side and the serial depth halves. Every link stays where it was,
-            // so each addend is still computed before the add that reads it.
             const auto second = newAccumulator (accumulator);
             bool startedSecond = false;
 
@@ -144,8 +124,6 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
 
                 if (! startedSecond)
                 {
-                    // The second accumulator has no zero to start from - it
-                    // simply *is* its first addend.
                     add.op = YdspIrOp::movF;
                     add.a = addend;
                     add.b = -1;
@@ -171,19 +149,6 @@ void YdspOptimizer::splitWidenedReductionChains (YdspIrFunction& fn)
 
             insts.insert (insts.begin() + static_cast<std::ptrdiff_t> (links.back().moveIndex + 1), combine);
             fn.reductionSplit = true;
-
-            // Deliberately not skipping past the chain. Two accumulators in one
-            // loop interleave their links, so jumping to the end of the first
-            // one's chain would step over every start position of the second.
-            //
-            // Rescanning also lets a long chain halve more than once. The scan
-            // resumes one instruction along, so it lands inside the chain just
-            // rewritten and picks up the *suffix* still on this accumulator:
-            // for eight links that is the last three even ones plus the
-            // combine, four in all, which halves again. Eight links therefore
-            // end at depth four, not at the depth a balanced tree would reach -
-            // restarting the block after each split would go further, and is
-            // untried. It terminates because each pass leaves a shorter suffix.
         }
     }
 }

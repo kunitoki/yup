@@ -40,16 +40,8 @@ int YdspIrBuilder::lowerFunctionCall (const YdspAnalyzedFunc& func, const YdspEx
         return emitConstF (0.0);
     }
 
-    // Save local variable state so parameters don't leak into the caller.
     std::unordered_map<String, int> savedLocals = locals;
 
-    // Bind arguments to parameters as local variables. Parameters are
-    // pass-by-value: each argument is copied into a fresh value. IR locals
-    // are mutable single-register slots, so aliasing the argument (coerceTo
-    // returns it unchanged when the types already match) would let the
-    // function body clobber the caller's local - e.g. `t = t / dt` inside
-    // `polyBlep` corrupted the caller's `phase`, which is stored back to
-    // state at the end of the block.
     for (size_t i = 0; i < decl.params.size() && i < expr.children.size(); ++i)
     {
         const auto argValue = lowerExpr (*expr.children[static_cast<size_t> (i)]);
@@ -62,13 +54,11 @@ int YdspIrBuilder::lowerFunctionCall (const YdspAnalyzedFunc& func, const YdspEx
         locals[paramName] = paramValue;
     }
 
-    // Lower the function body, capturing any return value.
     returnValue = -1;
     lowerFunctionBody (decl.body);
 
     const int result = returnValue >= 0 ? returnValue : emitConstF (0.0);
 
-    // Restore caller locals.
     locals = std::move (savedLocals);
 
     functionsBeingInlined.erase (decl.name);
@@ -90,12 +80,11 @@ void YdspIrBuilder::lowerFunctionBody (const std::vector<std::unique_ptr<YdspStm
             if (stmt->returnExpr != nullptr)
                 returnValue = lowerExpr (*stmt->returnExpr);
 
-            return; // Stop execution at the return
+            return;
         }
 
         lowerStatement (*stmt);
 
-        // If a return was encountered in a nested statement, stop.
         if (returnValue >= 0)
             return;
     }

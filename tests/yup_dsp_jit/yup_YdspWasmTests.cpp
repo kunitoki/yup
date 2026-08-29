@@ -242,11 +242,236 @@ bool containsSubsequence (const std::vector<uint8_t>& haystack, const std::vecto
     return false;
 }
 
+#if defined (__wasm_simd128__)
+// A minimal stack-balance validator over the emitted code section. Walks the
+// instruction bytes, consumes each opcode's immediates and tracks the value
+// stack depth, asserting it never underflows and ends balanced. This is what
+// catches a missing-operand lowering (e.g. a binary op fed one value) on the
+// desktop, where no wasm engine is available to reject the module at
+// instantiation.
+void expectBalancedStack (const std::vector<uint8_t>& code, const std::vector<WasmSection>& sections)
+{
+    std::vector<WasmFuncType> types;
+
+    for (const auto& section : sections)
+        if (section.id == YdspWasmEmitter::sectionType)
+            types = parseFuncTypes (section);
+
+    // Function index space: function imports first (in import order), then
+    // defined functions (function-section order).
+    std::vector<int> arity;
+
+    for (const auto& section : sections)
+        if (section.id == YdspWasmEmitter::sectionImport)
+            for (const auto& import : parseImports (section))
+                if (import.kind == YdspWasmEmitter::importKindFunc && import.typeIndex < types.size())
+                    arity.push_back (static_cast<int> (types[import.typeIndex].params.size()));
+
+    for (const auto& section : sections)
+        if (section.id == YdspWasmEmitter::sectionFunction)
+        {
+            size_t pos = 0;
+            const auto count = readLebU (section.payload, pos);
+
+            for (uint32_t i = 0; i < count && pos < section.payload.size(); ++i)
+            {
+                const auto typeIndex = readLebU (section.payload, pos);
+                arity.push_back (typeIndex < types.size() ? static_cast<int> (types[typeIndex].params.size()) : 0);
+            }
+        }
+
+    int depth = 0;
+    size_t pos = 0;
+
+    const auto byte = [&] { return code[pos++]; };
+    const auto lebU = [&] { return readLebU (code, pos); };
+
+    const auto delta = [&] (int d)
+    {
+        depth += d;
+        EXPECT_GE (depth, 0) << "value stack underflow at byte offset " << pos;
+    };
+
+    while (pos < code.size())
+    {
+        const auto op = byte();
+
+        switch (op)
+        {
+            case 0x00: // unreachable
+            case 0x01: // nop
+            case 0x05: // else
+            case 0x0B: // end
+            case 0x0F: // return (void kernel)
+                break;
+
+            case 0x02: // block
+            case 0x03: // loop
+                (void) byte(); // blocktype
+                break;
+
+            case 0x04: // if
+                (void) byte(); // blocktype
+                delta (-1);    // condition
+                break;
+
+            case 0x0C: // br
+                (void) lebU();
+                break;
+
+            case 0x0D: // br_if
+                (void) lebU();
+                delta (-1);
+                break;
+
+            case 0x10: // call
+            {
+                const auto index = lebU();
+                delta (index < arity.size() ? -arity[index] : 0);
+                break;
+            }
+
+            case 0x1A: // drop
+                delta (-1);
+                break;
+
+            case 0x1B: // select (untyped)
+                delta (-2);
+                break;
+
+            case 0x20: // local.get
+            case 0x21: // local.set
+            case 0x22: // local.tee
+                (void) lebU();
+                delta (op == 0x20 ? 1 : (op == 0x21 ? -1 : 0));
+                break;
+
+            case 0x41: // i32.const
+            case 0x42: // i64.const
+                (void) lebU();
+                delta (+1);
+                break;
+
+            case 0x43: // f32.const
+                pos += 4;
+                delta (+1);
+                break;
+
+            case 0x44: // f64.const
+                pos += 8;
+                delta (+1);
+                break;
+
+            case 0x28: case 0x29: case 0x2A: case 0x2B: // loads
+            case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+            case 0x30: case 0x31: case 0x32: case 0x33: case 0x34: case 0x35:
+                (void) lebU(); // align
+                (void) lebU(); // offset
+                break; // pop the address, push the value: net 0
+
+            case 0x36: case 0x37: case 0x38: case 0x39: // stores
+            case 0x3A: case 0x3B: case 0x3C: case 0x3D: case 0x3E:
+                (void) lebU();
+                (void) lebU();
+                delta (-2); // pop the address and the value
+                break;
+
+            case 0x45: case 0x50: // eqz
+            case 0x67: case 0x68: case 0x69: // i32 clz/ctz/popcnt
+            case 0x79: case 0x7A: case 0x7B: // i64 clz/ctz/popcnt
+            case 0x8B: case 0x8C: case 0x8D: case 0x8E: case 0x8F: case 0x90: case 0x91: // f32 unary
+            case 0x99: case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F: // f64 unary
+            case 0xA7: case 0xAC: case 0xB6: case 0xBB: // wrap/extend/demote/promote
+            case 0xBC: case 0xBD: case 0xBE: case 0xBF: // reinterpret
+            case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: // sign-extension
+            case 0xA8: case 0xA9: case 0xAA: case 0xAB: // i32.trunc_f*
+            case 0xAE: case 0xAF: case 0xB0: case 0xB1: // i64.trunc_f*
+            case 0xB2: case 0xB3: case 0xB4: case 0xB5: // f32.convert_i*
+            case 0xB7: case 0xB8: case 0xB9: case 0xBA: // f64.convert_i*
+                break; // unary: pop 1 push 1
+
+            case 0x46: case 0x47: case 0x48: case 0x49: case 0x4A: case 0x4B:
+            case 0x4C: case 0x4D: case 0x4E: case 0x4F: // i32 comparisons
+            case 0x51: case 0x52: case 0x53: case 0x54: case 0x55: case 0x56:
+            case 0x57: case 0x58: case 0x59: case 0x5A: // i64 comparisons
+            case 0x5B: case 0x5C: case 0x5D: case 0x5E: case 0x5F: case 0x60: // f32 comparisons
+            case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: // f64 comparisons
+            case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F: case 0x70: // i32 arith
+            case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x76:
+            case 0x77: case 0x78: // i32 bitwise/shifts/rotates
+            case 0x7C: case 0x7D: case 0x7E: case 0x7F: case 0x80: case 0x81: case 0x82: // i64 arith
+            case 0x83: case 0x84: case 0x85: case 0x86: case 0x87: case 0x88:
+            case 0x89: case 0x8A: // i64 bitwise/shifts/rotates
+            case 0x92: case 0x93: case 0x94: case 0x95: case 0x96: case 0x97: case 0x98: // f32 binary
+            case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: case 0xA6: // f64 binary
+                delta (-1); // binary: pop 2 push 1
+                break;
+
+            case YdspWasmEmitter::simdPrefix:
+            {
+                const auto sub = lebU();
+
+                switch (sub)
+                {
+                    case YdspWasmEmitter::opV128Load:
+                        (void) lebU();
+                        (void) lebU();
+                        break; // pop the address, push the value: net 0
+
+                    case YdspWasmEmitter::opV128Store:
+                        (void) lebU();
+                        (void) lebU();
+                        delta (-2); // pop the address and the value
+                        break;
+
+                    case YdspWasmEmitter::opI8x16Shuffle:
+                        pos += 16; // lane mask
+                        delta (-1); // pop 2 push 1
+                        break;
+
+                    case YdspWasmEmitter::opF32x4ExtractLane:
+                        (void) byte(); // lane index
+                        break; // pop 1 push 1
+
+                    case YdspWasmEmitter::opF32x4Splat:
+                    case YdspWasmEmitter::opF32x4Ceil:
+                    case YdspWasmEmitter::opF32x4Floor:
+                    case YdspWasmEmitter::opF32x4Nearest:
+                    case YdspWasmEmitter::opF32x4Abs:
+                    case YdspWasmEmitter::opF32x4Neg:
+                    case YdspWasmEmitter::opF32x4Sqrt:
+                        break; // unary
+
+                    case YdspWasmEmitter::opF32x4Add:
+                    case YdspWasmEmitter::opF32x4Sub:
+                    case YdspWasmEmitter::opF32x4Mul:
+                    case YdspWasmEmitter::opF32x4Div:
+                    case YdspWasmEmitter::opF32x4Min:
+                    case YdspWasmEmitter::opF32x4Max:
+                        delta (-1);
+                        break;
+
+                    default:
+                        break; // subopcode the codegen never emits
+                }
+
+                break;
+            }
+
+            default:
+                break; // opcode the codegen never emits
+        }
+    }
+
+    EXPECT_EQ (0, depth) << "value stack not balanced at end of code section";
+}
+#endif
+
 //==============================================================================
 // Runs the full YDSP pipeline (lexer -> parser -> analyzer -> optimizer) and
 // emits the wasm module for the named kernel.
 
-std::vector<uint8_t> compileWasm (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics)
+std::vector<uint8_t> compileWasm (StringRef source, const char* kernelName, YdspDiagnostics& diagnostics, bool enableVectorization = false)
 {
     YdspLexer lexer (source, diagnostics);
     auto tokens = lexer.tokenize();
@@ -264,6 +489,13 @@ std::vector<uint8_t> compileWasm (StringRef source, const char* kernelName, Ydsp
         return {};
 
     YdspOptimizer optimizer (diagnostics);
+
+    if (enableVectorization)
+    {
+        optimizer.setVectorizationEnabled (true);
+        optimizer.setVectorWidth (4);
+    }
+
     auto ir = optimizer.build (*analyzed);
 
     if (ir == nullptr || diagnostics.hasErrors())
@@ -344,6 +576,32 @@ constexpr const char* ifElseSource = R"YDSP(
 
 constexpr const char* forLoopSource = R"YDSP(
     processor P { input stream in; output stream out; process block { for i in 0..blockSize { out[i] = in[i] * 2; } } }
+    graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+)YDSP";
+
+// The vectoriser widens this constant-bound bank loop to four f32 lanes; the
+// wasm backend emits f32x4 only when compiled with -msimd128.
+constexpr const char* wasmVectorBankSource = R"YDSP(
+    let modes = 8;
+
+    processor P {
+        input stream in;
+        output stream out;
+
+        state float z[modes];
+
+        process {
+            float sum = 0.0;
+
+            for i in 0..modes {
+                z[i] = z[i] * 0.5 + in;
+                sum = sum + z[i];
+            }
+
+            out = sum;
+        }
+    }
+
     graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
 )YDSP";
 
@@ -770,3 +1028,84 @@ TEST (YdspWasmTests, DoubleKernelDeclaresF64Locals)
     const auto& payload = sections[4].payload;
     EXPECT_NE (payload.end(), std::find (payload.begin(), payload.end(), 0x7C));
 }
+
+//==============================================================================
+// SIMD lowering: the vectoriser widens the constant-bound bank loop to four
+// f32 lanes. Without -msimd128 the wasm backend rejects a widened function;
+// with it, the module carries f32x4 opcodes.
+
+#if ! defined (__wasm_simd128__)
+TEST (YdspWasmTests, VectorizedKernelIsRejectedWithoutSimd)
+{
+    YdspDiagnostics diagnostics;
+    auto bytes = compileWasm (wasmVectorBankSource, "P", diagnostics, true);
+
+    EXPECT_TRUE (bytes.empty());
+    ASSERT_TRUE (diagnostics.hasErrors());
+    EXPECT_TRUE (diagnostics.getItem (0).message.contains ("msimd128"));
+}
+#endif
+
+#if defined (__wasm_simd128__)
+TEST (YdspWasmTests, VectorizedKernelEmitsF32x4Opcodes)
+{
+    YdspDiagnostics diagnostics;
+    auto bytes = compileWasm (wasmVectorBankSource, "P", diagnostics, true);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    const auto sections = parseSections (bytes);
+    const auto code = collectCodeInstructions (sections[4]);
+
+    // The module must be stack-balanced: a missing operand would only be
+    // caught by the wasm engine at instantiation, so validate it here.
+    expectBalancedStack (code, sections);
+
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opV128Load }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opV128Store }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opF32x4Splat }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opF32x4Mul }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opF32x4Add }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opI8x16Shuffle }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::simdPrefix, YdspWasmEmitter::opF32x4ExtractLane }));
+
+    const auto text = YdspWasmCodegen::toText (bytes);
+
+    EXPECT_TRUE (text.contains ("v128.load"));
+    EXPECT_TRUE (text.contains ("v128.store"));
+    EXPECT_TRUE (text.contains ("f32x4.splat"));
+    EXPECT_TRUE (text.contains ("f32x4.mul"));
+    EXPECT_TRUE (text.contains ("f32x4.add"));
+    EXPECT_TRUE (text.contains ("i8x16.shuffle"));
+    EXPECT_TRUE (text.contains ("f32x4.extract_lane"));
+}
+
+TEST (YdspWasmTests, RejectsVectorWidthsBeyondF32x4)
+{
+    YdspDiagnostics diagnostics;
+    YdspLexer lexer (wasmVectorBankSource, diagnostics);
+    auto tokens = lexer.tokenize();
+
+    YdspParser parser (std::move (tokens), diagnostics);
+    auto program = parser.parseProgram();
+    ASSERT_NE (nullptr, program);
+
+    YdspSemanticAnalyzer analyzer (diagnostics);
+    auto analyzed = analyzer.analyze (std::move (program));
+    ASSERT_NE (nullptr, analyzed);
+
+    YdspOptimizer optimizer (diagnostics);
+    optimizer.setVectorizationEnabled (true);
+    optimizer.setVectorWidth (8); // AVX2 width; wasm SIMD is 128-bit only
+    auto ir = optimizer.build (*analyzed);
+
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+    ASSERT_TRUE (ir->kernels[0]->vectorized);
+
+    auto bytes = YdspWasmCodegen::compile (*ir->kernels[0], diagnostics);
+
+    EXPECT_TRUE (bytes.empty());
+    ASSERT_TRUE (diagnostics.hasErrors());
+    EXPECT_TRUE (diagnostics.getItem (0).message.contains ("width"));
+}
+#endif

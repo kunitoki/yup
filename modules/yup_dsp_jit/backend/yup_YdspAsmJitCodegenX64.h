@@ -40,10 +40,17 @@ namespace yup
 class YdspAsmJitCodegenX64 : public YdspAsmJitCodegenImpl
 {
 protected:
+    YdspFp newFp (const char* name) override;
+    YdspFp newFp64 (const char* name) override;
+    YdspFp newFp128 (const char* name) override;
+    YdspFp newFpVector (const char* name) override;
+
     YdspMem memPtr (const YdspGp& base, int32_t offset) const override;
     YdspMem memPtrIndexed (const YdspGp& base, const YdspGp& index, uint32_t scaleLog2, int32_t offset) const override;
+
     YdspMem emitStateMem (YdspValueType type, int base, int indexValue) override;
     YdspMem emitVectorStateMem (int base, int indexValue) override;
+    YdspMem emitVectorStreamMem (const YdspGp& base, int indexValue) override;
 
     void loadGpFromMem (const YdspGp& dst, const YdspMem& src) override;
     void storeGpToMem (const YdspMem& dst, const YdspGp& src) override;
@@ -95,18 +102,9 @@ protected:
     void branchIfNotZero (const YdspGp& cond, const asmjit::Label& target) override;
 
 private:
-    /** True when `reg` holds a float64 rather than a float32.
-
-        Unlike AArch64, x86 has no distinct register class per float width: a
-        f32 scalar, a f64 scalar and a packed f32 vector are all a 128-bit Xmm,
-        so the operand itself cannot answer this. The width lives on the
-        register's VirtReg, as the asmjit::TypeId it was created with. */
     bool isDoubleFloat (const YdspFp& reg) const;
-
-    // Blends `whenTrue`/`whenFalse` using an all-ones / all-zeros 32-bit mask.
     void blendFloatOnMask (const YdspGp& maskBits, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse);
 
-    // Reused invoke node for 32-bit integer division/modulo.
     asmjit::InvokeNode* divInvoke = nullptr;
 };
 

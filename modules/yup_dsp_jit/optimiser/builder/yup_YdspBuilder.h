@@ -98,17 +98,11 @@ private:
 
     int newValue (YdspValueType type);
     int newBlock();
-    int emitInst (YdspIrInst inst);
-
-    /** Appends to the function's prologue (block 0) regardless of where
-        lowering currently is.
-
-        The prologue holds nothing but definitions - parameter/state loads and
-        constants - so an instruction added to it later still dominates every
-        use, and it is emitted before the sample loop is entered. */
-    int emitInstInPrologue (YdspIrInst inst);
 
     void setTerminator (YdspIrTerm term, int cond = -1, int target = -1, int target2 = -1);
+
+    int emitInst (YdspIrInst inst);
+    int emitInstInPrologue (YdspIrInst inst);
 
     int emitConstFFor (double value, YdspValueType type);
     int emitConstF (double value);
@@ -210,10 +204,11 @@ private:
     //==============================================================================
     // Expressions
 
+    int captureValue (const YdspExpr& expr);
+
     int lowerExpr (const YdspExpr& expr);
     int lowerIdentifier (const String& name, const YdspLocation& location);
     int lowerEventField (const YdspExpr& expr);
-    int captureValue (const YdspExpr& expr);
     int lowerBinary (const YdspExpr& expr);
     int lowerCall (const YdspExpr& expr);
 
@@ -250,8 +245,6 @@ private:
         return isFloatValueType (valueTypes[static_cast<size_t> (value)]);
     }
 
-    // Returns the float width of an argument: the first float-typed operand,
-    // defaulting to float32 (adaptable literals and non-float constants).
     YdspValueType floatWidthOf (int first) const
     {
         return isFloatValueType (valueTypes[static_cast<size_t> (first)]) ? valueTypes[static_cast<size_t> (first)] : YdspValueType::float32Type;
@@ -275,8 +268,6 @@ private:
         return (isIntValue (args) || ...);
     }
 
-    // Returns the int width of an argument: the first int-typed operand,
-    // defaulting to int32 (adaptable literals coerce to whichever width wins).
     YdspValueType intWidthOf (int first) const
     {
         return isIntValueType (valueTypes[static_cast<size_t> (first)]) ? valueTypes[static_cast<size_t> (first)] : YdspValueType::int32Type;
@@ -336,10 +327,6 @@ private:
         return nullptr;
     }
 
-    // Resolves a `member` expression (`base.field`) against the flattened
-    // struct state layout. stride == 0 means a scalar slot (outBase = slot);
-    // otherwise outBase is an array region and outInstanceIndex (value id, or
-    // -1 for a scalar struct instance) is the instance element index.
     bool resolveStructFieldLayout (const YdspExpr& memberExpr, int& outBase, int& outStride, int& outInstanceIndex, YdspValueType& outType);
 
     int endpointStreamIndex (const YdspEndpointDecl* endpoint) const

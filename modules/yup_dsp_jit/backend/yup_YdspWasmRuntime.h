@@ -199,28 +199,21 @@ public:
 
 private:
 #if YUP_WASM
-    // wasmModules is the owning graph's byte storage; wasmIndex may be stale
-    // if this wrapper outlives a graph rebuild, so every access is bounds
-    // checked rather than trusted.
-    bool hasWasmModule() const noexcept
-    {
-        return wasmModules != nullptr && wasmIndex < wasmModules->size();
-    }
-
     const uint8_t* wasmBytes() const noexcept
     {
-        return hasWasmModule() ? (*wasmModules)[wasmIndex].data() : nullptr;
+        return wasmModules != nullptr && wasmIndex < wasmModules->size()
+            ? (*wasmModules)[wasmIndex].data()
+            : nullptr;
     }
 
     size_t wasmSize() const noexcept
     {
-        return hasWasmModule() ? (*wasmModules)[wasmIndex].size() : 0;
+        return wasmModules != nullptr && wasmIndex < wasmModules->size()
+            ? (*wasmModules)[wasmIndex].size()
+            : 0;
     }
 #endif
 
-    // Both native ABI function types are `void (*) (T*)` with a single pointer
-    // argument, so they share one storage slot; the conversions all go
-    // through ydspFnPtrCast (see yup_YdspAbi.h).
     void (*nativeFn) (void*) = nullptr;
     YdspWasmKernelHandle kernelId = -1;
     const std::vector<std::vector<uint8_t>>* wasmModules = nullptr;

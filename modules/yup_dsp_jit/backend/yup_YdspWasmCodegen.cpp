@@ -186,6 +186,58 @@ uint8_t floatUnaryOpcode (YdspIrOp op, bool is64) noexcept
     return 0;
 }
 
+#if defined (__wasm_simd128__)
+
+// Packed f32x4 twins of the scalar float opcodes the vectoriser widens. The
+// returned subopcode is emitted behind the 0xFD prefix; 0 means "not packed".
+uint32_t packedFloatBinarySimdOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::addF:
+            return YdspWasmEmitter::opF32x4Add;
+        case YdspIrOp::subF:
+            return YdspWasmEmitter::opF32x4Sub;
+        case YdspIrOp::mulF:
+            return YdspWasmEmitter::opF32x4Mul;
+        case YdspIrOp::divF:
+            return YdspWasmEmitter::opF32x4Div;
+        case YdspIrOp::minF:
+            return YdspWasmEmitter::opF32x4Min;
+        case YdspIrOp::maxF:
+            return YdspWasmEmitter::opF32x4Max;
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+uint32_t packedFloatUnarySimdOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::negF:
+            return YdspWasmEmitter::opF32x4Neg;
+        case YdspIrOp::absF:
+            return YdspWasmEmitter::opF32x4Abs;
+        case YdspIrOp::sqrtF:
+            return YdspWasmEmitter::opF32x4Sqrt;
+        case YdspIrOp::floorF:
+            return YdspWasmEmitter::opF32x4Floor;
+        case YdspIrOp::ceilF:
+            return YdspWasmEmitter::opF32x4Ceil;
+        case YdspIrOp::rintF:
+            return YdspWasmEmitter::opF32x4Nearest;
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+#endif
+
 // Round-toward-zero (used by the modF lowering; there is no IR op for it).
 uint8_t floatTruncOpcode (bool is64) noexcept
 {
@@ -534,6 +586,10 @@ private:
                 return "f32";
             case 0x7C:
                 return "f64";
+#if defined (__wasm_simd128__)
+            case 0x7B:
+                return "v128";
+#endif
             default:
                 return hex (type, 2);
         }
@@ -548,6 +604,51 @@ private:
 
         return " (result " + valTypeName (type) + ")";
     }
+
+#if defined (__wasm_simd128__)
+    static String simdMnemonic (uint32_t subopcode)
+    {
+        switch (subopcode)
+        {
+            case YdspWasmEmitter::opV128Load:
+                return "v128.load";
+            case YdspWasmEmitter::opV128Store:
+                return "v128.store";
+            case YdspWasmEmitter::opI8x16Shuffle:
+                return "i8x16.shuffle";
+            case YdspWasmEmitter::opF32x4Splat:
+                return "f32x4.splat";
+            case YdspWasmEmitter::opF32x4ExtractLane:
+                return "f32x4.extract_lane";
+            case YdspWasmEmitter::opF32x4Ceil:
+                return "f32x4.ceil";
+            case YdspWasmEmitter::opF32x4Floor:
+                return "f32x4.floor";
+            case YdspWasmEmitter::opF32x4Nearest:
+                return "f32x4.nearest";
+            case YdspWasmEmitter::opF32x4Abs:
+                return "f32x4.abs";
+            case YdspWasmEmitter::opF32x4Neg:
+                return "f32x4.neg";
+            case YdspWasmEmitter::opF32x4Sqrt:
+                return "f32x4.sqrt";
+            case YdspWasmEmitter::opF32x4Add:
+                return "f32x4.add";
+            case YdspWasmEmitter::opF32x4Sub:
+                return "f32x4.sub";
+            case YdspWasmEmitter::opF32x4Mul:
+                return "f32x4.mul";
+            case YdspWasmEmitter::opF32x4Div:
+                return "f32x4.div";
+            case YdspWasmEmitter::opF32x4Min:
+                return "f32x4.min";
+            case YdspWasmEmitter::opF32x4Max:
+                return "f32x4.max";
+            default:
+                return "simd." + String (static_cast<int> (subopcode));
+        }
+    }
+#endif
 
     String renderModule()
     {
@@ -859,6 +960,47 @@ private:
                     indentLine (result, line, depth);
                     break;
                 }
+
+#if defined (__wasm_simd128__)
+                case YdspWasmEmitter::simdPrefix: // 0xFD SIMD prefix
+                {
+                    const auto sub = readLebU (p);
+                    line = simdMnemonic (sub);
+
+                    switch (sub)
+                    {
+                        case YdspWasmEmitter::opV128Load:
+                        case YdspWasmEmitter::opV128Store:
+                        {
+                            const auto align = readLebU (p);
+                            const auto offset = readLebU (p);
+
+                            line += " offset=" + String (static_cast<int> (offset));
+                            line += " align=" + String (static_cast<int> (align));
+                            break;
+                        }
+
+                        case YdspWasmEmitter::opI8x16Shuffle:
+                            line += " [" + String (static_cast<int> (readByte (p)));
+
+                            for (int i = 1; i < 16; ++i)
+                                line += " " + String (static_cast<int> (readByte (p)));
+
+                            line += "]";
+                            break;
+
+                        case YdspWasmEmitter::opF32x4ExtractLane:
+                            line += " " + String (static_cast<int> (readByte (p)));
+                            break;
+
+                        default:
+                            break;
+                    }
+
+                    indentLine (result, line, depth);
+                    break;
+                }
+#endif
 
                 default:
                     indentLine (result, line, depth);
@@ -1281,6 +1423,11 @@ private:
                 if (inst.op == YdspIrOp::emitEvent)
                     usesEmitEvent = true;
 
+#if defined (__wasm_simd128__)
+                if (inst.op == YdspIrOp::vreduceAddF)
+                    usesVreduce = true;
+#endif
+
                 if (isLibmOp (inst.op))
                 {
                     const bool is64 = inst.a >= 0 && is64BitValueType (inferOperandType (fn, inst, inst.a));
@@ -1351,6 +1498,18 @@ private:
     //==============================================================================
     // Locals: one wasm local per value id (local 0 is the ctx parameter).
 
+    // The wasm local type of a value id: v128 for a widened value, the scalar
+    // type otherwise.
+    YdspWasmEmitter::ValType localTypeOf (int valueId) const
+    {
+#if defined (__wasm_simd128__)
+        if (fn->laneCountOf (valueId) > 1)
+            return ValType::v128;
+#endif
+
+        return toWasmType (valueTypes[static_cast<size_t> (valueId)]);
+    }
+
     void declareValueLocals()
     {
         // Group consecutive same-typed value ids into runs.
@@ -1358,15 +1517,22 @@ private:
 
         while (i < valueTypes.size())
         {
-            const auto type = valueTypes[i];
+            const auto type = localTypeOf (static_cast<int> (i));
             size_t count = 1;
 
-            while (i + count < valueTypes.size() && valueTypes[i + count] == type)
+            while (i + count < valueTypes.size() && localTypeOf (static_cast<int> (i + count)) == type)
                 ++count;
 
-            emitter.declareLocals (static_cast<uint32_t> (count), toWasmType (type));
+            emitter.declareLocals (static_cast<uint32_t> (count), type);
             i += count;
         }
+
+#if defined (__wasm_simd128__)
+        // One scratch v128 local for the horizontal-reduction fold, parked
+        // right after the value locals (index valueTypes.size() + 1).
+        if (usesVreduce)
+            emitter.declareLocals (1, ValType::v128);
+#endif
     }
 
     uint32_t localIndex (int valueId) const
@@ -1795,7 +1961,14 @@ private:
             {
                 const auto type = valueType (inst.result);
                 pushIndexedAddress (stateArraysOff, stateArrayBase (type, inst.memIndex), inst.a, type);
-                emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+
+#if defined (__wasm_simd128__)
+                if (inst.op == YdspIrOp::loadStateArrayF && fn->laneCountOf (inst.result) > 1)
+                    emitter.simdLoad (YdspWasmEmitter::opV128Load, 2, 0);
+                else
+#endif
+                    emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+
                 setValue (inst.result);
                 return;
             }
@@ -1806,7 +1979,14 @@ private:
                 const auto type = valueType (inst.b);
                 pushIndexedAddress (stateArraysOff, stateArrayBase (type, inst.memIndex), inst.a, type);
                 pushValue (inst.b);
-                emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+
+#if defined (__wasm_simd128__)
+                if (inst.op == YdspIrOp::storeStateArrayF && fn->laneCountOf (inst.b) > 1)
+                    emitter.simdStore (YdspWasmEmitter::opV128Store, 2, 0);
+                else
+#endif
+                    emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+
                 return;
             }
 
@@ -1830,7 +2010,13 @@ private:
                 emitter.op (YdspWasmEmitter::opI32Shl);
                 emitter.op (YdspWasmEmitter::opI32Add);
 
-                emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                    emitter.simdLoad (YdspWasmEmitter::opV128Load, 2, 0);
+                else
+#endif
+                    emitter.load (loadOpcode (type), scaleLog2 (type), 0);
+
                 setValue (inst.result);
                 return;
             }
@@ -1850,7 +2036,14 @@ private:
                 emitter.op (YdspWasmEmitter::opI32Add);
 
                 pushValue (inst.b);
-                emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.b) > 1)
+                    emitter.simdStore (YdspWasmEmitter::opV128Store, 2, 0);
+                else
+#endif
+                    emitter.store (storeOpcode (type), scaleLog2 (type), 0);
+
                 return;
             }
 
@@ -1863,6 +2056,18 @@ private:
             case YdspIrOp::maxF:
             {
                 const auto type = valueType (inst.result);
+
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    pushValue (inst.b);
+                    emitter.simdOp (packedFloatBinarySimdOp (inst.op));
+                    setValue (inst.result);
+                    return;
+                }
+#endif
+
                 pushValue (inst.a);
                 pushValue (inst.b);
                 emitter.op (floatBinaryOpcode (inst.op, is64BitValueType (type)));
@@ -1897,6 +2102,17 @@ private:
             case YdspIrOp::rintF:
             {
                 const auto type = valueType (inst.result);
+
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    emitter.simdOp (packedFloatUnarySimdOp (inst.op));
+                    setValue (inst.result);
+                    return;
+                }
+#endif
+
                 pushValue (inst.a);
                 emitter.op (floatUnaryOpcode (inst.op, is64BitValueType (type)));
                 setValue (inst.result);
@@ -1907,6 +2123,20 @@ private:
             {
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
+
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    // f32x4.max (a, b), then f32x4.min (.., c)
+                    pushValue (inst.a);
+                    pushValue (inst.b);
+                    emitter.simdOp (YdspWasmEmitter::opF32x4Max);
+                    pushValue (inst.c);
+                    emitter.simdOp (YdspWasmEmitter::opF32x4Min);
+                    setValue (inst.result);
+                    return;
+                }
+#endif
 
                 // min (max (a, b), c)
                 pushValue (inst.a);
@@ -1922,6 +2152,22 @@ private:
             {
                 const auto type = valueType (inst.result);
                 const bool is64 = is64BitValueType (type);
+
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    // (b - a) * t + a
+                    pushValue (inst.b);
+                    pushValue (inst.a);
+                    emitter.simdOp (YdspWasmEmitter::opF32x4Sub);
+                    pushValue (inst.c);
+                    emitter.simdOp (YdspWasmEmitter::opF32x4Mul);
+                    pushValue (inst.a);
+                    emitter.simdOp (YdspWasmEmitter::opF32x4Add);
+                    setValue (inst.result);
+                    return;
+                }
+#endif
 
                 // (b - a) * t + a
                 pushValue (inst.b);
@@ -2311,6 +2557,47 @@ private:
                 return;
             }
 
+#if defined (__wasm_simd128__)
+            // ---- lane movement (SIMD) ----
+            case YdspIrOp::vsplat:
+                pushValue (inst.a);
+                emitter.simdOp (YdspWasmEmitter::opF32x4Splat);
+                setValue (inst.result);
+                return;
+
+            case YdspIrOp::vreduceAddF:
+            {
+                // Horizontal f32x4 sum as a shuffle tree. i8x16.shuffle and
+                // f32x4.add are binary, so the operand is re-pushed before
+                // each of them: shuffle [2,3,0,1] over two copies of a, add a
+                // back in, park the partials in the scratch v128 local, then
+                // shuffle [1,0,3,2] over two copies of the partials and add
+                // one copy back. Lane j of the accumulator already holds the
+                // reassociated partial sum (see YdspVectorizer), so the
+                // grouping (l0 + l2) + (l1 + l3) is exactly the tree the
+                // widened reduction's semantics promise.
+                static const uint8_t swap64Mask[16] = { 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7 };
+                static const uint8_t swap32Mask[16] = { 4, 5, 6, 7, 0, 1, 2, 3, 12, 13, 14, 15, 8, 9, 10, 11 };
+
+                const auto scratch = static_cast<uint32_t> (valueTypes.size()) + 1u;
+
+                pushValue (inst.a);
+                pushValue (inst.a);
+                emitter.i8x16Shuffle (swap64Mask);
+                pushValue (inst.a);
+                emitter.simdOp (YdspWasmEmitter::opF32x4Add);
+                emitter.localSet (scratch);
+                emitter.localGet (scratch);
+                emitter.localGet (scratch);
+                emitter.i8x16Shuffle (swap32Mask);
+                emitter.localGet (scratch);
+                emitter.simdOp (YdspWasmEmitter::opF32x4Add);
+                emitter.f32x4ExtractLane (0);
+                setValue (inst.result);
+                return;
+            }
+#endif
+
             default:
                 diagnostics->addError (0, 0, "Wasm codegen: unsupported instruction in the IR");
                 return;
@@ -2355,6 +2642,12 @@ private:
     int emitEventTypeIndex = 0;
     int emitEventFuncIndex = 0;
 
+#if defined (__wasm_simd128__)
+    // Set when the function folds a widened reduction (vreduceAddF), which
+    // needs the scratch v128 local declared after the value locals.
+    bool usesVreduce = false;
+#endif
+
     // IR loop headers -> index into fn.loops.
     std::map<int, int> loopByHeader;
 
@@ -2373,15 +2666,27 @@ private:
 
 std::vector<uint8_t> YdspWasmCodegen::compile (const YdspIrFunction& fn, YdspDiagnostics& diagnostics)
 {
-    // There is no `simd128` lowering here, so a widened function would emit
-    // scalar code for packed values and silently compute the wrong thing. The
-    // compiler only enables the vectoriser on the native path; this is the
-    // guard for anything that reaches the wasm backend by another route.
-    if (fn.vectorized)
+#if defined (__wasm_simd128__)
+    // wasm SIMD is 128-bit: the f32x4 lowering covers YdspVectorizer's
+    // portable width. The 8/16-lane widths are native-target only (AVX2/
+    // AVX-512), so anything widened past f32x4 is rejected here.
+    if (fn.vectorized && fn.vectorWidth > 4)
     {
-        diagnostics.addError (0, 0, "The wasm backend has no SIMD lowering: this kernel was vectorized for a native target");
+        diagnostics.addError (0, 0, "The wasm backend lowers f32x4 SIMD only: this kernel was vectorized for width " + String (fn.vectorWidth));
         return {};
     }
+#else
+    // There is no `simd128` lowering in a build without -msimd128, so a
+    // widened function would emit scalar code for packed values and silently
+    // compute the wrong thing. The compiler only enables the vectoriser when
+    // `__wasm_simd128__` is defined; this is the guard for anything that
+    // reaches the wasm backend by another route.
+    if (fn.vectorized)
+    {
+        diagnostics.addError (0, 0, "The wasm backend has no SIMD lowering without -msimd128: this kernel was vectorized for a native target");
+        return {};
+    }
+#endif
 
     YdspWasmCodegenImpl impl;
     return impl.compile (fn, diagnostics);

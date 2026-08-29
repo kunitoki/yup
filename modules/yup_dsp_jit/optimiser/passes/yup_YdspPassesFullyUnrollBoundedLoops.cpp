@@ -27,11 +27,6 @@ namespace yup
 namespace
 {
 
-/** The single constant an integer value id holds, or nullopt.
-
-    The IR is not SSA, so a `constI` writing a register proves nothing unless it
-    is that register's only definition - the same guard constantFolding() needs.
-*/
 std::optional<int> constantIntValue (const YdspIrFunction& fn, int value)
 {
     if (value < 0)
@@ -47,7 +42,7 @@ std::optional<int> constantIntValue (const YdspIrFunction& fn, int value)
                 continue;
 
             if (definition != nullptr)
-                return std::nullopt; // written more than once
+                return std::nullopt;
 
             definition = &inst;
         }
@@ -67,17 +62,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
 {
     // Copying a body is only a win while the copies stay small enough to keep
     // the whole sample loop in the instruction cache.
-    //
-    // 256 AArch64 instructions is a kilobyte against a 192 KB L1i, so the cache
-    // is nowhere near the binding constraint at this size - what actually bounds
-    // this is register pressure and compile time.
-    //
-    // Where the win is measured, it is large: a 16-mode bank widened to four
-    // lanes unrolls to ~56 instructions and ran 37% faster (14.3 to 8.3
-    // ns/sample), and its run-to-run spread fell from ~30% to under 8%. The
-    // step from 128 to 256 is *not* measured, though: it was raised to admit a
-    // 32-partial bank at ~190 instructions, and that shape then moved by ~2%,
-    // which is inside its own spread. Treat 256 as unproven above 128.
     constexpr int maxUnrolledInstructions = 256;
     // Scalar loops keep more independent values live across the whole body;
     // keeping their budget at the measured limit avoids turning a compact
@@ -117,8 +101,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         }
     };
 
-    // A one-shot init kernel runs before audio does, so trading its code size
-    // for branches buys nothing that can be heard.
     if (fn.isInit)
         return;
 
@@ -132,9 +114,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         const auto exit = loop.exitBlock;
         const auto preheader = header - 1;
 
-        // The same CFG-linear shape the vectoriser matches: a single-block body
-        // between its header and the block after it. A nested loop or an `if`
-        // inside the body pushes the exit further along and is left alone.
         if (preheader < 0 || exit != body + 1 || exit >= static_cast<int> (fn.blocks.size()))
             continue;
 
@@ -153,19 +132,14 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         if (preheaderBlock.term != YdspIrTerm::fallthrough || bodyBlock.insts.size() < 2)
             continue;
 
-        // The header only ever holds the bound and the compare, both pure. If
-        // anything else has settled there, leave the loop alone rather than
-        // reason about what dropping it would mean.
-        if (! std::all_of (headerBlock.insts.begin(), headerBlock.insts.end(), [] (const YdspIrInst& inst)
+        auto allInstructionsHaveResult = std::all_of (headerBlock.insts.begin(), headerBlock.insts.end(), [] (const YdspIrInst& inst)
         {
             return inst.result >= 0 && hasValueResult (inst.op);
-        }))
+        });
+        if (! allInstructionsHaveResult)
             continue;
 
-        // `next = i + step; i = next` closes every body. The step is what the
-        // vectoriser rewrites when it widens, so read it rather than assume 1.
         const auto& move = bodyBlock.insts.back();
-
         if (move.op != YdspIrOp::movI || move.result != loop.induction || move.a < 0)
             continue;
 
@@ -179,7 +153,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         if (! step.has_value() || *step <= 0)
             continue;
 
-        // The preheader's own `movI i, start` is the loop's entry value.
         int start = 0;
         bool foundStart = false;
 
@@ -205,7 +178,7 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         const auto span = loop.bound.constant - start;
 
         if ((span % *step) != 0)
-            continue; // a trip the compare would cut short; not this pass's job
+            continue;
 
         const auto tripCount = span / *step;
         const auto bodySize = static_cast<int> (bodyBlock.insts.size());
@@ -222,12 +195,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         if (tripCount < 1 || tripCount > maxTripCount || tripCount * bodySize > instructionBudget)
             continue;
 
-        // ---- Rewrite ----
-        // The body is copied verbatim, increment and all, so copy k sees
-        // exactly the induction value iteration k saw. Nothing is substituted
-        // and no value id is invented, which is what makes this sound in a
-        // non-SSA IR: it is the same instruction sequence the loop executed,
-        // written out straight.
         preheaderBlock.insts.insert (preheaderBlock.insts.end(),
                                      headerBlock.insts.begin(),
                                      headerBlock.insts.end());
@@ -243,8 +210,6 @@ void YdspOptimizer::fullyUnrollBoundedLoops (YdspIrFunction& fn)
         headerBlock.insts.clear();
         bodyBlock.insts.clear();
 
-        // Both now fall through into the exit, so no index moves and the two
-        // emptied blocks cost nothing on any backend.
         for (auto* block : { &headerBlock, &bodyBlock })
         {
             block->term = YdspIrTerm::fallthrough;

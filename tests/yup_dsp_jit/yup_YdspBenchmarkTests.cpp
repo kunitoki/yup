@@ -1661,7 +1661,12 @@ TEST_F (YdspBenchmarkTests, AutomaticTierAgainstBaseline)
     // mode-bank stores exercise the automatic tier's packed loop lowering.
     EXPECT_EQ (automaticOutput, baselineOutput);
     EXPECT_TRUE (automaticReport.vectorizationEnabled);
+#if ! YUP_WASM || defined (__wasm_simd128__)
+    // Loop unrolling is part of the automatic tier on native and on a wasm
+    // build compiled with -msimd128; only a scalar wasm build keeps it off
+    // (see the compiler's hasLoopTransforms gate).
     EXPECT_TRUE (automaticReport.unrollingEnabled);
+#endif
     EXPECT_EQ (YdspNativeTarget::scalar, baselineReport.selectedIsa);
     EXPECT_EQ (1, baselineReport.vectorWidth);
     EXPECT_FALSE (baselineReport.vectorizationEnabled);

@@ -32,7 +32,6 @@ bool isStateArrayStore (YdspIrOp op) noexcept
     return op == YdspIrOp::storeStateArrayF || op == YdspIrOp::storeStateArrayI;
 }
 
-// The store that writes the elements a given array load reads.
 YdspIrOp matchingStoreFor (YdspIrOp loadOp) noexcept
 {
     return loadOp == YdspIrOp::loadStateArrayF ? YdspIrOp::storeStateArrayF : YdspIrOp::storeStateArrayI;
@@ -60,8 +59,6 @@ void YdspOptimizer::storeToLoadForwarding (YdspIrFunction& fn)
 
             const auto storeOp = matchingStoreFor (load.op);
 
-            // Walk back to the store that last wrote this element, giving up at
-            // anything that could have changed the address or the memory.
             size_t source = 0;
             bool found = false;
 
@@ -69,7 +66,6 @@ void YdspOptimizer::storeToLoadForwarding (YdspIrFunction& fn)
             {
                 const auto& previous = insts[k];
 
-                // The index register must still hold what it held at the store.
                 if (previous.result >= 0 && previous.result == load.a)
                     break;
 
@@ -83,10 +79,6 @@ void YdspOptimizer::storeToLoadForwarding (YdspIrFunction& fn)
                     break;
                 }
 
-                // A store of the same element width through the same index into
-                // a different region addresses `regionBase + index`, so it can
-                // only collide if the region bases do - which they never do.
-                // Anything else may alias, so stop.
                 if (previous.op != storeOp || previous.a != load.a || previous.memIndex == load.memIndex)
                     break;
             }
@@ -99,7 +91,6 @@ void YdspOptimizer::storeToLoadForwarding (YdspIrFunction& fn)
             if (stored < 0 || stored == load.result)
                 continue;
 
-            // The stored value itself must not have been rewritten since.
             bool valueStable = true;
 
             for (size_t k = source + 1; k < j && valueStable; ++k)

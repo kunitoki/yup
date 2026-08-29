@@ -47,8 +47,13 @@ namespace yup
 class YdspWasmCodegen
 {
 public:
-    /** Compiles the IR function into a wasm module; returns empty bytes and
-        records a diagnostic on failure. */
+    /** Compiles the IR function into a wasm module.
+    
+        @param fn the IR function to compile.
+        @param diagnostics receives any errors or warnings that occur during compilation.
+    
+        @return empty bytes and records a diagnostic on failure.
+    */
     static std::vector<uint8_t> compile (const YdspIrFunction& fn, YdspDiagnostics& diagnostics);
 
     /** Renders an emitted module in the WebAssembly text format (a readable
@@ -57,7 +62,12 @@ public:
         This is a one-way listing, not a round-trippable wat source; it is the
         wasm counterpart of the asmjit assembly log the native backend records
         at compile time. Returns an empty string when `module` is not a valid
-        MVP binary. */
+        MVP binary.
+
+        @param module the wasm module bytes to render.
+
+        @return the wat text, or empty when `module` is not a valid wasm binary.
+    */
     static String toText (const std::vector<uint8_t>& module);
 };
 

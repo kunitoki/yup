@@ -32,9 +32,6 @@ void YdspOptimizer::lowerFusedMultiplyAdd (YdspIrFunction& fn)
 
         fn.valueTypes.push_back (type);
 
-        // Parallel to valueTypes whenever the vectoriser populated it, and
-        // scalar: nothing widened ever reaches here (see contractMultiplyAdd,
-        // and the vectoriser rejects a loop whose body fuses).
         if (! fn.valueLanes.empty())
             fn.valueLanes.push_back (1);
 
@@ -60,11 +57,6 @@ void YdspOptimizer::lowerFusedMultiplyAdd (YdspIrFunction& fn)
                 continue;
             }
 
-            // a * b + c, one width up, rounded once on the way back down. The
-            // float32 product is exact in float64 and 2p + 2 = 50 bits fit in
-            // its 53, so this is the same value the hardware instruction
-            // produces rather than an approximation of it (for normal results -
-            // see the note on denormals in YdspOptimizer::setTargetHasFusedMultiplyAdd).
             const auto wideA = newValue (YdspValueType::float64Type);
             const auto wideB = newValue (YdspValueType::float64Type);
             const auto wideC = newValue (YdspValueType::float64Type);

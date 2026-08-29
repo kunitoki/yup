@@ -74,20 +74,7 @@ void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
             const auto cond = lowerExpr (*stmt.cond);
 
             const bool hasElse = (stmt.elseStmt != nullptr);
-
-            // Create blocks in CFG-linear order: then, [else], join. The join is
-            // always created *after* both regions have been lowered, so every
-            // block they allocate stays inside the region and the join is the
-            // region's last block — the codegen falls through blockIndex + 1 and
-            // the wasm backend recovers the region's extent from the join index,
-            // so a join allocated up front truncates the region. (An `else if`
-            // chain had its inner blocks pushed past the join, leaving the outer
-            // join falling into the inner then; a `for` inside an else-less `if`
-            // had its preheader fall into the join and the join fall into the
-            // loop header, whose induction variable was never initialised — an
-            // infinite loop in the generated kernel.)
             const int condBlock = currentBlock;
-
             const int thenBlock = newBlock();
 
             currentBlock = thenBlock;
@@ -131,35 +118,23 @@ void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
 
         case YdspStmtKind::forStmt:
         {
-            // preheader (current block): initialize the induction variable
             const auto startValue = lowerExpr (*stmt.startExpr);
             const auto induction = newValue (YdspValueType::int32Type);
             emitInst ({ YdspIrOp::movI, induction, startValue });
 
-            // The preheader falls through into the header, so the header must be
-            // the block that physically follows it - every enclosing construct
-            // has to leave the region's blocks contiguous (see the ifStmt case).
             const int header = newBlock();
             const int body = newBlock();
 
-            // header: compute the bound and compare. The exit block is
-            // created after the body so nested if/for blocks stay in
-            // CFG-linear order (the codegen falls through blockIndex+1).
             currentBlock = header;
 
-            // Capture the resolved bound immediately: lowering the body below
-            // may lower a *nested* loop, which resolves its own bound.
             YdspLoopBound resolvedBound;
             const auto boundValue = emitLoopBound (stmt, resolvedBound);
 
             const auto cond = emitInst ({ YdspIrOp::ltI, newValue (YdspValueType::boolType), induction, boundValue });
-            setTerminator (YdspIrTerm::branchIf, cond, body, -1); // exit patched below
+            setTerminator (YdspIrTerm::branchIf, cond, body, -1);
 
             currentBlock = body;
 
-            // The induction variable is scoped to the body: restore whatever
-            // the name meant outside on the way out (the analyzer enforces the
-            // same scoping).
             const auto shadowed = locals.find (stmt.name);
             const auto hadShadowed = shadowed != locals.end();
             const auto shadowedValue = hadShadowed ? shadowed->second : -1;
@@ -333,7 +308,6 @@ bool YdspIrBuilder::resolveLoopBoundForStmt (const YdspStmt& stmt, YdspLoopBound
     if (stmt.endExpr == nullptr)
         return false;
 
-    // Reuse the analyzer's bound resolution logic on the AST.
     if (stmt.endExpr->kind == YdspExprKind::intLiteral)
     {
         const auto value = static_cast<long long> (stmt.endExpr->number);
@@ -406,7 +380,6 @@ void YdspIrBuilder::lowerAssignment (const YdspStmt& stmt)
             return;
         }
 
-        // Resolve against processor endpoints / states / builtins.
         if (const auto* endpoint = findEndpoint (target.text))
         {
             const auto endpointType = toStorageType (endpoint->type);
@@ -458,7 +431,6 @@ void YdspIrBuilder::lowerAssignment (const YdspStmt& stmt)
 
         if (base.kind == YdspExprKind::member)
         {
-            // `state.buf[i] = v` / `voices[i].buf[j] = v`.
             int structBase = 0, stride = 0, instanceIndex = -1;
             YdspValueType structType = YdspValueType::float32Type;
 
@@ -524,7 +496,6 @@ void YdspIrBuilder::lowerAssignment (const YdspStmt& stmt)
 
     if (target.kind == YdspExprKind::member)
     {
-        // `state.field = v` / `voices[i].field = v`.
         int structBase = 0, stride = 0, instanceIndex = -1;
         YdspValueType structType = YdspValueType::float32Type;
 

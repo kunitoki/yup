@@ -27,14 +27,6 @@ namespace
 
 //==============================================================================
 
-/** Calls `callback (valueId)` for every operand of `inst` that really is a
-    value id.
-
-    Most opcodes carry value ids in a/b/c, but a handful use `a` for a
-    param/state *slot* index instead. Treating one of those as a value id would
-    make the analysis reject loops at random, depending on whether a slot number
-    happened to collide with a live value id.
-*/
 template <typename Callback>
 void forEachValueOperand (const YdspIrInst& inst, Callback&& callback)
 {
@@ -44,7 +36,7 @@ void forEachValueOperand (const YdspIrInst& inst, Callback&& callback)
         case YdspIrOp::loadParamOut:
         case YdspIrOp::loadStateF:
         case YdspIrOp::loadStateI:
-            return; // `a` is a slot index
+            return;
 
         default:
             break;
@@ -60,13 +52,6 @@ void forEachValueOperand (const YdspIrInst& inst, Callback&& callback)
         callback (inst.c);
 }
 
-/** The float operations both native backends lower to a packed form.
-
-    Deliberately excludes the rounding family (`roundps` needs SSE4.1) and
-    `modF` (which lowers through it), the transcendentals (a libm call per lane
-    would need extract/insert) and every comparison and `select` (no lane mask
-    yet). A loop using one of those on a widened value is left scalar.
-*/
 bool isPackedFloatOp (YdspIrOp op) noexcept
 {
     switch (op)
@@ -105,6 +90,20 @@ bool isStateArrayAccess (YdspIrOp op) noexcept
     }
 }
 
+bool isStreamAccess (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::loadInput:
+        case YdspIrOp::loadOutput:
+        case YdspIrOp::storeOutput:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
 //==============================================================================
 /** Widens one loop, or leaves it exactly as it was.
 
@@ -122,16 +121,27 @@ public:
     {
     }
 
-    bool tryWiden()
+    bool tryWiden (YdspVectorizationReason& reason)
     {
         if (! analyse())
+        {
+            reason = rejectionReason;
             return false;
+        }
 
         rewrite();
         return true;
     }
 
 private:
+    /** Records why the loop was rejected; the only way a legality test may
+        return false. */
+    bool fail (YdspVectorizationReason reason) noexcept
+    {
+        rejectionReason = reason;
+        return false;
+    }
+
     /** One recognised `acc = acc + x` accumulation in the loop body. */
     struct Reduction
     {
@@ -147,14 +157,11 @@ private:
 
     bool analyse()
     {
-        // A constant trip count that is a whole number of vectors: no scalar
-        // epilogue, and therefore no block to insert (see the class comment on
-        // YdspVectorizer).
-        if (loop.bound.kind != YdspLoopBoundKind::constant)
-            return false;
-
-        if (loop.bound.constant <= 0 || (loop.bound.constant % lanes) != 0)
-            return false;
+        if (loop.bound.kind != YdspLoopBoundKind::constant
+            && loop.bound.kind != YdspLoopBoundKind::blockSize)
+        {
+            return fail (YdspVectorizationReason::unsupportedLoopBound);
+        }
 
         header = loop.headerBlock;
         body = header + 1;
@@ -162,20 +169,20 @@ private:
         preheader = header - 1;
 
         if (preheader < 0 || body < 0 || exit != body + 1)
-            return false; // a multi-block (or nested) body
+            return fail (YdspVectorizationReason::multiBlockBody); // a multi-block (or nested) body
 
         if (static_cast<size_t> (exit) >= fn.blocks.size())
-            return false;
+            return fail (YdspVectorizationReason::multiBlockBody);
 
         const auto& bodyBlock = fn.blocks[static_cast<size_t> (body)];
 
         if (bodyBlock.term != YdspIrTerm::branch || bodyBlock.termTarget != header)
-            return false;
+            return fail (YdspVectorizationReason::multiBlockBody);
 
         numValues = static_cast<int> (fn.valueTypes.size());
 
         if (numValues <= 0)
-            return false;
+            return fail (YdspVectorizationReason::notVectorizable);
 
         defsInBody.assign (static_cast<size_t> (numValues), 0);
         defsElsewhere.assign (static_cast<size_t> (numValues), 0);
@@ -184,14 +191,124 @@ private:
         definedInHeader.assign (static_cast<size_t> (numValues), false);
 
         if (! countDefsAndUses())
+            return fail (YdspVectorizationReason::notVectorizable);
+
+        if (loop.bound.kind == YdspLoopBoundKind::constant)
+        {
+            if (loop.bound.constant <= 0)
+                return fail (YdspVectorizationReason::unsupportedLoopBound);
+
+            if (! findLoopStart())
+                return fail (YdspVectorizationReason::nonConstantStart);
+
+            const auto span = loop.bound.constant - start;
+
+            if (span < lanes)
+                return fail (YdspVectorizationReason::shortTripCount); // no full vector trip: the loop is all tail
+
+            tail = span % lanes;
+        }
+        else
+        {
+            if (! findHeaderCompare())
+                return fail (YdspVectorizationReason::missingHeaderCompare);
+
+            if (! findLoopStart())
+                return fail (YdspVectorizationReason::nonConstantStart);
+
+            if (start != 0)
+                return fail (YdspVectorizationReason::nonzeroStart);
+        }
+
+        if (! findInductionUpdate())
+            return fail (YdspVectorizationReason::unrecognizedInductionUpdate);
+
+        if (! checkInductionUses())
+            return fail (YdspVectorizationReason::inductionUsedAsValue);
+
+        if (! findReductions())
+            return fail (YdspVectorizationReason::unrecognizedAccumulation);
+
+        if (! classifyBody())
+            return false; // rejectionReason was set by the failing case
+
+        if (! checkSingleDefinitionAndLiveOut())
+            return fail (YdspVectorizationReason::loopCarriedValue);
+
+        if (! checkTailFeasibility())
+            return fail (YdspVectorizationReason::runtimeBoundWithoutStreams);
+
+        if (widenedAccessCount == 0)
+            return fail (YdspVectorizationReason::nothingToWiden);
+
+        return true;
+    }
+
+    bool findLoopStart()
+    {
+        for (const auto& inst : fn.blocks[static_cast<size_t> (preheader)].insts)
+            if (inst.op == YdspIrOp::movI && inst.result == loop.induction && inst.a >= 0)
+                return readConstantInt (inst.a, start);
+
+        for (size_t b = 0; b < fn.blocks.size(); ++b)
+        {
+            if (static_cast<int> (b) == body)
+                continue;
+
+            for (const auto& inst : fn.blocks[b].insts)
+                if (inst.result == loop.induction && inst.op == YdspIrOp::constI)
+                {
+                    start = static_cast<int> (inst.ivalue);
+                    return true;
+                }
+        }
+
+        return false;
+    }
+
+    bool readConstantInt (int value, int& out) const
+    {
+        if (value < 0 || value >= numValues)
             return false;
 
-        return findInductionUpdate()
-            && checkInductionUses()
-            && findReductions()
-            && classifyBody()
-            && checkSingleDefinitionAndLiveOut()
-            && widenedAccessCount > 0; // nothing to gain otherwise
+        if (defsInBody[static_cast<size_t> (value)] + defsElsewhere[static_cast<size_t> (value)] != 1)
+            return false;
+
+        for (const auto& block : fn.blocks)
+        {
+            for (const auto& inst : block.insts)
+            {
+                if (inst.result == value)
+                {
+                    if (inst.op != YdspIrOp::constI)
+                        return false;
+
+                    out = static_cast<int> (inst.ivalue);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool findHeaderCompare()
+    {
+        int matches = 0;
+
+        for (const auto& inst : fn.blocks[static_cast<size_t> (header)].insts)
+            if (inst.op == YdspIrOp::ltI && inst.a == loop.induction && inst.b >= 0)
+                ++matches;
+
+        return matches == 1;
+    }
+
+    bool checkTailFeasibility() const
+    {
+        if (loop.bound.kind == YdspLoopBoundKind::blockSize && ! hasStreamAccess)
+            return false;
+
+        return true;
     }
 
     bool countDefsAndUses()
@@ -206,7 +323,7 @@ private:
                 if (inst.result >= 0)
                 {
                     if (inst.result >= numValues)
-                        return false; // value ids must be covered by valueTypes
+                        return false;
 
                     ++(inBody ? defsInBody : defsElsewhere)[static_cast<size_t> (inst.result)];
 
@@ -243,8 +360,6 @@ private:
         return true;
     }
 
-    /** Matches the `next = i + 1; i = next` pair the lowering appends to every
-        loop body, which the rewrite re-steps to the vector width. */
     bool findInductionUpdate()
     {
         const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
@@ -255,10 +370,6 @@ private:
         const auto last = static_cast<int> (insts.size()) - 1;
         const auto& move = insts[static_cast<size_t> (last)];
 
-        // The update has to be the last thing in the body, so every use of the
-        // induction variable in the body sees the same iteration's value. The
-        // AArch64 lowering relies on this to reuse one scaled index register
-        // across every widened access in the block.
         if (move.op != YdspIrOp::movI || move.result != loop.induction || move.a < 0)
             return false;
 
@@ -290,8 +401,6 @@ private:
             && usesInBody[step] == 1 && usesElsewhere[step] == 0;
     }
 
-    /** True when `value` is written exactly once in the whole function, by a
-        `constI` carrying `expected`. */
     bool isConstantInt (int value, int64_t expected) const
     {
         if (value < 0 || value >= numValues)
@@ -301,16 +410,17 @@ private:
             return false;
 
         for (const auto& block : fn.blocks)
+        {
             for (const auto& inst : block.insts)
+            {
                 if (inst.result == value)
                     return inst.op == YdspIrOp::constI && inst.ivalue == expected;
+            }
+        }
 
         return false;
     }
 
-    /** The induction variable may only be read as a state-array index and by
-        its own increment - anything else (`float (i)`, `buf[i * 2]`, a use
-        after the loop) would see a variable stepping by the vector width. */
     bool checkInductionUses() const
     {
         for (size_t b = 0; b < fn.blocks.size(); ++b)
@@ -333,7 +443,7 @@ private:
                     continue;
 
                 if (static_cast<int> (b) == header)
-                    continue; // the trip-count compare, still correct at any step
+                    continue;
 
                 if (static_cast<int> (b) != body)
                     return false;
@@ -341,7 +451,7 @@ private:
                 if (static_cast<int> (j) == incrementIndex)
                     continue;
 
-                const bool indexOnly = isStateArrayAccess (inst.op)
+                const bool indexOnly = (isStateArrayAccess (inst.op) || isStreamAccess (inst.op))
                                     && inst.a == loop.induction
                                     && inst.b != loop.induction
                                     && inst.c != loop.induction;
@@ -357,9 +467,6 @@ private:
         return true;
     }
 
-    /** Finds the `acc = acc + x` accumulations, the one loop-carried dependence
-        this pass accepts. Every other value written in the body has to be
-        body-local (checkSingleDefinitionAndLiveOut). */
     bool findReductions()
     {
         const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
@@ -373,12 +480,9 @@ private:
 
             const auto accumulator = static_cast<size_t> (move.result);
 
-            // A body-local move is ordinary work, not an accumulation.
             if (defsElsewhere[accumulator] == 0 && usesElsewhere[accumulator] == 0)
                 continue;
 
-            // It escapes the body, so it must be initialised before the loop and
-            // match the accumulation shape exactly.
             if (defsElsewhere[accumulator] == 0 || defsInBody[accumulator] != 1)
                 return false;
 
@@ -406,13 +510,10 @@ private:
 
             const auto sum = static_cast<size_t> (add.result);
 
-            // The partial sum must be private to the accumulation, or replacing
-            // it with a vector would change something else's value.
             if (defsInBody[sum] != 1 || defsElsewhere[sum] != 0
                 || usesInBody[sum] != 1 || usesElsewhere[sum] != 0)
                 return false;
 
-            // The accumulator itself must be read only by this add.
             if (usesInBody[accumulator] != 1)
                 return false;
 
@@ -433,8 +534,6 @@ private:
         return true;
     }
 
-    /** Decides, in program order, which values the loop widens - and rejects
-        the loop as soon as something would have to be scalarised. */
     bool classifyBody()
     {
         const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
@@ -451,8 +550,6 @@ private:
 
             if (const auto* reduction = reductionAt (static_cast<int> (j)))
             {
-                // Both halves of the accumulation are rewritten wholesale, so
-                // the generic operand rules do not apply to them.
                 if (reduction->addIndex == static_cast<int> (j))
                 {
                     widened[j] = true;
@@ -469,7 +566,7 @@ private:
                     if (inst.a == loop.induction)
                     {
                         if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
-                            return false; // f64 lanes are not supported
+                            return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                         widened[j] = true;
                         isVector[static_cast<size_t> (inst.result)] = true;
@@ -477,7 +574,7 @@ private:
                     }
                     else if (! isLoopInvariant (inst.a))
                     {
-                        return false; // an indirect index (buf[wp]) is not unit-stride
+                        return fail (YdspVectorizationReason::indirectAccess);
                     }
 
                     break;
@@ -485,14 +582,11 @@ private:
 
                 case YdspIrOp::storeStateArrayF:
                 {
-                    // A store through anything but the induction variable writes
-                    // the same element every iteration, so running the loop a
-                    // quarter as often would change which write lands last.
                     if (inst.a != loop.induction)
-                        return false;
+                        return fail (YdspVectorizationReason::indirectAccess);
 
                     if (inst.b < 0 || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type)
-                        return false;
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                     widened[j] = true;
                     ++widenedAccessCount;
@@ -501,10 +595,8 @@ private:
 
                 case YdspIrOp::loadStateArrayI:
                 {
-                    // Integer lanes are not implemented; a loop-invariant index
-                    // is just an ordinary scalar load.
                     if (! isLoopInvariant (inst.a))
-                        return false;
+                        return fail (YdspVectorizationReason::indirectAccess);
 
                     break;
                 }
@@ -512,33 +604,49 @@ private:
                 case YdspIrOp::loadInput:
                 case YdspIrOp::loadOutput:
                 {
-                    // A stream read at the *sample* index is invariant across
-                    // this loop, and `in` used inside a loop body lands here:
-                    // loop-invariant code motion never hoists a load, so the
-                    // read stays in the body even though its value cannot
-                    // change. Running it once per vector instead of once per
-                    // element is safe because nothing in a widened body writes
-                    // a stream - storeOutput is rejected below.
-                    //
-                    // Reading at the induction variable would need a packed
-                    // stream access, which this pass does not do.
-                    if (! isLoopInvariant (inst.a))
-                        return false;
+                    if (inst.a == loop.induction)
+                    {
+                        if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
+                            return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                        widened[j] = true;
+                        isVector[static_cast<size_t> (inst.result)] = true;
+                        hasStreamAccess = true;
+                        ++widenedAccessCount;
+                    }
+                    else if (! isLoopInvariant (inst.a))
+                    {
+                        return fail (YdspVectorizationReason::indirectAccess);
+                    }
 
                     break;
                 }
 
-                // Side effects whose count or order the widening would change.
+                case YdspIrOp::storeOutput:
+                {
+                    if (inst.a != loop.induction)
+                        return fail (YdspVectorizationReason::invariantStreamStore);
+
+                    if (inst.b < 0 || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    hasStreamAccess = true;
+                    ++widenedAccessCount;
+                    break;
+                }
+
                 case YdspIrOp::storeStateArrayI:
                 case YdspIrOp::storeStateF:
                 case YdspIrOp::storeStateI:
                 case YdspIrOp::storeParam:
                 case YdspIrOp::storeParamOut:
-                case YdspIrOp::storeOutput:
                 case YdspIrOp::storeEventFieldF:
                 case YdspIrOp::storeEventFieldI:
+                    return fail (YdspVectorizationReason::stateWriteInBody);
+
                 case YdspIrOp::emitEvent:
-                    return false;
+                    return fail (YdspVectorizationReason::emitInBody);
 
                 default:
                 {
@@ -551,16 +659,13 @@ private:
                     });
 
                     if (! readsVector)
-                        break; // ordinary scalar work, left alone
+                        break;
 
                     if (! isPackedFloatOp (inst.op) || inst.result < 0)
-                        return false;
+                        return fail (YdspVectorizationReason::unsupportedWidenedOp);
 
-                    // Only float32 has a four-lane form here: a float64 operand
-                    // would need two registers, and an int operand a different
-                    // instruction family.
                     if (fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::float32Type)
-                        return false;
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                     bool operandsAreFloat32 = true;
 
@@ -571,7 +676,7 @@ private:
                     });
 
                     if (! operandsAreFloat32)
-                        return false;
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
 
                     widened[j] = true;
                     isVector[static_cast<size_t> (inst.result)] = true;
@@ -583,11 +688,6 @@ private:
         return true;
     }
 
-    /** Every value the body writes must be private to the body (the induction
-        variable and the reduction accumulators excepted), or widening it - or
-        simply running its definition a quarter as often - would be visible
-        outside the loop. This is what keeps promoted `state` scalars, `'`, `@`
-        and `smooth` slots out. */
     bool checkSingleDefinitionAndLiveOut() const
     {
         for (const auto& inst : fn.blocks[static_cast<size_t> (body)].insts)
@@ -607,14 +707,6 @@ private:
                 return false;
         }
 
-        // A scalar the body reads from outside is broadcast in the preheader, so
-        // the preheader has to see the same value the body does. It always
-        // does: preheader -> header -> body is the only way in, and the loop
-        // back-edge goes through the header too, so the header is the only block
-        // that can redefine anything in between. A value the body reads may
-        // well be redefined *after* the loop - the enclosing sample loop's own
-        // induction variable, which every `loadInput` in the body is indexed
-        // by, is exactly that - and that is not a reason to bail.
         for (const auto& inst : fn.blocks[static_cast<size_t> (body)].insts)
         {
             bool available = true;
@@ -647,8 +739,10 @@ private:
     const Reduction* reductionAt (int bodyIndex) const
     {
         for (const auto& reduction : reductions)
+        {
             if (reduction.addIndex == bodyIndex || reduction.moveIndex == bodyIndex)
                 return &reduction;
+        }
 
         return nullptr;
     }
@@ -656,8 +750,10 @@ private:
     bool isReductionAccumulator (int value) const
     {
         for (const auto& reduction : reductions)
+        {
             if (reduction.accumulator == value)
                 return true;
+        }
 
         return false;
     }
@@ -672,31 +768,6 @@ private:
         return id;
     }
 
-    /** Marks the body's loop-invariant scalar prelude for the preheader.
-
-        `in` read inside a loop lands in the body as a `loadInput` and stays
-        there: loop-invariant code motion never hoists a load, because in
-        general the body could write that memory. In a *widened* body it
-        provably cannot - `storeOutput` disqualifies the loop outright - and the
-        index is already known to be loop-invariant, so the load and everything
-        pure that depends only on it can run once per loop entry instead of once
-        per element. In the modal-bank shape that is a load, a multiply, and the
-        broadcast they feed, per vector iteration.
-
-        LICM is the natural home for this, but its availability rule ("every
-        definition of an operand dominates the preheader") cannot express it:
-        the index is the enclosing sample loop's induction variable, which is
-        also defined in a block *after* this loop. Loosening that rule is what
-        reintroduced the frozen-state hang once already, whereas here the
-        preconditions are all established by the analysis above.
-
-        A state-array load is deliberately not hoistable: `z[j]` at a
-        loop-invariant `j` is the same element as the widened `z[i]` store on
-        whichever iteration `i == j`.
-
-        Only reached for a loop with a constant, non-zero trip count, so
-        nothing is speculated into a loop that might not run.
-    */
     void planHoisting (const std::vector<YdspIrInst>& insts)
     {
         hoistToPreheader.assign (insts.size(), false);
@@ -712,9 +783,6 @@ private:
                 || reductionAt (static_cast<int> (j)) != nullptr)
                 continue;
 
-            // Every side-effecting opcode in this IR writes through `memIndex`
-            // and produces no result, so requiring a result is what keeps the
-            // stores out.
             if (inst.result < 0
                 || inst.op == YdspIrOp::loadStateArrayF
                 || inst.op == YdspIrOp::loadStateArrayI)
@@ -748,11 +816,9 @@ private:
 
         planHoisting (oldBody);
 
-        // The loop now advances a whole vector per iteration.
         const auto step = newValue (YdspValueType::int32Type, 1);
         preheaderInsts.push_back ({ YdspIrOp::constI, step, -1, -1, -1, -1, 0.0, lanes });
 
-        // One vector accumulator per reduction, zeroed per entry to the loop.
         for (auto& reduction : reductions)
         {
             const auto zero = newValue (YdspValueType::float32Type, 1);
@@ -768,16 +834,11 @@ private:
         std::map<int, int> preheaderSplats;
         std::map<int, int> bodySplats;
 
-        // A scalar feeding a widened operation is broadcast once: in the
-        // preheader when it is loop-invariant (so it stays out of the loop), in
-        // the body otherwise.
         const auto splatOf = [&] (int scalar)
         {
             if (isVector[static_cast<size_t> (scalar)])
                 return scalar;
 
-            // A hoisted value is defined in the preheader now, so its broadcast
-            // belongs there too - which is the point of hoisting it.
             const bool definedInBody = defsInBody[static_cast<size_t> (scalar)] > 0
                                     && ! valueHoisted[static_cast<size_t> (scalar)];
 
@@ -823,15 +884,12 @@ private:
             {
                 if (reduction->addIndex == static_cast<int> (j))
                 {
-                    // acc + x  ->  vectorAcc + broadcast/vector x
                     inst.a = reduction->vectorAcc;
                     inst.b = splatOf (reduction->addend);
                     fn.valueLanes[static_cast<size_t> (inst.result)] = lanes;
                 }
                 else
                 {
-                    // The accumulator itself stays scalar and keeps its
-                    // pre-loop value; the vector one is what the body updates.
                     inst.result = reduction->vectorAcc;
                 }
 
@@ -845,11 +903,13 @@ private:
                 continue;
             }
 
-            if (inst.op == YdspIrOp::storeStateArrayF)
+            if (inst.op == YdspIrOp::storeStateArrayF || inst.op == YdspIrOp::storeOutput)
             {
                 inst.b = splatOf (inst.b);
             }
-            else if (inst.op != YdspIrOp::loadStateArrayF) // its index stays scalar
+            else if (inst.op != YdspIrOp::loadStateArrayF
+                  && inst.op != YdspIrOp::loadInput
+                  && inst.op != YdspIrOp::loadOutput)
             {
                 if (isFloatOperand (inst.a))
                     inst.a = splatOf (inst.a);
@@ -869,7 +929,19 @@ private:
 
         bodyInsts = std::move (newBody);
 
-        // Fold the lanes back into the scalar accumulator, once, on the way out.
+        tailRemap.assign (static_cast<size_t> (numValues), -1);
+        int foldBlock = exit;
+
+        if (loop.bound.kind == YdspLoopBoundKind::constant)
+        {
+            if (tail > 0)
+                emitPeel (oldBody);
+        }
+        else
+        {
+            foldBlock = emitRuntimeEpilogue (oldBody);
+        }
+
         std::vector<YdspIrInst> reduceOnExit;
 
         for (const auto& reduction : reductions)
@@ -882,8 +954,190 @@ private:
             reduceOnExit.push_back ({ YdspIrOp::movF, reduction.accumulator, total });
         }
 
-        auto& exitInsts = fn.blocks[static_cast<size_t> (exit)].insts;
+        auto& exitInsts = fn.blocks[static_cast<size_t> (foldBlock)].insts;
         exitInsts.insert (exitInsts.begin(), reduceOnExit.begin(), reduceOnExit.end());
+    }
+
+    int tailId (int value)
+    {
+        if (value < 0)
+            return -1;
+
+        if (value == loop.induction || isReductionAccumulator (value))
+            return value;
+
+        const auto v = static_cast<size_t> (value);
+
+        if (defsInBody[v] == 0 || valueHoisted[v])
+            return value;
+
+        auto& slot = tailRemap[v];
+
+        if (slot < 0)
+            slot = newValue (fn.valueTypes[v], 1);
+
+        return slot;
+    }
+
+    void emitPeel (const std::vector<YdspIrInst>& oldBody)
+    {
+        auto& preheaderInsts = fn.blocks[static_cast<size_t> (preheader)].insts;
+
+        const auto newStart = newValue (YdspValueType::int32Type, 1);
+        bool rebased = false;
+
+        for (size_t j = 0; j < preheaderInsts.size(); ++j)
+        {
+            if (preheaderInsts[j].op != YdspIrOp::movI || preheaderInsts[j].result != loop.induction)
+                continue;
+
+            preheaderInsts.insert (preheaderInsts.begin() + static_cast<ptrdiff_t> (j),
+                                   YdspIrInst { YdspIrOp::constI, newStart, -1, -1, -1, -1, 0.0, start + tail });
+            preheaderInsts[j + 1].a = newStart;
+            rebased = true;
+            break;
+        }
+
+        if (! rebased)
+        {
+            for (size_t b = 0; b < fn.blocks.size() && ! rebased; ++b)
+            {
+                if (static_cast<int> (b) == body)
+                    continue;
+
+                for (auto& inst : fn.blocks[b].insts)
+                {
+                    if (inst.result == loop.induction && inst.op == YdspIrOp::constI)
+                    {
+                        inst.ivalue = start + tail;
+                        rebased = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (int k = 0; k < tail; ++k)
+        {
+            const auto index = newValue (YdspValueType::int32Type, 1);
+            preheaderInsts.push_back ({ YdspIrOp::constI, index, -1, -1, -1, -1, 0.0, start + k });
+
+            for (size_t j = 0; j < oldBody.size(); ++j)
+            {
+                if (static_cast<int> (j) == incrementIndex || static_cast<int> (j) == inductionMoveIndex)
+                    continue;
+
+                auto inst = oldBody[j];
+
+                if (inst.result == loop.induction)
+                    continue;
+
+                if (inst.result >= 0)
+                    inst.result = tailId (inst.result);
+
+                const auto replaceOperand = [&] (int operand) -> int
+                {
+                    return operand == loop.induction ? index : tailId (operand);
+                };
+
+                inst.a = replaceOperand (inst.a);
+                inst.b = replaceOperand (inst.b);
+                inst.c = replaceOperand (inst.c);
+
+                preheaderInsts.push_back (inst);
+            }
+        }
+    }
+
+    int emitRuntimeEpilogue (const std::vector<YdspIrInst>& oldBody)
+    {
+        const auto loopId = loop.id;
+        const auto induction = loop.induction;
+
+        int boundValue = -1;
+
+        for (const auto& inst : fn.blocks[static_cast<size_t> (header)].insts)
+            if (inst.op == YdspIrOp::ltI && inst.a == induction)
+                boundValue = inst.b;
+
+        auto& preheaderInsts = fn.blocks[static_cast<size_t> (preheader)].insts;
+
+        const auto mask = newValue (YdspValueType::int32Type, 1);
+        preheaderInsts.push_back ({ YdspIrOp::constI, mask, -1, -1, -1, -1, 0.0, lanes - 1 });
+
+        const auto tailValue = newValue (YdspValueType::int32Type, 1);
+        preheaderInsts.push_back ({ YdspIrOp::andI, tailValue, boundValue, mask });
+
+        const auto vectorN = newValue (YdspValueType::int32Type, 1);
+        preheaderInsts.push_back ({ YdspIrOp::subI, vectorN, boundValue, tailValue });
+
+        for (auto& inst : fn.blocks[static_cast<size_t> (header)].insts)
+            if (inst.op == YdspIrOp::ltI && inst.a == induction)
+                inst.b = vectorN;
+
+        fn.blocks.insert (fn.blocks.begin() + exit, 2, YdspIrBlock {});
+
+        for (auto& block : fn.blocks)
+        {
+            if (block.termTarget >= exit)
+                block.termTarget += 2;
+
+            if (block.termTarget2 >= exit)
+                block.termTarget2 += 2;
+        }
+
+        for (auto& loopEntry : fn.loops)
+        {
+            if (loopEntry.headerBlock >= exit)
+                loopEntry.headerBlock += 2;
+
+            if (loopEntry.exitBlock >= exit)
+                loopEntry.exitBlock += 2;
+        }
+
+        fn.loops[static_cast<size_t> (loopId)].exitBlock = exit;
+        fn.blocks[static_cast<size_t> (header)].termTarget2 = exit;
+
+        auto& tailHeaderInsts = fn.blocks[static_cast<size_t> (exit)].insts;
+
+        const auto tailCond = newValue (YdspValueType::boolType, 1);
+        tailHeaderInsts.push_back ({ YdspIrOp::ltI, tailCond, induction, boundValue });
+
+        auto& tailHeader = fn.blocks[static_cast<size_t> (exit)];
+        tailHeader.term = YdspIrTerm::branchIf;
+        tailHeader.termCond = tailCond;
+        tailHeader.termTarget = exit + 1;
+        tailHeader.termTarget2 = exit + 2;
+
+        auto& tailBodyInsts = fn.blocks[static_cast<size_t> (exit + 1)].insts;
+
+        for (const auto& inst : oldBody)
+        {
+            auto copy = inst;
+
+            if (copy.result >= 0)
+                copy.result = tailId (copy.result);
+
+            copy.a = tailId (copy.a);
+            copy.b = tailId (copy.b);
+            copy.c = tailId (copy.c);
+
+            tailBodyInsts.push_back (copy);
+        }
+
+        auto& tailBody = fn.blocks[static_cast<size_t> (exit + 1)];
+        tailBody.term = YdspIrTerm::branch;
+        tailBody.termTarget = exit;
+
+        YdspIrLoop tailLoop;
+        tailLoop.id = static_cast<int> (fn.loops.size());
+        tailLoop.headerBlock = exit;
+        tailLoop.exitBlock = exit + 2;
+        tailLoop.induction = induction;
+        tailLoop.bound = { YdspLoopBoundKind::blockSize, 0 };
+        fn.loops.push_back (tailLoop);
+
+        return exit + 2;
     }
 
     //==============================================================================
@@ -891,6 +1145,8 @@ private:
     YdspIrFunction& fn;
     const YdspIrLoop& loop;
     const int lanes;
+
+    YdspVectorizationReason rejectionReason = YdspVectorizationReason::notVectorizable;
 
     int header = -1;
     int body = -1;
@@ -902,12 +1158,18 @@ private:
     int inductionMoveIndex = -1;
     int widenedAccessCount = 0;
 
+    int start = 0;
+    int tail = 0;
+
+    bool hasStreamAccess = false;
+
     std::vector<int> defsInBody, defsElsewhere, usesInBody, usesElsewhere;
     std::vector<bool> definedInHeader;
     std::vector<bool> isVector;
     std::vector<bool> widened;
-    std::vector<bool> hoistToPreheader; // per body instruction
-    std::vector<bool> valueHoisted;     // per value id
+    std::vector<bool> hoistToPreheader;
+    std::vector<bool> valueHoisted;
+    std::vector<int> tailRemap;
     std::vector<Reduction> reductions;
 };
 
@@ -922,13 +1184,37 @@ bool YdspVectorizer::run (YdspIrFunction& fn)
 
 bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth)
 {
+    YdspVectorizationReport report;
+    return run (fn, targetVectorWidth, report);
+}
+
+bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report)
+{
     if (targetVectorWidth != 4 && targetVectorWidth != 8 && targetVectorWidth != 16)
         return false;
 
     bool changed = false;
+    const auto loopCount = fn.loops.size();
 
-    for (const auto& loop : fn.loops)
-        changed |= LoopWidener (fn, loop, targetVectorWidth).tryWiden();
+    fn.vectorizationResults.clear();
+    fn.vectorizationResults.reserve (loopCount);
+
+    for (size_t i = 0; i < loopCount; ++i)
+    {
+        YdspVectorizationReason reason = YdspVectorizationReason::notVectorizable;
+
+        if (LoopWidener (fn, fn.loops[i], targetVectorWidth).tryWiden (reason))
+        {
+            changed = true;
+            fn.vectorizationResults.push_back ({ static_cast<int> (i), YdspVectorizationReason::widened, targetVectorWidth });
+        }
+        else
+        {
+            fn.vectorizationResults.push_back ({ static_cast<int> (i), reason, 1 });
+        }
+    }
+
+    report.loops = fn.vectorizationResults;
 
     if (changed)
     {

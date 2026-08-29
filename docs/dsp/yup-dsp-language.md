@@ -353,9 +353,12 @@ sibling loops may reuse the same name.
 #### Automatic vectorisation
 
 On the native (asmjit) backends the optimiser widens a constant-bound loop over
-parallel `state` arrays to the selected float32 width: four lanes for the
-portable SSE2/ASIMD targets and eight lanes for AVX2. This is the shape an
-oscillator bank, a modal filter bank or a partial bank has:
+parallel `state` arrays - and, in a block-mode processor, the per-sample loop
+over `in[i]` / `out[i]` - to the selected float32 width: four lanes for the
+portable SSE2/ASIMD targets, eight lanes for AVX2, and four f32x4 lanes on the
+WebAssembly backend when the module is compiled with `-msimd128` (the emscripten
+default). This is the shape an oscillator bank, a modal filter bank, a partial
+bank, or a per-sample gain/mix has:
 
 ```ydsp
 for i in 0..16 {
@@ -368,17 +371,23 @@ This is an optimisation, not a language feature: nothing in the patch selects
 it, and a loop that does not qualify simply stays scalar. A loop is widened only
 when **all** of the following hold:
 
-- the trip count is a constant and a whole multiple of the selected vector
-  width (so there is no scalar remainder to run);
+- the trip count is a compile-time constant with a constant start, or it is
+  `blockSize` and the body reads or writes a stream at the loop variable. When
+  the constant span is not a whole multiple of the vector width, the leading
+  scalar remainder is peeled as straight-line copies before the vector loop; a
+  `blockSize` loop gets a rolled scalar tail loop after the vector loop instead
+  (a runtime remainder cannot be peeled). A constant-bound `state`-array bank
+  whose span is shorter than one vector stays scalar;
 - the body is a single block — no `if`, no nested loop;
-- every array element is reached through the loop variable itself (`z[i]`, not
-  `z[j]` or `z[wp]`), and the loop variable is used for nothing else (`float (i)`
-  disqualifies the loop, because the widened counter advances by the selected
-  vector width);
+- every array or stream element is reached through the loop variable itself
+  (`z[i]`, `in[i]`, `out[i]`, not `z[j]` or `z[wp]`), and the loop variable is
+  used for nothing else (`float (i)` disqualifies the loop, because the widened
+  counter advances by the selected vector width);
 - the only value carried between iterations is an accumulation (`sum = sum + x`),
   one per accumulator;
-- the body touches no stream (`in[i]`), no scalar `state`, and no `'`, `@` or
-  `smooth` slot;
+- the body touches no scalar `state`, and no `'`, `@` or `smooth` slot. A
+  stream store anywhere but through the loop variable disqualifies the loop
+  (it would write the same element every iteration);
 - the body applies only `+ - * /`, `min`, `max`, `abs`, `sqrt`, `clamp` and
   `lerp` to widened values. A transcendental, a comparison or a `select` on a
   widened value leaves the loop scalar — but work that is *invariant* across the
@@ -389,26 +398,41 @@ when **all** of the following hold:
 *j+W*, *j+2W* … and the lanes are then added in a target-specific tree. That
 reassociates the sum and also removes the serial dependency between
 iterations, and so most of the speedup. Element-wise work (a loop with no
-accumulator) is bit-exact.
+accumulator) is bit-exact, and the peeled scalar remainder is bit-exact too.
 
-The current WebAssembly backend has no SIMD lowering and stays scalar. A future
-portable f32x4 lowering must be enabled with Emscripten's `-msimd128`, preserve
-strict floating-point semantics, and treat relaxed SIMD FMA as fast math only.
-It is deliberately separate from the x86 and AArch64 host target selection.
-An accumulating bank loop can therefore differ in the last bits between a
-desktop build and a browser build. `YdspAudioGraph::getExecutionReport()` reports
-which kernels were widened and at what lane count (see
-[7](#7-realtime-safety-and-the-execution-report)).
+**Why a loop stayed scalar is reported, per loop.** `YdspKernelReport` gained
+`loopVectorization`, one `YdspVectorizationResult` per original loop: `widened`
+with the lane count, or the exact rejection reason (`shortTripCount`,
+`unsupportedWidenedOp` - a select, comparison, transcendental or rounding on a
+widened value - `indirectAccess`, `loopCarriedValue`, `nonConstantStart`, and
+so on). `YdspVectorizationReport::rejectionReasons()` deduplicates the human
+text, and `YdspVectorizationResult::describe()` renders one line ("loop 1 was
+not vectorized: a select, comparison, transcendental or rounding consumes a
+widened value"). When `YdspCompileOptions::emitOptimizationReport` is set,
+the same lines are also emitted as *info* diagnostics, the LLVM `-Rpass`
+equivalent; without it, compilation stays silent and the structured report is
+still available from the execution report.
+
+The WebAssembly backend lowers the same widened IR to f32x4 when the module is
+compiled with `-msimd128` (the emscripten default, which defines
+`__wasm_simd128__`); without it, wasm stays scalar and a widened kernel is
+rejected rather than silently miscompiled. wasm SIMD is 128-bit, so the wasm
+vector width is always four lanes. It is deliberately separate from the x86 and
+AArch64 host target selection. An accumulating bank loop can therefore differ in
+the last bits between a desktop build and a browser build.
+`YdspAudioGraph::getExecutionReport()` reports which kernels were widened and at
+what lane count (see [7](#7-realtime-safety-and-the-execution-report)).
 
 #### Automatic loop unrolling
 
-On the same native backends, a small loop whose trip count is a compile-time
-constant is then written out in full, so the per-iteration bound compare and
-back edge disappear. This runs *after* widening, and so unrolls at the widened
-trip count - `for i in 0..16` over four lanes is four copies, not sixteen - and
-it declines a loop that is nested, runtime-bound, or large enough that the
-copies would cost more in instruction cache than the branches cost in issue
-slots. The wasm path stays rolled: a module is downloaded and parsed before it
+On the native backends and the wasm SIMD backend (compiled with `-msimd128`),
+a small loop whose trip count is a compile-time constant is then written out in
+full, so the per-iteration bound compare and back edge disappear. This runs
+*after* widening, and so unrolls at the widened trip count - `for i in 0..16`
+over four lanes is four copies, not sixteen - and it declines a loop that is
+nested, runtime-bound, or large enough that the copies would cost more in
+instruction cache than the branches cost in issue slots. A scalar wasm build
+(no `-msimd128`) stays rolled: a module is downloaded and parsed before it
 runs, and the browser's own engine re-optimises the loop regardless.
 
 It is bit-exact by construction: the body is copied verbatim, in order,
@@ -1621,7 +1645,7 @@ After optimisation the compiler emits, per kernel:
   the scalar count when a loop is vectorised: it answers "how many iterations
   could this loop run", not "how many instructions were emitted";
 - whether any loop was vectorised, and at what lane count (1 when none was, and
-  always 1 on the wasm backend — see
+  always 1 on a wasm build compiled without `-msimd128` - see
   [2.6](#automatic-vectorisation));
 - a boolean "proven realtime-safe" that is `true` only if every loop bound is
   statically known and no realtime-unsafe construct remains.

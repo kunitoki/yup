@@ -679,6 +679,14 @@ YdspTargetSelection selectTarget (const YdspCompileOptions& options, const YdspH
     if (requested == YdspNativeTarget::asimd)
         result.supportsFusedMultiplyAdd = true;
 
+#if YUP_WASM && defined (__wasm_simd128__)
+    // wasm has no native-target tiers; -msimd128 enables the portable f32x4
+    // lowering, a four-lane width. The scalar baseline tier stays scalar so
+    // its report keeps vectorWidth 1.
+    if (options.optimizationTier != YdspOptimizationTier::baseline)
+        result.vectorWidth = 4;
+#endif
+
     return result;
 }
 
@@ -1021,15 +1029,22 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
 
     const bool useNativeTier = options.optimizationTier != YdspOptimizationTier::baseline;
 
-#if YUP_WASM
-    constexpr bool hasNativeLoopTransforms = false;
+#if YUP_WASM && ! defined (__wasm_simd128__)
+    // A scalar wasm build (no -msimd128) keeps every loop transform off.
+    constexpr bool hasLoopTransforms = false;
 #else
-    constexpr bool hasNativeLoopTransforms = true;
+    constexpr bool hasLoopTransforms = true;
 #endif
 
-    const bool enableVectorization = useNativeTier && hasNativeLoopTransforms && target.vectorWidth > 1;
-    const bool enableUnrolling = useNativeTier && hasNativeLoopTransforms;
-    const bool enableReductionSplitting = useNativeTier && hasNativeLoopTransforms;
+    // The wasm SIMD backend (compiled with -msimd128, the emscripten default)
+    // applies the same automatic-tier transform set as native: vectorisation
+    // at four f32x4 lanes, unrolling of the widened loops, and splitting of
+    // the widened reduction chains the unrolled copies expose. All three are
+    // pure IR passes that run before codegen, so the wasm backend consumes
+    // exactly the IR the native suite already validates.
+    const bool enableVectorization = useNativeTier && hasLoopTransforms && target.vectorWidth > 1;
+    const bool enableUnrolling = useNativeTier && hasLoopTransforms;
+    const bool enableReductionSplitting = useNativeTier && hasLoopTransforms;
 
     // Only fast-math compilation may change an expression's evaluation order.
     // An explicit YDSP fma() remains a one-rounding operation in every tier;
@@ -1038,18 +1053,10 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     optimizer.setTargetHasFusedMultiplyAdd (target.supportsFusedMultiplyAdd);
     optimizer.setTargetHasPackedFusedMultiplyAdd (target.supportsFusedMultiplyAdd && target.vectorWidth > 1);
 
-#if ! YUP_WASM
-    // The asmjit backends lower packed lanes. The wasm emitter stays scalar
-    // until its SIMD opcode support and corresponding validation are present.
     optimizer.setVectorizationEnabled (enableVectorization);
     optimizer.setVectorWidth (target.vectorWidth);
-
-    // These transforms are benchmarked by the native test suite and retain the
-    // established automatic-tier behavior. The baseline tier keeps its compact
-    // rolled scalar form for reproducibility and portability checks.
     optimizer.setUnrollingEnabled (enableUnrolling);
     optimizer.setReductionSplittingEnabled (enableReductionSplitting);
-#endif
 
     if (options.emitOptimizationReport)
     {
@@ -1058,9 +1065,9 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
         optimizationReport.reductionSplittingEnabled = enableReductionSplitting;
         optimizationReport.contractionEnabled = options.fastMath;
 
-#if YUP_WASM
+#if YUP_WASM && ! defined (__wasm_simd128__)
         if (useNativeTier)
-            optimizationReport.rejectedTransforms.add ("WASM SIMD lowering is not implemented; portable f32x4 SIMD requires a dedicated strict-semantics backend");
+            optimizationReport.rejectedTransforms.add ("WASM SIMD lowering requires compiling with -msimd128");
 #endif
 
         if (options.optimizationTier == YdspOptimizationTier::aggressive)
@@ -1070,6 +1077,16 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     auto ir = optimizer.build (*analyzed);
     if (ir == nullptr || diagnostics.hasErrors())
         return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
+
+    // Missed-vectorization remarks: "why is this loop scalar?", as info
+    // diagnostics, only when the optimization report was asked for - the same
+    // opt-in that LLVM's -Rpass=loop-vectorize uses. The structured per-loop
+    // outcome is always available through YdspKernelReport::loopVectorization.
+    if (options.emitOptimizationReport && enableVectorization)
+        for (const auto& kernel : ir->kernels)
+            for (const auto& result : kernel->vectorizationResults)
+                if (! result.widened())
+                    diagnostics.addInfo (0, 0, "kernel '" + kernel->name + "': " + result.describe());
 
     // 5. Codegen into the graph's runtime
     auto graphPimpl = std::make_unique<YdspAudioGraph::Pimpl>();

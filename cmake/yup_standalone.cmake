@@ -216,11 +216,13 @@ function (yup_standalone_app)
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
-            $<$<CONFIG:DEBUG>:-gsource-map -g>
+            $<$<CONFIG:DEBUG>:-O0 -gsource-map -g>
+            $<$<CONFIG:RELEASE>:-O2 -flto>
             -fexceptions
             -pthread
             -Wno-pthreads-mem-growth
             -sWASM=1
+            -sWASM_BIGINT=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
             -sSHARED_MEMORY=1

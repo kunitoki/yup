@@ -27,12 +27,6 @@ namespace yup
 namespace
 {
 
-/** How many times a value id is defined and read across the whole function.
-
-    Whole-function rather than per-block because the IR is not SSA: a multiply
-    whose result is read again three blocks later cannot be folded away, and
-    only a global count can say so.
-*/
 struct YdspValueUseCounts
 {
     std::vector<int> definitions;
@@ -108,8 +102,6 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             if (insts[i].op != YdspIrOp::addF || ! isFusableFloat32 (insts[i].result))
                 continue;
 
-            // A candidate is a multiply this add consumes and nothing else does,
-            // and which can be moved down to the add's position unchanged.
             const auto findMultiply = [&] (int operand) -> std::optional<size_t>
             {
                 if (! isFusableFloat32 (operand) || ! counts.definedOnce (operand) || counts.useCount (operand) != 1)
@@ -123,8 +115,6 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
                     if (insts[j].op != YdspIrOp::mulF || ! isFusableFloat32 (insts[j].a) || ! isFusableFloat32 (insts[j].b))
                         return std::nullopt;
 
-                    // The multiply is about to happen later than it did, so
-                    // anything it reads has to still hold the same value there.
                     for (size_t k = j + 1; k < i; ++k)
                         if (insts[k].result == insts[j].a || insts[k].result == insts[j].b)
                             return std::nullopt;
@@ -132,7 +122,7 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
                     return j;
                 }
 
-                return std::nullopt; // defined in another block
+                return std::nullopt;
             };
 
             const auto fromA = findMultiply (insts[i].a);
@@ -141,24 +131,6 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             if (! fromA.has_value() && ! fromB.has_value())
                 continue;
 
-            // With both operands eligible the choice is a latency decision, not
-            // a free one. Fusing removes a link from the chain running through
-            // the *fused* operand and leaves the other chain as it was, so on
-            // `last * 0.5 + y * 0.5` fusing the `last` multiply leaves
-            // `last -> fma -> last` where fusing the other leaves
-            // `last -> mul -> fma -> last`, one link longer round a recurrence
-            // that is the whole critical path.
-            //
-            // What distinguishes them locally is that the multiply on the
-            // recurrence reads a register the block writes again further down -
-            // a promoted `state` scalar carried across the sample loop's back
-            // edge. That is the one to fuse.
-            //
-            // Scanned from the add rather than from the multiply: a write
-            // between the two would mean the multiply cannot move down at all,
-            // which is findMultiply()'s business and not this one's. Keeping
-            // the ranges disjoint is what stops the two predicates having to
-            // agree about anything.
             const auto isOnARecurrence = [&] (size_t multiplyIndex)
             {
                 for (size_t k = i + 1; k < insts.size(); ++k)
@@ -173,15 +145,10 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             if (fromA.has_value() && fromB.has_value() && ! isOnARecurrence (*fromA) && isOnARecurrence (*fromB))
                 chosen = *fromB;
 
-            // Copied, not referenced: the assignment below writes into the same
-            // vector the multiply lives in.
             const auto factorA = insts[chosen].a;
             const auto factorB = insts[chosen].b;
             const auto addend = (insts[chosen].result == insts[i].a) ? insts[i].b : insts[i].a;
 
-            // `vreduceAddF` produces a scalar from a widened operand, so the
-            // add result alone cannot establish that every FMA operand is
-            // scalar or that the target can lower the packed operation.
             if (! isFusableFloat32 (addend))
                 continue;
 
@@ -189,10 +156,6 @@ void YdspOptimizer::contractMultiplyAdd (YdspIrFunction& fn)
             insts[i].a = factorA;
             insts[i].b = factorB;
             insts[i].c = addend;
-
-            // The multiply is now unread - it had exactly one use and this was
-            // it - so the dead-code pass that follows collects it. Erasing it
-            // here instead would invalidate `i` and every index above.
         }
     }
 }

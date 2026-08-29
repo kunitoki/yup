@@ -34,6 +34,123 @@ int YdspIrFunction::getInstructionCount() const noexcept
 
 //==============================================================================
 
+namespace
+{
+
+String vectorizationReasonText (YdspVectorizationReason reason)
+{
+    switch (reason)
+    {
+        case YdspVectorizationReason::widened:
+            return "widened";
+
+        case YdspVectorizationReason::notVectorizable:
+            return "the loop is not vectorizable";
+
+        case YdspVectorizationReason::unsupportedLoopBound:
+            return "the loop bound is not a compile-time constant or blockSize";
+
+        case YdspVectorizationReason::multiBlockBody:
+            return "the loop body contains control flow (an if or a nested loop)";
+
+        case YdspVectorizationReason::nonConstantStart:
+            return "the loop start is not a compile-time constant";
+
+        case YdspVectorizationReason::nonzeroStart:
+            return "a blockSize loop must start at 0";
+
+        case YdspVectorizationReason::shortTripCount:
+            return "the loop span is shorter than one vector";
+
+        case YdspVectorizationReason::missingHeaderCompare:
+            return "the loop header does not hold exactly one `i < bound` compare";
+
+        case YdspVectorizationReason::unrecognizedInductionUpdate:
+            return "the loop body does not end with `next = i + 1; i = next`";
+
+        case YdspVectorizationReason::inductionUsedAsValue:
+            return "the loop variable is used as a value instead of only as an array/stream index";
+
+        case YdspVectorizationReason::indirectAccess:
+            return "an element is reached through an index other than the loop variable";
+
+        case YdspVectorizationReason::unrecognizedAccumulation:
+            return "a value carried across iterations is not of the form `acc = acc + x`";
+
+        case YdspVectorizationReason::loopCarriedValue:
+            return "the loop writes a value that escapes the loop (scalar state, `'`, `@` or `smooth`)";
+
+        case YdspVectorizationReason::unsupportedWidenedOp:
+            return "a select, comparison, transcendental or rounding consumes a widened value";
+
+        case YdspVectorizationReason::unsupportedWidenedType:
+            return "a widened value is not float32";
+
+        case YdspVectorizationReason::stateWriteInBody:
+            return "the loop writes scalar state, a param or an event field";
+
+        case YdspVectorizationReason::invariantStreamStore:
+            return "a stream store does not go through the loop variable";
+
+        case YdspVectorizationReason::emitInBody:
+            return "the loop emits an output event";
+
+        case YdspVectorizationReason::nothingToWiden:
+            return "the loop has no array or stream access to widen";
+
+        case YdspVectorizationReason::runtimeBoundWithoutStreams:
+            return "a blockSize-bound loop needs a stream access at the loop variable";
+
+        default:
+            break;
+    }
+
+    return "the loop is not vectorizable";
+}
+
+} // namespace
+
+//==============================================================================
+
+String YdspVectorizationResult::describe() const
+{
+    if (reason == YdspVectorizationReason::widened)
+        return "loop " + String (loopId) + " was widened to " + String (laneCount) + " lanes";
+
+    return "loop " + String (loopId) + " was not vectorized: " + vectorizationReasonText (reason);
+}
+
+int YdspVectorizationReport::countWidened() const noexcept
+{
+    int count = 0;
+
+    for (const auto& result : loops)
+        if (result.widened())
+            ++count;
+
+    return count;
+}
+
+StringArray YdspVectorizationReport::rejectionReasons() const
+{
+    StringArray reasons;
+
+    for (const auto& result : loops)
+    {
+        if (result.widened())
+            continue;
+
+        const auto text = vectorizationReasonText (result.reason);
+
+        if (! reasons.contains (text))
+            reasons.add (text);
+    }
+
+    return reasons;
+}
+
+//==============================================================================
+
 YdspOptimizer::YdspOptimizer (YdspDiagnostics& diagnostics)
     : diagnostics (diagnostics)
 {
@@ -158,6 +275,7 @@ void YdspOptimizer::buildReport (const YdspIrProgram& program, YdspExecutionRepo
         entry.provenRealtimeSafe = true;
         entry.vectorized = kernel->vectorized;
         entry.vectorWidth = kernel->vectorWidth;
+        entry.loopVectorization.loops = kernel->vectorizationResults;
 
         entry.unrolled = std::any_of (kernel->loops.begin(), kernel->loops.end(), [] (const YdspIrLoop& loop)
         {

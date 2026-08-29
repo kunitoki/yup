@@ -435,4 +435,53 @@ void YdspWasmEmitter::unreachable()
     op (opUnreachable);
 }
 
+#if defined (__wasm_simd128__)
+
+void YdspWasmEmitter::simdOp (uint32_t subopcode)
+{
+    op (simdPrefix);
+    appendUnsignedLeb (body, subopcode);
+}
+
+void YdspWasmEmitter::simdLoad (uint32_t subopcode, uint32_t alignLog2, uint32_t offset)
+{
+    op (simdPrefix);
+    appendUnsignedLeb (body, subopcode);
+    appendUnsignedLeb (body, alignLog2);
+    appendUnsignedLeb (body, offset);
+}
+
+void YdspWasmEmitter::simdStore (uint32_t subopcode, uint32_t alignLog2, uint32_t offset)
+{
+    op (simdPrefix);
+    appendUnsignedLeb (body, subopcode);
+    appendUnsignedLeb (body, alignLog2);
+    appendUnsignedLeb (body, offset);
+}
+
+void YdspWasmEmitter::v128Const (const uint8_t data[16])
+{
+    op (simdPrefix);
+    appendUnsignedLeb (body, 0x0C);
+    bytes (data, 16);
+}
+
+void YdspWasmEmitter::i8x16Shuffle (const uint8_t mask[16])
+{
+    op (simdPrefix);
+    appendUnsignedLeb (body, opI8x16Shuffle);
+    bytes (mask, 16);
+}
+
+void YdspWasmEmitter::f32x4ExtractLane (uint32_t lane)
+{
+    jassert (lane < 4);
+
+    op (simdPrefix);
+    appendUnsignedLeb (body, opF32x4ExtractLane);
+    u8 (static_cast<uint8_t> (lane));
+}
+
+#endif
+
 } // namespace yup

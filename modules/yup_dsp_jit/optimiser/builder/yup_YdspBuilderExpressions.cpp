@@ -25,7 +25,6 @@ namespace yup
 namespace
 {
 
-/** Linear lookup over a constexpr intrinsic-name -> IR op table. */
 template <size_t N>
 const YdspIrOp* findIntrinsicOp (const std::array<std::pair<const char*, YdspIrOp>, N>& table, StringRef name) noexcept
 {
@@ -68,7 +67,6 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
 
             if (expr.op == YdspOperator::notI)
             {
-                // ~x is lowered to x ^ -1 (all-ones mask of the operand width).
                 const auto operandType = valueTypes[static_cast<size_t> (operand)];
                 const auto minusOne = emitConstIFor (-1, operandType);
                 return emitInst ({ YdspIrOp::xorI, newValue (operandType), operand, minusOne });
@@ -107,8 +105,6 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
 
             if (base.kind == YdspExprKind::member)
             {
-                // `state.buf[i]` / `voices[i].buf[j]` - array field of a
-                // struct state.
                 int structBase = 0, stride = 0, instanceIndex = -1;
                 YdspValueType structType = YdspValueType::float32Type;
 
@@ -205,13 +201,9 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
 
         case YdspExprKind::prev:
         {
-            // x' : read the hidden slot, evaluate x, defer the slot write.
             const auto slot = newHiddenFloatScalar();
             const auto previous = promoteHiddenSlot (slot, YdspValueType::float32Type);
 
-            // Defer capture resolution to flush time: the value of 'out'
-            // is not yet known when out' is evaluated on the RHS, but
-            // lastOutputValue will be populated after the assignment.
             pendingPrevStores.emplace_back (slot, previous, expr.children[0].get());
 
             return previous;
@@ -219,7 +211,6 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
 
         case YdspExprKind::delay:
         {
-            // x @ n : self-contained ring buffer.
             constexpr int maxDelay = 65536;
             const auto n = static_cast<int> (expr.children[1]->number);
 
@@ -245,16 +236,9 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
             const auto size = emitConstI (n + 1);
             const auto next = emitInst ({ YdspIrOp::addI, newValue (YdspValueType::int32Type), wp, one });
 
-            // The write pointer starts at zero (prepare()/reset() zero the
-            // state and nothing outside this kernel touches the slot) and only
-            // ever advances by one, so it stays within [0, n]: `next % (n + 1)`
-            // is just "wrap n + 1 back to zero", which wrapI does with a
-            // compare and a conditional move instead of an integer division.
             const auto wrapped = emitInst ({ YdspIrOp::wrapI, newValue (YdspValueType::int32Type), next, size });
             writeHiddenSlot (wpSlot, wp, wrapped, YdspValueType::int32Type);
 
-            // Read the slot one past the write pointer: with an n + 1 entry
-            // ring this is the sample written exactly `n` samples ago.
             const auto read = emitInst ({ YdspIrOp::loadStateArrayF, newValue (YdspValueType::float32Type), wrapped, -1, -1, ringBase });
 
             return read;
@@ -275,7 +259,6 @@ int YdspIrBuilder::lowerEventField (const YdspExpr& expr)
 
     if (field == nullptr)
     {
-        // The analyzer already rejects unknown fields; this is defensive.
         diagnostics.addError (expr.location.line, expr.location.column, "Unknown event field '" + expr.text + "'");
         return emitConstF (0.0);
     }
@@ -288,8 +271,6 @@ int YdspIrBuilder::lowerEventField (const YdspExpr& expr)
     if (field->type != YdspValueType::boolType)
         return raw;
 
-    // `.isLegato` is the only bool payload field: it reads bit 0 of the flags
-    // word, so masking and comparing against zero needs no dedicated opcode.
     const auto masked = emitBinary (YdspIrOp::andI, YdspValueType::int32Type, raw, emitConstIFor (ydspEventFlagLegato, YdspValueType::int32Type));
 
     return emitBinary (YdspIrOp::neI, YdspValueType::boolType, masked, emitConstIFor (0, YdspValueType::int32Type));
@@ -304,8 +285,6 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
 
     if (name == "blockSize")
     {
-        // Event handlers have no block-size context; the analyzer rejects
-        // `blockSize` there, so this is purely defensive.
         if (! isEventHandler)
             return blockSizeValue;
 
@@ -317,22 +296,25 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
 
     if (name == "samplePeriod")
     {
-        // 1 / sampleRate. Loop-invariant, so LICM hoists it out of the sample
-        // loop and the division is paid once per block.
         const auto rate = emitInst ({ YdspIrOp::loadSampleRate, newValue (YdspValueType::float32Type) });
         return emitInst ({ YdspIrOp::divF, newValue (YdspValueType::float32Type), emitConstF (1.0), rate });
     }
 
     if (name == "pi")
         return emitConstF (3.14159265358979323846);
+
     if (name == "e")
         return emitConstF (2.71828182845904523536);
+
     if (name == "inf")
         return emitConstF (std::numeric_limits<double>::infinity());
+
     if (name == "nan")
         return emitConstF (std::numeric_limits<double>::quiet_NaN());
+
     if (name == "true")
         return emitConstB (true);
+
     if (name == "false")
         return emitConstB (false);
 
@@ -344,7 +326,6 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
             return emitConstF (0.0);
         }
 
-        // Sample-mode scalar state lives in a register.
         if (fn.isSampleMode && state->arraySize <= 0)
         {
             if (const auto it = stateRegs.find (state); it != stateRegs.end())
@@ -361,7 +342,6 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
             return emitConstF (0.0);
         }
 
-        // Block-mode scalar state: memory access.
         return emitInst ({ stateIsInt (state) ? YdspIrOp::loadStateI : YdspIrOp::loadStateF,
                            newValue (toStorageType (state->type)),
                            stateScalarSlot (state) });
@@ -376,7 +356,6 @@ int YdspIrBuilder::lowerIdentifier (const String& name, const YdspLocation& loca
 
             case YdspEndpointKind::outputStream:
             {
-                // Reading an output stream reads the current sample's buffer value.
                 const auto streamIndex = endpointStreamIndex (endpoint);
 
                 if (const auto it = lastOutputValue.find (static_cast<size_t> (streamIndex)); it != lastOutputValue.end())
@@ -513,20 +492,15 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
 
     if (callee == "mem")
     {
-        // mem(x) == x'
         const auto slot = newHiddenFloatScalar();
         const auto previous = promoteHiddenSlot (slot, YdspValueType::float32Type);
 
-        // Defer capture resolution to flush time (same rationale as prev).
         pendingPrevStores.emplace_back (slot, previous, expr.children[0].get());
         return previous;
     }
 
     if (callee == "smooth")
     {
-        // smooth(x, tau): a one-pole ramp towards x, plus a snap so the target
-        // is reached exactly instead of stalling short of it. Two hidden slots
-        // per call site: the running value and a primed flag.
         const auto target = coerceTo (lowerExpr (*expr.children[0]), YdspValueType::float32Type);
         const auto tau = coerceTo (lowerExpr (*expr.children[1]), YdspValueType::float32Type);
 
@@ -536,8 +510,6 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
         const auto previous = promoteHiddenSlot (valueSlot, YdspValueType::float32Type);
         const auto primed = promoteHiddenSlot (primedSlot, YdspValueType::int32Type);
 
-        // coeff = 1 - exp (-samplePeriod / tau). Loop-invariant for a constant
-        // tau, so LICM hoists the exp out of the sample loop.
         const auto rate = emitInst ({ YdspIrOp::loadSampleRate, newValue (YdspValueType::float32Type) });
         const auto period = emitBinary (YdspIrOp::divF, YdspValueType::float32Type, emitConstF (1.0), rate);
         const auto exponent = emitBinary (YdspIrOp::divF, YdspValueType::float32Type, emitInst ({ YdspIrOp::negF, newValue (YdspValueType::float32Type), period }), tau);
@@ -546,21 +518,6 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
 
         const auto ramped = emitInst ({ YdspIrOp::lerpF, newValue (YdspValueType::float32Type), previous, target, coeff });
 
-        // Snap on the first sample the ramp cannot advance, and on the very
-        // first sample of all.
-        //
-        // The arrival test looks at the *step*, not the remaining distance: a
-        // float32 lerp stalls once its increment drops below half an ulp, and
-        // it does so while still short of the target by roughly ulp / coeff -
-        // 7e-7 for a 0.5 ms smoother, but 1.4e-3 for a 1 s one. So any fixed
-        // epsilon is either unreachable (a permanent offset) or loose enough
-        // to truncate a fast ramp. Testing the step is scale-free, strictly
-        // monotone (an advancing ramp advances by at least one ulp) and lands
-        // on the target exactly.
-        //
-        // prepare()/reset() zero the state, so the first-sample case is what
-        // stops a patch sweeping up from 0 instead of starting at the
-        // parameter's current value.
         const auto hasArrived = emitBinary (YdspIrOp::eqF, YdspValueType::boolType, ramped, previous);
         const auto isFirstSample = emitBinary (YdspIrOp::eqI, YdspValueType::boolType, primed, emitConstI (0));
         const auto snap = emitInst ({ YdspIrOp::orB, newValue (YdspValueType::boolType), isFirstSample, hasArrived });
@@ -573,7 +530,6 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
         return next;
     }
 
-    // Explicit conversion casts (width-aware).
     if (callee == "int" || callee == "int32")
         return lowerCastToInt (lowerExpr (*expr.children[0]), YdspValueType::int32Type);
 
@@ -687,9 +643,6 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
 
     if (callee == "fma")
     {
-        // Unlike its neighbours this one does not take its width from the
-        // operands: the analyzer has already rejected anything float64, so the
-        // result is float32 by construction. See YdspIrOp::fmaF.
         const auto argA = lowerExpr (*expr.children[0]);
         const auto argB = lowerExpr (*expr.children[1]);
         const auto argC = lowerExpr (*expr.children[2]);
@@ -718,7 +671,6 @@ int YdspIrBuilder::lowerCall (const YdspExpr& expr)
                            elseU });
     }
 
-    // User-defined functions: inline the body. Processor-local functions win
     if (const auto* func = findFunctionInScope (callee, &processor.functions, programFunctions))
         return lowerFunctionCall (*func, expr);
 
@@ -754,10 +706,6 @@ void YdspIrBuilder::unifyOperands (const YdspExpr& a, int av, const YdspExpr& b,
         return;
     }
 
-    // Mirror the semantic analyzer's contextual literal adaptation: only a
-    // source literal adapts to the other operand's type. Never narrow the
-    // non-literal side (e.g. an `int64(1)` cast result) to a narrower
-    // literal width - that silently changed the result type.
     const bool aIsLiteral = isAdaptableLiteral (a);
     const bool bIsLiteral = isAdaptableLiteral (b);
 
@@ -800,8 +748,6 @@ void YdspIrBuilder::unifyOperands (const YdspExpr& a, int av, const YdspExpr& b,
         }
     }
 
-    // Try cross-class coercion (int ↔ float): the semantic analyzer allows
-    // integer literals to adapt to float targets and vice versa.
     if (const auto coerced = coerceTo (bv, ta); coerced >= 0)
     {
         outA = av;
@@ -818,7 +764,6 @@ void YdspIrBuilder::unifyOperands (const YdspExpr& a, int av, const YdspExpr& b,
         return;
     }
 
-    // Should not reach here if the semantic analyzer did its job.
     outA = av;
     outB = bv;
     outType = ta;
@@ -838,8 +783,6 @@ int YdspIrBuilder::widenConst (int value, YdspValueType targetType)
         if (isIntValueType (targetType))
             return emitConstIFor (it->second, targetType);
 
-        // Contextual literal adaptation: an integer literal may bind to any
-        // float width. Float literals never adapt to integers (handled below).
         if (isFloatValueType (targetType))
             return emitConstFFor (static_cast<double> (it->second), targetType);
     }
@@ -874,7 +817,6 @@ int YdspIrBuilder::coerceTo (int value, YdspValueType targetType)
     if (isFloatValueType (sourceType) && isIntValueType (targetType))
         return emitInst ({ YdspIrOp::ftoi, newValue (targetType), value });
 
-    // bool <-> numeric via the integer representation.
     if (isIntValueType (targetType))
         return emitInst ({ targetType == YdspValueType::int64Type ? YdspIrOp::extI : YdspIrOp::movI, newValue (targetType), value });
 
@@ -959,7 +901,6 @@ void YdspIrBuilder::lowerStateStore (const YdspStateDecl* state, int value)
 {
     if (fn.isSampleMode && state->arraySize <= 0)
     {
-        // Write through the register.
         const auto reg = stateRegs[state];
         const auto regType = valueTypes[static_cast<size_t> (reg)];
         const auto coerced = coerceTo (value, regType);

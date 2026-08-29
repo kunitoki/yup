@@ -97,11 +97,6 @@ void YdspOptimizer::constantFolding (YdspIrFunction& fn)
             if (inst.result >= 0 && static_cast<size_t> (inst.result) >= constants.size())
                 constants.resize (static_cast<size_t> (inst.result) + 1);
 
-    // The IR is non-SSA: a value id can be redefined at several program
-    // points (the sample-loop induction register is written both by the
-    // prologue `constI 0` and by the per-iteration `movI` update). A constant
-    // recorded for one definition is not valid at the others, so only value
-    // ids defined exactly once may ever be treated as constant.
     std::vector<int> definitionCount (constants.size(), 0);
 
     for (const auto& block : fn.blocks)
@@ -162,8 +157,6 @@ void YdspOptimizer::constantFolding (YdspIrFunction& fn)
                 if (! allConst)
                     continue;
 
-                // Folding a multi-defined result would also record a constant
-                // that other uses of the id could read incorrectly.
                 if (definitionCount[static_cast<size_t> (inst.result)] != 1)
                     continue;
 
@@ -344,12 +337,6 @@ void YdspOptimizer::constantFolding (YdspIrFunction& fn)
                         result = { true, true, false, a.f + (b.f - a.f) * c.f };
                         break;
                     case YdspIrOp::fmaF:
-                        // Folded in double like every other float op here, and
-                        // for this one that is not an approximation of the
-                        // runtime behaviour but exactly it: the operands are
-                        // float32, their product is exact in float64, and the
-                        // single rounding back down to float32 is the rounding
-                        // the hardware instruction performs.
                         result = { true, true, false, a.f * b.f + c.f };
                         break;
                     case YdspIrOp::selectB:
@@ -370,7 +357,6 @@ void YdspOptimizer::constantFolding (YdspIrFunction& fn)
                         continue;
                 }
 
-                // Replace the folded instruction with a constant.
                 inst.op = result.isBool ? YdspIrOp::constB : (result.isFloat ? YdspIrOp::constF : YdspIrOp::constI);
                 inst.a = inst.b = inst.c = -1;
                 inst.memIndex = -1;

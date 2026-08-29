@@ -408,6 +408,11 @@ struct YdspIrFunction
     bool vectorized = false;
     int vectorWidth = 1;
 
+    // Populated by the vectoriser whenever it runs: one entry per original
+    // loop (see YdspVectorizationResult), recording whether it was widened or
+    // the exact reason it stayed scalar. Empty when the vectoriser did not run.
+    std::vector<YdspVectorizationResult> vectorizationResults;
+
     // Set when a widened accumulator was halved. Unlike the loop flags this is
     // per-function rather than per-loop: the chain it rewrites lives in a block,
     // and after unrolling that block no longer belongs to any loop.

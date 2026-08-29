@@ -166,6 +166,69 @@ TEST (YdspWasmBackendTests, StateAccumulatesAcrossBlocks)
         EXPECT_FLOAT_EQ (static_cast<float> (9 + i), output[static_cast<size_t> (i)]);
 }
 
+TEST (YdspWasmBackendTests, VectorizedStateBankMatchesScalarReference)
+{
+    // The automatic tier vectorises this constant-bound bank loop to f32x4
+    // (the emscripten build compiles with -msimd128), so the module runs the
+    // packed lowering: v128 load/store, f32x4 arithmetic, splats and the
+    // shuffle-based horizontal reduction. Compare its output against the
+    // scalar recurrence (EXPECT_FLOAT_EQ tolerates the reassociated sum).
+    YdspCompiler compiler;
+    auto graph = compilePatch (R"YDSP(
+        let modes = 8;
+
+        processor P {
+            input stream in;
+            output stream out;
+
+            state float z[modes];
+
+            process {
+                float sum = 0.0;
+
+                for i in 0..modes {
+                    z[i] = z[i] * 0.5 + in;
+                    sum = sum + z[i];
+                }
+
+                out = sum;
+            }
+        }
+
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP", compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (44100.0, 32);
+
+    const std::vector<float> ones (32, 1.0f);
+    std::vector<float> output (32, 0.0f);
+
+    const float* inPtrs[] = { ones.data() };
+    float* outPtrs[] = { output.data() };
+
+    runWasmProcess (graph, inPtrs, 1, outPtrs, 1, 32);
+
+    float z[8] = {};
+    std::vector<float> reference (32, 0.0f);
+
+    for (int s = 0; s < 32; ++s)
+    {
+        float sum = 0.0f;
+
+        for (int i = 0; i < 8; ++i)
+        {
+            z[i] = z[i] * 0.5f + 1.0f;
+            sum += z[i];
+        }
+
+        reference[static_cast<size_t> (s)] = sum;
+    }
+
+    for (int s = 0; s < 32; ++s)
+        EXPECT_FLOAT_EQ (reference[static_cast<size_t> (s)], output[static_cast<size_t> (s)]);
+}
+
 TEST (YdspWasmBackendTests, ParamsDriveTheKernel)
 {
     YdspCompiler compiler;

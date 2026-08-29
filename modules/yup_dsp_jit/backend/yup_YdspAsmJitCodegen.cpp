@@ -852,6 +852,18 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
 
             const YdspGp base = bases[slot];
 
+            if (isVectorValue (isStore ? inst.b : inst.result))
+            {
+                const auto mem = emitVectorStreamMem (base, inst.a);
+
+                if (isStore)
+                    storeVectorToMem (mem, fp (inst.b));
+                else
+                    loadVectorFromMem (fp (inst.result), mem);
+
+                return;
+            }
+
             const uint32_t scale = is64BitValueType (type) ? 3u : 2u;
             const YdspMem mem = memPtrIndexed (base, gp (inst.a), scale, 0);
 
@@ -1243,6 +1255,54 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
 }
 
 //==============================================================================
+
+bool YdspAsmJitCodegenImpl::isVectorValue (int value) const noexcept
+{
+    return value >= 0
+        && static_cast<size_t> (value) < valueLanes.size()
+        && valueLanes[static_cast<size_t> (value)] > 1;
+}
+
+YdspFp YdspAsmJitCodegenImpl::newFpOfType (YdspValueType type, const char* name)
+{
+    return type == YdspValueType::float64Type ? newFp64 (name) : newFp (name);
+}
+
+asmjit::Reg YdspAsmJitCodegenImpl::newRegFor (const std::vector<YdspValueType>& types, const YdspIrInst& inst)
+{
+    const auto type = types[static_cast<size_t> (inst.result)];
+
+    if (isVectorValue (inst.result))
+        return newFpVector ("v");
+
+    if (type == YdspValueType::float64Type)
+        return newFp64 ("v");
+
+    if (type == YdspValueType::float32Type)
+        return newFp ("v");
+
+    if (type == YdspValueType::int64Type)
+        return cc->new_gp64 ("v");
+
+    return cc->new_gp32 ("v");
+}
+
+YdspGp YdspAsmJitCodegenImpl::gp (int value) const
+{
+    return regs[static_cast<size_t> (value)].as<YdspGp>();
+}
+
+YdspFp YdspAsmJitCodegenImpl::fp (int value) const
+{
+    return regs[static_cast<size_t> (value)].as<YdspFp>();
+}
+
+void YdspAsmJitCodegenImpl::moveGp (const YdspGp& dst, const YdspGp& src)
+{
+    cc->mov (dst, src);
+}
+
+//==============================================================================
 // libm calls
 
 void YdspAsmJitCodegenImpl::emitLibmUnary (float (*f32fn) (float), double (*f64fn) (double), const YdspIrInst& inst)
@@ -1365,6 +1425,42 @@ void YdspAsmJitCodegenImpl::emitTerminator (const YdspIrBlock& block, int blockI
 
         default:
             return;
+    }
+}
+
+//==============================================================================
+
+int YdspAsmJitCodegenImpl::stateScalarBase (YdspValueType type, int slot) const
+{
+    switch (type)
+    {
+        case YdspValueType::float32Type:
+            return slot * 4;
+        case YdspValueType::float64Type:
+            return float64ScalarOffset + slot * 8;
+        case YdspValueType::int32Type:
+            return int32ScalarOffset + slot * 4;
+        case YdspValueType::int64Type:
+            return int64ScalarOffset + slot * 8;
+        default:
+            return slot * 4;
+    }
+}
+
+int YdspAsmJitCodegenImpl::stateArrayBase (YdspValueType type, int element) const
+{
+    switch (type)
+    {
+        case YdspValueType::float32Type:
+            return element * 4;
+        case YdspValueType::float64Type:
+            return float64ArrayOffset + element * 8;
+        case YdspValueType::int32Type:
+            return int32ArrayOffset + element * 4;
+        case YdspValueType::int64Type:
+            return int64ArrayOffset + element * 8;
+        default:
+            return element * 4;
     }
 }
 

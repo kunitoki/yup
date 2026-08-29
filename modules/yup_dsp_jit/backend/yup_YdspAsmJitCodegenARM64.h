@@ -41,10 +41,18 @@ namespace yup
 class YdspAsmJitCodegenARM64 : public YdspAsmJitCodegenImpl
 {
 protected:
+    YdspFp newFp (const char* name) override;
+    YdspFp newFp64 (const char* name) override;
+    YdspFp newFp128 (const char* name) override;
+    YdspFp newFpVector (const char* name) override;
+
     YdspMem memPtr (const YdspGp& base, int32_t offset) const override;
     YdspMem memPtrIndexed (const YdspGp& base, const YdspGp& index, uint32_t scaleLog2, int32_t offset) const override;
+
     YdspMem emitStateMem (YdspValueType type, int base, int indexValue) override;
     YdspMem emitVectorStateMem (int base, int indexValue) override;
+    YdspMem emitVectorStreamMem (const YdspGp& base, int indexValue) override;
+
     void prepareStateAddressing (const YdspIrFunction& fn) override;
     void beginBlock (int blockIndex) override;
     void onValueRedefined (int value) override;
@@ -99,15 +107,7 @@ protected:
     void branchIfNotZero (const YdspGp& cond, const asmjit::Label& target) override;
 
 private:
-    // `stateArrays + regionBase` per distinct array region, materialized once
-    // in the prologue and keyed by the region's byte offset.
     std::unordered_map<int, YdspGp> stateArrayBaseRegs;
-
-    // The element index of a widened access, pre-scaled to bytes, per index
-    // value id. LDR/STR of a Q register cannot scale a register offset by 4, so
-    // the scaling has to happen in a register; one register serves every widened
-    // access in a block because the vectoriser guarantees the induction variable
-    // is only updated after all of them. Dropped at each block boundary.
     std::unordered_map<int, YdspGp> vectorIndexRegs;
 };
 

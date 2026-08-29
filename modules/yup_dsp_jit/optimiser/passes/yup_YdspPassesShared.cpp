@@ -27,9 +27,6 @@ namespace yup
 namespace
 {
 
-// Returns true for ops that produce a trackable value result (as opposed
-// to store ops which have no result). Used by constant propagation and DCE
-// to determine which instructions participate in value tracking.
 bool hasValueResult (YdspIrOp op)
 {
     switch (op)
@@ -129,12 +126,6 @@ bool hasValueResult (YdspIrOp op)
     }
 }
 
-// Returns true when the given operand field of an instruction holds a value
-// id (false when it holds a state/param slot index that only shares the same
-// small-int range). Copy propagation must never rewrite slot fields: a mov
-// that redefines a low value id (e.g. a sample-mode state register) would
-// otherwise clobber the slot of an unrelated load that happens to use the
-// same number.
 bool isValueIdOperand (YdspIrOp op, int operand)
 {
     switch (op)
@@ -143,7 +134,7 @@ bool isValueIdOperand (YdspIrOp op, int operand)
         case YdspIrOp::loadParamOut:
         case YdspIrOp::loadStateF:
         case YdspIrOp::loadStateI:
-            return operand != 0; // `a` is a slot index, not a value id
+            return operand != 0;
 
         default:
             return true;
