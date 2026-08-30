@@ -609,7 +609,7 @@ TEST (YdspSemanticAnalyzerTests, DoesNotWarnOnKnownEndpointAnnotationKeys)
     auto analyzed = analyze (R"YDSP(
         processor P {
             output stream out;
-            input value float cutoff = 100.0 [[ name: "Cutoff", min: 0.0, max: 1000.0, unit: "Hz", step: 1.0, style: "knob" ]];
+            input value float cutoff = 100.0 [[ name: "Cutoff", min: 0.0, max: 1000.0, unit: "Hz", step: 1.0, style: "knob", mid: 100.0, bipolar: true ]];
             process { out = cutoff; }
         }
         graph G { output stream y; node v = P; connection { v.out -> y; } }

@@ -4363,6 +4363,46 @@ TEST (YdspJitGraphTests, ExposesUnitStepAndStyleForUi)
     dumpAsmOnFailure (graph);
 }
 
+TEST (YdspJitGraphTests, ExposesMidAndBipolarForUi)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor Voice {
+            output stream out;
+            input value float cutoff = 1500.0 [[ name: "Cutoff", min: 60.0, max: 12000.0, mid: 632.46, bipolar: true ]];
+            input value float decay = 0.25;
+            process { out = cutoff * decay; }
+        }
+        graph G {
+            output stream y;
+            input value float master = 0.5 [[ mid: 0.25, bipolar: true ]];
+            node v = Voice;
+            connection { v.out -> y; }
+        }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    ASSERT_EQ (3, graph.getParameterCount());
+
+    const auto master = graph.getParameterInfo (0);
+    ASSERT_TRUE (master.midValue.has_value());
+    EXPECT_NEAR (0.25, *master.midValue, 1e-6);
+    EXPECT_TRUE (master.bipolar);
+
+    const auto cutoff = graph.getParameterInfo (graph.getParameterSlot ("v.cutoff"));
+    ASSERT_TRUE (cutoff.midValue.has_value());
+    EXPECT_NEAR (632.46, *cutoff.midValue, 1e-6);
+    EXPECT_TRUE (cutoff.bipolar);
+
+    const auto decay = graph.getParameterInfo (graph.getParameterSlot ("v.decay"));
+    EXPECT_FALSE (decay.midValue.has_value());
+    EXPECT_FALSE (decay.bipolar);
+
+    dumpAsmOnFailure (graph);
+}
+
 TEST (YdspJitGraphTests, ExposesDiscreteValuesForUi)
 
 {

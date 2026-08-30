@@ -133,6 +133,24 @@ StringArray annotationValues (const YdspEndpointDecl& endpoint, StringRef key)
     return {};
 }
 
+std::optional<double> annotationOptionalValue (const YdspEndpointDecl& endpoint, StringRef key)
+{
+    for (const auto& [k, v] : endpoint.annotations)
+        if (k == key)
+            return v.getDoubleValue();
+
+    return std::nullopt;
+}
+
+bool annotationBool (const YdspEndpointDecl& endpoint, StringRef key, bool fallback)
+{
+    for (const auto& [k, v] : endpoint.annotations)
+        if (k == key)
+            return v.trim().equalsIgnoreCase ("true") || v.getIntValue() != 0;
+
+    return fallback;
+}
+
 double constDefaultAsDouble (const YdspConstValue& value)
 {
     return isFloatValueType (value.type) ? value.asDouble : static_cast<double> (value.asInt);

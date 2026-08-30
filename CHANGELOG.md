@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- YDSP: endpoint annotations gain `[[ mid: <value> ]]` (the value that should sit at the middle of a host slider's travel, exposed as `YdspParameterInfo::midValue` so a UI can derive a logarithmic skew) and `[[ bipolar: true ]]` (a range-centered-on-zero flag, exposed as `YdspParameterInfo::bipolar`, default `false`). `examples/graphics`'s YDSP Synth Lab applies `mid` through `Slider::setSkewFactorFromMidpoint()`; the Analog Saw patch's Cutoff knob demonstrates it.
+
 - YDSP: introduced the `.ydsb` bundle API, `yup_dsp_compiler` host tool, CMake embedding helper, and bundle format documentation.
 
 - YDSP: fast-math contraction now covers multiply-add and subtract-multiply patterns; the explicit tradeoff is changed rounding. Fixed inline `@` delays use a compact increment-and-wrap IR operation for faster native code.

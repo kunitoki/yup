@@ -120,6 +120,12 @@ struct YdspAutomationEvent
     `[[ step: ... ]]` and `[[ style: ... ]]` annotations verbatim, for a host UI
     to use as it sees fit (e.g. a unit suffix, a slider increment, or a hint
     about which control to render). All three are empty/zero when absent.
+
+    `midValue` carries the optional `[[ mid: ... ]]` annotation: the value that
+    should sit at the middle of a host slider's travel, so a UI can derive a
+    logarithmic skew factor for the control. It is `std::nullopt` when absent.
+    `bipolar` carries the optional `[[ bipolar: true ]]` annotation (default
+    `false`), marking a parameter whose range is centered on zero.
 */
 struct YdspParameterInfo
 {
@@ -134,6 +140,9 @@ struct YdspParameterInfo
     String unit;           // [[ unit: "..." ]] annotation (e.g. "Hz", "dB"), else empty
     double stepSize = 0.0; // [[ step: ... ]] annotation (UI increment), else 0 (continuous)
     String style;          // [[ style: "..." ]] annotation (host-defined control hint), else empty
+
+    std::optional<double> midValue; // [[ mid: ... ]] annotation (slider midpoint for skew), else std::nullopt
+    bool bipolar = false;           // [[ bipolar: true ]] annotation (range centered on zero), else false
 
     /** Returns true if this parameter carries a [[ values ]] annotation. */
     bool isDiscrete() const noexcept { return discreteValues.size() >= 2; }

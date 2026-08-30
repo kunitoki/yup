@@ -112,8 +112,8 @@ void validateStreamChannelCount (const YdspEndpointDecl& endpoint, YdspDiagnosti
 
 void validateEndpointAnnotationKeys (const YdspEndpointDecl& endpoint, YdspDiagnostics& diagnostics)
 {
-    static constexpr std::array<const char*, 9> allowedEndpointKeys = {
-        "name", "min", "max", "values", "init", "smoothing", "unit", "step", "style"
+    static constexpr std::array<const char*, 11> allowedEndpointKeys = {
+        "name", "min", "max", "values", "init", "smoothing", "unit", "step", "style", "mid", "bipolar"
     };
 
     for (const auto& [key, value] : endpoint.annotations)
@@ -127,7 +127,7 @@ void validateEndpointAnnotationKeys (const YdspEndpointDecl& endpoint, YdspDiagn
             diagnostics.addWarning (endpoint.location.line,
                                     endpoint.location.column,
                                     "Unknown endpoint annotation '" + key + "' on '" + endpoint.name
-                                        + "' (expected 'name', 'min', 'max', 'values', 'init', 'smoothing', 'unit', 'step' or 'style')");
+                                        + "' (expected 'name', 'min', 'max', 'values', 'init', 'smoothing', 'unit', 'step', 'style', 'mid' or 'bipolar')");
     }
 }
 

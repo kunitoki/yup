@@ -1483,6 +1483,8 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
         info.unit = detail::annotationString (*endpoint, "unit", {});
         info.stepSize = detail::annotationValue (*endpoint, "step", 0.0);
         info.style = detail::annotationString (*endpoint, "style", {});
+        info.midValue = detail::annotationOptionalValue (*endpoint, "mid");
+        info.bipolar = detail::annotationBool (*endpoint, "bipolar", false);
         graphPimpl->paramInfos.push_back (std::move (info));
         graphPimpl->paramSlotByName[endpoint->name] = paramSlotCount;
         graphPimpl->paramSlotTypes.push_back (type);
@@ -1540,6 +1542,8 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
             info.unit = detail::annotationString (endpoint, "unit", {});
             info.stepSize = detail::annotationValue (endpoint, "step", 0.0);
             info.style = detail::annotationString (endpoint, "style", {});
+            info.midValue = detail::annotationOptionalValue (endpoint, "mid");
+            info.bipolar = detail::annotationBool (endpoint, "bipolar", false);
 
             // The node's own private slot maps straight to its local param
             // (the audio-thread automation path writes into the node block).

@@ -29,6 +29,7 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -948,6 +949,17 @@ private:
 
             auto slider = paramSliders.add (std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag));
             slider->setRange (info.minValue, info.maxValue, sliderStep);
+
+            // [[ mid: ... ]] gives the value that should sit at the middle of the
+            // knob's travel, so frequency-like controls get a logarithmic skew.
+            // Discrete controls keep their evenly-spaced label positions.
+            std::optional<float> mid;
+            if (info.midValue.has_value())
+                mid = static_cast<float> (*info.midValue);
+
+            if (mid.has_value() && ! info.isDiscrete())
+                slider->setSkewFactorFromMidpoint (static_cast<double> (*mid));
+
             slider->setDefaultValue (info.defaultValue);
             slider->setNumDecimalPlacesToDisplay (3);
             slider->setValue (graph.getParameter (info.name), yup::dontSendNotification);

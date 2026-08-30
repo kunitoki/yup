@@ -166,7 +166,8 @@ processor Saturator {
 | Event input | `input event <name>;` | A named event input channel (processor and graph scope). A processor may declare several, each carrying all seven shapes; a handler selects the shape it processes (see [2.11](#211-events)). A graph's own `input event` reaches a node only through an explicit `connection { }` entry, exactly like a stream. |
 
 Endpoint annotations `[[ key: value, ... ]]` carry UI metadata (`name`,
-`min`, `max`, `step`, `unit`, `style`) and are exposed through the public API.
+`min`, `max`, `step`, `unit`, `style`, `mid`, `bipolar`) and are exposed
+through the public API.
 
 `[[ init: <value> ]]` is accepted as an alias for the endpoint's default value,
 so an annotation block pastes in unchanged. An explicit `= <value>` always
@@ -205,6 +206,20 @@ graph parameter aliased onto node parameters replaces them in the host's
 enumeration (see [3.1](#31-graph-declarations)), so labels on the node's own
 parameter would never be read; one vowel control moving three formant filters has
 to name its five vowels on the graph endpoint.
+
+`[[ mid: <value> ]]` names the value that should sit at the middle of a host
+slider's travel, so a UI can derive a logarithmic skew for the control
+(`YdspParameterInfo::midValue`, absent unless annotated). Combined with
+`[[ min: ... ]]` / `[[ max: ... ]]` it lets a frequency knob spend half its
+travel below the midpoint and the rest above it:
+
+```ydsp
+input value float cutoff = 700.0 [[ name: "Cutoff", min: 30.0, max: 12000.0, mid: 632.46 ]];
+```
+
+`[[ bipolar: true ]]` (default `false`) marks a parameter whose range is centered
+on zero, e.g. a pan or pitch-offset control (`YdspParameterInfo::bipolar`). Like
+`mid`, it carries no codegen - it is host-facing metadata.
 
 
 At **graph scope** event inputs are named channels too, declared as
