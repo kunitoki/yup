@@ -623,6 +623,80 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, StringRef i
     return compile (source, YdspCompileOptions {}, importBasePath, threadPool);
 }
 
+ResultValue<YdspBundle> YdspCompiler::compileBundle (StringRef source, const YdspBundleCompileOptions& options,
+                                                     StringRef importBasePath, ThreadPool* threadPool)
+{
+    YdspCompileOptions compileOptions;
+    compileOptions.fastMath = options.fastMath;
+
+    auto graph = compile (source, compileOptions, importBasePath, threadPool);
+    if (! graph)
+        return ResultValue<YdspBundle>::fail (getDiagnostics().getCount() > 0 ? getDiagnostics().getItem (0).message
+                                                                            : "YdspCompiler: bundle compilation failed");
+
+    YdspBundle bundle;
+    bundle.sources.push_back ({ "source-0", String (source), true });
+    bundle.diagnostics = getDiagnostics();
+    bundle.diagnostics.setSourceId ("source-0");
+    bundle.hasWasm = options.includeWasm;
+    bundle.fastMath = options.fastMath;
+
+    // Build the serializable source closure independently of the direct graph
+    // compiler. This keeps paths out of the bundle while preserving the
+    // compiler's existing import semantics and deterministic DFS order.
+    std::unordered_map<String, String> pathToId;
+    pathToId.emplace ("<root>", "source-0");
+    std::function<void (const String&, const String&, const String&)> collect;
+    collect = [&] (const String& parentPath, const String& parentId, const String& text)
+    {
+        YdspDiagnostics parseDiagnostics;
+        YdspLexer lexer (text, parseDiagnostics);
+        auto tokens = lexer.tokenize();
+        if (parseDiagnostics.hasErrors()) return;
+        YdspParser parser (std::move (tokens), parseDiagnostics);
+        auto parsed = parser.parseProgram();
+        if (parsed == nullptr || parseDiagnostics.hasErrors()) return;
+
+        for (const auto& import : parsed->imports)
+        {
+            const auto path = resolveImportPath (import.path, parentPath);
+            auto found = pathToId.find (path);
+            String id;
+            const bool isNew = found == pathToId.end();
+            if (isNew)
+            {
+                const auto file = File::getCurrentWorkingDirectory().getChildFile (path);
+                if (! file.existsAsFile()) continue;
+                id = "source-" + String (bundle.sources.size());
+                pathToId.emplace (path, id);
+                bundle.sources.push_back ({ id, file.loadFileAsString(), false });
+            }
+            else
+            {
+                id = found->second;
+            }
+            bundle.importEdges.push_back ({ parentId, import.path, id });
+            if (isNew)
+                collect (path, id, bundle.sources.back().source);
+        }
+    };
+
+    collect (String (importBasePath), "source-0", String (source));
+
+    for (const auto& target : options.nativeTargets)
+    {
+        String name;
+        if (target.operatingSystem == YdspTargetOperatingSystem::macos) name = "macos-";
+        else if (target.operatingSystem == YdspTargetOperatingSystem::linux) name = "linux-";
+        else name = "windows-";
+        name += target.architecture == YdspTargetArchitecture::arm64 ? "arm64" : "x64";
+        bundle.nativeTargets.addIfNotAlreadyThere (name);
+    }
+
+    bundle.nativeTargets.sort (true);
+    return ResultValue<YdspBundle>::ok (std::move (bundle));
+}
+
 //==============================================================================
 
 ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool)
@@ -1599,7 +1673,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
 
     graphPimpl->topoOrder = analyzedGraph.topoOrder;
     graphPimpl->valid = true;
-    graphPimpl->diagnostics = std::move (diagnostics);
+    graphPimpl->diagnostics = diagnostics;
 
     YdspAudioGraph graph;
     graph.pimpl = std::move (graphPimpl);

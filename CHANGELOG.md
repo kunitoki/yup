@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- YDSP: introduced the `.ydsb` bundle API, `yup_dsp_compiler` host tool, CMake embedding helper, and bundle format documentation.
+
 - YDSP: fast-math contraction now covers multiply-add and subtract-multiply patterns; the explicit tradeoff is changed rounding. Fixed inline `@` delays use a compact increment-and-wrap IR operation for faster native code.
 
 - YDSP: `YdspCompiler` now accepts per-compile `YdspCompileOptions`, providing baseline/automatic/aggressive policies, strict-by-default `fastMath`, host or portable-target selection and an optional optimisation report. Native bank-loop SIMD now uses the selected target width (SSE2/ASIMD x4 or AVX2 x8), AVX2 emits packed FMA when fast math is enabled, and AVX-width kernels emit `vzeroupper` on return. AVX-512 is detected but remains disabled until a measured microarchitecture cost model is available. `YdspBenchmarkTests` now compare automatic code against the scalar baseline on the modal-bank shape, reporting lane width, generated code size and timing while requiring identical strict output.
@@ -26,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - YDSP: a graph's `input event <name>;` is no longer a broadcast subscription. Previously any node whose own processor declared `input event <name>;` with the same name received every event on that port automatically, with no wire in the `connection { }` block to show it - and which port a node actually heard depended on its declaration order among the graph's inputs, invisible at the call site. A graph input event is now wired exactly like a stream: `<name> -> node.event;` in a `connection { }` block, fanning out to as many destinations as are wired and reaching none that aren't; an unconnected graph input event or an unconnected node input event is now a compile error, the same rule already applied to `output event`. All shipped synth patches (and `ArpPolySine.ydsp`/`ArpTranspose.ydsp`) gained the explicit `midi -> voices.midi;` (or `midiIn -> arp.midiIn;`) line this requires; `PolySine.ydsp` moved from the algebra body form to a `connection { }` block, since the algebra form has no event syntax.
 
 ### Changed
+
+- Tools: the python stdlib archive generator (used by the tests target) now skips the copy and zip steps when the source bundle and tool configuration are unchanged since the last run, so reconfigures no longer pay for a full stdlib rebuild.
+
+- Build: `yup_add_embedded_binary_resources` now regenerates a resource's byte array only when the input file's content actually changed (tracked via an MD5 sidecar next to the generated `.inc`), so reconfigures no longer re-read and re-serialize large embedded files such as the python stdlib zip.
 
 - YDSP native codegen: kernel prologues now load context pointers only when the generated IR uses the corresponding resource, reducing register pressure and avoidable spills in small sample kernels.
 - Emscripten: the standalone shell now shows a non-blocking hint over the canvas when audio needs a user gesture, reports audio/MIDI availability in the top rail, and keeps activation in the shared AudioWorklet backend for all examples using the shell.

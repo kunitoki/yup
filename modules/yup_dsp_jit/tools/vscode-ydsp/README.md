@@ -4,6 +4,11 @@ Syntax highlighting, snippets and editing support for **YDSP** — the realtime
 JIT-compiled audio DSP language of the [YUP](https://github.com/kunitoki/yup)
 library.
 
+Platform packages launch the bundled `yup_dsp_compiler --lsp` server. During
+development, set `ydsp.server.path` to an absolute compiler path. The server
+currently provides live diagnostics over stdio; syntax highlighting remains
+available if the server cannot be started.
+
 YDSP is a small language for audio signal processing that compiles ahead of the
 audio callback into machine code (AsmJit x86-64/AArch64 or WebAssembly). It
 borrows a Faust-style composition algebra (`:` sequential, `,` parallel, `<:`
@@ -53,9 +58,16 @@ Or manually:
 
 ```sh
 cd modules/yup_dsp_jit/tools/vscode-ydsp
+sh tools/package-server.sh
+npm install
+npm run compile
 npx --yes @vscode/vsce package -o vscode-ydsp.vsix
 code --install-extension vscode-ydsp.vsix
 ```
+
+Set `YDSP_COMPILER` to override the compiler binary used by the packaging
+script. The generated `server/` directory is release output and is ignored by
+Git.
 
 ## Language reference
 

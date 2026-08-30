@@ -20,27 +20,31 @@
 cmake_minimum_required (VERSION 3.31)
 
 # ==== Prepare target
-set (target_name yup_shader_bundler)
+set (target_name yup_dsp_compiler)
 set (target_version "2.0.0")
 
-project (${target_name} VERSION ${target_version})
+project (${target_name} VERSION 2.0.0)
 
 # ==== Bootstrap YUP modules (this is always built as a standalone host tool)
 get_filename_component (yup_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 set (YUP_FETCH_UPSTREAM_MODULES ON CACHE BOOL "Fetch missing YUP module upstream sources" FORCE)
-include (${yup_root}/cmake/yup.cmake)
+include ("${yup_root}/cmake/yup.cmake")
 
-# Only add the modules actually needed by the shader bundler tool.
-# Adding all default modules would pull in audio modules that require host
-# system packages (e.g. alsa, pulseaudio) which may not be available.
-yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
-yup_add_module ("${yup_root}/thirdparty/glslang" "" "Thirdparty")
-yup_add_module ("${yup_root}/thirdparty/spirv_cross" "" "Thirdparty")
-yup_add_module ("${yup_root}/thirdparty/spirv_tools" "" "Thirdparty")
+# Only add the modules actually needed by the dsp compiler.
 yup_add_module ("${yup_root}/modules/yup_core" "" "Modules")
-yup_add_module ("${yup_root}/modules/yup_shading" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_dsp" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_audio_basics" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_dsp_jit" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_simd" "" "Modules")
+yup_add_module ("${yup_root}/thirdparty/asmjit_library" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/xsimd" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
+
 add_library (yup::yup_core ALIAS yup_core)
-add_library (yup::yup_shading ALIAS yup_shading)
+add_library (yup::yup_dsp ALIAS yup_dsp)
+add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
+add_library (yup::yup_dsp_jit ALIAS yup_dsp_jit)
+add_library (yup::yup_simd ALIAS yup_simd)
 
 # ==== Prepare target
 yup_standalone_app (
@@ -52,10 +56,12 @@ yup_standalone_app (
     TARGET_CONSOLE ON
     MODULES
         yup::yup_core
-        yup::yup_shading
-        glslang
-        spirv_cross
-        spirv_tools)
+        yup::yup_dsp
+        yup::yup_audio_basics
+        yup::yup_simd
+        yup::yup_dsp_jit
+        asmjit_library
+        xsimd)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")

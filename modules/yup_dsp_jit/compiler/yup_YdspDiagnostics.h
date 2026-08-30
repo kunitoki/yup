@@ -35,12 +35,25 @@ enum class YdspSeverity
 
 //==============================================================================
 /** A single YDSP compilation diagnostic (message + source location). */
+struct YdspSourceRange
+{
+    int startLine = 0;
+    int startColumn = 0;
+    int endLine = 0;
+    int endColumn = 0;
+};
+
 struct YdspDiagnostic
 {
     YdspSeverity severity = YdspSeverity::error;
+    String sourceId;
+    YdspSourceRange range;
+    String code;
+    String message;
+
+    // Deprecated source-compatible accessors. New callers should use range.
     int line = 0;
     int column = 0;
-    String message;
 };
 
 //==============================================================================
@@ -71,6 +84,7 @@ public:
     /** Stores the source text so that toString() can render source lines with
         a caret marker at the diagnostic position. */
     void setSource (StringRef source);
+    void setSourceId (StringRef sourceId);
 
     /** Adds an error diagnostic at the given 1-based line/column. */
     void addError (int line, int column, StringRef message);
@@ -80,6 +94,10 @@ public:
 
     /** Adds an informational diagnostic at the given 1-based line/column. */
     void addInfo (int line, int column, StringRef message);
+
+    //==============================================================================
+    /** Adds a diagnostic to this diagnostic. */
+    void add (YdspDiagnostic diagnostic);
 
     //==============================================================================
     /** Returns a marker for the current number of diagnostics.

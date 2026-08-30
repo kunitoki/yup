@@ -5,6 +5,8 @@
   "version": "1.0.0",
   "publisher": "yup",
   "license": "ISC",
+  "icon": "images/ydsp-icon.png",
+  "main": "./out/extension.js",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -25,6 +27,20 @@
   },
   "homepage": "https://github.com/kunitoki/yup",
   "contributes": {
+    "configuration": {
+      "title": "YDSP",
+      "properties": {
+        "ydsp.server.path": {
+          "type": "string",
+          "description": "Absolute path to a development yup_dsp_compiler binary."
+        },
+        "ydsp.server.trace": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off"
+        }
+      }
+    },
     "languages": [
       {
         "id": "ydsp",
@@ -35,7 +51,11 @@
         "extensions": [
           ".ydsp"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/ydsp-icon.png",
+          "dark": "./images/ydsp-icon.png"
+        }
       }
     ],
     "grammars": [
@@ -51,5 +71,16 @@
         "path": "./snippets/ydsp.code-snippets"
       }
     ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }

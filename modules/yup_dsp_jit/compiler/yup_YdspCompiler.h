@@ -75,6 +75,9 @@ public:
     */
     ResultValue<YdspAudioGraph> compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
 
+    ResultValue<YdspBundle> compileBundle (StringRef source, const YdspBundleCompileOptions& options,
+                                           StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
+
     /** Returns the diagnostics of the most recent compile. */
     const YdspDiagnostics& getDiagnostics() const noexcept;
 

@@ -20,6 +20,7 @@
 */
 
 #include "yup_dsp_jit/yup_YdspDiagnosticsTests.cpp"
+#include "yup_dsp_jit/yup_YdspBundleTests.cpp"
 #include "yup_dsp_jit/yup_YdspCompilerOptionsTests.cpp"
 #include "yup_dsp_jit/yup_YdspExamplePatchTests.cpp"
 #include "yup_dsp_jit/yup_YdspFusionTests.cpp"

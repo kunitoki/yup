@@ -64,6 +64,7 @@
 // Language front-end: lexer, AST and parser
 #include "language/yup_YdspLexer.cpp"
 #include "language/yup_YdspParser.cpp"
+#include "compiler/yup_YdspBundle.cpp"
 
 // Semantic analysis: type system and realtime-safety enforcement
 #include "analysis/semantic/yup_YdspSemanticTypeSystem.cpp"

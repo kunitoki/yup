@@ -51,19 +51,33 @@ void YdspDiagnostics::setSource (StringRef source)
     sourceText = String (source);
 }
 
+void YdspDiagnostics::setSourceId (StringRef sourceId)
+{
+    for (auto& item : items)
+        if (item.sourceId.isEmpty())
+            item.sourceId = sourceId;
+}
+
 void YdspDiagnostics::addError (int line, int column, StringRef message)
 {
-    items.push_back ({ YdspSeverity::error, line, column, String (message) });
+    add ({ YdspSeverity::error, {}, { line, column, line, column }, {}, String (message), line, column });
 }
 
 void YdspDiagnostics::addWarning (int line, int column, StringRef message)
 {
-    items.push_back ({ YdspSeverity::warning, line, column, String (message) });
+    add ({ YdspSeverity::warning, {}, { line, column, line, column }, {}, String (message), line, column });
 }
 
 void YdspDiagnostics::addInfo (int line, int column, StringRef message)
 {
-    items.push_back ({ YdspSeverity::info, line, column, String (message) });
+    add ({ YdspSeverity::info, {}, { line, column, line, column }, {}, String (message), line, column });
+}
+
+void YdspDiagnostics::add (YdspDiagnostic diagnostic)
+{
+    diagnostic.line = diagnostic.range.startLine;
+    diagnostic.column = diagnostic.range.startColumn;
+    items.push_back (std::move (diagnostic));
 }
 
 int YdspDiagnostics::mark() const noexcept

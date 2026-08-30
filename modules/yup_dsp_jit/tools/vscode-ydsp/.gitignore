@@ -1,4 +1,5 @@
-src/**
+node_modules/
+out/
 **/*.map
-**/*.ts
 *.vsix
+server/

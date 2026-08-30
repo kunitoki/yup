@@ -97,12 +97,29 @@ function (yup_add_embedded_binary_resources library_name)
                 "} // namespace ${YUP_ARG_NAMESPACE}\n")
         endif()
 
-        _yup_file_to_byte_array (${resource} resource_byte_array)
-        file (WRITE "${scratch_resource_hex_path}" "${resource_byte_array}")
+        # Regenerate the byte array only when the input changed since the last run
+        set (resource_hash_path "${full_resource_hex_path}.md5")
+        file (MD5 "${resource}" resource_hash)
+
+        set (resource_needs_update TRUE)
+        if (EXISTS "${full_resource_hex_path}" AND EXISTS "${resource_hash_path}")
+            file (READ "${resource_hash_path}" previous_resource_hash)
+            string (STRIP "${previous_resource_hash}" previous_resource_hash)
+
+            if (resource_hash STREQUAL previous_resource_hash)
+                set (resource_needs_update FALSE)
+            endif()
+        endif()
+
+        if (resource_needs_update)
+            _yup_file_to_byte_array (${resource} resource_byte_array)
+            file (WRITE "${scratch_resource_hex_path}" "${resource_byte_array}")
+            configure_file ("${scratch_resource_hex_path}" "${full_resource_hex_path}" COPYONLY)
+            file (WRITE "${resource_hash_path}" "${resource_hash}")
+        endif()
 
         # Copy only if content differs, to avoid recompilation
         configure_file ("${scratch_resource_unit_path}" "${full_resource_unit_path}" COPYONLY)
-        configure_file ("${scratch_resource_hex_path}" "${full_resource_hex_path}" COPYONLY)
 
         list (APPEND binary_sources "${full_resource_unit_path}")
         list (APPEND resources_hex_files "${full_resource_hex_path}")

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Offline YDSP bundle tooling is now documented alongside the extension.
+
 - TextMate grammar (`source.ydsp`) for `.ydsp` files: declarations
   (`processor`, `graph`, `struct`, `func`, `node`), endpoints and state,
   types, builtin constants, intrinsics, event shapes, graph composition
