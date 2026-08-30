@@ -879,7 +879,9 @@ std::vector<std::pair<String, String>> YdspParser::parseAnnotations()
         if (current().type == YdspTokenType::identifier
             || current().type == YdspTokenType::stringLiteral
             || current().type == YdspTokenType::intLiteral
-            || current().type == YdspTokenType::floatLiteral)
+            || current().type == YdspTokenType::floatLiteral
+            || current().type == YdspTokenType::kwTrue
+            || current().type == YdspTokenType::kwFalse)
         {
             auto value = current().text;
             advance();

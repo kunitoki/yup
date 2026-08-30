@@ -60,6 +60,12 @@ bool readString (InputStream& stream, String& result)
     if (size > static_cast<uint32_t> (stream.getNumBytesRemaining()))
         return false;
 
+    if (size == 0)
+    {
+        result.clear();
+        return true;
+    }
+
     MemoryBlock bytes (size, false);
     if (stream.read (bytes.getData(), static_cast<int> (size)) != static_cast<int> (size))
         return false;

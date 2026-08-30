@@ -433,6 +433,35 @@ TEST (YdspParserTests, ParsesBracedListAnnotationValue)
     EXPECT_EQ ("Pulse", entries[3]);
 }
 
+TEST (YdspParserTests, ParsesBooleanAnnotationValue)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor P {
+            output stream out;
+            input value float pan = 0.0 [[ name: "Pan", min: -1.0, max: 1.0, bipolar: true ]];
+            input value float depth = 0.0 [[ bipolar: false ]];
+            process { out = pan + depth; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, program);
+    ASSERT_EQ (1u, program->processors.size());
+
+    const auto& panAnnotations = program->processors[0].endpoints[1].annotations;
+    ASSERT_EQ (4u, panAnnotations.size());
+    EXPECT_EQ ("bipolar", panAnnotations[3].first);
+    EXPECT_EQ ("true", panAnnotations[3].second);
+
+    const auto& depthAnnotations = program->processors[0].endpoints[2].annotations;
+    ASSERT_EQ (1u, depthAnnotations.size());
+    EXPECT_EQ ("bipolar", depthAnnotations[0].first);
+    EXPECT_EQ ("false", depthAnnotations[0].second);
+}
+
 TEST (YdspParserTests, DoesNotPushANullStatementIntoTheProcessBody)
 {
     YdspDiagnostics diagnostics;
