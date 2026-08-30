@@ -48,6 +48,8 @@ available in the build.
 - [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
   JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
   realtime contract, and the public C++ API.
+- [YDSP bundle format](ydsp-bundle-format.md) - the RIFF `YDSP` container that
+  carries a patch's editable source closure, metadata, and diagnostics.
 
 ## Key building blocks
 
@@ -103,4 +105,5 @@ convolution-and-delay
 resampling
 time-stretching
 yup-dsp-language
+ydsp-bundle-format
 ```

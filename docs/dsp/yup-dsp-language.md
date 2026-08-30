@@ -17,8 +17,8 @@ YDSP borrows two ideas:
   `process = ...;` entry definition, one-sample delay primitives (`mem`,
   `'`, `@`) and UI-style parameter annotations.
 - From **Cmajor**: a readable `processor` surface with typed endpoints
-  (`input stream`, `output stream`, `input value`, `output value`), `state`
-  history variables, `graph`/`node`/`connection` declarative wiring, and the
+  (`input stream`, `output stream`, `input event`, `output event`, `input value`, `output value`),
+  `state` history variables, `graph`/`node`/`connection` declarative wiring, and the
   deterministic-realtime ethos (no pointers, no dynamic allocation, no
   recursion, statically bounded loops).
 
