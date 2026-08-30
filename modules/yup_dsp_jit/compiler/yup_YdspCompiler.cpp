@@ -686,8 +686,8 @@ ResultValue<YdspBundle> YdspCompiler::compileBundle (StringRef source, const Yds
     for (const auto& target : options.nativeTargets)
     {
         String name;
-        if (target.operatingSystem == YdspTargetOperatingSystem::macos) name = "macos-";
-        else if (target.operatingSystem == YdspTargetOperatingSystem::linux) name = "linux-";
+        if (target.operatingSystem == YdspTargetOperatingSystem::macosTarget) name = "macos-";
+        else if (target.operatingSystem == YdspTargetOperatingSystem::linuxTarget) name = "linux-";
         else name = "windows-";
         name += target.architecture == YdspTargetArchitecture::arm64 ? "arm64" : "x64";
         bundle.nativeTargets.addIfNotAlreadyThere (name);

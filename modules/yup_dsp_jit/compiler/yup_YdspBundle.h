@@ -24,12 +24,12 @@
 namespace yup
 {
 
-enum class YdspTargetOperatingSystem { macos, linux, windows };
+enum class YdspTargetOperatingSystem { macosTarget, linuxTarget, windowsTarget };
 enum class YdspTargetArchitecture { arm64, x64 };
 
 struct YdspTargetTriple
 {
-    YdspTargetOperatingSystem operatingSystem = YdspTargetOperatingSystem::macos;
+    YdspTargetOperatingSystem operatingSystem = YdspTargetOperatingSystem::macosTarget;
     YdspTargetArchitecture architecture = YdspTargetArchitecture::x64;
 };
 

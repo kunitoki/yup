@@ -55,7 +55,7 @@ TEST (YdspBundleTests, CompileAndLoadMemoryRoundTrip)
 {
     YdspCompiler compiler;
     YdspBundleCompileOptions options;
-    options.nativeTargets.push_back ({ YdspTargetOperatingSystem::macos, YdspTargetArchitecture::arm64 });
+    options.nativeTargets.push_back ({ YdspTargetOperatingSystem::macosTarget, YdspTargetArchitecture::arm64 });
 
     auto compiled = compiler.compileBundle (simplePatch, options);
     ASSERT_TRUE (compiled.wasOk()) << compiler.getDiagnostics().toString();

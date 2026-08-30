@@ -34,22 +34,22 @@ static void printHelp()
 static std::optional<YdspTargetTriple> parseTarget (const String& value)
 {
     if (value == "macos-arm64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::macos, YdspTargetArchitecture::arm64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::macosTarget, YdspTargetArchitecture::arm64 };
 
     if (value == "macos-x64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::macos, YdspTargetArchitecture::x64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::macosTarget, YdspTargetArchitecture::x64 };
 
     if (value == "linux-arm64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::linux, YdspTargetArchitecture::arm64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::arm64 };
 
     if (value == "linux-x64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::linux, YdspTargetArchitecture::x64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::linuxTarget, YdspTargetArchitecture::x64 };
 
     if (value == "windows-arm64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::windows, YdspTargetArchitecture::arm64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::windowsTarget, YdspTargetArchitecture::arm64 };
 
     if (value == "windows-x64")
-        return YdspTargetTriple { YdspTargetOperatingSystem::windows, YdspTargetArchitecture::x64 };
+        return YdspTargetTriple { YdspTargetOperatingSystem::windowsTarget, YdspTargetArchitecture::x64 };
 
     return {};
 }
