@@ -19,6 +19,10 @@
 
 cmake_minimum_required (VERSION 3.31)
 
+if (CMAKE_GENERATOR STREQUAL "Xcode" AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set (CMAKE_SUPPRESS_REGENERATION ON)
+endif()
+
 include (cmake/yup.cmake)
 _yup_get_project_version_string (${CMAKE_CURRENT_LIST_DIR}/modules yup_version)
 _yup_message (STATUS "Building project version ${yup_version}")

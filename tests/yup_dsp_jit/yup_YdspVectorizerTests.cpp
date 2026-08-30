@@ -163,7 +163,7 @@ constexpr auto vectorizerElementWiseSource = R"YDSP(
 
 // Three loops that fail for three different reasons, plus one that widens:
 // loop 0 widens (constant span, streams at the induction), loop 1 trips on a
-// select consuming a widened comparison, loop 2 is shorter than one vector.
+// transcendental consuming a widened value, loop 2 is shorter than one vector.
 // (The state arrays avoid the built-in constant names `pi`, `e` and `inf`.)
 constexpr auto vectorizerMixedReasonsSource = R"YDSP(
     processor P {
@@ -176,7 +176,7 @@ constexpr auto vectorizerMixedReasonsSource = R"YDSP(
 
         process block {
             for i in 0..8 { z[i] = z[i] * 0.5 + in[i]; }
-            for j in 0..8 { w[j] = select (w[j] > in[0], w[j], 0.0); }
+            for j in 0..8 { w[j] = sin (w[j]); }
             for k in 0..2 { r[k] = r[k] * 0.5; }
 
             out[0] = z[0] + w[0] + r[0];
@@ -401,9 +401,9 @@ TEST (YdspVectorizerTests, RejectsATranscendentalOnAWidenedValue)
     )YDSP"));
 }
 
-TEST (YdspVectorizerTests, RejectsASelectOnWidenedValues)
+TEST (YdspVectorizerTests, WidensAFloatSelectOnWidenedValues)
 {
-    EXPECT_FALSE (vectorizerWidens (R"YDSP(
+    EXPECT_TRUE (vectorizerWidens (R"YDSP(
         processor P {
             input stream in;
             output stream out;
@@ -415,6 +415,45 @@ TEST (YdspVectorizerTests, RejectsASelectOnWidenedValues)
             }
         }
     )YDSP"));
+}
+
+TEST (YdspVectorizerTests, WidenedSelectUsesAVectorPredicateAndSelect)
+{
+    YdspDiagnostics diagnostics;
+    auto ir = vectorizerBuildIr (vectorizerPatch (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float z[8];
+            process {
+                for i in 0..8 { z[i] = select (z[i] > 0.0, z[i], in); }
+                out = z[0];
+            }
+        }
+    )YDSP"), diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (ir->kernels.empty());
+
+    const auto& fn = *ir->kernels[0];
+    EXPECT_TRUE (fn.vectorized);
+
+    bool foundVectorPredicate = false;
+    bool foundVectorSelect = false;
+
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+        {
+            if (inst.op == YdspIrOp::gtF && fn.laneCountOf (inst.result) == fn.vectorWidth)
+                foundVectorPredicate = true;
+
+            if (inst.op == YdspIrOp::selectB && fn.laneCountOf (inst.result) == fn.vectorWidth)
+                foundVectorSelect = true;
+        }
+
+    EXPECT_TRUE (foundVectorPredicate);
+    EXPECT_TRUE (foundVectorSelect);
 }
 
 TEST (YdspVectorizerTests, RejectsAScalarStateWriteInsideTheLoop)
@@ -1123,7 +1162,7 @@ TEST (YdspVectorizerTests, ReportsWhyEachLoopWasNotVectorized)
     EXPECT_FALSE (results[1].widened());
     EXPECT_EQ (YdspVectorizationReason::unsupportedWidenedOp, results[1].reason);
     EXPECT_TRUE (results[1].describe().contains ("was not vectorized"));
-    EXPECT_TRUE (results[1].describe().contains ("select"));
+    EXPECT_TRUE (results[1].describe().contains ("unsupported operation"));
 
     EXPECT_FALSE (results[2].widened());
     EXPECT_EQ (YdspVectorizationReason::shortTripCount, results[2].reason);
@@ -1185,7 +1224,7 @@ TEST (YdspVectorizerTests, ExecutionReportCarriesPerLoopReasons)
     EXPECT_EQ (YdspVectorizationReason::unsupportedWidenedOp, report.loops[1].reason);
     EXPECT_EQ (YdspVectorizationReason::shortTripCount, report.loops[2].reason);
 
-    EXPECT_TRUE (report.rejectionReasons().contains ("a select, comparison, transcendental or rounding consumes a widened value"));
+    EXPECT_TRUE (report.rejectionReasons().contains ("an unsupported operation consumes a widened value"));
     EXPECT_TRUE (report.rejectionReasons().contains ("the loop span is shorter than one vector"));
 #endif
 }

@@ -45,8 +45,8 @@ namespace yup
     - **Only a single-block loop body**
     - **Scalar tails only for constant bounds and constant starts.**
     - **Stream accesses are widened only at the induction variable.**
-    - **A transcendental, a comparison or a `select` on a widened value
-      disqualifies the loop**
+    - **A transcendental on a widened value disqualifies the loop**
+    - **Only float comparisons feeding float selects are widened**
 
     @see YdspOptimizer::setVectorizationEnabled
 */

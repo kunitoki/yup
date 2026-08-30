@@ -96,6 +96,7 @@
 #include "analysis/yup_YdspTypes.h"
 #include "analysis/yup_YdspSemanticAnalyzer.h"
 #include "optimiser/yup_YdspIr.h"
+#include "optimiser/yup_YdspUtils.h"
 #include "optimiser/yup_YdspVectorizer.h"
 #include "optimiser/yup_YdspOptimizer.h"
 #include "backend/yup_YdspWasmEmitter.h"

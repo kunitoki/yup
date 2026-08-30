@@ -35,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Build: `yup_add_embedded_binary_resources` now regenerates a resource's byte array only when the input file's content actually changed (tracked via an MD5 sidecar next to the generated `.inc`), so reconfigures no longer re-read and re-serialize large embedded files such as the python stdlib zip.
 
+- Build: Xcode builds no longer auto-regenerate the project during a build (`CMAKE_SUPPRESS_REGENERATION` is set for the Xcode generator), so building no longer cancels with "project is being modified while building" when CMake input files change; re-run cmake (e.g. `just mac`) after editing `CMakeLists.txt` or `.cmake` files.
+
 - YDSP native codegen: kernel prologues now load context pointers only when the generated IR uses the corresponding resource, reducing register pressure and avoidable spills in small sample kernels.
 - Emscripten: the standalone shell now shows a non-blocking hint over the canvas when audio needs a user gesture, reports audio/MIDI availability in the top rail, and keeps activation in the shared AudioWorklet backend for all examples using the shell.
 

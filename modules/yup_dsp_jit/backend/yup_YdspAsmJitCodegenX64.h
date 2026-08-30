@@ -71,6 +71,8 @@ protected:
     void moveVector (const YdspFp& dst, const YdspFp& src) override;
     void vectorBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
     void vectorUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src) override;
+    void vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) override;
+    void vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) override;
     void emitSplatFloat (const YdspFp& dst, const YdspFp& src) override;
     void emitReduceAddFloat (const YdspFp& dst, const YdspFp& src) override;
 

@@ -561,6 +561,54 @@ private:
 
             switch (inst.op)
             {
+                case YdspIrOp::eqF:
+                case YdspIrOp::neF:
+                case YdspIrOp::ltF:
+                case YdspIrOp::leF:
+                case YdspIrOp::gtF:
+                case YdspIrOp::geF:
+                {
+                    bool readsVector = false;
+
+                    forEachValueOperand (inst, [&] (int value)
+                    {
+                        readsVector = readsVector || isVector[static_cast<size_t> (value)];
+                    });
+
+                    if (! readsVector)
+                        break;
+
+                    if (inst.result < 0 || fn.valueTypes[static_cast<size_t> (inst.result)] != YdspValueType::boolType)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
+                case YdspIrOp::selectB:
+                {
+                    bool readsVector = false;
+
+                    forEachValueOperand (inst, [&] (int value)
+                    {
+                        readsVector = readsVector || isVector[static_cast<size_t> (value)];
+                    });
+
+                    if (! readsVector)
+                        break;
+
+                    if (inst.result < 0 || inst.a < 0 || inst.b < 0 || inst.c < 0
+                        || ! isVector[static_cast<size_t> (inst.a)]
+                        || fn.valueTypes[static_cast<size_t> (inst.b)] != YdspValueType::float32Type
+                        || fn.valueTypes[static_cast<size_t> (inst.c)] != YdspValueType::float32Type)
+                        return fail (YdspVectorizationReason::unsupportedWidenedType);
+
+                    widened[j] = true;
+                    isVector[static_cast<size_t> (inst.result)] = true;
+                    break;
+                }
+
                 case YdspIrOp::loadStateArrayF:
                 {
                     if (inst.a == loop.induction)
@@ -836,6 +884,9 @@ private:
 
         const auto splatOf = [&] (int scalar)
         {
+            if (scalar < 0 || scalar >= numValues)
+                return scalar;
+
             if (isVector[static_cast<size_t> (scalar)])
                 return scalar;
 
@@ -919,6 +970,15 @@ private:
 
                 if (isFloatOperand (inst.c))
                     inst.c = splatOf (inst.c);
+            }
+
+            if (isFloatComparison (inst.op))
+            {
+                if (isFloatOperand (inst.a))
+                    inst.a = splatOf (inst.a);
+
+                if (isFloatOperand (inst.b))
+                    inst.b = splatOf (inst.b);
             }
 
             if (inst.result >= 0)

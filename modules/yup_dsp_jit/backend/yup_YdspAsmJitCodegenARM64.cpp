@@ -414,6 +414,29 @@ void YdspAsmJitCodegenARM64::vectorUnary (YdspIrOp op, const YdspFp& dst, const 
     floatUnary (op, dst.s4(), src.s4(), YdspValueType::float32Type);
 }
 
+void YdspAsmJitCodegenARM64::vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB)
+{
+    switch (op)
+    {
+        case YdspIrOp::eqF: cc->fcmeq (dst.s4(), srcA.s4(), srcB.s4()); break;
+        case YdspIrOp::neF:
+            cc->fcmeq (dst.s4(), srcA.s4(), srcB.s4());
+            cc->not_ (dst.b16(), dst.b16());
+            break;
+        case YdspIrOp::ltF: cc->fcmgt (dst.s4(), srcB.s4(), srcA.s4()); break;
+        case YdspIrOp::leF: cc->fcmge (dst.s4(), srcB.s4(), srcA.s4()); break;
+        case YdspIrOp::gtF: cc->fcmgt (dst.s4(), srcA.s4(), srcB.s4()); break;
+        case YdspIrOp::geF: cc->fcmge (dst.s4(), srcA.s4(), srcB.s4()); break;
+        default: break;
+    }
+}
+
+void YdspAsmJitCodegenARM64::vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse)
+{
+    moveVector (dst, mask);
+    cc->bsl (dst.b16(), whenTrue.b16(), whenFalse.b16());
+}
+
 void YdspAsmJitCodegenARM64::emitSplatFloat (const YdspFp& dst, const YdspFp& src)
 {
     // DUP's source is a vector *element*, so it has to be addressed through a

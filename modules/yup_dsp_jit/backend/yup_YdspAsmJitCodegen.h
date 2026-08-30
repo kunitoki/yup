@@ -180,6 +180,8 @@ protected:
     virtual void moveVector (const YdspFp& dst, const YdspFp& src) = 0;
     virtual void vectorBinary (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) = 0;
     virtual void vectorUnary (YdspIrOp op, const YdspFp& dst, const YdspFp& src) = 0;
+    virtual void vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB) = 0;
+    virtual void vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse) = 0;
 
     /** Every lane of dst = the scalar src (YdspIrOp::vsplat). */
     virtual void emitSplatFloat (const YdspFp& dst, const YdspFp& src) = 0;

@@ -466,6 +466,51 @@ void YdspAsmJitCodegenX64::vectorUnary (YdspIrOp op, const YdspFp& dst, const Yd
     }
 }
 
+void YdspAsmJitCodegenX64::vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB)
+{
+    uint32_t predicate = 0;
+
+    switch (op)
+    {
+        case YdspIrOp::eqF: predicate = 0x00; break;
+        case YdspIrOp::neF: predicate = 0x0c; break;
+        case YdspIrOp::ltF: predicate = 0x11; break;
+        case YdspIrOp::leF: predicate = 0x12; break;
+        case YdspIrOp::gtF: predicate = 0x1e; break;
+        case YdspIrOp::geF: predicate = 0x1d; break;
+        default: return;
+    }
+
+    if (activeVectorWidth > 4)
+        cc->vcmpps (dst, srcA, srcB, asmjit::Imm (predicate));
+    else
+        cc->cmpps (dst, srcA, asmjit::Imm (predicate));
+}
+
+void YdspAsmJitCodegenX64::vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse)
+{
+    YdspFp selected = newFpVector ("sel");
+    moveVector (selected, mask);
+    if (activeVectorWidth > 4)
+        cc->vandps (selected, selected, whenTrue);
+    else
+        cc->andps (selected, whenTrue);
+
+    YdspFp inverse = newFpVector ("selInverse");
+    moveVector (inverse, mask);
+    if (activeVectorWidth > 4)
+    {
+        cc->vandnps (inverse, inverse, whenFalse);
+        cc->vorps (selected, selected, inverse);
+    }
+    else
+    {
+        cc->andnps (inverse, whenFalse);
+        cc->orps (selected, inverse);
+    }
+    moveVector (dst, selected);
+}
+
 void YdspAsmJitCodegenX64::emitSplatFloat (const YdspFp& dst, const YdspFp& src)
 {
     if (activeVectorWidth > 4)

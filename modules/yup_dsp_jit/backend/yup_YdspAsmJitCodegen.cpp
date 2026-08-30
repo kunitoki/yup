@@ -54,23 +54,6 @@ uint64_t doubleBits (double value)
     return bits;
 }
 
-bool isFloatComparison (YdspIrOp op) noexcept
-{
-    switch (op)
-    {
-        case YdspIrOp::eqF:
-        case YdspIrOp::neF:
-        case YdspIrOp::ltF:
-        case YdspIrOp::leF:
-        case YdspIrOp::gtF:
-        case YdspIrOp::geF:
-            return true;
-
-        default:
-            return false;
-    }
-}
-
 bool isIntComparison (YdspIrOp op) noexcept
 {
     switch (op)
@@ -1110,6 +1093,12 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
         case YdspIrOp::leF:
         case YdspIrOp::gtF:
         case YdspIrOp::geF:
+            if (isVectorValue (inst.result))
+            {
+                vectorFloatCompare (inst.op, fp (inst.result), fp (inst.a), fp (inst.b));
+                return;
+            }
+
             if (elidedCompares.count ({ blockIndex, instIndex }) == 0)
                 emitFloatCompare (conditionForComparison (inst.op), fp (inst.a), fp (inst.b), gp (inst.result));
 
@@ -1142,6 +1131,12 @@ void YdspAsmJitCodegenImpl::emitInstruction (const YdspIrFunction& fn, const Yds
         // ---- select ----
         case YdspIrOp::selectB:
         {
+            if (isVectorValue (inst.result))
+            {
+                vectorSelectFloat (fp (inst.a), fp (inst.result), fp (inst.b), fp (inst.c));
+                return;
+            }
+
             // Branchless on both targets: a select in a sample loop is almost
             // always data dependent, so a branch diamond here would be an
             // unpredictable branch per sample.

@@ -81,7 +81,7 @@ String vectorizationReasonText (YdspVectorizationReason reason)
             return "the loop writes a value that escapes the loop (scalar state, `'`, `@` or `smooth`)";
 
         case YdspVectorizationReason::unsupportedWidenedOp:
-            return "a select, comparison, transcendental or rounding consumes a widened value";
+            return "an unsupported operation consumes a widened value";
 
         case YdspVectorizationReason::unsupportedWidenedType:
             return "a widened value is not float32";
