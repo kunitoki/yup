@@ -110,6 +110,11 @@ private:
     void parseAlgebraDefinition (YdspGraphDecl& graph);
 
     //==============================================================================
+    // Functions
+
+    YdspFuncDecl parseFunction();
+
+    //==============================================================================
     // Statements
 
     YdspStmtPtr parseStatement();
@@ -120,9 +125,6 @@ private:
     YdspStmtPtr parseEmitStatement();
     YdspStmtPtr parseAssignment();
     YdspStmtPtr parseReturnStatement();
-
-    // Functions
-    YdspFuncDecl parseFunction();
 
     //==============================================================================
     // Expressions
@@ -150,7 +152,6 @@ private:
     YdspExprPtr parseAlgebraSequential();
     YdspExprPtr parseAlgebraRecursive();
     YdspExprPtr parseAlgebraPrimary();
-
     YdspExprPtr parseParenthesized();
 
     //==============================================================================

@@ -77,8 +77,18 @@
 //==============================================================================
 
 #include "backend/yup_YdspAbi.h"
+
+// Runtime: the realtime graph API
+#include "runtime/yup_YdspTypes.h"
+#include "runtime/yup_YdspExecutionReport.h"
 #include "runtime/yup_YdspAudioGraph.h"
+
+// Compiler: the control-thread compile API
+#include "compiler/yup_YdspRecursionGuard.h"
+#include "compiler/yup_YdspDiagnostics.h"
+#include "compiler/yup_YdspCompileOptions.h"
 #include "compiler/yup_YdspCompiler.h"
+
 #include "language/yup_YdspAst.h"
 #include "language/yup_YdspLexer.h"
 #include "language/yup_YdspParser.h"
