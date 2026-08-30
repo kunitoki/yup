@@ -774,11 +774,30 @@ void YdspAsmJitCodegenX64::blendFloatOnMask (const YdspGp& maskBits, const YdspF
 
 void YdspAsmJitCodegenX64::emitSelectFloat (const YdspGp& cond, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse)
 {
-    YdspGp maskBits = cc->new_gp32 ("selMask");
-    cc->mov (maskBits, cond);
-    cc->neg (maskBits); // 0 -> 0, 1 -> all ones
+    const bool is64 = isDoubleFloat (dst);
+    YdspGp selected = is64 ? cc->new_gp64 ("sel") : cc->new_gp32 ("sel");
+    YdspGp whenTrueBits = is64 ? cc->new_gp64 ("selTrue") : cc->new_gp32 ("selTrue");
+    YdspGp whenFalseBits = is64 ? cc->new_gp64 ("selFalse") : cc->new_gp32 ("selFalse");
 
-    blendFloatOnMask (maskBits, dst, whenTrue, whenFalse);
+    if (is64)
+    {
+        cc->movq (whenTrueBits, whenTrue);
+        cc->movq (whenFalseBits, whenFalse);
+    }
+    else
+    {
+        cc->movd (whenTrueBits, whenTrue);
+        cc->movd (whenFalseBits, whenFalse);
+    }
+
+    cc->mov (selected, whenFalseBits);
+    cc->test (cond, cond);
+    cc->cmov (YdspCond::kNotEqual, selected, whenTrueBits);
+
+    if (is64)
+        cc->movq (dst, selected);
+    else
+        cc->movd (dst, selected);
 }
 
 void YdspAsmJitCodegenX64::emitFloatCompareToFlags (const YdspFp& a, const YdspFp& b)
@@ -796,14 +815,29 @@ void YdspAsmJitCodegenX64::emitIntCompareToFlags (const YdspGp& a, const YdspGp&
 
 void YdspAsmJitCodegenX64::emitSelectFloatOnFlags (YdspCond cond, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse)
 {
-    // Build the blend mask straight from the flags. `movzx` and `neg` run after
-    // the `set`, so neither disturbs the condition it just consumed.
-    YdspGp maskBits = cc->new_gp32 ("selMask");
-    cc->set (cond, maskBits.r8());
-    cc->movzx (maskBits, maskBits.r8());
-    cc->neg (maskBits);
+    const bool is64 = isDoubleFloat (dst);
+    YdspGp selected = is64 ? cc->new_gp64 ("sel") : cc->new_gp32 ("sel");
+    YdspGp whenTrueBits = is64 ? cc->new_gp64 ("selTrue") : cc->new_gp32 ("selTrue");
+    YdspGp whenFalseBits = is64 ? cc->new_gp64 ("selFalse") : cc->new_gp32 ("selFalse");
 
-    blendFloatOnMask (maskBits, dst, whenTrue, whenFalse);
+    if (is64)
+    {
+        cc->movq (whenTrueBits, whenTrue);
+        cc->movq (whenFalseBits, whenFalse);
+    }
+    else
+    {
+        cc->movd (whenTrueBits, whenTrue);
+        cc->movd (whenFalseBits, whenFalse);
+    }
+
+    cc->mov (selected, whenFalseBits);
+    cc->cmov (cond, selected, whenTrueBits);
+
+    if (is64)
+        cc->movq (dst, selected);
+    else
+        cc->movd (dst, selected);
 }
 
 void YdspAsmJitCodegenX64::emitSelectIntOnFlags (YdspCond cond, const YdspGp& dst, const YdspGp& whenTrue, const YdspGp& whenFalse)
@@ -834,10 +868,13 @@ void YdspAsmJitCodegenX64::emitAdvanceWrapInt (const YdspGp& dst, const YdspGp& 
 {
     moveGp (dst, value);
     cc->add (dst, asmjit::Imm (1));
-    YdspGp zero = cc->new_gp32 ("zero");
-    cc->xor_ (zero, zero);
     cc->cmp (dst, asmjit::Imm (bound));
-    cc->cmov (YdspCond::kSignedGE, dst, zero);
+
+    const auto done = cc->new_label();
+
+    cc->jl (done);
+    cc->xor_ (dst, dst);
+    cc->bind (done);
 }
 
 //==============================================================================

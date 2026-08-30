@@ -378,6 +378,28 @@ TEST (YdspOptimizerTests, DoesNotSimplifyAgainstAnOverwrittenLiteral)
 // Copy propagation
 //==============================================================================
 
+TEST (YdspOptimizerTests, ReusesIdenticalPureExpressions)
+{
+    YdspDiagnostics diagnostics;
+
+    auto ir = buildIr (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process { let x = in; let k = 2.0; out = x * k + x * k; }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                       diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, ir);
+
+    const auto& fn = *ir->kernels[0];
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::mulF));
+    EXPECT_EQ (1, countInst (fn, YdspIrOp::addF));
+}
+
 TEST (YdspOptimizerTests, CopyPropagatesFunctionParameterCopies)
 {
     YdspDiagnostics diagnostics;

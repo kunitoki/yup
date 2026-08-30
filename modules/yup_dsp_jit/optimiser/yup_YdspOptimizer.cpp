@@ -299,6 +299,7 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
         ifConversion (fn);
         storeToLoadForwarding (fn);
         copyPropagation (fn);
+        commonSubexpressionElimination (fn);
         deadCodeElimination (fn);
     }
 

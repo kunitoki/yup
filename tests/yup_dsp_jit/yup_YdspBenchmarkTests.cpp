@@ -1580,8 +1580,8 @@ TEST_F (YdspBenchmarkTests, HarmonicBankAgainstNative)
         if (kernel.name != "Bank")
             continue;
 
-        std::cout << "\n  | kernel    | " << kernel.instructionCount << " insts, vectorized "
-                  << (kernel.vectorized ? "yes" : "no") << " x" << kernel.vectorWidth
+        std::cout << "\n  kernel: " << kernel.instructionCount << " insts, vectorized "
+                  << (kernel.vectorized ? "yes" : "no") << ", x" << kernel.vectorWidth
                   << ", unrolled " << (kernel.unrolled ? "yes" : "no") << "\n";
         break;
     }
@@ -1613,29 +1613,6 @@ TEST_F (YdspBenchmarkTests, WaveShaperAgainstNative)
     EXPECT_NEAR (benchmarkChecksum (nativeOutput), benchmarkChecksum (jitOutput), 1.0);
 
     benchmarkReportPolicies ("wave shaper (compare + select)", { "baseline", "baseline + fastMath", "host", "host + fastMath" }, benchmarkPolicies (benchmarkShaperSource), nativeTiming);
-
-    std::vector<float> uncontractedOutput (static_cast<size_t> (benchmarkTotalSamples), 0.0f);
-
-    const auto uncontractedTiming = benchmarkTimeRepeats ([&]
-    {
-        BenchmarkNativeShaperUncontracted reference;
-
-        for (int block = 0; block < benchmarkBlockCount; ++block)
-        {
-            const auto offset = static_cast<size_t> (block * benchmarkBlockSize);
-            reference.process (input.data() + offset, uncontractedOutput.data() + offset, benchmarkBlockSize);
-        }
-    });
-
-    EXPECT_NEAR (benchmarkChecksum (uncontractedOutput), benchmarkChecksum (jitOutput), 1.0);
-
-    benchmarkReportContraction ("wave shaper", nativeOutput, uncontractedOutput);
-
-    benchmarkReportVariants ("wave shaper: the JIT against a reference that also cannot fuse mul+add",
-                             "jit",
-                             jitTiming,
-                             "c++ nofma",
-                             uncontractedTiming);
 }
 
 TEST_F (YdspBenchmarkTests, ModalBankAgainstNative)

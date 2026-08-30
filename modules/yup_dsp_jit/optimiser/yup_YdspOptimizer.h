@@ -173,6 +173,9 @@ public:
     */
     void copyPropagation (YdspIrFunction& fn);
 
+    /** Runs block-local common-subexpression elimination. */
+    void commonSubexpressionElimination (YdspIrFunction& fn);
+
     /** Runs the if-conversion pass over the given function.
 
         Turns a short, else-less `if` whose body is one side-effect-free block
