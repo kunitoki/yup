@@ -196,20 +196,27 @@ static int runLsp()
         {
             sendLsp ("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":null}");
         }
-        else if (method == "textDocument/didOpen" || method == "textDocument/didChange" || method == "textDocument/didSave")
+        else if (method == "textDocument/didOpen" || method == "textDocument/didChange")
         {
             const auto uri = jsonString (message, "uri");
             const auto source = jsonString (message, "text", message.indexOf ("textDocument"));
+            const auto documentUrl = URL (uri);
+            const auto importBasePath = documentUrl.isLocalFile() ? documentUrl.getLocalFile().getFullPathName() : String {};
 
             YdspCompiler compiler;
-            compiler.compile (source, uri);
+            compiler.compile (source, importBasePath);
             const auto& diagnostics = compiler.getDiagnostics();
 
             String items = "[";
+            bool hasDiagnostic = false;
             for (int i = 0; i < diagnostics.getCount(); ++i)
             {
                 const auto& item = diagnostics.getItem (i);
-                if (i != 0) items += ',';
+                if (item.severity == YdspSeverity::info)
+                    continue;
+
+                if (hasDiagnostic) items += ',';
+                hasDiagnostic = true;
                 const auto line = jmax (0, item.range.startLine > 0 ? item.range.startLine - 1 : 0);
                 const auto column = jmax (0, item.range.startColumn > 0 ? item.range.startColumn - 1 : 0);
                 const auto endLine = jmax (line, item.range.endLine > 0 ? item.range.endLine - 1 : line);
