@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - YDSP: the optimizer now performs block-local common-subexpression elimination for pure IR expressions, reducing repeated arithmetic without changing non-SSA state or memory semantics.
 
+- CI: new smart CI tooling - `.github/tools/smart_ci.py` classifies the changed files, resolves the module dependency graph from the module declaration headers and the examples `CMakeLists.txt`, and drives the new `build_macos_smart.yml` workflow so a change only builds/tests the affected modules and examples (global changes still trigger a full build). The `yup_tests` target gains a `YUP_TEST_MODULES` option (semicolon-separated modules/thirdparty targets; empty builds all) that restricts which modules' tests are compiled, so targeted CI runs stay fast while local development keeps the full suite.
+
 - YDSP: endpoint annotations gain `[[ mid: <value> ]]` (the value that should sit at the middle of a host slider's travel, exposed as `YdspParameterInfo::midValue` so a UI can derive a logarithmic skew) and `[[ bipolar: true ]]` (a range-centered-on-zero flag, exposed as `YdspParameterInfo::bipolar`, default `false`). `examples/graphics`'s YDSP Synth Lab applies `mid` through `Slider::setSkewFactorFromMidpoint()`; the Analog Saw patch's Cutoff knob demonstrates it.
 
 - YDSP: introduced the `.ydsb` bundle API, `yup_dsp_compiler` host tool, CMake embedding helper, and bundle format documentation.

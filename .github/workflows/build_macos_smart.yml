@@ -1,0 +1,199 @@
+name: MacOS Smart
+
+on:
+  pull_request:
+  push:
+    paths:
+      - "CMakeLists.txt"
+      - "**/.github/workflows/build_macos_smart.yml"
+      - "**/.github/tools/smart_ci.py"
+      - "**/.github/smart_ci_config.json"
+      - "**/cmake/**"
+      - "**/examples/**"
+      - "**/modules/**"
+      - "**/python/**"
+      - "**/tests/**"
+      - "**/thirdparty/**"
+      - "!**/native/generated/**"
+      - "!**/native/java*/**"
+      - "!**/native/*_android.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_ios*.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Base ref/sha to compare against
+        required: false
+        default: "origin/main"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACTION_RUNNER: github-actions
+
+jobs:
+  determine-components:
+    runs-on: macos-latest
+    outputs:
+      any: ${{ steps.set-outputs.outputs.any }}
+      full_build: ${{ steps.set-outputs.outputs.full_build }}
+      test_modules: ${{ steps.set-outputs.outputs.test_modules }}
+      modules: ${{ steps.set-outputs.outputs.modules }}
+      examples: ${{ steps.set-outputs.outputs.examples }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Run Smart CI
+      id: smart
+      run: |
+        python3 .github/tools/smart_ci.py \
+          --base "${{ inputs.base || github.event.pull_request.base.sha || github.event.before || 'origin/main' }}" \
+          --config .github/smart_ci_config.json \
+          --output affected.json
+    - name: Set outputs
+      id: set-outputs
+      run: |
+        FULL=$(jq -r '.full_build' affected.json)
+        MODULES=$(jq -c '.modules' affected.json)
+        EXAMPLES=$(jq -c '.examples' affected.json)
+        TEST_MODULES=$(jq -r '.modules | join(";")' affected.json)
+        if [ "$FULL" = "true" ] || [ "$(jq -r '.modules | length' affected.json)" -gt 0 ] || [ "$(jq -r '.examples | length' affected.json)" -gt 0 ]; then
+          ANY=true
+        else
+          ANY=false
+        fi
+        echo "any=$ANY" >> "$GITHUB_OUTPUT"
+        echo "full_build=$FULL" >> "$GITHUB_OUTPUT"
+        echo "test_modules=$TEST_MODULES" >> "$GITHUB_OUTPUT"
+        echo "modules=$MODULES" >> "$GITHUB_OUTPUT"
+        echo "examples=$EXAMPLES" >> "$GITHUB_OUTPUT"
+
+  configure:
+    runs-on: macos-latest
+    needs: [determine-components]
+    if: needs.determine-components.outputs.any == 'true'
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - name: Configure
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+    - name: Build SDL
+      run: |
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
+    - name: Cache Configure
+      id: cache-build
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ runner.workspace }}/build
+        key: macos-smart-build-${{ github.sha }}
+
+  build_tests_debug:
+    runs-on: macos-latest
+    needs: [determine-components, configure]
+    if: needs.determine-components.outputs.full_build == 'true' || needs.determine-components.outputs.test_modules != ''
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: actions/cache/restore@v5
+      id: cache-restore
+      with:
+        path: ${{ runner.workspace }}/build
+        key: macos-smart-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+    - name: Build SDL
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
+    - run: |
+        cmake --build ${{ runner.workspace }}/build --config Debug --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Debug
+      run: ./yup_tests.app/Contents/MacOS/yup_tests
+
+  build_tests_release:
+    runs-on: macos-latest
+    needs: [determine-components, configure]
+    if: needs.determine-components.outputs.full_build == 'true' || needs.determine-components.outputs.test_modules != ''
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: actions/cache/restore@v5
+      id: cache-restore
+      with:
+        path: ${{ runner.workspace }}/build
+        key: macos-smart-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+    - name: Build SDL
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
+    - run: |
+        cmake --build ${{ runner.workspace }}/build --config Release --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Release
+      run: ./yup_tests.app/Contents/MacOS/yup_tests
+
+  build_examples:
+    runs-on: macos-latest
+    needs: [determine-components, configure]
+    if: needs.determine-components.outputs.full_build == 'true' || needs.determine-components.outputs.examples != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        example: ${{ fromJson(needs.determine-components.outputs.examples) }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: actions/cache/restore@v5
+      id: cache-restore
+      with:
+        path: ${{ runner.workspace }}/build
+        key: macos-smart-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build \
+          -DYUP_BUILD_TESTS=ON -DYUP_BUILD_EXAMPLES=ON -DYUP_TEST_MODULES="${{ needs.determine-components.outputs.test_modules }}"
+    - name: Build SDL
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: |
+        cmake --build ${{ runner.workspace }}/build --config Debug --target SDL3-static
+        cmake --build ${{ runner.workspace }}/build --config Release --target SDL3-static
+    - name: Build ${{ matrix.example }}
+      run: |
+        case "${{ matrix.example }}" in
+          console)     TARGETS="example_console" ;;
+          app)         TARGETS="example_app" ;;
+          graphics)    TARGETS="example_graphics" ;;
+          audiograph)  TARGETS="example_audiograph" ;;
+          plugin)      TARGETS="example_plugin_clap_plugin example_plugin_vst3_plugin example_plugin_standalone_plugin" ;;
+          *) echo "::error::Unknown example '${{ matrix.example }}'"; exit 1 ;;
+        esac
+        for TARGET in $TARGETS; do
+          cmake --build ${{ runner.workspace }}/build --config Debug --target "$TARGET"
+          cmake --build ${{ runner.workspace }}/build --config Release --target "$TARGET"
+        done

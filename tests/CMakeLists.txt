@@ -52,7 +52,6 @@ set (target_name yup_tests)
 set (target_version "2.0.0")
 set (target_console OFF)
 set (target_gtest_modules "")
-set (target_preloaded "")
 set (target_modules
     yup_core
     yup_simd
@@ -106,15 +105,39 @@ if (NOT YUP_PLATFORM_EMSCRIPTEN)
     endif()
 else()
     set (target_console ON)
-
-    file (GLOB_RECURSE data_files "${CMAKE_CURRENT_LIST_DIR}/data/*")
-    foreach (data_file ${data_files})
-        file (RELATIVE_PATH rel_path "${CMAKE_CURRENT_LIST_DIR}" "${data_file}")
-        list (APPEND target_preloaded "${data_file}@${rel_path}")
-    endforeach()
 endif()
 
-if (YUP_PLATFORM_MAC) # OR YUP_PLATFORM_WINDOWS)
+set (target_bundle_resources "")
+if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND target_bundle_resources
+        "${CMAKE_CURRENT_LIST_DIR}/data@data"
+        "${CMAKE_CURRENT_LIST_DIR}/../examples/graphics/data/synths@data/synths")
+endif()
+
+# ==== Restrict the modules under test (used by the smart CI workflow).
+#      Empty builds every module above; otherwise only the listed modules are
+#      compiled and tested, so a targeted change stays fast.
+set (YUP_TEST_MODULES "" CACHE STRING "Semicolon-separated list of modules to test; empty builds all")
+
+if (YUP_TEST_MODULES)
+    set (restricted_modules "")
+    foreach (test_module IN LISTS YUP_TEST_MODULES)
+        if (NOT test_module)
+            continue()
+        endif()
+
+        # yup_* modules must be part of the platform default list above;
+        # thirdparty link targets just need to exist.
+        if (TARGET ${test_module} AND (NOT test_module MATCHES "^yup_" OR test_module IN_LIST target_modules))
+            list (APPEND restricted_modules ${test_module})
+        else()
+            _yup_message (WARNING "Skipping YUP_TEST_MODULES entry '${test_module}' (not available on this platform)")
+        endif()
+    endforeach()
+    set (target_modules ${restricted_modules})
+endif()
+
+if (YUP_PLATFORM_MAC AND "yup_python" IN_LIST target_modules)
     set (python_tools_path "${CMAKE_CURRENT_LIST_DIR}/../python/tools")
     set (python_target_name "${target_name}_python_stdlib")
 
@@ -141,15 +164,11 @@ yup_standalone_app (
     INITIAL_MEMORY 268435456   # 256MB: enlarged for wasm pthread stress tests (CI stability)
     MAXIMUM_MEMORY 1073741824  # 1GB:  cap for ALLOW_MEMORY_GROWTH under node/wasm
     STACK_SIZE 1048576         # 1MB:  per-thread stack for concurrent stress tests
-    EMSCRIPTEN_LINK_OPTIONS
-        $<$<CONFIG:Debug>:-sERROR_ON_WASM_CHANGES_AFTER_LINK>
-        $<$<CONFIG:Debug>:-sWASM_BIGINT>
-        $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
-    PRELOAD_FILES
-        ${target_preloaded}
+    BUNDLE_RESOURCES
+        ${target_bundle_resources}    
     MODULES
         ${target_modules}
         ${target_gtest_modules})
