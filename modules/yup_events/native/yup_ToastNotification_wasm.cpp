@@ -298,7 +298,7 @@ bool toastNotificationHide (int64 id)
     {
         var id = $0;
 
-        if (typeof window.YupToastNotifications !== "undefined" && window.YupToastNotifications[id] !== undefined)
+        if (typeof window !== "undefined" && typeof window.YupToastNotifications !== "undefined" && window.YupToastNotifications[id] !== undefined)
         {
             window.YupToastNotifications[id].close();
             delete window.YupToastNotifications[id];
@@ -315,7 +315,7 @@ void toastNotificationClear()
     // clang-format off
     MAIN_THREAD_EM_ASM (
     {
-        if (typeof window.YupToastNotifications === "undefined")
+        if (typeof window === "undefined" || typeof window.YupToastNotifications === "undefined")
             return;
 
         for (var key in window.YupToastNotifications)
