@@ -117,8 +117,8 @@ YUP is usable for experimentation, examples, prototypes, and contributors who ar
 ## Supported Rendering Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
-| **OpenGL 4.2**           | :construction:     |                    | :white_check_mark: |                    |                           |                       |
-| **OpenGL ES3.0**         |                    |                    | :construction:     |                    | :white_check_mark:        |                       |
+| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
+| **OpenGL ES3.1**         |                    |                    | :construction:     |                    | :white_check_mark:        |                       |
 | **WebGL2 (GLES3.0)**     |                    |                    |                    | :white_check_mark: |                           |                       |
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
