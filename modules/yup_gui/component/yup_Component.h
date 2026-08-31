@@ -1429,7 +1429,7 @@ protected:
         if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
             MessageManager::callAsync (std::move (notificationSender));
         else
-            notificationSender();
+            function();
     }
 
 private:

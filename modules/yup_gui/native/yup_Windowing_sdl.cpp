@@ -298,6 +298,8 @@ SDLComponentNative::~SDLComponentNative()
         window = nullptr;
     }
 
+    masterReference.clear();
+
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: native component destroyed");
 }
 
@@ -1816,61 +1818,66 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
     {
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_CLOSE_REQUESTED");
-            component.internalUserTriedToCloseWindow();
+            processEvent ([this] { component.internalUserTriedToCloseWindow(); });
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
-            handleContentScaleChanged();
+            processEvent ([this] { handleContentScaleChanged(); });
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED");
-            handleContentScaleChanged();
+            processEvent ([this] { handleContentScaleChanged(); });
             break;
 
         case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SAFE_AREA_CHANGED");
-            handleSafeAreaChanged();
+            processEvent ([this] { handleSafeAreaChanged(); });
             break;
 
         case SDL_EVENT_WINDOW_RESIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            //handleResized (windowEvent.data1, windowEvent.data2);
+            // processEvent ([this] { handleResized (windowEvent.data1, windowEvent.data2); });
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleContentScaleChanged();
+            processEvent ([this] { handleContentScaleChanged(); });
             break;
 
         case SDL_EVENT_WINDOW_MOVED:
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
             const auto scale = getWindowUnitsPerPoint (window);
-            handleMoved (roundToInt (windowEvent.data1 / scale), roundToInt (windowEvent.data2 / scale));
+            const auto x = roundToInt (windowEvent.data1 / scale);
+            const auto y = roundToInt (windowEvent.data2 / scale);
+            processEvent ([this, x, y] { handleMoved (x, y); });
             break;
         }
 
         case SDL_EVENT_WINDOW_MOUSE_ENTER:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_ENTER");
-            handleMouseEnter (getCursorPosition());
+            processEvent ([this] { handleMouseEnter (getCursorPosition()); });
             break;
 
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MOUSE_LEAVE");
-            handleMouseLeave (getCursorPosition());
+            processEvent ([this] { handleMouseLeave (getCursorPosition()); });
             break;
 
         case SDL_EVENT_WINDOW_SHOWN:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_SHOWN");
-            if (firstDisplay)
+            processEvent ([this]
             {
-                firstDisplay = false;
+                if (firstDisplay)
+                {
+                    firstDisplay = false;
 
-                const auto size = getSize();
-                handleResized (size.getWidth(), size.getHeight());
-            }
+                    const auto size = getSize();
+                    handleResized (size.getWidth(), size.getHeight());
+                }
+            });
             break;
 
         case SDL_EVENT_WINDOW_HIDDEN:
@@ -1879,32 +1886,32 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_MINIMIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MINIMIZED");
-            handleMinimized();
+            processEvent ([this] { handleMinimized(); });
             break;
 
         case SDL_EVENT_WINDOW_MAXIMIZED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_MAXIMIZED");
-            handleMaximized();
+            processEvent ([this] { handleMaximized(); });
             break;
 
         case SDL_EVENT_WINDOW_RESTORED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESTORED");
-            handleRestored();
+            processEvent ([this] { handleRestored(); });
             break;
 
         case SDL_EVENT_WINDOW_EXPOSED:
             // YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_EXPOSED");
-            repaint();
+            processEvent ([this] { repaint(); });
             break;
 
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_FOCUS_GAINED");
-            handleFocusChanged (true);
+            processEvent ([this] { handleFocusChanged (true); });
             break;
 
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_FOCUS_LOST");
-            handleFocusChanged (false);
+            processEvent ([this] { handleFocusChanged (false); });
             break;
 
         default:
@@ -1947,7 +1954,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
                                 / getWindowUnitsPerPoint (window);
 
             if (event->motion.windowID == SDL_GetWindowID (window))
-                handleMouseMoveOrDrag (cursorPosition);
+                processEvent ([this, cursorsPosition] { handleMouseMoveOrDrag (cursorPosition); });
 
             break;
         }
@@ -1959,9 +1966,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / getWindowUnitsPerPoint (window);
+            auto mouseButton = toMouseButton (event->button.button);
+            auto keyModifiers = KeyModifiers (SDL_GetModState());
 
             if (event->button.windowID == SDL_GetWindowID (window))
-                handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
+                processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseDown (cursorPosition, mouseButton, keyModifiers); });
 
             break;
         }
@@ -1972,12 +1981,11 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / getWindowUnitsPerPoint (window);
+            auto mouseButton = toMouseButton (event->button.button);
+            auto keyModifiers = KeyModifiers (SDL_GetModState());
 
-            if (event->button.windowID == SDL_GetWindowID (window))
-                handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
-
-            else if (lastComponentClicked != nullptr)
-                handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
+            if (event->button.windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
+                processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseUp (cursorPosition, mouseButton, keyModifiers); });
 
             break;
         }
@@ -1987,9 +1995,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_MOUSE_WHEEL " << event->wheel.x << " " << event->wheel.y);
 
             auto cursorPosition = getCursorPosition();
+            auto wheelDelta = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
 
             if (event->wheel.windowID == SDL_GetWindowID (window))
-                handleMouseWheel (cursorPosition, { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) });
+                processEvent ([this, cursorPosition, wheelDelta] { handleMouseWheel (cursorPosition, wheelDelta); });
 
             break;
         }
@@ -2000,9 +2009,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
+            auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                handleKeyDown (toKeyPress (event->key.key, event->key.scancode, modifiers), cursorPosition);
+                processEvent ([this, cursorPosition, keyPress] { handleKeyDown (keyPress, cursorPosition); });
 
             break;
         }
@@ -2013,9 +2023,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.mod);
+            auto keyPress = toKeyPress (event->key.key, event->key.scancode, modifiers);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                handleKeyUp (toKeyPress (event->key.key, event->key.scancode, modifiers), cursorPosition);
+                processEvent ([this, cursorPosition, keyPress] { handleKeyUp (keyPress, cursorPosition); });
 
             break;
         }
@@ -2028,7 +2039,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             // auto modifiers = toKeyModifiers (getKeyModifiers());
 
             if (event->text.windowID == SDL_GetWindowID (window))
-                handleTextInput (String::fromUTF8 (event->text.text));
+                processEvent ([this, text = String::fromUTF8 (event->text.text)] { handleTextInput (text); });
 
             break;
         }
@@ -2041,7 +2052,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             // auto modifiers = toKeyModifiers (getKeyModifiers());
 
             //if (event->text.windowID == SDL_GetWindowID (window))
-            //    handleTextInput (String::fromUTF8 (event->text.text));
+            //    processEvent ([this, text = String::fromUTF8 (event->text.text)] { handleTextInput (text); });
 
             break;
         }
@@ -2053,20 +2064,22 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
                 SDL_RaiseWindow (window);
-
-                // Clean up any previous drag enter state
-                if (lastComponentUnderDrag != nullptr)
+                
+                processEvent ([this]
                 {
-                    auto data = DragAndDropData()
-                                    .withFiles (pendingDroppedFiles)
-                                    .withText (pendingDroppedText);
+                    if (lastComponentUnderDrag != nullptr)
+                    {
+                        auto data = DragAndDropData()
+                                        .withFiles (pendingDroppedFiles)
+                                        .withText (pendingDroppedText);
 
-                    lastComponentUnderDrag->internalItemDragExit (data);
-                    lastComponentUnderDrag = nullptr;
-                }
+                        lastComponentUnderDrag->internalItemDragExit (data);
+                        lastComponentUnderDrag = nullptr;
+                    }
 
-                pendingDroppedFiles.clear();
-                pendingDroppedText.clear();
+                    pendingDroppedFiles.clear();
+                    pendingDroppedText.clear();
+                });
             }
 
             break;
@@ -2077,7 +2090,12 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DROP_FILE " << String::fromUTF8 (event->drop.data));
 
             if (event->drop.windowID == SDL_GetWindowID (window))
-                pendingDroppedFiles.add (File (String::fromUTF8 (event->drop.data)));
+            {
+                processEvent ([this, file = File (String::fromUTF8 (event->drop.data))]
+                {
+                    pendingDroppedFiles.add (file);
+                });
+            }
 
             break;
         }
@@ -2087,7 +2105,12 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DROP_TEXT " << String::fromUTF8 (event->drop.data));
 
             if (event->drop.windowID == SDL_GetWindowID (window))
-                pendingDroppedText += String::fromUTF8 (event->drop.data);
+            {
+                processEvent ([this, text = String::fromUTF8 (event->drop.data)]
+                {
+                    pendingDroppedText += text;
+                });
+            }
 
             break;
         }
@@ -2096,11 +2119,16 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         {
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
-                auto data = DragAndDropData()
-                                .withFiles (pendingDroppedFiles)
-                                .withText (pendingDroppedText);
+                auto dropPosition = Point<float> (event->drop.x, event->drop.y) / getWindowUnitsPerPoint (window);
+            
+                processEvent ([this, dropPosition]
+                {
+                    auto data = DragAndDropData()
+                                    .withFiles (pendingDroppedFiles)
+                                    .withText (pendingDroppedText);
 
-                handleItemsDragPosition (Point<float> (event->drop.x, event->drop.y) / getWindowUnitsPerPoint (window), data);
+                    handleItemsDragPosition (dropPosition, data);
+                });
             }
 
             break;
@@ -2112,22 +2140,27 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
-                auto data = DragAndDropData()
-                                .withFiles (pendingDroppedFiles)
-                                .withText (pendingDroppedText);
-
-                if (! data.isEmpty())
-                    handleItemsDropped (getCursorPosition(), data);
-
-                // Clean up drag enter/exit tracking
-                if (lastComponentUnderDrag != nullptr)
+                auto cursorPosition = getCursorPosition();
+            
+                processEvent ([this, cursorPosition]
                 {
-                    lastComponentUnderDrag->internalItemDragExit (data);
-                    lastComponentUnderDrag = nullptr;
-                }
+                    auto data = DragAndDropData()
+                                    .withFiles (pendingDroppedFiles)
+                                    .withText (pendingDroppedText);
 
-                pendingDroppedFiles.clear();
-                pendingDroppedText.clear();
+                    if (! data.isEmpty())
+                        handleItemsDropped (cursorPosition, data);
+
+                    // Clean up drag enter/exit tracking
+                    if (lastComponentUnderDrag != nullptr)
+                    {
+                        lastComponentUnderDrag->internalItemDragExit (data);
+                        lastComponentUnderDrag = nullptr;
+                    }
+
+                    pendingDroppedFiles.clear();
+                    pendingDroppedText.clear();
+                });
             }
 
             break;
@@ -2142,91 +2175,53 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
 bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
-    auto mm = MessageManager::getInstanceWithoutCreating();
-    if (mm == nullptr || event == nullptr)
-        return true;
-
-#if YUP_MOBILE
-    if (event->type == SDL_EVENT_WILL_ENTER_BACKGROUND)
-    {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WILL_ENTER_BACKGROUND");
-        static_cast<SDLComponentNative*> (userdata)->stopRendering();
-        return true;
-    }
-
-    if (event->type == SDL_EVENT_DID_ENTER_FOREGROUND)
-    {
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DID_ENTER_FOREGROUND");
-
-        MessageManager::callAsync ([userdata]
-        {
-            if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
-            {
-                if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
-                    nativeComponent->startRendering();
-            }
-        });
-
-        return true;
-    }
-#endif
-
-    // SDL owns the string payloads of these events and frees them once the watch callback
-    // returns, so they must be deep copied before handing the event to the message thread.
-    String text;
-
     switch (event->type)
     {
-        case SDL_EVENT_TEXT_INPUT:
-            text = String::fromUTF8 (event->text.text);
-            break;
+        case SDL_EVENT_QUIT:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_QUIT");
+            return true;
+        }
 
-        case SDL_EVENT_DROP_FILE:
-        case SDL_EVENT_DROP_TEXT:
-            text = String::fromUTF8 (event->drop.data);
-            break;
+#if YUP_MOBILE
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WILL_ENTER_BACKGROUND");
+
+            static_cast<SDLComponentNative*> (userdata)->stopRendering();
+            return true;
+        }
+
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
+        {
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DID_ENTER_FOREGROUND");
+
+            MessageManager::callAsync ([userdata]
+            {
+                if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
+                {
+                    if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                        nativeComponent->startRendering();
+                    else
+                        YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+                }
+            });
+
+            return true;
+        }
+#endif
 
         default:
             break;
     }
 
-    auto dispatchEvent = [userdata, eventCopy = *event, text]() mutable
+    if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
     {
-        switch (eventCopy.type)
-        {
-            case SDL_EVENT_QUIT:
-            {
-                YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_QUIT");
-                return;
-            }
-
-            case SDL_EVENT_TEXT_INPUT:
-                eventCopy.text.text = text.toRawUTF8();
-                break;
-
-            case SDL_EVENT_DROP_FILE:
-            case SDL_EVENT_DROP_TEXT:
-                eventCopy.drop.source = nullptr;
-                eventCopy.drop.data = text.toRawUTF8();
-                break;
-
-            default:
-                break;
-        }
-
-        if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
-        {
-            if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
-                nativeComponent->handleEvent (&eventCopy);
-            else
-                YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown component");
-        }
-    };
-
-    if (! mm->isThisTheMessageThread())
-        MessageManager::callAsync (dispatchEvent);
-    else
-        dispatchEvent();
+        if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+            nativeComponent->handleEvent (event);
+        else
+            YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+    }
 
     return true;
 }

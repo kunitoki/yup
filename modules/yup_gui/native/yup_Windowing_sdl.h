@@ -163,6 +163,23 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    template <class F>
+    void processEvent (F&& function)
+    {
+        auto eventHandler = [function = std::forward<F> (function), weakSelf = WeakReference<SDLComponentNative> (this)]
+        {
+            if (weakSelf.wasObjectDeleted())
+                return;
+
+            function();
+        };
+
+        if (! MessageManager::getInstance()->isThisTheMessageThread())
+            MessageManager::callAsync (std::move (eventHandler));
+        else
+            function();
+    }
+
     static bool requestMouseCapture();
     static void releaseMouseCapture();
     static int mouseCaptureRequestCount;
@@ -185,6 +202,9 @@ private:
     void stopRendering();
     bool isRendering() const;
     bool hasNativeKeyboardFocus() const;
+
+    friend class WeakReference<SDLComponentNative>;
+    WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;

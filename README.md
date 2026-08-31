@@ -233,22 +233,29 @@ cd yup
 To ease bootstrapping, the provided `justfile` wraps common CMake workflows (see https://github.com/casey/just for more information):
 
 ```bash
-$ just
+❯ just
 Available recipes:
-    android                                 # generate and open project for Android
-    build CONFIG="Debug"                    # build project using cmake
-    clean                                   # clean project build artifacts
-    c                                       # alias for `clean`
-    default                                 # list available recipes
-    emscripten CONFIG="Debug"               # generate and build project for WASM
-    emscripten_test CONFIG="Debug"          # run tests for WASM
-    emscripten_serve                        # serve project for WASM
-    ios PLATFORM="OS64"                     # generate and open project for iOS using Xcode
-    ios_simulator PLATFORM="SIMULATORARM64" # generate and open project for iOS Simulator macOS using Xcode
-    linux PROFILING="OFF"                   # generate project in Linux using Ninja
-    mac PROFILING="OFF"                     # generate and open project in macOS using Xcode
-    ninja PROFILING="OFF"                   # generate project using Ninja Multi-Config
-    win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
+    android                                      # generate and open project for Android using Android Studio (macos)
+    build PLATFORM="mac" CONFIG="Debug" TARGET="yup_tests" # build project using cmake
+    clean PLATFORM="mac"                         # clean single platform build artifacts [alias: c]
+    cleanall                                     # clean project build artifacts
+    default                                      # list available recipes
+    emscripten CONFIG="Debug" TARGET="yup_tests" # generate and build project for WASM
+    emscripten_serve                             # serve project for WASM
+    emscripten_test                              # run tests for WASM
+    fetch_coverage PR                            # fetch missing coverage lines for a pull request
+    ios IOS_PLATFORM="OS64"                      # generate and open project for iOS using Xcode
+    ios_simulator IOS_PLATFORM="SIMULATORARM64"  # generate and open project for iOS Simulator macOS using Xcode
+    mac PROFILING="OFF"                          # generate and open project in macOS using Xcode
+    ninja PROFILING="OFF"                        # generate and open project using Ninja multi config
+    python_install                               # install python wheel for yup_python bindings
+    python_test *TEST_OPTS                       # run tests for yup_python bindings
+    python_uninstall                             # uninstall python wheel for yup_python bindings
+    python_wheel                                 # generate python wheel for yup_python bindings
+    rive_shaders_update                          # update rive shaders
+    rive_update REF="runtime-v0.1.62"            # update rive runtime
+    shader_bundler *COMPILE_ARGS                 # compile and invoke shader_bundler tool
+    test CONFIG="Debug"                          # execute unit tests using cmake
 ```
 
 
