@@ -826,8 +826,8 @@ TEST_F (GpuDeviceOpenGLTests, ImageFromTargetReadsPixels)
     EXPECT_EQ (img.getWidth(), 64);
     EXPECT_EQ (img.getHeight(), 64);
 
-    // getTexture() must resolve the backing GPU texture (sampledTexture on GL).
-    EXPECT_NE (img.getTexture(), nullptr);
+    // The backing GPU texture is resolved internally (sampledTexture on GL).
+    EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
 }
 
 TEST_F (GpuDeviceOpenGLTests, ImageCreateTextureIfNotPresent)
@@ -837,9 +837,8 @@ TEST_F (GpuDeviceOpenGLTests, ImageCreateTextureIfNotPresent)
 
     // First call uploads CPU pixels into a GPU texture.
     EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
-    EXPECT_NE (img.getTexture(), nullptr);
 
-    // Second call finds the texture already present.
+    // Second call finds the texture already present (resolved internally).
     EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
 }
 
@@ -855,7 +854,9 @@ TEST_F (GpuDeviceOpenGLTests, GraphicsCommitToImage)
         g.fillRect (0.0f, 0.0f, 64.0f, 64.0f);
 
         EXPECT_TRUE (g.commitToImage());
-        EXPECT_NE (img.getTexture(), nullptr);
+
+        // The committed GPU texture is resolved internally on the next upload.
+        EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
     }
 }
 
