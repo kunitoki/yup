@@ -156,6 +156,20 @@ public:
     virtual rive::ore::Context* getGpuContext() const noexcept { return nullptr; }
 
     //==============================================================================
+    /** Runs GPU work with the backend's rendering context current on the calling
+        thread.
+
+        On OpenGL this routes @p fn through Options::contextActivator so GPU
+        resources can be created or released from threads that do not own the GL
+        context (e.g. offscreen targets and textures dropped on the message thread
+        while a render thread owns the context). On every other backend @p fn runs
+        directly.
+
+        @param fn The GPU work to run with the rendering context current.
+    */
+    virtual void runOnGraphicsContext (const std::function<void()>& fn) const { fn(); }
+
+    //==============================================================================
     /** Returns true if compute shaders are available on this backend.
 
         Compute shaders are available on Metal, D3D11, D3D12, Vulkan, and

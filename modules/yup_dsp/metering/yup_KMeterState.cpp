@@ -107,10 +107,10 @@ void KMeterState::reset() noexcept
 
     for (auto& channel : channels)
     {
-        channel.currentPeak = 0.0f;
+        channel.currentPeak.set (0.0f);
         channel.currentAverage = 0.0f;
-        channel.currentAverageDb = kMeterMinimumDecibel;
-        channel.peakHold = 0.0f;
+        channel.currentAverageDb.set (kMeterMinimumDecibel);
+        channel.peakHold.set (0.0f);
         channel.peakHoldTimer = 0.0;
         channel.contiguousOverSamples = 0;
         channel.totalOverflows = 0;
@@ -236,12 +236,15 @@ void KMeterState::processPendingAudio() noexcept
         const auto& channelState = channels[ch];
 
         // Convert to dB
-        const float peakDb = channelState.currentPeak > 0.0f
-                               ? Decibels::gainToDecibels (channelState.currentPeak)
+        const float channelPeak = channelState.currentPeak.get();
+        const float channelPeakHold = channelState.peakHold.get();
+
+        const float peakDb = channelPeak > 0.0f
+                               ? Decibels::gainToDecibels (channelPeak)
                                : kMeterMinimumDecibel;
-        const float averageDb = channelState.currentAverageDb;
-        const float peakHoldDb = channelState.peakHold > 0.0f
-                                   ? Decibels::gainToDecibels (channelState.peakHold)
+        const float averageDb = channelState.currentAverageDb.get();
+        const float peakHoldDb = channelPeakHold > 0.0f
+                                   ? Decibels::gainToDecibels (channelPeakHold)
                                    : kMeterMinimumDecibel;
 
         maxPeak = jmax (maxPeak, peakDb);
@@ -293,9 +296,15 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     float peak = 0.0f;
     processor.processPeak (samples, numSamples, peak);
 
+    // Ballistics are computed on locals and published to the atomics once, as the
+    // UI thread reads them concurrently
+    float ballisticPeak = channelState.currentPeak.get();
+    float currentAverageDb = channelState.currentAverageDb.get();
+    float currentPeakHold = channelState.peakHold.get();
+
     // Update peak with fall
     const double timeDelta = numSamples / sampleRate;
-    processor.processPeakWithFall (peak, timeDelta, channelState.currentPeak);
+    processor.processPeakWithFall (peak, timeDelta, ballisticPeak);
 
     // Process RMS (from K-weighted samples if ITU/EBU, otherwise from original)
     float rms = 0.0f;
@@ -303,8 +312,8 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     channelState.currentAverage = rms;
 
     // CRITICAL: Peak must never fall below RMS average (physically impossible)
-    if (channelState.currentPeak < rms)
-        channelState.currentPeak = rms;
+    if (ballisticPeak < rms)
+        ballisticPeak = rms;
 
     float averageDb = rms > 0.0f ? Decibels::gainToDecibels (rms) : kMeterMinimumDecibel;
 
@@ -314,18 +323,18 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     if (averageDb < kMeterMinimumDecibel)
         averageDb = kMeterMinimumDecibel;
 
-    applyLogBallistics (static_cast<float> (averageFallTime), static_cast<float> (timeDelta), averageDb, channelState.currentAverageDb);
+    applyLogBallistics (static_cast<float> (averageFallTime), static_cast<float> (timeDelta), averageDb, currentAverageDb);
 
-    if (channelState.currentAverageDb < kMeterMinimumDecibel)
-        channelState.currentAverageDb = kMeterMinimumDecibel;
+    if (currentAverageDb < kMeterMinimumDecibel)
+        currentAverageDb = kMeterMinimumDecibel;
 
-    channelState.currentAverage = Decibels::decibelsToGain (channelState.currentAverageDb);
+    channelState.currentAverage = Decibels::decibelsToGain (currentAverageDb);
 
     // Update peak hold (tracks the ballistic peak, not instant peak)
-    const float peakHoldCandidate = jmin (channelState.currentPeak, 1.0f);
-    if (peakHoldCandidate > channelState.peakHold)
+    const float peakHoldCandidate = jmin (ballisticPeak, 1.0f);
+    if (peakHoldCandidate > currentPeakHold)
     {
-        channelState.peakHold = peakHoldCandidate;
+        currentPeakHold = peakHoldCandidate;
         channelState.peakHoldTimer = 0.0;
     }
     else if (peakHoldTime >= 0.0)
@@ -340,17 +349,21 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
             const float fallAmountDb = kPeakHoldFallRateDbPerSecond * static_cast<float> (timeDelta);
 
             // Convert to dB, apply fall, convert back
-            const float peakHoldDb = channelState.peakHold > 0.0f
-                                       ? Decibels::gainToDecibels (channelState.peakHold)
+            const float peakHoldDb = currentPeakHold > 0.0f
+                                       ? Decibels::gainToDecibels (currentPeakHold)
                                        : kMeterMinimumDecibel;
             const float newPeakHoldDb = peakHoldDb - fallAmountDb;
-            channelState.peakHold = Decibels::decibelsToGain (newPeakHoldDb);
+            currentPeakHold = Decibels::decibelsToGain (newPeakHoldDb);
 
             // Never fall below current peak
-            if (peakHoldCandidate > channelState.peakHold)
-                channelState.peakHold = peakHoldCandidate;
+            if (peakHoldCandidate > currentPeakHold)
+                currentPeakHold = peakHoldCandidate;
         }
     }
+
+    channelState.currentPeak.set (ballisticPeak);
+    channelState.currentAverageDb.set (currentAverageDb);
+    channelState.peakHold.set (currentPeakHold);
 
     // Update OVER counter (counts contiguous or total samples at or above threshold)
     // IMPORTANT: Always use ORIGINAL samples for clipping detection, never filtered
@@ -434,7 +447,7 @@ float KMeterState::getPeakLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float peak = channels[channel].currentPeak;
+        const float peak = channels[channel].currentPeak.get();
         const float peakDb = peak > 0.0f ? Decibels::gainToDecibels (peak) : kMeterMinimumDecibel;
         return peakDb + scaleOffsetForScale (scale);
     }
@@ -446,7 +459,7 @@ float KMeterState::getAverageLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float averageDb = channels[channel].currentAverageDb;
+        const float averageDb = channels[channel].currentAverageDb.get();
         const float scaleOffset = scaleOffsetForScale (scale);
         return averageDb + scaleOffset;
     }
@@ -458,7 +471,7 @@ float KMeterState::getPeakHoldLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float hold = channels[channel].peakHold;
+        const float hold = channels[channel].peakHold.get();
         const float holdDb = hold > 0.0f ? Decibels::gainToDecibels (hold) : kMeterMinimumDecibel;
         return holdDb + scaleOffsetForScale (scale);
     }

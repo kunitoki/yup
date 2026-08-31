@@ -287,7 +287,7 @@ public:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
-        bool leased = false;
+        std::atomic<bool> leased = false;
     };
 
     struct OffscreenTargetGL : public RenderableTarget
@@ -520,6 +520,14 @@ public:
     void runOnComputeContext (const std::function<void()>& fn) const override
     {
         withComputeContext ([&]
+        {
+            fn();
+        });
+    }
+
+    void runOnGraphicsContext (const std::function<void()>& fn) const override
+    {
+        withGLContext ([&]
         {
             fn();
         });

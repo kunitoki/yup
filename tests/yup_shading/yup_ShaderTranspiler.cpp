@@ -911,6 +911,43 @@ TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL)
     EXPECT_TRUE (output.contains ("es"));
 }
 
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL_ComputeUsesVersion310)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kMinimalComputeGLSL, ShaderStage::compute, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::essl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (result.getValue().contains ("#version 310 es"));
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToESSL_FragmentUsesVersion300)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->decompileFromSPIRV (
+        spirv.getValue(), ShaderLanguage::essl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+    EXPECT_TRUE (result.getValue().contains ("#version 300 es"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_ToESSL_ComputeDoesNotFail)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kMinimalComputeGLSL, ShaderStage::compute, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::essl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+}
+
 TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_ToHLSL)
 {
     auto spirv = transpiler->compileToSPIRV (

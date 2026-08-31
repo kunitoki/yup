@@ -35,7 +35,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
                                         const Options& options,
                                         void* parent)
     : ComponentNative (component, options.flags)
-    , Thread ("YUP Render Thread")
+    , Thread ("YUP Render Thread", renderThreadStackSize)
     , parentWindow (parent)
     , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
     , clearColor (options.clearColor.value_or (Colors::black))
@@ -47,6 +47,8 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , shouldCaptureMouse (options.flags.test (captureMouse))
 {
     incReferenceCount();
+
+    contextGuard->native = this;
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: constructing native component: component=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (&component))) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))) << ", bounds=" << component.getBounds().toString() << ", visible=" << String (component.isVisible() ? "true" : "false") << ", renderContinuous=" << String (shouldRenderContinuous ? "true" : "false") << ", updateOnlyWhenFocused=" << String (updateOnlyWhenFocused ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
@@ -189,13 +191,19 @@ SDLComponentNative::SDLComponentNative (Component& component,
     {
         return reinterpret_cast<void*> (SDL_GL_GetProcAddress (name));
     };
-    graphicsOptions.contextActivator = [this] (const std::function<void()>& fn)
+    graphicsOptions.contextActivator = [guard = contextGuard] (const std::function<void()>& fn)
     {
-        runWithGraphicsContext (fn);
+        const ScopedLock sl (guard->lock);
+
+        if (guard->native != nullptr)
+            guard->native->runWithGraphicsContext (fn);
     };
-    graphicsOptions.computeContextActivator = [this] (const std::function<void()>& fn)
+    graphicsOptions.computeContextActivator = [guard = contextGuard] (const std::function<void()>& fn)
     {
-        runWithComputeContext (fn);
+        const ScopedLock sl (guard->lock);
+
+        if (guard->native != nullptr)
+            guard->native->runWithComputeContext (fn);
     };
 
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
@@ -241,22 +249,30 @@ SDLComponentNative::~SDLComponentNative()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: destroying native component: window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))) << ", context=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (context.get()))) << ", rendering=" << String (isRendering() ? "true" : "false"));
 
+    // Remove the event watch
+    SDL_RemoveEventWatch (eventDispatcher, this);
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered window event watch");
+
     updateMouseCapture (false);
 
     // Stop the rendering first, before touching any SDL resources
     stopRendering();
-
-    // Remove event watch
-    SDL_RemoveEventWatch (eventDispatcher, this);
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered window event watch");
 
     // Unregister this component from the desktop
     Desktop::getInstance()->unregisterNativeComponent (this);
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered native component");
 
     // Destroy graphics resources before the SDL window
+    if (window != nullptr && windowContext != nullptr)
+        SDL_GL_MakeCurrent (window, windowContext);
+
     renderer.reset();
     context.reset();
+
+    {
+        const ScopedLock sl (contextGuard->lock);
+        contextGuard->native = nullptr;
+    }
 
     // Destroy the window
     if (window != nullptr)
@@ -865,7 +881,7 @@ void SDLComponentNative::run()
     {
         const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        renderEvent.wait (maxFrameTimeMs - 4.0);
+        renderEvent.wait (jmax (1.0, maxFrameTimeMs - 4.0));
         renderEvent.reset();
 
         if (threadShouldExit())
@@ -903,6 +919,8 @@ void SDLComponentNative::runWithComputeContext (const std::function<void()>& fn)
     if (computeContextLost)
         return;
 
+    jassert (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES);
+
     auto* previousContext = SDL_GL_GetCurrentContext();
 
     if (! SDL_GL_MakeCurrent (window, computeContext) || SDL_GL_GetCurrentContext() != computeContext)
@@ -924,13 +942,13 @@ void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn
 {
     if constexpr (! renderDrivenByTimer)
     {
+        const ScopedLock sl (glContextLock);
+
         const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
 
         if (isGL)
         {
-            const ScopedLock sl (glContextLock);
-
-            const bool wasCurrent = isGL && (SDL_GL_GetCurrentContext() == windowContext);
+            const bool wasCurrent = SDL_GL_GetCurrentContext() == windowContext;
 
             if (! wasCurrent)
                 SDL_GL_MakeCurrent (window, windowContext);
@@ -981,91 +999,88 @@ void SDLComponentNative::renderFrame()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
-    if (context == nullptr)
-        return;
-
-    const auto contentSize = getContentSize();
-    const auto contentWidth = contentSize.getWidth();
-    const auto contentHeight = contentSize.getHeight();
-
-    if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
-        return;
-
     const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
-
-    // Resize GL resources on the render thread, which owns the GL context.
-    if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
-    {
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
-
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: resize render target " << currentContentWidth << "x" << currentContentHeight << " -> " << contentWidth << "x" << contentHeight << ", dpiScale=" << getScaleDpi());
-
-        currentContentWidth = contentWidth;
-        currentContentHeight = contentHeight;
-
-        if (isGL)
-        {
-            if constexpr (! renderDrivenByTimer)
-            {
-                glContextLock.enter();
-                SDL_GL_MakeCurrent (window, windowContext);
-            }
-        }
-
-        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
-        renderer = context->makeRenderer (contentWidth, contentHeight);
-        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
-
-        if (isGL)
-        {
-            if constexpr (! renderDrivenByTimer)
-            {
-                SDL_GL_MakeCurrent (window, nullptr);
-                glContextLock.exit();
-            }
-        }
-
-        repaint();
-    }
-
-    const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
-    const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-
-    const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
-    {
-        ++frameRateCounter;
-
-        const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
-        if (timeSinceFpsMeasure >= 1.0)
-        {
-            const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
-            currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-            frameRateStartTimeSeconds = currentTimeSeconds;
-            frameRateCounter = 0;
-        }
-    });
-
-    const auto loadAction = (renderContinuous)
-                              ? rive::gpu::LoadAction::clear
-                              : rive::gpu::LoadAction::preserveRenderTarget;
-
-    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
-    frameDescriptor.renderTargetWidth = static_cast<uint32_t> (currentContentWidth);
-    frameDescriptor.renderTargetHeight = static_cast<uint32_t> (currentContentHeight);
-    frameDescriptor.loadAction = loadAction;
-    frameDescriptor.clearColor = clearColor.getARGB();
-    frameDescriptor.disableRasterOrdering = renderAtomicMode.load (std::memory_order_relaxed);
-    frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
-    frameDescriptor.fillsDisabled = false;
-    frameDescriptor.strokesDisabled = false;
-    frameDescriptor.clockwiseFillOverride = true;
-
-    RectangleList<float> repaintAreas;
     bool glContextLocked = false;
 
     auto renderInternal = [&]() -> bool
     {
+        if (context == nullptr)
+            return false;
+
+        const auto contentSize = getContentSize();
+        const auto contentWidth = contentSize.getWidth();
+        const auto contentHeight = contentSize.getHeight();
+
+        if (contentWidth == 0 || contentHeight == 0 || ! isVisible())
+            return false;
+
+        if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
+
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: resize render target " << currentContentWidth << "x" << currentContentHeight << " -> " << contentWidth << "x" << contentHeight << ", dpiScale=" << getScaleDpi());
+
+            currentContentWidth = contentWidth;
+            currentContentHeight = contentHeight;
+
+            if constexpr (! renderDrivenByTimer)
+            {
+                glContextLock.enter();
+
+                if (isGL)
+                    SDL_GL_MakeCurrent (window, windowContext);
+            }
+
+            context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
+            renderer = context->makeRenderer (contentWidth, contentHeight);
+            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
+
+            if constexpr (! renderDrivenByTimer)
+            {
+                if (isGL)
+                    SDL_GL_MakeCurrent (window, nullptr);
+
+                glContextLock.exit();
+            }
+
+            repaint();
+        }
+
+        const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
+        const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+
+        const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
+        {
+            ++frameRateCounter;
+
+            const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
+            if (timeSinceFpsMeasure >= 1.0)
+            {
+                const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
+                currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+                frameRateStartTimeSeconds = currentTimeSeconds;
+                frameRateCounter = 0;
+            }
+        });
+
+        const auto loadAction = (renderContinuous)
+                                ? rive::gpu::LoadAction::clear
+                                : rive::gpu::LoadAction::preserveRenderTarget;
+
+        rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
+        frameDescriptor.renderTargetWidth = static_cast<uint32_t> (currentContentWidth);
+        frameDescriptor.renderTargetHeight = static_cast<uint32_t> (currentContentHeight);
+        frameDescriptor.loadAction = loadAction;
+        frameDescriptor.clearColor = clearColor.getARGB();
+        frameDescriptor.disableRasterOrdering = renderAtomicMode.load (std::memory_order_relaxed);
+        frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
+        frameDescriptor.fillsDisabled = false;
+        frameDescriptor.strokesDisabled = false;
+        frameDescriptor.clockwiseFillOverride = true;
+
+        RectangleList<float> repaintAreas;
+
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
 
@@ -1085,14 +1100,13 @@ void SDLComponentNative::renderFrame()
         if (! renderContinuous && repaintAreas.isEmpty())
             return false;
 
-        if (isGL)
+        if constexpr (! renderDrivenByTimer)
         {
-            if constexpr (! renderDrivenByTimer)
-            {
-                glContextLock.enter();
-                glContextLocked = true;
+            glContextLock.enter();
+            glContextLocked = true;
+
+            if (isGL)
                 SDL_GL_MakeCurrent (window, windowContext);
-            }
         }
 
         {
@@ -1134,19 +1148,37 @@ void SDLComponentNative::renderFrame()
         return true;
     };
 
-    if constexpr (! renderDrivenByTimer)
+    auto unlockGLContextAtExit = ErasedScopeGuard ([&]
     {
-        const MessageManagerLock mmLock (Thread::getCurrentThread());
-        if (! mmLock.lockWasGained())
-            return;
+        if constexpr (! renderDrivenByTimer)
+        {
+            if (glContextLocked)
+            {
+                if (isGL && window != nullptr)
+                    SDL_GL_MakeCurrent (window, nullptr);
 
-        if (! renderInternal())
-            return;
-    }
-    else
+                glContextLock.exit();
+            }
+        }
+    });
+
     {
-        if (! renderInternal())
-            return;
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderInternal);
+
+        if constexpr (! renderDrivenByTimer)
+        {
+            const MessageManagerLock mmLock (Thread::getCurrentThread());
+            if (! mmLock.lockWasGained())
+                return;
+
+            if (! renderInternal())
+                return;
+        }
+        else
+        {
+            if (! renderInternal())
+                return;
+        }
     }
 
     {
@@ -1158,17 +1190,9 @@ void SDLComponentNative::renderFrame()
 
     if (isGL && window != nullptr)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (SwapWindow);
+
         SDL_GL_SwapWindow (window);
-
-        if constexpr (! renderDrivenByTimer)
-        {
-            if (glContextLocked)
-            {
-                SDL_GL_MakeCurrent (window, nullptr);
-
-                glContextLock.exit();
-            }
-        }
     }
 }
 
@@ -2118,27 +2142,91 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
 bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
-    switch (event->type)
-    {
-        case SDL_EVENT_QUIT:
-        {
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_QUIT");
-            break;
-        }
+    auto mm = MessageManager::getInstanceWithoutCreating();
+    if (mm == nullptr || event == nullptr)
+        return true;
 
-        default:
+#if YUP_MOBILE
+    if (event->type == SDL_EVENT_WILL_ENTER_BACKGROUND)
+    {
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WILL_ENTER_BACKGROUND");
+        static_cast<SDLComponentNative*> (userdata)->stopRendering();
+        return true;
+    }
+
+    if (event->type == SDL_EVENT_DID_ENTER_FOREGROUND)
+    {
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_DID_ENTER_FOREGROUND");
+
+        MessageManager::callAsync ([userdata]
         {
             if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
             {
                 if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
-                    nativeComponent->handleEvent (event);
-                else
-                    YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown component");
+                    nativeComponent->startRendering();
+            }
+        });
+
+        return true;
+    }
+#endif
+
+    // SDL owns the string payloads of these events and frees them once the watch callback
+    // returns, so they must be deep copied before handing the event to the message thread.
+    String text;
+
+    switch (event->type)
+    {
+        case SDL_EVENT_TEXT_INPUT:
+            text = String::fromUTF8 (event->text.text);
+            break;
+
+        case SDL_EVENT_DROP_FILE:
+        case SDL_EVENT_DROP_TEXT:
+            text = String::fromUTF8 (event->drop.data);
+            break;
+
+        default:
+            break;
+    }
+
+    auto dispatchEvent = [userdata, eventCopy = *event, text]() mutable
+    {
+        switch (eventCopy.type)
+        {
+            case SDL_EVENT_QUIT:
+            {
+                YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_QUIT");
+                return;
             }
 
-            break;
+            case SDL_EVENT_TEXT_INPUT:
+                eventCopy.text.text = text.toRawUTF8();
+                break;
+
+            case SDL_EVENT_DROP_FILE:
+            case SDL_EVENT_DROP_TEXT:
+                eventCopy.drop.source = nullptr;
+                eventCopy.drop.data = text.toRawUTF8();
+                break;
+
+            default:
+                break;
         }
-    }
+
+        if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
+        {
+            if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                nativeComponent->handleEvent (&eventCopy);
+            else
+                YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown component");
+        }
+    };
+
+    if (! mm->isThisTheMessageThread())
+        MessageManager::callAsync (dispatchEvent);
+    else
+        dispatchEvent();
 
     return true;
 }

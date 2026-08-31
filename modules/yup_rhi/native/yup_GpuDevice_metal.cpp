@@ -332,7 +332,7 @@ private:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
-        bool leased = false;
+        std::atomic<bool> leased = false;
     };
 
     struct OffscreenTargetMetal : public RenderableTarget

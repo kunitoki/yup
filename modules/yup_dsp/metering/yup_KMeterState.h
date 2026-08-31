@@ -316,13 +316,16 @@ private:
     //==============================================================================
     struct ChannelState
     {
-        float currentPeak = 0.0f;         // Current 1-sample peak
-        float currentAverage = 0.0f;      // Current average level (linear)
-        float currentAverageDb = -100.0f; // Current average level (dB)
-        float peakHold = 0.0f;            // Peak hold value
-        double peakHoldTimer = 0.0;       // Time since peak hold was set
-        int contiguousOverSamples = 0;    // For contiguous OVER counter
-        int totalOverflows = 0;           // For total OVER counter
+        // The per-channel getters read these from the UI thread while the audio
+        // thread updates them, so they must be atomic
+        Atomic<float> currentPeak { 0.0f };         // Current ballistic peak
+        Atomic<float> currentAverageDb { -100.0f }; // Current average level (dB)
+        Atomic<float> peakHold { 0.0f };            // Peak hold value
+
+        float currentAverage = 0.0f;   // Current average level (linear)
+        double peakHoldTimer = 0.0;    // Time since peak hold was set
+        int contiguousOverSamples = 0; // For contiguous OVER counter
+        int totalOverflows = 0;        // For total OVER counter
     };
 
     //==============================================================================

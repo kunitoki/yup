@@ -558,7 +558,7 @@ void Component::repaint (float x, float y, float width, float height)
 
 void Component::repaint (const Rectangle<float>& rect)
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    jassert (! isRepainting.load (std::memory_order_relaxed)); // You are likely repainting from paint !
 
     cachedTextureCanvas = nullptr;
 
@@ -1424,7 +1424,7 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
 void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
 {
-    options.isRepainting = true;
+    isRepainting.store (true, std::memory_order_relaxed);
 
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
@@ -1500,7 +1500,7 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
         }
     }
 
-    options.isRepainting = false;
+    isRepainting.store (false, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -1574,7 +1574,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             }
         }
 
-        options.isRepainting = true;
+        isRepainting.store (true, std::memory_order_relaxed);
 
         {
             const auto saved = g.saveState();
@@ -1590,7 +1590,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
                 paint (g);
         }
 
-        options.isRepainting = false;
+        isRepainting.store (false, std::memory_order_relaxed);
 
         paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
         return;

@@ -34,6 +34,10 @@ class SDLComponentNative final
     static constexpr bool renderDrivenByTimer = false;
 #endif
 
+    /** Matches the main thread's stack size: user paint() code runs on the render
+        thread and may recurse deeply (e.g. Rive path triangulation). */
+    static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
+
 public:
     //==============================================================================
     using Ptr = ReferenceCountedObjectPtr<SDLComponentNative>;
@@ -222,9 +226,19 @@ private:
     RectangleList<float> currentRepaintAreas;
     CriticalSection repaintLock;
 
+    struct ContextActivatorGuard : public ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<ContextActivatorGuard>;
+
+        CriticalSection lock;
+        SDLComponentNative* native = nullptr;
+    };
+
+    ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
+
     /** Serializes access to the shared GL context between the render thread and
         any other thread running offscreen GPU work (see runWithGraphicsContext). */
-    CriticalSection glContextLock;
+    CriticalSection& glContextLock { contextGuard->lock };
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
