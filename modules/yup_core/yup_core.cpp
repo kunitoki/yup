@@ -328,6 +328,7 @@ extern char** environ;
 #include "native/yup_AndroidDocument_android.cpp"
 #include "threads/yup_HighResolutionTimer.cpp"
 #include "threads/yup_WaitableEvent.cpp"
+#include "threads/yup_WaitableTimer.cpp"
 #include "threads/yup_CancelToken.cpp"
 #include "threads/yup_CancelTokenSource.cpp"
 #include "network/yup_URL.cpp"

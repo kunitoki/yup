@@ -22,42 +22,99 @@
 namespace yup
 {
 
+namespace
+{
+
+//==============================================================================
+
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+struct GlStorageBuffer
+{
+    GlStorageBuffer() = default;
+
+    GlStorageBuffer (GLuint id, ReferenceCountedObjectPtr<GpuDevice> device)
+        : id (id)
+        , device (std::move (device))
+    {
+    }
+
+    GlStorageBuffer (GlStorageBuffer&& other) noexcept
+        : id (std::exchange (other.id, 0))
+        , device (std::move (other.device))
+    {
+    }
+
+    GlStorageBuffer& operator= (GlStorageBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+
+            id = std::exchange (other.id, 0);
+            device = std::move (other.device);
+        }
+
+        return *this;
+    }
+
+    ~GlStorageBuffer()
+    {
+        release();
+    }
+
+    GLuint id = 0;
+    ReferenceCountedObjectPtr<GpuDevice> device;
+
+    GlStorageBuffer (const GlStorageBuffer&) = delete;
+    GlStorageBuffer& operator= (const GlStorageBuffer&) = delete;
+
+private:
+    void release() noexcept
+    {
+        if (id == 0)
+            return;
+
+        if (device != nullptr)
+        {
+            device->runOnComputeContext ([id = id]
+            {
+                GLuint bufferToDelete = id;
+                glDeleteBuffers (1, &bufferToDelete);
+            });
+        }
+        else
+        {
+            glDeleteBuffers (1, &id);
+        }
+    }
+};
+#endif
+
+} // namespace
+
 //==============================================================================
 
 struct GpuBuffer::Impl
 {
     GpuBufferType type = GpuBufferType::vertex;
     size_t byteSize = 0;
-
-    // Ore buffer (for vertex, index, uniform).
     rive::rcp<rive::ore::Buffer> oreBuffer;
 
-    // Native storage buffer handles (for compute).
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
     id<MTLBuffer> mtlStorageBuffer = nil;
+#endif
 
-    ~Impl() = default;
-#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
     ComPtr<ID3D11Buffer> d3dStorageBuffer;
     ComPtr<ID3D11UnorderedAccessView> d3dUav;
-
-    /** Staging copy used by readBuffer(), kept alive so a per-frame reader does not
-        reallocate it every frame. Created on first readback. */
     ComPtr<ID3D11Buffer> d3dReadbackStaging;
+#endif
 
-    ~Impl() = default;
-#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
-    wgpu::Buffer webgpuStorageBuffer;
-
-    /** One staging buffer in the pipelined readback ring.
-
-        Held by shared_ptr so an in-flight map callback keeps its slot (and the
-        staging buffer it unmaps) alive even if the GpuBuffer is released first.
-    */
+#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
     struct ReadbackSlot
     {
         wgpu::Buffer staging;
-        uint64_t serial = 0; ///< Submission order, so snapshots are consumed oldest-first.
+        uint64_t serial = 0;
         bool mapPending = false;
         bool mapped = false;
 
@@ -68,28 +125,15 @@ struct GpuBuffer::Impl
         }
     };
 
-    /** Three slots keep one copy in flight, one map pending and one ready to
-        consume, so a snapshot lands every frame once the ring is primed. */
+    wgpu::Buffer webgpuStorageBuffer;
     static constexpr size_t numReadbackSlots = 3;
-
     std::vector<std::shared_ptr<ReadbackSlot>> readbackSlots;
     uint64_t nextReadbackSerial = 0;
-
-    /** Set when the staging buffers could not be allocated, so a per-frame reader
-        gives up instead of retrying the same failing allocation every frame. */
     bool readbackUnavailable = false;
+#endif
 
-    ~Impl() = default;
-#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
-    GLuint glBuffer = 0;
-
-    ~Impl()
-    {
-        if (glBuffer != 0)
-            glDeleteBuffers (1, &glBuffer);
-    }
-#else
-    ~Impl() = default;
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+    GlStorageBuffer glStorageBuffer;
 #endif
 };
 
@@ -132,16 +176,22 @@ bool GpuBuffer::isValid() const noexcept
     if (i->type == GpuBufferType::storage)
     {
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
-        return i->mtlStorageBuffer != nil;
-#elif YUP_RIVE_USE_D3D && YUP_WINDOWS
-        return i->d3dStorageBuffer != nullptr;
-#elif (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
-        return i->webgpuStorageBuffer != nullptr;
-#elif YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
-        return i->glBuffer != 0;
-#else
-        return false;
+        if (i->mtlStorageBuffer != nil)
+            return true;
 #endif
+#if YUP_RIVE_USE_D3D && YUP_WINDOWS
+        if (i->d3dStorageBuffer != nullptr)
+            return true;
+#endif
+#if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
+        if (i->webgpuStorageBuffer != nullptr)
+            return true;
+#endif
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID || (YUP_WASM && RIVE_WEBGL && ! RIVE_WEBGPU)
+        if (i->glStorageBuffer.id != 0)
+            return true;
+#endif
+        return false;
     }
 
     return i->oreBuffer != nullptr;
@@ -164,6 +214,7 @@ GpuBuffer::Ptr GpuBuffer::createWithImpl (Impl&& impl)
 {
     auto* result = new GpuBuffer();
     result->impl = TypeErasedObject (std::move (impl));
+
     return result;
 }
 
