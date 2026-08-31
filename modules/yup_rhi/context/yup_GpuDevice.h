@@ -53,7 +53,7 @@ public:
     struct Options
     {
         /** Default constructor, initializes the options with default values. */
-        constexpr Options() noexcept = default;
+        Options() noexcept = default;
 
         bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
         bool readableFramebuffer = false;           ///< Allows the framebuffer to be readable.
@@ -61,6 +61,36 @@ public:
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
+
+        /** Optional callback that runs GPU work with the native rendering context made
+            current on the calling thread.
+
+            GL contexts are thread-affine and the windowing layer may bind the context
+            to a dedicated render thread. Offscreen GPU work initiated from other threads
+            (e.g. snapshots taken from the message thread) must go through this callback
+            so the context is bound — and its access serialized with the render thread —
+            for the duration of the work. Backends without a thread-affine context
+            (D3D, Metal, WebGPU) ignore it. When null, GPU work runs as-is.
+
+            @param fn The GPU work to run with the context current.
+        */
+        std::function<void (const std::function<void()>&)> contextActivator;
+
+        /** Optional callback that runs GPU compute work with a dedicated compute
+            context made current on the calling thread.
+
+            Some GL drivers stop executing compute dispatches when they are
+            interleaved with rendering on the same context — or on any context of
+            the same share group. Providing a dedicated, unshared context isolates
+            the compute command stream from the render pass; every compute resource
+            (program, storage buffers) then lives exclusively on that context.
+            When null, compute work falls back to contextActivator (or runs as-is
+            when that is also null). Backends without a thread-affine context
+            (D3D, Metal, WebGPU) ignore it.
+
+            @param fn The GPU compute work to run with the compute context current.
+        */
+        std::function<void (const std::function<void()>&)> computeContextActivator;
     };
 
     //==============================================================================
@@ -97,6 +127,13 @@ public:
     virtual GpuPlatform getPlatform() const noexcept = 0;
 
     //==============================================================================
+    /** Returns true if a GPU (ore) context is available for RHI operations.
+
+        Equivalent to getGpuContext() != nullptr but without referencing any ore
+        type, so user code and examples can probe GPU capability ore-free.
+    */
+    bool isGpuAvailable() const noexcept { return getGpuContext() != nullptr; }
+
     /** Returns the backend-specific GPU render context, or nullptr if unavailable.
     
         This is the native GPU context used by the Rive renderer. It may be
@@ -118,19 +155,43 @@ public:
     */
     virtual rive::ore::Context* getGpuContext() const noexcept { return nullptr; }
 
-    /** Returns true if a GPU (ore) context is available for RHI operations.
+    //==============================================================================
+    /** Runs GPU work with the backend's rendering context current on the calling
+        thread.
 
-        Equivalent to getGpuContext() != nullptr but without referencing any ore
-        type, so user code and examples can probe GPU capability ore-free.
+        On OpenGL this routes @p fn through Options::contextActivator so GPU
+        resources can be created or released from threads that do not own the GL
+        context (e.g. offscreen targets and textures dropped on the message thread
+        while a render thread owns the context). On every other backend @p fn runs
+        directly.
+
+        @param fn The GPU work to run with the rendering context current.
     */
-    bool isGpuAvailable() const noexcept { return getGpuContext() != nullptr; }
+    virtual void runOnGraphicsContext (const std::function<void()>& fn) const { fn(); }
 
+    //==============================================================================
     /** Returns true if compute shaders are available on this backend.
 
         Compute shaders are available on Metal, D3D11, D3D12, Vulkan, and
         WebGPU backends. Not available on OpenGL/GLES or Headless.
     */
     virtual bool isComputeAvailable() const noexcept { return false; }
+
+    /** Runs GPU compute work with the backend's compute context current on the
+        calling thread.
+
+        On OpenGL this routes @p fn through Options::computeContextActivator so
+        the work is encoded on a dedicated compute context, isolated from the
+        rendering command stream (falling back to Options::contextActivator when
+        no compute activator was provided). On every other backend @p fn runs
+        directly.
+
+        Used internally by GpuComputePass and GpuComputePipeline; user code
+        normally never needs to call this.
+
+        @param fn The GPU compute work to run with the compute context current.
+    */
+    virtual void runOnComputeContext (const std::function<void()>& fn) const { fn(); }
 
     //==============================================================================
     /** Creates platform-specific GPU offscreen resources for the given dimensions.

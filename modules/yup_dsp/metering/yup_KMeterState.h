@@ -40,9 +40,9 @@ namespace yup
     Threading Model:
     - Audio thread: pushSamples() writes to lock-free FIFO (real-time safe)
     - Processing: processPendingAudio() reads FIFO and computes levels
-    - UI thread: Getter methods read Atomic variables (wait-free)
+    - UI thread: Getter methods read atomic variables (wait-free)
 
-    All level values are thread-safe using Atomic variables. The class uses AbstractFifo
+    All level values are thread-safe using atomic variables. The class uses AbstractFifo
     for lock-free communication between threads, ensuring no blocking operations occur
     in the audio path.
 
@@ -264,10 +264,10 @@ public:
 
     //==============================================================================
     /** Returns the current metering standard. */
-    MeteringStandard getMeteringStandard() const noexcept { return meteringStandard; }
+    MeteringStandard getMeteringStandard() const noexcept { return meteringStandard.load(); }
 
     /** Returns the current K-System scale. */
-    Scale getScale() const noexcept { return scale; }
+    Scale getScale() const noexcept { return scale.load(); }
 
     /** Returns the number of channels. */
     int getNumChannels() const noexcept { return numChannels; }
@@ -276,16 +276,16 @@ public:
     double getSampleRate() const noexcept { return sampleRate; }
 
     /** Returns the RMS integration time in seconds. */
-    double getIntegrationTime() const noexcept { return integrationTime; }
+    double getIntegrationTime() const noexcept { return integrationTime.load(); }
 
     /** Returns the average fall time in seconds. */
-    double getAverageFallTime() const noexcept { return averageFallTime; }
+    double getAverageFallTime() const noexcept { return averageFallTime.load(); }
 
     /** Returns the peak hold time in seconds. */
-    double getPeakHoldTime() const noexcept { return peakHoldTime; }
+    double getPeakHoldTime() const noexcept { return peakHoldTime.load(); }
 
     /** Returns the current OVER counter mode. */
-    OverCounterMode getOverCounterMode() const noexcept { return overCounterMode; }
+    OverCounterMode getOverCounterMode() const noexcept { return overCounterMode.load(); }
 
     //==============================================================================
     /** Returns the scale offset for the given K-System scale (static).
@@ -316,13 +316,33 @@ private:
     //==============================================================================
     struct ChannelState
     {
-        float currentPeak = 0.0f;         // Current 1-sample peak
-        float currentAverage = 0.0f;      // Current average level (linear)
-        float currentAverageDb = -100.0f; // Current average level (dB)
-        float peakHold = 0.0f;            // Peak hold value
-        double peakHoldTimer = 0.0;       // Time since peak hold was set
-        int contiguousOverSamples = 0;    // For contiguous OVER counter
-        int totalOverflows = 0;           // For total OVER counter
+        ChannelState() = default;
+
+        // Copy semantics are needed by std::vector::resize in prepare(), which is
+        // never concurrent with processing
+        ChannelState (const ChannelState& other) noexcept { *this = other; }
+
+        ChannelState& operator= (const ChannelState& other) noexcept
+        {
+            currentPeak.store (other.currentPeak.load());
+            currentAverageDb.store (other.currentAverageDb.load());
+            peakHold.store (other.peakHold.load());
+
+            currentAverage = other.currentAverage;
+            peakHoldTimer = other.peakHoldTimer;
+            contiguousOverSamples = other.contiguousOverSamples;
+            totalOverflows = other.totalOverflows;
+
+            return *this;
+        }
+
+        std::atomic<float> currentPeak { 0.0f };         // Current ballistic peak
+        std::atomic<float> currentAverageDb { -100.0f }; // Current average level (dB)
+        std::atomic<float> peakHold { 0.0f };            // Peak hold value
+        float currentAverage = 0.0f;   // Current average level (linear)
+        double peakHoldTimer = 0.0;    // Time since peak hold was set
+        int contiguousOverSamples = 0; // For contiguous OVER counter
+        int totalOverflows = 0;        // For total OVER counter
     };
 
     //==============================================================================
@@ -330,18 +350,28 @@ private:
     void processChannelLevels (int channel, const float* samples, int numSamples);
 
     //==============================================================================
-    // Configuration
+    // Prepare-time configuration: prepare() reallocates the buffers below, so it
+    // must never run concurrently with processing, and these can stay plain
     double sampleRate = 48000.0;
     int numChannels = 2;
-    MeteringStandard meteringStandard = MeteringStandard::rmsFlat;
-    Scale scale = Scale::k20;
 
-    double integrationTime = 0.6; // 600ms
-    double peakFallTime = 3.0;    // 3 seconds
-    double averageFallTime = 0.6; // 600ms
-    double peakHoldTime = 10.0;   // 10 seconds (-1.0 = infinite)
-    float overThreshold = 0.999f; // -0.001 dBFS
-    OverCounterMode overCounterMode = OverCounterMode::contiguous;
+    // Runtime configuration: written by the setters on any thread and read by the
+    // processing thread, so they must be atomic
+    std::atomic<MeteringStandard> meteringStandard { MeteringStandard::rmsFlat };
+    std::atomic<Scale> scale { Scale::k20 };
+
+    std::atomic<double> integrationTime { 0.6 };  // 600ms
+    std::atomic<double> peakFallTime { 3.0 };     // 3 seconds
+    std::atomic<double> averageFallTime { 0.6 };  // 600ms
+    std::atomic<double> peakHoldTime { 10.0 };    // 10 seconds (-1.0 = infinite)
+    std::atomic<float> overThreshold { 0.999f };  // -0.001 dBFS
+    std::atomic<OverCounterMode> overCounterMode { OverCounterMode::contiguous };
+
+    // Set by the setters so the processing thread reconfigures the level
+    // processors and loudness filters itself, instead of mutating them while
+    // it may be using them
+    std::atomic<bool> processorConfigChanged { false };
+    std::atomic<bool> filtersNeedReset { false };
 
     // Lock-free FIFO for audio data
     std::unique_ptr<AbstractFifo> audioFifo;
@@ -358,17 +388,17 @@ private:
     std::vector<float> filteredBuffer;              // Temporary buffer for K-weighted samples
 
     // Atomic state for UI thread (wait-free reads)
-    Atomic<float> atomicPeakLevelDb { -100.0f };
-    Atomic<float> atomicAverageLevelDb { -100.0f };
-    Atomic<float> atomicPeakHoldLevelDb { -100.0f };
-    Atomic<int> atomicOverCount { 0 };
-    Atomic<bool> atomicClipping { false };
+    std::atomic<float> atomicPeakLevelDb { -100.0f };
+    std::atomic<float> atomicAverageLevelDb { -100.0f };
+    std::atomic<float> atomicPeakHoldLevelDb { -100.0f };
+    std::atomic<int> atomicOverCount { 0 };
+    std::atomic<bool> atomicClipping { false };
 
     // EBU R128 extended metrics (Phase 4)
-    Atomic<float> atomicIntegratedLoudness { -70.0f };
-    Atomic<float> atomicShortTermLoudness { -70.0f };
-    Atomic<float> atomicMomentaryLoudness { -70.0f };
-    Atomic<float> atomicLoudnessRange { 0.0f };
+    std::atomic<float> atomicIntegratedLoudness { -70.0f };
+    std::atomic<float> atomicShortTermLoudness { -70.0f };
+    std::atomic<float> atomicMomentaryLoudness { -70.0f };
+    std::atomic<float> atomicLoudnessRange { 0.0f };
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (KMeterState)

@@ -55,8 +55,6 @@ struct GpuRenderPass::Impl
     int height = 0;
     GpuRenderOptions options;
 
-    // Resolved from the bound GpuPipeline by GpuRenderPass::setPipeline (which
-    // is a friend of GpuPipeline). Kept alive by pipelineRef.
     GpuPipeline::Ptr pipelineRef;
     rive::ore::Pipeline* orePipeline = nullptr;
     const std::vector<rive::rcp<rive::ore::BindGroupLayout>>* oreLayouts = nullptr;
@@ -74,24 +72,6 @@ struct GpuRenderPass::Impl
 
     bool encode (uint32_t count, bool indexed);
 
-    // Creates an ore TextureView for a GpuTexture. The correct view kind depends
-    // on how the texture is used, and the preference order differs between color
-    // attachments and sampled inputs:
-    //
-    // - Color attachments must be bound through a render-target view. On D3D the
-    //   canvas wrapper (wrapCanvasTexture) exposes the RTV; binding an SRV-backed
-    //   rive-texture view instead leaves no RTV bound and the draw is discarded
-    //   (DEVICE_DRAW_RENDERTARGETVIEW_NOT_SET). Prefer wrapCanvasTexture, and
-    //   fall back to the underlying GPU texture.
-    // - Sampled inputs must be bound through an SRV-backed view. wrapCanvasTexture
-    //   only exposes a render-target view, which has no shader-resource view on
-    //   D3D - sampling it reads nothing. Prefer the underlying GPU texture, which
-    //   wrapRiveTexture() wraps with a proper SRV, and fall back to the canvas
-    //   view.
-    //
-    // This is a member of the nested Impl so it can read GpuTexture internals:
-    // GpuRenderPass is a friend of GpuTexture, and a nested class shares the
-    // enclosing class's access rights (C++11).
     static rive::rcp<rive::ore::TextureView> createView (rive::ore::Context& oreCtx, const GpuTexture& tex, bool forRenderTarget)
     {
         if (forRenderTarget)
@@ -144,8 +124,6 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
     std::vector<std::pair<uint32_t, rive::rcp<rive::ore::BindGroup>>> bindGroups;
 
-    // Fast path: skip bind-group creation when there are no UBOs, textures,
-    // or samplers to bind (common for simple vertex-only draws).
     const bool hasAnyBindings = ! uboBindings.empty() || ! textureBindings.empty();
 
     for (uint32_t groupIdx = 0; groupIdx < layouts.size(); ++groupIdx)
@@ -154,8 +132,6 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
         if (layout == nullptr)
             continue;
 
-        // The pipeline pre-created one sampler per sampler slot this layout
-        // declares, so their presence also decides whether a bind group is needed.
         const std::vector<GpuPipeline::Impl::SamplerBinding>* groupSamplers = nullptr;
         if (oreSamplers != nullptr && groupIdx < oreSamplers->size())
             groupSamplers = &(*oreSamplers)[groupIdx];
@@ -167,14 +143,11 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
         // UBO entries for this group.
         std::vector<rive::ore::BindGroupDesc::UBOEntry> uboEntries;
-
         for (const auto& ub : uboBindings)
         {
             if (ub.group != (int) groupIdx)
                 continue;
 
-            // Recycled from the device pool and owned by the frame, so a steady
-            // stream of draws stops allocating GPU buffers after the first frames.
             auto buf = framePools->acquireUniformBuffer (ub.data.data(), ub.data.size());
             if (buf == nullptr)
                 continue;
@@ -189,7 +162,6 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
 
         // Texture entries for this group.
         std::vector<rive::ore::BindGroupDesc::TexEntry> texEntries;
-
         for (const auto& tb : textureBindings)
         {
             if (tb.group != (int) groupIdx || tb.texture == nullptr)
@@ -206,12 +178,8 @@ bool GpuRenderPass::Impl::encode (uint32_t count, bool indexed)
             framePools->liveViews.push_back (std::move (view));
         }
 
-        // Sampler entries - one linear+clamp sampler per sampler binding declared
-        // in the layout, created once when the pipeline was compiled. The frame
-        // holds a reference too, since the encoded pass points at them raw and may
-        // outlive this pass object.
+        // Sampler entries.
         std::vector<rive::ore::BindGroupDesc::SampEntry> sampEntries;
-
         if (groupSamplers != nullptr)
         {
             for (const auto& sb : *groupSamplers)

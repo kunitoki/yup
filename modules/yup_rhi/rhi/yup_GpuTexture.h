@@ -24,6 +24,7 @@ namespace yup
 
 class Image;
 class GpuCanvas;
+class GpuDevice;
 class GpuTarget;
 class GpuRenderPass;
 class Graphics;
@@ -43,6 +44,9 @@ class YUP_API GpuTexture : public ReferenceCountedObject
 {
 public:
     using Ptr = ReferenceCountedObjectPtr<GpuTexture>;
+
+    /** Destructor. Releases the GPU resources with the rendering context current. */
+    ~GpuTexture() override;
 
     //==============================================================================
     /** Returns the width of the texture in pixels. */
@@ -67,11 +71,15 @@ private:
 
     GpuTexture() = default;
 
-    /** Creates a GpuTexture from a raw GPU texture of known dimensions. */
-    static GpuTexture::Ptr fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height);
+    /** Creates a GpuTexture from a raw GPU texture of known dimensions. The device,
+        when given, is used to release the GPU resources with its rendering context
+        current on destruction. */
+    static GpuTexture::Ptr fromGpuTexture (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::Texture> texture, int width, int height);
 
-    /** Creates a GpuTexture from a render canvas of known dimensions. */
-    static GpuTexture::Ptr fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height);
+    /** Creates a GpuTexture from a render canvas of known dimensions. The device,
+        when given, is used to release the GPU resources with its rendering context
+        current on destruction. */
+    static GpuTexture::Ptr fromRenderCanvas (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height);
 
     /** Returns the raw GPU texture, extracting it from the render canvas if needed. */
     rive::rcp<rive::gpu::Texture> getOrAdoptGpuTexture() const;
@@ -87,6 +95,7 @@ private:
     int height = 0;
     bool renderTarget = false;
 
+    ReferenceCountedObjectPtr<GpuDevice> device;
     mutable rive::rcp<rive::gpu::Texture> gpuTexture;
     rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
     rive::rcp<rive::gpu::Texture> sampledTexture; // GL Y-flipped mirror; null on non-GL backends

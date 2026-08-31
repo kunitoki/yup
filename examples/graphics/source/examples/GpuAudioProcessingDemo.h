@@ -193,6 +193,12 @@ public:
             }
         }
 
+        for (int i = 0; i < kRingSize; ++i)
+        {
+            cpuUploadBuf[i].resize (static_cast<size_t> (gpuBlockSize));
+            cpuOutputBuf[i].resize (static_cast<size_t> (gpuBlockSize));
+        }
+
         if (computeDevice == nullptr || ! computeDevice->isComputeAvailable())
             return;
 
@@ -203,8 +209,6 @@ public:
         {
             gpuInputBuf[i] = computeDevice->createBuffer (yup::GpuBufferType::storage, zeroData.data(), bufBytes);
             gpuOutputBuf[i] = computeDevice->createBuffer (yup::GpuBufferType::storage, zeroData.data(), bufBytes);
-            cpuUploadBuf[i].resize (static_cast<size_t> (gpuBlockSize));
-            cpuOutputBuf[i].resize (static_cast<size_t> (gpuBlockSize));
         }
 
         writePos = 0;

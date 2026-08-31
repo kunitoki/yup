@@ -1129,3 +1129,33 @@ TEST_F (GraphicsTest, TransparencyLayer_MoveAssignmentDoesNotCrash)
     if (layer2.isValid())
         layer2.commit();
 }
+
+// =============================================================================
+// Coverage: blend-mode fallback, single-stop gradients, fitted text
+// =============================================================================
+
+TEST_F (GraphicsTest, InvalidBlendModeFallsBackToSrcOver)
+{
+    graphics->setBlendMode (static_cast<BlendMode> (0x7FFFFFFF));
+
+    EXPECT_NO_THROW (graphics->fillRect (10.0f, 10.0f, 30.0f, 30.0f));
+}
+
+TEST_F (GraphicsTest, SingleColorStopGradientFills)
+{
+    ColorGradient singleStop (
+        Color (0xFFFF0000), 0.0f, 0.0f, Color (0xFFFF0000), 0.0f, 0.0f, ColorGradient::Linear);
+    singleStop.clearStops();
+    singleStop.addColorStop (Color (0xFF00FF00), 0.0f);
+
+    graphics->setFillColorGradient (singleStop);
+
+    EXPECT_NO_THROW (graphics->fillRect (10.0f, 10.0f, 50.0f, 30.0f));
+}
+
+TEST_F (GraphicsTest, StrokeFittedTextWithEmptyStyledTextReturnsEarly)
+{
+    StyledText emptyText;
+
+    EXPECT_NO_THROW (graphics->strokeFittedText (emptyText, Rectangle<float> (0.0f, 0.0f, 100.0f, 30.0f)));
+}

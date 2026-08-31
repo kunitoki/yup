@@ -36,6 +36,13 @@
 #include <vector>
 #include <cmath> // For sine wave generation
 
+// Enable this to enable leak detection tools on windows
+// #define YUP_ENABLE_WINDOWS_BREAK_ALLOC 277639
+
+#if YUP_WINDOWS && YUP_ENABLE_WINDOWS_BREAK_ALLOC
+#include <crtdbg.h>
+#endif
+
 //==============================================================================
 
 inline yup::File getAssetPath (yup::StringRef subPath = {})
@@ -144,14 +151,9 @@ public:
         setTitle ("main");
 
         // Load the logo image
-#if YUP_WASM
-        auto baseFilePath = yup::File ("/data");
-#else
-        auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
-#endif
         {
             yup::MemoryBlock mb;
-            auto imageFile = baseFilePath.getChildFile ("logo.png");
+            auto imageFile = getAssetPath ("data/logo.png");
             if (imageFile.loadFileAsData (mb))
             {
                 auto loadedImage = yup::Image::loadFromData (mb.asBytes());
@@ -319,11 +321,8 @@ public:
 
     void selectComponent (int index)
     {
-        for (auto* component : components)
-        {
-            if (component != nullptr)
-                component->setVisible (false);
-        }
+        if (! yup::isPositiveAndBelow (index, components.size()))
+            return;
 
         if (components[index] == nullptr)
         {
@@ -331,7 +330,20 @@ public:
             addChildComponent (components[index]);
         }
 
+        for (int i = 0; i < components.size(); ++i)
+        {
+            if (i == index)
+                continue;
+
+            if (components[i] != nullptr)
+            {
+                components[i]->setVisible (false);
+                components.set (i, nullptr);
+            }
+        }
+
         resized(); // Ensure the newly created component is sized correctly
+
         components[index]->setVisible (true);
     }
 
@@ -339,16 +351,50 @@ private:
     void updateWindowTitle()
     {
         yup::String title;
+        auto nativeComponent = getNativeComponent();
 
-        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        auto currentFps = nativeComponent ? nativeComponent->getCurrentFrameRate() : 0.0f;
         title << "[" << yup::String (currentFps, 1) << " FPS]";
-        title << " | YUP On Rive Renderer";
+        title << " | " << yup::YUPApplication::getInstance()->getApplicationName() << " ";
 
-        if (getNativeComponent()->isAtomicModeEnabled())
-            title << " (atomic)";
+        if (nativeComponent)
+        {
+            if (auto context = nativeComponent->getGraphicsContext())
+            {
+                switch (context->getPlatform())
+                {
+                    case yup::GpuPlatform::Direct3D:
+                        title << " | D3D11";
+                        break;
 
-        auto [width, height] = getNativeComponent()->getContentSize();
-        title << " | " << width << " x " << height;
+                    case yup::GpuPlatform::Metal:
+                        title << " | Metal";
+                        break;
+
+                    case yup::GpuPlatform::OpenGL:
+                        title << " | OpenGL 4.x";
+                        break;
+
+                    case yup::GpuPlatform::OpenGLES:
+                        title << " | OpenGLES 3.x";
+                        break;
+
+                    case yup::GpuPlatform::WebGPU:
+                        title << " | WebGPU";
+                        break;
+
+                    case yup::GpuPlatform::Headless:
+                        title << " | Headless";
+                        break;
+                }
+            }
+
+            if (nativeComponent->isAtomicModeEnabled())
+                title << " (atomic)";
+
+            auto [width, height] = nativeComponent->getContentSize();
+            title << " | " << width << " x " << height;
+        }
 
         setTitle (title);
     }
@@ -369,7 +415,7 @@ struct Application : yup::YUPApplication
 
     yup::String getApplicationName() override
     {
-        return "yup! graphics";
+        return "YUP! demos";
     }
 
     yup::String getApplicationVersion() override
@@ -379,6 +425,10 @@ struct Application : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+#if YUP_WINDOWS && YUP_ENABLE_WINDOWS_BREAK_ALLOC
+        _CrtSetBreakAlloc (YUP_ENABLE_WINDOWS_BREAK_ALLOC);
+#endif
+
         YUP_PROFILE_START();
 
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);

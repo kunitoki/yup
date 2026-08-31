@@ -32,8 +32,8 @@ class GpuDevice;
     or non-indexed geometry rendering. The underlying GPU resource lives for as
     long as at least one GpuBuffer::Ptr exists.
 
-    Buffers are immutable by default: the data provided at creation time is
-    uploaded once and cannot be updated afterwards.
+    Buffers are created with the data provided at creation time and may be
+    rewritten in place afterwards via GpuDevice::updateBuffer().
 
     @see GpuRenderPass, GraphicsContext::Options
 */

@@ -201,6 +201,50 @@
               "}"
             ]
           }
+        },
+        {
+          "path": "source/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL render pass: disable the scissor test for the duration of the pass, since the host renderer may leave a stale scissor rect enabled that would clip the pass's clears and draws",
+          "already_contains": "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);\n\n    glDisable(GL_SCISSOR_TEST);",
+          "replace": {
+            "from": [
+              "    // Create an FBO for this render pass.",
+              "    glGenFramebuffers(1, &pass->m_glFBO);",
+              "    pass->m_ownsFBO = true;",
+              "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);",
+              "",
+              "    // Attach color targets."
+            ],
+            "to": [
+              "    // Create an FBO for this render pass.",
+              "    glGenFramebuffers(1, &pass->m_glFBO);",
+              "    pass->m_ownsFBO = true;",
+              "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);",
+              "",
+              "    glDisable(GL_SCISSOR_TEST);",
+              "",
+              "    // Attach color targets."
+            ]
+          }
+        },
+        {
+          "path": "source/ore/gl/ore_context_gl.cpp",
+          "note": "Ore GL render pass: force the color/depth/stencil write masks on before the clears — the host renderer may leave them disabled, which silently discards glClearBuffer* and leaves stale content in reused render targets (trails/ghosting)",
+          "already_contains": "    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);\n    glDepthMask(GL_TRUE);\n    glStencilMask(0xFF);",
+          "replace": {
+            "from": [
+              "    // Handle clear ops.",
+              "    for (uint32_t i = 0; i < desc.colorCount; ++i)"
+            ],
+            "to": [
+              "    // Handle clear ops.",
+              "    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);",
+              "    glDepthMask(GL_TRUE);",
+              "    glStencilMask(0xFF);",
+              "",
+              "    for (uint32_t i = 0; i < desc.colorCount; ++i)"
+            ]
+          }
         }
       ],
       "shader_generation": {
