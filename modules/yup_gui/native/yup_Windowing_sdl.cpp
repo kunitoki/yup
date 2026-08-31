@@ -1954,7 +1954,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
                                 / getWindowUnitsPerPoint (window);
 
             if (event->motion.windowID == SDL_GetWindowID (window))
-                processEvent ([this, cursorsPosition] { handleMouseMoveOrDrag (cursorPosition); });
+                processEvent ([this, cursorPosition] { handleMouseMoveOrDrag (cursorPosition); });
 
             break;
         }
