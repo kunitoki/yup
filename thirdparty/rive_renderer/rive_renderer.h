@@ -85,17 +85,31 @@
 
 //==============================================================================
 /** Config: YUP_RIVE_OPENGL_MAJOR
-    Enables a speficic OpenGL major version. Must be at least 4.
+    Enables a specific OpenGL major version. Must be at least 4.
 */
 #ifndef YUP_RIVE_OPENGL_MAJOR
 #define YUP_RIVE_OPENGL_MAJOR 4
 #endif
 
 /** Config: YUP_RIVE_OPENGL_MINOR
-    Enables a speficic OpenGL minor version. Must be at least 5 (OpenGL 4.5+, required for compute shaders).
+    Enables a specific OpenGL minor version. Must be at least 5 (OpenGL 4.5+, required for compute shaders).
 */
 #ifndef YUP_RIVE_OPENGL_MINOR
 #define YUP_RIVE_OPENGL_MINOR 5
+#endif
+
+/** Config: YUP_RIVE_OPENGLES_MAJOR
+    Enables a specific OpenGL ES major version. Must be at least 3.
+*/
+#ifndef YUP_RIVE_OPENGLES_MAJOR
+#define YUP_RIVE_OPENGLES_MAJOR 3
+#endif
+
+/** Config: YUP_RIVE_OPENGLES_MINOR
+    Enables a specific OpenGL ES minor version. Must be at least 1 (OpenGL ES 3.1+, required for compute shaders).
+*/
+#ifndef YUP_RIVE_OPENGLES_MINOR
+#define YUP_RIVE_OPENGLES_MINOR 1
 #endif
 
 //==============================================================================

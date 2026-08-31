@@ -443,8 +443,8 @@ Uint32 setContextWindowHints (GpuPlatform desiredApi)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles2");
 
-        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGLES_MAJOR);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGLES_MINOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
         SDL_GL_SetAttribute (SDL_GL_RED_SIZE, 8);
         SDL_GL_SetAttribute (SDL_GL_GREEN_SIZE, 8);
