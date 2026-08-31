@@ -107,6 +107,7 @@
 #include "yup_core/yup_URL.cpp"
 #include "yup_core/yup_Uuid.cpp"
 #include "yup_core/yup_Variant.cpp"
+#include "yup_core/yup_WaitableTimer.cpp"
 #include "yup_core/yup_Watchdog.cpp"
 #include "yup_core/yup_WebInputStream.cpp"
 #include "yup_core/yup_XmlDocument.cpp"

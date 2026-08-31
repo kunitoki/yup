@@ -558,7 +558,7 @@ void Component::repaint (float x, float y, float width, float height)
 
 void Component::repaint (const Rectangle<float>& rect)
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    jassert (! isRepainting.load (std::memory_order_relaxed)); // You are likely repainting from paint !
 
     cachedTextureCanvas = nullptr;
 
@@ -1243,43 +1243,77 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
-    auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
-    if (canvas == nullptr)
-        return nullptr;
+    const auto renderSnapshot = [&] () -> GpuCanvas::Ptr
+    {
+        auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
+        if (canvas == nullptr)
+            return nullptr;
 
-    if (! includeEffects || componentEffect == nullptr)
+        if (! includeEffects || componentEffect == nullptr)
+            return canvas;
+
+        auto texture = canvas->asTexture();
+
+        auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+        if (effectCanvas == nullptr)
+            return canvas;
+
+        auto& g = effectCanvas->beginDraw();
+        auto localBounds = getLocalBounds();
+        g.setDrawingArea (localBounds);
+        componentEffect->apply (g, texture, localBounds);
+
+        return effectCanvas;
+    };
+
+    if (auto* nativeComponent = getNativeComponent())
+    {
+        GpuCanvas::Ptr canvas;
+        nativeComponent->runWithGraphicsContext ([&] { canvas = renderSnapshot(); });
         return canvas;
+    }
 
-    auto texture = canvas->asTexture();
-
-    auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
-    if (effectCanvas == nullptr)
-        return canvas;
-
-    auto& g = effectCanvas->beginDraw();
-    auto localBounds = getLocalBounds();
-    g.setDrawingArea (localBounds);
-    componentEffect->apply (g, texture, localBounds);
-
-    return effectCanvas;
+    return renderSnapshot();
 }
 
 Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
 {
-    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
-    if (canvas == nullptr)
-        return {};
+    Image result;
+    const auto takeSnapshot = [&]
+    {
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        if (canvas == nullptr)
+            return;
 
-    return canvas->asImage();
+        result = canvas->asImage();
+    };
+
+    if (auto* nativeComponent = getNativeComponent())
+        nativeComponent->runWithGraphicsContext (takeSnapshot);
+    else
+        takeSnapshot();
+
+    return result;
 }
 
 GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool includeEffects)
 {
-    auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
-    if (canvas == nullptr)
-        return nullptr;
+    GpuTexture::Ptr result;
+    const auto takeSnapshot = [&]
+    {
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        if (canvas == nullptr)
+            return;
 
-    return canvas->asTexture();
+        result = canvas->asTexture();
+    };
+
+    if (auto* nativeComponent = getNativeComponent())
+        nativeComponent->runWithGraphicsContext (takeSnapshot);
+    else
+        takeSnapshot();
+
+    return result;
 }
 
 //==============================================================================
@@ -1344,41 +1378,53 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
-    const auto w = static_cast<int> (getWidth());
-    const auto h = static_cast<int> (getHeight());
-
-    GpuCanvas::Ptr canvas;
-    if (reuseCanvas != nullptr && reuseCanvas->getWidth() == w && reuseCanvas->getHeight() == h)
+    const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
-        canvas = std::move (reuseCanvas);
-    }
-    else
+        const auto w = static_cast<int> (getWidth());
+        const auto h = static_cast<int> (getHeight());
+
+        GpuCanvas::Ptr canvas;
+        if (reuseCanvas != nullptr && reuseCanvas->getWidth() == w && reuseCanvas->getHeight() == h)
+        {
+            canvas = std::move (reuseCanvas);
+        }
+        else
+        {
+            reuseCanvas = nullptr;
+            canvas = GpuCanvas::create (ctx, w, h);
+        }
+
+        if (canvas == nullptr)
+            return nullptr;
+
+        auto& offscreenG = canvas->beginDraw();
+
+        options.paintAsOffscreenRoot = true;
+
+        auto localBounds = getLocalBounds();
+        paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
+
+        options.paintAsOffscreenRoot = false;
+
+        canvas->commit();
+        return canvas;
+    };
+
+    if (auto* nativeComponent = getNativeComponent())
     {
-        reuseCanvas = nullptr;
-        canvas = GpuCanvas::create (ctx, w, h);
+        GpuCanvas::Ptr canvas;
+        nativeComponent->runWithGraphicsContext ([&] { canvas = renderOffscreen(); });
+        return canvas;
     }
 
-    if (canvas == nullptr)
-        return nullptr;
-
-    auto& offscreenG = canvas->beginDraw();
-
-    options.paintAsOffscreenRoot = true;
-
-    auto localBounds = getLocalBounds();
-    paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
-
-    options.paintAsOffscreenRoot = false;
-
-    canvas->commit();
-    return canvas;
+    return renderOffscreen();
 }
 
 //==============================================================================
 
 void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
 {
-    options.isRepainting = true;
+    isRepainting.store (true, std::memory_order_relaxed);
 
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
@@ -1454,7 +1500,7 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
         }
     }
 
-    options.isRepainting = false;
+    isRepainting.store (false, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -1528,7 +1574,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             }
         }
 
-        options.isRepainting = true;
+        isRepainting.store (true, std::memory_order_relaxed);
 
         {
             const auto saved = g.saveState();
@@ -1544,7 +1590,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
                 paint (g);
         }
 
-        options.isRepainting = false;
+        isRepainting.store (false, std::memory_order_relaxed);
 
         paintChildrenAndOverChildren (g, boundsToRedraw, renderContinuous);
         return;

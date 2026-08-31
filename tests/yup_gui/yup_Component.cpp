@@ -238,6 +238,95 @@ public:
         comp.internalSafeAreaChanged();
     }
 
+    static void setOnDesktop (Component& comp, bool value)
+    {
+        comp.options.onDesktop = value;
+    }
+
+    static void triggerDisplayChanged (Component& comp)
+    {
+        comp.internalDisplayChanged();
+    }
+
+    static void triggerUserTriedToCloseWindow (Component& comp)
+    {
+        comp.internalUserTriedToCloseWindow();
+    }
+
+    static void triggerRefreshDisplay (Component& comp, double lastFrameTimeSeconds)
+    {
+        comp.internalRefreshDisplay (lastFrameTimeSeconds);
+    }
+
+    static void triggerKeyDown (Component& comp, const KeyPress& keys, const Point<float>& position)
+    {
+        comp.internalKeyDown (keys, position);
+    }
+
+    static void triggerKeyUp (Component& comp, const KeyPress& keys, const Point<float>& position)
+    {
+        comp.internalKeyUp (keys, position);
+    }
+
+    static void triggerTextInput (Component& comp, const String& text)
+    {
+        comp.internalTextInput (text);
+    }
+
+    static void triggerMouseEnter (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseEnter (event);
+    }
+
+    static void triggerMouseExit (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseExit (event);
+    }
+
+    static void triggerMouseDown (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseDown (event);
+    }
+
+    static void triggerMouseMove (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseMove (event);
+    }
+
+    static void triggerMouseDrag (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseDrag (event);
+    }
+
+    static void triggerMouseUp (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseUp (event);
+    }
+
+    static void triggerMouseDoubleClick (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseDoubleClick (event);
+    }
+
+    static void triggerMouseWheel (Component& comp, const MouseEvent& event, const MouseWheelData& wheelData)
+    {
+        comp.internalMouseWheel (event, wheelData);
+    }
+
+    static void triggerVisibilityChanged (Component& comp)
+    {
+        comp.internalVisibilityChanged();
+    }
+
+    static void triggerAttachedToNative (Component& comp)
+    {
+        comp.internalAttachedToNative();
+    }
+
+    static void triggerDetachedFromNative (Component& comp)
+    {
+        comp.internalDetachedFromNative();
+    }
     static void triggerInternalMouseDown (Component& comp, const MouseEvent& event)
     {
         comp.internalMouseDown (event);
@@ -2816,4 +2905,255 @@ TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragExit)
     ComponentHelper::triggerItemDragExit (*child, data);
     EXPECT_TRUE (child->lastDragExitData.hasFiles());
     EXPECT_EQ (child->lastDragExitData.getFiles().size(), 1);
+}
+
+// =============================================================================
+// Coverage: desktop-native delegation, hierarchy no-ops, internal dispatch
+// =============================================================================
+
+TEST_F (ComponentTest, DesktopNativeDelegationSetters)
+{
+    // Mock a native peer so the onDesktop delegation branches execute.
+    ComponentHelper::attachMockNative (*root);
+    ComponentHelper::setOnDesktop (*root, true);
+
+    root->setBounds (0, 0, 100, 50);
+    root->setTitle ("hello");
+    root->setPosition (Point<float> (10.0f, 20.0f));
+    root->setBottomLeft (Point<float> (5.0f, 30.0f));
+    root->setTopRight (Point<float> (60.0f, 5.0f));
+    root->setBottomRight (Point<float> (80.0f, 40.0f));
+    root->setCenter (Point<float> (50.0f, 25.0f));
+    root->setCenterX (50.0f);
+    root->setCenterY (25.0f);
+    root->setFullScreen (true);
+    EXPECT_TRUE (root->isFullScreen());
+    EXPECT_FLOAT_EQ (root->getScaleDpi(), 1.0f);
+    root->setOpacity (0.5f);
+    EXPECT_NEAR (0.5f, root->getOpacity(), 0.01f); // stored as uint8 → 127/255 ≈ 0.498
+    EXPECT_EQ (root->getNativeHandle(), nullptr);
+    EXPECT_TRUE (root->getSafeAreaBounds().isEmpty());
+
+    // localToScreen / getTransformToScreen native branches.
+    root->localToScreen (Point<float> (1.0f, 2.0f));
+    root->getTransformToScreen();
+
+    // Const getNativeComponent with an attached native.
+    const Component& constRoot = *root;
+    EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
+}
+
+TEST_F (ComponentTest, ChildResolvesNativeThroughParent)
+{
+    // Child has no native; parent does → getNativeComponent walks up (both overloads).
+    ComponentHelper::attachMockNative (*parent);
+    EXPECT_EQ (child->getNativeComponent(), parent->getNativeComponent());
+
+    const Component& constChild = *child;
+    const Component& constParent = *parent;
+    EXPECT_EQ (constChild.getNativeComponent(), constParent.getNativeComponent());
+
+    // localToScreen adds the desktop parent's native position then stops.
+    ComponentHelper::setOnDesktop (*parent, true);
+    child->localToScreen (Point<float> (1.0f, 1.0f));
+}
+
+TEST_F (ComponentTest, SameStateSettersAreNoOps)
+{
+    root->setEnabled (true);   // already enabled
+    root->setVisible (true);   // already visible
+    root->setFullScreen (false); // already not fullscreen
+}
+
+TEST_F (ComponentTest, HierarchyOperationsOnParentlessComponent)
+{
+    Component lone ("lone");
+
+    lone.toBack();
+    lone.raiseAbove (&lone);
+    lone.lowerBelow (&lone);
+    lone.raiseBy (1);
+
+    // Target that is not a child of the parent.
+    Component other ("other");
+    parent->raiseAbove (&other);
+    parent->lowerBelow (&other);
+}
+
+TEST_F (ComponentTest, TransformAndCoordinateQueries)
+{
+    // getScreenPosition covers localToScreen of the position.
+    root->setBounds (10, 20, 100, 50);
+    root->getScreenPosition();
+
+    // getRelativeArea / getTransformToComponent with self or null target.
+    root->getRelativeArea (root.get(), Rectangle<float> (0.0f, 0.0f, 10.0f, 10.0f));
+    root->getRelativeArea (nullptr, Rectangle<float> (0.0f, 0.0f, 10.0f, 10.0f));
+    root->getTransformToComponent (root.get());
+    root->getTransformToComponent (nullptr);
+    root->getTransformFromComponent (nullptr);
+
+    // getTransformToScreen with a non-identity transform.
+    root->setTransform (AffineTransform::translation (5.0f, 7.0f));
+    root->getTransformToScreen();
+}
+
+TEST_F (ComponentTest, FindColorWalksUpTheHierarchy)
+{
+    root->setColor ("missing", Color (0xFFFF0000));
+
+    // child → parent → root: found at root.
+    auto found = child->findColor ("missing");
+    ASSERT_TRUE (found.has_value());
+    EXPECT_EQ (found.value(), Color (0xFFFF0000));
+
+    // No one in the chain has it → recursion returns nullopt.
+    EXPECT_FALSE (child->findColor ("unknown-id").has_value());
+}
+
+TEST_F (ComponentTest, InternalDisplayAndCloseDispatch)
+{
+    ComponentHelper::triggerDisplayChanged (*root);
+    ComponentHelper::triggerUserTriedToCloseWindow (*root);
+
+    // refreshDisplay recurses into children.
+    ComponentHelper::triggerRefreshDisplay (*root, 0.016);
+}
+
+TEST_F (ComponentTest, InternalKeyboardDispatch)
+{
+    const KeyPress key (KeyPress::spaceKey);
+
+    // Invisible component → early return.
+    root->setVisible (false);
+    ComponentHelper::triggerKeyDown (*root, key, Point<float> (0.0f, 0.0f));
+    ComponentHelper::triggerKeyUp (*root, key, Point<float> (0.0f, 0.0f));
+    ComponentHelper::triggerTextInput (*root, "a");
+    root->setVisible (true);
+
+    // Disabled component → early return.
+    root->setEnabled (false);
+    ComponentHelper::triggerKeyDown (*root, key, Point<float> (0.0f, 0.0f));
+    ComponentHelper::triggerKeyUp (*root, key, Point<float> (0.0f, 0.0f));
+    ComponentHelper::triggerTextInput (*root, "a");
+    root->setEnabled (true);
+
+    // Visible + enabled → default virtual bodies run.
+    ComponentHelper::triggerKeyDown (*root, key, Point<float> (0.0f, 0.0f));
+    ComponentHelper::triggerKeyUp (*root, key, Point<float> (0.0f, 0.0f));
+
+    // textInput requires wantsKeyboardFocus.
+    ComponentHelper::triggerTextInput (*root, "a");
+    root->setWantsKeyboardFocus (true);
+    ComponentHelper::triggerTextInput (*root, "a");
+}
+
+TEST_F (ComponentTest, InternalMouseDispatch)
+{
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+    const MouseWheelData wheel (0.0f, 10.0f);
+
+    // Invisible component → every handler returns early.
+    root->setVisible (false);
+    ComponentHelper::triggerMouseEnter (*root, event);
+    ComponentHelper::triggerMouseExit (*root, event);
+    ComponentHelper::triggerMouseDown (*root, event);
+    ComponentHelper::triggerMouseMove (*root, event);
+    ComponentHelper::triggerMouseDrag (*root, event);
+    ComponentHelper::triggerMouseUp (*root, event);
+    ComponentHelper::triggerMouseDoubleClick (*root, event);
+    ComponentHelper::triggerMouseWheel (*root, event, wheel);
+    root->setVisible (true);
+
+    // Visible component → default virtual bodies run.
+    ComponentHelper::triggerMouseEnter (*root, event);
+    ComponentHelper::triggerMouseExit (*root, event);
+    ComponentHelper::triggerMouseDown (*root, event);
+    ComponentHelper::triggerMouseMove (*root, event);
+    ComponentHelper::triggerMouseDrag (*root, event);
+    ComponentHelper::triggerMouseUp (*root, event);
+    ComponentHelper::triggerMouseDoubleClick (*root, event);
+    ComponentHelper::triggerMouseWheel (*root, event, wheel);
+
+    // Mouse-down with keyboard focus request → takeKeyboardFocus path.
+    root->setWantsKeyboardFocus (true);
+    ComponentHelper::triggerMouseDown (*root, event);
+}
+
+TEST_F (ComponentTest, InternalMouseDispatchNotifiesListeners)
+{
+    struct LocalMouseListener : public MouseListener
+    {
+        void mouseEnter (const MouseEvent&) override { ++enters; }
+        void mouseExit (const MouseEvent&) override { ++exits; }
+        void mouseDown (const MouseEvent&) override { ++downs; }
+        void mouseMove (const MouseEvent&) override { ++moves; }
+        void mouseDrag (const MouseEvent&) override { ++drags; }
+        void mouseUp (const MouseEvent&) override { ++ups; }
+        void mouseDoubleClick (const MouseEvent&) override { ++doubleClicks; }
+        void mouseWheel (const MouseEvent&, const MouseWheelData&) override { ++wheels; }
+
+        int enters = 0;
+        int exits = 0;
+        int downs = 0;
+        int moves = 0;
+        int drags = 0;
+        int ups = 0;
+        int doubleClicks = 0;
+        int wheels = 0;
+    };
+
+    LocalMouseListener listener;
+    root->addMouseListener (&listener);
+    root->setVisible (true);
+
+    const MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+    const MouseWheelData wheel (0.0f, 10.0f);
+
+    ComponentHelper::triggerMouseEnter (*root, event);
+    ComponentHelper::triggerMouseExit (*root, event);
+    ComponentHelper::triggerMouseDown (*root, event);
+    ComponentHelper::triggerMouseMove (*root, event);
+    ComponentHelper::triggerMouseDrag (*root, event);
+    ComponentHelper::triggerMouseUp (*root, event);
+    ComponentHelper::triggerMouseDoubleClick (*root, event);
+    ComponentHelper::triggerMouseWheel (*root, event, wheel);
+
+    EXPECT_EQ (listener.enters, 1);
+    EXPECT_EQ (listener.exits, 1);
+    EXPECT_EQ (listener.downs, 1);
+    EXPECT_EQ (listener.moves, 1);
+    EXPECT_EQ (listener.drags, 1);
+    EXPECT_EQ (listener.ups, 1);
+    EXPECT_EQ (listener.doubleClicks, 1);
+    EXPECT_EQ (listener.wheels, 1);
+
+    root->removeMouseListener (&listener);
+}
+
+TEST_F (ComponentTest, InternalAttachDetachAndVisibilityDispatch)
+{
+    // A visible child makes internalVisibilityChanged recurse into the child loop.
+    parent->setVisible (true);
+
+    ComponentHelper::triggerVisibilityChanged (*root);
+    ComponentHelper::triggerAttachedToNative (*root);
+    ComponentHelper::triggerDetachedFromNative (*root);
+}
+
+TEST_F (ComponentTest, RemoveFromDesktopWhenNotOnDesktopReturnsEarly)
+{
+    // Not on desktop → removeFromDesktop is a no-op.
+    root->removeFromDesktop();
+}
+
+TEST_F (ComponentTest, GetParentComponentWithTypeWalksUpTheChain)
+{
+    struct CustomComponent : public Component { };
+
+    // No ancestor is a CustomComponent → the walk reaches the top and returns nullptr.
+    EXPECT_EQ (child->getParentComponentWithType<CustomComponent>(), nullptr);
+
+    // Direct parent match.
+    EXPECT_EQ (child->getParentComponentWithType<Component>(), parent.get());
 }
