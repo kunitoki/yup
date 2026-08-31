@@ -124,7 +124,7 @@ shader_bundler *COMPILE_ARGS:
 
 [doc("fetch missing coverage lines for a pull request")]
 fetch_coverage PR:
-  uv run python tools/fetch_coverage.py --pr {{PR}}
+  uv run python tools/print_uncovered_lines.py --pr {{PR}}
 
 [doc("update rive runtime")]
 rive_update REF="runtime-v0.1.62":
