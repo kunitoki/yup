@@ -294,7 +294,7 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 bool toastNotificationHide (int64 id)
 {
     // clang-format off
-    MAIN_THREAD_EM_ASM (
+    const auto found = MAIN_THREAD_EM_ASM_INT (
     {
         var id = $0;
 
@@ -302,11 +302,14 @@ bool toastNotificationHide (int64 id)
         {
             window.YupToastNotifications[id].close();
             delete window.YupToastNotifications[id];
+            return 1;
         }
+
+        return 0;
     }, id);
     // clang-format on
 
-    return true;
+    return found != 0;
 }
 
 //==============================================================================
