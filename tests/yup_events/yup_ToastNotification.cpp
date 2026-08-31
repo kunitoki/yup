@@ -275,6 +275,65 @@ TEST_F (ToastNotificationTests, ClearIsSafeBeforeInitialize)
     EXPECT_NO_THROW (ToastNotification::getInstance()->clear());
 }
 
+TEST_F (ToastNotificationTests, SetAppNameAppUserModelIdAndFallbackImage)
+{
+    auto& instance = *ToastNotification::getInstance();
+
+    instance.setAppName ("MyTestApp");
+    EXPECT_EQ (String ("MyTestApp"), instance.getAppName());
+
+    instance.setAppUserModelId ("MyCompany.MyApp");
+    EXPECT_EQ (String ("MyCompany.MyApp"), instance.getAppUserModelId());
+
+    // setFallbackImage() has no public getter; just check it doesn't crash.
+    EXPECT_NO_THROW (instance.setFallbackImage (File ("/tmp/fallback.png")));
+    EXPECT_NO_THROW (instance.setFallbackImage (std::nullopt));
+}
+
+TEST_F (ToastNotificationTests, SetPermissionStateChangedCallbackIsAccepted)
+{
+    // Every backend either stores this callback or ignores it; none of them
+    // touch the system permission APIs, so this is safe on every platform.
+    EXPECT_NO_THROW (ToastNotification::getInstance()->setPermissionStateChangedCallback (
+        [] (ToastNotification::PermissionState) {}));
+}
+
+#if YUP_LINUX || YUP_BSD
+
+TEST_F (ToastNotificationTests, GetPermissionStateReportsGrantedOnLinux)
+{
+    // Linux/BSD has no user-facing notification permission, so the backend
+    // reports "granted" synchronously without touching the system.
+    bool called = false;
+    ToastNotification::PermissionState reported = ToastNotification::PermissionState::notDetermined;
+
+    ToastNotification::getPermissionState ([&] (ToastNotification::PermissionState state)
+    {
+        called = true;
+        reported = state;
+    });
+
+    EXPECT_TRUE (called);
+    EXPECT_EQ (ToastNotification::PermissionState::granted, reported);
+}
+
+TEST_F (ToastNotificationTests, RequestPermissionReportsGrantedOnLinux)
+{
+    bool called = false;
+    ToastNotification::PermissionState reported = ToastNotification::PermissionState::notDetermined;
+
+    ToastNotification::requestPermission ([&] (ToastNotification::PermissionState state)
+    {
+        called = true;
+        reported = state;
+    });
+
+    EXPECT_TRUE (called);
+    EXPECT_EQ (ToastNotification::PermissionState::granted, reported);
+}
+
+#endif // YUP_LINUX || YUP_BSD
+
 TEST_F (ToastNotificationTests, ConfigureAumiBuildsExpectedId)
 {
     EXPECT_EQ (String ("Company.Product"),
