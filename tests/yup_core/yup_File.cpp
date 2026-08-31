@@ -102,6 +102,21 @@ TEST_F (FileTests, SpecialLocationComprehensive)
     EXPECT_TRUE (hostAppPath.getFullPathName().isNotEmpty());
 }
 
+TEST_F (FileTests, BundleDirectory)
+{
+    File bundleDir = File::getSpecialLocation (File::bundleDirectory);
+    EXPECT_TRUE (bundleDir.getFullPathName().isNotEmpty());
+    EXPECT_TRUE (bundleDir.isDirectory());
+
+    File hostBundleDir = File::getSpecialLocation (File::hostBundleDirectory);
+    EXPECT_TRUE (hostBundleDir.getFullPathName().isNotEmpty());
+    EXPECT_TRUE (hostBundleDir.isDirectory());
+
+    // The test binary is a standalone executable rather than a loaded plugin, so bundleDirectory
+    // (own image) and hostBundleDirectory (host process) must resolve to the same location here.
+    EXPECT_EQ (bundleDir.getFullPathName(), hostBundleDir.getFullPathName());
+}
+
 TEST_F (FileTests, RootDirectory)
 {
 #if ! YUP_WINDOWS

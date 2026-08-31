@@ -158,7 +158,7 @@ public:
 
             queue.WriteBuffer (wgpuBuffer, 0, data, byteSize);
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (wgpuBuffer) });
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .webgpuStorageBuffer = std::move (wgpuBuffer) });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);

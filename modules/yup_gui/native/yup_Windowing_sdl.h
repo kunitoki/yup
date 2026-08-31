@@ -27,13 +27,14 @@ class SDLComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
-    , public AsyncUpdater
 {
-#if (YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    static constexpr bool renderDrivenByTimer = false;
-#else
+#if YUP_EMSCRIPTEN
     static constexpr bool renderDrivenByTimer = true;
+#else
+    static constexpr bool renderDrivenByTimer = false;
 #endif
+
+    static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
 
 public:
     //==============================================================================
@@ -110,6 +111,9 @@ public:
     GraphicsContext* getGraphicsContext() override;
 
     //==============================================================================
+    void runWithGraphicsContext (const std::function<void()>& fn) override;
+
+    //==============================================================================
     void* getNativeHandle() const override;
 
     //==============================================================================
@@ -119,7 +123,6 @@ public:
 
     //==============================================================================
     void run() override;
-    void handleAsyncUpdate() override;
     void timerCallback() override;
 
     //==============================================================================
@@ -160,6 +163,23 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    template <class F>
+    void processEvent (F&& function)
+    {
+        auto eventHandler = [function = std::forward<F> (function), weakSelf = WeakReference<SDLComponentNative> (this)]
+        {
+            if (weakSelf.wasObjectDeleted())
+                return;
+
+            function();
+        };
+
+        if (! MessageManager::getInstance()->isThisTheMessageThread())
+            MessageManager::callAsync (std::move (eventHandler));
+        else
+            function();
+    }
+
     static bool requestMouseCapture();
     static void releaseMouseCapture();
     static int mouseCaptureRequestCount;
@@ -175,15 +195,21 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
-    void getRenderContext();
+    void runWithComputeContext (const std::function<void()>& fn);
+    void renderFrame();
 
     void startRendering();
     void stopRendering();
     bool isRendering() const;
     bool hasNativeKeyboardFocus() const;
 
+    friend class WeakReference<SDLComponentNative>;
+    WeakReference<SDLComponentNative>::Master masterReference;
+
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;
+    SDL_GLContext computeContext = nullptr;
+    bool computeContextLost = false;
 
     void* parentWindow = nullptr;
     String windowTitle;
@@ -216,6 +242,18 @@ private:
     RelativeTime doubleClickTime;
 
     RectangleList<float> currentRepaintAreas;
+    CriticalSection repaintLock;
+
+    struct ContextActivatorGuard : public ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<ContextActivatorGuard>;
+
+        CriticalSection lock;
+        SDLComponentNative* native = nullptr;
+    };
+
+    ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
+    CriticalSection& glContextLock { contextGuard->lock };
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
@@ -231,8 +269,8 @@ private:
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
     double lastRenderTimeSeconds = 0.0;
-    bool renderAtomicMode = false;
-    bool renderWireframe = false;
+    std::atomic<bool> renderAtomicMode = false;
+    std::atomic<bool> renderWireframe = false;
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;

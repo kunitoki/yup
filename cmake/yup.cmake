@@ -108,6 +108,7 @@ include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_pluginval.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_bundle_resources.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_shader_bundler.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/yup_python.cmake)
 

@@ -54,6 +54,11 @@ int64 FileInputStream::getTotalLength()
     // You should always check that a stream opened successfully before using it!
     jassert (openedOk());
 
+#if YUP_ANDROID
+    if (assetBacked)
+        return cachedAssetLength;
+#endif
+
     return file.getSize();
 }
 
@@ -88,7 +93,20 @@ bool FileInputStream::setPosition (int64 pos)
     jassert (openedOk());
 
     if (pos != currentPosition)
-        currentPosition = yup_fileSetPosition (fileHandle, pos);
+    {
+#if YUP_ANDROID
+        if (assetBacked)
+        {
+            currentPosition = fileHandle != nullptr
+                                ? AAsset_seek64 (static_cast<AAsset*> (fileHandle), (off64_t) pos, SEEK_SET)
+                                : -1;
+        }
+        else
+#endif
+        {
+            currentPosition = yup_fileSetPosition (fileHandle, pos);
+        }
+    }
 
     return currentPosition == pos;
 }

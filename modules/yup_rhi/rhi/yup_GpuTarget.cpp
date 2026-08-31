@@ -37,6 +37,18 @@ GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height)
     return result;
 }
 
+GpuTarget::~GpuTarget()
+{
+    if (ctx == nullptr)
+        return;
+
+    ctx->runOnGraphicsContext ([this]
+    {
+        cachedTexture = nullptr;
+        offscreenTarget = nullptr;
+    });
+}
+
 GpuTarget::Ptr GpuTarget::createFromTarget (GpuDevice::Ptr ctx, std::unique_ptr<RenderableTarget> target)
 {
     if (target == nullptr)
@@ -77,14 +89,12 @@ GpuTexture::Ptr GpuTarget::asTexture()
 
     if (auto canvas = target.getRenderCanvas())
     {
-        cachedTexture = GpuTexture::fromRenderCanvas (std::move (canvas), w, h);
-        // Only attach the Y-flip mirror if it was already created; GPU
-        // render-pass targets never create one.
+        cachedTexture = GpuTexture::fromRenderCanvas (ctx, std::move (canvas), w, h);
         cachedTexture->sampledTexture = target.getSampledTexture();
     }
     else if (auto tex = target.adoptAsTexture())
     {
-        cachedTexture = GpuTexture::fromGpuTexture (std::move (tex), w, h);
+        cachedTexture = GpuTexture::fromGpuTexture (ctx, std::move (tex), w, h);
     }
 
     return cachedTexture;

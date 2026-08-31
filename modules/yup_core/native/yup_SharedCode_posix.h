@@ -303,6 +303,35 @@ void* fdToVoidPointer (int fd) noexcept { return (void*) (pointer_sized_int) fd;
 
 bool File::isDirectory() const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fullPath))
+    {
+        auto* assetManager = getAndroidAssetManager();
+        if (assetManager == nullptr)
+            return false;
+
+        auto relativePath = getAndroidAssetRelativePath (fullPath);
+
+        // A single-file open never succeeds for a directory, so try that first as the common
+        // case. AAssetManager_openDir doesn't validate that the path exists, so a directory is
+        // only confirmed once it yields at least one entry.
+        if (auto* asset = AAssetManager_open (assetManager, relativePath.toRawUTF8(), AASSET_MODE_UNKNOWN))
+        {
+            AAsset_close (asset);
+            return false;
+        }
+
+        if (auto* dir = AAssetManager_openDir (assetManager, relativePath.toRawUTF8()))
+        {
+            auto isNonEmpty = AAssetDir_getNextFileName (dir) != nullptr;
+            AAssetDir_close (dir);
+            return isNonEmpty;
+        }
+
+        return false;
+    }
+#endif
+
     yup_statStruct info;
 
     return fullPath.isNotEmpty()
@@ -311,17 +340,57 @@ bool File::isDirectory() const
 
 bool File::exists() const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fullPath))
+        return existsAsFile() || isDirectory();
+#endif
+
     return fullPath.isNotEmpty()
         && access (fullPath.toUTF8(), F_OK) == 0;
 }
 
 bool File::existsAsFile() const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fullPath))
+    {
+        auto* assetManager = getAndroidAssetManager();
+        if (assetManager == nullptr)
+            return false;
+
+        if (auto* asset = AAssetManager_open (assetManager, getAndroidAssetRelativePath (fullPath).toRawUTF8(), AASSET_MODE_UNKNOWN))
+        {
+            AAsset_close (asset);
+            return true;
+        }
+
+        return false;
+    }
+#endif
+
     return exists() && ! isDirectory();
 }
 
 int64 File::getSize() const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fullPath))
+    {
+        auto* assetManager = getAndroidAssetManager();
+        if (assetManager == nullptr)
+            return 0;
+
+        if (auto* asset = AAssetManager_open (assetManager, getAndroidAssetRelativePath (fullPath).toRawUTF8(), AASSET_MODE_UNKNOWN))
+        {
+            auto length = (int64) AAsset_getLength64 (asset);
+            AAsset_close (asset);
+            return length;
+        }
+
+        return 0;
+    }
+#endif
+
     yup_statStruct info;
     return yup_stat (fullPath, info) ? info.st_size : 0;
 }
@@ -453,6 +522,11 @@ bool File::setFileTimesInternal (int64 modificationTime, int64 accessTime, int64
 
 bool File::deleteFile() const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fullPath))
+        return false; // bundled assets are read-only
+#endif
+
     if (! isSymbolicLink())
     {
         if (! exists())
@@ -491,6 +565,11 @@ bool File::replaceInternal (const File& dest) const
 
 Result File::createDirectoryInternal (const String& fileName) const
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (fileName))
+        return Result::fail ("Cannot write to a read-only bundle/asset path: " + fileName);
+#endif
+
     auto res = getResultForReturnValue (mkdir (fileName.toUTF8(), 0777));
 
     if (res.ok())
@@ -527,6 +606,29 @@ int64 yup_fileSetPosition (void* handle, int64 pos)
 
 void FileInputStream::openHandle()
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (file.getFullPathName()))
+    {
+        auto* assetManager = getAndroidAssetManager();
+        auto* asset = assetManager != nullptr
+                        ? AAssetManager_open (assetManager, getAndroidAssetRelativePath (file.getFullPathName()).toRawUTF8(), AASSET_MODE_RANDOM)
+                        : nullptr;
+
+        if (asset != nullptr)
+        {
+            assetBacked = true;
+            cachedAssetLength = (int64) AAsset_getLength64 (asset);
+            fileHandle = asset;
+        }
+        else
+        {
+            status = Result::fail ("Could not open asset: " + file.getFullPathName());
+        }
+
+        return;
+    }
+#endif
+
     mode_t permission = 00644;
 
     auto parent = file.getParentDirectory().getFullPathName();
@@ -557,12 +659,40 @@ void FileInputStream::openHandle()
 
 FileInputStream::~FileInputStream()
 {
+#if YUP_ANDROID
+    if (assetBacked)
+    {
+        if (fileHandle != nullptr)
+            AAsset_close (static_cast<AAsset*> (fileHandle));
+
+        return;
+    }
+#endif
+
     if (fileHandle != nullptr)
         close (getFD (fileHandle));
 }
 
 size_t FileInputStream::readInternal (void* buffer, size_t numBytes)
 {
+#if YUP_ANDROID
+    if (assetBacked)
+    {
+        if (fileHandle == nullptr)
+            return 0;
+
+        auto result = AAsset_read (static_cast<AAsset*> (fileHandle), buffer, numBytes);
+
+        if (result < 0)
+        {
+            status = Result::fail ("Error reading asset");
+            result = 0;
+        }
+
+        return (size_t) result;
+    }
+#endif
+
     ssize_t result = 0;
 
     if (fileHandle != nullptr)
@@ -582,6 +712,14 @@ size_t FileInputStream::readInternal (void* buffer, size_t numBytes)
 //==============================================================================
 void FileOutputStream::openHandle()
 {
+#if YUP_ANDROID
+    if (isAndroidAssetPath (file.getFullPathName()))
+    {
+        status = Result::fail ("Cannot write to a read-only bundle/asset path: " + file.getFullPathName());
+        return;
+    }
+#endif
+
     if (file.exists())
     {
         auto f = open (file.getFullPathName().toUTF8(), O_RDWR);

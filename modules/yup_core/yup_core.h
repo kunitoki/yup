@@ -269,6 +269,7 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 YUP_END_IGNORE_WARNINGS_MSVC
 
 #include "misc/yup_MetaProgramming.h"
+#include "misc/yup_HashGenerator.h"
 #include "text/yup_String.h"
 #include "text/yup_StringRef.h"
 #include "logging/yup_Logger.h"
@@ -366,6 +367,9 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "threads/yup_Process.h"
 #include "threads/yup_SpinLock.h"
 #include "threads/yup_WaitableEvent.h"
+#include "threads/yup_WaitableTimer.h"
+#include "threads/yup_CancelToken.h"
+#include "threads/yup_CancelTokenSource.h"
 #include "threads/yup_Thread.h"
 #include "threads/yup_RecursiveSpinLock.h"
 #include "threads/yup_HighResolutionTimer.h"
@@ -414,6 +418,8 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #if YUP_CORE_INCLUDE_JNI_HELPERS && YUP_ANDROID
 #include <jni.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include "native/yup_JNIHelpers_android.h"
 #endif
 

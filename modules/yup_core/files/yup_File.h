@@ -983,6 +983,29 @@ public:
         */
         globalApplicationsDirectory,
 
+        /** The root directory for resources bundled with the currently running YUP binary
+            itself - e.g. the "Resources" folder inside a plugin's own .vst3/.component/.clap
+            bundle or the app's own macOS .app bundle, the root of the app's own iOS .app bundle
+            (which is flat and has no "Resources" subfolder), or the root of the Android APK's
+            assets. This is NOT the host application's bundle when the current binary is running
+            as a plugin - see hostBundleDirectory for that.
+
+            A file bundled with yup_add_bundled_resources() using a given relative destination
+            path can be found again by calling getChildFile() with that same relative path on
+            this location.
+
+            @see hostBundleDirectory
+        */
+        bundleDirectory,
+
+        /** The root directory for resources bundled with the *host* application - the DAW
+            hosting a plugin, or the same location as bundleDirectory when the current binary
+            is itself the standalone application (not a plugin).
+
+            @see bundleDirectory
+        */
+        hostBundleDirectory,
+
 #if YUP_WINDOWS || DOXYGEN
         /** On a Windows machine, returns the directory in which 32 bit applications
             normally get installed. On a 64 bit machine this would be something like

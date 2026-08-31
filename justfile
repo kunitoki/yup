@@ -57,7 +57,8 @@ ios IOS_PLATFORM="OS64":
 [doc("generate and open project for iOS Simulator macOS using Xcode")]
 [macos]
 ios_simulator IOS_PLATFORM="SIMULATORARM64":
-  @just ios {{IOS_PLATFORM}}
+  cmake -G Xcode -B build/ios_sim -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM={{IOS_PLATFORM}}
+  -open build/ios_sim/yup.xcodeproj
 
 [doc("generate and open project for Android using Android Studio (macos)")]
 [macos]
@@ -92,33 +93,44 @@ emscripten_serve:
   #python3 -m http.server -d .
   python3 tools/serve.py -p 8000 -d .
 
+[doc("generate python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_wheel:
   python -m build --wheel
   @just python_install
   @just python_test
 
+[doc("install python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_install:
   python -m pip install --force-reinstall dist/yup-*.whl
 
+[doc("uninstall python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_uninstall:
   python -m pip uninstall -y yup
 
+[doc("run tests for yup_python bindings")]
 [working-directory: 'python']
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
 
+[doc("compile and invoke shader_bundler tool")]
 [working-directory: 'cmake/tools/shader_bundler']
 shader_bundler *COMPILE_ARGS:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
 
+[doc("fetch missing coverage lines for a pull request")]
+fetch_coverage PR:
+  uv run python tools/print_uncovered_lines.py --pr {{PR}}
+
+[doc("update rive runtime")]
 rive_update REF="runtime-v0.1.62":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
 
+[doc("update rive shaders")]
 rive_shaders_update:
   uv venv .venv --clear
   source .venv/bin/activate

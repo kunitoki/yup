@@ -326,9 +326,9 @@ bool Graphics::commitToImage()
         return false;
 
     if (auto canvas = offscreenTarget->getRenderCanvas())
-        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (context.getGpuDevice(), std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
     else if (auto tex = offscreenTarget->adoptAsTexture())
-        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (context.getGpuDevice(), std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
 
     return true;
 }
@@ -992,7 +992,21 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
-    renderFittedText (text, rect, std::addressof (paint));
+    bool hasStylePaints = false;
+    for (auto style : text.getRenderStyles())
+    {
+        if (style->paint != nullptr)
+        {
+            hasStylePaints = true;
+        }
+        else
+        {
+            hasStylePaints = false;
+            break;
+        }
+    }
+
+    renderFittedText (text, rect, hasStylePaints ? nullptr : std::addressof (paint));
 }
 
 void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
