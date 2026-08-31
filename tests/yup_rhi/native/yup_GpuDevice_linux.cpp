@@ -803,3 +803,334 @@ TEST_F (GpuDeviceOpenGLTests, ComputePassWithHeadlessDeviceIsInvalid)
     EXPECT_FALSE (pass.dispatch (1, 1, 1));
     EXPECT_FALSE (pass.finish());
 }
+
+// --------------------------------------------------------------------------
+// Coverage: GpuDevice / Image / Graphics GPU-backed paths
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, CreateWithUnavailableApiReturnsNull)
+{
+    // Metal and Direct3D are not compiled on Linux — the create() switch must
+    // fall through to its default error branch.
+    EXPECT_EQ (GpuDevice::create (GpuPlatform::Metal, {}), nullptr);
+    EXPECT_EQ (GpuDevice::create (GpuPlatform::Direct3D, {}), nullptr);
+}
+
+TEST_F (GpuDeviceOpenGLTests, ImageFromTargetReadsPixels)
+{
+    auto target = GpuTarget::create (device, 64, 64);
+    ASSERT_NE (target, nullptr);
+
+    auto img = Image::fromTarget (*target);
+    ASSERT_TRUE (img.isValid());
+    EXPECT_EQ (img.getWidth(), 64);
+    EXPECT_EQ (img.getHeight(), 64);
+
+    // getTexture() must resolve the backing GPU texture (sampledTexture on GL).
+    EXPECT_NE (img.getTexture(), nullptr);
+}
+
+TEST_F (GpuDeviceOpenGLTests, ImageCreateTextureIfNotPresent)
+{
+    Image img (32, 32, PixelFormat::RGBA);
+    img.fill (0xFF000000);
+
+    // First call uploads CPU pixels into a GPU texture.
+    EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
+    EXPECT_NE (img.getTexture(), nullptr);
+
+    // Second call finds the texture already present.
+    EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
+}
+
+TEST_F (GpuDeviceOpenGLTests, GraphicsCommitToImage)
+{
+    Image img (64, 64, PixelFormat::RGBA);
+
+    {
+        Graphics g (*graphicsContext, img, 0u);
+        ASSERT_TRUE (g.isOffscreen());
+
+        g.setFillColor (Color (0xFFFF0000));
+        g.fillRect (0.0f, 0.0f, 64.0f, 64.0f);
+
+        EXPECT_TRUE (g.commitToImage());
+        EXPECT_NE (img.getTexture(), nullptr);
+    }
+}
+
+TEST_F (GpuDeviceOpenGLTests, GraphicsReadPixelsToImage)
+{
+    Image img (64, 64, PixelFormat::RGBA);
+
+    {
+        Graphics g (*graphicsContext, img, 0u);
+        ASSERT_TRUE (g.isOffscreen());
+
+        g.setFillColor (Color (0xFF00FF00));
+        g.fillRect (0.0f, 0.0f, 64.0f, 64.0f);
+
+        EXPECT_TRUE (g.readPixelsToImage());
+    }
+}
+
+TEST_F (GpuDeviceOpenGLTests, GraphicsTransparencyLayerCommit)
+{
+    auto renderer = graphicsContext->makeRenderer (256, 256);
+    ASSERT_NE (renderer, nullptr);
+
+    Graphics g (*graphicsContext, *renderer);
+
+    auto layer = g.beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.5f);
+    ASSERT_TRUE (layer.isValid());
+
+    auto& layerGraphics = layer.getGraphics();
+    layerGraphics.setFillColor (Color (0xFFFF0000));
+    layerGraphics.fillRect (10.0f, 10.0f, 50.0f, 50.0f);
+
+    EXPECT_TRUE (layer.commit());
+}
+
+TEST_F (GpuDeviceOpenGLTests, GraphicsDrawImageAndTexture)
+{
+    auto renderer = graphicsContext->makeRenderer (128, 128);
+    ASSERT_NE (renderer, nullptr);
+
+    Graphics g (*graphicsContext, *renderer);
+
+    // Upload a CPU image to the GPU.
+    Image img (16, 16, PixelFormat::RGBA);
+    img.fill (0xFFFF0000);
+    ASSERT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
+
+    // drawImage() → renderTexture() success path.
+    EXPECT_NO_THROW (g.drawImage (img, Rectangle<float> (10.0f, 10.0f, 64.0f, 64.0f)));
+
+    // A canvas texture for the drawTexture() path.
+    auto canvas = GpuCanvas::create (*graphicsContext, 16, 16);
+    ASSERT_NE (canvas, nullptr);
+    auto tex = canvas->asTexture();
+    ASSERT_NE (tex, nullptr);
+
+    // drawTexture() → renderTexture() success path.
+    EXPECT_NO_THROW (g.drawTexture (tex, Rectangle<float> (10.0f, 10.0f, 64.0f, 64.0f)));
+
+    // Empty target area → early return.
+    EXPECT_NO_THROW (g.drawTexture (tex, Rectangle<float>()));
+}
+
+TEST_F (GpuDeviceOpenGLTests, GraphicsDrawTextureWithNullRenderContext)
+{
+    // Grab a real GPU texture from a canvas on the GL context.
+    auto canvas = GpuCanvas::create (*graphicsContext, 32, 32);
+    ASSERT_NE (canvas, nullptr);
+    auto tex = canvas->asTexture();
+    ASSERT_NE (tex, nullptr);
+
+    // A headless Graphics has no render context — renderTexture must bail safely.
+    auto headlessContext = GraphicsContext::createContext (GpuPlatform::Headless, {});
+    ASSERT_NE (headlessContext, nullptr);
+    auto renderer = headlessContext->makeRenderer (64, 64);
+    ASSERT_NE (renderer, nullptr);
+
+    Graphics g (*headlessContext, *renderer);
+    EXPECT_NO_THROW (g.drawTexture (tex, Rectangle<float> (0.0f, 0.0f, 32.0f, 32.0f)));
+}
+
+// --------------------------------------------------------------------------
+// Coverage: GpuRenderPass vertex/index buffers, uniform & texture bindings
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, RenderPassDrawWithVertexAndIndexBuffers)
+{
+    auto target = GpuTarget::create (device, 128, 128);
+    ASSERT_NE (target, nullptr);
+
+    const float verts[] = { -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.5f, 0.0f };
+    const uint16_t indices[] = { 0, 1, 2 };
+
+    auto vbo = device->createBuffer (GpuBufferType::vertex, verts, sizeof (verts));
+    auto ibo = device->createBuffer (GpuBufferType::index, indices, sizeof (indices));
+    ASSERT_NE (vbo, nullptr);
+    ASSERT_NE (ibo, nullptr);
+
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    const char* vsSrc = R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform Uniforms { mat4 mvp; } ubo;
+        layout(location = 0) in vec3 aPos;
+        void main() { gl_Position = ubo.mvp * vec4(aPos, 1.0); }
+    )";
+
+    const char* fsSrc = R"(
+        #version 450
+        layout(location = 0) out vec4 fragColor;
+        void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
+    )";
+
+    auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc);
+    ASSERT_TRUE (compileResult.wasOk());
+    auto* pipeline = compileResult.getValue().get();
+    ASSERT_NE (pipeline, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = target->beginRenderPass (frame, { true, Color (0, 0, 0, 0) });
+    ASSERT_TRUE (pass.isValid());
+
+    pass.setPipeline (*pipeline);
+
+    // A >16 byte uniform buffer forces the pool into a higher bucket.
+    std::vector<float> uboData (64, 1.0f);
+    pass.setUniformBuffer (0, 0, uboData.data(), uboData.size() * sizeof (float));
+
+    pass.setVertexBuffer (0, vbo);
+    pass.setIndexBuffer (GpuIndexFormat::uint16, ibo);
+
+    EXPECT_TRUE (pass.drawIndexed (3));
+
+    pass.finish();
+    frame.submit();
+    frame.waitForGPU();
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, RenderPassSetUniformBufferAndTexture)
+{
+    auto target = GpuTarget::create (device, 64, 64);
+    ASSERT_NE (target, nullptr);
+
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    // Fragment shader samples a texture at binding 1 so the pass layout has a
+    // texture slot matching the bound canvas texture.
+    const char* vsSrc = R"(
+        #version 450
+        layout(set = 0, binding = 0) uniform Uniforms { mat4 mvp; } ubo;
+        layout(location = 0) in vec3 aPos;
+        layout(location = 0) out vec2 vUV;
+        void main() { vUV = aPos.xy; gl_Position = ubo.mvp * vec4(aPos, 1.0); }
+    )";
+
+    const char* fsSrc = R"(
+        #version 450
+        layout(set = 0, binding = 1) uniform sampler2D tex;
+        layout(location = 0) in vec2 vUV;
+        layout(location = 0) out vec4 fragColor;
+        void main() { fragColor = texture(tex, vUV); }
+    )";
+
+    auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc);
+    ASSERT_TRUE (compileResult.wasOk());
+    auto* pipeline = compileResult.getValue().get();
+    ASSERT_NE (pipeline, nullptr);
+
+    auto canvas = GpuCanvas::create (*graphicsContext, 16, 16);
+    ASSERT_NE (canvas, nullptr);
+    auto tex = canvas->asTexture();
+    ASSERT_NE (tex, nullptr);
+
+    auto frame = GpuFrame::begin (device);
+    ASSERT_TRUE (frame.isValid());
+
+    auto pass = target->beginRenderPass (frame, { true, Color (0, 0, 0, 0) });
+    ASSERT_TRUE (pass.isValid());
+
+    pass.setPipeline (*pipeline);
+
+    // Null / zero-size uniform data → early return.
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
+
+    // Valid uniform + texture bindings, then draw.
+    const float data[] = { 1.0f, 0.0f, 0.0f, 1.0f };
+    pass.setUniformBuffer (0, 0, data, sizeof (data));
+    pass.setTexture (0, 1, tex);
+
+    EXPECT_TRUE (pass.draw (3));
+
+    pass.finish();
+    frame.submit();
+    frame.waitForGPU();
+#endif
+}
+
+// --------------------------------------------------------------------------
+// Coverage: GpuComputePass repeated bindings update in place
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, ComputePassRepeatedBindingsUpdateInPlace)
+{
+    auto pass = GpuComputePass::begin (device);
+    ASSERT_TRUE (pass.isValid());
+
+    const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+
+    // Null / zero-size data → early return.
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
+
+    pass.setUniformBuffer (0, 0, data, sizeof (data));
+    pass.setUniformBuffer (0, 0, data, sizeof (data)); // update existing
+
+    pass.setStorageBuffer (0, 0, nullptr);
+    pass.setStorageBuffer (0, 0, nullptr); // update existing
+
+    pass.setTexture (0, 0, nullptr);
+    pass.setTexture (0, 0, nullptr); // update existing
+
+    pass.finish();
+}
+
+// --------------------------------------------------------------------------
+// Coverage: GpuComputePipeline bundle / transpiler error paths
+// --------------------------------------------------------------------------
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromBundleWithComputeShader)
+{
+#if ! YUP_ENABLE_SHADER_TRANSPILER
+    GTEST_SKIP() << "Shader transpiler unavailable — cannot compile GLSL sources inline";
+#else
+    const char* glsl = R"(
+        #version 450
+        layout(local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+        layout(std430, binding = 0) buffer OutputBuf { float values[]; } outputBuf;
+        void main()
+        {
+            uint idx = gl_GlobalInvocationID.x;
+            outputBuf.values[idx] = float(idx) * 2.0;
+        }
+    )";
+
+    ShaderBundle bundle;
+    ShaderInfo info;
+    info.stage = ShaderStage::compute;
+    info.language = ShaderLanguage::glsl;
+    info.entryPoint = "main";
+    info.source = glsl;
+    info.inputSource = glsl;
+    info.reflection.workgroupSize = { 8, 1, 1, false };
+    bundle.addShader (info);
+
+    auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 1, 1, 1 });
+    ASSERT_TRUE (result.wasOk());
+    ASSERT_NE (result.getValue(), nullptr);
+#endif
+}
+
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromBundleWithoutComputeShaderFails)
+{
+    ShaderBundle bundle;
+    auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 8, 1, 1 });
+    EXPECT_TRUE (result.failed());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFromGlslInvalidSourceFails)
+{
+    auto result = GpuComputePipeline::compileFromGlsl (device, "this is not valid glsl at all");
+    EXPECT_TRUE (result.failed());
+}
+#endif

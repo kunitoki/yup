@@ -426,7 +426,8 @@ void main()
 )glsl";
 
 constexpr const char* kVertexWithDrawParams = R"glsl(
-#version 450
+#version 460
+#extension GL_ARB_shader_draw_parameters : enable
 void main()
 {
     gl_Position = vec4(float(gl_BaseVertex), float(gl_BaseInstance), float(gl_DrawID), 1.0);
@@ -451,62 +452,6 @@ layout(input_attachment_index = 0, binding = 0) uniform subpassInput subpass;
 void main()
 {
     outColor = subpassLoad(subpass);
-}
-)glsl";
-
-constexpr const char* kFragmentWith8BitStorage = R"glsl(
-#version 450
-#extension GL_EXT_shader_8bit_storage : enable
-layout(location = 0) out vec4 outColor;
-layout(std430, binding = 0) buffer StorageBuf8 {
-    layout(offset = 0) int8_t i8;
-    layout(offset = 1) uint8_t u8;
-} sb;
-void main()
-{
-    outColor = vec4(float(sb.i8), float(sb.u8), 0.0, 1.0);
-}
-)glsl";
-
-constexpr const char* kFragmentWith16BitStorage = R"glsl(
-#version 450
-#extension GL_EXT_shader_16bit_storage : enable
-layout(location = 0) out vec4 outColor;
-layout(std430, binding = 0) buffer StorageBuf16 {
-    layout(offset = 0) int16_t i16;
-    layout(offset = 2) uint16_t u16;
-    layout(offset = 4) float16_t f16;
-} sb;
-void main()
-{
-    outColor = vec4(float(sb.i16), float(sb.u16), float(sb.f16), 1.0);
-}
-)glsl";
-
-constexpr const char* kFragmentWithInt64 = R"glsl(
-#version 450
-#extension GL_ARB_gpu_shader_int64 : enable
-layout(location = 0) out vec4 outColor;
-layout(std140, binding = 0) uniform Int64UBO {
-    layout(offset = 0) int64_t i64;
-    layout(offset = 8) uint64_t u64;
-} ubo;
-void main()
-{
-    outColor = vec4(float(ubo.i64) * 1e-9, float(ubo.u64) * 1e-9, 0.0, 1.0);
-}
-)glsl";
-
-constexpr const char* kFragmentWithDouble = R"glsl(
-#version 450
-#extension GL_ARB_gpu_shader_fp64 : enable
-layout(location = 0) out vec4 outColor;
-layout(std140, binding = 0) uniform DoubleUBO {
-    layout(offset = 0) double dVal;
-} ubo;
-void main()
-{
-    outColor = vec4(float(ubo.dVal), 0.0, 0.0, 1.0);
 }
 )glsl";
 
@@ -2705,4 +2650,288 @@ TEST (TranspileOptionsTests, CacheKeyPayload_DefineValueAffectsKey)
     b.defines.set ("FOO", "2");
 
     EXPECT_NE (a.toCacheKeyPayload(), b.toCacheKeyPayload());
+}
+
+//==============================================================================
+// Coverage: additional reflection, backend slot filling, error paths
+//==============================================================================
+
+TEST_F (ShaderTranspilerTests, Reflect_DrawParametersBuiltins)
+{
+    auto result = transpiler->reflect (
+        kVertexWithDrawParams, ShaderStage::vertex, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& ref = result.getValue();
+
+    bool hasBaseVertex = false;
+    bool hasBaseInstance = false;
+    bool hasDrawIndex = false;
+
+    for (const auto& bi : ref.builtinInputs)
+    {
+        if (bi.builtin == ShaderReflection::BuiltInType::baseVertex)
+            hasBaseVertex = true;
+        if (bi.builtin == ShaderReflection::BuiltInType::baseInstance)
+            hasBaseInstance = true;
+        if (bi.builtin == ShaderReflection::BuiltInType::drawIndex)
+            hasDrawIndex = true;
+    }
+
+    EXPECT_TRUE (hasBaseVertex);
+    EXPECT_TRUE (hasBaseInstance);
+    EXPECT_TRUE (hasDrawIndex);
+}
+
+// Shaders using exotic storage types, written with comparisons instead of
+// arithmetic conversions (glslang's Vulkan rules reject int8/float16 → float
+// constructors).
+constexpr const char* kCoverageFragmentWith8BitStorage = R"glsl(
+#version 450
+#extension GL_EXT_shader_8bit_storage : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable
+layout(location = 0) out vec4 outColor;
+layout(std430, binding = 0) buffer StorageBuf8 {
+    layout(offset = 0) int8_t i8;
+    layout(offset = 1) uint8_t u8;
+} sb;
+void main()
+{
+    outColor = vec4 (0.0);
+    if (sb.i8 == int8_t (0)) outColor.r = 1.0;
+    if (sb.u8 == uint8_t (0)) outColor.g = 1.0;
+}
+)glsl";
+
+constexpr const char* kCoverageFragmentWith16BitStorage = R"glsl(
+#version 450
+#extension GL_EXT_shader_16bit_storage : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
+layout(location = 0) out vec4 outColor;
+layout(std430, binding = 0) buffer StorageBuf16 {
+    layout(offset = 0) int16_t i16;
+    layout(offset = 2) uint16_t u16;
+    layout(offset = 4) float16_t f16;
+} sb;
+void main()
+{
+    outColor = vec4 (0.0);
+    if (sb.i16 == int16_t (0)) outColor.r = 1.0;
+    if (sb.u16 == uint16_t (0)) outColor.g = 1.0;
+}
+)glsl";
+
+constexpr const char* kCoverageFragmentWithInt64 = R"glsl(
+#version 450
+#extension GL_ARB_gpu_shader_int64 : enable
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform Int64UBO {
+    layout(offset = 0) int64_t i64;
+    layout(offset = 8) uint64_t u64;
+} ubo;
+void main()
+{
+    outColor = vec4 (0.0);
+    if (ubo.i64 == int64_t (0)) outColor.r = 1.0;
+    if (ubo.u64 == uint64_t (0)) outColor.g = 1.0;
+}
+)glsl";
+
+constexpr const char* kCoverageFragmentWithDouble = R"glsl(
+#version 450
+#extension GL_ARB_gpu_shader_fp64 : enable
+layout(location = 0) out vec4 outColor;
+layout(std140, binding = 0) uniform DoubleUBO {
+    layout(offset = 0) double dVal;
+} ubo;
+void main()
+{
+    outColor = vec4 (0.0);
+    if (ubo.dVal == 0.0) outColor.r = 1.0;
+}
+)glsl";
+
+TEST_F (ShaderTranspilerTests, Reflect_8Bit16Bit64BitStorageTypes)
+{
+    struct Case
+    {
+        const char* source;
+        ShaderReflection::BaseType expectedType;
+    };
+
+    const Case cases[] = {
+        { kCoverageFragmentWith8BitStorage,  ShaderReflection::BaseType::int8   },
+        { kCoverageFragmentWith16BitStorage, ShaderReflection::BaseType::int16  },
+        { kCoverageFragmentWithInt64,        ShaderReflection::BaseType::int64  },
+        { kCoverageFragmentWithDouble,       ShaderReflection::BaseType::float64 },
+    };
+
+    for (const auto& testCase : cases)
+    {
+        auto result = transpiler->reflect (
+            testCase.source, ShaderStage::fragment, ShaderLanguage::glsl);
+
+        ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+        const auto& ref = result.getValue();
+
+        bool foundType = false;
+        for (const auto& ub : ref.uniformBuffers)
+            for (const auto& member : ub.members)
+                foundType = foundType || (member.baseType == testCase.expectedType);
+        for (const auto& sb : ref.storageBuffers)
+            for (const auto& member : sb.members)
+                foundType = foundType || (member.baseType == testCase.expectedType);
+
+        EXPECT_TRUE (foundType) << "Expected base type not found";
+    }
+}
+
+TEST_F (ShaderTranspilerTests, Reflect_DeclaredExtensions)
+{
+    // The shader actually *uses* 16-bit storage, so glslang emits the
+    // SPV_KHR_16bit_storage extension into the SPIR-V module.
+    auto result = transpiler->reflect (
+        kCoverageFragmentWith16BitStorage, ShaderStage::fragment, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    EXPECT_FALSE (result.getValue().extensions.empty());
+}
+
+TEST_F (ShaderTranspilerTests, Transpile_SeparateSamplerToGlsl)
+{
+    auto result = transpiler->transpile (
+        kFragmentWithSeparateSampler, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    // The combined sampler must be emitted with the deterministic yup_ prefix.
+    EXPECT_TRUE (result.getValue().contains ("yup_combined_"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_GlslBackendCombinedSamplers)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kFragmentWithSeparateSampler, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::glsl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& ref = result.getValue();
+    EXPECT_FALSE (ref.glCombinedSamplers.empty());
+
+    for (const auto& cs : ref.glCombinedSamplers)
+        EXPECT_TRUE (cs.name.startsWith ("yup_combined_"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_WgslCompanionSamplerBindings)
+{
+    constexpr const char* kFragmentWithCombinedAndSeparateSamplers = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+layout(binding = 0) uniform sampler2D texA;
+layout(binding = 1) uniform sampler2D texB;
+layout(binding = 2) uniform texture2D tex;
+layout(binding = 3) uniform sampler samp;
+void main()
+{
+    outColor = texture (texA, vec2 (0.5)) + texture (texB, vec2 (0.5))
+             + texture (sampler2D (tex, samp), vec2 (0.5));
+}
+)glsl";
+
+    auto spirv = transpiler->compileToSPIRV (
+        kFragmentWithCombinedAndSeparateSamplers, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::wgsl);
+
+    ASSERT_TRUE (result.wasOk()) << result.getErrorMessage();
+
+    const auto& ref = result.getValue();
+    ASSERT_FALSE (ref.separateSamplers.empty());
+    ASSERT_FALSE (ref.sampledImages.empty());
+
+    // The separate sampler mirrors its own binding, and the companion binding
+    // for a sampled image is allocated after the textures in the same set.
+    bool foundSecondary = false;
+    for (const auto& img : ref.sampledImages)
+        foundSecondary = foundSecondary || (img.backendSlotSecondary != ~0u);
+
+    EXPECT_TRUE (foundSecondary);
+
+    for (const auto& samp : ref.separateSamplers)
+        EXPECT_EQ (samp.backendSlotSecondary, samp.backendSlot);
+}
+
+TEST_F (ShaderTranspilerTests, Transpile_FragmentWithoutMainFails)
+{
+    constexpr const char* kFragmentWithoutMain = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void helper()
+{
+    outColor = vec4 (1.0);
+}
+)glsl";
+
+    auto result = transpiler->transpile (
+        kFragmentWithoutMain, ShaderStage::fragment, ShaderLanguage::glsl, ShaderLanguage::glsl);
+
+    EXPECT_TRUE (result.failed());
+}
+
+TEST_F (ShaderTranspilerTests, DecompileFromSPIRV_CorruptBinaryThrows)
+{
+    // Valid magic/version, but garbage thereafter — the spirv-cross constructor
+    // throws and the error must be wrapped in the result.
+    const uint32_t corruptSpirv[] = {
+        0x07230203, 0x00010000, 0x00000000, 0x00000000, 0x00000000, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF
+    };
+    MemoryBlock corrupt (corruptSpirv, sizeof (corruptSpirv));
+
+    auto result = transpiler->decompileFromSPIRV (corrupt, ShaderLanguage::glsl);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("SPIR-V decompilation error"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_TooSmallWithTargetLanguageFails)
+{
+    const uint32_t tooSmall[] = { 0x07230203, 0x00010000 };
+    MemoryBlock small (tooSmall, sizeof (tooSmall));
+
+    auto result = transpiler->reflectFromSPIRV (small, ShaderLanguage::glsl);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("too small"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_UnsupportedTargetLanguageFails)
+{
+    auto spirv = transpiler->compileToSPIRV (
+        kMinimalFragmentGLSL, ShaderStage::fragment, ShaderLanguage::glsl);
+    ASSERT_TRUE (spirv.wasOk());
+
+    auto result = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::spirv);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("Unsupported target language"));
+}
+
+TEST_F (ShaderTranspilerTests, ReflectFromSPIRV_CorruptBinaryWithTargetLanguageFails)
+{
+    const uint32_t corruptSpirv[] = {
+        0x07230203, 0x00010000, 0x00000000, 0x00000000, 0x00000000, 0xDEADBEEF, 0xDEADBEEF, 0xDEADBEEF
+    };
+    MemoryBlock corrupt (corruptSpirv, sizeof (corruptSpirv));
+
+    auto result = transpiler->reflectFromSPIRV (corrupt, ShaderLanguage::glsl);
+
+    EXPECT_TRUE (result.failed());
+    EXPECT_TRUE (result.getErrorMessage().contains ("SPIR-V reflection error"));
 }
