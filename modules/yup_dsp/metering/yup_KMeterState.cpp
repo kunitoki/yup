@@ -76,8 +76,8 @@ void KMeterState::prepare (double newSampleRate, int maxChannels)
     for (auto& processor : levelProcessors)
     {
         processor.setSampleRate (sampleRate);
-        processor.setIntegrationTime (integrationTime);
-        processor.setFallTime (peakFallTime);
+        processor.setIntegrationTime (integrationTime.load());
+        processor.setFallTime (peakFallTime.load());
     }
 
     // Preallocate per-channel de-interleaving buffers
@@ -103,14 +103,14 @@ void KMeterState::reset() noexcept
 
     std::fill (sampleBuffer.begin(), sampleBuffer.end(), 0.0f);
 
-    const float scaleOffset = scaleOffsetForScale (scale);
+    const float scaleOffset = scaleOffsetForScale (scale.load());
 
     for (auto& channel : channels)
     {
-        channel.currentPeak.set (0.0f);
+        channel.currentPeak.store (0.0f);
         channel.currentAverage = 0.0f;
-        channel.currentAverageDb.set (kMeterMinimumDecibel);
-        channel.peakHold.set (0.0f);
+        channel.currentAverageDb.store (kMeterMinimumDecibel);
+        channel.peakHold.store (0.0f);
         channel.peakHoldTimer = 0.0;
         channel.contiguousOverSamples = 0;
         channel.totalOverflows = 0;
@@ -122,16 +122,16 @@ void KMeterState::reset() noexcept
     for (auto& filter : loudnessFilters)
         filter.reset();
 
-    atomicPeakLevelDb.set (kMeterMinimumDecibel + scaleOffset);
-    atomicAverageLevelDb.set (kMeterMinimumDecibel + scaleOffset);
-    atomicPeakHoldLevelDb.set (kMeterMinimumDecibel + scaleOffset);
-    atomicOverCount.set (0);
-    atomicClipping.set (false);
+    atomicPeakLevelDb.store (kMeterMinimumDecibel + scaleOffset);
+    atomicAverageLevelDb.store (kMeterMinimumDecibel + scaleOffset);
+    atomicPeakHoldLevelDb.store (kMeterMinimumDecibel + scaleOffset);
+    atomicOverCount.store (0);
+    atomicClipping.store (false);
 
-    atomicIntegratedLoudness.set (-70.0f);
-    atomicShortTermLoudness.set (-70.0f);
-    atomicMomentaryLoudness.set (-70.0f);
-    atomicLoudnessRange.set (0.0f);
+    atomicIntegratedLoudness.store (-70.0f);
+    atomicShortTermLoudness.store (-70.0f);
+    atomicMomentaryLoudness.store (-70.0f);
+    atomicLoudnessRange.store (0.0f);
 }
 
 //==============================================================================
@@ -190,6 +190,21 @@ void KMeterState::processPendingAudio() noexcept
     if (! audioFifo)
         return;
 
+    if (processorConfigChanged.exchange (false))
+    {
+        for (auto& processor : levelProcessors)
+        {
+            processor.setIntegrationTime (integrationTime.load());
+            processor.setFallTime (peakFallTime.load());
+        }
+    }
+
+    if (filtersNeedReset.exchange (false))
+    {
+        for (auto& filter : loudnessFilters)
+            filter.reset();
+    }
+
     const int numAvailable = audioFifo->getNumReady();
     if (numAvailable == 0)
         return;
@@ -236,13 +251,13 @@ void KMeterState::processPendingAudio() noexcept
         const auto& channelState = channels[ch];
 
         // Convert to dB
-        const float channelPeak = channelState.currentPeak.get();
-        const float channelPeakHold = channelState.peakHold.get();
+        const float channelPeak = channelState.currentPeak.load();
+        const float channelPeakHold = channelState.peakHold.load();
 
         const float peakDb = channelPeak > 0.0f
                                ? Decibels::gainToDecibels (channelPeak)
                                : kMeterMinimumDecibel;
-        const float averageDb = channelState.currentAverageDb.get();
+        const float averageDb = channelState.currentAverageDb.load();
         const float peakHoldDb = channelPeakHold > 0.0f
                                    ? Decibels::gainToDecibels (channelPeakHold)
                                    : kMeterMinimumDecibel;
@@ -255,20 +270,20 @@ void KMeterState::processPendingAudio() noexcept
     }
 
     // Write to atomic variables - all levels are calibrated by scale offset
-    const float scaleOffset = scaleOffsetForScale (scale);
+    const float scaleOffset = scaleOffsetForScale (scale.load());
     const float calibratedPeak = maxPeak + scaleOffset;
     const float calibratedAverage = maxAverage + scaleOffset;
     const float calibratedPeakHold = maxPeakHold + scaleOffset;
 
-    atomicPeakLevelDb.set (calibratedPeak);
-    atomicAverageLevelDb.set (calibratedAverage);
-    atomicPeakHoldLevelDb.set (calibratedPeakHold);
-    const int overCountToReport = overCounterMode == OverCounterMode::contiguous
+    atomicPeakLevelDb.store (calibratedPeak);
+    atomicAverageLevelDb.store (calibratedAverage);
+    atomicPeakHoldLevelDb.store (calibratedPeakHold);
+    const int overCountToReport = overCounterMode.load() == OverCounterMode::contiguous
                                     ? maxContiguousOverCount
                                     : totalOverCount;
 
-    atomicOverCount.set (overCountToReport);
-    atomicClipping.set (overCountToReport > 0);
+    atomicOverCount.store (overCountToReport);
+    atomicClipping.store (overCountToReport > 0);
 }
 
 void KMeterState::processChannelLevels (int channel, const float* samples, int numSamples)
@@ -278,9 +293,15 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
     auto& channelState = channels[channel];
     auto& processor = levelProcessors[channel];
 
+    // Load the runtime configuration once per block, as it can change concurrently
+    const auto currentStandard = meteringStandard.load();
+    const auto currentAverageFallTime = averageFallTime.load();
+    const auto currentPeakHoldTime = peakHoldTime.load();
+    const auto currentOverThreshold = overThreshold.load();
+
     // Determine if we need K-weighting (ITU BS.1770-4 or EBU R128)
-    const bool needsKWeighting = meteringStandard == MeteringStandard::ituBS1770_4
-                              || meteringStandard == MeteringStandard::ebuR128;
+    const bool needsKWeighting = currentStandard == MeteringStandard::ituBS1770_4
+                              || currentStandard == MeteringStandard::ebuR128;
 
     // Apply K-weighting filter for ITU/EBU modes
     const float* samplesToProcess = samples;
@@ -298,9 +319,9 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
 
     // Ballistics are computed on locals and published to the atomics once, as the
     // UI thread reads them concurrently
-    float ballisticPeak = channelState.currentPeak.get();
-    float currentAverageDb = channelState.currentAverageDb.get();
-    float currentPeakHold = channelState.peakHold.get();
+    float ballisticPeak = channelState.currentPeak.load();
+    float currentAverageDb = channelState.currentAverageDb.load();
+    float currentPeakHold = channelState.peakHold.load();
 
     // Update peak with fall
     const double timeDelta = numSamples / sampleRate;
@@ -317,13 +338,13 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
 
     float averageDb = rms > 0.0f ? Decibels::gainToDecibels (rms) : kMeterMinimumDecibel;
 
-    if (meteringStandard == MeteringStandard::rmsFlat)
+    if (currentStandard == MeteringStandard::rmsFlat)
         averageDb += kPeakToAverageCorrectionDb;
 
     if (averageDb < kMeterMinimumDecibel)
         averageDb = kMeterMinimumDecibel;
 
-    applyLogBallistics (static_cast<float> (averageFallTime), static_cast<float> (timeDelta), averageDb, currentAverageDb);
+    applyLogBallistics (static_cast<float> (currentAverageFallTime), static_cast<float> (timeDelta), averageDb, currentAverageDb);
 
     if (currentAverageDb < kMeterMinimumDecibel)
         currentAverageDb = kMeterMinimumDecibel;
@@ -337,13 +358,13 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
         currentPeakHold = peakHoldCandidate;
         channelState.peakHoldTimer = 0.0;
     }
-    else if (peakHoldTime >= 0.0)
+    else if (currentPeakHoldTime >= 0.0)
     {
         // Update hold timer
         channelState.peakHoldTimer += timeDelta;
 
         // After hold time (10 seconds), apply linear fall
-        if (channelState.peakHoldTimer >= peakHoldTime)
+        if (channelState.peakHoldTimer >= currentPeakHoldTime)
         {
             // Apply linear fall in dB space: 26 dB in 3 seconds (same as peak fall)
             const float fallAmountDb = kPeakHoldFallRateDbPerSecond * static_cast<float> (timeDelta);
@@ -361,16 +382,16 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
         }
     }
 
-    channelState.currentPeak.set (ballisticPeak);
-    channelState.currentAverageDb.set (currentAverageDb);
-    channelState.peakHold.set (currentPeakHold);
+    channelState.currentPeak.store (ballisticPeak);
+    channelState.currentAverageDb.store (currentAverageDb);
+    channelState.peakHold.store (currentPeakHold);
 
     // Update OVER counter (counts contiguous or total samples at or above threshold)
     // IMPORTANT: Always use ORIGINAL samples for clipping detection, never filtered
     int overflowsInBlock = 0;
     for (int i = 0; i < numSamples; ++i)
     {
-        if (std::abs (samples[i]) >= overThreshold)
+        if (std::abs (samples[i]) >= currentOverThreshold)
         {
             ++overflowsInBlock;
             ++channelState.contiguousOverSamples;
@@ -387,59 +408,46 @@ void KMeterState::processChannelLevels (int channel, const float* samples, int n
 //==============================================================================
 void KMeterState::setMeteringStandard (MeteringStandard standard)
 {
-    if (meteringStandard != standard)
-    {
-        meteringStandard = standard;
-        // Reset filters when switching metering standards
-        for (auto& filter : loudnessFilters)
-            filter.reset();
-    }
+    if (meteringStandard.exchange (standard) != standard)
+        filtersNeedReset.store (true);
 }
 
 void KMeterState::setScale (Scale newScale)
 {
-    scale = newScale;
+    scale.store (newScale);
 }
 
 void KMeterState::setIntegrationTime (double seconds)
 {
-    if (seconds > 0.0 && seconds != integrationTime)
-    {
-        integrationTime = seconds;
-        for (auto& processor : levelProcessors)
-            processor.setIntegrationTime (seconds);
-    }
+    if (seconds > 0.0 && integrationTime.exchange (seconds) != seconds)
+        processorConfigChanged.store (true);
 }
 
 void KMeterState::setPeakFallTime (double seconds)
 {
-    if (seconds > 0.0 && seconds != peakFallTime)
-    {
-        peakFallTime = seconds;
-        for (auto& processor : levelProcessors)
-            processor.setFallTime (seconds);
-    }
+    if (seconds > 0.0 && peakFallTime.exchange (seconds) != seconds)
+        processorConfigChanged.store (true);
 }
 
 void KMeterState::setAverageFallTime (double seconds)
 {
     if (seconds > 0.0)
-        averageFallTime = seconds;
+        averageFallTime.store (seconds);
 }
 
 void KMeterState::setPeakHoldTime (double seconds)
 {
-    peakHoldTime = seconds;
+    peakHoldTime.store (seconds);
 }
 
 void KMeterState::setOverThreshold (float threshold)
 {
-    overThreshold = jlimit (0.0f, 1.0f, threshold);
+    overThreshold.store (jlimit (0.0f, 1.0f, threshold));
 }
 
 void KMeterState::setOverCounterMode (OverCounterMode mode)
 {
-    overCounterMode = mode;
+    overCounterMode.store (mode);
 }
 
 //==============================================================================
@@ -447,67 +455,67 @@ float KMeterState::getPeakLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float peak = channels[channel].currentPeak.get();
+        const float peak = channels[channel].currentPeak.load();
         const float peakDb = peak > 0.0f ? Decibels::gainToDecibels (peak) : kMeterMinimumDecibel;
-        return peakDb + scaleOffsetForScale (scale);
+        return peakDb + scaleOffsetForScale (scale.load());
     }
 
-    return atomicPeakLevelDb.get();
+    return atomicPeakLevelDb.load();
 }
 
 float KMeterState::getAverageLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float averageDb = channels[channel].currentAverageDb.get();
-        const float scaleOffset = scaleOffsetForScale (scale);
+        const float averageDb = channels[channel].currentAverageDb.load();
+        const float scaleOffset = scaleOffsetForScale (scale.load());
         return averageDb + scaleOffset;
     }
 
-    return atomicAverageLevelDb.get();
+    return atomicAverageLevelDb.load();
 }
 
 float KMeterState::getPeakHoldLevel (int channel) const noexcept
 {
     if (channel >= 0 && channel < numChannels)
     {
-        const float hold = channels[channel].peakHold.get();
+        const float hold = channels[channel].peakHold.load();
         const float holdDb = hold > 0.0f ? Decibels::gainToDecibels (hold) : kMeterMinimumDecibel;
-        return holdDb + scaleOffsetForScale (scale);
+        return holdDb + scaleOffsetForScale (scale.load());
     }
 
-    return atomicPeakHoldLevelDb.get();
+    return atomicPeakHoldLevelDb.load();
 }
 
 int KMeterState::getOverCount() const noexcept
 {
-    return atomicOverCount.get();
+    return atomicOverCount.load();
 }
 
 bool KMeterState::isClipping() const noexcept
 {
-    return atomicClipping.get();
+    return atomicClipping.load();
 }
 
 //==============================================================================
 float KMeterState::getIntegratedLoudness() const noexcept
 {
-    return atomicIntegratedLoudness.get();
+    return atomicIntegratedLoudness.load();
 }
 
 float KMeterState::getShortTermLoudness() const noexcept
 {
-    return atomicShortTermLoudness.get();
+    return atomicShortTermLoudness.load();
 }
 
 float KMeterState::getMomentaryLoudness() const noexcept
 {
-    return atomicMomentaryLoudness.get();
+    return atomicMomentaryLoudness.load();
 }
 
 float KMeterState::getLoudnessRange() const noexcept
 {
-    return atomicLoudnessRange.get();
+    return atomicLoudnessRange.load();
 }
 
 //==============================================================================
