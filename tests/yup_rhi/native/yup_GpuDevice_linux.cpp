@@ -880,6 +880,12 @@ TEST_F (GpuDeviceOpenGLTests, GraphicsTransparencyLayerCommit)
     auto renderer = graphicsContext->makeRenderer (256, 256);
     ASSERT_NE (renderer, nullptr);
 
+    rive::gpu::RenderContext::FrameDescriptor fd;
+    fd.renderTargetWidth = 256;
+    fd.renderTargetHeight = 256;
+    graphicsContext->onSizeChanged (nullptr, 256, 256, 1.0f, 0);
+    graphicsContext->begin (fd);
+
     Graphics g (*graphicsContext, *renderer);
 
     auto layer = g.beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 0.5f);
@@ -890,6 +896,8 @@ TEST_F (GpuDeviceOpenGLTests, GraphicsTransparencyLayerCommit)
     layerGraphics.fillRect (10.0f, 10.0f, 50.0f, 50.0f);
 
     EXPECT_TRUE (layer.commit());
+
+    graphicsContext->end (nullptr);
 }
 
 TEST_F (GpuDeviceOpenGLTests, GraphicsDrawImageAndTexture)
@@ -897,15 +905,10 @@ TEST_F (GpuDeviceOpenGLTests, GraphicsDrawImageAndTexture)
     auto renderer = graphicsContext->makeRenderer (128, 128);
     ASSERT_NE (renderer, nullptr);
 
-    Graphics g (*graphicsContext, *renderer);
-
     // Upload a CPU image to the GPU.
     Image img (16, 16, PixelFormat::RGBA);
     img.fill (0xFFFF0000);
     ASSERT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
-
-    // drawImage() → renderTexture() success path.
-    EXPECT_NO_THROW (g.drawImage (img, Rectangle<float> (10.0f, 10.0f, 64.0f, 64.0f)));
 
     // A canvas texture for the drawTexture() path.
     auto canvas = GpuCanvas::create (*graphicsContext, 16, 16);
@@ -913,11 +916,23 @@ TEST_F (GpuDeviceOpenGLTests, GraphicsDrawImageAndTexture)
     auto tex = canvas->asTexture();
     ASSERT_NE (tex, nullptr);
 
+    rive::gpu::RenderContext::FrameDescriptor fd;
+    fd.renderTargetWidth = 128;
+    fd.renderTargetHeight = 128;
+    graphicsContext->onSizeChanged (nullptr, 128, 128, 1.0f, 0);
+    graphicsContext->begin (fd);
+
+    Graphics g (*graphicsContext, *renderer);
+
+    EXPECT_NO_THROW (g.drawImage (img, Rectangle<float> (10.0f, 10.0f, 64.0f, 64.0f)));
+
     // drawTexture() → renderTexture() success path.
     EXPECT_NO_THROW (g.drawTexture (tex, Rectangle<float> (10.0f, 10.0f, 64.0f, 64.0f)));
 
     // Empty target area → early return.
     EXPECT_NO_THROW (g.drawTexture (tex, Rectangle<float>()));
+
+    graphicsContext->end (nullptr);
 }
 
 TEST_F (GpuDeviceOpenGLTests, GraphicsDrawTextureWithNullRenderContext)
