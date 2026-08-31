@@ -40,9 +40,6 @@ namespace
 {
 
 //==============================================================================
-// The per-process state of the toast backend. The JS-side notification handles
-// are kept in a Map keyed by the notification id, so they can be closed on
-// demand.
 struct WasmToastState
 {
     yup::Atomic<int32> nextId { 1 };
@@ -57,22 +54,25 @@ WasmToastState& getToastState()
 
 bool isNotificationApiAvailable()
 {
-    return EM_ASM_INT ({ return typeof Notification != = "undefined";
-    }) != 0;
+    // clang-format off
+    return EM_ASM_INT ({ return typeof Notification !== "undefined"; }) != 0;
+    // clang-format on
 }
 
 ToastNotification::PermissionState getPermissionStateSync()
 {
-    const auto permission = MAIN_THREAD_EM_ASM_INT ({
+    // clang-format off
+    const auto permission = MAIN_THREAD_EM_ASM_INT (
+    {
         if (typeof Notification === "undefined")
             return 0;
-
         if (Notification.permission === "granted")
             return 2;
         if (Notification.permission === "denied")
             return 1;
         return 0;
     });
+    // clang-format on
 
     switch (permission)
     {
@@ -86,10 +86,6 @@ ToastNotification::PermissionState getPermissionStateSync()
 }
 
 //==============================================================================
-// The browser reports the outcome of Notification.requestPermission() through
-// a JS promise. Since there is no JS->C++ bridge in this module, the result is
-// picked up by polling Notification.permission on the main thread until it
-// leaves the "default" state (or a timeout is reached).
 struct PermissionPollState
 {
     std::vector<std::function<void (ToastNotification::PermissionState)>> callbacks;
@@ -148,10 +144,13 @@ void requestPermissionInternal (std::function<void (ToastNotification::Permissio
     poll.polling = true;
     poll.remainingTicks = 40; // ~8 seconds at 200 ms per tick
 
-    MAIN_THREAD_EM_ASM ({
+    // clang-format off
+    MAIN_THREAD_EM_ASM (
+    {
         if (typeof Notification !== "undefined" && Notification.permission === "default")
             Notification.requestPermission();
     });
+    // clang-format on
 
     emscripten_async_call (&permissionPollTick, nullptr, 200);
 }
@@ -169,12 +168,13 @@ Result toastNotificationInitialize (const ToastNotificationSettings&)
     if (! isNotificationApiAvailable())
         return Result::fail (ToastNotification::getErrorDescription (ToastNotification::Error::systemNotSupported));
 
-    // Permission must be requested from a user gesture on most browsers, so a
-    // request issued here may be ignored. It is harmless to try.
-    MAIN_THREAD_EM_ASM ({
+    // clang-format off
+    MAIN_THREAD_EM_ASM (
+    {
         if (Notification.permission === "default")
             Notification.requestPermission();
     });
+    // clang-format on
 
     state.initialized = true;
     return Result::ok();
@@ -202,7 +202,9 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
         const String iconPath = icon.existsAsFile() ? icon.getFullPathName() : String();
         const int64 expiration = toast.getExpiration();
 
-        const auto created = MAIN_THREAD_EM_ASM_INT ({
+        // clang-format off
+        const auto created = MAIN_THREAD_EM_ASM_INT (
+        {
             var id = $0;
             var title = UTF8ToString ($1);
             var body = UTF8ToString ($2);
@@ -241,6 +243,7 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
             return 1;
         }, id, title.toRawUTF8(), body.toRawUTF8(), iconPath.toRawUTF8(), static_cast<double> (expiration));
+        // clang-format on
 
         if (created != 0)
             return makeResultValueOk (id);
@@ -272,9 +275,6 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 
         case ToastNotification::PermissionState::notDetermined:
         {
-            // The request must come from a user gesture; the caller should be
-            // inside one (e.g. a button click). The outcome arrives through
-            // completion once the permission state settles.
             requestPermissionInternal ([showNow, complete] (ToastNotification::PermissionState permission)
             {
                 if (permission == ToastNotification::PermissionState::granted)
@@ -293,7 +293,9 @@ ResultValue<int64> toastNotificationShow (const ToastTemplate& toast, const Toas
 //==============================================================================
 bool toastNotificationHide (int64 id)
 {
-    MAIN_THREAD_EM_ASM ({
+    // clang-format off
+    MAIN_THREAD_EM_ASM (
+    {
         var id = $0;
 
         if (typeof window.YupToastNotifications !== "undefined" && window.YupToastNotifications[id] !== undefined)
@@ -302,6 +304,7 @@ bool toastNotificationHide (int64 id)
             delete window.YupToastNotifications[id];
         }
     }, id);
+    // clang-format on
 
     return true;
 }
@@ -309,7 +312,9 @@ bool toastNotificationHide (int64 id)
 //==============================================================================
 void toastNotificationClear()
 {
-    MAIN_THREAD_EM_ASM ({
+    // clang-format off
+    MAIN_THREAD_EM_ASM (
+    {
         if (typeof window.YupToastNotifications === "undefined")
             return;
 
@@ -319,6 +324,7 @@ void toastNotificationClear()
             delete window.YupToastNotifications[key];
         }
     });
+    // clang-format on
 }
 
 //==============================================================================
