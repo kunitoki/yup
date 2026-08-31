@@ -150,36 +150,41 @@ public:
 
     //==============================================================================
 
-    void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
+    void attachToWindow (void* window, int width, int height, float dpiScale) override
     {
+        if (swapchain != nil)
+            return;
+
 #if YUP_MAC
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* nsView = [nsWindow contentView];
+        nsView.wantsLayer = YES;
 #endif
 
-        if (swapchain == nil)
-        {
+        swapchain = [CAMetalLayer layer];
+        swapchain.device = gpu;
+        swapchain.opaque = YES;
+        swapchain.framebufferOnly = ! options.readableFramebuffer;
+        swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
 #if YUP_MAC
-            nsView.wantsLayer = YES;
-#endif
-
-            swapchain = [CAMetalLayer layer];
-            swapchain.device = gpu;
-            swapchain.opaque = YES;
-            swapchain.framebufferOnly = ! options.readableFramebuffer;
-            swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
-#if YUP_MAC
-            swapchain.displaySyncEnabled = NO;
+        swapchain.displaySyncEnabled = NO;
 #endif
 
 #if YUP_IOS
-            UIView* view = (__bridge UIView*) window;
-            swapchain.frame = view.bounds;
-            [view.layer addSublayer:swapchain];
+        UIView* view = (__bridge UIView*) window;
+        swapchain.frame = view.bounds;
+        [view.layer addSublayer:swapchain];
 #else
-            nsView.layer = swapchain;
+        nsView.layer = swapchain;
 #endif
-        }
+
+        swapchain.contentsScale = dpiScale;
+        swapchain.drawableSize = CGSizeMake (width, height);
+    }
+
+    void onSizeChanged (void*, int width, int height, float dpiScale, uint32_t) override
+    {
+        jassert (swapchain != nil);
 
         swapchain.contentsScale = dpiScale;
         swapchain.drawableSize = CGSizeMake (width, height);

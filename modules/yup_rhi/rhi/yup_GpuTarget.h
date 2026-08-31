@@ -83,6 +83,9 @@ public:
     */
     static GpuTarget::Ptr create (GpuDevice::Ptr ctx, int width, int height);
 
+    /** Destructor. Releases the GPU resources with the rendering context current. */
+    ~GpuTarget() override;
+
     //==============================================================================
     /** Returns the width of this target in pixels. */
     int getWidth() const noexcept;

@@ -1445,7 +1445,7 @@ protected:
         if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
             MessageManager::callAsync (std::move (notificationSender));
         else
-            notificationSender();
+            function();
     }
 
 private:
@@ -1520,6 +1520,7 @@ private:
     GpuCanvas::Ptr effectOffscreenCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
+    std::atomic_bool isRepainting { false };
 
     struct Options
     {
@@ -1532,7 +1533,6 @@ private:
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
         bool clickingDoesNotGrabFocus : 1;
-        bool isRepainting : 1;
         bool blockSelfMouseEvents : 1;
         bool blockChildrenMouseEvents : 1;
         bool paintProfilingDisabled : 1;

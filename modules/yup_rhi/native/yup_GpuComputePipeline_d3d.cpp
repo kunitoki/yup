@@ -58,10 +58,34 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineD3D11 (GpuDevic
 
     auto& d3dCtx = static_cast<GpuDeviceD3D&> (ctx);
 
+    std::string hlsl (static_cast<const char*> (source.code), source.codeSize);
+    hlsl.erase (std::remove (hlsl.begin(), hlsl.end(), '\r'), hlsl.end());
+
+    const char* entryPoint = source.entryPoint != nullptr ? source.entryPoint : "main";
+
+    ComPtr<ID3DBlob> compiledBlob;
+    ComPtr<ID3DBlob> errorBlob;
+    HRESULT hr = D3DCompile (hlsl.data(), hlsl.size(), nullptr, nullptr, nullptr,
+                             entryPoint, "cs_5_0",
+                             D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3,
+                             0, compiledBlob.ReleaseAndGetAddressOf(), errorBlob.ReleaseAndGetAddressOf());
+    if (FAILED (hr) || compiledBlob == nullptr)
+    {
+        String errorMessage = "D3D11 compute shader compilation failed";
+
+        if (errorBlob != nullptr && errorBlob->GetBufferSize() > 0)
+            errorMessage << ": " << static_cast<const char*> (errorBlob->GetBufferPointer());
+
+        return makeResultValueFail (errorMessage);
+    }
+
     ComPtr<ID3D11ComputeShader> computeShader;
-    HRESULT hr = d3dCtx.getD3DDevice()->CreateComputeShader (source.code, source.codeSize, nullptr, computeShader.ReleaseAndGetAddressOf());
+    hr = d3dCtx.getD3DDevice()->CreateComputeShader (compiledBlob->GetBufferPointer(),
+                                                     compiledBlob->GetBufferSize(),
+                                                     nullptr,
+                                                     computeShader.ReleaseAndGetAddressOf());
     if (FAILED (hr) || computeShader == nullptr)
-        return makeResultValueFail ("D3D11 compute shader compilation failed");
+        return makeResultValueFail ("D3D11 compute shader creation failed");
 
     return makeResultValueOk (GpuComputePipeline::Ptr (new GpuComputePipelineD3D11 (std::move (computeShader), workgroupSize)));
 }
