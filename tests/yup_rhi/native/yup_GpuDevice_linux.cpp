@@ -986,7 +986,15 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawWithVertexAndIndexBuffers)
         void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
     )";
 
-    auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc);
+    GpuVertexAttribute attr (GpuVertexFormat::float3, 0, 0);
+    GpuVertexBufferLayout vbLayout (sizeof (float) * 3, GpuVertexStepMode::vertex, &attr, 1);
+
+    GpuPipelineOptions pipelineOptions;
+    pipelineOptions.vertexBuffers = &vbLayout;
+    pipelineOptions.vertexBufferCount = 1;
+    pipelineOptions.indexFormat = GpuIndexFormat::uint16;
+
+    auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc, pipelineOptions);
     ASSERT_TRUE (compileResult.wasOk());
     auto* pipeline = compileResult.getValue().get();
     ASSERT_NE (pipeline, nullptr);
