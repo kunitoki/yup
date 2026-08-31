@@ -35,6 +35,7 @@ class SDLComponentNative final
 #endif
 
     static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
+
     struct TouchFinger
     {
         SDL_FingerID fingerId = 0;
@@ -221,14 +222,15 @@ private:
     int findTouchFingerIndex (SDL_FingerID fingerId) const;
     int getFreeTouchIndex() const;
     TouchClickState& getTouchClickState (int touchIndex);
-    void getRenderContext();
-    void runWithComputeContext (const std::function<void()>& fn);
-    void renderFrame();
+
+    bool hasNativeKeyboardFocus() const;
 
     void startRendering();
     void stopRendering();
     bool isRendering() const;
-    bool hasNativeKeyboardFocus() const;
+    void getRenderContext();
+    void runWithComputeContext (const std::function<void()>& fn);
+    void renderFrame();
 
     friend class WeakReference<SDLComponentNative>;
     WeakReference<SDLComponentNative>::Master masterReference;

@@ -313,6 +313,11 @@ public:
         comp.internalMouseWheel (event, wheelData);
     }
 
+    static void triggerInternalMouseDown (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseDown (event);
+    }
+
     static void triggerVisibilityChanged (Component& comp)
     {
         comp.internalVisibilityChanged();
@@ -326,10 +331,6 @@ public:
     static void triggerDetachedFromNative (Component& comp)
     {
         comp.internalDetachedFromNative();
-    }
-    static void triggerInternalMouseDown (Component& comp, const MouseEvent& event)
-    {
-        comp.internalMouseDown (event);
     }
 };
 
