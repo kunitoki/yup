@@ -520,7 +520,7 @@ TEST_F (SpectrogramComponentGpuTests, AppliesRowsAndScrollsHistoryOnGpu)
     auto snapshot1 = spectrogram->getSpectrogramImage();
 
     ASSERT_TRUE (snapshot1.isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, snapshot1.getWidth());
+    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramRenderWidth, snapshot1.getWidth());
     EXPECT_EQ (16, snapshot1.getHeight());
     EXPECT_FALSE (spectrogramRowIsColor (snapshot1, 0, 0xFF0a0a0a));
 
@@ -554,6 +554,7 @@ TEST_F (SpectrogramComponentGpuTests, ClearHistoryResetsGpuHistoryToBackground)
     EXPECT_FALSE (spectrogramRowIsColor (before, 0, 0xFF0a0a0a));
 
     spectrogram->clearHistory();
+    paintComponent(); // clearHistory() destroys the history canvases; repaint to recreate them
 
     auto after = spectrogram->getSpectrogramImage();
     ASSERT_TRUE (after.isValid());
@@ -571,7 +572,7 @@ TEST_F (SpectrogramComponentGpuTests, GetSpectrogramImageReturnsCurrentHistoryIm
     const auto image = spectrogram->getSpectrogramImage();
 
     ASSERT_TRUE (image.isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, image.getWidth());
+    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramRenderWidth, image.getWidth());
     EXPECT_EQ (8, image.getHeight());
     EXPECT_EQ (PixelFormat::RGBA, image.getPixelFormat());
 }

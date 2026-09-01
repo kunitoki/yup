@@ -125,7 +125,8 @@ public:
     /** Display constants. */
     enum
     {
-        defaultSpectrogramWidth = 1024,      ///< Default number of horizontal frequency bins.
+        defaultSpectrogramWidth = 1024, ///< Default number of horizontal frequency bins.
+        defaultSpectrogramRenderWidth = defaultSpectrogramWidth * 2, ///< Horizontal resolution of the waterfall texture (2x the bin count, interpolated for a smooth frequency axis).
         defaultSpectrogramMagnitudes = 2048, ///< Default number of magnitudes per FFT (must be >= defaultSpectrogramWidth).
         defaultColorLutSize = 256            ///< Default number of color stops in the color lookup table.
     };

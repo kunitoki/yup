@@ -235,6 +235,8 @@ void SpectrogramComponent::applyPendingRows()
 
     if (waterfallPipeline == nullptr || gpuTargets[0] == nullptr || gpuTargets[1] == nullptr)
     {
+        Logger::outputDebugString ("SpectrogramComponent: dropping " + String (static_cast<int> (pendingRows.size()))
+                                   + " pending FFT rows - waterfall pipeline or GPU targets not ready");
         pendingRows.clear();
         return;
     }
@@ -247,7 +249,7 @@ void SpectrogramComponent::applyPendingRows()
     auto& current = gpuTargets[pingPongIndex ^ 1];
 
     const WaterfallParams params { static_cast<float> (appliedRows),
-                                   static_cast<float> (spectrogramWidth * 2), // render width
+                                   static_cast<float> (defaultSpectrogramRenderWidth), // render width
                                    static_cast<float> (numHistoryFrames),
                                    static_cast<float> (spectrogramWidth), // bins
                                    0.0f,
@@ -291,7 +293,19 @@ void SpectrogramComponent::applyPendingRows()
                 pingPongIndex ^= 1;
                 scrollOffset -= static_cast<float> (appliedRows);
             }
+            else
+            {
+                Logger::outputDebugString ("SpectrogramComponent: waterfall draw/finish/submit failed - rows not applied");
+            }
         }
+        else
+        {
+            Logger::outputDebugString ("SpectrogramComponent: beginRenderPass failed - rows not applied");
+        }
+    }
+    else
+    {
+        Logger::outputDebugString ("SpectrogramComponent: GpuFrame::begin failed - rows not applied");
     }
 
     pendingRows.erase (pendingRows.begin(), pendingRows.begin() + appliedRows);
@@ -487,7 +501,7 @@ bool SpectrogramComponent::ensureGpuTargets (GraphicsContext& context)
     // The waterfall texture is rendered at a higher horizontal resolution than
     // the bin count and interpolated in the shader for a smooth (antialiased)
     // frequency axis.
-    const int renderWidth = spectrogramWidth * 2;
+    const int renderWidth = defaultSpectrogramRenderWidth;
 
     const auto backgroundColor = Color (0xFF0a0a0a);
 
@@ -532,7 +546,7 @@ void SpectrogramComponent::ensureWaterfallPipeline()
     auto loaded = ShaderBundle::loadFromData (kSpectrogramShaderBundle, sizeof (kSpectrogramShaderBundle));
     if (loaded.failed())
     {
-        YUP_DBG ("Failed to load precompiled waterfall shader bundle: " << loaded.getErrorMessage());
+        Logger::outputDebugString ("SpectrogramComponent: failed to load waterfall shader bundle: " + loaded.getErrorMessage());
 
         jassertfalse; // Waterfall shader bundle failed to load - no waterfall will be rendered.
         return;
@@ -548,7 +562,10 @@ void SpectrogramComponent::ensureWaterfallPipeline()
     if (result.wasOk())
         waterfallPipeline = result.getValue();
     else
+    {
+        Logger::outputDebugString ("SpectrogramComponent: waterfall shader failed to compile: " + result.getErrorMessage());
         jassertfalse; // Waterfall shader failed to compile - no waterfall will be rendered.
+    }
 }
 
 void SpectrogramComponent::generateWindow()
