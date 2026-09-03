@@ -65,6 +65,7 @@
 #include "yup_core/yup_MemoryMappedFile.cpp"
 #include "yup_core/yup_MemoryOutputStream.cpp"
 #include "yup_core/yup_MetaProgramming.cpp"
+#include "yup_core/yup_MimeTypes.cpp"
 #include "yup_core/yup_NamedPipe.cpp"
 #include "yup_core/yup_NormalisableRange.cpp"
 #include "yup_core/yup_OwnedArray.cpp"

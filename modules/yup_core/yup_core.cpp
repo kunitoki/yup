@@ -236,6 +236,7 @@ extern char** environ;
 #include "xml/yup_XmlElement.cpp"
 #include "files/yup_FileFilter.cpp"
 #include "files/yup_WildcardFileFilter.cpp"
+#include "files/yup_MimeTypes.cpp"
 #include "native/yup_ThreadPriorities_native.h"
 #include "native/yup_PlatformTimerListener.h"
 
@@ -323,8 +324,6 @@ extern char** environ;
 #include "native/yup_PlatformTimer_generic.cpp"
 #endif
 
-#include "files/yup_common_MimeTypes.h"
-#include "files/yup_common_MimeTypes.cpp"
 #include "native/yup_AndroidDocument_android.cpp"
 #include "threads/yup_HighResolutionTimer.cpp"
 #include "threads/yup_CountDownLatch.cpp"

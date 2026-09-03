@@ -151,6 +151,9 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
+#include "examples/ToastNotificationDemo.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
 #include "examples/VariableFonts.h"
 #endif
@@ -320,6 +323,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
+        addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });

@@ -88,6 +88,9 @@ static StringArray yupPermissionToAndroidPermissions (RuntimePermissions::Permis
 
         case RuntimePermissions::readMediaVideo:
             return { externalStorageOrMedia ("android.permission.READ_MEDIA_VIDEO") };
+
+        case RuntimePermissions::postNotifications:
+            return { "android.permission.POST_NOTIFICATIONS" };
     }
 
     // invalid permission
@@ -107,6 +110,7 @@ static RuntimePermissions::PermissionID androidPermissionToYupPermission (const 
         { "android.permission.READ_MEDIA_IMAGES", RuntimePermissions::readMediaImages },
         { "android.permission.READ_MEDIA_VIDEO", RuntimePermissions::readMediaVideo },
         { "android.permission.BLUETOOTH_SCAN", RuntimePermissions::bluetoothMidi },
+        { "android.permission.POST_NOTIFICATIONS", RuntimePermissions::postNotifications },
     };
 
     const auto iter = map.find (permission);
