@@ -92,14 +92,20 @@ public:
 
     void enableWireframe (bool) override {}
 
-    void repaint() override {}
+    void repaint() override
+    {
+        repaintAreas.clearQuick();
+        repaintAreas.add (component.getBounds());
+    }
 
-    void repaint (const Rectangle<float>&) override {}
+    void repaint (const Rectangle<float>& rect) override
+    {
+        repaintAreas.add (rect);
+    }
 
     const RectangleList<float>& getRepaintAreas() const override
     {
-        static RectangleList<float> r;
-        return r;
+        return repaintAreas;
     }
 
     void startTextInput (Component&) override {}
@@ -123,6 +129,8 @@ public:
     Component& getComponent() const { return component; }
 
     Flags getFlags() const { return flags; }
+
+    RectangleList<float> repaintAreas;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StubComponentNative)
 };
@@ -379,4 +387,48 @@ TEST_F (ComponentNativeConstructionTests, DestructorDoesNotCrash)
         EXPECT_NO_THROW ({ /* destructor called here */ });
     }
     SUCCEED();
+}
+
+// ==============================================================================
+// ComponentNative — repaint-area contract
+//
+// The render thread consumes the repaint areas produced by repaint()/repaint(rect)
+// on the message thread, so the accumulation/clear semantics must be predictable.
+// ==============================================================================
+
+class ComponentNativeRepaintTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        comp.setBounds (0, 0, 100, 100);
+    }
+
+    Component comp;
+};
+
+TEST_F (ComponentNativeRepaintTests, RectRepaintAccumulatesIntoRepaintAreas)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+
+    const Rectangle<float> area (10.0f, 20.0f, 30.0f, 40.0f);
+    native.repaint (area);
+
+    EXPECT_EQ (1, native.getRepaintAreas().getNumRectangles());
+    EXPECT_TRUE (native.getRepaintAreas().contains (area));
+}
+
+TEST_F (ComponentNativeRepaintTests, FullRepaintResetsPendingAreas)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+
+    native.repaint (Rectangle<float> (1.0f, 2.0f, 3.0f, 4.0f));
+    native.repaint (Rectangle<float> (5.0f, 6.0f, 7.0f, 8.0f));
+    EXPECT_EQ (2, native.getRepaintAreas().getNumRectangles());
+
+    // A full repaint replaces the accumulated region with the component bounds.
+    native.repaint();
+
+    EXPECT_EQ (1, native.getRepaintAreas().getNumRectangles());
+    EXPECT_TRUE (native.getRepaintAreas().contains (comp.getBounds()));
 }

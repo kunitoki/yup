@@ -124,6 +124,9 @@ public:
     /** Returns the number of characters in the string. */
     int length() const noexcept { return (int) text.length(); }
 
+    /** Returns a hash code for the string. */
+    int hashCode() const noexcept { return (int) HashGenerator<uint32>::calculate (text); }
+
     /** Retrieves a character by index. */
     yup_wchar operator[] (int index) const noexcept { return text[index]; }
 

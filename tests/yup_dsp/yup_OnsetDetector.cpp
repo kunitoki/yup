@@ -76,6 +76,16 @@ TEST_F (FilterBankTests, BuildCreatesBands)
     EXPECT_EQ (numFFTBins, fb.getNumFFTBins());
 }
 
+TEST_F (FilterBankTests, BuildClampsMaxFrequencyToNyquist)
+{
+    FilterBank fb;
+    fb.build (24, 30.0f, sampleRate * 2.0f, numFFTBins, sampleRate);
+
+    EXPECT_GT (fb.getNumBands(), 50);
+    EXPECT_LT (fb.getNumBands(), 200);
+    EXPECT_EQ (numFFTBins, fb.getNumFFTBins());
+}
+
 TEST_F (FilterBankTests, TriangularShape)
 {
     FilterBank fb;

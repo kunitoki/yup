@@ -55,14 +55,26 @@
 #include <rive/rive.h>
 
 //==============================================================================
-/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_FONT
+/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
 
-    Select if the default theme text fonts should be embedded in the binary. If set to 0, the
-    default theme text fonts will be loaded from the system fonts. If set to 1, the default
-    theme text fonts will be embedded in the binary. The default is 1.
+    Select if the default theme serif text font should be embedded in the binary. If set to 0, the
+    default theme serif text font will be loaded from the system fonts. If set to 1, the default
+    theme serif text font will be embedded in the binary. The default is 0, except on Emscripten
+    where it is forced to 1.
 */
-#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
-#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 0
+#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT 0
+#endif
+
+/** Config: YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT
+
+    Select if the default theme monospace text font should be embedded in the binary. If set to 0,
+    the default theme monospace text font will be loaded from the system fonts. If set to 1, the
+    default theme monospace text font will be embedded in the binary. The default is 0, except on
+    Emscripten where it is forced to 1.
+*/
+#ifndef YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT 0
 #endif
 
 /** Config: YUP_EMBED_DEFAULT_THEME_ICON_FONT
@@ -105,9 +117,14 @@
 
 //==============================================================================
 
-#if ! YUP_EMBED_DEFAULT_THEME_TEXT_FONT && YUP_EMSCRIPTEN
-#undef YUP_EMBED_DEFAULT_THEME_TEXT_FONT
-#define YUP_EMBED_DEFAULT_THEME_TEXT_FONT 1
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT && YUP_EMSCRIPTEN
+#undef YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_SERIF_FONT 1
+#endif
+
+#if ! YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT && YUP_EMSCRIPTEN
+#undef YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT
+#define YUP_EMBED_DEFAULT_THEME_TEXT_MONOSPACE_FONT 1
 #endif
 
 //==============================================================================
@@ -147,6 +164,11 @@
 #include "buttons/yup_ToggleButton.h"
 #include "buttons/yup_SwitchButton.h"
 #include "buttons/yup_ImageButton.h"
+#include "code/yup_SyntaxDefinition.h"
+#include "code/yup_CodeDocument.h"
+#include "code/yup_CodeTokeniser.h"
+#include "code/yup_CodeEditorScheme.h"
+#include "code/yup_CodeEditor.h"
 #include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"

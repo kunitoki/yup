@@ -103,6 +103,9 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case commonApplicationDataDirectory:  return File ("/opt");
         case globalApplicationsDirectory:     return File ("/usr");
 
+        case bundleDirectory:
+        case hostBundleDirectory:             return File ("/"); // preloaded/bundled files land under the VFS root
+
         case tempDirectory:
         {
             if (const char* tmpDir = getenv ("TMPDIR"))

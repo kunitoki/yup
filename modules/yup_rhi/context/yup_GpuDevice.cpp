@@ -104,7 +104,6 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
     if (data == nullptr || byteSize == 0)
         return nullptr;
 
-    // Storage buffers must be handled by backend overrides.
     if (type == GpuBufferType::storage)
         return nullptr;
 
@@ -118,9 +117,11 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
         case GpuBufferType::vertex:
             desc.usage = rive::ore::BufferUsage::vertex;
             break;
+
         case GpuBufferType::index:
             desc.usage = rive::ore::BufferUsage::index;
             break;
+
         default:
             desc.usage = rive::ore::BufferUsage::uniform;
             break;
@@ -128,7 +129,7 @@ ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type
 
     desc.size = (uint32_t) byteSize;
     desc.data = data;
-    desc.immutable = true;
+    desc.immutable = false;
     desc.label = "GpuBuffer";
 
     auto buffer = oreCtx->makeBuffer (desc);
@@ -152,7 +153,6 @@ bool GpuDevice::updateBuffer (GpuBuffer::Ptr buffer, const void* data, size_t by
     if (impl == nullptr)
         return false;
 
-    // For ore-backed buffers (vertex, index, uniform), update in place.
     if (impl->oreBuffer != nullptr)
     {
         if (byteSize > buffer->getSizeInBytes())
@@ -214,7 +214,7 @@ rive::rcp<rive::ore::Buffer> GpuDevice::UniformBufferPool::acquire (rive::ore::C
     desc.usage = rive::ore::BufferUsage::uniform;
     desc.size = static_cast<uint32_t> (minimumCapacity << index);
     desc.data = nullptr;
-    desc.immutable = false; // Rewritten in place every time it is handed out.
+    desc.immutable = false;
     desc.label = "GpuRenderPass uniform";
 
     return oreCtx.makeBuffer (desc);
@@ -228,7 +228,6 @@ void GpuDevice::UniformBufferPool::release (rive::rcp<rive::ore::Buffer> buffer)
     // Capacities are exactly minimumCapacity << index, so the buffer lands back in
     // the bucket it came from, which acquire() has already created.
     const auto index = bucketFor (buffer->size());
-
     if (index < buckets.size())
         buckets[index].push_back (std::move (buffer));
 }

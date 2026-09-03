@@ -24,24 +24,39 @@ namespace yup
 
 //==============================================================================
 
-GpuTexture::Ptr GpuTexture::fromGpuTexture (rive::rcp<rive::gpu::Texture> texture, int width, int height)
+GpuTexture::~GpuTexture()
+{
+    if (device == nullptr)
+        return;
+
+    device->runOnGraphicsContext ([this]
+    {
+        gpuTexture = nullptr;
+        renderCanvas = nullptr;
+        sampledTexture = nullptr;
+    });
+}
+
+GpuTexture::Ptr GpuTexture::fromGpuTexture (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::Texture> texture, int width, int height)
 {
     if (texture == nullptr || width <= 0 || height <= 0)
         return nullptr;
 
     GpuTexture::Ptr t = new GpuTexture();
+    t->device = std::move (device);
     t->gpuTexture = std::move (texture);
     t->width = width;
     t->height = height;
     return t;
 }
 
-GpuTexture::Ptr GpuTexture::fromRenderCanvas (rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height)
+GpuTexture::Ptr GpuTexture::fromRenderCanvas (ReferenceCountedObjectPtr<GpuDevice> device, rive::rcp<rive::gpu::RenderCanvas> canvas, int width, int height)
 {
     if (canvas == nullptr || width <= 0 || height <= 0)
         return nullptr;
 
     GpuTexture::Ptr t = new GpuTexture();
+    t->device = std::move (device);
     t->renderCanvas = std::move (canvas);
     t->renderTarget = true;
     t->width = width;

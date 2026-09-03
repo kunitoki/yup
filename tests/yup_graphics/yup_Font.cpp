@@ -49,6 +49,11 @@ MemoryBlock getValidFontData()
         is->readIntoMemoryBlock (mb);
     return mb;
 }
+
+Font loadTestFont()
+{
+    return Font::loadFontFromFile (getValidFontFile()).getValue();
+}
 } // namespace
 
 // ==============================================================================
@@ -123,55 +128,47 @@ TEST (FontTests, MoveAssignment)
 
 TEST (FontTests, LoadFromDataWithEmptyData)
 {
-    Font font;
     MemoryBlock emptyData;
 
-    Result result = font.loadFromData (emptyData);
+    auto result = Font::loadFontFromData (emptyData);
 
-    EXPECT_FALSE (result.wasOk());
+    EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST (FontTests, DISABLED_LoadFromDataWithInvalidData) // TODO - this doesn't fail harfbuzz!!
 {
-    Font font;
     MemoryBlock invalidData ("invalid font data", 17);
 
-    Result result = font.loadFromData (invalidData);
+    auto result = Font::loadFontFromData (invalidData);
 
-    EXPECT_FALSE (result.wasOk());
+    EXPECT_TRUE (result.failed());
 }
 
 TEST (FontTests, LoadFromNonExistentFile)
 {
-    Font font;
     File nonExistentFile ("/path/to/nonexistent/font.ttf");
 
-    Result result = font.loadFromFile (nonExistentFile);
+    auto result = Font::loadFontFromFile (nonExistentFile);
 
-    EXPECT_FALSE (result.wasOk());
+    EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST (FontTests, LoadFromDirectory)
 {
-    Font font;
     File directory = File::getCurrentWorkingDirectory();
 
-    Result result = font.loadFromFile (directory);
+    auto result = Font::loadFontFromFile (directory);
 
-    EXPECT_FALSE (result.wasOk());
+    EXPECT_TRUE (result.failed());
 }
 
 TEST (FontTests, LoadFromFileWithValidFile)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    Result result = font.loadFromFile (fontFile);
+    auto result = Font::loadFontFromFile (getValidFontFile());
 
     EXPECT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getErrorMessage().isEmpty());
 }
 
 // ==============================================================================
@@ -180,36 +177,32 @@ TEST (FontTests, LoadFromFileWithValidFile)
 
 TEST (FontTests, LoadFromSpanWithEmptySpan)
 {
-    Font font;
     Span<const uint8> emptySpan;
 
-    Result result = font.loadFromData (emptySpan);
+    auto result = Font::loadFontFromData (emptySpan);
 
-    EXPECT_FALSE (result.wasOk());
+    EXPECT_TRUE (result.failed());
     EXPECT_FALSE (result.getErrorMessage().isEmpty());
 }
 
 TEST (FontTests, LoadFromSpanWithValidData)
 {
-    Font font;
     MemoryBlock mb = getValidFontData();
     ASSERT_FALSE (mb.isEmpty());
 
     Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
-    Result result = font.loadFromData (span);
+    auto result = Font::loadFontFromData (span);
 
     EXPECT_TRUE (result.wasOk());
-    EXPECT_TRUE (result.getErrorMessage().isEmpty());
 }
 
 TEST (FontTests, LoadFromSpanProducesValidFontMetrics)
 {
-    Font font;
     MemoryBlock mb = getValidFontData();
     ASSERT_FALSE (mb.isEmpty());
 
     Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
-    font.loadFromData (span);
+    auto font = Font::loadFontFromData (span).getValue();
 
     EXPECT_NE (0.0f, font.getAscent());
     EXPECT_NE (0.0f, font.getDescent());
@@ -222,12 +215,10 @@ TEST (FontTests, LoadFromSpanAndMemoryBlockProduceSameMetrics)
     MemoryBlock mb = getValidFontData();
     ASSERT_FALSE (mb.isEmpty());
 
-    Font fontFromBlock;
-    fontFromBlock.loadFromData (mb);
+    auto fontFromBlock = Font::loadFontFromData (mb).getValue();
 
-    Font fontFromSpan;
     Span<const uint8> span (static_cast<const uint8*> (mb.getData()), mb.getSize());
-    fontFromSpan.loadFromData (span);
+    auto fontFromSpan = Font::loadFontFromData (span).getValue();
 
     EXPECT_FLOAT_EQ (fontFromBlock.getAscent(), fontFromSpan.getAscent());
     EXPECT_FLOAT_EQ (fontFromBlock.getDescent(), fontFromSpan.getDescent());
@@ -241,10 +232,7 @@ TEST (FontTests, LoadFromSpanAndMemoryBlockProduceSameMetrics)
 
 TEST (FontTests, VariableFont_HasCorrectNumberOfAxes)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // The font should have 2 axes: wdth and wght
     EXPECT_EQ (2, font.getNumAxis());
@@ -252,10 +240,7 @@ TEST (FontTests, VariableFont_HasCorrectNumberOfAxes)
 
 TEST (FontTests, VariableFont_GetAxisDescriptionByIndex)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Get axis descriptions by index
     auto axis0 = font.getAxisDescription (0);
@@ -274,10 +259,7 @@ TEST (FontTests, VariableFont_GetAxisDescriptionByIndex)
 
 TEST (FontTests, VariableFont_GetAxisDescriptionByTag)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Get wdth axis description
     auto wdthAxis = font.getAxisDescription ("wdth");
@@ -298,10 +280,7 @@ TEST (FontTests, VariableFont_GetAxisDescriptionByTag)
 
 TEST (FontTests, VariableFont_GetAxisDescriptionForInvalidTag)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Try to get description for non-existent axis
     auto invalidAxis = font.getAxisDescription ("slnt");
@@ -311,10 +290,7 @@ TEST (FontTests, VariableFont_GetAxisDescriptionForInvalidTag)
 
 TEST (FontTests, VariableFont_GetAxisValueReturnsDefaultValue)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Get default values
     auto wdthAxis = font.getAxisDescription ("wdth");
@@ -330,10 +306,7 @@ TEST (FontTests, VariableFont_GetAxisValueReturnsDefaultValue)
 
 TEST (FontTests, VariableFont_SetAxisValueByTag)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Get axis ranges
     auto wdthAxis = font.getAxisDescription ("wdth");
@@ -353,10 +326,7 @@ TEST (FontTests, VariableFont_SetAxisValueByTag)
 
 TEST (FontTests, VariableFont_SetAxisValueByIndex)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Get axis descriptions to find which index is which
     auto axis0 = font.getAxisDescription (0);
@@ -369,10 +339,7 @@ TEST (FontTests, VariableFont_SetAxisValueByIndex)
 
 TEST (FontTests, VariableFont_WithAxisValueByTag)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wghtAxis = font.getAxisDescription ("wght");
     ASSERT_TRUE (wghtAxis.has_value());
@@ -389,10 +356,7 @@ TEST (FontTests, VariableFont_WithAxisValueByTag)
 
 TEST (FontTests, VariableFont_WithAxisValueByIndex)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto axis0 = font.getAxisDescription (0);
     ASSERT_TRUE (axis0.has_value());
@@ -409,10 +373,7 @@ TEST (FontTests, VariableFont_WithAxisValueByIndex)
 
 TEST (FontTests, VariableFont_ResetAxisValueByTag)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wdthAxis = font.getAxisDescription ("wdth");
     ASSERT_TRUE (wdthAxis.has_value());
@@ -428,10 +389,7 @@ TEST (FontTests, VariableFont_ResetAxisValueByTag)
 
 TEST (FontTests, VariableFont_ResetAxisValueByIndex)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto axis0 = font.getAxisDescription (0);
     ASSERT_TRUE (axis0.has_value());
@@ -447,10 +405,7 @@ TEST (FontTests, VariableFont_ResetAxisValueByIndex)
 
 TEST (FontTests, VariableFont_ResetAllAxisValues)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wdthAxis = font.getAxisDescription ("wdth");
     auto wghtAxis = font.getAxisDescription ("wght");
@@ -472,10 +427,7 @@ TEST (FontTests, VariableFont_ResetAllAxisValues)
 
 TEST (FontTests, VariableFont_SetAxisValues)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wdthAxis = font.getAxisDescription ("wdth");
     auto wghtAxis = font.getAxisDescription ("wght");
@@ -493,10 +445,7 @@ TEST (FontTests, VariableFont_SetAxisValues)
 
 TEST (FontTests, VariableFont_WithAxisValues)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wdthAxis = font.getAxisDescription ("wdth");
     auto wghtAxis = font.getAxisDescription ("wght");
@@ -519,10 +468,7 @@ TEST (FontTests, VariableFont_WithAxisValues)
 
 TEST (FontTests, VariableFont_ChainedAxisOperations)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     auto wdthAxis = font.getAxisDescription ("wdth");
     auto wghtAxis = font.getAxisDescription ("wght");
@@ -549,10 +495,7 @@ TEST (FontTests, VariableFont_ChainedAxisOperations)
 
 TEST (FontTests, VariableFont_FontMetrics)
 {
-    Font font;
-    File fontFile = getValidFontFile();
-
-    font.loadFromFile (fontFile);
+    auto font = loadTestFont();
 
     // Variable font should have valid metrics
     EXPECT_NE (0.0f, font.getAscent());
@@ -1114,4 +1057,74 @@ TEST (FontTests, ChainedWithOperations)
 
     EXPECT_EQ (24.0f, result.getHeight());
     EXPECT_EQ (12.0f, font.getHeight()); // Original unchanged
+}
+
+// ==============================================================================
+// Static Loading Tests
+// ==============================================================================
+
+TEST (FontTests, LoadFontFromFileReturnsFontForValidFile)
+{
+    auto font = Font::loadFontFromFile (getValidFontFile());
+
+    ASSERT_TRUE (font.wasOk());
+    EXPECT_GT (font.getValue().getNumAxis(), 0);
+    EXPECT_GT (font.getValue().getHeight(), 0.0f);
+}
+
+TEST (FontTests, LoadFontFromFileReturnsFailureForMissingFile)
+{
+    auto font = Font::loadFontFromFile (File ("/nonexistent/path/to/font.ttf"));
+
+    EXPECT_TRUE (font.failed());
+}
+
+TEST (FontTests, LoadFontFromFirstAvailableFileSkipsMissingFiles)
+{
+    auto font = Font::loadFontFromFirstAvailableFile ({ "/nonexistent/path/to/font.ttf",
+                                                        "/also/nonexistent/font.otf" });
+
+    EXPECT_TRUE (font.failed());
+
+    // The valid file path must be reachable; use the same file the other tests use.
+    const String validPath = getValidFontFile().getFullPathName();
+    auto found = Font::loadFontFromFirstAvailableFile ({ "/nonexistent/path/to/font.ttf",
+                                                         validPath.toRawUTF8() });
+
+    ASSERT_TRUE (found.wasOk());
+    EXPECT_GT (found.getValue().getNumAxis(), 0);
+}
+
+TEST (FontTests, LoadFontFromFirstAvailableFileReturnsFailureWhenNoneExist)
+{
+    auto font = Font::loadFontFromFirstAvailableFile ({ "/nonexistent/path/to/font.ttf",
+                                                        "/also/nonexistent/font.otf",
+                                                        "/still/nonexistent/font.woff2" });
+
+    EXPECT_TRUE (font.failed());
+}
+
+TEST (FontTests, LoadSerifSystemTextFontDoesNotCrash)
+{
+    auto font = Font::loadSerifSystemTextFont();
+
+#if YUP_MAC || YUP_IOS
+    EXPECT_TRUE (font.wasOk());
+#else
+    // On other platforms the presence of system fonts varies; just ensure no crash.
+    if (font.wasOk())
+        EXPECT_GT (font.getValue().getHeight(), 0.0f);
+#endif
+}
+
+TEST (FontTests, LoadMonospaceSystemTextFontDoesNotCrash)
+{
+    auto font = Font::loadMonospaceSystemTextFont();
+
+#if YUP_MAC || YUP_IOS
+    EXPECT_TRUE (font.wasOk());
+#else
+    if (font.wasOk())
+        EXPECT_GT (font.getValue().getHeight(), 0.0f);
+#endif
 }

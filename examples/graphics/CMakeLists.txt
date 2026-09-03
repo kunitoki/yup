@@ -35,21 +35,13 @@ if (ANDROID)
     yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
 endif()
 
-# ==== Embed data files on platforms without access to the source tree at runtime
-if (ANDROID OR YUP_PLATFORM_IOS)
-    yup_add_embedded_binary_resources (
-        "${target_name}_binary_data"
-        OUT_DIR BinaryData
-        HEADER BinaryData.h
-        NAMESPACE yup
-        RESOURCE_NAMES
-            RiveFile
-            LottieFile
-        RESOURCES
-            "${CMAKE_CURRENT_LIST_DIR}/${rive_file}"
-            "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}")
-
-    set (link_libraries "${target_name}_binary_data")
+# ==== Bundle data files on platforms without access to the source tree at runtime, read back
+#      at runtime through File::getSpecialLocation (File::bundleDirectory) - see getAssetPath()
+set (bundle_resources "")
+if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND bundle_resources
+        "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
+        "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}")
 endif()
 
 # ==== Embed shaders
@@ -83,9 +75,8 @@ yup_standalone_app (
         YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
         YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE="${lottie_file}"
         ${additional_definitions}
-    PRELOAD_FILES
-        "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
-        "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}"
+    BUNDLE_RESOURCES
+        ${bundle_resources}
     MODULES
         yup::yup_core
         yup::yup_audio_basics

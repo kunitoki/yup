@@ -45,26 +45,55 @@ public:
     /** Loads a font from a memory block.
 
         @param fontBytes The memory block containing the font data.
-        @return The result of the operation.
+        @return The result of the operation, holding the loaded font on success.
     */
-    Result loadFromData (const MemoryBlock& fontBytes);
+    static ResultValue<Font> loadFontFromData (const MemoryBlock& fontBytes);
 
-    /** Loads a font from as span of bytes
+    /** Loads a font from a span of bytes.
 
-        @param fontBytes The memory block containing the font data.
-        @return The result of the operation.
+        @param fontBytes The span containing the font data.
+        @return The result of the operation, holding the loaded font on success.
     */
-    Result loadFromData (const Span<const uint8>& fontBytes);
+    static ResultValue<Font> loadFontFromData (const Span<const uint8>& fontBytes);
 
     //==============================================================================
     /** Loads a font from a file.
 
         @param fontFile The file containing the font data.
-        @return The result of the operation.
+        @return The result of the operation, holding the loaded font on success.
     */
-    Result loadFromFile (const File& fontFile);
+    static ResultValue<Font> loadFontFromFile (const File& fontFile);
+
+    /** Loads the first font found among the given file paths, in order.
+
+        @param fontPaths The file paths to try in order.
+        @return The result of the operation, holding the loaded font on success,
+                or a failure if none of the files could be loaded.
+    */
+    static ResultValue<Font> loadFontFromFirstAvailableFile (std::initializer_list<const char*> fontPaths);
+
+    /** Attempts to load the platform's default serif system text font.
+
+        On macOS/iOS this uses the CoreText system UI font, otherwise well-known
+        system font files are tried in order.
+
+        @return The result of the operation, holding the loaded font on success.
+    */
+    static ResultValue<Font> loadSerifSystemTextFont();
+
+    /** Attempts to load the platform's default monospace system text font.
+
+        On macOS/iOS this uses the CoreText monospaced system UI font, otherwise
+        well-known system monospace font files are tried in order.
+
+        @return The result of the operation, holding the loaded font on success.
+    */
+    static ResultValue<Font> loadMonospaceSystemTextFont();
 
     //==============================================================================
+    /** Returns true if the font is empty (no font data loaded). */
+    bool isEmpty() const noexcept { return font == nullptr; }
+
     /** Returns the ascent of the font. */
     float getAscent() const;
 

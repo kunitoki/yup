@@ -40,6 +40,11 @@ windowing, layout, widgets, and theming are still to come.
 - [Component paint profiling](component-profiling.md) — measure and
   reduce the cost of `Component::paint`.
 
+## Additional Components
+
+- [Code editor](code-editor.md) — `CodeDocument`, `SyntaxDefinition`,
+  `CodeTokeniser`, and the syntax-highlighting `CodeEditor` component.
+
 ```{toctree}
 :hidden:
 :maxdepth: 1
@@ -51,4 +56,5 @@ component-effects
 component-caching
 component-snapshots
 component-profiling
+code-editor
 ```
