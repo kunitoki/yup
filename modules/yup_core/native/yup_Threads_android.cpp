@@ -280,9 +280,6 @@ private:
 };
 
 //==============================================================================
-#if YUP_MODULE_AVAILABLE_yup_events && YUP_ANDROID
-void yup_yupEventsAndroidStartApp();
-#endif
 
 void Thread::initialiseYUP (void* jniEnv, void* context)
 {
@@ -313,10 +310,6 @@ void Thread::initialiseYUP (void* jniEnv, void* context)
         // if we ever support unloading then this should probably be a weak reference
         androidApkContext = env->NewGlobalRef (static_cast<jobject> (context));
         YupActivityWatcher::getInstance();
-
-#if YUP_MODULE_AVAILABLE_yup_events && YUP_ANDROID
-        yup_yupEventsAndroidStartApp();
-#endif
     }
 }
 
