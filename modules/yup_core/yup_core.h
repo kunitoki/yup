@@ -51,10 +51,11 @@
     license:            ISC
 
     dependencies:       zlib
-    optionalDeps:       sqlite3_library yup_events
-    macFrameworks:      Cocoa Foundation IOKit Security
-    iosFrameworks:      Foundation UIKit
-    iosSimFrameworks:   Foundation UIKit
+    optionalDeps:       sqlite3_library
+    appleFrameworks:    Foundation
+    macFrameworks:      Cocoa IOKit Security
+    iosFrameworks:      UIKit
+    iosSimFrameworks:   UIKit
     linuxLibs:          rt dl pthread
     androidLibs:        log android
     androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
@@ -349,6 +350,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "files/yup_TemporaryFile.h"
 #include "files/yup_FileFilter.h"
 #include "files/yup_WildcardFileFilter.h"
+#include "files/yup_MimeTypes.h"
 #include "streams/yup_FileInputSource.h"
 #include "logging/yup_FileLogger.h"
 #include "javascript/yup_JSONUtils.h"
