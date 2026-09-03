@@ -1859,6 +1859,8 @@ void registerYupGraphicsBindings (py::module_& m)
 
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)
+        .def ("drawImage", &Graphics::drawImage)
+        .def ("drawTexture", &Graphics::drawTexture)
 
         // Text operations
         .def ("fillFittedText", py::overload_cast<const String&, const Font&, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
@@ -1871,7 +1873,28 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getContextScale", &Graphics::getContextScale)
         .def ("getFactory", &Graphics::getFactory, py::return_value_policy::reference_internal)
         .def ("getRenderer", &Graphics::getRenderer, py::return_value_policy::reference_internal)
+        .def ("getGraphicsContext", &Graphics::getGraphicsContext, py::return_value_policy::reference)
     ;
+
+    // ============================================================================================ yup::GpuCanvas
+
+    py::class_<GpuCanvas, ReferenceCountedObjectPtr<GpuCanvas>> (m, "GpuCanvas")
+        .def_static ("create", &GpuCanvas::create)
+        .def ("getWidth", &GpuCanvas::getWidth)
+        .def ("getHeight", &GpuCanvas::getHeight)
+        .def ("asTexture", &GpuCanvas::asTexture)
+        .def ("asImage", &GpuCanvas::asImage)
+        .def ("beginDraw", &GpuCanvas::beginDraw)
+        .def ("commit", &GpuCanvas::commit)
+        .def ("getTarget", &GpuCanvas::getTarget)
+        .def ("__repr__", [] (const GpuCanvas& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " " << self.getWidth() << "x" << self.getHeight() << ">";
+            return result;
+        });
 
     // ============================================================================================ yup::Colors
 

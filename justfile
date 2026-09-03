@@ -90,30 +90,32 @@ emscripten_test:
 
 [doc("serve project for WASM")]
 emscripten_serve:
-  #python3 -m http.server -d .
-  python3 tools/serve.py -p 8000 -d .
+  #uv run python -m http.server -d .
+  uv run python tools/serve.py -p 8000 -d .
 
 [doc("generate python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_wheel:
-  python -m build --wheel
+  uv pip install build
+  uv run python -m build --wheel
   @just python_install
   @just python_test
 
 [doc("install python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_install:
-  python -m pip install --force-reinstall dist/yup-*.whl
+  uv pip install --force-reinstall dist/yup-*.whl
 
 [doc("uninstall python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_uninstall:
-  python -m pip uninstall -y yup
+  uv pip uninstall -y yup
 
 [doc("run tests for yup_python bindings")]
 [working-directory: 'python']
 python_test *TEST_OPTS:
-  python -m pytest -s {{TEST_OPTS}}
+  uv sync --group test
+  uv run --group test python -m pytest -s {{TEST_OPTS}}
 
 [doc("compile and invoke shader_bundler tool")]
 [working-directory: 'cmake/tools/shader_bundler']

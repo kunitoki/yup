@@ -82,6 +82,7 @@
 #include "format/yup_AudioFormatReader.cpp"
 #include "format/yup_AudioFormatWriter.cpp"
 #include "common/yup_AudioFormatManager.cpp"
+#include "sources/yup_AudioFormatReaderSource.cpp"
 
 //==============================================================================
 

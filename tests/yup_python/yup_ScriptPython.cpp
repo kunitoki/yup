@@ -100,22 +100,28 @@ TEST_F (ScriptPythonTest, RunPythonTests)
         import runpy
         import sys
 
-        sys.path.append('{{root_path}}')
         sys.path.append('{{root_path}}/lib/python{{version}}/site-packages')
+        sys.path.append('{{root_path}}')
 
         package = 'pytest'
 
         try:
             import pytest
         except ImportError:
+            # Temporarily remove target from sys.path to avoid pip's
+            # "Unexpected import after pip install started" deprecation warnings
+            sys.path.remove('{{root_path}}')
+
             old_argv = [x for x in sys.argv]
-            sys.argv = ['pip', 'install', 'pytest', '--target', '{{root_path}}']
+            sys.argv = ['pip', 'install', '--upgrade', 'pytest', '--target', '{{root_path}}']
             try:
                 runpy.run_module('pip', run_name='__main__')
             except SystemExit as ex:
                 print(str(ex))
             finally:
                 sys.argv = old_argv
+
+            sys.path.append('{{root_path}}')
             import pytest
 
         assert pytest.main(['-x', '{{test_path}}', '-vvv', '-p', 'no:cacheprovider']) == 0

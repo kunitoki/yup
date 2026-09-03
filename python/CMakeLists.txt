@@ -50,16 +50,39 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_WHEEL ON
     MODULES
+        yup::yup_ai
+        yup::yup_animation
         yup::yup_audio_basics
         yup::yup_audio_devices
+        yup::yup_audio_formats
+        yup::yup_audio_graph
+        yup::yup_audio_gui
+        yup::yup_audio_plugin_host
         yup::yup_audio_processors
         yup::yup_core
         yup::yup_data_model
+        yup::yup_dsp
         yup::yup_events
         yup::yup_graphics
         yup::yup_gui
         yup::yup_python
-        yup::yup_ai)
+        yup::yup_shading
+        yup::yup_simd
+        bungee_library
+        pffft_library
+        opus_library
+        flac_library
+        hmp3_library
+        dr_libs
+        libvorbis
+        libpng
+        libwebp
+        libjpeg
+        libgif
+        libtiff
+        glslang
+        spirv_cross
+        spirv_tools)
 
 set_target_properties (${target_name} PROPERTIES
     CXX_EXTENSIONS OFF
