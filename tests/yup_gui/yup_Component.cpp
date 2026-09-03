@@ -81,9 +81,12 @@ public:
 
     float getOpacity() const override { return 1.0f; }
 
-    void setFocusedComponent (Component*) override {}
+    void setFocusedComponent (Component* component) override
+    {
+        focusedComponent = component;
+    }
 
-    Component* getFocusedComponent() const override { return nullptr; }
+    Component* getFocusedComponent() const override { return focusedComponent; }
 
     bool isContinuousRepaintingEnabled() const override { return false; }
 
@@ -124,6 +127,9 @@ public:
     rive::Factory* getFactory() override { return nullptr; }
 
     GraphicsContext* getGraphicsContext() override { return nullptr; }
+
+private:
+    Component* focusedComponent = nullptr;
 };
 
 class RecordingComponentListener : public ComponentListener
@@ -305,6 +311,11 @@ public:
     static void triggerMouseWheel (Component& comp, const MouseEvent& event, const MouseWheelData& wheelData)
     {
         comp.internalMouseWheel (event, wheelData);
+    }
+
+    static void triggerInternalMouseDown (Component& comp, const MouseEvent& event)
+    {
+        comp.internalMouseDown (event);
     }
 
     static void triggerVisibilityChanged (Component& comp)
@@ -1427,6 +1438,25 @@ TEST_F (ComponentMockTest, KeyboardFocusMethods)
     // Test focus methods don't crash
     mockComponent->takeKeyboardFocus();
     mockComponent->leaveKeyboardFocus();
+}
+
+TEST_F (ComponentMockTest, SecondaryTouchCanGrabKeyboardFocusDuringMouseDown)
+{
+    ComponentHelper::attachMockNative (*mockComponent);
+    mockComponent->setVisible (true);
+    mockComponent->setWantsKeyboardFocus (true);
+    mockComponent->setClickingGrabFocus (false); // isolate the explicit takeKeyboardFocus() call below
+
+    ON_CALL (*mockComponent, mouseDown (_)).WillByDefault ([this] (const MouseEvent&)
+    {
+        mockComponent->takeKeyboardFocus();
+    });
+
+    const auto secondaryTouchDown = MouseEvent().withTouchIndex (1);
+    ComponentHelper::triggerInternalMouseDown (*mockComponent, secondaryTouchDown);
+    EXPECT_TRUE (mockComponent->hasKeyboardFocus());
+
+    ComponentHelper::detachMockNative (*mockComponent);
 }
 
 TEST_F (ComponentMockTest, ParentHierarchyMethods)

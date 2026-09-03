@@ -95,6 +95,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/SpinningCubeDemo.h"
 #include "examples/Svg.h"
 #include "examples/TextEditor.h"
+#include "examples/TouchTrails.h"
 #include "examples/ToastNotificationDemo.h"
 #include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
@@ -203,6 +204,7 @@ public:
         addDemo ("Spinning Cube", [] { return std::make_unique<SpinningCubeDemo>(); });
         addDemo ("SVG", [] { return std::make_unique<SvgDemo>(); });
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+        addDemo ("Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });
         addDemo ("Widgets", [] { return std::make_unique<WidgetsDemo>(); });

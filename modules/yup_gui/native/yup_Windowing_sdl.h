@@ -36,6 +36,25 @@ class SDLComponentNative final
 
     static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
 
+    struct TouchFinger
+    {
+        SDL_FingerID fingerId = 0;
+        int index = 0;
+        Point<float> position;
+        float pressure = 0.0f;
+        MouseEvent::Buttons buttons = MouseEvent::noButtons;
+        std::optional<Point<float>> lastDownPosition;
+        std::optional<yup::Time> lastDownTime;
+        WeakReference<Component> clickedComponent;
+        WeakReference<Component> componentUnderPointer;
+    };
+
+    struct TouchClickState
+    {
+        std::optional<yup::Time> lastUpTime;
+        WeakReference<Component> lastComponent;
+    };
+
 public:
     //==============================================================================
     using Ptr = ReferenceCountedObjectPtr<SDLComponentNative>;
@@ -129,9 +148,12 @@ public:
     Point<float> getCursorPosition() const;
 
     //==============================================================================
-    void handleMouseMoveOrDrag (const Point<float>& position);
-    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
+    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr);
+    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr, bool wasCanceled = false);
+    void handleTouchDown (SDL_FingerID fingerId, const Point<float>& position, float pressure);
+    void handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure);
+    void handleTouchUp (SDL_FingerID fingerId, const Point<float>& position, float pressure, bool wasCanceled = false);
     void handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData);
     void handleMouseEnter (const Point<float>& position);
     void handleMouseLeave (const Point<float>& position);
@@ -195,13 +217,20 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
-    void runWithComputeContext (const std::function<void()>& fn);
-    void renderFrame();
+    WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);
+    Point<float> getTouchPosition (const SDL_TouchFingerEvent& event) const;
+    int findTouchFingerIndex (SDL_FingerID fingerId) const;
+    int getFreeTouchIndex() const;
+    TouchClickState& getTouchClickState (int touchIndex);
+
+    bool hasNativeKeyboardFocus() const;
 
     void startRendering();
     void stopRendering();
     bool isRendering() const;
-    bool hasNativeKeyboardFocus() const;
+    void getRenderContext();
+    void runWithComputeContext (const std::function<void()>& fn);
+    void renderFrame();
 
     friend class WeakReference<SDLComponentNative>;
     WeakReference<SDLComponentNative>::Master masterReference;
@@ -237,6 +266,8 @@ private:
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
+    Array<TouchFinger> activeTouches;
+    Array<TouchClickState> touchClickStates;
     Array<File> pendingDroppedFiles;
     String pendingDroppedText;
     RelativeTime doubleClickTime;
