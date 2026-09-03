@@ -1440,23 +1440,20 @@ TEST_F (ComponentMockTest, KeyboardFocusMethods)
     mockComponent->leaveKeyboardFocus();
 }
 
-TEST_F (ComponentMockTest, SecondaryTouchCannotGrabKeyboardFocusDuringMouseDown)
+TEST_F (ComponentMockTest, SecondaryTouchCanGrabKeyboardFocusDuringMouseDown)
 {
     ComponentHelper::attachMockNative (*mockComponent);
     mockComponent->setVisible (true);
     mockComponent->setWantsKeyboardFocus (true);
+    mockComponent->setClickingGrabFocus (false); // isolate the explicit takeKeyboardFocus() call below
 
     ON_CALL (*mockComponent, mouseDown (_)).WillByDefault ([this] (const MouseEvent&)
     {
         mockComponent->takeKeyboardFocus();
     });
 
-    const auto touchDown = MouseEvent().withTouchIndex (1);
-    ComponentHelper::triggerInternalMouseDown (*mockComponent, touchDown);
-    EXPECT_FALSE (mockComponent->hasKeyboardFocus());
-
-    const auto firstTouchDown = touchDown.withTouchIndex (0);
-    ComponentHelper::triggerInternalMouseDown (*mockComponent, firstTouchDown);
+    const auto secondaryTouchDown = MouseEvent().withTouchIndex (1);
+    ComponentHelper::triggerInternalMouseDown (*mockComponent, secondaryTouchDown);
     EXPECT_TRUE (mockComponent->hasKeyboardFocus());
 
     ComponentHelper::detachMockNative (*mockComponent);

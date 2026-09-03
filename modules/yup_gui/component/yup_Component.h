@@ -1522,7 +1522,6 @@ private:
         bool paintProfilingDisabled : 1;
         bool cachedToTexture : 1;
         bool paintAsOffscreenRoot : 1;
-        bool isHandlingSecondaryTouchDown : 1;
     };
 
     union

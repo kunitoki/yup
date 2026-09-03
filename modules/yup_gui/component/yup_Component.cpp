@@ -972,7 +972,7 @@ bool Component::getClickingGrabFocus() const
 
 void Component::takeKeyboardFocus()
 {
-    if (options.isHandlingSecondaryTouchDown || ! options.wantsKeyboardFocus || ! isEnabled())
+    if (! options.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
@@ -1661,18 +1661,10 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     auto bailOutChecker = BailOutChecker (this);
 
-    const bool isSecondaryTouch = event.isTouch() && event.getTouchIndex() > 0;
+    handleKeyboardFocusFromClick();
 
-    if (! isSecondaryTouch)
-    {
-        handleKeyboardFocusFromClick();
-
-        if (bailOutChecker.shouldBailOut())
-            return;
-    }
-
-    const auto previousHandlingSecondaryTouchDown = options.isHandlingSecondaryTouchDown;
-    options.isHandlingSecondaryTouchDown = isSecondaryTouch;
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     mouseDown (event);
 
@@ -1680,11 +1672,6 @@ void Component::internalMouseDown (const MouseEvent& event)
         return;
 
     mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
-
-    if (bailOutChecker.shouldBailOut())
-        return;
-
-    options.isHandlingSecondaryTouchDown = previousHandlingSecondaryTouchDown;
 }
 
 //==============================================================================

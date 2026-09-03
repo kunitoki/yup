@@ -80,11 +80,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
     SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
-#if YUP_MOBILE || YUP_EMSCRIPTEN
     // Touch input is delivered by YUP itself through the SDL_EVENT_FINGER_* handlers
     // below, so don't let SDL also synthesize mouse events from the same touches.
     SDL_SetHint (SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
-#endif
 
     // Create the window, renderer and parent it
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: creating window: title=" << component.getTitle() << ", flags=" << String::toHexString (static_cast<int> (windowFlags)) << ", parent=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (parent))));
@@ -2272,7 +2270,6 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-#if YUP_MOBILE || YUP_EMSCRIPTEN
         case SDL_EVENT_FINGER_DOWN:
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_FINGER_DOWN " << static_cast<int64> (event->tfinger.fingerID));
@@ -2325,7 +2322,6 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             break;
         }
-#endif
 
         case SDL_EVENT_KEY_DOWN:
         {

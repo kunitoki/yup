@@ -436,10 +436,11 @@ The first flag controls whether this component receives mouse events on itself.
 The second controls whether its children can receive them (useful for
 mouse-blocking overlays).
 
-### Multitouch (mobile and Emscripten on a mobile browser)
+### Multitouch (any platform with touch hardware)
 
-On iOS, Android and Emscripten in a mobile browser, every finger is delivered
-through the same mouse callbacks, with the left button held. The first finger
+On any platform with touch hardware (mobile, Emscripten in a mobile browser,
+and desktop touchscreens), every finger is delivered through the same mouse
+callbacks, with the left button held. The first finger
 behaves exactly like a mouse; each additional finger produces parallel
 `mouseDown` / `mouseDrag` / `mouseUp` events. Distinguish fingers with
 `MouseEvent::isTouch()` and `MouseEvent::getTouchIndex()` - a dense, zero-based
@@ -472,11 +473,8 @@ class DragHandle : public Component
 
 Notes:
 
-- Touch events are only generated on `YUP_MOBILE` and `YUP_EMSCRIPTEN` targets.
 - `MouseEvent::getPressure()` reports the touch pressure in the range 0.0-1.0
   (0.0 for mouse events).
-- Only the first finger takes keyboard focus, so an additional finger can never
-  steal it mid-gesture.
 - A finger cancelled by the system (e.g. a palm resting on the screen) is
   delivered as a regular `mouseUp`.
 
