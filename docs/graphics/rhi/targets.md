@@ -41,11 +41,43 @@ if (target != nullptr)
 
 | Method                              | Description                                            |
 | ----------------------------------- | ------------------------------------------------------ |
-| `getWidth()` / `getHeight()`        | Target dimensions in pixels.                           |
+| `getWidth()` / `getHeight()`        | Target dimensions, at the mip level it renders into.   |
 | `beginRenderPass (frame, options)`  | Begins a render pass targeting the backing texture.    |
 | `asTexture()`                       | GPU-texture view of the rendered result.               |
 | `asImage()`                         | An `Image` with GPU texture + CPU pixels populated.    |
 | `readPixels (dst, byteSize)`        | Reads pixels back to CPU memory.                       |
+
+### Targets over a directly allocated texture
+
+The `width`/`height` overload above goes through Rive's 2D canvas allocator,
+which is fixed at rgba8 / 2D / one mip / one sample. To render into anything
+else, allocate the texture yourself:
+
+```cpp
+// A float 2D target.
+auto hdr = GpuTarget::create (device, { 512, 512, GpuTextureFormat::rgba16float });
+
+// One face of a cube map, or one level of a mip chain.
+auto face = GpuTarget::createFromTexture (device, cube, { /* mip */ 0, /* layer */ 3 });
+auto mip  = GpuTarget::createFromTexture (device, texture, { /* mip */ 2, /* layer */ 0 });
+```
+
+`createFromTexture()` is what makes **render-to-mip** and **render-to-cube-face**
+possible: point the view at a mip level and a layer (a cube face *is* a layer),
+and every draw in a pass begun on that target lands there. Since nothing
+generates mip contents automatically, a mip chain is built by rendering each
+level in turn - which is also what a roughness-varying IBL prefilter wants.
+
+> **Narrowed views are for attachments only, never for sampling.** OpenGL ES 3
+> has no `glTextureView`, so a mip- or layer-narrowed view silently falls back to
+> the base texture when *read* - binding one to sample mip 2 quietly samples mip 0
+> instead, with no error. Attachment targeting is unaffected. To read one level
+> of a chain, bind the whole texture and use an explicit `textureLod()` together
+> with a `GpuSampler` whose `minLod`/`maxLod` clamp to that level.
+
+`readPixels()` is only supported for canvas-backed targets; targets over a
+directly allocated texture return false, because there is no texture readback
+path in the backend layer.
 
 ## `GpuCanvas`
 

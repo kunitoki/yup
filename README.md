@@ -14,7 +14,7 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 [![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 [![Documentation](https://app.readthedocs.org/projects/yup/badge/?version=latest)](https://yup.readthedocs.io/en/latest)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kunitoki/yup)
-[![Discord](https://dcbadge.limes.pink/api/server/E6pSdcj4R?style=plastic)](https://discord.gg/E6pSdcj4R)
+[![Discord](https://img.shields.io/discord/1533809375762976908?logo=discord)](https://discord.gg/E6pSdcj4R)
 
 > [!WARNING]
 > YUP is under active early-stage development. APIs may change while the framework is being shaped, but the repository already contains working examples, tests, and platform builds.
@@ -86,6 +86,12 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 <div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/_static/images/yup_lottie.gif" style="height:340px;" /></a>
   <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.5%;" /></a>
+</div>
+
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:20.1%;" /></a>
+  <a href="./examples/graphics/source/examples/PbrDemo.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:39.4%;" /></a>
+  <a href="./examples/graphics/source/examples/FluidSimulationDemo.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:39.4%;" /></a>
 </div>
 
 Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).

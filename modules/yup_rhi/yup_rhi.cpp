@@ -117,5 +117,6 @@
 //==============================================================================
 #include "rhi/yup_GpuTarget.cpp"
 #include "rhi/yup_GpuTexture.cpp"
+#include "rhi/yup_GpuSampler.cpp"
 #include "rhi/yup_ShaderBindingMap.cpp"
 #include "context/yup_GpuDevice.cpp"

@@ -87,6 +87,15 @@ public:
         else
             gpuDevice = GpuDevice::create (GpuPlatform::Metal, options);
 
+        if (gpuDevice != nullptr)
+        {
+            if (auto* nativeDevice = gpuDevice->getNativeDevice())
+                gpu = (__bridge id<MTLDevice>) nativeDevice;
+
+            if (auto* nativeQueue = gpuDevice->getNativeCommandQueue())
+                queue = (__bridge id<MTLCommandQueue>) nativeQueue;
+        }
+
         // Compile PLS shaders for the fullscreen blit pipeline
         NSError* error = nil;
 
@@ -167,7 +176,7 @@ public:
         swapchain.framebufferOnly = ! options.readableFramebuffer;
         swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
 #if YUP_MAC
-        swapchain.displaySyncEnabled = NO;
+        swapchain.displaySyncEnabled = options.vsync ? YES : NO;
 #endif
 
 #if YUP_IOS

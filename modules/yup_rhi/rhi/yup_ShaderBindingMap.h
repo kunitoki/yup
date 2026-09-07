@@ -33,7 +33,13 @@ namespace yup
     Uniform buffers, separate images (textures), separate samplers, and
     read/write storage buffers are all mapped to their corresponding GPU
     ResourceKind, carrying the reflected native backend slot for the given
-    stage.
+    stage. Texture entries also carry the reflected view dimension, sample type
+    and multisampled flag, which WebGPU validates against the shader itself.
+
+    @warning Combined texture+sampler declarations (@c uniform @c sampler2D) are
+             deliberately not mapped: shaders must be written Vulkan-style, with
+             a separate @c texture2D / @c textureCube and a separate @c sampler.
+             A combined declaration yields no binding-map entries at all.
 
     @param reflection  The reflection data for a single shader stage.
     @param stage       Which stage the reflection belongs to (vertex/fragment).

@@ -41,10 +41,30 @@ rive::ore::VertexFormat toOreVertexFormat (GpuVertexFormat f)
             return rive::ore::VertexFormat::float4;
         case GpuVertexFormat::uint8x4:
             return rive::ore::VertexFormat::uint8x4;
+        case GpuVertexFormat::sint8x4:
+            return rive::ore::VertexFormat::sint8x4;
         case GpuVertexFormat::snorm8x4:
             return rive::ore::VertexFormat::snorm8x4;
         case GpuVertexFormat::unorm8x4:
             return rive::ore::VertexFormat::unorm8x4;
+        case GpuVertexFormat::uint16x2:
+            return rive::ore::VertexFormat::uint16x2;
+        case GpuVertexFormat::sint16x2:
+            return rive::ore::VertexFormat::sint16x2;
+        case GpuVertexFormat::unorm16x2:
+            return rive::ore::VertexFormat::unorm16x2;
+        case GpuVertexFormat::snorm16x2:
+            return rive::ore::VertexFormat::snorm16x2;
+        case GpuVertexFormat::uint16x4:
+            return rive::ore::VertexFormat::uint16x4;
+        case GpuVertexFormat::sint16x4:
+            return rive::ore::VertexFormat::sint16x4;
+        case GpuVertexFormat::float16x2:
+            return rive::ore::VertexFormat::float16x2;
+        case GpuVertexFormat::float16x4:
+            return rive::ore::VertexFormat::float16x4;
+        case GpuVertexFormat::uint32:
+            return rive::ore::VertexFormat::uint32;
         default:
             return rive::ore::VertexFormat::float4;
     }
@@ -182,6 +202,12 @@ rive::ore::BlendFactor toOreBlendFactor (GpuBlendFactor f)
             return rive::ore::BlendFactor::dstAlpha;
         case GpuBlendFactor::oneMinusDstAlpha:
             return rive::ore::BlendFactor::oneMinusDstAlpha;
+        case GpuBlendFactor::srcAlphaSaturated:
+            return rive::ore::BlendFactor::srcAlphaSaturated;
+        case GpuBlendFactor::blendColor:
+            return rive::ore::BlendFactor::blendColor;
+        case GpuBlendFactor::oneMinusBlendColor:
+            return rive::ore::BlendFactor::oneMinusBlendColor;
         default:
             return rive::ore::BlendFactor::one;
     }
@@ -210,19 +236,184 @@ rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
 {
     switch (f)
     {
+        case GpuTextureFormat::r8unorm:
+            return rive::ore::TextureFormat::r8unorm;
+        case GpuTextureFormat::rg8unorm:
+            return rive::ore::TextureFormat::rg8unorm;
         case GpuTextureFormat::rgba8unorm:
             return rive::ore::TextureFormat::rgba8unorm;
+        case GpuTextureFormat::rgba8snorm:
+            return rive::ore::TextureFormat::rgba8snorm;
         case GpuTextureFormat::bgra8unorm:
             return rive::ore::TextureFormat::bgra8unorm;
         case GpuTextureFormat::rgba16float:
             return rive::ore::TextureFormat::rgba16float;
+        case GpuTextureFormat::rg16float:
+            return rive::ore::TextureFormat::rg16float;
+        case GpuTextureFormat::r16float:
+            return rive::ore::TextureFormat::r16float;
+        case GpuTextureFormat::rgba32float:
+            return rive::ore::TextureFormat::rgba32float;
+        case GpuTextureFormat::rg32float:
+            return rive::ore::TextureFormat::rg32float;
+        case GpuTextureFormat::r32float:
+            return rive::ore::TextureFormat::r32float;
+        case GpuTextureFormat::rgb10a2unorm:
+            return rive::ore::TextureFormat::rgb10a2unorm;
+        case GpuTextureFormat::r11g11b10float:
+            return rive::ore::TextureFormat::r11g11b10float;
+        case GpuTextureFormat::depth16unorm:
+            return rive::ore::TextureFormat::depth16unorm;
         case GpuTextureFormat::depth24plusStencil8:
             return rive::ore::TextureFormat::depth24plusStencil8;
         case GpuTextureFormat::depth32float:
             return rive::ore::TextureFormat::depth32float;
+        case GpuTextureFormat::depth32floatStencil8:
+            return rive::ore::TextureFormat::depth32floatStencil8;
+        case GpuTextureFormat::bc1unorm:
+            return rive::ore::TextureFormat::bc1unorm;
+        case GpuTextureFormat::bc3unorm:
+            return rive::ore::TextureFormat::bc3unorm;
+        case GpuTextureFormat::bc7unorm:
+            return rive::ore::TextureFormat::bc7unorm;
+        case GpuTextureFormat::etc2rgb8:
+            return rive::ore::TextureFormat::etc2rgb8;
+        case GpuTextureFormat::etc2rgba8:
+            return rive::ore::TextureFormat::etc2rgba8;
+        case GpuTextureFormat::astc4x4:
+            return rive::ore::TextureFormat::astc4x4;
+        case GpuTextureFormat::astc6x6:
+            return rive::ore::TextureFormat::astc6x6;
+        case GpuTextureFormat::astc8x8:
+            return rive::ore::TextureFormat::astc8x8;
         default:
             return rive::ore::TextureFormat::rgba8unorm;
     }
+}
+
+rive::ore::TextureType toOreTextureType (GpuTextureType t)
+{
+    switch (t)
+    {
+        case GpuTextureType::cube:
+            return rive::ore::TextureType::cube;
+        case GpuTextureType::texture3D:
+            return rive::ore::TextureType::texture3D;
+        case GpuTextureType::array2D:
+            return rive::ore::TextureType::array2D;
+        case GpuTextureType::texture2D:
+        default:
+            return rive::ore::TextureType::texture2D;
+    }
+}
+
+rive::ore::TextureViewDimension toOreViewDimension (GpuTextureViewDimension d)
+{
+    switch (d)
+    {
+        case GpuTextureViewDimension::cube:
+            return rive::ore::TextureViewDimension::cube;
+        case GpuTextureViewDimension::texture3D:
+            return rive::ore::TextureViewDimension::texture3D;
+        case GpuTextureViewDimension::array2D:
+            return rive::ore::TextureViewDimension::array2D;
+        case GpuTextureViewDimension::cubeArray:
+            return rive::ore::TextureViewDimension::cubeArray;
+        case GpuTextureViewDimension::texture2D:
+        default:
+            return rive::ore::TextureViewDimension::texture2D;
+    }
+}
+
+/** The view dimension that covers a whole texture of the given storage shape. */
+GpuTextureViewDimension defaultViewDimension (GpuTextureType t)
+{
+    switch (t)
+    {
+        case GpuTextureType::cube:
+            return GpuTextureViewDimension::cube;
+        case GpuTextureType::texture3D:
+            return GpuTextureViewDimension::texture3D;
+        case GpuTextureType::array2D:
+            return GpuTextureViewDimension::array2D;
+        case GpuTextureType::texture2D:
+        default:
+            return GpuTextureViewDimension::texture2D;
+    }
+}
+
+rive::ore::TextureAspect toOreTextureAspect (GpuTextureAspect a)
+{
+    switch (a)
+    {
+        case GpuTextureAspect::depthOnly:
+            return rive::ore::TextureAspect::depthOnly;
+        case GpuTextureAspect::stencilOnly:
+            return rive::ore::TextureAspect::stencilOnly;
+        case GpuTextureAspect::all:
+        default:
+            return rive::ore::TextureAspect::all;
+    }
+}
+
+rive::ore::LoadOp toOreLoadOp (GpuLoadOp op)
+{
+    switch (op)
+    {
+        case GpuLoadOp::load:
+            return rive::ore::LoadOp::load;
+        case GpuLoadOp::dontCare:
+            return rive::ore::LoadOp::dontCare;
+        case GpuLoadOp::clear:
+        default:
+            return rive::ore::LoadOp::clear;
+    }
+}
+
+rive::ore::StoreOp toOreStoreOp (GpuStoreOp op)
+{
+    return op == GpuStoreOp::discard ? rive::ore::StoreOp::discard : rive::ore::StoreOp::store;
+}
+
+rive::ore::Filter toOreFilter (GpuFilter f)
+{
+    return f == GpuFilter::linear ? rive::ore::Filter::linear : rive::ore::Filter::nearest;
+}
+
+rive::ore::WrapMode toOreWrapMode (GpuWrapMode w)
+{
+    switch (w)
+    {
+        case GpuWrapMode::repeat:
+            return rive::ore::WrapMode::repeat;
+        case GpuWrapMode::mirrorRepeat:
+            return rive::ore::WrapMode::mirrorRepeat;
+        case GpuWrapMode::clampToEdge:
+        default:
+            return rive::ore::WrapMode::clampToEdge;
+    }
+}
+
+rive::ore::ColorWriteMask toOreColorWriteMask (GpuColorWriteMask m)
+{
+    return static_cast<rive::ore::ColorWriteMask> (static_cast<uint8_t> (m));
+}
+
+rive::ore::SamplerDesc toOreSamplerDesc (const GpuSamplerDesc& src)
+{
+    rive::ore::SamplerDesc sd;
+    sd.minFilter = toOreFilter (src.minFilter);
+    sd.magFilter = toOreFilter (src.magFilter);
+    sd.mipmapFilter = toOreFilter (src.mipmapFilter);
+    sd.wrapU = toOreWrapMode (src.wrapU);
+    sd.wrapV = toOreWrapMode (src.wrapV);
+    sd.wrapW = toOreWrapMode (src.wrapW);
+    sd.compare = src.compare.has_value() ? toOreCompare (*src.compare) : rive::ore::CompareFunction::none;
+    sd.minLod = src.minLod;
+    sd.maxLod = src.maxLod;
+    sd.maxAnisotropy = src.maxAnisotropy;
+    sd.label = src.label;
+    return sd;
 }
 
 } // namespace GpuPipelineHelpers
@@ -577,6 +768,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
             pipeDesc.colorTargets[i].blend.srcAlpha = toOreBlendFactor (src.blend.srcAlpha);
             pipeDesc.colorTargets[i].blend.dstAlpha = toOreBlendFactor (src.blend.dstAlpha);
             pipeDesc.colorTargets[i].blend.alphaOp = toOreBlendOp (src.blend.alphaOp);
+            pipeDesc.colorTargets[i].writeMask = toOreColorWriteMask (src.writeMask);
         }
     }
 
@@ -638,6 +830,10 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
             sd.magFilter = rive::ore::Filter::linear;
             sd.wrapU = rive::ore::WrapMode::clampToEdge;
             sd.wrapV = rive::ore::WrapMode::clampToEdge;
+            sd.wrapW = rive::ore::WrapMode::clampToEdge;
+
+            if (entry.kind == rive::ore::BindingKind::comparisonSampler)
+                sd.compare = rive::ore::CompareFunction::lessEqual;
 
             if (auto sampler = oreCtx->makeSampler (sd))
                 implRef->samplersPerGroup[g].push_back ({ entry.binding, std::move (sampler) });

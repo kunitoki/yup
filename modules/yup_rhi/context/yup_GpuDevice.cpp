@@ -97,6 +97,88 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
 
 //==============================================================================
 
+bool GpuDevice::isFormatSupported (GpuTextureFormat format) const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    if (oreCtx == nullptr)
+        return false;
+
+    const auto& features = oreCtx->features();
+
+    switch (format)
+    {
+        case GpuTextureFormat::bc1unorm:
+        case GpuTextureFormat::bc3unorm:
+        case GpuTextureFormat::bc7unorm:
+            return features.bc;
+
+        case GpuTextureFormat::etc2rgb8:
+        case GpuTextureFormat::etc2rgba8:
+            return features.etc2;
+
+        case GpuTextureFormat::astc4x4:
+        case GpuTextureFormat::astc6x6:
+        case GpuTextureFormat::astc8x8:
+            return features.astc;
+
+        default:
+            return true;
+    }
+}
+
+bool GpuDevice::isFormatRenderable (GpuTextureFormat format) const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    if (oreCtx == nullptr)
+        return false;
+
+    const auto& features = oreCtx->features();
+
+    switch (format)
+    {
+        // 32-bit float attachments are the strictest ask.
+        case GpuTextureFormat::rgba32float:
+        case GpuTextureFormat::rg32float:
+        case GpuTextureFormat::r32float:
+            return features.colorBufferFloat;
+
+        // WebGL2 can expose half-float attachments without the full-float ones.
+        case GpuTextureFormat::rgba16float:
+        case GpuTextureFormat::rg16float:
+        case GpuTextureFormat::r16float:
+        case GpuTextureFormat::r11g11b10float:
+            return features.colorBufferFloat || features.colorBufferHalfFloat;
+
+        // Block-compressed formats are never renderable.
+        case GpuTextureFormat::bc1unorm:
+        case GpuTextureFormat::bc3unorm:
+        case GpuTextureFormat::bc7unorm:
+        case GpuTextureFormat::etc2rgb8:
+        case GpuTextureFormat::etc2rgba8:
+        case GpuTextureFormat::astc4x4:
+        case GpuTextureFormat::astc6x6:
+        case GpuTextureFormat::astc8x8:
+            return false;
+
+        default:
+            return true;
+    }
+}
+
+bool GpuDevice::isAnisotropicFilteringAvailable() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr && oreCtx->features().anisotropicFiltering;
+}
+
+uint32_t GpuDevice::getMaximumSampleCount() const noexcept
+{
+    auto* oreCtx = getGpuContext();
+    return oreCtx != nullptr ? oreCtx->features().maxSamples : 1u;
+}
+
+//==============================================================================
+
 ReferenceCountedObjectPtr<GpuBuffer> GpuDevice::createBuffer (GpuBufferType type,
                                                               const void* data,
                                                               size_t byteSize)
@@ -172,11 +254,63 @@ GpuDevice::~GpuDevice()
     // A backend that forgets releasePooledResources() would let pooled ore buffers
     // be destroyed after the ore context that created them.
     jassert (uniformBufferPool.isEmpty());
+    jassert (retiredFrames.empty());
 }
 
 void GpuDevice::releasePooledResources() noexcept
 {
+    retiredFrames.clear();
     uniformBufferPool.clear();
+}
+
+//==============================================================================
+
+uint64_t GpuDevice::beginFrameGeneration()
+{
+    ++frameGeneration;
+
+    releaseRetiredFrames (getSafeFrameGeneration());
+
+    return frameGeneration;
+}
+
+uint64_t GpuDevice::getSafeFrameGeneration() const noexcept
+{
+    return frameGeneration > framesInFlight ? frameGeneration - framesInFlight : 0;
+}
+
+void GpuDevice::retireFrameResources (uint64_t generation,
+                                      std::vector<rive::rcp<rive::ore::Buffer>> buffers,
+                                      std::vector<rive::rcp<rive::ore::TextureView>> views,
+                                      std::vector<rive::rcp<rive::ore::Sampler>> samplers)
+{
+    if (buffers.empty() && views.empty() && samplers.empty())
+        return;
+
+    retiredFrames.push_back ({ generation, std::move (buffers), std::move (views), std::move (samplers) });
+}
+
+void GpuDevice::releaseRetiredFrames (uint64_t generation)
+{
+    if (retiredFrames.empty())
+        return;
+
+    auto isSafe = [generation] (const RetiredFrame& frame)
+    {
+        return frame.generation <= generation;
+    };
+
+    for (auto& frame : retiredFrames)
+    {
+        if (! isSafe (frame))
+            continue;
+
+        for (auto& buffer : frame.buffers)
+            uniformBufferPool.release (std::move (buffer));
+    }
+
+    retiredFrames.erase (std::remove_if (retiredFrames.begin(), retiredFrames.end(), isSafe),
+                         retiredFrames.end());
 }
 
 //==============================================================================
