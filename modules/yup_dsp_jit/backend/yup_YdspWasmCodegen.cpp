@@ -1650,7 +1650,8 @@ private:
                     break;
 
                 case YdspIrTerm::branch:
-                    emitBranchTo (block.termTarget, false);
+                    if (block.termTarget != i + 1)
+                        emitBranchTo (block.termTarget, false);
                     break;
 
                 case YdspIrTerm::branchIf:

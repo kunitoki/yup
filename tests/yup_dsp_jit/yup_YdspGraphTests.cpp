@@ -427,6 +427,45 @@ TEST (YdspJitGraphTests, StatePersistsAcrossBlocks)
     dumpAsmOnFailure (graph);
 }
 
+TEST (YdspJitGraphTests, CommaSeparatedStateDeclarationsStayIndependentAcrossBlocks)
+{
+    YdspCompiler compiler;
+
+    auto graph = compilePatch (R"YDSP(
+        processor Counter {
+            output stream out;
+            state float x, y, z;
+            process {
+                x = x + 1.0;
+                y = y + 2.0;
+                z = z + 3.0;
+                out = x + y + z;
+            }
+        }
+        graph G { output stream y; node c = Counter; connection { c.out -> y; } }
+    )YDSP",
+                               compiler);
+
+    ASSERT_TRUE (graph.isValid());
+    graph.prepare (44100.0, 4);
+
+    std::vector<float> output (12, 0.0f);
+    float* outPtrs[] = { output.data() };
+
+    for (int block = 0; block < 3; ++block)
+    {
+        runProcess32 (graph, nullptr, outPtrs, 4);
+        outPtrs[0] += 4;
+    }
+
+    // Each sample advances x by 1, y by 2 and z by 3, so the sum grows by 6
+    // per sample and keeps counting across block boundaries.
+    for (int i = 0; i < 12; ++i)
+        EXPECT_NEAR (6.0f * static_cast<float> (i + 1), output[static_cast<size_t> (i)], 1e-4f);
+
+    dumpAsmOnFailure (graph);
+}
+
 TEST (YdspJitGraphTests, RunsTanhIntrinsic)
 {
     YdspCompiler compiler;

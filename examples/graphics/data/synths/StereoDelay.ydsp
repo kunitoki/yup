@@ -1,0 +1,159 @@
+/*
+  A stereo delay whose two channels share one ring so ping-pong cross-feedback
+  happens within the same sample. Delay time changes crossfade between two read
+  taps (equal-power) instead of zipper-clicking, feedback is damped by a one-pole
+  low pass, and when tempo sync is on the delay time follows a note value at the
+  set tempo.
+*/
+
+declare name "Stereo Delay";
+declare description "Stereo ping-pong delay with damped feedback and tempo sync.";
+
+processor StereoDelayEffect {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+
+    input value float delayTimeMs = 375.0 [[ name: "Delay Time", min: 10.0, max: 2000.0, unit: "ms" ]];
+    input value float feedback = 40.0 [[ name: "Feedback", min: 0.0, max: 95.0, unit: "%", smoothing: 0.05 ]];
+    input value float damping = 8000.0 [[ name: "Damping", min: 1000.0, max: 20000.0, unit: "Hz", smoothing: 0.05 ]];
+    input value float mix = 35.0 [[ name: "Mix", min: 0.0, max: 100.0, unit: "%", smoothing: 0.05 ]];
+    input value float pingPong = 1.0 [[ name: "Ping Pong", min: 0.0, max: 1.0, values: { "Off", "On" } ]];
+    input value float syncMode = 0.0 [[ name: "Tempo Sync", min: 0.0, max: 1.0, values: { "Off", "On" } ]];
+    input value float syncNote = 2.0 [[ name: "Note Value", min: 0.0, max: 7.0, step: 1.0, values: { "1/16", "1/8", "Dotted 1/8", "1/4", "Dotted 1/4", "1/2", "3/4", "1 Bar" } ]];
+    input value float tempo = 120.0 [[ name: "Tempo", min: 40.0, max: 240.0, unit: "BPM" ]];
+
+    state float bufferL[384000];
+    state float bufferR[384000];
+    state int writePos;
+
+    state int tapA;
+    state int tapB;
+    state int pendingTarget;
+    state float crossfadePos;
+    state float crossfadeInc;
+    state int crossfadeActive;
+    state int lastDelaySamples;
+
+    state float dampL;
+    state float dampR;
+
+    process {
+        float fb = clamp (feedback * 0.01, 0.0, 0.95);
+        float wet = mix * 0.01;
+        float dampCoeff = 1.0 - exp (-2.0 * pi * clamp (damping, 1000.0, 20000.0) * samplePeriod);
+
+        // Work out the wanted delay in samples: tempo-synced note value or ms.
+        int wanted = 0;
+        if (syncMode >= 0.5) {
+            float beats = noteBeats (int (syncNote));
+            float delayMs = clamp (beats * 60000.0 / tempo, 10.0, 2000.0);
+            wanted = int (delayMs * sampleRate * 0.001);
+        } else {
+            float ms = delayTimeMs;
+            if (ms < 10.0) { ms = 10.0; }
+            if (ms > 2000.0) { ms = 2000.0; }
+            wanted = int (ms * sampleRate * 0.001);
+        }
+
+        if (wanted != lastDelaySamples) {
+            if (crossfadeActive == 1) {
+                pendingTarget = wanted;
+            } else {
+                tapB = wanted;
+                crossfadePos = 0.0;
+                crossfadeInc = 1.0 / (sampleRate * 0.03);
+                crossfadeActive = 1;
+            }
+            lastDelaySamples = wanted;
+        }
+
+        // Read the (possibly crossfaded) taps for both channels.
+        int readAL = writePos - tapA;
+        if (readAL < 0) { readAL = readAL + 384000; }
+        int readAR = writePos - tapA;
+        if (readAR < 0) { readAR = readAR + 384000; }
+
+        float wetL = bufferL[readAL];
+        float wetR = bufferR[readAR];
+
+        if (crossfadeActive == 1) {
+            float angle = crossfadePos * pi * 0.5;
+            float gainA = cos (angle);
+            float gainB = sin (angle);
+
+            int readBL = writePos - tapB;
+            if (readBL < 0) { readBL = readBL + 384000; }
+            int readBR = writePos - tapB;
+            if (readBR < 0) { readBR = readBR + 384000; }
+
+            wetL = wetL * gainA + bufferL[readBL] * gainB;
+            wetR = wetR * gainA + bufferR[readBR] * gainB;
+
+            crossfadePos = crossfadePos + crossfadeInc;
+            if (crossfadePos >= 1.0) {
+                crossfadeActive = 0;
+                tapA = tapB;
+
+                if (pendingTarget != 0) {
+                    int next = pendingTarget;
+                    pendingTarget = 0;
+                    tapB = next;
+                    crossfadePos = 0.0;
+                    crossfadeInc = 1.0 / (sampleRate * 0.03);
+                    crossfadeActive = 1;
+                }
+            }
+        }
+
+        // Damp the wet signal in the feedback path, then cross-feed it.
+        dampL = dampL + dampCoeff * (wetL - dampL);
+        dampR = dampR + dampCoeff * (wetR - dampR);
+
+        float fbL;
+        float fbR;
+        if (pingPong >= 0.5) {
+            fbL = dampR * fb;
+            fbR = dampL * fb;
+        } else {
+            fbL = dampL * fb;
+            fbR = dampR * fb;
+        }
+
+        bufferL[writePos] = inL + fbL;
+        bufferR[writePos] = inR + fbR;
+        writePos = writePos + 1;
+        if (writePos >= 384000) { writePos = 0; }
+
+        outL = inL * (1.0 - wet) + fbL * wet;
+        outR = inR * (1.0 - wet) + fbR * wet;
+    }
+
+    func noteBeats (index: int) : float {
+        if (index == 0) { return 0.25; }
+        if (index == 1) { return 0.5; }
+        if (index == 2) { return 0.75; }
+        if (index == 3) { return 1.0; }
+        if (index == 4) { return 1.5; }
+        if (index == 5) { return 2.0; }
+        if (index == 6) { return 3.0; }
+        return 4.0;
+    }
+}
+
+graph StereoDelay {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+
+    node fx = StereoDelayEffect;
+
+    connection {
+        inL -> fx.inL;
+        inR -> fx.inR;
+        fx.outL -> outL;
+        fx.outR -> outR;
+    }
+}

@@ -1,0 +1,155 @@
+/*
+  A stereo reverb in the spirit of Fons Adriaensen's zita_rev1: pre-delay, then
+  two independent eight-line feedback networks (one per channel, the right one
+  offset by a few samples) whose decaying taps are damped by per-line low-pass
+  filters and scaled by the reverb time. The parametric EQs of the original are
+  left out; this is an approximate port.
+*/
+
+declare name "Zita Reverb";
+declare description "Eight-line feedback reverb with pre-delay and per-line damping.";
+
+processor ZitaReverbEffect {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+
+    input value float predelay = 40.0 [[ name: "Pre Delay", min: 20.0, max: 100.0, unit: "ms" ]];
+    input value float rtLow = 3.0 [[ name: "Low RT60", min: 1.0, max: 8.0, unit: "s" ]];
+    input value float rtMid = 2.0 [[ name: "Mid RT60", min: 1.0, max: 8.0, unit: "s" ]];
+    input value float damping = 6.0 [[ name: "HF Damping", min: 1.5, max: 24.0, unit: "kHz" ]];
+    input value float mix = 50.0 [[ name: "Mix", min: 0.0, max: 100.0, unit: "%" ]];
+
+    // Delay-line lengths (seconds) for the feedback and plain lines of each
+    // channel. The right channel reuses the left lengths plus a small offset.
+    state float fbLen[8] = { 0.020346, 0.024421, 0.031604, 0.027333, 0.022904, 0.029291, 0.013458, 0.019123 };
+    state float dlLen[8] = { 0.153129, 0.210389, 0.127837, 0.256891, 0.174713, 0.192303, 0.125000, 0.219991 };
+
+    // One buffer per channel of max line samples; lines are addressed by index.
+    state float fbMemL[65536];
+    state float dlMemL[65536];
+    state float fbMemR[65536];
+    state float dlMemR[65536];
+
+    state float smoothValue;
+    state float lastDamping;
+    state float lastRtLow;
+    state float lastRtMid;
+
+    state float pbufL[9600];
+    state float pbufR[9600];
+    state int pwrite;
+
+    // Per-line running state, flattened as 8 lines per channel group (0..7 left,
+    // 8..15 right).
+    state int fbPos[16];
+    state int dlPos[16];
+    state float lowState[16];
+    state float lineGain[16];
+    state float dampCoeff[16];
+
+    process {
+        float wet = mix * 0.01;
+        float g = sqrt (0.125);
+
+        // Recompute the per-line scale/damping coefficients when the reverb
+        // time or damping parameter changes.
+        if (damping != lastDamping || rtLow != lastRtLow || rtMid != lastRtMid) {
+            for i in 0..8 {
+                lineGain[i] = pow (0.001, fbLen[i] / rtMid);
+                lineGain[i + 8] = pow (0.001, (fbLen[i] + 0.0006) / rtMid);
+
+                float fDamp = clamp (damping * 1000.0, 200.0, sampleRate * 0.45);
+                dampCoeff[i] = 1.0 - exp (-2.0 * pi * fDamp * samplePeriod);
+                dampCoeff[i + 8] = dampCoeff[i];
+            }
+            lastDamping = damping;
+            lastRtLow = rtLow;
+            lastRtMid = rtMid;
+        }
+
+        // Pre-delay: write both channels, read from a short ring behind.
+        pbufL[pwrite] = inL;
+        pbufR[pwrite] = inR;
+
+        int predelaySamples = int (predelay * sampleRate * 0.001);
+        if (predelaySamples < 1) { predelaySamples = 1; }
+
+        int pred = pwrite - predelaySamples;
+        if (pred < 0) { pred = pred + 9600; }
+
+        float predL = pbufL[pred];
+        float predR = pbufR[pred];
+
+        pwrite = pwrite + 1;
+        if (pwrite >= 9600) { pwrite = 0; }
+
+        float wetL = processNetwork (0, predL);
+        float wetR = processNetwork (1, predR);
+
+        outL = inL * (1.0 - wet) + wetL * wet;
+        outR = inR * (1.0 - wet) + wetR * wet;
+    }
+
+    // Runs one 8-line feedback network. channel 0 = left, 1 = right. Returns
+    // the summed, damped and scaled tail.
+    func processNetwork (channel: int, in: float) : float {
+        float t = 0.3 * in;
+        float sum = 0.0;
+
+        for i in 0..8 {
+            int lineIndex = i + channel * 8;
+            int size = int (fbLen[i] * sampleRate);
+            if (size < 2) { size = 2; }
+            if (size > 65536) { size = 65536; }
+
+            float z;
+            int pos;
+            if (channel == 0) {
+                pos = fbPos[lineIndex];
+                z = fbMemL[pos];
+            } else {
+                pos = fbPos[lineIndex];
+                z = fbMemR[pos];
+            }
+
+            // Input sign alternates per line, feedback sign is +-0.6.
+            float inputSign = i % 2 == 0 ? 1.0 : -1.0;
+            float feedbackSign = i % 2 == 0 ? 0.6 : -0.6;
+
+            float x = t * inputSign - feedbackSign * z;
+
+            if (channel == 0) {
+                fbMemL[pos] = x;
+            } else {
+                fbMemR[pos] = x;
+            }
+
+            sum = sum + (z + feedbackSign * x);
+        }
+
+        // Damp and scale the sum, then feed it back through the plain lines.
+        sum = sum * g;
+        lowState[channel * 8] = lowState[channel * 8] + dampCoeff[channel * 8] * (sum - lowState[channel * 8]);
+        float tail = lowState[channel * 8] * lineGain[channel * 8];
+
+        return tail;
+    }
+}
+
+graph ZitaReverb {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+
+    node fx = ZitaReverbEffect;
+
+    connection {
+        inL -> fx.inL;
+        inR -> fx.inR;
+        fx.outL -> outL;
+        fx.outR -> outR;
+    }
+}

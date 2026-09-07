@@ -299,7 +299,9 @@ public:
         clearButton->onClick = [this]
         {
             keyboardState.allNotesOff (0);
-            keyboardComponent.takeKeyboardFocus();
+
+            if (keyboardComponent.isVisible())
+                keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*clearButton);
 
@@ -454,6 +456,9 @@ public:
             layoutMeters (bounds.removeFromBottom (proportionOfHeight (0.06f)).reduced (proportionOfWidth (0.04f), 0.0f));
 
         layoutParamArea (bounds);
+
+        if (keyboardComponent.isVisible())
+            keyboardComponent.takeKeyboardFocus();
     }
 
     void paint (yup::Graphics& g) override
@@ -491,7 +496,7 @@ public:
 
     void mouseDown (const yup::MouseEvent&) override
     {
-        if (! showingEditorTab)
+        if (keyboardComponent.isVisible())
             keyboardComponent.takeKeyboardFocus();
         else
             takeKeyboardFocus();
@@ -927,6 +932,9 @@ private:
         YUP_DBG (synthSources[static_cast<size_t> (index)].name << " - " << graph->getParameterCount() << " parameter(s)");
 
         rebuildParamUI (*graph);
+        
+        if (keyboardComponent.isVisible())
+            keyboardComponent.takeKeyboardFocus();
     }
 
     std::shared_ptr<yup::YdspAudioGraph> getCurrentGraph() const
@@ -982,6 +990,9 @@ private:
         paramPrevButton->setVisible (showParamPaging);
         paramNextButton->setVisible (showParamPaging);
         paramPageLabel->setVisible (showParamPaging);
+
+        if (keyboardComponent.isVisible())
+            keyboardComponent.takeKeyboardFocus();
     }
 
     void updateEditorControlsVisible()
@@ -1191,6 +1202,9 @@ private:
 
         if (paramPageCount > 1)
             layoutParamNav (navBounds);
+
+        if (keyboardComponent.isVisible())
+            keyboardComponent.takeKeyboardFocus();
     }
 
     int computeParamPageCapacity (const yup::Rectangle<float>& bounds) const
@@ -1335,9 +1349,6 @@ private:
             const int current = synthCombo->getSelectedId() - 1;
             if (current > 0)
                 selectSynth (current - 1);
-
-            if (! showingEditorTab)
-                keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*patchPrevButton);
 
@@ -1349,9 +1360,6 @@ private:
             const int last = static_cast<int> (synthSources.size()) - 1;
             if (current >= 0 && current < last)
                 selectSynth (current + 1);
-
-            if (! showingEditorTab)
-                keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*patchNextButton);
 
@@ -1380,7 +1388,8 @@ private:
         inputSourceCombo->onSelectedItemChanged = [this]
         {
             setEffectInputSource (inputSourceCombo->getSelectedId());
-            keyboardComponent.takeKeyboardFocus();
+            if (keyboardComponent.isVisible())
+                keyboardComponent.takeKeyboardFocus();
         };
         inputSourceCombo->setSelectedItemIndex (1, yup::dontSendNotification); // Drum Loop
         inputSourceCombo->setClickingGrabFocus (false);
@@ -1411,8 +1420,12 @@ private:
         paramPrevButton->onClick = [this]
         {
             paramPageIndex = std::max (0, paramPageIndex - 1);
+
             resized();
             repaint();
+
+            if (keyboardComponent.isVisible())
+                keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*paramPrevButton);
 
@@ -1421,8 +1434,12 @@ private:
         paramNextButton->onClick = [this]
         {
             paramPageIndex = std::min (paramPageCount - 1, paramPageIndex + 1);
+
             resized();
             repaint();
+
+            if (keyboardComponent.isVisible())
+                keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*paramNextButton);
 

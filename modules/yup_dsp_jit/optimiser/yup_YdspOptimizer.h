@@ -288,6 +288,17 @@ public:
     */
     void deadCodeElimination (YdspIrFunction& fn);
 
+    /** Removes basic blocks unreachable from the entry block.
+
+        A lowered function with early returns leaves the joins of if/else
+        regions whose both arms return as blocks nothing ever branches into;
+        their edges to live blocks would otherwise confuse the register
+        allocator's liveness pass. The pass compacts the reachable blocks and
+        rewrites terminator and loop region indices so the codegen never sees a
+        dead block.
+    */
+    void removeUnreachableBlocks (YdspIrFunction& fn);
+
     /** Runs the loop-invariant-code-motion pass over the given function.
 
         Hoists pure, invariant computations out of bounded loops into the

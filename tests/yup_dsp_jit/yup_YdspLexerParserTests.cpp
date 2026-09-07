@@ -427,6 +427,142 @@ TEST (YdspParserTests, ParsesStateArrayWithoutExplicitSizeInferringFromTheList)
     EXPECT_EQ (4u, processor.states[0].initialisers.size());
 }
 
+TEST (YdspParserTests, ParsesMultipleStateDeclarationsSharingOneType)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor P {
+            output stream out;
+            state float x, y, z;
+            process { out = x + y + z; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors());
+    ASSERT_NE (nullptr, program);
+    ASSERT_EQ (1u, program->processors.size());
+
+    const auto& processor = program->processors[0];
+    ASSERT_EQ (3u, processor.states.size());
+    EXPECT_EQ ("x", processor.states[0].name);
+    EXPECT_EQ (YdspPrimitiveType::float32Type, processor.states[0].type);
+    EXPECT_EQ (0, processor.states[0].arraySize);
+    EXPECT_TRUE (processor.states[0].structName.isEmpty());
+    EXPECT_EQ ("y", processor.states[1].name);
+    EXPECT_EQ (YdspPrimitiveType::float32Type, processor.states[1].type);
+    EXPECT_EQ ("z", processor.states[2].name);
+    EXPECT_EQ (YdspPrimitiveType::float32Type, processor.states[2].type);
+
+    // The declarators keep the locations of their own names (later columns on the same line).
+    EXPECT_EQ (processor.states[0].location.line, processor.states[1].location.line);
+    EXPECT_LT (processor.states[0].location.column, processor.states[1].location.column);
+    EXPECT_LT (processor.states[1].location.column, processor.states[2].location.column);
+}
+
+TEST (YdspParserTests, ParsesMultipleStateDeclarationsWithArrayAndInitialiserMix)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor P {
+            output stream out;
+            state float amp[2] = { 0.5, 1.0 }, freq = 440.0, table[] = { 2.0, 4.0, 8.0 }, inc;
+            process { out = amp[0] * freq + table[0] + inc; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors());
+    ASSERT_NE (nullptr, program);
+
+    const auto& processor = program->processors[0];
+    ASSERT_EQ (4u, processor.states.size());
+
+    EXPECT_EQ ("amp", processor.states[0].name);
+    EXPECT_EQ (2, processor.states[0].arraySize);
+    ASSERT_EQ (2u, processor.states[0].initialisers.size());
+
+    EXPECT_EQ ("freq", processor.states[1].name);
+    EXPECT_EQ (0, processor.states[1].arraySize);
+    ASSERT_EQ (1u, processor.states[1].initialisers.size());
+
+    EXPECT_EQ ("table", processor.states[2].name);
+    EXPECT_EQ (3, processor.states[2].arraySize);
+    ASSERT_EQ (3u, processor.states[2].initialisers.size());
+
+    EXPECT_EQ ("inc", processor.states[3].name);
+    EXPECT_EQ (0, processor.states[3].arraySize);
+    EXPECT_TRUE (processor.states[3].initialisers.empty());
+}
+
+TEST (YdspParserTests, ParsesMultipleStructAndAnnotatedStateDeclarations)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor P {
+            struct Voice { float phase; }
+            Voice mono, voices[2];
+            state int active [[ role: voiceActivity ]], released;
+            init { mono.phase = 0.5; }
+            process { out = mono.phase + voices[1].phase; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors());
+    ASSERT_NE (nullptr, program);
+
+    const auto& processor = program->processors[0];
+
+    ASSERT_EQ (4u, processor.states.size());
+
+    EXPECT_EQ ("Voice", processor.states[0].structName);
+    EXPECT_EQ ("mono", processor.states[0].name);
+    EXPECT_EQ (0, processor.states[0].arraySize);
+    EXPECT_EQ ("Voice", processor.states[1].structName);
+    EXPECT_EQ ("voices", processor.states[1].name);
+    EXPECT_EQ (2, processor.states[1].arraySize);
+
+    EXPECT_EQ (YdspPrimitiveType::int32Type, processor.states[2].type);
+    EXPECT_EQ ("active", processor.states[2].name);
+    ASSERT_EQ (1u, processor.states[2].annotations.size());
+    EXPECT_EQ ("role", processor.states[2].annotations[0].first);
+    EXPECT_EQ ("voiceActivity", processor.states[2].annotations[0].second);
+
+    EXPECT_EQ (YdspPrimitiveType::int32Type, processor.states[3].type);
+    EXPECT_EQ ("released", processor.states[3].name);
+    EXPECT_TRUE (processor.states[3].annotations.empty());
+}
+
+TEST (YdspParserTests, ReportsMissingStateDeclaratorNameOnceAndStopsTheList)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor P {
+            output stream out;
+            state float x, 1.5, y;
+            process { out = x; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_TRUE (diagnostics.hasErrors());
+    ASSERT_EQ (1, diagnostics.getCount());
+    EXPECT_TRUE (diagnostics.getItem (0).message.contains ("Expected a state name"));
+
+    ASSERT_NE (nullptr, program);
+    const auto& processor = program->processors[0];
+
+    // The list stops at the bad declarator; the rest of the patch still parses.
+    ASSERT_EQ (1u, processor.states.size());
+    EXPECT_EQ ("x", processor.states[0].name);
+    ASSERT_NE (nullptr, processor.process);
+}
+
 TEST (YdspParserTests, ParsesBracedListAnnotationValue)
 {
     YdspDiagnostics diagnostics;

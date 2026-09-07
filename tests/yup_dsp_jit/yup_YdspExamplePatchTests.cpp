@@ -25,6 +25,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace yup::test
@@ -397,6 +398,21 @@ TEST_F (YdspExamplePatchTests, PulseBassCompilesAndRenders)
     testPatch ("PulseBass.ydsp");
 }
 
+TEST_F (YdspExamplePatchTests, StereoDelayCompilesAndRenders)
+{
+    testPatch ("StereoDelay.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, SubtractOneCompilesAndRenders)
+{
+    testPatch ("SubtractOne.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, TX81ZCompilesAndRenders)
+{
+    testPatch ("TX81Z.ydsp");
+}
+
 TEST_F (YdspExamplePatchTests, TremoloCompilesAndRenders)
 {
     testPatch ("Tremolo.ydsp");
@@ -744,6 +760,376 @@ TEST (YdspParamProbeTests, VoiceBankNoteOnReadsEventPitch)
         EXPECT_NEAR (460800.0f, energy, 1000.0f)
             << "noteOn misread e.pitch (block " << block << ")";
     }
+}
+
+//==============================================================================
+// Regression: a `return` inside an inlined function used to be lowered as a
+// plain value record, so the linear fall-through of later statements/returns
+// overwrote the result - every branch returned the last value. This exercises
+// a chained `if { return A; } ... return B;` function against four parameter
+// values and asserts the chosen branch actually reaches the output.
+TEST (YdspFunctionReturnTests, BranchReturnsFollowTheParameter)
+{
+    const char* patch = R"YDSP(
+processor BranchProbe {
+    output stream out;
+
+    input value float shape = 0.0;
+
+    func branchOut (shapeValue: float) : float {
+        if (shapeValue < 0.5) { return 0.2; }
+        if (shapeValue < 1.5) { return 0.6; }
+        if (shapeValue < 2.5) { return 1.0; }
+        return 0.4;
+    }
+
+    process {
+        out = branchOut (shape);
+    }
+}
+
+graph BranchProbe {
+    output stream out;
+
+    node probe = BranchProbe;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    YdspCompiler compiler;
+    auto result = compiler.compile (patch);
+    ASSERT_TRUE (result.wasOk())
+        << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 8;
+    constexpr double sampleRate = 48000.0;
+    graph.prepare (sampleRate, blockSize);
+
+    ASSERT_GE (graph.getParameterCount(), 1);
+
+    const auto& paramInfo = graph.getParameterInfo (0);
+
+    const float shapeValues[] = { 0.0f, 1.0f, 2.0f, 3.0f };
+    const float expected[] = { 0.2f, 0.6f, 1.0f, 0.4f };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        std::vector<float> out (blockSize, 0.0f);
+        YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+        graph.setParameter (paramInfo.name, shapeValues[i]);
+
+        graph.process (Span<const YdspInputBuffer> (),
+                       Span<YdspOutputBuffer> (outputs, 1),
+                       blockSize);
+
+        EXPECT_NEAR (expected[i], out[static_cast<size_t> (blockSize - 1)], 1.0e-5f)
+            << "branchOut did not return the branch for shape " << shapeValues[i];
+    }
+}
+
+// The same chain driven by literal arguments: if literals select correctly but
+// the parameter-driven case above does not, the fault is in how a parameter
+// value reaches the function argument rather than in the chain lowering.
+TEST (YdspFunctionReturnTests, LiteralArgumentsSelectTheirBranch)
+{
+    auto runWithLiteral = [] (double literal)
+    {
+        const std::string source = R"YDSP(
+processor BranchProbe {
+    output stream out;
+
+    func branchOut (shapeValue: float) : float {
+        if (shapeValue < 0.5) { return 0.2; }
+        if (shapeValue < 1.5) { return 0.6; }
+        if (shapeValue < 2.5) { return 1.0; }
+        return 0.4;
+    }
+
+    process {
+        out = branchOut ()YDSP" + std::to_string (literal) + R"YDSP();
+    }
+}
+
+graph BranchProbe {
+    output stream out;
+
+    node probe = BranchProbe;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+        YdspCompiler compiler;
+        auto result = compiler.compile (source);
+        EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+        if (! result.wasOk())
+            return 0.0;
+
+        auto graph = std::move (result).getValue();
+
+        constexpr int blockSize = 8;
+        constexpr double sampleRate = 48000.0;
+        graph.prepare (sampleRate, blockSize);
+
+        std::vector<float> out (blockSize, 0.0f);
+        YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+        graph.process (Span<const YdspInputBuffer> (),
+                       Span<YdspOutputBuffer> (outputs, 1),
+                       blockSize);
+
+        return static_cast<double> (out[static_cast<size_t> (blockSize - 1)]);
+    };
+
+    EXPECT_NEAR (0.2, runWithLiteral (0.0), 1.0e-5);
+    EXPECT_NEAR (0.6, runWithLiteral (1.0), 1.0e-5);
+    EXPECT_NEAR (1.0, runWithLiteral (2.0), 1.0e-5);
+    EXPECT_NEAR (0.4, runWithLiteral (3.0), 1.0e-5);
+}
+
+//==============================================================================
+// Nested if/else cascades. An `else if` chain and a two-level if/else go
+// through the branch-terminator path when their arms hold early returns, and
+// through if-conversion/selectB when they hold local writes in the process
+// body. Every branch is driven explicitly so a single mis-lowered arm fails.
+//==============================================================================
+
+namespace
+{
+
+double compileAndRender (const char* patch, const std::vector<double>& params)
+{
+    YdspCompiler compiler;
+    auto result = compiler.compile (patch);
+
+    if (! result.wasOk())
+        return std::numeric_limits<double>::quiet_NaN();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 8;
+    constexpr double sampleRate = 48000.0;
+    graph.prepare (sampleRate, blockSize);
+
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+        if (i >= static_cast<size_t> (graph.getParameterCount()))
+            break;
+
+        graph.setParameter (graph.getParameterInfo (static_cast<int> (i)).name, static_cast<float> (params[i]));
+    }
+
+    std::vector<float> out (static_cast<size_t> (blockSize), 0.0f);
+    YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+    graph.process (Span<const YdspInputBuffer> (),
+                   Span<YdspOutputBuffer> (outputs, 1),
+                   blockSize);
+
+    return static_cast<double> (out[static_cast<size_t> (blockSize - 1)]);
+}
+
+} // namespace
+
+TEST (YdspNestedIfElseTests, ElseIfCascadeInFunctionReturnsCorrectBranch)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input value float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.2; }
+        else if (v < 1.5) { return 0.6; }
+        else if (v < 2.5) { return 1.0; }
+        else { return 0.4; }
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.6, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (1.0, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, ElseIfCascadeWithTrailingReturn)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input value float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.2; }
+        else if (v < 1.5) { return 0.6; }
+        return 0.4;
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.6, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, TwoLevelNestedIfElseInFunctionReturnsCorrectQuadrant)
+{
+    const char* patch = R"YDSP(
+processor Nest {
+    output stream out;
+
+    input value float a = 0.0;
+    input value float b = 0.0;
+
+    func nest (a: float, b: float) : float {
+        if (a < 0.5) {
+            if (b < 0.5) { return 0.1; }
+            else { return 0.2; }
+        } else {
+            if (b < 0.5) { return 0.3; }
+            else { return 0.4; }
+        }
+    }
+
+    process {
+        out = nest (a, b);
+    }
+}
+
+graph Nest {
+    output stream out;
+
+    node probe = Nest;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0, 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 1.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 1.0, 1.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, TwoLevelNestedIfElseInProcessBodySelectsCorrectly)
+{
+    const char* patch = R"YDSP(
+processor Nest {
+    output stream out;
+
+    input value float a = 0.0;
+    input value float b = 0.0;
+
+    process {
+        float v = 0.0;
+        if (a < 0.5) {
+            if (b < 0.5) { v = 0.1; } else { v = 0.2; }
+        } else {
+            if (b < 0.5) { v = 0.3; } else { v = 0.4; }
+        }
+        out = v;
+    }
+}
+
+graph Nest {
+    output stream out;
+
+    node probe = Nest;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0, 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 1.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 1.0, 1.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, DeepElseIfCascadeInFunctionReturnsCorrectBranch)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input value float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.1; }
+        else if (v < 1.5) { return 0.2; }
+        else if (v < 2.5) { return 0.3; }
+        else if (v < 3.5) { return 0.4; }
+        else if (v < 4.5) { return 0.5; }
+        else { return 0.9; }
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+    EXPECT_NEAR (0.5, compileAndRender (patch, { 4.0 }), 1.0e-5);
+    EXPECT_NEAR (0.9, compileAndRender (patch, { 5.0 }), 1.0e-5);
 }
 
 } // namespace yup::test

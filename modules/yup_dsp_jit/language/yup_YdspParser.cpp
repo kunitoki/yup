@@ -479,7 +479,8 @@ std::unique_ptr<YdspProcessorDecl> YdspParser::parseProcessor()
 
         if (match (YdspTokenType::kwState))
         {
-            processor->states.push_back (parseState());
+            for (auto& state : parseStateList())
+                processor->states.push_back (std::move (state));
             continue;
         }
 
@@ -532,8 +533,9 @@ std::unique_ptr<YdspProcessorDecl> YdspParser::parseProcessor()
 
         if (at (YdspTokenType::identifier))
         {
-            // A struct-typed state declaration (`Voice mono;` / `Voice voices[4];`).
-            processor->states.push_back (parseState());
+            // Struct-typed state declarations (`Voice mono;` / `Voice voices[4];`).
+            for (auto& state : parseStateList())
+                processor->states.push_back (std::move (state));
             continue;
         }
 
@@ -658,85 +660,102 @@ YdspEndpointDecl YdspParser::parseEndpoint (YdspEndpointKind kind, const YdspLoc
     return endpoint;
 }
 
-YdspStateDecl YdspParser::parseState()
+std::vector<YdspStateDecl> YdspParser::parseStateList()
 {
-    YdspStateDecl state;
+    std::vector<YdspStateDecl> states;
 
     const auto& typeToken = expectIdentifier ("a type (float, int, float64, int64, bool) or a struct name");
-    const auto type = parsePrimitiveType (typeToken);
+    const auto sharedType = parsePrimitiveType (typeToken);
 
-    if (type.has_value())
+    for (;;)
     {
-        state.type = *type;
-    }
-    else
-    {
-        state.structName = typeToken.text;
-    }
+        YdspStateDecl state;
 
-    const auto& nameToken = expectIdentifier ("a state name");
-    state.name = nameToken.text;
-    state.location = { nameToken.line, nameToken.column };
-
-    if (match (YdspTokenType::lBracket))
-    {
-        if (at (YdspTokenType::rBracket))
-        {
-            // `[]` without a size: the element count comes from the
-            // `{ ... }` initialiser list parsed below (-1 = to be inferred).
-            state.arraySize = -1;
-        }
-        else if (at (YdspTokenType::identifier))
-        {
-            state.arraySizeName = current().text;
-            advance();
-
-            while (match (YdspTokenType::dot))
-                state.arraySizeName += "." + expectIdentifier ("a constant name after '.'").text;
-        }
+        if (sharedType.has_value())
+            state.type = *sharedType;
         else
+            state.structName = typeToken.text;
+
+        // A missing declarator name cannot be recovered inside the list, and
+        // expectIdentifier()'s synchronize would already have skipped past the
+        // statement boundary - so report it and give up on the remaining
+        // declarators instead of parsing a bogus one over the next declaration.
+        if (! at (YdspTokenType::identifier))
         {
-            const auto& sizeToken = expect (YdspTokenType::intLiteral, "a constant array size");
-            state.arraySize = static_cast<int> (parseIntLiteralText (sizeToken.text));
+            errorCurrent ("Expected a state name");
+            synchronize();
+            return states;
         }
 
-        expect (YdspTokenType::rBracket, "']' after the array size");
-    }
+        const auto& nameToken = expectIdentifier ("a state name");
+        state.name = nameToken.text;
+        state.location = { nameToken.line, nameToken.column };
 
-    if (match (YdspTokenType::assign))
-    {
-        if (match (YdspTokenType::lBrace))
+        if (match (YdspTokenType::lBracket))
         {
-            if (! at (YdspTokenType::rBrace))
+            if (at (YdspTokenType::rBracket))
             {
-                for (;;)
-                {
-                    state.initialisers.push_back (parseExpression());
+                // `[]` without a size: the element count comes from the
+                // `{ ... }` initialiser list parsed below (-1 = to be inferred).
+                state.arraySize = -1;
+            }
+            else if (at (YdspTokenType::identifier))
+            {
+                state.arraySizeName = current().text;
+                advance();
 
-                    if (! match (YdspTokenType::comma))
-                        break;
-
-                    if (at (YdspTokenType::rBrace))
-                        break;
-                }
+                while (match (YdspTokenType::dot))
+                    state.arraySizeName += "." + expectIdentifier ("a constant name after '.'").text;
+            }
+            else
+            {
+                const auto& sizeToken = expect (YdspTokenType::intLiteral, "a constant array size");
+                state.arraySize = static_cast<int> (parseIntLiteralText (sizeToken.text));
             }
 
-            expect (YdspTokenType::rBrace, "'}' to close the state initialiser list");
-
-            if (state.arraySize < 0 && state.structName.isEmpty() && ! state.initialisers.empty())
-                state.arraySize = static_cast<int> (state.initialisers.size());
+            expect (YdspTokenType::rBracket, "']' after the array size");
         }
-        else
+
+        if (match (YdspTokenType::assign))
         {
-            state.initialisers.push_back (parseExpression());
-        }
-    }
+            if (match (YdspTokenType::lBrace))
+            {
+                if (! at (YdspTokenType::rBrace))
+                {
+                    for (;;)
+                    {
+                        state.initialisers.push_back (parseExpression());
 
-    state.annotations = parseAnnotations();
+                        if (! match (YdspTokenType::comma))
+                            break;
+
+                        if (at (YdspTokenType::rBrace))
+                            break;
+                    }
+                }
+
+                expect (YdspTokenType::rBrace, "'}' to close the state initialiser list");
+
+                if (state.arraySize < 0 && state.structName.isEmpty() && ! state.initialisers.empty())
+                    state.arraySize = static_cast<int> (state.initialisers.size());
+            }
+            else
+            {
+                state.initialisers.push_back (parseExpression());
+            }
+        }
+
+        state.annotations = parseAnnotations();
+
+        states.push_back (std::move (state));
+
+        if (! match (YdspTokenType::comma))
+            break;
+    }
 
     expect (YdspTokenType::semi, "';' after state declaration");
 
-    return state;
+    return states;
 }
 
 YdspStructDecl YdspParser::parseStruct()

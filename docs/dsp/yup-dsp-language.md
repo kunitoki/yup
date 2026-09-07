@@ -237,6 +237,14 @@ for a program constant `N` — see [1.0](#10-program-constants)). State memory i
 allocated once in `YdspAudioGraph::prepare()` and lives for the lifetime of the
 graph, and is zeroed by `prepare()` and `reset()`.
 
+One statement may declare several states of the same type by separating the
+declarators with commas: `state float x, y, z;`. Each declarator keeps its own
+array size and optional initialiser (`state float freq = 440.0, table[4] = {
+1.0, 0.5, 0.25 }, amp;`), so the list is exactly equivalent to one `state`
+statement per declarator. An annotation block applies to the declarator it
+trails: `state int active [[ role: voiceActivity ]], released;` marks only
+`active`.
+
 A `state` declaration may carry an initialiser:
 
 ```ydsp

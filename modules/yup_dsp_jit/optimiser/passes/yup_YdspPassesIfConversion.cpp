@@ -186,8 +186,8 @@ void YdspOptimizer::ifConversion (YdspIrFunction& fn)
             return std::tuple<int, int, size_t> (mov.result, mov.a, block.insts.size() - 1);
         };
 
-        const auto thenArm = armMove (fn, fn.blocks[thenIndex], thenIndex, static_cast<int> (joinIndex));
-        const auto elseArm = armMove (fn, fn.blocks[elseIndex], elseIndex, static_cast<int> (joinIndex));
+        const auto thenArm = armMove (fn, fn.blocks[thenIndex], static_cast<int> (thenIndex), static_cast<int> (joinIndex));
+        const auto elseArm = armMove (fn, fn.blocks[elseIndex], static_cast<int> (elseIndex), static_cast<int> (joinIndex));
 
         if (std::get<0> (thenArm) < 0 || std::get<0> (elseArm) < 0 || std::get<0> (thenArm) != std::get<0> (elseArm))
             continue;

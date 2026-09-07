@@ -27,7 +27,12 @@ namespace yup
 void YdspIrBuilder::lowerStatements (const std::vector<std::unique_ptr<YdspStmt>>& statements)
 {
     for (const auto& statement : statements)
+    {
         lowerStatement (*statement);
+
+        if (fn.blocks[static_cast<size_t> (currentBlock)].term != YdspIrTerm::fallthrough)
+            return;
+    }
 }
 
 void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
@@ -65,8 +70,32 @@ void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
             break;
 
         case YdspStmtKind::returnStmt:
-            if (stmt.returnExpr != nullptr)
+            if (lowerFunctionReturns)
+            {
+                if (stmt.returnExpr != nullptr)
+                {
+                    const auto value = lowerExpr (*stmt.returnExpr);
+
+                    if (returnSlot >= 0)
+                    {
+                        const auto slotType = valueTypes[static_cast<size_t> (returnSlot)];
+                        const auto coerced = coerceTo (value, slotType);
+                        emitInst ({ moveOpcodeFor (slotType), returnSlot, coerced });
+                    }
+                }
+
+                auto& block = fn.blocks[static_cast<size_t> (currentBlock)];
+                if (block.term == YdspIrTerm::fallthrough)
+                {
+                    block.term = YdspIrTerm::branch;
+                    block.termTarget = -1; // patched to the function join below
+                    returnBlocks.push_back (currentBlock);
+                }
+            }
+            else if (stmt.returnExpr != nullptr)
+            {
                 returnValue = lowerExpr (*stmt.returnExpr);
+            }
             break;
 
         case YdspStmtKind::ifStmt:
@@ -102,13 +131,21 @@ void YdspIrBuilder::lowerStatement (const YdspStmt& stmt)
             fn.blocks[static_cast<size_t> (condBlock)].termTarget = thenBlock;
             fn.blocks[static_cast<size_t> (condBlock)].termTarget2 = hasElse ? elseBlock : join;
 
-            fn.blocks[static_cast<size_t> (thenTail)].term = YdspIrTerm::branch;
-            fn.blocks[static_cast<size_t> (thenTail)].termTarget = join;
+            auto& thenTailBlock = fn.blocks[static_cast<size_t> (thenTail)];
+            if (thenTailBlock.term == YdspIrTerm::fallthrough)
+            {
+                thenTailBlock.term = YdspIrTerm::branch;
+                thenTailBlock.termTarget = join;
+            }
 
             if (elseTail >= 0)
             {
-                fn.blocks[static_cast<size_t> (elseTail)].term = YdspIrTerm::branch;
-                fn.blocks[static_cast<size_t> (elseTail)].termTarget = join;
+                auto& elseTailBlock = fn.blocks[static_cast<size_t> (elseTail)];
+                if (elseTailBlock.term == YdspIrTerm::fallthrough)
+                {
+                    elseTailBlock.term = YdspIrTerm::branch;
+                    elseTailBlock.termTarget = join;
+                }
             }
 
             currentBlock = join;

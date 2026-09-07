@@ -89,7 +89,7 @@ private:
     std::vector<YdspEndpointDecl> parseEndpointWithKind();
     std::vector<YdspEndpointDecl> parseEndpointList (YdspEndpointKind kind, const YdspLocation& location);
     YdspStructDecl parseStruct();
-    YdspStateDecl parseState();
+    std::vector<YdspStateDecl> parseStateList();
     std::unique_ptr<YdspProcessDecl> parseProcess();
     YdspEventHandlerDecl parseEventHandler();
     YdspNodeDecl parseNode();

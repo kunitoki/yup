@@ -360,6 +360,10 @@ private:
 
     int returnValue = -1;
 
+    bool lowerFunctionReturns = false;
+    int returnSlot = -1;
+    std::vector<int> returnBlocks;
+
     YdspIrFunction& fn;
     const YdspAnalyzedProcessor& processor;
     YdspDiagnostics& diagnostics;

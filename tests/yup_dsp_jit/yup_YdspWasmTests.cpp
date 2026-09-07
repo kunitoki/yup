@@ -869,6 +869,46 @@ TEST (YdspWasmTests, CompilesIfElseIfChainInsideInlinedFunction)
     EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::opElse }));
 }
 
+// An `else if` cascade whose arms are early returns lowers through the branch
+// terminator path (nested forward branches to a single join). The wasm backend
+// must reloop those into nested block/if/else regions; a branch whose target
+// escapes the structured region fails codegen with a diagnostic, so compiling
+// without errors is the assertion that matters here.
+TEST (YdspWasmTests, CompilesElseIfEarlyReturnCascadeInInlinedFunction)
+{
+    YdspDiagnostics diagnostics;
+    auto bytes = compileWasm (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+
+            func pick (t: float) : float {
+                if (t < 0.5) { return 0.2; }
+                else if (t < 1.5) { return 0.6; }
+                else if (t < 2.5) { return 1.0; }
+                else { return 0.4; }
+            }
+
+            process {
+                out = pick (in);
+            }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                              "P",
+                              diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_FALSE (bytes.empty());
+
+    const auto sections = parseSections (bytes);
+    const auto code = collectCodeInstructions (sections[4]);
+
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::opIf, YdspWasmEmitter::emptyBlockType }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::opElse }));
+    EXPECT_TRUE (containsSubsequence (code, { YdspWasmEmitter::opBr }));
+}
+
 TEST (YdspWasmTests, SinF32IsImportedFromEnv)
 {
     YdspDiagnostics diagnostics;

@@ -1,0 +1,377 @@
+/*
+  A 4-operator phase-modulation synth after the TX81Z: each operator is a
+  sine-derived waveshape through its own four-stage envelope (attack, two
+  decays, release), and the eight "algorithms" pick which operators modulate
+  which and which sum as carriers. Operator modulation and self-feedback are
+  fed one sample late, like the hardware's delay lines, so each frame only
+  depends on the previous one.
+*/
+
+declare name "TX81Z";
+declare description "Four-operator FM synth with eight algorithms and per-operator envelopes.";
+
+processor TXVoice {
+    output stream out;
+
+    input event midi;
+
+    input value float volume = -6.0 [[ name: "Volume", min: -48.0, max: 0.0, unit: "dB", step: 1.0 ]];
+    input value float pitchOffset = -12.0 [[ name: "Pitch Offset", min: -24.0, max: 24.0, unit: "semi", step: 1.0 ]];
+    input value float algorithmParam = 2.0 [[ name: "Algorithm", min: 1.0, max: 8.0, step: 1.0, values: { "1", "2", "3", "4", "5", "6", "7", "8" } ]];
+
+    input value float osc1Waveshape = 1.0 [[ name: "Osc 1 Waveshape", min: 1.0, max: 8.0, step: 1.0 ]];
+    input value float osc1Level = 99.0 [[ name: "Osc 1 Level", min: 0.0, max: 99.0, step: 1.0 ]];
+    input value float osc1Fixed = 0.0 [[ name: "Osc 1 Fixed Freq", min: 0.0, max: 1000.0 ]];
+    input value float osc1FreqMult = 0.5 [[ name: "Osc 1 Freq Mult", min: 0.0, max: 16.0 ]];
+    input value float osc1Feedback = 0.0 [[ name: "Osc 1 Feedback", min: 0.0, max: 7.0, step: 1.0 ]];
+    input value float osc1Attack = 31.0 [[ name: "Osc 1 Attack", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc1Decay1 = 9.0 [[ name: "Osc 1 Decay 1", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc1DecayLevel = 0.0 [[ name: "Osc 1 Decay Level", min: 0.0, max: 15.0, step: 1.0 ]];
+    input value float osc1Decay2 = 0.0 [[ name: "Osc 1 Decay 2", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc1Release = 8.0 [[ name: "Osc 1 Release", min: 1.0, max: 15.0, step: 1.0 ]];
+
+    input value float osc2Waveshape = 1.0 [[ name: "Osc 2 Waveshape", min: 1.0, max: 8.0, step: 1.0 ]];
+    input value float osc2Level = 74.0 [[ name: "Osc 2 Level", min: 0.0, max: 99.0, step: 1.0 ]];
+    input value float osc2Fixed = 0.0 [[ name: "Osc 2 Fixed Freq", min: 0.0, max: 1000.0 ]];
+    input value float osc2FreqMult = 0.5 [[ name: "Osc 2 Freq Mult", min: 0.0, max: 16.0 ]];
+    input value float osc2Feedback = 0.0 [[ name: "Osc 2 Feedback", min: 0.0, max: 7.0, step: 1.0 ]];
+    input value float osc2Attack = 31.0 [[ name: "Osc 2 Attack", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc2Decay1 = 9.0 [[ name: "Osc 2 Decay 1", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc2DecayLevel = 0.0 [[ name: "Osc 2 Decay Level", min: 0.0, max: 15.0, step: 1.0 ]];
+    input value float osc2Decay2 = 0.0 [[ name: "Osc 2 Decay 2", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc2Release = 8.0 [[ name: "Osc 2 Release", min: 1.0, max: 15.0, step: 1.0 ]];
+
+    input value float osc3Waveshape = 5.0 [[ name: "Osc 3 Waveshape", min: 1.0, max: 8.0, step: 1.0 ]];
+    input value float osc3Level = 71.0 [[ name: "Osc 3 Level", min: 0.0, max: 99.0, step: 1.0 ]];
+    input value float osc3Fixed = 0.0 [[ name: "Osc 3 Fixed Freq", min: 0.0, max: 1000.0 ]];
+    input value float osc3FreqMult = 1.0 [[ name: "Osc 3 Freq Mult", min: 0.0, max: 16.0 ]];
+    input value float osc3Feedback = 0.0 [[ name: "Osc 3 Feedback", min: 0.0, max: 7.0, step: 1.0 ]];
+    input value float osc3Attack = 31.0 [[ name: "Osc 3 Attack", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc3Decay1 = 17.0 [[ name: "Osc 3 Decay 1", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc3DecayLevel = 0.0 [[ name: "Osc 3 Decay Level", min: 0.0, max: 15.0, step: 1.0 ]];
+    input value float osc3Decay2 = 0.0 [[ name: "Osc 3 Decay 2", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc3Release = 8.0 [[ name: "Osc 3 Release", min: 1.0, max: 15.0, step: 1.0 ]];
+
+    input value float osc4Waveshape = 1.0 [[ name: "Osc 4 Waveshape", min: 1.0, max: 8.0, step: 1.0 ]];
+    input value float osc4Level = 79.0 [[ name: "Osc 4 Level", min: 0.0, max: 99.0, step: 1.0 ]];
+    input value float osc4Fixed = 0.0 [[ name: "Osc 4 Fixed Freq", min: 0.0, max: 1000.0 ]];
+    input value float osc4FreqMult = 1.0 [[ name: "Osc 4 Freq Mult", min: 0.0, max: 16.0 ]];
+    input value float osc4Feedback = 7.0 [[ name: "Osc 4 Feedback", min: 0.0, max: 7.0, step: 1.0 ]];
+    input value float osc4Attack = 31.0 [[ name: "Osc 4 Attack", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc4Decay1 = 16.0 [[ name: "Osc 4 Decay 1", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc4DecayLevel = 3.0 [[ name: "Osc 4 Decay Level", min: 0.0, max: 15.0, step: 1.0 ]];
+    input value float osc4Decay2 = 7.0 [[ name: "Osc 4 Decay 2", min: 0.0, max: 31.0, step: 1.0 ]];
+    input value float osc4Release = 8.0 [[ name: "Osc 4 Release", min: 1.0, max: 15.0, step: 1.0 ]];
+
+    state float oscPhase[4];
+    state float oscPrev[4];
+    state float envValue[4];
+    state int envStage[4];   // 0 off, 1 attack, 2 decay1, 3 decay2, 4 release
+
+    state float notePitch;
+    state float bend;
+    state int voiceActive;
+    state int active [[ role: voiceActivity ]];
+
+    event midi (e: noteOn) {
+        notePitch = e.pitch + pitchOffset;
+        bend = e.bendSemitones;
+        voiceActive = 1;
+        active = 1;
+
+        for op in 0..4 {
+            envStage[op] = 1;
+            envValue[op] = 0.0;
+            if (op == 0) { oscPhase[0] = 0.0; }
+            if (op == 1) { oscPhase[1] = 0.0; }
+            if (op == 2) { oscPhase[2] = 0.0; }
+            if (op == 3) { oscPhase[3] = 0.0; }
+        }
+    }
+
+    event midi (e: noteOff) {
+        for op in 0..4 {
+            if (envStage[op] > 0 && envStage[op] < 4) { envStage[op] = 4; }
+        }
+    }
+
+    event midi (e: pitchBend) {
+        bend = e.bendSemitones;
+    }
+
+    process {
+        float algorithm = algorithmParam;
+        float outSum = 0.0;
+
+        float freq = noteToFreq (notePitch + bend);
+
+        for op in 0..4 {
+            float waveshape = waveParam (op, 0);
+            float level = waveParam (op, 1);
+            float fixed = waveParam (op, 2);
+            float multiplier = waveParam (op, 3);
+            float feedback = feedbackAmount (waveParam (op, 4));
+
+            float attack = waveParam (op, 5);
+            float decay1 = waveParam (op, 6);
+            float decayLevel = waveParam (op, 7);
+            float decay2 = waveParam (op, 8);
+            float release = waveParam (op, 9);
+
+            // Advance this operator's envelope.
+            if (envStage[op] == 1) {
+                envValue[op] = envValue[op] + attackFactor (attack);
+                if (envValue[op] >= 1.0) { envValue[op] = 1.0; envStage[op] = 2; }
+            } else if (envStage[op] == 2) {
+                if (envValue[op] > decayLevelTarget (decayLevel)) {
+                    envValue[op] = envValue[op] * decayFactor (decay1);
+                } else {
+                    envStage[op] = 3;
+                }
+            } else if (envStage[op] == 3) {
+                envValue[op] = envValue[op] * decayFactor (decay2);
+                if (envValue[op] < 0.0001) { envValue[op] = 0.0; envStage[op] = 0; }
+            } else if (envStage[op] == 4) {
+                envValue[op] = envValue[op] * releaseFactor (release);
+                if (envValue[op] < 0.0001) { envValue[op] = 0.0; envStage[op] = 0; }
+            }
+
+            float opFreq = fixed + multiplier * freq;
+
+            if (envStage[op] > 0) {
+                oscPhase[op] = oscPhase[op] + opFreq * samplePeriod;
+                if (oscPhase[op] >= 1.0) { oscPhase[op] = oscPhase[op] - 1.0; }
+
+                float modulation = modFor (op, algorithm);
+                float feedbackTerm = oscPrev[op] * feedback;
+
+                float raw = envValue[op] * waveshapeValue (int (waveshape), oscPhase[op] + 4.0 * modulation + feedbackTerm);
+
+                oscPrev[op] = raw;
+
+                if (carrierFor (op, algorithm) == 1) { outSum = outSum + levelGain (level) * raw; }
+            } else {
+                oscPrev[op] = 0.0;
+            }
+        }
+
+        voiceActive = select (abs (outSum) < 0.000001, 0, voiceActive);
+        active = voiceActive;
+
+        out = outSum * volumeGain (volume);
+    }
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func waveParam (op: int, field: int) : float {
+        if (field == 0) {
+            if (op == 0) { return osc1Waveshape; }
+            if (op == 1) { return osc2Waveshape; }
+            if (op == 2) { return osc3Waveshape; }
+            return osc4Waveshape;
+        }
+        if (field == 1) {
+            if (op == 0) { return osc1Level; }
+            if (op == 1) { return osc2Level; }
+            if (op == 2) { return osc3Level; }
+            return osc4Level;
+        }
+        if (field == 2) {
+            if (op == 0) { return osc1Fixed; }
+            if (op == 1) { return osc2Fixed; }
+            if (op == 2) { return osc3Fixed; }
+            return osc4Fixed;
+        }
+        if (field == 3) {
+            if (op == 0) { return osc1FreqMult; }
+            if (op == 1) { return osc2FreqMult; }
+            if (op == 2) { return osc3FreqMult; }
+            return osc4FreqMult;
+        }
+        if (field == 4) {
+            if (op == 0) { return osc1Feedback; }
+            if (op == 1) { return osc2Feedback; }
+            if (op == 2) { return osc3Feedback; }
+            return osc4Feedback;
+        }
+        if (field == 5) {
+            if (op == 0) { return osc1Attack; }
+            if (op == 1) { return osc2Attack; }
+            if (op == 2) { return osc3Attack; }
+            return osc4Attack;
+        }
+        if (field == 6) {
+            if (op == 0) { return osc1Decay1; }
+            if (op == 1) { return osc2Decay1; }
+            if (op == 2) { return osc3Decay1; }
+            return osc4Decay1;
+        }
+        if (field == 7) {
+            if (op == 0) { return osc1DecayLevel; }
+            if (op == 1) { return osc2DecayLevel; }
+            if (op == 2) { return osc3DecayLevel; }
+            return osc4DecayLevel;
+        }
+        if (field == 8) {
+            if (op == 0) { return osc1Decay2; }
+            if (op == 1) { return osc2Decay2; }
+            if (op == 2) { return osc3Decay2; }
+            return osc4Decay2;
+        }
+        if (op == 0) { return osc1Release; }
+        if (op == 1) { return osc2Release; }
+        if (op == 2) { return osc3Release; }
+        return osc4Release;
+    }
+
+    func waveshapeValue (waveshape: int, rawPhase: float) : float {
+        float phase = rawPhase - floor (rawPhase);
+        float twoPi2 = 2.0 * pi;
+
+        if (waveshape == 1) { return sin (phase * twoPi2); }
+        if (waveshape == 2) {
+            if (phase < 0.25) { return sin ((phase - 0.25) * twoPi2) + 1.0; }
+            if (phase < 0.5) { return sin ((phase + 0.25) * twoPi2) + 1.0; }
+            if (phase < 0.75) { return sin ((phase - 0.25) * twoPi2) - 1.0; }
+            return sin ((phase + 0.25) * twoPi2) - 1.0;
+        }
+        if (waveshape == 3) { return phase < 0.5 ? sin (phase * twoPi2) : 0.0; }
+        if (waveshape == 4) {
+            if (phase < 0.25) { return sin ((phase - 0.25) * twoPi2) + 1.0; }
+            if (phase < 0.5) { return sin ((phase + 0.25) * twoPi2) + 1.0; }
+            return 0.0;
+        }
+        if (waveshape == 5) { return phase < 0.5 ? sin (phase * 2.0 * twoPi2) : 0.0; }
+        if (waveshape == 6) {
+            if (phase < 0.125) { return sin ((phase - 0.125) * 2.0 * twoPi2) + 1.0; }
+            if (phase < 0.25) { return sin ((phase + 0.125) * 2.0 * twoPi2) + 1.0; }
+            if (phase < 0.375) { return sin ((phase - 0.125) * 2.0 * twoPi2) - 1.0; }
+            if (phase < 0.5) { return sin ((phase + 0.125) * 2.0 * twoPi2) - 1.0; }
+            return 0.0;
+        }
+        if (waveshape == 7) {
+            if (phase < 0.25) { return sin (phase * 2.0 * twoPi2); }
+            if (phase < 0.5) { return -sin (phase * 2.0 * twoPi2); }
+            return 0.0;
+        }
+        if (waveshape == 8) {
+            if (phase < 0.125) { return 1.0 + sin ((phase - 0.125) * 2.0 * twoPi2); }
+            if (phase < 0.25) { return 1.0 + sin ((phase + 0.125) * 2.0 * twoPi2); }
+            if (phase < 0.375) { return 1.0 - sin ((phase - 0.125) * 2.0 * twoPi2); }
+            if (phase < 0.5) { return 1.0 - sin ((phase + 0.125) * 2.0 * twoPi2); }
+            return 0.0;
+        }
+        return 0.0;
+    }
+
+    // Which operators sum as carriers for the given algorithm.
+    func carrierFor (op: int, algorithm: float) : int {
+        if (algorithm < 4.5) { return op == 0 ? 1 : 0; }
+        if (algorithm < 5.5) { return op == 0 || op == 2 ? 1 : 0; }
+        if (algorithm < 7.5) { return op < 3 ? 1 : 0; }
+        return 1;
+    }
+
+    // Which other operators modulate this one: returns the summed previous
+    // samples of the modulator sources for the algorithm.
+    func modFor (op: int, algorithm: float) : float {
+        if (op == 0) {
+            if (algorithm < 1.5) { return oscPrev[1]; }
+            if (algorithm < 2.5) { return oscPrev[1]; }
+            if (algorithm < 3.5) { return oscPrev[1] + oscPrev[3]; }
+            if (algorithm < 4.5) { return oscPrev[1] + oscPrev[2]; }
+            if (algorithm < 5.5) { return oscPrev[1]; }
+            if (algorithm < 6.5) { return oscPrev[3]; }
+            return 0.0;
+        }
+        if (op == 1) {
+            if (algorithm < 1.5) { return oscPrev[2]; }
+            if (algorithm < 2.5) { return oscPrev[2] + oscPrev[3]; }
+            if (algorithm < 3.5) { return oscPrev[2]; }
+            if (algorithm < 6.5) { return oscPrev[3]; }
+            return 0.0;
+        }
+        if (op == 2) {
+            if (algorithm < 1.5) { return oscPrev[3]; }
+            if (algorithm < 4.5) { return oscPrev[3]; }
+            if (algorithm < 5.5) { return 0.0; }
+            if (algorithm < 6.5) { return oscPrev[3]; }
+            if (algorithm < 7.5) { return oscPrev[3]; }
+            return 0.0;
+        }
+        return 0.0;
+    }
+
+    func feedbackAmount (level: float) : float {
+        if (level < 0.5) { return 0.0; }
+        if (level < 1.5) { return 0.008; }
+        if (level < 2.5) { return 0.015; }
+        if (level < 3.5) { return 0.024; }
+        if (level < 4.5) { return 0.07; }
+        if (level < 5.5) { return 0.12; }
+        if (level < 6.5) { return 0.19; }
+        return 0.26;
+    }
+
+    func levelGain (level: float) : float {
+        return pow (10.0, (0.74 * (level + 1.0) - 73.26) * 0.05);
+    }
+
+    func volumeGain (db: float) : float {
+        return pow (10.0, db * 0.05);
+    }
+
+    func decayLevelTarget (level: float) : float {
+        if (level < 0.5) { return 0.0; }
+        return pow (10.0, (-3.0 * (15.0 - level)) * 0.05);
+    }
+
+    func attackFactor (rate: float) : float {
+        float seconds = pow (2.0, 3.5 - rate * 0.5);
+        return clamp (1.0 / (sampleRate * seconds), 0.0, 1.0);
+    }
+
+    func decayFactor (rate: float) : float {
+        if (rate < 0.5) { return 1.0; }
+        float seconds = pow (2.0, 5.5 - rate * 0.5);
+        return exp (-2.7725887 / (sampleRate * seconds)); // -ln(16)
+    }
+
+    func releaseFactor (rate: float) : float {
+        return decayFactor (1.0 + rate * 2.0);
+    }
+}
+
+processor DcBlockVol {
+    input stream in;
+    output stream out;
+
+    input value float volume = -6.0 [[ name: "Volume", min: -48.0, max: 0.0, unit: "dB", step: 1.0 ]];
+
+    state float x1;
+    state float y1;
+
+    process {
+        float y = in - x1 + 0.995 * y1;
+        x1 = in;
+        y1 = y;
+
+        out = y * pow (10.0, volume * 0.05);
+    }
+}
+
+graph TX81Z {
+    input event midi;
+    output stream out;
+
+    node voices = TXVoice[8] [[ mode: poly, stealing: oldest ]];
+    node dc = DcBlockVol;
+
+    connection {
+        midi -> voices.midi;
+        voices.out -> dc.in;
+        dc.out -> out;
+    }
+}

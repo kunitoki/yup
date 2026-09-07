@@ -1524,7 +1524,7 @@ ASMJIT_FAVOR_SPEED Error BaseRAPass::bin_pack(RegGroup group) noexcept {
         }
 
         for (size_t i = 0; i < spans.size(); i++) {
-          const RALiveSpan& span = spans[i];
+          const RALiveSpan& span = spans[(uint32_t) i];
           if (span.a <= site.pos && (site.pos < span.b || span.b == RALiveSpan::kInf)) {
             clobbered |= site.clobbered;
             break;

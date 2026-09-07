@@ -1,0 +1,242 @@
+/*
+  A monophonic subtractive synth: three detune-able oscillators (sine,
+  triangle, square or either saw, band-limited where the shape has edges)
+  through a resonant ladder filter swept by its own ADSR, plus the amp ADSR.
+  Mono notes are driven by the runtime's held-note stack: a legato note-on
+  glides to the new pitch instead of re-attacking.
+*/
+
+declare name "Subtract One";
+declare description "Three-oscillator mono subtractive synth with glide and filter envelope.";
+
+processor SubtractVoice {
+    output stream out;
+
+    input value float masterGain = 1.0 [[ name: "Master Gain", min: 0.0, max: 1.0, step: 0.01 ]];
+    input value float masterOctave = 0.0 [[ name: "Master Octave", min: -3.0, max: 3.0, step: 1.0 ]];
+    input value float masterGlide = 0.08 [[ name: "Master Glide", min: 0.001, max: 3.0, unit: "s" ]];
+
+    input value float vco1Semitones = 0.0 [[ name: "VCO1 Semitones", min: -24.0, max: 24.0, step: 1.0 ]];
+    input value float vco1Detune = 7.0 [[ name: "VCO1 Detune", min: -50.0, max: 50.0, unit: "cents", step: 1.0 ]];
+    input value float vco1Level = 1.0 [[ name: "VCO1 Level", min: 0.0, max: 1.0, step: 0.001 ]];
+    input value float vco1Shape = 3.0 [[ name: "VCO1 Shape", min: 0.0, max: 4.0, values: { "Sine", "Triangle", "Square", "Ramp Up", "Ramp Down" } ]];
+
+    input value float vco2Semitones = 0.0 [[ name: "VCO2 Semitones", min: -24.0, max: 24.0, step: 1.0 ]];
+    input value float vco2Detune = -7.0 [[ name: "VCO2 Detune", min: -50.0, max: 50.0, unit: "cents", step: 1.0 ]];
+    input value float vco2Level = 1.0 [[ name: "VCO2 Level", min: 0.0, max: 1.0, step: 0.001 ]];
+    input value float vco2Shape = 3.0 [[ name: "VCO2 Shape", min: 0.0, max: 4.0, values: { "Sine", "Triangle", "Square", "Ramp Up", "Ramp Down" } ]];
+
+    input value float vco3Semitones = -12.0 [[ name: "VCO3 Semitones", min: -24.0, max: 24.0, step: 1.0 ]];
+    input value float vco3Detune = 0.0 [[ name: "VCO3 Detune", min: -50.0, max: 50.0, unit: "cents", step: 1.0 ]];
+    input value float vco3Level = 0.5 [[ name: "VCO3 Level", min: 0.0, max: 1.0, step: 0.001 ]];
+    input value float vco3Shape = 3.0 [[ name: "VCO3 Shape", min: 0.0, max: 4.0, values: { "Sine", "Triangle", "Square", "Ramp Up", "Ramp Down" } ]];
+
+    input value float filterCutoff = 1500.0 [[ name: "Filter Cutoff", min: 60.0, max: 20000.0, unit: "Hz", smoothing: 0.02 ]];
+    input value float filterResonance = 0.35 [[ name: "Filter Resonance", min: 0.0, max: 0.9, smoothing: 0.02 ]];
+    input value float filterEgInt = 45.0 [[ name: "Filter EG Amount", min: -100.0, max: 100.0, step: 1.0 ]];
+
+    input value float ampAttack = 0.005 [[ name: "Amp Attack", min: 0.001, max: 10.0, unit: "s" ]];
+    input value float ampDecay = 0.6 [[ name: "Amp Decay", min: 0.001, max: 10.0, unit: "s" ]];
+    input value float ampSustain = 0.7 [[ name: "Amp Sustain", min: 0.0, max: 1.0 ]];
+    input value float ampRelease = 0.3 [[ name: "Amp Release", min: 0.005, max: 10.0, unit: "s" ]];
+
+    input value float filterAttack = 0.005 [[ name: "Filter Attack", min: 0.001, max: 10.0, unit: "s" ]];
+    input value float filterDecay = 0.4 [[ name: "Filter Decay", min: 0.001, max: 10.0, unit: "s" ]];
+    input value float filterSustain = 0.35 [[ name: "Filter Sustain", min: 0.0, max: 1.0 ]];
+    input value float filterRelease = 0.25 [[ name: "Filter Release", min: 0.005, max: 10.0, unit: "s" ]];
+
+    input event midi;
+
+    state float phase1;
+    state float phase2;
+    state float phase3;
+
+    state float freq1;
+    state float freq2;
+    state float freq3;
+    state float freq1Target;
+    state float freq2Target;
+    state float freq3Target;
+    state float glideCoeff;
+
+    state float ampEnv;
+    state int ampStage;
+    state float filterEnv;
+    state int filterStage;
+    state float velocity = 0.8;
+
+    state float z1;
+    state float z2;
+    state float z3;
+    state float z4;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func polyBlep (t: float, dt: float) : float {
+        float r = 0.0;
+        if (t < dt) {
+            t = t / dt;
+            r = t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            r = t * t + t + t + 1.0;
+        }
+        return r;
+    }
+
+    func oscValue (phase: float, dt: float, shape: float) : float {
+        // Early returns per branch: a local assigned inside if/else-if branches
+        // of an inlined func currently loses the branch value (only the
+        // initializer survives), so no merged local is used here.
+        if (shape < 0.5) { return sin (phase * 2.0 * pi); }
+        if (shape < 1.5) { return 1.0 - 4.0 * abs (phase - 0.5); }
+        if (shape < 2.5) { return squareShape (phase, dt); }
+        if (shape < 3.5) { return rampUpShape (phase, dt); }
+        return rampDownShape (phase, dt);
+    }
+
+    func sineShape (phase: float) : float {
+        return sin (phase * 2.0 * pi);
+    }
+
+    func triangleShape (phase: float) : float {
+        return ;
+    }
+
+    func squareShape (phase: float, dt: float) : float {
+        float falling = phase < 0.5 ? phase + 0.5 : phase - 0.5;
+        float x = select (phase < 0.5, 1.0, -1.0)
+                    + polyBlep (phase, dt)
+                    - polyBlep (falling, dt);
+        return x;
+    }
+
+    func rampUpShape (phase: float, dt: float) : float {
+        float rising = phase < 1.0 - dt ? phase + dt : phase - 1.0 + dt;
+        float x = 2.0 * (phase - polyBlep (phase, dt)) + polyBlep (rising, dt) - 1.0;
+        return x;
+    }
+
+    func rampDownShape (phase: float, dt: float) : float {
+        float rising = phase < 1.0 - dt ? phase + dt : phase - 1.0 + dt;
+        float x = 1.0 - 2.0 * (phase - polyBlep (phase, dt)) - polyBlep (rising, dt);
+        return x;
+    }
+
+    event midi (e: noteOn) {
+        float base = e.pitch + masterOctave * 12.0;
+
+        freq1Target = noteToFreq (base + vco1Semitones + vco1Detune * 0.01);
+        freq2Target = noteToFreq (base + vco2Semitones + vco2Detune * 0.01);
+        freq3Target = noteToFreq (base + vco3Semitones + vco3Detune * 0.01);
+
+        velocity = e.velocity;
+        active = 1;
+
+        // A legato continuation only glides when a note is already sounding;
+        // otherwise (including a first note that is somehow flagged legato)
+        // always start the envelopes from silence.
+        if (e.isLegato && ampStage > 0) {
+            glideCoeff = 1.0 - exp (-1.0 / (masterGlide * sampleRate));
+        } else {
+            glideCoeff = 1.0;
+
+            ampEnv = 0.0;
+            ampStage = 1;
+
+            filterEnv = 0.0;
+            filterStage = 1;
+        }
+    }
+
+    event midi (e: noteOff) {
+        ampStage = 4;
+        filterStage = 4;
+    }
+
+    process {
+        // Glide towards the newest targets.
+        freq1 = freq1 + (freq1Target - freq1) * glideCoeff;
+        freq2 = freq2 + (freq2Target - freq2) * glideCoeff;
+        freq3 = freq3 + (freq3Target - freq3) * glideCoeff;
+
+        // Amp ADSR.
+        if (ampStage == 1) {
+            ampEnv = ampEnv + (1.0 - ampEnv) * (1.0 - exp (-1.0 / (ampAttack * sampleRate)));
+            if (ampEnv >= 0.999) { ampStage = 2; }
+        } else if (ampStage == 2) {
+            ampEnv = ampEnv * exp (-9.21034 / (ampDecay * sampleRate));
+            if (ampEnv <= ampSustain) { ampEnv = ampSustain; ampStage = 3; }
+        } else if (ampStage == 3) {
+            ampEnv = ampEnv;
+        } else if (ampStage == 4) {
+            ampEnv = ampEnv * exp (-9.21034 / (ampRelease * sampleRate));
+            if (ampEnv < 0.000001) { ampEnv = 0.0; ampStage = 0; }
+        }
+
+        // Filter ADSR.
+        if (filterStage == 1) {
+            filterEnv = filterEnv + (1.0 - filterEnv) * (1.0 - exp (-1.0 / (filterAttack * sampleRate)));
+            if (filterEnv >= 0.999) { filterStage = 2; }
+        } else if (filterStage == 2) {
+            filterEnv = filterEnv * exp (-9.21034 / (filterDecay * sampleRate));
+            if (filterEnv <= filterSustain) { filterEnv = filterSustain; filterStage = 3; }
+        } else if (filterStage == 3) {
+            filterEnv = filterEnv;
+        } else if (filterStage == 4) {
+            filterEnv = filterEnv * exp (-9.21034 / (filterRelease * sampleRate));
+            if (filterEnv < 0.000001) { filterEnv = 0.0; filterStage = 0; }
+        }
+
+        float d1 = freq1 * samplePeriod;
+        float d2 = freq2 * samplePeriod;
+        float d3 = freq3 * samplePeriod;
+
+        phase1 = phase1 + d1;
+        if (phase1 >= 1.0) { phase1 = phase1 - 1.0; }
+        phase2 = phase2 + d2;
+        if (phase2 >= 1.0) { phase2 = phase2 - 1.0; }
+        phase3 = phase3 + d3;
+        if (phase3 >= 1.0) { phase3 = phase3 - 1.0; }
+
+        float osc1 = oscValue (phase1, d1, vco1Shape);
+        float osc2 = oscValue (phase2, d2, vco2Shape);
+        float osc3 = oscValue (phase3, d3, vco3Shape);
+
+        float mixed = (osc1 * vco1Level + osc2 * vco2Level + osc3 * vco3Level) * 0.4;
+
+        // Resonant ladder low-pass; cutoff swept by the filter envelope.
+        float cutoff = filterCutoff + filterEnv * filterEgInt * 40.0;
+        if (cutoff < 60.0) { cutoff = 60.0; }
+        if (cutoff > sampleRate * 0.45) { cutoff = sampleRate * 0.45; }
+
+        float k = clamp (1.0 - exp (-2.0 * pi * cutoff * samplePeriod), 0.0005, 0.98);
+
+        float driven = mixed - filterResonance * 4.0 * (z4 - 0.5 * mixed);
+
+        z1 = z1 + k * (tanh (driven) - z1);
+        z2 = z2 + k * (z1 - z2);
+        z3 = z3 + k * (z2 - z3);
+        z4 = z4 + k * (z3 - z4);
+
+        active = select (abs (ampEnv) < 0.000001, 0, 1);
+
+        out = z4 * ampEnv * velocity * masterGain * 1.4;
+    }
+}
+
+graph SubtractOne {
+    input event midi;
+    output stream out;
+
+    node voice = SubtractVoice [[ mode: mono, priority: last ]];
+
+    connection {
+        midi -> voice.midi;
+        voice.out -> out;
+    }
+}

@@ -377,6 +377,11 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     rematerializePostCallLeaves (fn);
     deadCodeElimination (fn);
 
+    // Finally, drop blocks that became unreachable during lowering (the joins
+    // of if/else regions whose both arms return early). Their dangling edges to
+    // live blocks would otherwise reach the register allocator's liveness pass
+    // as a block it never allocated liveness bits for.
+    removeUnreachableBlocks (fn);
 }
 
 } // namespace yup
