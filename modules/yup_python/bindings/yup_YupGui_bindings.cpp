@@ -570,6 +570,275 @@ void registerYupGuiBindings (py::module_& m)
             return std::addressof (self);
         }, py::return_value_policy::reference);
 #endif
+
+    // ============================================================================================ yup::Button
+
+    py::class_<Button, Component, PyButton<>> (m, "Button")
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("isButtonOver", &Button::isButtonOver)
+        .def ("isButtonDown", &Button::isButtonDown)
+        .def_readwrite ("onClick", &Button::onClick)
+        .def ("paintButton", &Button::paintButton);
+
+    // ============================================================================================ yup::TextButton
+
+    py::class_<TextButton, Button> (m, "TextButton")
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("getButtonText", &TextButton::getButtonText)
+        .def ("setButtonText", &TextButton::setButtonText);
+
+    // ============================================================================================ yup::ToggleButton
+
+    py::class_<ToggleButton, Button> (m, "ToggleButton")
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("getToggleState", &ToggleButton::getToggleState)
+        .def ("setToggleState", &ToggleButton::setToggleState,
+              "shouldBeToggled"_a, "notification"_a = sendNotification)
+        .def ("getButtonText", &ToggleButton::getButtonText)
+        .def ("setButtonText", &ToggleButton::setButtonText);
+
+    // ============================================================================================ yup::Slider::SliderType
+
+    py::enum_<Slider::SliderType> (m, "SliderType")
+        .value ("LinearHorizontal", Slider::LinearHorizontal)
+        .value ("LinearVertical", Slider::LinearVertical)
+        .value ("LinearBarHorizontal", Slider::LinearBarHorizontal)
+        .value ("LinearBarVertical", Slider::LinearBarVertical)
+        .value ("Rotary", Slider::Rotary)
+        .value ("RotaryHorizontalDrag", Slider::RotaryHorizontalDrag)
+        .value ("RotaryVerticalDrag", Slider::RotaryVerticalDrag)
+        .value ("IncDecButtons", Slider::IncDecButtons)
+        .value ("TwoValueHorizontal", Slider::TwoValueHorizontal)
+        .value ("TwoValueVertical", Slider::TwoValueVertical)
+        .value ("ThreeValueHorizontal", Slider::ThreeValueHorizontal)
+        .value ("ThreeValueVertical", Slider::ThreeValueVertical)
+        .export_values();
+
+    // Make SliderType accessible as Slider.SliderType via the class
+    py::class_<Slider, Component, PySlider> (m, "Slider")
+        .def (py::init<Slider::SliderType, StringRef>(),
+              "sliderType"_a, "componentID"_a = StringRef())
+        .def (py::init<Slider::SliderType>(),
+              "sliderType"_a)
+        .def ("setValue", &Slider::setValue,
+              "newValue"_a, "notification"_a = sendNotification)
+        .def ("getValue", &Slider::getValue)
+        .def ("setValueNormalised", &Slider::setValueNormalised,
+              "newValue"_a, "notification"_a = sendNotification)
+        .def ("getValueNormalised", &Slider::getValueNormalised)
+        .def ("setMinValue", &Slider::setMinValue,
+              "newMinValue"_a, "notification"_a = sendNotification, "allowNudgingOfOtherValues"_a = false)
+        .def ("getMinValue", &Slider::getMinValue)
+        .def ("setMaxValue", &Slider::setMaxValue,
+              "newMaxValue"_a, "notification"_a = sendNotification, "allowNudgingOfOtherValues"_a = false)
+        .def ("getMaxValue", &Slider::getMaxValue)
+        .def ("setRange", py::overload_cast<double, double, double> (&Slider::setRange),
+              "minValue"_a, "maxValue"_a, "stepSize"_a = 0.0)
+        .def ("setSkewFactor", &Slider::setSkewFactor)
+        .def ("setNumDecimalPlacesToDisplay", &Slider::setNumDecimalPlacesToDisplay)
+        .def ("setTextBoxStyle", &Slider::setTextBoxStyle,
+              "position"_a, "isReadOnly"_a = false, "textEntryBoxWidth"_a = 80, "textEntryBoxHeight"_a = 20)
+        .def_readwrite ("onValueChanged", &Slider::onValueChanged)
+        .def_readwrite ("onMinValueChanged", &Slider::onMinValueChanged)
+        .def_readwrite ("onMaxValueChanged", &Slider::onMaxValueChanged)
+        .def ("__repr__", [] (const Slider& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " value=" << self.getValue() << ">";
+            return result;
+        });
+
+    // ============================================================================================ yup::Slider::TextEntryBoxPosition
+
+    py::enum_<Slider::TextEntryBoxPosition> (m, "TextEntryBoxPosition")
+        .value ("NoTextBox", Slider::NoTextBox)
+        .value ("TextBoxLeft", Slider::TextBoxLeft)
+        .value ("TextBoxRight", Slider::TextBoxRight)
+        .value ("TextBoxAbove", Slider::TextBoxAbove)
+        .value ("TextBoxBelow", Slider::TextBoxBelow)
+        .export_values();
+
+    // ============================================================================================ yup::Label
+
+    py::class_<Label, Component> (m, "Label")
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("getText", &Label::getText)
+        .def ("setText", &Label::setText,
+              "newText"_a, "notification"_a = sendNotification)
+        .def ("__repr__", [] (const Label& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " text=\"" << self.getText() << "\">";
+            return result;
+        });
+
+    // ============================================================================================ yup::FlexItem::AlignSelf
+
+    py::enum_<FlexItem::AlignSelf> (m, "FlexAlignSelf")
+        .value ("autoAlign", FlexItem::AlignSelf::autoAlign)
+        .value ("flexStart", FlexItem::AlignSelf::flexStart)
+        .value ("flexEnd", FlexItem::AlignSelf::flexEnd)
+        .value ("center", FlexItem::AlignSelf::center)
+        .value ("stretch", FlexItem::AlignSelf::stretch)
+        .export_values();
+
+    // ============================================================================================ yup::FlexItem
+
+    py::class_<FlexItem> (m, "FlexItem")
+        .def (py::init<>())
+        .def (py::init<Component&>())
+        .def (py::init<Component*>())
+        .def (py::init<float, float>())
+        .def (py::init<Component&, float, float>())
+        .def (py::init<Component*, float, float>())
+        .def_readwrite ("associatedComponent", &FlexItem::associatedComponent)
+        .def_readwrite ("flexGrow", &FlexItem::flexGrow)
+        .def_readwrite ("flexShrink", &FlexItem::flexShrink)
+        .def_readwrite ("flexBasis", &FlexItem::flexBasis)
+        .def_readwrite ("minWidth", &FlexItem::minWidth)
+        .def_readwrite ("minHeight", &FlexItem::minHeight)
+        .def_readwrite ("maxWidth", &FlexItem::maxWidth)
+        .def_readwrite ("maxHeight", &FlexItem::maxHeight)
+        .def_readwrite ("width", &FlexItem::width)
+        .def_readwrite ("height", &FlexItem::height)
+        .def_readwrite ("alignSelf", &FlexItem::alignSelf)
+        .def_readwrite ("marginLeft", &FlexItem::marginLeft)
+        .def_readwrite ("marginRight", &FlexItem::marginRight)
+        .def_readwrite ("marginTop", &FlexItem::marginTop)
+        .def_readwrite ("marginBottom", &FlexItem::marginBottom)
+        .def_readwrite ("order", &FlexItem::order)
+        .def ("withFlex", &FlexItem::withFlex)
+        .def ("withWidth", &FlexItem::withWidth)
+        .def ("withHeight", &FlexItem::withHeight)
+        .def ("withMinWidth", &FlexItem::withMinWidth)
+        .def ("withMinHeight", &FlexItem::withMinHeight)
+        .def ("withMaxWidth", &FlexItem::withMaxWidth)
+        .def ("withMaxHeight", &FlexItem::withMaxHeight)
+        .def ("withMargin", &FlexItem::withMargin)
+        .def ("withAlignSelf", &FlexItem::withAlignSelf)
+        .def ("withOrder", &FlexItem::withOrder);
+
+    // ============================================================================================ yup::FlexBox
+
+    py::enum_<FlexBox::Direction> (m, "FlexDirection")
+        .value ("row", FlexBox::Direction::row)
+        .value ("rowReverse", FlexBox::Direction::rowReverse)
+        .value ("column", FlexBox::Direction::column)
+        .value ("columnReverse", FlexBox::Direction::columnReverse)
+        .export_values();
+
+    py::enum_<FlexBox::Wrap> (m, "FlexWrap")
+        .value ("noWrap", FlexBox::Wrap::noWrap)
+        .value ("wrap", FlexBox::Wrap::wrap)
+        .value ("wrapReverse", FlexBox::Wrap::wrapReverse)
+        .export_values();
+
+    py::enum_<FlexBox::JustifyContent> (m, "FlexJustifyContent")
+        .value ("flexStart", FlexBox::JustifyContent::flexStart)
+        .value ("flexEnd", FlexBox::JustifyContent::flexEnd)
+        .value ("center", FlexBox::JustifyContent::center)
+        .value ("spaceBetween", FlexBox::JustifyContent::spaceBetween)
+        .value ("spaceAround", FlexBox::JustifyContent::spaceAround)
+        .export_values();
+
+    py::enum_<FlexBox::AlignItems> (m, "FlexAlignItems")
+        .value ("flexStart", FlexBox::AlignItems::flexStart)
+        .value ("flexEnd", FlexBox::AlignItems::flexEnd)
+        .value ("center", FlexBox::AlignItems::center)
+        .value ("stretch", FlexBox::AlignItems::stretch)
+        .export_values();
+
+    py::enum_<FlexBox::AlignContent> (m, "FlexAlignContent")
+        .value ("flexStart", FlexBox::AlignContent::flexStart)
+        .value ("flexEnd", FlexBox::AlignContent::flexEnd)
+        .value ("center", FlexBox::AlignContent::center)
+        .value ("spaceBetween", FlexBox::AlignContent::spaceBetween)
+        .value ("spaceAround", FlexBox::AlignContent::spaceAround)
+        .value ("stretch", FlexBox::AlignContent::stretch)
+        .export_values();
+
+    py::class_<FlexBox> (m, "FlexBox")
+        .def (py::init<>())
+        .def (py::init<FlexBox::Direction>())
+        .def (py::init<FlexBox::Direction, FlexBox::Wrap, FlexBox::AlignItems,
+                        FlexBox::JustifyContent, FlexBox::AlignContent>())
+        .def_readwrite ("flexDirection", &FlexBox::flexDirection)
+        .def_readwrite ("flexWrap", &FlexBox::flexWrap)
+        .def_readwrite ("alignItems", &FlexBox::alignItems)
+        .def_readwrite ("justifyContent", &FlexBox::justifyContent)
+        .def_readwrite ("alignContent", &FlexBox::alignContent)
+        .def_readwrite ("gap", &FlexBox::gap)
+        .def_readwrite ("items", &FlexBox::items)
+        .def ("performLayout", py::overload_cast<Rectangle<float>> (&FlexBox::performLayout))
+        .def ("performLayout", py::overload_cast<Rectangle<int>> (&FlexBox::performLayout));
+
+    // ============================================================================================ yup::GridItem::AlignSelf
+
+    py::enum_<GridItem::AlignSelf> (m, "GridAlignSelf")
+        .value ("autoAlign", GridItem::AlignSelf::autoAlign)
+        .value ("flexStart", GridItem::AlignSelf::flexStart)
+        .value ("flexEnd", GridItem::AlignSelf::flexEnd)
+        .value ("center", GridItem::AlignSelf::center)
+        .value ("stretch", GridItem::AlignSelf::stretch)
+        .export_values();
+
+    // ============================================================================================ yup::GridItem
+
+    py::class_<GridItem> (m, "GridItem")
+        .def (py::init<>())
+        .def (py::init<Component&>())
+        .def (py::init<Component*>())
+        .def_readwrite ("associatedComponent", &GridItem::associatedComponent)
+        .def_readwrite ("column", &GridItem::column)
+        .def_readwrite ("row", &GridItem::row)
+        .def_readwrite ("columnSpan", &GridItem::columnSpan)
+        .def_readwrite ("rowSpan", &GridItem::rowSpan)
+        .def_readwrite ("justifySelf", &GridItem::justifySelf)
+        .def_readwrite ("alignSelf", &GridItem::alignSelf)
+        .def_readwrite ("marginLeft", &GridItem::marginLeft)
+        .def_readwrite ("marginRight", &GridItem::marginRight)
+        .def_readwrite ("marginTop", &GridItem::marginTop)
+        .def_readwrite ("marginBottom", &GridItem::marginBottom)
+        .def ("withColumn", &GridItem::withColumn)
+        .def ("withRow", &GridItem::withRow)
+        .def ("withColumnSpan", &GridItem::withColumnSpan)
+        .def ("withRowSpan", &GridItem::withRowSpan)
+        .def ("withMargin", &GridItem::withMargin);
+
+    // ============================================================================================ yup::Grid
+
+    py::enum_<Grid::AlignItems> (m, "GridAlignItems")
+        .value ("flexStart", Grid::AlignItems::flexStart)
+        .value ("flexEnd", Grid::AlignItems::flexEnd)
+        .value ("center", Grid::AlignItems::center)
+        .value ("stretch", Grid::AlignItems::stretch)
+        .export_values();
+
+    py::class_<Grid::TrackInfo> (m, "TrackInfo")
+        .def_static ("px", &Grid::TrackInfo::px)
+        .def_static ("fr", &Grid::TrackInfo::fr)
+        .def_static ("auto_", &Grid::TrackInfo::auto_)
+        .def_readwrite ("pixelSize", &Grid::TrackInfo::pixelSize)
+        .def_readwrite ("fraction", &Grid::TrackInfo::fraction)
+        .def_readwrite ("isAuto", &Grid::TrackInfo::isAuto);
+
+    py::class_<Grid> (m, "Grid")
+        .def (py::init<>())
+        .def_readwrite ("templateColumns", &Grid::templateColumns)
+        .def_readwrite ("templateRows", &Grid::templateRows)
+        .def_readwrite ("autoRows", &Grid::autoRows)
+        .def_readwrite ("autoColumns", &Grid::autoColumns)
+        .def_readwrite ("columnGap", &Grid::columnGap)
+        .def_readwrite ("rowGap", &Grid::rowGap)
+        .def_readwrite ("justifyItems", &Grid::justifyItems)
+        .def_readwrite ("alignItems", &Grid::alignItems)
+        .def_readwrite ("items", &Grid::items)
+        .def ("performLayout", py::overload_cast<Rectangle<float>> (&Grid::performLayout))
+        .def ("performLayout", py::overload_cast<Rectangle<int>> (&Grid::performLayout));
 }
 
 } // namespace Bindings

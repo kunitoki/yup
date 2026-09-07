@@ -459,4 +459,39 @@ struct PyDocumentWindow : PyComponent<Base>
     //}
 };
 
+// ============================================================================================
+
+template <class Base = yup::Button>
+struct PyButton : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    void paintButton (yup::Graphics& g) override
+    {
+        PYBIND11_OVERRIDE_PURE (void, Base, paintButton, g);
+    }
+};
+
+// ============================================================================================
+
+struct PySlider : yup::Slider
+{
+    using Slider::Slider;
+
+    void valueChanged() override
+    {
+        PYBIND11_OVERRIDE (void, yup::Slider, valueChanged);
+    }
+
+    void minValueChanged() override
+    {
+        PYBIND11_OVERRIDE (void, yup::Slider, minValueChanged);
+    }
+
+    void maxValueChanged() override
+    {
+        PYBIND11_OVERRIDE (void, yup::Slider, maxValueChanged);
+    }
+};
+
 } // namespace yup::Bindings

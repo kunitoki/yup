@@ -34,6 +34,7 @@
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
 #include "../bindings/yup_YupGraphics_bindings.h"
+#include "../bindings/yup_YupRhi_bindings.h"
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_gui
@@ -48,11 +49,15 @@
 #include "../bindings/yup_YupAudioBasics_bindings.h"
 #endif
 
-/*
+#if YUP_MODULE_AVAILABLE_yup_audio_formats
+#include "../bindings/yup_YupAudioFormats_bindings.h"
+#endif
+
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include "../bindings/yup_YupAudioDevices_bindings.h"
 #endif
 
+/*
 #if YUP_MODULE_AVAILABLE_yup_audio_processors
 #include "../bindings/yup_YupAudioProcessors_bindings.h"
 #endif
@@ -90,6 +95,7 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
     yup::Bindings::registerYupGraphicsBindings (m);
+    yup::Bindings::registerYupRhiBindings (m);
 #endif
 
 #if YUP_MODULE_AVAILABLE_yup_gui
@@ -104,11 +110,15 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
     yup::Bindings::registerYupAudioBasicsBindings (m);
 #endif
 
-    /*
+#if YUP_MODULE_AVAILABLE_yup_audio_formats
+    yup::Bindings::registerYupAudioFormatsBindings (m);
+#endif
+
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
     yup::Bindings::registerYupAudioDevicesBindings (m);
 #endif
 
+    /*
 #if YUP_MODULE_AVAILABLE_yup_audio_processors
     yup::Bindings::registerYupAudioProcessorsBindings (m);
 #endif

@@ -1,18 +1,19 @@
 [build-system]
 requires = [
-    # c++ building
     #"cmake>=3.28",
-    # pyi generation
+    "setuptools",
+    "wheel",
     "mypy",
-    # unit tests (for code coverage cmake target)
+    "pytest"
+]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+test = [
     "pytest",
     #"numpy",
     #"imageio",
-    # defaults
-    "setuptools",
-    "wheel",
 ]
-build-backend = "setuptools.build_meta"
 
 [tool.distutils.bdist_wheel]
 universal = false
