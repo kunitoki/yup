@@ -55,7 +55,8 @@ enum class YdspVectorizationReason
     invariantStreamStore,        //!< a stream store does not go through the loop variable
     emitInBody,                  //!< the body emits an output event
     nothingToWiden,              //!< the body has no array or stream access
-    runtimeBoundWithoutStreams   //!< a blockSize loop needs a stream access at the loop variable
+    runtimeBoundWithoutStreams,  //!< a blockSize loop needs a stream access at the loop variable
+    keptScalarForContraction     //!< an implicit per-sample stream loop holds a fusable mul->add/sub chain and the target contracts without a packed fused multiply-add
 };
 
 //==============================================================================

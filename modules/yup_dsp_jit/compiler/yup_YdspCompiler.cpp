@@ -677,15 +677,14 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     YdspCompileTimer compileTimer (optimizationReport, options.emitOptimizationReport);
     const auto target = selectTarget (options, pimpl->hostTarget);
 
-    // fastMath is the default for native targets (SLEEF u35 + contraction).
-    // The wasm backend keeps strict numerics: it neither links sleef_library
-    // nor enables contraction, so the default-on flag must not leak into wasm
-    // output (an explicit fastMath=true is ignored there too, by design).
-#if YUP_WASM
-    const bool fastMath = false;
-#else
+    // fastMath is the default everywhere, wasm included. The wasm backend
+    // neither links sleef_library nor widens transcendentals (vector math is
+    // off there), so on wasm the flag's practical effects are scalar float32
+    // contraction - a target without a fused multiply-add instruction expands
+    // the fused op through the exact float64 sequence, so it still rounds once
+    // and stays bit-stable with the native default - plus the usual fast-math
+    // algebraic rewrites.
     const bool fastMath = options.fastMath;
-#endif
 
     if (options.emitOptimizationReport)
     {

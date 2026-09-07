@@ -101,6 +101,9 @@ String vectorizationReasonText (YdspVectorizationReason reason)
         case YdspVectorizationReason::runtimeBoundWithoutStreams:
             return "a blockSize-bound loop needs a stream access at the loop variable";
 
+        case YdspVectorizationReason::keptScalarForContraction:
+            return "the body has a fused multiply-add chain that must stay scalar to round once";
+
         default:
             break;
     }
@@ -324,8 +327,15 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // coefficients) into the preheader, where it stays scalar and is broadcast
     // once, and none of the passes above knows what a lane is - constant
     // folding a `vsplat` of a literal, say, would silently drop its width.
+    //
+    // On a target that contracts but has no packed fused multiply-add, an
+    // implicit per-sample stream loop holding a fusable mul->add/sub chain is
+    // kept scalar (see the vectoriser docs): the chain is fused here
+    // afterwards and lowered through the exact float64 expansion, whereas a
+    // widened chain would round twice. Constant-bound bank loops are
+    // unaffected.
     if (vectorizationEnabled && ! fn.isEventHandler)
-        if (YdspVectorizer::run (fn, vectorWidth))
+        if (YdspVectorizer::run (fn, vectorWidth, contractionEnabled && ! targetHasPackedFusedMultiplyAdd))
             deadCodeElimination (fn);
 
     // After the vectoriser, so a widened loop is unrolled at its widened trip

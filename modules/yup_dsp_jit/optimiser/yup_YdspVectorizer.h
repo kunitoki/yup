@@ -74,8 +74,17 @@ public:
 
         Only 4, 8 and 16 lanes are accepted. The 4-lane overload above is
         retained for IR clients that target the portable SSE2 / ASIMD subset.
+
+        When `scalarOnlyContraction` is true (the target contracts fused
+        multiply-add but has no packed fused multiply-add instruction), an
+        implicit per-sample stream loop (runtime blockSize bound) whose body
+        holds a fusable mul->add/sub chain is kept scalar: the chain is fused
+        and lowered through the exact float64 expansion instead of being
+        widened into a chain that would round twice. Constant-bound bank
+        `for i in 0..N` loops are unaffected - they widen and stay unfused on
+        such targets by design.
     */
-    static bool run (YdspIrFunction& fn, int targetVectorWidth);
+    static bool run (YdspIrFunction& fn, int targetVectorWidth, bool scalarOnlyContraction = false);
 
     /** Widens every qualifying loop, recording each loop's outcome.
 
@@ -84,7 +93,7 @@ public:
         count, or the exact reason it stayed scalar - which is also stored on
         fn.vectorizationResults for the execution report.
     */
-    static bool run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report);
+    static bool run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report, bool scalarOnlyContraction = false);
 };
 
 } // namespace yup

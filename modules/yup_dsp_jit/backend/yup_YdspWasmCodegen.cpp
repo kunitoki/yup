@@ -236,6 +236,33 @@ uint32_t packedFloatUnarySimdOp (YdspIrOp op) noexcept
     return 0;
 }
 
+// Packed f32x4 twins of the scalar float comparisons. A widened compare is
+// the AsmJit cmpps/fcmeq semantics: a per-lane all-ones/all-zeros mask, which
+// is exactly what wasm f32x4.* produces - so a widened selectB can consume the
+// result directly through v128.bitselect. 0 means "not packed".
+uint32_t packedFloatCompareSimdOp (YdspIrOp op) noexcept
+{
+    switch (op)
+    {
+        case YdspIrOp::eqF:
+            return YdspWasmEmitter::opF32x4Eq;
+        case YdspIrOp::neF:
+            return YdspWasmEmitter::opF32x4Ne;
+        case YdspIrOp::ltF:
+            return YdspWasmEmitter::opF32x4Lt;
+        case YdspIrOp::leF:
+            return YdspWasmEmitter::opF32x4Le;
+        case YdspIrOp::gtF:
+            return YdspWasmEmitter::opF32x4Gt;
+        case YdspIrOp::geF:
+            return YdspWasmEmitter::opF32x4Ge;
+        default:
+            break;
+    }
+
+    return 0;
+}
+
 #endif
 
 // Round-toward-zero (used by the modF lowering; there is no IR op for it).
@@ -552,13 +579,13 @@ private:
     //==============================================================================
     // Rendering helpers
 
-    static void indentLine (String& result, const String& text, int indent)
+    static void indentLine (std::string& result, const String& text, int indent)
     {
         for (int i = 0; i < indent; ++i)
             result += "  ";
 
-        result += text;
-        result += "\n";
+        result += text.toRawUTF8();
+        result += '\n';
     }
 
     static String hex (uint32_t value, int digits)
@@ -644,6 +671,20 @@ private:
                 return "f32x4.min";
             case YdspWasmEmitter::opF32x4Max:
                 return "f32x4.max";
+            case YdspWasmEmitter::opF32x4Eq:
+                return "f32x4.eq";
+            case YdspWasmEmitter::opF32x4Ne:
+                return "f32x4.ne";
+            case YdspWasmEmitter::opF32x4Lt:
+                return "f32x4.lt";
+            case YdspWasmEmitter::opF32x4Gt:
+                return "f32x4.gt";
+            case YdspWasmEmitter::opF32x4Le:
+                return "f32x4.le";
+            case YdspWasmEmitter::opF32x4Ge:
+                return "f32x4.ge";
+            case YdspWasmEmitter::opV128Bitselect:
+                return "v128.bitselect";
             default:
                 return "simd." + String (static_cast<int> (subopcode));
         }
@@ -716,7 +757,11 @@ private:
                 functionTypes.push_back (readLebU (p));
         }
 
-        String result = "(module\n";
+        // Lines accumulate into a growth-friendly buffer: yup::String += has
+        // no capacity reserve, so appending a large dump line by line would be
+        // quadratic (every += reallocates and copies the whole prefix) - a big
+        // kernel (e.g. TX81Z) would take effectively forever to compile.
+        std::string result = "(module\n";
 
         // ---- render types ----
         for (size_t i = 0; i < types.size(); ++i)
@@ -843,12 +888,12 @@ private:
         }
 
         result += ")\n";
-        return result;
+        return String (result.c_str());
     }
 
     // Renders one code-section body: the locals declaration followed by the
     // instruction listing (up to the trailing `end`, which is implicit).
-    void renderBody (String& result, const Section& section, size_t& p)
+    void renderBody (std::string& result, const Section& section, size_t& p)
     {
         const auto bodySize = readLebU (p);
 
@@ -2429,6 +2474,17 @@ private:
             case YdspIrOp::gtF:
             case YdspIrOp::geF:
             {
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    pushValue (inst.a);
+                    pushValue (inst.b);
+                    emitter.simdOp (packedFloatCompareSimdOp (inst.op));
+                    setValue (inst.result);
+                    return;
+                }
+#endif
+
                 const auto type = valueType (inst.a);
                 pushValue (inst.a);
                 pushValue (inst.b);
@@ -2484,6 +2540,21 @@ private:
 
             // ---- select ----
             case YdspIrOp::selectB:
+#if defined (__wasm_simd128__)
+                if (fn->laneCountOf (inst.result) > 1)
+                {
+                    // Widened select: bitwise per-lane pick with the mask from
+                    // a widened compare. v128.bitselect (mask ? b : c) pops its
+                    // mask last, so the b, c, a push order matches the scalar
+                    // select below.
+                    pushValue (inst.b);
+                    pushValue (inst.c);
+                    pushValue (inst.a);
+                    emitter.simdOp (YdspWasmEmitter::opV128Bitselect);
+                    setValue (inst.result);
+                    return;
+                }
+#endif
                 pushValue (inst.b);
                 pushValue (inst.c);
                 pushValue (inst.a);

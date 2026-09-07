@@ -1056,7 +1056,10 @@ private:
     void showCompileError (const yup::String& diagnostics)
     {
         diagnosticsEditor->setText (diagnostics, yup::dontSendNotification);
+        YUP_DBG ("Compile error:\n" << diagnostics);
+
         hasCompileError = true;
+
         updateEditorControlsVisible();
         resized();
     }

@@ -160,10 +160,11 @@ bool isStreamAccess (YdspIrOp op) noexcept
 class LoopWidener
 {
 public:
-    LoopWidener (YdspIrFunction& functionToWiden, const YdspIrLoop& loopToWiden, int width)
+    LoopWidener (YdspIrFunction& functionToWiden, const YdspIrLoop& loopToWiden, int width, bool scalarOnlyContractionToWiden)
         : fn (functionToWiden)
         , loop (loopToWiden)
         , lanes (width)
+        , scalarOnlyContraction (scalarOnlyContractionToWiden)
     {
     }
 
@@ -185,6 +186,89 @@ private:
     bool fail (YdspVectorizationReason reason) noexcept
     {
         rejectionReason = reason;
+        return false;
+    }
+
+    /** True when the loop body holds a multiply whose only use is one add or
+        subtract - exactly the chain contractMultiplyAdd fuses into
+        fmaF/fmsubF if the loop stays scalar (same single-block scan, see
+        yup_YdspPassesContractMultiplyAdd.cpp).
+
+        The caller applies this only to an implicit per-sample (runtime
+        blockSize-bound) stream loop: a target that contracts without a packed
+        fused multiply-add cannot fuse the widened form of such a chain, so
+        widening the loop would make it round twice. Keeping it scalar lets the
+        contraction pass fuse it and lower it through the exact float64
+        expansion that rounds once. Constant-bound bank loops are exempt - on
+        such a target they stay widened and unfused by design.
+    */
+    bool hasContractionFusableChain() const
+    {
+        const auto& insts = fn.blocks[static_cast<size_t> (body)].insts;
+
+        const auto isF32 = [this] (int value)
+        {
+            return value >= 0
+                && static_cast<size_t> (value) < fn.valueTypes.size()
+                && fn.valueTypes[static_cast<size_t> (value)] == YdspValueType::float32Type;
+        };
+
+        const auto findDef = [&insts] (int value, size_t upTo) -> size_t
+        {
+            for (size_t j = upTo; j-- > 0;)
+                if (insts[j].result == value)
+                    return j;
+
+            return static_cast<size_t> (-1);
+        };
+
+        for (size_t i = 0; i < insts.size(); ++i)
+        {
+            const auto& add = insts[i];
+
+            if ((add.op != YdspIrOp::addF && add.op != YdspIrOp::subF) || ! isF32 (add.result))
+                continue;
+
+            for (const auto operand : { add.a, add.b })
+            {
+                // Only `c - a*b` has a fused form; `(a*b) - c` does not.
+                if (add.op == YdspIrOp::subF && operand != add.b)
+                    continue;
+
+                if (operand < 0 || ! isF32 (operand)
+                    || defsInBody[static_cast<size_t> (operand)] != 1
+                    || defsElsewhere[static_cast<size_t> (operand)] != 0
+                    || usesInBody[static_cast<size_t> (operand)] != 1
+                    || usesElsewhere[static_cast<size_t> (operand)] != 0)
+                    continue;
+
+                const auto mulIndex = findDef (operand, i);
+                if (mulIndex == static_cast<size_t> (-1))
+                    continue;
+
+                const auto& mul = insts[mulIndex];
+
+                if (mul.op != YdspIrOp::mulF || ! isF32 (mul.a) || ! isF32 (mul.b))
+                    continue;
+
+                // Nothing between the multiply and the add may redefine a factor.
+                bool interference = false;
+
+                for (size_t k = mulIndex + 1; k < i; ++k)
+                    if (insts[k].result == mul.a || insts[k].result == mul.b)
+                    {
+                        interference = true;
+                        break;
+                    }
+
+                if (interference)
+                    continue;
+
+                if (isF32 (operand == add.a ? add.b : add.a))
+                    return true;
+            }
+        }
+
         return false;
     }
 
@@ -288,6 +372,19 @@ private:
 
         if (widenedAccessCount == 0)
             return fail (YdspVectorizationReason::nothingToWiden);
+
+        // Only the implicit per-sample stream loop - a runtime blockSize bound
+        // - is kept scalar when it holds a fusable mul->add/sub chain and the
+        // target contracts without a packed fused multiply-add: that chain is
+        // the language-level expression the contraction pass fuses, so it must
+        // round once. A constant-bound bank `for i in 0..N` loop stays a SIMD
+        // shape: it is widened and left unfused on such a target (see
+        // hasContractionFusableChain), with per-lane mul/add rounding twice by
+        // design.
+        if (scalarOnlyContraction
+            && loop.bound.kind != YdspLoopBoundKind::constant
+            && hasContractionFusableChain())
+            return fail (YdspVectorizationReason::keptScalarForContraction);
 
         return true;
     }
@@ -1254,6 +1351,12 @@ private:
     const YdspIrLoop loop;
     const int lanes;
 
+    // When the target contracts fused multiply-add without a packed fused
+    // instruction, an implicit per-sample stream loop whose body holds a
+    // fusable mul->add/sub chain is kept scalar so the chain still rounds once
+    // (see analyse). Constant-bound bank loops widen and stay unfused.
+    const bool scalarOnlyContraction = false;
+
     YdspVectorizationReason rejectionReason = YdspVectorizationReason::notVectorizable;
 
     int header = -1;
@@ -1290,13 +1393,13 @@ bool YdspVectorizer::run (YdspIrFunction& fn)
     return run (fn, vectorWidth);
 }
 
-bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth)
+bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth, bool scalarOnlyContraction)
 {
     YdspVectorizationReport report;
-    return run (fn, targetVectorWidth, report);
+    return run (fn, targetVectorWidth, report, scalarOnlyContraction);
 }
 
-bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report)
+bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth, YdspVectorizationReport& report, bool scalarOnlyContraction)
 {
     if (targetVectorWidth != 4 && targetVectorWidth != 8 && targetVectorWidth != 16)
         return false;
@@ -1311,7 +1414,7 @@ bool YdspVectorizer::run (YdspIrFunction& fn, int targetVectorWidth, YdspVectori
     {
         YdspVectorizationReason reason = YdspVectorizationReason::notVectorizable;
 
-        if (LoopWidener (fn, fn.loops[i], targetVectorWidth).tryWiden (reason))
+        if (LoopWidener (fn, fn.loops[i], targetVectorWidth, scalarOnlyContraction).tryWiden (reason))
         {
             changed = true;
             fn.vectorizationResults.push_back ({ static_cast<int> (i), YdspVectorizationReason::widened, targetVectorWidth });

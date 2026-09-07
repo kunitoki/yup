@@ -413,6 +413,17 @@ public:
     static constexpr uint32_t opF32x4Floor = 0x68;
     static constexpr uint32_t opF32x4Nearest = 0x6A;
 
+    // Comparisons (f32x4, per-lane all-ones/all-zeros masks) and the bitwise
+    // per-lane select that consumes them - the wasm lowering of widened
+    // compare/select chains (see the packed float compare helper in codegen).
+    static constexpr uint32_t opF32x4Eq = 0x41;
+    static constexpr uint32_t opF32x4Ne = 0x42;
+    static constexpr uint32_t opF32x4Lt = 0x43;
+    static constexpr uint32_t opF32x4Gt = 0x44;
+    static constexpr uint32_t opF32x4Le = 0x45;
+    static constexpr uint32_t opF32x4Ge = 0x46;
+    static constexpr uint32_t opV128Bitselect = 0x52;
+
     // Float arithmetic (f32x4)
     static constexpr uint32_t opF32x4Abs = 0xE0;
     static constexpr uint32_t opF32x4Neg = 0xE1;
