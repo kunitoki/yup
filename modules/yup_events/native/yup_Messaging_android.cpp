@@ -132,9 +132,4 @@ void MessageManager::broadcastMessage (const String&)
 {
 }
 
-//==============================================================================
-void yup_yupEventsAndroidStartApp()
-{
-}
-
 } // namespace yup

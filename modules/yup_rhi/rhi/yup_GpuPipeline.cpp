@@ -231,7 +231,6 @@ rive::ore::TextureFormat toOreTextureFormat (GpuTextureFormat f)
 
 struct GpuPipeline::Impl
 {
-    /** A sampler auto-created for one sampler binding declared by the layouts. */
     struct SamplerBinding
     {
         uint32_t binding;
@@ -242,18 +241,8 @@ struct GpuPipeline::Impl
     rive::rcp<rive::ore::ShaderModule> vertModule;
     rive::rcp<rive::ore::ShaderModule> fragModule;
     rive::rcp<rive::ore::Pipeline> pipeline;
-    std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts; // indexed by group; may contain null entries
-
-    // One sampler per sampler binding the layouts declare, indexed by group.
-    // GpuRenderPass fills every declared sampler slot with a linear/clamp-to-edge
-    // sampler; that descriptor never varies, so the samplers are created here once
-    // rather than per draw. The pipeline outlives the passes that reference them.
+    std::vector<rive::rcp<rive::ore::BindGroupLayout>> layouts;
     std::vector<std::vector<SamplerBinding>> samplersPerGroup;
-
-    // Vertex-layout storage backing PipelineDesc's raw pointers. The ore
-    // Pipeline copies PipelineDesc by value but keeps the vertexBuffers /
-    // attributes pointers, reading them at draw time - so this storage must
-    // outlive the pipeline.
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
 };
@@ -297,10 +286,6 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     if (fs.bindingMap == nullptr || fs.bindingMapSize == 0)
         return makeResultValueFail ("Fragment shader binding-map sidecar is required but not provided");
 
-    // Populates an ore ShaderModuleDesc from a GpuShaderSource. The D3D11/D3D12
-    // backends compile HLSL from source at first use (AMD drivers crash on
-    // cross-process DXBC), so HLSL sources must be routed through the dedicated
-    // hlslSource fields rather than the generic code pointer.
     auto fillModuleDesc = [] (rive::ore::ShaderModuleDesc& desc,
                               const GpuShaderSource& src,
                               rive::ore::ShaderStage stage,
@@ -375,10 +360,13 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
             if (m.group == e.group && m.binding == e.binding)
             {
                 m.stageMask |= e.stageMask;
+
                 if (e.backendSlot[0] != rive::ore::BindingMap::kAbsent)
                     m.slotVS = e.backendSlot[0];
+
                 if (e.backendSlot[1] != rive::ore::BindingMap::kAbsent)
                     m.slotFS = e.backendSlot[1];
+
                 return;
             }
         }
@@ -521,10 +509,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     for (uint32_t g = 0; g < numGroups; ++g)
         layoutPtrs[g] = layouts[g].get();
 
-    // Create the pipeline up-front so the vertex-layout storage that backs
-    // PipelineDesc's raw pointers lives inside the object that owns the
-    // pipeline. The ore Pipeline copies PipelineDesc by value but keeps the
-    // vertexBuffers / attributes pointers, reading them at draw time.
+    // Create the pipeline up-front.
     auto pipe = GpuPipeline::Ptr { new GpuPipeline() };
     pipe->impl = TypeErasedObject (GpuPipeline::Impl {});
 
@@ -563,8 +548,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     pipeDesc.cullMode = toOreCullMode (pipelineOptions.cullMode);
     pipeDesc.winding = toOreWinding (pipelineOptions.winding);
 
-    // Color targets. Default to a single alpha-blended rgba8unorm target when
-    // none are specified, matching the classic fullscreen post-process pipeline.
+    // Color targets.
     if (pipelineOptions.colorTargetCount == 0)
     {
         pipeDesc.colorCount = 1;
@@ -596,7 +580,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         }
     }
 
-    // Depth/stencil. rgba8unorm is the ore sentinel for "no depth/stencil".
+    // Depth/stencil.
     if (pipelineOptions.depthStencil.enabled)
     {
         pipeDesc.depthStencil.format = toOreTextureFormat (pipelineOptions.depthStencil.format);
@@ -633,8 +617,6 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     implRef->pipeline = std::move (pipeline);
     implRef->layouts = std::move (layouts);
 
-    // Create the auto-samplers up front. Their descriptor is fixed, so one per
-    // declared binding serves every draw encoded with this pipeline.
     implRef->samplersPerGroup.resize (implRef->layouts.size());
 
     for (size_t g = 0; g < implRef->layouts.size(); ++g)
@@ -733,11 +715,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     auto fsSource = fsInfo->source.toRawUTF8();
 
     // GL / GLES bind UBO blocks and sampler units by name after linking, so
-    // build the name→slot fixup table for the GLSL/ESSL targets. Empty (and
-    // ignored) for every other backend.
-    const bool isGLTarget = (gpuLang == GpuShaderLanguage::glsl);
+    // build the name→slot fixup table for the GLSL/ESSL targets.
     std::vector<uint8_t> vsFixup, fsFixup;
-    if (isGLTarget)
+    if (gpuLang == GpuShaderLanguage::glsl)
     {
         vsFixup = makeGLFixupBlob (vsInfo->reflection);
         fsFixup = makeGLFixupBlob (fsInfo->reflection);
@@ -748,6 +728,7 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     {
         if (gpuLang == GpuShaderLanguage::msl && info.entryPoint == "main")
             return "main0";
+
         return info.entryPoint;
     };
 
@@ -823,7 +804,6 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromGlsl (GpuDevice::Ptr ctx,
     if (fsBundle.failed())
         return makeResultValueFail ("Fragment shader compile failed: " + fsBundle.getErrorMessage());
 
-    // Merge both stages into a single bundle for compileFromBundle().
     ShaderBundle bundle;
     for (const auto& info : vsBundle.getReference().getShaders())
         bundle.addShader (info);

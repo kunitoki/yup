@@ -481,3 +481,115 @@ TEST (MouseEventTests, WithoutButtonsPreservesOtherFields)
     EXPECT_TRUE (modified.isLeftButtonDown());
     EXPECT_FALSE (modified.isRightButtonDown());
 }
+
+TEST (MouseEventTests, DefaultIsNotATouchEvent)
+{
+    MouseEvent event;
+
+    EXPECT_FALSE (event.isTouch());
+    EXPECT_EQ (-1, event.getTouchIndex());
+    EXPECT_FLOAT_EQ (0.0f, event.getPressure());
+}
+
+TEST (MouseEventTests, ConstructWithTouchIndex)
+{
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers(), Point<float> (1.0f, 2.0f), Point<float>(), Time(), nullptr, 3, 0.75f);
+
+    EXPECT_TRUE (event.isTouch());
+    EXPECT_EQ (3, event.getTouchIndex());
+    EXPECT_FLOAT_EQ (0.75f, event.getPressure());
+}
+
+TEST (MouseEventTests, WithTouchIndexMarksEventAsTouch)
+{
+    MouseEvent event;
+    MouseEvent modified = event.withTouchIndex (2);
+
+    EXPECT_FALSE (event.isTouch());
+    EXPECT_TRUE (modified.isTouch());
+    EXPECT_EQ (2, modified.getTouchIndex());
+}
+
+TEST (MouseEventTests, WithTouchIndexNegativeMarksEventAsMouse)
+{
+    MouseEvent event = MouseEvent().withTouchIndex (1);
+    MouseEvent modified = event.withTouchIndex (-1);
+
+    EXPECT_FALSE (modified.isTouch());
+    EXPECT_EQ (-1, modified.getTouchIndex());
+}
+
+TEST (MouseEventTests, NegativeTouchIndexIsCanonicalised)
+{
+    MouseEvent event = MouseEvent().withTouchIndex (-2);
+
+    EXPECT_FALSE (event.isTouch());
+    EXPECT_EQ (-1, event.getTouchIndex());
+}
+
+TEST (MouseEventTests, WithTouchIndexPreservesOtherState)
+{
+    Point<float> position (5.0f, 6.0f);
+    MouseEvent event (MouseEvent::leftButton, KeyModifiers (KeyModifiers::shiftMask), position);
+    MouseEvent modified = event.withTouchIndex (1);
+
+    EXPECT_TRUE (modified.isLeftButtonDown());
+    EXPECT_TRUE (modified.getModifiers().isShiftDown());
+    EXPECT_EQ (position, modified.getPosition());
+}
+
+TEST (MouseEventTests, TouchIndexPreservedThroughOtherBuilders)
+{
+    MouseEvent event = MouseEvent().withTouchIndex (1).withPressure (0.5f).withPosition (Point<float> (10.0f, 20.0f));
+
+    EXPECT_TRUE (event.isTouch());
+    EXPECT_EQ (1, event.getTouchIndex());
+    EXPECT_FLOAT_EQ (0.5f, event.getPressure());
+
+    MouseEvent relative = event.withRelativePositionTo (nullptr);
+    EXPECT_EQ (1, relative.getTouchIndex());
+    EXPECT_FLOAT_EQ (0.5f, relative.getPressure());
+}
+
+TEST (MouseEventTests, WithPressure)
+{
+    MouseEvent event;
+    MouseEvent modified = event.withPressure (0.5f);
+
+    EXPECT_FLOAT_EQ (0.0f, event.getPressure());
+    EXPECT_FLOAT_EQ (0.5f, modified.getPressure());
+}
+
+TEST (MouseEventTests, WithPressurePreservesTouchIndex)
+{
+    MouseEvent event = MouseEvent().withTouchIndex (2).withPressure (0.25f);
+
+    EXPECT_EQ (2, event.getTouchIndex());
+    EXPECT_FLOAT_EQ (0.25f, event.getPressure());
+}
+
+TEST (MouseEventTests, EqualityDifferentTouchIndex)
+{
+    MouseEvent a = MouseEvent().withTouchIndex (0);
+    MouseEvent b = MouseEvent().withTouchIndex (1);
+
+    EXPECT_FALSE (a == b);
+    EXPECT_TRUE (a != b);
+}
+
+TEST (MouseEventTests, EqualityDifferentPressure)
+{
+    MouseEvent a = MouseEvent().withPressure (0.25f);
+    MouseEvent b = MouseEvent().withPressure (0.75f);
+
+    EXPECT_FALSE (a == b);
+}
+
+TEST (MouseEventTests, EqualitySameTouchState)
+{
+    MouseEvent a = MouseEvent().withTouchIndex (1).withPressure (0.5f);
+    MouseEvent b = MouseEvent().withTouchIndex (1).withPressure (0.5f);
+
+    EXPECT_TRUE (a == b);
+    EXPECT_FALSE (a != b);
+}

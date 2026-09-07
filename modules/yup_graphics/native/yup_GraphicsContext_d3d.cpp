@@ -66,6 +66,7 @@ public:
         if (! isHeadless)
         {
             swapchain.Reset();
+            cachedBackbuffer.Reset();
             DXGI_SWAP_CHAIN_DESC1 scd {};
             scd.Width = width;
             scd.Height = height;
@@ -121,16 +122,20 @@ public:
                 renderTarget->setTargetTexture (headlessDrawTexture);
             else
             {
-                ComPtr<ID3D11Texture2D> backbuffer;
-                HRESULT hr = swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf()));
-                if (FAILED (hr))
+                if (cachedBackbuffer == nullptr)
                 {
-                    auto reason = device->GetDeviceRemovedReason();
-                    fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
-                    renderTarget->setTargetTexture (nullptr);
-                    return;
+                    HRESULT hr = swapchain->GetBuffer (0, __uuidof (ID3D11Texture2D), reinterpret_cast<void**> (cachedBackbuffer.ReleaseAndGetAddressOf()));
+                    if (FAILED (hr))
+                    {
+                        auto reason = device->GetDeviceRemovedReason();
+                        fprintf (stderr, "D3D: GetBuffer failed: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                        cachedBackbuffer.Reset();
+                        renderTarget->setTargetTexture (nullptr);
+                        return;
+                    }
+
+                    renderTarget->setTargetTexture (cachedBackbuffer);
                 }
-                renderTarget->setTargetTexture (backbuffer);
             }
         }
 
@@ -152,7 +157,6 @@ public:
             }
         }
 
-        renderTarget->setTargetTexture (nullptr);
     }
 
 private:
@@ -163,6 +167,7 @@ private:
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> deviceContext;
     ComPtr<IDXGISwapChain1> swapchain;
+    ComPtr<ID3D11Texture2D> cachedBackbuffer;
     ComPtr<ID3D11Texture2D> readbackTexture;
     ComPtr<ID3D11Texture2D> headlessDrawTexture;
     rive::rcp<rive::gpu::RenderTargetD3D> renderTarget;

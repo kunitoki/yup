@@ -113,7 +113,26 @@ public:
     virtual std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) = 0;
 
     //==============================================================================
+    /** Attaches the rendering surface to the native window or view.
+
+        This is called on the message thread and is the only place where a
+        backend is allowed to touch native UI (e.g. attaching a Metal
+        `CAMetalLayer` to an `NSView`, or creating a D3D swapchain for an
+        `HWND`). Implementations that do not need native UI may leave it as a
+        no-op.
+
+        @param nativeHandle A platform-specific handle to the native window or view.
+        @param width The initial surface width in pixels.
+        @param height The initial surface height in pixels.
+        @param dpiScale The scale factor for high-DPI displays.
+    */
+    virtual void attachToWindow (void* nativeHandle, int width, int height, float dpiScale) {}
+
     /** Handles changes in the size of the rendering surface.
+
+        Unlike attachToWindow(), this runs on the render thread (so it must not
+        touch native UI) and is responsible for resizing the GPU render target
+        and any dependent textures to the new dimensions.
 
         @param nativeHandle A platform-specific handle to the native window or screen.
         @param width The new width of the surface.

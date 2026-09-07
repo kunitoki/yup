@@ -60,6 +60,17 @@ TEST_F (GpuComputePassHeadlessTests, IsValidReturnsFalseForDefaultConstructed)
     EXPECT_FALSE (pass.isValid());
 }
 
+TEST_F (GpuComputePassHeadlessTests, RunOnComputeContextRunsWorkSynchronously)
+{
+    // Backends without a dedicated compute context run the work directly.
+    bool ran = false;
+    device->runOnComputeContext ([&]
+    {
+        ran = true;
+    });
+    EXPECT_TRUE (ran);
+}
+
 TEST_F (GpuComputePassHeadlessTests, SetPipelineOnInvalidPassDoesNotCrash)
 {
     auto pass = GpuComputePass::begin (device);

@@ -326,9 +326,9 @@ bool Graphics::commitToImage()
         return false;
 
     if (auto canvas = offscreenTarget->getRenderCanvas())
-        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromRenderCanvas (context.getGpuDevice(), std::move (canvas), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
     else if (auto tex = offscreenTarget->adoptAsTexture())
-        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
+        offscreenTargetImage->setGpuTexture (GpuTexture::fromGpuTexture (context.getGpuDevice(), std::move (tex), offscreenTargetImage->getWidth(), offscreenTargetImage->getHeight()));
 
     return true;
 }

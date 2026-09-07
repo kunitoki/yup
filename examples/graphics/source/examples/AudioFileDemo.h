@@ -576,9 +576,13 @@ public:
     ~AudioFileDemo() override
     {
         stopPlayback();
+
+        waveformThreadPool.removeAllJobs (true, -1);
+
         transportSource.setSource (nullptr);
         meteringSource.setLooping (false);
         sourcePlayer.setSource (nullptr);
+
         deviceManager.removeAudioCallback (&sourcePlayer);
         deviceManager.closeAudioDevice();
     }

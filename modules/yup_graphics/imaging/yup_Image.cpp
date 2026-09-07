@@ -269,7 +269,7 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (riveTex == nullptr)
         return false;
 
-    gpuTexture = GpuTexture::fromGpuTexture (std::move (riveTex), width, height);
+    gpuTexture = GpuTexture::fromGpuTexture (context.getGpuDevice(), std::move (riveTex), width, height);
     return true;
 }
 

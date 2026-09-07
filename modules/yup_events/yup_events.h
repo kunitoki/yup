@@ -52,6 +52,7 @@
 
     dependencies:       yup_core
     optionalDeps:       yup_gui
+    appleFrameworks:    UserNotifications
 
   END_YUP_MODULE_DECLARATION
 
@@ -114,6 +115,7 @@
 #include "interprocess/yup_InterprocessConnectionServer.h"
 #include "interprocess/yup_ConnectedChildProcess.h"
 #include "interprocess/yup_NetworkServiceDiscovery.h"
+#include "notifications/yup_ToastNotification.h"
 #include "native/yup_ScopedLowPowerModeDisabler.h"
 
 #if YUP_LINUX || YUP_BSD

@@ -24,3 +24,4 @@
 #include "yup_events/yup_Timer.cpp"
 #include "yup_events/yup_MessageManager.cpp"
 #include "yup_events/yup_InterprocessConnection.cpp"
+#include "yup_events/yup_ToastNotification.cpp"

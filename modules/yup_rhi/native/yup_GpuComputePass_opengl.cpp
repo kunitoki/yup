@@ -29,6 +29,11 @@ namespace yup
 class GpuComputePassImplGL final : public GpuComputePass::Impl
 {
 public:
+    explicit GpuComputePassImplGL (GpuDevice& deviceToUse)
+        : device (deviceToUse)
+    {
+    }
+
     bool isValid() const override { return true; }
 
     //==========================================================================
@@ -42,44 +47,56 @@ public:
         if (pipe == nullptr || pipe->getProgram() == 0)
             return false;
 
-        glUseProgram (pipe->getProgram());
-
-        for (auto& sb : storageBindings)
+        device.runOnComputeContext ([&]
         {
-            if (sb.buffer == nullptr)
-                continue;
+            GLint previousProgram = 0;
+            GLint previousUniformBuffer = 0;
+            glGetIntegerv (GL_CURRENT_PROGRAM, &previousProgram);
+            glGetIntegerv (GL_UNIFORM_BUFFER_BINDING, &previousUniformBuffer);
 
-            auto* bufImpl = sb.buffer->getImpl();
-            if (bufImpl == nullptr || bufImpl->glBuffer == 0)
-                continue;
+            glUseProgram (pipe->getProgram());
 
-            GLuint index = static_cast<GLuint> (sb.group * 16 + sb.binding);
-            glBindBufferBase (GL_SHADER_STORAGE_BUFFER, index, bufImpl->glBuffer);
-        }
+            for (auto& sb : storageBindings)
+            {
+                if (sb.buffer == nullptr)
+                    continue;
 
-        for (auto& ub : uboBindings)
-        {
-            if (ub.data.empty())
-                continue;
+                auto* bufImpl = sb.buffer->getImpl();
+                if (bufImpl == nullptr || bufImpl->glStorageBuffer.id == 0)
+                    continue;
 
-            GLuint ubo = 0;
-            glGenBuffers (1, &ubo);
-            if (ubo == 0)
-                continue;
+                GLuint index = static_cast<GLuint> (sb.group * 16 + sb.binding);
+                glBindBufferBase (GL_SHADER_STORAGE_BUFFER, index, bufImpl->glStorageBuffer.id);
+            }
 
-            glBindBuffer (GL_UNIFORM_BUFFER, ubo);
-            glBufferData (GL_UNIFORM_BUFFER,
-                          static_cast<GLsizeiptr> (ub.data.size()),
-                          ub.data.data(),
-                          GL_DYNAMIC_DRAW);
+            for (auto& ub : uboBindings)
+            {
+                if (ub.data.empty())
+                    continue;
 
-            GLuint index = static_cast<GLuint> (ub.group * 16 + ub.binding);
-            glBindBufferBase (GL_UNIFORM_BUFFER, index, ubo);
+                GLuint ubo = 0;
+                glGenBuffers (1, &ubo);
+                if (ubo == 0)
+                    continue;
 
-            tempBuffers.push_back (ubo);
-        }
+                glBindBuffer (GL_UNIFORM_BUFFER, ubo);
+                glBufferData (GL_UNIFORM_BUFFER,
+                              static_cast<GLsizeiptr> (ub.data.size()),
+                              ub.data.data(),
+                              GL_DYNAMIC_DRAW);
 
-        glDispatchCompute (groupsX, groupsY, groupsZ);
+                GLuint index = static_cast<GLuint> (ub.group * 16 + ub.binding);
+                glBindBufferBase (GL_UNIFORM_BUFFER, index, ubo);
+
+                tempBuffers.push_back (ubo);
+            }
+
+            glDispatchCompute (groupsX, groupsY, groupsZ);
+
+            glUseProgram (static_cast<GLuint> (previousProgram));
+            glBindBuffer (GL_UNIFORM_BUFFER, static_cast<GLuint> (previousUniformBuffer));
+        });
+
         return true;
     }
 
@@ -87,26 +104,30 @@ public:
 
     void finish() override
     {
-        if (! tempBuffers.empty())
+        device.runOnComputeContext ([&]
         {
-            glDeleteBuffers (static_cast<GLsizei> (tempBuffers.size()), tempBuffers.data());
-            tempBuffers.clear();
-        }
+            if (! tempBuffers.empty())
+            {
+                glDeleteBuffers (static_cast<GLsizei> (tempBuffers.size()), tempBuffers.data());
+                tempBuffers.clear();
+            }
 
-        glMemoryBarrier (GL_SHADER_STORAGE_BARRIER_BIT
-                         | GL_UNIFORM_BARRIER_BIT
-                         | GL_BUFFER_UPDATE_BARRIER_BIT);
+            glMemoryBarrier (GL_SHADER_STORAGE_BARRIER_BIT
+                             | GL_UNIFORM_BARRIER_BIT
+                             | GL_BUFFER_UPDATE_BARRIER_BIT);
+        });
     }
 
 private:
+    GpuDevice& device;
     std::vector<GLuint> tempBuffers;
 };
 
 //==============================================================================
 
-std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&)
+std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice& device)
 {
-    return std::make_unique<GpuComputePassImplGL>();
+    return std::make_unique<GpuComputePassImplGL> (device);
 }
 
 } // namespace yup

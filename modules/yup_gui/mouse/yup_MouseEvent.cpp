@@ -42,13 +42,17 @@ MouseEvent::MouseEvent (Buttons newButtons,
                         const Point<float>& newPosition,
                         const Point<float>& lastMouseDownPosition,
                         yup::Time lastMouseDownTime,
-                        Component* sourceComponent) noexcept
+                        Component* sourceComponent,
+                        int newTouchIndex,
+                        float newPressure) noexcept
     : buttons (newButtons)
     , modifiers (newModifiers)
     , position (newPosition)
     , lastMouseDownPosition (lastMouseDownPosition)
     , lastMouseDownTime (lastMouseDownTime)
     , sourceComponent (sourceComponent)
+    , touchIndex (newTouchIndex >= 0 ? newTouchIndex : -1)
+    , pressure (newPressure)
 {
 }
 
@@ -81,12 +85,12 @@ MouseEvent::Buttons MouseEvent::getButtons() const noexcept
 
 MouseEvent MouseEvent::withButtons (Buttons buttonsToAdd) const noexcept
 {
-    return { static_cast<Buttons> (buttons | buttonsToAdd), modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent };
+    return { static_cast<Buttons> (buttons | buttonsToAdd), modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 MouseEvent MouseEvent::withoutButtons (Buttons buttonsToRemove) const noexcept
 {
-    return { static_cast<Buttons> (buttons & ~buttonsToRemove), modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent };
+    return { static_cast<Buttons> (buttons & ~buttonsToRemove), modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 //==============================================================================
@@ -98,7 +102,7 @@ KeyModifiers MouseEvent::getModifiers() const noexcept
 
 MouseEvent MouseEvent::withModifiers (KeyModifiers newModifiers) const noexcept
 {
-    return { buttons, newModifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent };
+    return { buttons, newModifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 //==============================================================================
@@ -118,12 +122,12 @@ Point<float> MouseEvent::getScreenPosition() const noexcept
 
 MouseEvent MouseEvent::withPosition (const Point<float>& newPosition) const noexcept
 {
-    return { buttons, modifiers, newPosition, lastMouseDownPosition, lastMouseDownTime, sourceComponent };
+    return { buttons, modifiers, newPosition, lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 MouseEvent MouseEvent::withTranslatedPosition (const Point<float>& translation) const noexcept
 {
-    return { buttons, modifiers, position.translated (translation), lastMouseDownPosition, lastMouseDownTime, sourceComponent };
+    return { buttons, modifiers, position.translated (translation), lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 MouseEvent MouseEvent::withRelativePositionTo (Component* targetComponent) const noexcept
@@ -154,7 +158,7 @@ MouseEvent MouseEvent::withRelativePositionTo (Component* targetComponent) const
         }
     }
 
-    return { buttons, modifiers, relativePos, relativeLastPos, lastMouseDownTime, targetComponent };
+    return { buttons, modifiers, relativePos, relativeLastPos, lastMouseDownTime, targetComponent, touchIndex, pressure };
 }
 
 //==============================================================================
@@ -166,7 +170,7 @@ Point<float> MouseEvent::getLastMouseDownPosition() const noexcept
 
 MouseEvent MouseEvent::withLastMouseDownPosition (const Point<float>& newPosition) const noexcept
 {
-    return { buttons, modifiers, position, newPosition, lastMouseDownTime, sourceComponent };
+    return { buttons, modifiers, position, newPosition, lastMouseDownTime, sourceComponent, touchIndex, pressure };
 }
 
 yup::Time MouseEvent::getLastMouseDownTime() const noexcept
@@ -176,7 +180,7 @@ yup::Time MouseEvent::getLastMouseDownTime() const noexcept
 
 MouseEvent MouseEvent::withLastMouseDownTime (yup::Time newTime) const noexcept
 {
-    return { buttons, modifiers, position, lastMouseDownPosition, newTime, sourceComponent };
+    return { buttons, modifiers, position, lastMouseDownPosition, newTime, sourceComponent, touchIndex, pressure };
 }
 
 //==============================================================================
@@ -188,7 +192,34 @@ Component* MouseEvent::getSourceComponent() const noexcept
 
 MouseEvent MouseEvent::withSourceComponent (Component* newComponent) const noexcept
 {
-    return { buttons, modifiers, position, lastMouseDownPosition, lastMouseDownTime, newComponent };
+    return { buttons, modifiers, position, lastMouseDownPosition, lastMouseDownTime, newComponent, touchIndex, pressure };
+}
+
+//==============================================================================
+
+bool MouseEvent::isTouch() const noexcept
+{
+    return touchIndex >= 0;
+}
+
+int MouseEvent::getTouchIndex() const noexcept
+{
+    return touchIndex;
+}
+
+float MouseEvent::getPressure() const noexcept
+{
+    return pressure;
+}
+
+MouseEvent MouseEvent::withTouchIndex (int newTouchIndex) const noexcept
+{
+    return { buttons, modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent, newTouchIndex >= 0 ? newTouchIndex : -1, pressure };
+}
+
+MouseEvent MouseEvent::withPressure (float newPressure) const noexcept
+{
+    return { buttons, modifiers, position, lastMouseDownPosition, lastMouseDownTime, sourceComponent, touchIndex, newPressure };
 }
 
 //==============================================================================
@@ -203,7 +234,9 @@ bool MouseEvent::operator== (const MouseEvent& other) const noexcept
             x.position,
             x.lastMouseDownPosition,
             x.lastMouseDownTime,
-            x.sourceComponent);
+            x.sourceComponent,
+            x.touchIndex,
+            x.pressure);
     };
 
     return tie (*this) == tie (other);

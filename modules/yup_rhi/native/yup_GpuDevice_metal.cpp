@@ -78,7 +78,7 @@ public:
             if (mtlBuffer == nil)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, mtlBuffer });
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .mtlStorageBuffer = mtlBuffer });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);
@@ -332,7 +332,7 @@ private:
     {
         std::unique_ptr<rive::gpu::RenderContext> renderContext;
         bool frameActive = false;
-        bool leased = false;
+        std::atomic<bool> leased = false;
     };
 
     struct OffscreenTargetMetal : public RenderableTarget

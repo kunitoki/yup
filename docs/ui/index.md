@@ -39,6 +39,8 @@ windowing, layout, widgets, and theming are still to come.
   `snapshotToTexture` for pixel capture.
 - [Component paint profiling](component-profiling.md) — measure and
   reduce the cost of `Component::paint`.
+- [Toast notifications](toast-notifications.md) - the cross-platform `ToastNotification` utility and
+  its `ToastTemplate`, delivered by the platform notification backend.
 
 ## Additional Components
 

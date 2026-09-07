@@ -961,6 +961,8 @@ std::unique_ptr<RenderPass> ContextGL::beginRenderPass(
     pass->m_ownsFBO = true;
     glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);
 
+    glDisable(GL_SCISSOR_TEST);
+
     // Attach color targets.
     GLenum drawBuffers[4] = {};
     for (uint32_t i = 0; i < desc.colorCount; ++i)
@@ -1066,6 +1068,10 @@ std::unique_ptr<RenderPass> ContextGL::beginRenderPass(
            "Ore GL FBO incomplete");
 
     // Handle clear ops.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDepthMask(GL_TRUE);
+    glStencilMask(0xFF);
+
     for (uint32_t i = 0; i < desc.colorCount; ++i)
     {
         const auto& ca = desc.colorAttachments[i];

@@ -65,6 +65,30 @@
 #import <IOKit/hid/IOHIDLib.h>
 #import <IOKit/hid/IOHIDKeys.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
+#import <UserNotifications/UserNotifications.h>
+
+#elif YUP_IOS
+#import <UserNotifications/UserNotifications.h>
+
+#elif YUP_WINDOWS
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4471 4710 4711 4514 4820 4668 4505)
+#include <sdkddkver.h>
+#include <ShObjIdl.h>
+#include <windows.ui.notifications.h>
+#include <roapi.h>
+#include <propvarutil.h>
+#include <functiondiscoverykeys.h>
+#include <winstring.h>
+YUP_END_IGNORE_WARNINGS_MSVC
+
+#include <cwchar>
+#include <map>
+#include <optional>
+
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "shlwapi")
+#pragma comment(lib, "user32")
+#endif
 
 #elif YUP_LINUX || YUP_BSD
 #include <unistd.h>
@@ -97,6 +121,7 @@
 #include "interprocess/yup_ConnectedChildProcess.cpp"
 #include "interprocess/yup_NetworkServiceDiscovery.cpp"
 #include "native/yup_ScopedLowPowerModeDisabler.cpp"
+#include "notifications/yup_ToastNotification.cpp"
 
 //==============================================================================
 #if YUP_MAC || YUP_IOS
@@ -106,6 +131,7 @@
 #else
 #include "native/yup_MessageManager_ios.mm"
 #endif
+#include "native/yup_ToastNotification_apple.mm"
 
 #elif YUP_WINDOWS
 #include "native/yup_RunningInUnity.h"
@@ -113,15 +139,19 @@
 #if YUP_EVENTS_INCLUDE_WINRT_WRAPPER
 #include "native/yup_WinRTWrapper_windows.cpp"
 #endif
+#include "native/yup_ToastNotification_windows.cpp"
 
 #elif YUP_LINUX || YUP_BSD
 #include "native/yup_EventLoopInternal_linux.h"
 #include "native/yup_Messaging_linux.cpp"
+#include "native/yup_ToastNotification_linux.cpp"
 
 #elif YUP_EMSCRIPTEN
 #include "native/yup_Messaging_emscripten.cpp"
+#include "native/yup_ToastNotification_wasm.cpp"
 
 #elif YUP_ANDROID
 #include "native/yup_Messaging_android.cpp"
+#include "native/yup_ToastNotification_android.cpp"
 
 #endif

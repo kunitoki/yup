@@ -368,6 +368,7 @@ void Slider::mouseDown (const MouseEvent& event)
 
     mouseDownPosition = event.getPosition(); // Already returns Point<float>, no toFloat() needed
     mouseDragStartPosition = mouseDownPosition;
+    isMouseOverSlider = true;
 
     dragMode = getDragModeForMousePosition (mouseDownPosition);
 
@@ -444,6 +445,12 @@ void Slider::mouseUp (const MouseEvent& event)
             onDragEnd (event);
 
         dragMode = notDragging;
+        repaint();
+    }
+
+    if (isMouseOverSlider && ! getLocalBounds().contains (event.getPosition()))
+    {
+        isMouseOverSlider = false;
         repaint();
     }
 }

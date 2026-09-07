@@ -752,3 +752,99 @@ TEST_F (KMeterStateTests, OverCounterDetectsNegativePeaks)
     EXPECT_EQ (3, overCount);
     EXPECT_TRUE (meter->isClipping());
 }
+
+//==============================================================================
+// Coverage: ballistics early-exit, K-weighting, peak-hold fall, clamps
+//==============================================================================
+
+TEST_F (KMeterStateTests, KWeightedSilenceHitsBallisticsEarlyReturn)
+{
+    // Changing the standard schedules a loudness filter reset on the next
+    // processPendingAudio() call.
+    meter->setMeteringStandard (KMeterState::MeteringStandard::ebuR128);
+    meter->reset();
+
+    std::vector<float> silence (512, 0.0f);
+    const float* channels[2] = { silence.data(), silence.data() };
+
+    meter->pushSamples (channels, 2, 512);
+    meter->processPendingAudio();
+
+    // For K-weighted silence the level equals the readout, so the log
+    // ballistics early-exit path is taken.
+    EXPECT_LT (meter->getPeakLevel(), -90.0f);
+    EXPECT_LT (meter->getAverageLevel(), -70.0f);
+}
+
+TEST_F (KMeterStateTests, KWeightedRmsCanExceedBallisticPeak)
+{
+    meter->setMeteringStandard (KMeterState::MeteringStandard::ituBS1770_4);
+
+    // 10 kHz tone: the K-weighting high-shelf boosts it ~4 dB, so the RMS of
+    // the filtered samples can exceed the ballistic peak computed from the
+    // original samples, exercising the peak-must-not-fall-below-RMS guard.
+    constexpr int numSamples = 4800; // 100ms
+    std::vector<float> samples (numSamples);
+    for (int i = 0; i < numSamples; ++i)
+        samples[i] = 0.5f * std::sin (2.0f * MathConstants<float>::pi * 10000.0f * i / sampleRate);
+
+    const float* channels[2] = { samples.data(), samples.data() };
+
+    for (int pass = 0; pass < 10; ++pass)
+    {
+        meter->pushSamples (channels, 2, numSamples);
+        while (meter->getNumSamplesInFifo() > 0)
+            meter->processPendingAudio();
+    }
+
+    EXPECT_GT (meter->getAverageLevel(), -60.0f);
+    EXPECT_GT (meter->getPeakLevel(), -60.0f);
+}
+
+TEST_F (KMeterStateTests, PeakHoldFallsAndClampsToCandidate)
+{
+    meter->setPeakHoldTime (0.05); // 50ms auto-release
+
+    std::vector<float> loud (512, 1.0f);
+    std::vector<float> medium (512, 0.98f);
+    const float* loudChannels[2] = { loud.data(), loud.data() };
+    const float* mediumChannels[2] = { medium.data(), medium.data() };
+
+    // Establish a peak hold of 1.0
+    meter->pushSamples (loudChannels, 2, 512);
+    meter->processPendingAudio();
+
+    const float holdBefore = meter->getPeakHoldLevel();
+    EXPECT_NEAR (Decibels::gainToDecibels (1.0f) + 20.0f, holdBefore, tolerance);
+
+    // Feed a slightly quieter signal until the hold time elapses and the hold
+    // starts falling; the ballistic peak must keep the hold from falling below it.
+    for (int i = 0; i < 12; ++i)
+    {
+        meter->pushSamples (mediumChannels, 2, 512);
+        meter->processPendingAudio();
+    }
+
+    const float holdAfter = meter->getPeakHoldLevel();
+    EXPECT_LT (holdAfter, holdBefore);
+    EXPECT_NEAR (Decibels::gainToDecibels (0.98f) + 20.0f, holdAfter, 0.5f);
+}
+
+TEST_F (KMeterStateTests, GetAverageAndPeakHoldForSpecificChannel)
+{
+    std::vector<float> ch0 (512, 0.3f);
+    std::vector<float> ch1 (512, 0.5f);
+    const float* channels[2] = { ch0.data(), ch1.data() };
+
+    meter->pushSamples (channels, 2, 512);
+    meter->processPendingAudio();
+
+    const float avg0 = meter->getAverageLevel (0);
+    const float avg1 = meter->getAverageLevel (1);
+    const float hold0 = meter->getPeakHoldLevel (0);
+    const float hold1 = meter->getPeakHoldLevel (1);
+
+    EXPECT_GT (avg1, avg0);
+    EXPECT_NEAR (Decibels::gainToDecibels (0.3f) + 20.0f, hold0, tolerance);
+    EXPECT_NEAR (Decibels::gainToDecibels (0.5f) + 20.0f, hold1, tolerance);
+}

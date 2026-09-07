@@ -29,16 +29,29 @@ namespace yup
 class GpuComputePipelineGL final : public GpuComputePipeline
 {
 public:
-    GpuComputePipelineGL (GLuint program, GpuWorkgroupSize wgs)
-        : glProgram (program)
+    GpuComputePipelineGL (GpuDevice::Ptr deviceToUse, GLuint program, GpuWorkgroupSize wgs)
+        : device (std::move (deviceToUse))
+        , glProgram (program)
         , workgroupSize (wgs)
     {
     }
 
     ~GpuComputePipelineGL() override
     {
-        if (glProgram != 0)
+        if (glProgram == 0)
+            return;
+
+        if (device != nullptr)
+        {
+            device->runOnComputeContext ([program = glProgram]
+            {
+                glDeleteProgram (program);
+            });
+        }
+        else
+        {
             glDeleteProgram (glProgram);
+        }
     }
 
     GpuWorkgroupSize getWorkgroupSize() const noexcept override { return workgroupSize; }
@@ -46,13 +59,15 @@ public:
     GLuint getProgram() const noexcept { return glProgram; }
 
 private:
+    GpuDevice::Ptr device;
     GLuint glProgram;
     GpuWorkgroupSize workgroupSize;
 };
 
 //==============================================================================
 
-ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineGL (const GpuShaderSource& source,
+ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineGL (GpuDevice::Ptr device,
+                                                                     const GpuShaderSource& source,
                                                                      const GpuWorkgroupSize& workgroupSize)
 {
     if (source.code == nullptr || source.codeSize == 0)
@@ -114,7 +129,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineGL (const GpuSh
 
     glDeleteShader (shader);
 
-    return makeResultValueOk (GpuComputePipeline::Ptr (new GpuComputePipelineGL (program, workgroupSize)));
+    return makeResultValueOk (GpuComputePipeline::Ptr (new GpuComputePipelineGL (std::move (device), program, workgroupSize)));
 }
 
 } // namespace yup

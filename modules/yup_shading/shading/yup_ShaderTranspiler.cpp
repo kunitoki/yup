@@ -29,21 +29,31 @@ namespace
 // glslang global init/finalize - reference-counted across all ShaderTranspiler instances
 //==============================================================================
 
-static std::atomic<int>& getGlslangInitCount()
+static CriticalSection& getGlslangInitLock()
 {
-    static std::atomic<int> count { 0 };
+    static CriticalSection lock;
+    return lock;
+}
+
+static int& getGlslangInitCount()
+{
+    static int count = 0;
     return count;
 }
 
 static void incrementGlslangInit()
 {
-    if (getGlslangInitCount().fetch_add (1) == 0)
+    const ScopedLock sl (getGlslangInitLock());
+
+    if (getGlslangInitCount()++ == 0)
         glslang::InitializeProcess();
 }
 
 static void decrementGlslangInit()
 {
-    if (getGlslangInitCount().fetch_sub (1) == 1)
+    const ScopedLock sl (getGlslangInitLock());
+
+    if (--getGlslangInitCount() == 0)
         glslang::FinalizeProcess();
 }
 
@@ -798,6 +808,16 @@ static void setupGLCombinedSamplers (spirv_cross::CompilerGLSL& compiler)
 }
 
 //==============================================================================
+// ESSL profile versions have per-stage floors: compute shaders require OpenGL ES 3.1
+// (ESSL 3.10), while vertex/fragment shaders are fine on OpenGL ES 3.0 (ESSL 3.00).
+//==============================================================================
+
+static uint32_t esslVersionForExecutionModel (spv::ExecutionModel model)
+{
+    return model == spv::ExecutionModelGLCompute ? 310u : 300u;
+}
+
+//==============================================================================
 // Fills MSL backend slot numbers into a ShaderReflection after CompilerMSL::compile() has run
 //==============================================================================
 
@@ -1299,7 +1319,8 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
 
                 const bool es = options.es || (targetLang == ShaderLanguage::essl);
                 glslOpts.es = es;
-                glslOpts.version = es ? 300u : static_cast<uint32_t> (options.glslVersion);
+                glslOpts.version = es ? esslVersionForExecutionModel (compiler.get_execution_model())
+                                      : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
@@ -1519,7 +1540,8 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                 spirv_cross::CompilerGLSL::Options glslOpts;
                 const bool es = options.es || (targetLang == ShaderLanguage::essl);
                 glslOpts.es = es;
-                glslOpts.version = es ? 300u : static_cast<uint32_t> (options.glslVersion);
+                glslOpts.version = es ? esslVersionForExecutionModel (compiler.get_execution_model())
+                                      : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = options.flipVertY;
                 compiler.set_common_options (glslOpts);

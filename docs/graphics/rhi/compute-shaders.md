@@ -26,6 +26,15 @@ does not yet expose compute dispatch, so `GpuComputePipeline` and
 | WebGPU       | `wgpu::ComputePipeline`                | `DispatchWorkgroups()`             |
 | OpenGL       | `GL_COMPUTE_SHADER` + program link     | `glDispatchCompute()`              |
 
+On OpenGL, compute work runs on a dedicated, unshared GL context
+(`GpuDevice::Options::computeContextActivator`, routed through
+`GpuDevice::runOnComputeContext()`). Some drivers silently stop executing
+compute dispatches when they are interleaved with rendering on the same
+context — or on any context of the same share group — so pipeline compilation,
+dispatches, storage buffer create/update/readback, and the matching deletions
+all live exclusively on that context. When no dedicated context is available,
+compute falls back to the rendering context.
+
 ## Compiling a compute pipeline
 
 ### From GLSL (online, requires `YUP_ENABLE_SHADER_TRANSPILER`)

@@ -57,10 +57,8 @@ public:
 
     bool isComputeAvailable() const noexcept override { return true; }
 
-    /** Returns the native ID3D11Device for compute operations. */
     ID3D11Device* getD3DDevice() const noexcept { return gpu.Get(); }
 
-    /** Returns the native ID3D11DeviceContext for compute operations. */
     ID3D11DeviceContext* getD3DDeviceContext() const noexcept { return gpuContext.Get(); }
 
     //==============================================================================
@@ -99,7 +97,7 @@ public:
             if (FAILED (hr) || uav == nullptr)
                 return nullptr;
 
-            return GpuBuffer::createWithImpl (GpuBuffer::Impl { type, byteSize, {}, std::move (d3dBuffer), std::move (uav) });
+            return GpuBuffer::createWithImpl (GpuBuffer::Impl { .type = type, .byteSize = byteSize, .d3dStorageBuffer = std::move (d3dBuffer), .d3dUav = std::move (uav) });
         }
 
         return GpuDevice::createBuffer (type, data, byteSize);
@@ -120,8 +118,6 @@ public:
         if (dstSize < byteSize)
             return false;
 
-        // The storage buffer is D3D11_USAGE_DEFAULT and so not CPU accessible; a
-        // staging copy is the only way to reach its contents.
         if (impl->d3dReadbackStaging == nullptr)
         {
             D3D11_BUFFER_DESC stagingDesc {};
@@ -137,10 +133,6 @@ public:
                 return false;
         }
 
-        // The compute dispatch was issued on this same immediate context, so the
-        // copy is ordered after it, and Map (without DO_NOT_WAIT) blocks until the
-        // copy has retired. D3D11 can therefore read back in lockstep and always
-        // hand the caller current data.
         gpuContext->CopyResource (impl->d3dReadbackStaging.Get(), impl->d3dStorageBuffer.Get());
 
         D3D11_MAPPED_SUBRESOURCE mapped {};
@@ -164,7 +156,6 @@ public:
         if (impl == nullptr)
             return false;
 
-        // For ore-backed buffers (vertex, index, uniform), delegate to base class.
         if (impl->d3dStorageBuffer == nullptr)
             return GpuDevice::updateBuffer (buffer, data, byteSize);
 
@@ -332,8 +323,6 @@ public:
         flushDesc.renderTarget = target.getRenderTarget();
         renderContext->flush (flushDesc);
 
-        if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
-            gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
 
         target.contextSlot->frameActive = false;
     }
@@ -367,11 +356,9 @@ public:
         if (dstSize < bytesPerRow * static_cast<size_t> (target.height))
             return false;
 
-        if (target.getRenderContext() == nullptr)
-        {
-            if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+        if (auto* renderTarget = static_cast<rive::gpu::RenderTargetD3D*> (target.getRenderTarget()))
+            if (renderTarget->targetTexture() != nullptr)
                 gpuContext->CopyResource (target.stagingTexture.Get(), renderTarget->targetTexture());
-        }
 
         D3D11_MAPPED_SUBRESOURCE mapped {};
         HRESULT hr = gpuContext->Map (target.stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
@@ -457,7 +444,6 @@ std::unique_ptr<GpuDevice> yup_constructDirect3DGpuDevice (GpuDevice::Options fi
         contextOptions.disableTypedUAVLoadStore = true;
     }
 
-    // Create a temporary factory just to enumerate adapters
     ComPtr<IDXGIFactory2> factory;
     VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
 

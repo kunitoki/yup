@@ -40,6 +40,18 @@ String getSDLVersionString (int version)
 
 bool displayEventDispatcher (void* userdata, SDL_Event* event)
 {
+    if (auto* messageManager = MessageManager::getInstanceWithoutCreating();
+        messageManager != nullptr && ! messageManager->isThisTheMessageThread())
+    {
+        MessageManager::callAsync ([eventCopy = *event]() mutable
+        {
+            if (auto* desktop = Desktop::getInstanceWithoutCreating())
+                displayEventDispatcher (desktop, &eventCopy);
+        });
+
+        return true;
+    }
+
     auto desktop = static_cast<Desktop*> (userdata);
 
     if (event->type >= SDL_EVENT_DISPLAY_FIRST && event->type <= SDL_EVENT_DISPLAY_LAST)

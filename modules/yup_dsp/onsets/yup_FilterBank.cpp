@@ -63,7 +63,7 @@ void FilterBank::build (int bandsPerOctave, float fMin, float fMax, int numFFTBi
     const int bands = static_cast<int> (frequencies.size()) - 2;
     jassert (bands >= 3);
 
-    matrix.assign (static_cast<std::size_t> (numFFTBins) * static_cast<std::size_t> (bands), 0.0f);
+    matrix.assign (static_cast<std::size_t> (numFFTBins) * static_cast<std::size_t> (bands) + static_cast<std::size_t> (bands), 0.0f);
     numBands = bands;
 
     for (int band = 0; band < bands; ++band)

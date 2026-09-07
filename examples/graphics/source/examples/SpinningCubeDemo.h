@@ -179,7 +179,7 @@ public:
         }
 
         lottiePlayer.advanceTime (lastFrameTimeSeconds);
-        repaint();
+        repaint (getCubeArea());
     }
 
     //==============================================================================
@@ -219,9 +219,13 @@ public:
         //    so it can be sampled as a texture by the cube's fragment shader.
         yup::GpuTexture::Ptr lottieTexture = renderLottieTexture();
 
-        // 3. Render the 3D cube into sceneCanvas via GpuPipeline + GpuRenderPass.
+        // 3. Render the 3D cube into sceneCanvas via GpuPipeline + GpuRenderPass, and
+        //    apply the blur passes below, all against a single shared GpuFrame - the
+        //    cube pass and both blur passes run on the same command buffer.
+        auto frame = yup::GpuFrame::begin (capturedContext->getGpuDevice());
+
         if (cubePipeline != nullptr)
-            renderCube (*sceneCanvas, w, h, lottieTexture);
+            renderCube (frame, *sceneCanvas, w, h, lottieTexture);
 
         // 4. Apply separable Gaussian blur: two O(radius) passes (H then V).
         yup::GpuTexture::Ptr outputTex = sceneCanvas->asTexture();
@@ -251,9 +255,6 @@ public:
 
             if (blurCanvasA != nullptr && blurCanvasB != nullptr)
             {
-                // Both blur passes share a single GpuFrame.
-                auto frame = yup::GpuFrame::begin (capturedContext->getGpuDevice());
-
                 auto runPass = [&] (yup::GpuTarget& passCanvas, const yup::GpuTexture::Ptr& input, float dirX, float dirY) -> yup::GpuTexture::Ptr
                 {
                     BlurParams params { blurSigma, radius, (float) w, (float) h, dirX, dirY, 0.0f, 0.0f };
@@ -270,13 +271,13 @@ public:
 
                 outputTex = runPass (*blurCanvasA, outputTex, 1.0f, 0.0f); // horizontal
                 outputTex = runPass (*blurCanvasB, outputTex, 0.0f, 1.0f); // vertical
-
-                // Submit without stalling: all contexts share one command queue,
-                // so the main frame that samples outputTex is serialised after
-                // this work on the GPU. No CPU wait is required.
-                frame.submit();
             }
         }
+
+        // Submit without stalling: all contexts share one command queue, so the
+        // main frame that samples outputTex is serialised after this work on
+        // the GPU. No CPU wait is required.
+        frame.submit();
 
         // 5. Composite to main view.
         if (outputTex != nullptr)
@@ -966,7 +967,7 @@ void main() {
 
     // ---- Per-frame cube render pass -----------------------------------------
 
-    void renderCube (yup::GpuTarget& canvas, int w, int h, const yup::GpuTexture::Ptr& lottieTexture)
+    void renderCube (yup::GpuFrame& frame, yup::GpuTarget& canvas, int w, int h, const yup::GpuTexture::Ptr& lottieTexture)
     {
         if (cubePipeline == nullptr || cubeVBO == nullptr || cubeIBO == nullptr)
             return;
@@ -979,8 +980,6 @@ void main() {
 
         CubeUniforms uniforms { angleY, angleX, (float) w / (float) h, 0.0f };
 
-        auto frame = yup::GpuFrame::begin (capturedContext->getGpuDevice());
-
         auto pass = canvas.beginRenderPass (frame, { true, yup::Color (0xff1a1a2e) });
         pass.setPipeline (cubePipeline);
         pass.setUniformBuffer (0, 0, &uniforms, sizeof (uniforms));
@@ -990,11 +989,6 @@ void main() {
         pass.setIndexBuffer (yup::GpuIndexFormat::uint16, cubeIBO);
         pass.drawIndexed (yup::numElementsInArray (kCubeIdx));
         pass.finish();
-
-        // Submit without stalling: the shared command queue serialises this
-        // work ahead of the main frame that samples the scene texture, so no
-        // CPU wait is needed here.
-        frame.submit();
     }
 
     //==============================================================================

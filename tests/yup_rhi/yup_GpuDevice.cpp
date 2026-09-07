@@ -226,3 +226,54 @@ TEST_F (GpuBufferErrorTests, DefaultConstructedBufferIsInvalid)
     GpuBuffer::Ptr nullBuf;
     EXPECT_EQ (nullBuf, nullptr);
 }
+
+TEST_F (GpuBufferErrorTests, CreateWithNullDeviceReturnsNull)
+{
+    const float data[] = { 1.0f, 2.0f, 3.0f };
+    EXPECT_EQ (GpuBuffer::create (nullptr, GpuBufferType::vertex, data, sizeof (data)), nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// GpuComputePipeline — headless (compute-unavailable) error paths
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuDeviceErrorTests, ComputePipelineCompileOnHeadlessFails)
+{
+    GpuShaderSource src;
+    src.language = GpuShaderLanguage::glsl;
+    src.code = "void main() {}";
+    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
+
+    auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 8, 1, 1 });
+    EXPECT_TRUE (result.failed());
+}
+
+TEST_F (GpuDeviceErrorTests, ComputePipelineCompileFromBundleOnHeadlessFails)
+{
+    ShaderBundle bundle;
+    auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 8, 1, 1 });
+    EXPECT_TRUE (result.failed());
+}
+
+#if YUP_ENABLE_SHADER_TRANSPILER
+TEST_F (GpuDeviceErrorTests, ComputePipelineCompileFromGlslOnHeadlessFails)
+{
+    auto result = GpuComputePipeline::compileFromGlsl (device, "void main() {}");
+    EXPECT_TRUE (result.failed());
+}
+#endif // YUP_ENABLE_SHADER_TRANSPILER
+
+// ---------------------------------------------------------------------------
+// GpuComputePass — invalid (headless) pass setter no-ops
+// ---------------------------------------------------------------------------
+
+TEST_F (GpuDeviceErrorTests, ComputePassSettersOnInvalidPassAreNoOps)
+{
+    auto pass = GpuComputePass::begin (device);
+    EXPECT_FALSE (pass.isValid());
+
+    EXPECT_NO_THROW (pass.setPipeline (nullptr));
+    EXPECT_NO_THROW (pass.setStorageBuffer (0, 0, nullptr));
+    EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
+    EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
+}

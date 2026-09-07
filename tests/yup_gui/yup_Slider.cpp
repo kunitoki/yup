@@ -355,6 +355,17 @@ TEST_F (SliderTest, IsMouseOverDefaultFalse)
     EXPECT_FALSE (slider->isMouseOver());
 }
 
+TEST_F (SliderTest, MouseUpOutsideBoundsClearsMouseOver)
+{
+    slider->mouseEnter (MouseEvent (MouseEvent::noButtons, KeyModifiers(), Point<float> (100.0f, 15.0f)));
+    ASSERT_TRUE (slider->isMouseOver());
+
+    slider->mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (100.0f, 15.0f)));
+    slider->mouseUp (MouseEvent (MouseEvent::noButtons, KeyModifiers(), Point<float> (-50.0f, -50.0f)));
+
+    EXPECT_FALSE (slider->isMouseOver());
+}
+
 TEST_F (SliderTest, IsCurrentlyBeingDraggedDefaultFalse)
 {
     EXPECT_FALSE (slider->isCurrentlyBeingDragged());

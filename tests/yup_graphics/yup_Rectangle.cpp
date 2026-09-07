@@ -1776,3 +1776,45 @@ TEST (RectangleTests, WithSizeKeepingCenter_FractionalValues)
     EXPECT_FLOAT_EQ (newCenter.getX(), 11.75f);
     EXPECT_FLOAT_EQ (newCenter.getY(), 15.125f);
 }
+
+TEST (RectangleTests, ConstructorWithWidthAndHeight)
+{
+    Rectangle<float> r (3.0f, 4.0f);
+
+    EXPECT_FLOAT_EQ (r.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (r.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (r.getWidth(), 3.0f);
+    EXPECT_FLOAT_EQ (r.getHeight(), 4.0f);
+
+    Rectangle<int> rInt (5, 7);
+    EXPECT_EQ (rInt.getWidth(), 5);
+    EXPECT_EQ (rInt.getHeight(), 7);
+}
+
+TEST (RectangleTests, LargestFittingSquareEmpty)
+{
+    Rectangle<float> empty;
+    auto square = empty.largestFittingSquare();
+
+    EXPECT_TRUE (square.isEmpty());
+    EXPECT_EQ (square, empty);
+}
+
+TEST (RectangleTests, SmallestIntContainer)
+{
+    Rectangle<float> r (0.25f, 0.75f, 10.5f, 7.25f);
+
+    auto container = r.smallestIntContainer();
+    EXPECT_FLOAT_EQ (container.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (container.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (container.getWidth(), 11.0f);
+    EXPECT_FLOAT_EQ (container.getHeight(), 8.0f);
+
+    // Negative fractional position rounds the floor down
+    Rectangle<float> r2 (-1.25f, -2.75f, 4.5f, 3.5f);
+    auto container2 = r2.smallestIntContainer();
+    EXPECT_FLOAT_EQ (container2.getX(), -2.0f);
+    EXPECT_FLOAT_EQ (container2.getY(), -3.0f);
+    EXPECT_FLOAT_EQ (container2.getWidth(), 6.0f);
+    EXPECT_FLOAT_EQ (container2.getHeight(), 4.0f);
+}

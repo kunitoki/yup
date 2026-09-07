@@ -68,10 +68,7 @@ public:
         if (capturedContext == nullptr)
         {
             capturedContext = &g.getGraphicsContext();
-            yup::MessageManager::callAsync ([this]
-            {
-                renderOffscreen();
-            });
+            renderOffscreen();
         }
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
@@ -177,8 +174,6 @@ private:
 
         saveButton->setEnabled (true);
         statusLabel->setText ("Rendered to 256x256 GPU texture. GPU draw active.", yup::dontSendNotification);
-
-        repaint();
     }
 
     void savePixelsToFile()

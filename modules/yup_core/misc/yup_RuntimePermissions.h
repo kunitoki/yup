@@ -118,7 +118,13 @@ public:
         /** Permission to read video files that your app didn't create.
             Has the same effect as readExternalStorage on iOS and Android versions before 33.
         */
-        readMediaVideo = 8
+        readMediaVideo = 8,
+
+        /** Permission to post notifications (required on Android 13 and above).
+            You need to request this, for example, before showing toast notifications
+            with ToastNotification.
+        */
+        postNotifications = 9
     };
 
     //==============================================================================

@@ -27,13 +27,33 @@ class SDLComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
-    , public AsyncUpdater
 {
-#if (YUP_EMSCRIPTEN && (RIVE_WEBGL || RIVE_WEBGPU)) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    static constexpr bool renderDrivenByTimer = false;
-#else
+#if YUP_EMSCRIPTEN
     static constexpr bool renderDrivenByTimer = true;
+#else
+    static constexpr bool renderDrivenByTimer = false;
 #endif
+
+    static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
+
+    struct TouchFinger
+    {
+        SDL_FingerID fingerId = 0;
+        int index = 0;
+        Point<float> position;
+        float pressure = 0.0f;
+        MouseEvent::Buttons buttons = MouseEvent::noButtons;
+        std::optional<Point<float>> lastDownPosition;
+        std::optional<yup::Time> lastDownTime;
+        WeakReference<Component> clickedComponent;
+        WeakReference<Component> componentUnderPointer;
+    };
+
+    struct TouchClickState
+    {
+        std::optional<yup::Time> lastUpTime;
+        WeakReference<Component> lastComponent;
+    };
 
 public:
     //==============================================================================
@@ -110,6 +130,9 @@ public:
     GraphicsContext* getGraphicsContext() override;
 
     //==============================================================================
+    void runWithGraphicsContext (const std::function<void()>& fn) override;
+
+    //==============================================================================
     void* getNativeHandle() const override;
 
     //==============================================================================
@@ -119,16 +142,18 @@ public:
 
     //==============================================================================
     void run() override;
-    void handleAsyncUpdate() override;
     void timerCallback() override;
 
     //==============================================================================
     Point<float> getCursorPosition() const;
 
     //==============================================================================
-    void handleMouseMoveOrDrag (const Point<float>& position);
-    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
+    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr);
+    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr, bool wasCanceled = false);
+    void handleTouchDown (SDL_FingerID fingerId, const Point<float>& position, float pressure);
+    void handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure);
+    void handleTouchUp (SDL_FingerID fingerId, const Point<float>& position, float pressure, bool wasCanceled = false);
     void handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData);
     void handleMouseEnter (const Point<float>& position);
     void handleMouseLeave (const Point<float>& position);
@@ -160,6 +185,23 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    template <class F>
+    void processEvent (F&& function)
+    {
+        auto eventHandler = [function = std::forward<F> (function), weakSelf = WeakReference<SDLComponentNative> (this)]
+        {
+            if (weakSelf.wasObjectDeleted())
+                return;
+
+            function();
+        };
+
+        if (! MessageManager::getInstance()->isThisTheMessageThread())
+            MessageManager::callAsync (std::move (eventHandler));
+        else
+            function();
+    }
+
     static bool requestMouseCapture();
     static void releaseMouseCapture();
     static int mouseCaptureRequestCount;
@@ -175,15 +217,28 @@ private:
 
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
-    void getRenderContext();
+    WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);
+    Point<float> getTouchPosition (const SDL_TouchFingerEvent& event) const;
+    int findTouchFingerIndex (SDL_FingerID fingerId) const;
+    int getFreeTouchIndex() const;
+    TouchClickState& getTouchClickState (int touchIndex);
+
+    bool hasNativeKeyboardFocus() const;
 
     void startRendering();
     void stopRendering();
     bool isRendering() const;
-    bool hasNativeKeyboardFocus() const;
+    void getRenderContext();
+    void runWithComputeContext (const std::function<void()>& fn);
+    void renderFrame();
+
+    friend class WeakReference<SDLComponentNative>;
+    WeakReference<SDLComponentNative>::Master masterReference;
 
     SDL_Window* window = nullptr;
     SDL_GLContext windowContext = nullptr;
+    SDL_GLContext computeContext = nullptr;
+    bool computeContextLost = false;
 
     void* parentWindow = nullptr;
     String windowTitle;
@@ -211,11 +266,25 @@ private:
     HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
+    Array<TouchFinger> activeTouches;
+    Array<TouchClickState> touchClickStates;
     Array<File> pendingDroppedFiles;
     String pendingDroppedText;
     RelativeTime doubleClickTime;
 
     RectangleList<float> currentRepaintAreas;
+    CriticalSection repaintLock;
+
+    struct ContextActivatorGuard : public ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<ContextActivatorGuard>;
+
+        CriticalSection lock;
+        SDLComponentNative* native = nullptr;
+    };
+
+    ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
+    CriticalSection& glContextLock { contextGuard->lock };
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
@@ -231,8 +300,8 @@ private:
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
     double lastRenderTimeSeconds = 0.0;
-    bool renderAtomicMode = false;
-    bool renderWireframe = false;
+    std::atomic<bool> renderAtomicMode = false;
+    std::atomic<bool> renderWireframe = false;
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;

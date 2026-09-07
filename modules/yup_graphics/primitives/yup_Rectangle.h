@@ -1947,11 +1947,25 @@ public:
         return { xy.roundToInt(), size.roundToInt() };
     }
 
+    /** Returns the rectangle wrapped at the nearest integer. */
     template <class T = ValueType>
     [[nodiscard]] constexpr auto toNearestInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<ValueType>>
     {
         return { xy.toNearestInt(), size.toNearestInt() };
+    }
+
+    /** Returns the smallest rectangle container aligned at integer boundaries. */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto smallestIntContainer() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<ValueType>>
+    {
+        const auto x = std::floor (xy.getX());
+        const auto y = std::floor (xy.getY());
+        const auto right = std::ceil (xy.getX() + size.getWidth());
+        const auto bottom = std::ceil (xy.getY() + size.getHeight());
+
+        return { x, y, right - x, bottom - y };
     }
 
     //==============================================================================
