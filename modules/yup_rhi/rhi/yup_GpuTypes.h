@@ -102,13 +102,23 @@ enum class GpuBufferType : uint8_t
 /** Per-vertex attribute data format. Mirrors the ore vertex formats. */
 enum class GpuVertexFormat : uint8_t
 {
-    float1,   ///< One 32-bit float.
-    float2,   ///< Two 32-bit floats.
-    float3,   ///< Three 32-bit floats.
-    float4,   ///< Four 32-bit floats.
-    uint8x4,  ///< Four unsigned bytes (integer in shader).
-    snorm8x4, ///< Four signed bytes normalised to [-1, 1].
-    unorm8x4, ///< Four unsigned bytes normalised to [0, 1].
+    float1,    ///< One 32-bit float.
+    float2,    ///< Two 32-bit floats.
+    float3,    ///< Three 32-bit floats.
+    float4,    ///< Four 32-bit floats.
+    uint8x4,   ///< Four unsigned bytes (integer in shader).
+    sint8x4,   ///< Four signed bytes (integer in shader).
+    snorm8x4,  ///< Four signed bytes normalised to [-1, 1].
+    unorm8x4,  ///< Four unsigned bytes normalised to [0, 1].
+    uint16x2,  ///< Two unsigned shorts (integer in shader).
+    sint16x2,  ///< Two signed shorts (integer in shader).
+    unorm16x2, ///< Two unsigned shorts normalised to [0, 1].
+    snorm16x2, ///< Two signed shorts normalised to [-1, 1].
+    uint16x4,  ///< Four unsigned shorts (integer in shader).
+    sint16x4,  ///< Four signed shorts (integer in shader).
+    float16x2, ///< Two 16-bit floats.
+    float16x4, ///< Four 16-bit floats.
+    uint32,    ///< One 32-bit unsigned integer.
 };
 
 /** Vertex step mode: advance per vertex or per instance. */
@@ -188,9 +198,35 @@ enum class GpuBlendFactor : uint8_t
     oneMinusSrcAlpha, ///< 1 - source alpha.
     dstColor,         ///< Destination color.
     oneMinusDstColor, ///< 1 - destination color.
-    dstAlpha,         ///< Destination alpha.
-    oneMinusDstAlpha, ///< 1 - destination alpha.
+    dstAlpha,           ///< Destination alpha.
+    oneMinusDstAlpha,   ///< 1 - destination alpha.
+    srcAlphaSaturated,  ///< min(srcAlpha, 1 - dstAlpha).
+    blendColor,         ///< The constant blend color set via GpuRenderPass::setBlendColor().
+    oneMinusBlendColor, ///< 1 - the constant blend color.
 };
+
+/** Per-channel color write mask for a color target. Values are bit flags. */
+enum class GpuColorWriteMask : uint8_t
+{
+    none = 0,      ///< Write no channels.
+    red = 1 << 0,  ///< Write the red channel.
+    green = 1 << 1, ///< Write the green channel.
+    blue = 1 << 2, ///< Write the blue channel.
+    alpha = 1 << 3, ///< Write the alpha channel.
+    all = 0xF,     ///< Write every channel.
+};
+
+/** Bitwise OR of two color write masks. */
+constexpr GpuColorWriteMask operator| (GpuColorWriteMask a, GpuColorWriteMask b)
+{
+    return static_cast<GpuColorWriteMask> (static_cast<uint8_t> (a) | static_cast<uint8_t> (b));
+}
+
+/** Bitwise AND of two color write masks. */
+constexpr GpuColorWriteMask operator& (GpuColorWriteMask a, GpuColorWriteMask b)
+{
+    return static_cast<GpuColorWriteMask> (static_cast<uint8_t> (a) & static_cast<uint8_t> (b));
+}
 
 /** Blend equation for a color target. */
 enum class GpuBlendOp : uint8_t
@@ -202,14 +238,274 @@ enum class GpuBlendOp : uint8_t
     max,             ///< max(src, dst).
 };
 
-/** Color target pixel format. */
+/** Texture / color target pixel format.
+
+    Mirrors the full ore format set. Block-compressed formats are only usable for
+    uploaded textures (never as render targets), and their availability varies by
+    device - probe with GpuDevice::isFormatSupported() before creating one.
+
+    Float render targets are extension-gated on OpenGL ES / WebGL2; probe with
+    GpuDevice::isFormatRenderable() and degrade instead of rendering black.
+*/
 enum class GpuTextureFormat : uint8_t
 {
-    rgba8unorm,          ///< 8-bit RGBA, unsigned normalised.
-    bgra8unorm,          ///< 8-bit BGRA, unsigned normalised.
-    rgba16float,         ///< 16-bit float RGBA.
-    depth24plusStencil8, ///< 24-bit depth + 8-bit stencil.
-    depth32float,        ///< 32-bit float depth.
+    // 8-bit
+    r8unorm,    ///< 8-bit red, unsigned normalised.
+    rg8unorm,   ///< 8-bit red+green, unsigned normalised.
+    rgba8unorm, ///< 8-bit RGBA, unsigned normalised.
+    rgba8snorm, ///< 8-bit RGBA, signed normalised.
+    bgra8unorm, ///< 8-bit BGRA, unsigned normalised.
+
+    // 16-bit float
+    rgba16float, ///< 16-bit float RGBA.
+    rg16float,   ///< 16-bit float red+green.
+    r16float,    ///< 16-bit float red.
+
+    // 32-bit float
+    rgba32float, ///< 32-bit float RGBA.
+    rg32float,   ///< 32-bit float red+green.
+    r32float,    ///< 32-bit float red.
+
+    // Packed
+    rgb10a2unorm,   ///< 10-bit RGB + 2-bit alpha, unsigned normalised.
+    r11g11b10float, ///< Packed 11/11/10-bit float RGB.
+
+    // Depth/stencil
+    depth16unorm,         ///< 16-bit unsigned normalised depth.
+    depth24plusStencil8,  ///< 24-bit depth + 8-bit stencil.
+    depth32float,         ///< 32-bit float depth.
+    depth32floatStencil8, ///< 32-bit float depth + 8-bit stencil.
+
+    // Block compressed (upload only, runtime support varies)
+    bc1unorm,  ///< BC1 (DXT1) compressed RGBA.
+    bc3unorm,  ///< BC3 (DXT5) compressed RGBA.
+    bc7unorm,  ///< BC7 compressed RGBA.
+    etc2rgb8,  ///< ETC2 compressed RGB.
+    etc2rgba8, ///< ETC2 compressed RGBA.
+    astc4x4,   ///< ASTC 4x4 block compressed.
+    astc6x6,   ///< ASTC 6x6 block compressed.
+    astc8x8,   ///< ASTC 8x8 block compressed.
+};
+
+/** Returns true if the given format is a depth and/or stencil format. */
+constexpr bool isDepthStencilFormat (GpuTextureFormat format) noexcept
+{
+    return format == GpuTextureFormat::depth16unorm
+        || format == GpuTextureFormat::depth24plusStencil8
+        || format == GpuTextureFormat::depth32float
+        || format == GpuTextureFormat::depth32floatStencil8;
+}
+
+/** The shape of a texture's storage. */
+enum class GpuTextureType : uint8_t
+{
+    texture2D, ///< A single 2D image.
+    cube,      ///< Six square 2D faces forming a cube map.
+    texture3D, ///< A volume of depthOrArrayLayers slices.
+    array2D,   ///< An array of depthOrArrayLayers 2D images.
+};
+
+/** How a texture is interpreted when bound to a shader or an attachment. */
+enum class GpuTextureViewDimension : uint8_t
+{
+    texture2D, ///< A single 2D image.
+    cube,      ///< A cube map.
+    texture3D, ///< A 3D volume.
+    array2D,   ///< A 2D array.
+    cubeArray, ///< An array of cube maps.
+};
+
+/** Which planes of a depth/stencil texture a view exposes. */
+enum class GpuTextureAspect : uint8_t
+{
+    all,          ///< Every plane the format has.
+    depthOnly,    ///< The depth plane only.
+    stencilOnly,  ///< The stencil plane only.
+};
+
+/** What happens to an attachment's existing contents when a render pass begins. */
+enum class GpuLoadOp : uint8_t
+{
+    clear,    ///< Fill the attachment with the clear value.
+    load,     ///< Preserve the existing contents.
+    dontCare, ///< Contents are undefined; the fastest option when the pass writes every pixel.
+};
+
+/** What happens to an attachment's contents when a render pass ends. */
+enum class GpuStoreOp : uint8_t
+{
+    store,   ///< Write the results back to the attachment.
+    discard, ///< Throw the results away (e.g. a transient depth buffer).
+};
+
+/** Texture minification / magnification / mipmap filter. */
+enum class GpuFilter : uint8_t
+{
+    nearest, ///< Nearest-neighbour sampling.
+    linear,  ///< Linear interpolation.
+};
+
+/** Texture coordinate addressing mode outside [0, 1]. */
+enum class GpuWrapMode : uint8_t
+{
+    repeat,       ///< Tile the texture.
+    mirrorRepeat, ///< Tile the texture, mirroring every other repetition.
+    clampToEdge,  ///< Clamp to the edge texel.
+};
+
+//==============================================================================
+/** Describes a GPU texture to allocate.
+
+    @see GpuTexture::create, GpuTarget::create
+*/
+struct GpuTextureDesc
+{
+    constexpr GpuTextureDesc() = default;
+
+    /** Convenience constructor for the common 2D case. */
+    constexpr GpuTextureDesc (uint32_t width, uint32_t height, GpuTextureFormat format, bool renderTarget = false)
+        : width (width)
+        , height (height)
+        , format (format)
+        , renderTarget (renderTarget)
+    {
+    }
+
+    uint32_t width = 0;  ///< Width in texels (must be > 0).
+    uint32_t height = 0; ///< Height in texels (must be > 0).
+
+    /** Slice count for texture3D, layer count for array2D. Must be 1 for
+        texture2D, and 6 for cube (each face is one layer). */
+    uint32_t depthOrArrayLayers = 1;
+
+    GpuTextureFormat format = GpuTextureFormat::rgba8unorm; ///< Texel format.
+    GpuTextureType type = GpuTextureType::texture2D;        ///< Storage shape.
+
+    /** Whether the texture may be used as a render pass attachment. */
+    bool renderTarget = false;
+
+    /** Number of mip levels to allocate. Storage is allocated for all of them;
+        nothing generates their contents - render or upload each level. */
+    uint32_t mipLevels = 1;
+
+    /** MSAA sample count. Values above 1 require renderTarget = true.
+
+        @warning On OpenGL / OpenGL ES an MSAA color texture is allocated as a
+                 renderbuffer, so it can be resolved but never sampled. Resolve
+                 into a separate single-sampled texture and sample that. */
+    uint32_t sampleCount = 1;
+
+    /** Optional debug label passed through to the native API. */
+    const char* label = nullptr;
+};
+
+//==============================================================================
+/** Describes a CPU-to-GPU texture upload of one mip level of one layer.
+
+    @see GpuTexture::upload
+*/
+struct GpuTextureDataDesc
+{
+    constexpr GpuTextureDataDesc() = default;
+
+    const void* data = nullptr; ///< Source pixels (must be non-null).
+
+    /** Bytes between consecutive rows of @c data. Zero means tightly packed
+        (width * bytes-per-texel). */
+    uint32_t bytesPerRow = 0;
+
+    /** Rows between consecutive depth slices of @c data. Zero means @c height. */
+    uint32_t rowsPerImage = 0;
+
+    uint32_t mipLevel = 0; ///< Destination mip level.
+    uint32_t layer = 0;    ///< Destination array layer, or cube face (0..5).
+
+    uint32_t x = 0; ///< Destination x origin in texels.
+    uint32_t y = 0; ///< Destination y origin in texels.
+    uint32_t z = 0; ///< Destination z origin in texels (3D textures).
+
+    uint32_t width = 0;  ///< Region width in texels. Zero means the whole mip level.
+    uint32_t height = 0; ///< Region height in texels. Zero means the whole mip level.
+    uint32_t depth = 1;  ///< Region depth in texels (3D textures).
+};
+
+//==============================================================================
+/** Selects a sub-range of a texture's mip levels and layers.
+
+    @warning A narrowed view is honoured for render pass *attachments* on every
+             backend, but not for *sampling* on OpenGL / OpenGL ES, which has no
+             glTextureView in GLES3 and silently falls back to the base texture.
+             Read a specific mip with an explicit @c textureLod() plus a sampler
+             whose minLod / maxLod clamp to that level instead.
+
+    @see GpuTarget::createFromTexture
+*/
+struct GpuTextureViewDesc
+{
+    constexpr GpuTextureViewDesc() = default;
+
+    /** Convenience constructor selecting one mip level of one layer. */
+    constexpr GpuTextureViewDesc (uint32_t baseMipLevel, uint32_t baseLayer)
+        : baseMipLevel (baseMipLevel)
+        , baseLayer (baseLayer)
+    {
+    }
+
+    /** How the view is interpreted. Ignored for attachments, which always target
+        a single mip level of a single layer. */
+    GpuTextureViewDimension dimension = GpuTextureViewDimension::texture2D;
+
+    GpuTextureAspect aspect = GpuTextureAspect::all; ///< Which depth/stencil planes to expose.
+
+    uint32_t baseMipLevel = 0; ///< First mip level the view covers.
+    uint32_t mipCount = 1;     ///< Number of mip levels the view covers.
+    uint32_t baseLayer = 0;    ///< First array layer / cube face the view covers.
+    uint32_t layerCount = 1;   ///< Number of array layers / cube faces the view covers.
+
+    /** Two descriptors are equal when they select the same range of the same shape. */
+    constexpr bool operator== (const GpuTextureViewDesc&) const = default;
+};
+
+//==============================================================================
+/** Describes a texture sampler.
+
+    @see GpuSampler::create, GpuRenderPass::setSampler
+*/
+struct GpuSamplerDesc
+{
+    GpuSamplerDesc() = default;
+
+    /** Convenience constructor for the common filter + wrap case. */
+    GpuSamplerDesc (GpuFilter filter, GpuWrapMode wrap)
+        : minFilter (filter)
+        , magFilter (filter)
+        , wrapU (wrap)
+        , wrapV (wrap)
+        , wrapW (wrap)
+    {
+    }
+
+    GpuFilter minFilter = GpuFilter::nearest;    ///< Minification filter.
+    GpuFilter magFilter = GpuFilter::nearest;    ///< Magnification filter.
+    GpuFilter mipmapFilter = GpuFilter::nearest; ///< Filter applied between mip levels.
+
+    GpuWrapMode wrapU = GpuWrapMode::clampToEdge; ///< Addressing mode along U.
+    GpuWrapMode wrapV = GpuWrapMode::clampToEdge; ///< Addressing mode along V.
+    GpuWrapMode wrapW = GpuWrapMode::clampToEdge; ///< Addressing mode along W.
+
+    /** Set to make this a comparison (shadow) sampler. Leave empty for normal
+        filtering. Must be set for a binding declared as a comparison sampler. */
+    std::optional<GpuCompareFunction> compare;
+
+    float minLod = 0.0f;  ///< Lowest mip level this sampler will read.
+    float maxLod = 32.0f; ///< Highest mip level this sampler will read.
+
+    /** Maximum anisotropy. 1 disables anisotropic filtering; higher values
+        require GpuDevice::isAnisotropicFilteringAvailable(). */
+    uint32_t maxAnisotropy = 1;
+
+    /** Optional debug label passed through to the native API. */
+    const char* label = nullptr;
 };
 
 //==============================================================================
@@ -270,6 +566,7 @@ struct GpuColorTarget
     GpuTextureFormat format = GpuTextureFormat::rgba8unorm; ///< Target pixel format.
     bool blendEnabled = true;                               ///< Enable alpha blending.
     GpuBlendState blend;                                    ///< Blend equation and factors.
+    GpuColorWriteMask writeMask = GpuColorWriteMask::all;   ///< Channels this target writes.
 };
 
 /** Per-face stencil test state. */
@@ -401,25 +698,63 @@ struct GpuColor
 };
 
 //==============================================================================
-/** Per-render-pass options controlling attachment load behaviour. */
+/** Per-color-attachment options controlling load and store behaviour.
+
+    The @c { bool, GpuColor } constructor is the original two-state form and is
+    kept so existing call sites such as @c { true, Colors::transparentBlack }
+    keep compiling unchanged.
+*/
 struct GpuRenderOptions
 {
-    /** Default constructor. */
+    /** Default constructor: clears to transparent black and stores the result. */
     constexpr GpuRenderOptions() = default;
 
-    /** Constructs a GpuRenderOptions with the given clear flag and clear color. */
+    /** Constructs options that either clear to @p clearColor or load the existing
+        contents, and store the result either way. */
     constexpr GpuRenderOptions (bool clear, GpuColor clearColor)
-        : clear (clear)
+        : loadOp (clear ? GpuLoadOp::clear : GpuLoadOp::load)
         , clearColor (clearColor)
     {
     }
 
-    /** Whether to clear the target before drawing (LoadOp::clear). When false
-        the existing contents are loaded (LoadOp::load). */
-    bool clear = true;
+    /** Constructs options with explicit load and store operations. */
+    constexpr GpuRenderOptions (GpuLoadOp loadOp, GpuStoreOp storeOp, GpuColor clearColor = GpuColor::transparentBlack())
+        : loadOp (loadOp)
+        , storeOp (storeOp)
+        , clearColor (clearColor)
+    {
+    }
 
-    /** Clear color used when @c clear is true. */
+    GpuLoadOp loadOp = GpuLoadOp::clear;    ///< What to do with the existing contents.
+    GpuStoreOp storeOp = GpuStoreOp::store; ///< What to do with the drawn result.
+
+    /** Clear color used when @c loadOp is GpuLoadOp::clear. */
     GpuColor clearColor = GpuColor::transparentBlack();
+};
+
+//==============================================================================
+/** Per-depth/stencil-attachment options controlling load and store behaviour.
+
+    @see GpuRenderPass::setDepthStencilAttachment
+*/
+struct GpuDepthStencilOptions
+{
+    /** Default constructor: clears depth to 1.0 and discards stencil. */
+    constexpr GpuDepthStencilOptions() = default;
+
+    /** Constructs options clearing depth to @p depthClearValue. */
+    constexpr GpuDepthStencilOptions (float depthClearValue)
+        : depthClearValue (depthClearValue)
+    {
+    }
+
+    GpuLoadOp depthLoadOp = GpuLoadOp::clear;    ///< What to do with the existing depth.
+    GpuStoreOp depthStoreOp = GpuStoreOp::store; ///< What to do with the written depth.
+    float depthClearValue = 1.0f;                ///< Depth clear value (far plane by default).
+
+    GpuLoadOp stencilLoadOp = GpuLoadOp::clear;      ///< What to do with the existing stencil.
+    GpuStoreOp stencilStoreOp = GpuStoreOp::discard; ///< What to do with the written stencil.
+    uint32_t stencilClearValue = 0;                  ///< Stencil clear value.
 };
 
 //==============================================================================

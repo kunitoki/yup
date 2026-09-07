@@ -422,7 +422,7 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassClearColor)
     ASSERT_TRUE (frame.isValid());
 
     GpuRenderOptions opts;
-    opts.clear = true;
+    opts.loadOp = GpuLoadOp::clear;
     opts.clearColor = Color (255, 0, 255, 0); // ARGB: Green, fully opaque.
 
     auto pass = target->beginRenderPass (frame, opts);

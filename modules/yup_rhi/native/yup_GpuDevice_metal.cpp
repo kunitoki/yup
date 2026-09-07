@@ -327,6 +327,10 @@ public:
     /** Returns the native MTLCommandQueue. Used by GraphicsContextMetal. */
     id<MTLCommandQueue> getCommandQueue() const noexcept { return queue; }
 
+    void* getNativeDevice() const noexcept override { return (__bridge void*) device; }
+
+    void* getNativeCommandQueue() const noexcept override { return (__bridge void*) queue; }
+
 private:
     struct OffscreenContextSlot
     {
