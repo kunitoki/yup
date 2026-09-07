@@ -83,14 +83,56 @@ public:
     */
     static GpuTarget::Ptr create (GpuDevice::Ptr ctx, int width, int height);
 
+    /** Creates a GpuTarget backed by a freshly allocated texture.
+
+        Unlike the width/height overload, which goes through Rive's fixed
+        rgba8 2D canvas allocator, this allocates the texture directly and so
+        covers the full format, shape, mip and sample-count surface. The
+        descriptor's renderTarget flag is forced on.
+
+        @param ctx   The GPU device that owns the texture.
+        @param desc  The texture to allocate.
+
+        @returns A GpuTarget, or nullptr on failure.
+
+        @warning Requires ctx->isGpuAvailable(). Probe float and MSAA formats with
+                 GpuDevice::isFormatRenderable() first.
+    */
+    static GpuTarget::Ptr create (GpuDevice::Ptr ctx, const GpuTextureDesc& desc);
+
+    /** Creates a GpuTarget rendering into one mip level and one layer of an
+        existing texture.
+
+        This is what makes render-to-mip and render-to-cube-face possible: point
+        @p view at a mip level and a layer (a cube face is a layer), and every
+        draw in a pass begun on this target lands there.
+
+        @param ctx      The GPU device that owns the texture.
+        @param texture  A render-target texture allocated with GpuTexture::create().
+        @param view     Selects the mip level and layer to render into.
+
+        @returns A GpuTarget, or nullptr if the texture is not a render target or
+                 the view is out of range.
+
+        @warning A narrowed view is honoured for attachments on every backend, but
+                 **not for sampling** on OpenGL / OpenGL ES, which has no GLES3
+                 glTextureView and silently falls back to the base texture. Never
+                 read one mip level by binding a narrowed view - bind the whole
+                 texture and use an explicit @c textureLod() with a GpuSampler
+                 whose minLod / maxLod clamp to that level.
+    */
+    static GpuTarget::Ptr createFromTexture (GpuDevice::Ptr ctx,
+                                             GpuTexture::Ptr texture,
+                                             const GpuTextureViewDesc& view = {});
+
     /** Destructor. Releases the GPU resources with the rendering context current. */
     ~GpuTarget() override;
 
     //==============================================================================
-    /** Returns the width of this target in pixels. */
+    /** Returns the width of this target in pixels, at the mip level it renders into. */
     int getWidth() const noexcept;
 
-    /** Returns the height of this target in pixels. */
+    /** Returns the height of this target in pixels, at the mip level it renders into. */
     int getHeight() const noexcept;
 
     //==============================================================================
@@ -123,6 +165,10 @@ public:
         (RGBA, top-to-bottom row order). Returns false if readback is not available
         for this backend or fails.
 
+        Only supported for canvas-backed targets - those created by the
+        width/height overload. Targets backed by a directly allocated texture
+        return false, because ore has no texture readback path.
+
         @param dst       Pointer to the destination buffer (must be non-null).
         @param byteSize  Size of the destination buffer in bytes (must be >= width*height*4).
 
@@ -146,6 +192,11 @@ private:
     std::unique_ptr<OffscreenTarget> offscreenTarget;
     RenderableTarget* renderableTarget = nullptr;
     GpuTexture::Ptr cachedTexture;
+
+    // Set only for targets backed by a directly allocated texture; the two
+    // backings are mutually exclusive.
+    GpuTexture::Ptr ownedTexture;
+    GpuTextureViewDesc ownedView;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuTarget)
 };

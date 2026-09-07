@@ -1324,6 +1324,9 @@ ResultValue<String> ShaderTranspiler::decompileFromSPIRV (const MemoryBlock& spi
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = ! options.flipVertY;
 
+                if (es)
+                    glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
+
                 compiler.set_common_options (glslOpts);
 
                 if (! entryName.empty())
@@ -1544,6 +1547,10 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
                                       : static_cast<uint32_t> (options.glslVersion);
                 glslOpts.vulkan_semantics = false;
                 glslOpts.vertex.flip_vert_y = options.flipVertY;
+
+                if (es)
+                    glslOpts.fragment.default_float_precision = spirv_cross::CompilerGLSL::Options::Highp;
+
                 compiler.set_common_options (glslOpts);
 
                 if (! entryName.empty())

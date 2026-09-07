@@ -75,6 +75,15 @@ ComponentNative::Options& ComponentNative::Options::withMouseCapture (bool shoul
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withVSync (bool shouldUseVSync) noexcept
+{
+    if (shouldUseVSync)
+        flags |= vsync;
+    else
+        flags &= ~vsync;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withTemporaryWindow (bool shouldBeTemporary) noexcept
 {
     if (shouldBeTemporary)

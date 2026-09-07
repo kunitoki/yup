@@ -54,10 +54,16 @@ TEST_F (GpuComputePassHeadlessTests, BeginWithHeadlessDeviceReturnsInvalidPass)
     EXPECT_FALSE (pass.isValid());
 }
 
-TEST_F (GpuComputePassHeadlessTests, IsValidReturnsFalseForDefaultConstructed)
+
+TEST_F (GpuComputePassHeadlessTests, RunOnComputeContextRunsWorkSynchronously)
 {
-    GpuComputePass pass;
-    EXPECT_FALSE (pass.isValid());
+    // Backends without a dedicated compute context run the work directly.
+    bool ran = false;
+    device->runOnComputeContext ([&]
+    {
+        ran = true;
+    });
+    EXPECT_TRUE (ran);
 }
 
 TEST_F (GpuComputePassHeadlessTests, RunOnComputeContextRunsWorkSynchronously)

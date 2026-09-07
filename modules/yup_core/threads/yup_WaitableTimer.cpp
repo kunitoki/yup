@@ -70,20 +70,27 @@ void WaitableTimer::waitUntilFallback (double milliseconds)
 {
     if (const auto nowMs = Time::getMillisecondCounterHiRes(); milliseconds - nowMs > 4.0)
     {
-        const auto target = std::chrono::steady_clock::now() + std::chrono::duration<double, std::milli> ((milliseconds - 4.0) - nowMs);
+        const auto target = std::chrono::steady_clock::now()
+            + std::chrono::duration<double, std::milli> ((milliseconds - 4.0) - nowMs);
 
         std::unique_lock lock (mutex);
-        cv.wait_until (lock, target);
+        cv.wait_until (lock, target, []{ return false; });
     }
 
-    while (Time::getMillisecondCounterHiRes() < milliseconds - 4.0)
-        std::this_thread::sleep_for (std::chrono::microseconds (25));
-
     while (Time::getMillisecondCounterHiRes() < milliseconds - 2.0)
+        std::this_thread::sleep_for (std::chrono::microseconds (20));
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds - 1.0)
         std::this_thread::sleep_for (std::chrono::microseconds (10));
 
-    while (Time::getMillisecondCounterHiRes() < milliseconds)
+    while (Time::getMillisecondCounterHiRes() < milliseconds - 0.5)
+        std::this_thread::sleep_for (std::chrono::microseconds (5));
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds - 0.1)
         std::this_thread::sleep_for (std::chrono::microseconds (1));
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds)
+        std::this_thread::yield();
 }
 
 } // namespace yup
