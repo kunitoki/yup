@@ -165,23 +165,23 @@ void Artboard::setFile (std::shared_ptr<ArtboardFile> file, StringRef artboardNa
 
 void Artboard::clear()
 {
-    artboardFile.reset();
-
-    artboard.reset();
-    scene.reset();
+    ++nodeEpoch;
 
     stateMachine = nullptr;
+    boundViewModelInstance = nullptr;
 
     eventProperties.clear();
     viewTransform = rive::Mat2D();
     selectedArtboardName.clear();
 
-    boundViewModelInstance = nullptr;
-
-    ++nodeEpoch;
     lastNodeBounds.clear();
     lastNodeViewTransforms.clear();
     cachedNodeHandles.clear();
+
+    artboardFile.reset();
+
+    scene.reset();
+    artboard.reset();
 }
 
 //==============================================================================
@@ -717,8 +717,8 @@ void Artboard::propertyChanged (const String& eventName, const String& propertyN
 
 void Artboard::updateSceneFromFile()
 {
-    artboard.reset();
     scene.reset();
+    artboard.reset();
     stateMachine = nullptr;
 
     auto rivFile = artboardFile->getRiveFile();
