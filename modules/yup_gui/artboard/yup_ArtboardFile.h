@@ -19,6 +19,11 @@
   ==============================================================================
 */
 
+#include <atomic>
+
+#include "yup_ArtboardViewModel.h"
+#include "yup_ArtboardViewModelInstance.h"
+
 namespace yup
 {
 
@@ -27,9 +32,11 @@ class Artboard;
 //==============================================================================
 /** Represents a Rive file.
 
-    This class is used to load Rive binary files (aka .riv files).
+    This class is used to load Rive binary files (aka .riv files). It also
+    provides access to the ViewModel schemas stored in the file and creates
+    ViewModel instances that can be bound to Artboard components.
 */
-class YUP_API ArtboardFile
+class YUP_API ArtboardFile : public std::enable_shared_from_this<ArtboardFile>
 {
 public:
     //==============================================================================
@@ -86,6 +93,47 @@ public:
     static LoadResult load (InputStream& is, rive::Factory& factory, const AssetLoadCallback& assetCallback);
 
     //==============================================================================
+    /** Returns the number of ViewModel schemas stored in the Rive file. */
+    int getNumViewModels() const noexcept;
+
+    /** Returns the names of all ViewModel schemas stored in the Rive file. */
+    StringArray getViewModelNames();
+
+    /** Returns a handle to the ViewModel schema at the given index, or null if out of range.
+
+        @param index The index of the ViewModel schema.
+    */
+    ArtboardViewModel::Ptr getArtboardViewModelAt (int index);
+
+    /** Returns a handle to the ViewModel schema with the given name, or null if unknown.
+
+        @param name The name of the ViewModel schema.
+    */
+    ArtboardViewModel::Ptr getArtboardViewModel (StringRef name);
+
+    /** Creates a new instance of the ViewModel schema with the given name.
+
+        The instance is populated with the schema's default property values.
+        Bind the returned instance to an Artboard through
+        Artboard::bindViewModelInstance() to drive its data bindings.
+
+        @param viewModelName The name of the ViewModel schema to instantiate.
+        @return The new instance handle, or null if the schema is unknown.
+    */
+    ArtboardViewModelInstance::Ptr createArtboardViewModelInstance (StringRef viewModelName);
+
+    /** Creates an instance of the ViewModel schema by cloning a pre-authored instance.
+
+        .riv files may ship with authored instances (see ArtboardViewModel::getInstanceNames()).
+        The first authored instance is the file's "default" instance.
+
+        @param viewModelName The name of the ViewModel schema to instantiate.
+        @param instanceName  The name of the authored instance to clone.
+        @return The new instance handle, or null if the schema or instance is unknown.
+    */
+    ArtboardViewModelInstance::Ptr createArtboardViewModelInstance (StringRef viewModelName, StringRef instanceName);
+
+    //==============================================================================
     /** Returns the underlying Rive file. */
     const rive::File* getRiveFile() const;
 
@@ -93,10 +141,17 @@ public:
     rive::File* getRiveFile();
 
 private:
+    friend class ArtboardViewModelInstance;
+
+    void enterObserverDispatch() noexcept { ++observerDispatchDepth; }
+    void leaveObserverDispatch() noexcept { --observerDispatchDepth; }
+    bool isObserverDispatchInProgress() const noexcept { return observerDispatchDepth.load() != 0; }
+
     ArtboardFile() = default;
     ArtboardFile (rive::rcp<rive::File> rivFile);
 
     rive::rcp<rive::File> rivFile;
+    std::atomic<int> observerDispatchDepth { 0 };
 };
 
 } // namespace yup

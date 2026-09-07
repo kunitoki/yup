@@ -892,8 +892,18 @@ public:
     }
 
     //==============================================================================
+    /** @internal Conversion from Rive Mat2D class.
+     
+        @note Rive uses a transposed matrix representation compared to YUP.
+    */
+    explicit AffineTransform (const rive::Mat2D& m2d)
+        : AffineTransform (m2d[0], m2d[2], m2d[4], m2d[1], m2d[3], m2d[5])
+    {
+    }
+    
     /** @internal Conversion to Rive Mat2D class.
-     *  Note: Rive uses a transposed matrix representation compared to YUP.
+
+        @note Rive uses a transposed matrix representation compared to YUP.
      */
     rive::Mat2D toMat2D() const
     {

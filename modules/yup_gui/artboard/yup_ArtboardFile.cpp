@@ -76,6 +76,45 @@ rive::File* ArtboardFile::getRiveFile()
 
 //==============================================================================
 
+int ArtboardFile::getNumViewModels() const noexcept
+{
+    return rivFile != nullptr ? static_cast<int> (rivFile->viewModelCount()) : 0;
+}
+
+StringArray ArtboardFile::getViewModelNames()
+{
+    StringArray names;
+
+    if (rivFile != nullptr)
+        for (std::size_t index = 0; index < rivFile->viewModelCount(); ++index)
+            if (auto* viewModel = rivFile->viewModel (index))
+                names.add (String (viewModel->name()));
+
+    return names;
+}
+
+ArtboardViewModel::Ptr ArtboardFile::getArtboardViewModelAt (int index)
+{
+    return ArtboardViewModel::createFromFile (shared_from_this(), index);
+}
+
+ArtboardViewModel::Ptr ArtboardFile::getArtboardViewModel (StringRef name)
+{
+    return ArtboardViewModel::createFromFile (shared_from_this(), name);
+}
+
+ArtboardViewModelInstance::Ptr ArtboardFile::createArtboardViewModelInstance (StringRef viewModelName)
+{
+    return ArtboardViewModelInstance::createFromFile (shared_from_this(), viewModelName);
+}
+
+ArtboardViewModelInstance::Ptr ArtboardFile::createArtboardViewModelInstance (StringRef viewModelName, StringRef instanceName)
+{
+    return ArtboardViewModelInstance::createFromFile (shared_from_this(), viewModelName, instanceName);
+}
+
+//==============================================================================
+
 ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory)
 {
     return load (file, factory, nullptr);

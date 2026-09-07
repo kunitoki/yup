@@ -24,6 +24,8 @@
 #include "yup_gui/yup_Application.cpp"
 #include "yup_gui/yup_ApplicationTheme.cpp"
 #include "yup_gui/yup_Artboard.cpp"
+#include "yup_gui/yup_ArtboardViewModel.cpp"
+#include "yup_gui/yup_ArtboardViewModelInstance.cpp"
 #include "yup_gui/yup_CodeDocument.cpp"
 #include "yup_gui/yup_CodeEditor.cpp"
 #include "yup_gui/yup_CodeTokeniser.cpp"

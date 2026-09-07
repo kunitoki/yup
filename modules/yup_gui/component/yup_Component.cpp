@@ -23,6 +23,46 @@ namespace yup
 {
 
 //==============================================================================
+namespace
+{
+// Returns the axis-aligned bounding box of a rectangle mapped through a transform.
+Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const AffineTransform& transform)
+{
+    const auto x1 = bounds.getX();
+    const auto y1 = bounds.getY();
+    const auto x2 = bounds.getRight();
+    const auto y2 = bounds.getBottom();
+
+    float px1 = x1, py1 = y1;
+    float px2 = x2, py2 = y1;
+    float px3 = x1, py3 = y2;
+    float px4 = x2, py4 = y2;
+
+    transform.transformPoint (px1, py1);
+    transform.transformPoint (px2, py2);
+    transform.transformPoint (px3, py3);
+    transform.transformPoint (px4, py4);
+
+    auto minX = px1, maxX = px1;
+    auto minY = py1, maxY = py1;
+
+    const auto updateMinMax = [&] (float x, float y)
+    {
+        minX = jmin (minX, x);
+        maxX = jmax (maxX, x);
+        minY = jmin (minY, y);
+        maxY = jmax (maxY, y);
+    };
+
+    updateMinMax (px2, py2);
+    updateMinMax (px3, py3);
+    updateMinMax (px4, py4);
+
+    return { minX, minY, maxX - minX, maxY - minY };
+}
+} // namespace
+
+//==============================================================================
 
 Component::Component()
     : optionsValue (0)
@@ -1512,7 +1552,24 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
     auto bounds = getBoundsRelativeToTopLevelComponent();
 
-    auto boundsToRedraw = bounds
+    auto clipBounds = bounds;
+    if (isTransformed())
+    {
+        AffineTransform toTopLevel;
+        const Component* comp = this;
+        while (comp != nullptr && ! comp->options.onDesktop && ! comp->options.paintAsOffscreenRoot)
+        {
+            if (comp->isTransformed())
+                toTopLevel = toTopLevel.followedBy (comp->getTransform());
+
+            toTopLevel = toTopLevel.translated (comp->getPosition());
+            comp = comp->getParentComponent();
+        }
+
+        clipBounds = getTransformedBounds (getLocalBounds(), toTopLevel);
+    }
+
+    auto boundsToRedraw = clipBounds
                               .intersection (repaintArea)
                               .roundToInt()
                               .to<float>();

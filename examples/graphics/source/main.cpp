@@ -178,6 +178,7 @@ public:
         // clang-format off
         addDemo ("AI", [] { return std::make_unique<AIDemo>(); });
         addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+        addDemo ("Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
         addDemo ("Audio", [] { return std::make_unique<AudioExample>(); });
         addDemo ("Audio File", [] { return std::make_unique<AudioFileDemo>(); });
         addDemo ("Clipboard", [] { return std::make_unique<ClipboardDemo>(); });
