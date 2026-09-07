@@ -22,6 +22,19 @@
 namespace yup
 {
 
+namespace
+{
+
+/** Returns the size of mip level @p level of a base dimension, never below 1. */
+int mipExtentOf (int base, uint32_t level) noexcept
+{
+    return jmax (1, base >> (int) level);
+}
+
+} // namespace
+
+//==============================================================================
+
 GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height)
 {
     if (width <= 0 || height <= 0)
@@ -37,6 +50,37 @@ GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, int width, int height)
     return result;
 }
 
+GpuTarget::Ptr GpuTarget::create (GpuDevice::Ptr ctx, const GpuTextureDesc& desc)
+{
+    auto renderableDesc = desc;
+    renderableDesc.renderTarget = true;
+
+    auto texture = GpuTexture::create (ctx, renderableDesc);
+    if (texture == nullptr)
+        return nullptr;
+
+    return createFromTexture (std::move (ctx), std::move (texture), {});
+}
+
+GpuTarget::Ptr GpuTarget::createFromTexture (GpuDevice::Ptr ctx, GpuTexture::Ptr texture, const GpuTextureViewDesc& view)
+{
+    if (ctx == nullptr || texture == nullptr)
+        return nullptr;
+
+    if (! texture->isRenderTarget())
+        return nullptr;
+
+    if (view.baseMipLevel >= texture->getMipLevels() || view.baseLayer >= texture->getDepthOrArrayLayers())
+        return nullptr;
+
+    GpuTarget::Ptr result = new GpuTarget();
+    result->ctx = std::move (ctx);
+    result->ownedTexture = std::move (texture);
+    result->ownedView = view;
+    result->cachedTexture = result->ownedTexture;
+    return result;
+}
+
 GpuTarget::~GpuTarget()
 {
     if (ctx == nullptr)
@@ -45,6 +89,7 @@ GpuTarget::~GpuTarget()
     ctx->runOnGraphicsContext ([this]
     {
         cachedTexture = nullptr;
+        ownedTexture = nullptr;
         offscreenTarget = nullptr;
     });
 }
@@ -65,11 +110,17 @@ GpuTarget::Ptr GpuTarget::createFromTarget (GpuDevice::Ptr ctx, std::unique_ptr<
 
 int GpuTarget::getWidth() const noexcept
 {
+    if (ownedTexture != nullptr)
+        return mipExtentOf (ownedTexture->getWidth(), ownedView.baseMipLevel);
+
     return offscreenTarget != nullptr ? offscreenTarget->getWidth() : 0;
 }
 
 int GpuTarget::getHeight() const noexcept
 {
+    if (ownedTexture != nullptr)
+        return mipExtentOf (ownedTexture->getHeight(), ownedView.baseMipLevel);
+
     return offscreenTarget != nullptr ? offscreenTarget->getHeight() : 0;
 }
 
@@ -77,6 +128,9 @@ int GpuTarget::getHeight() const noexcept
 
 GpuTexture::Ptr GpuTarget::asTexture()
 {
+    if (ownedTexture != nullptr)
+        return ownedTexture;
+
     if (offscreenTarget == nullptr)
         return nullptr;
 
@@ -105,6 +159,9 @@ bool GpuTarget::readPixels (void* dst, size_t byteSize)
     if (offscreenTarget == nullptr || ctx == nullptr)
         return false;
 
+    if (dst == nullptr || byteSize < (size_t) getWidth() * (size_t) getHeight() * 4u)
+        return false;
+
     return ctx->readOffscreenPixels (*offscreenTarget, dst, byteSize);
 }
 
@@ -114,7 +171,7 @@ GpuRenderPass GpuTarget::beginRenderPass (GpuFrame& frame, const GpuRenderOption
 {
     GpuRenderPass pass;
 
-    if (offscreenTarget == nullptr || ! frame.isValid())
+    if ((offscreenTarget == nullptr && ownedTexture == nullptr) || ! frame.isValid())
         return pass;
 
     auto tex = asTexture();
@@ -126,10 +183,12 @@ GpuRenderPass GpuTarget::beginRenderPass (GpuFrame& frame, const GpuRenderOption
     auto* i = pass.getImpl();
     i->oreCtx = frame.getImpl()->oreCtx;
     i->framePools = frame.getImpl();
-    i->outputTexture = tex;
+    i->colorAttachments[0].texture = tex;
+    i->colorAttachments[0].view = ownedView;
+    i->colorAttachments[0].options = options;
+    i->colorCount = 1;
     i->width = getWidth();
     i->height = getHeight();
-    i->options = options;
 
     return pass;
 }

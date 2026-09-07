@@ -24,9 +24,12 @@
 #include "mocks/yup_rhi.h"
 #include "mocks/yup_graphics.h"
 
+#include "yup_rhi/yup_GpuDevice.cpp"
 #include "yup_rhi/yup_GpuTarget.cpp"
+#include "yup_rhi/yup_GpuTexture.cpp"
 #include "yup_rhi/yup_GpuPipeline.cpp"
 #include "yup_rhi/yup_GpuPipelineMocked.cpp"
+#include "yup_rhi/yup_GpuComputePass.cpp"
 
 #if YUP_LINUX
 #include "yup_rhi/native/yup_GpuDevice_linux.cpp"

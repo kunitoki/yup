@@ -24,6 +24,54 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
+/** Recombines the reflected image dimension with its arrayed flag into the RSTB
+    view dimension.
+
+    spirv-cross reports "cube" and "arrayed" as two independent properties, and
+    ShaderTranspiler's toImageDim() therefore never yields dim2DArray / cubeArray
+    on its own - the consumer has to fold imageArrayed back in here.
+*/
+rive::ore::TextureViewDim toRstbViewDim (ShaderReflection::ImageDimension dim, bool arrayed)
+{
+    using ID = ShaderReflection::ImageDimension;
+    using VD = rive::ore::TextureViewDim;
+
+    switch (dim)
+    {
+        case ID::dim1D:
+            return VD::D1;
+
+        case ID::dim2D:
+        case ID::dimRect:
+        case ID::dimSubpass:
+            return arrayed ? VD::D2Array : VD::D2;
+
+        case ID::dim2DArray:
+            return VD::D2Array;
+
+        case ID::dim3D:
+            return VD::D3;
+
+        case ID::cube:
+            return arrayed ? VD::CubeArray : VD::Cube;
+
+        case ID::cubeArray:
+            return VD::CubeArray;
+
+        case ID::dimBuffer:
+        case ID::unknown:
+        default:
+            return VD::D2;
+    }
+}
+
+} // namespace
+
+//==============================================================================
+
 std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflection,
                                                ShaderStage stage)
 {
@@ -49,13 +97,14 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
         e.binding = (uint8_t) res.binding;
         e.kind = kind;
         e.stageMask = stageMask;
+        e.backendSpace = (uint8_t) res.set; // D3D12 register space / Vulkan set == group.
         e.backendSlot[slotIndex] = (uint16_t) res.backendSlot;
 
         if (isTexture)
         {
-            e.textureViewDim = TextureViewDim::D2;
-            e.textureSampleType = TextureSampleType::Float;
-            e.textureMultisampled = false;
+            e.textureViewDim = toRstbViewDim (res.imageDim, res.imageArrayed);
+            e.textureSampleType = res.imageIsDepth ? TextureSampleType::Depth : TextureSampleType::Float;
+            e.textureMultisampled = res.imageMS;
         }
 
         bm.push (e);

@@ -68,6 +68,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #include "context/yup_GpuDevice.h"
 #include "rhi/yup_GpuBuffer.h"
 #include "rhi/yup_GpuTexture.h"
+#include "rhi/yup_GpuSampler.h"
 #include "rhi/yup_GpuFrame.h"
 #include "rhi/yup_GpuPipeline.h"
 #include "rhi/yup_GpuComputePipeline.h"

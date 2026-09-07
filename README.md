@@ -88,6 +88,12 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
   <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.5%;" /></a>
 </div>
 
+<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+  <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:20.1%;" /></a>
+  <a href="./examples/graphics/source/examples/PbrDemo.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:39.4%;" /></a>
+  <a href="./examples/graphics/source/examples/FluidSimulationDemo.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:39.4%;" /></a>
+</div>
+
 Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).
 
 <details>

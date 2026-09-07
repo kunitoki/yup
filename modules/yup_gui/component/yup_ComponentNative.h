@@ -45,6 +45,7 @@ class YUP_API ComponentNative : public ReferenceCountedObject
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
     struct captureMouseTag;
+    struct vsyncTag;
 
 public:
     //==============================================================================
@@ -59,7 +60,8 @@ public:
                           temporaryWindowTag,
                           renderContinuousTag,
                           allowHighDensityDisplayTag,
-                          captureMouseTag>;
+                          captureMouseTag,
+                          vsyncTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -75,8 +77,10 @@ public:
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
     /** Flag to capture mouse input outside the native window while the component is on the desktop. */
     static inline constexpr Flags captureMouse = Flags::declareValue<captureMouseTag>();
+    /** Flag to synchronize presentation to the display refresh (vsync). */
+    static inline constexpr Flags vsync = Flags::declareValue<vsyncTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
-    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay | vsync;
 
     //==============================================================================
     /**
@@ -138,6 +142,17 @@ public:
             @return Reference to this Options object for method chaining.
         */
         Options& withMouseCapture (bool shouldCaptureMouse) noexcept;
+
+        /** Sets whether presentation should be synchronized to the display refresh.
+
+            With vsync enabled the backend's present call blocks until the display is ready, so
+            frames are paced by the display rather than by `framerateRedraw`. Off by default.
+
+            @param shouldUseVSync True to synchronize presentation to the display, false to pace frames with the software timer.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withVSync (bool shouldUseVSync) noexcept;
 
         /** Sets whether the window should be treated as a temporary popup/menu window.
 

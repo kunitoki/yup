@@ -76,12 +76,25 @@ pass.finish();
 | `isValid()`                                        | True if the pass holds a valid encoding target.                       |
 | `setPipeline (pipeline)`                           | Sets the compiled pipeline used by subsequent draws.                  |
 | `setTexture (group, binding, texture)`             | Binds a texture to a `(group, binding)` slot; last write wins.        |
+| `setSampler (group, binding, sampler)`             | Overrides the pipeline's default sampler for a slot.                  |
 | `setUniformBuffer (group, binding, data, size)`    | Copies uniform data to a slot immediately; last write wins.           |
 | `setVertexBuffer (slot, buffer)`                   | Binds a vertex buffer for custom geometry.                            |
 | `setIndexBuffer (format, buffer)`                  | Binds an index buffer for `drawIndexed()`.                            |
-| `draw (vertexCount)`                               | Non-indexed draw.                                                     |
-| `drawIndexed (indexCount)`                         | Indexed draw using the bound vertex + index buffers.                  |
+| `setColorAttachment (index, texture, …)`           | Binds an extra colour attachment (MRT); index 1..3.                   |
+| `setDepthStencilAttachment (texture, …)`           | Binds the depth/stencil attachment for the pass.                      |
+| `setResolveTarget (index, texture, …)`             | MSAA resolve destination for a colour attachment.                     |
+| `setViewport (x, y, w, h, …)`                      | Restricts rendering to a sub-rectangle; sticky across draws.          |
+| `setScissorRect (x, y, w, h)`                      | Discards fragments outside the rectangle; sticky across draws.        |
+| `setStencilReference (ref)`                        | Stencil test reference value; sticky across draws.                    |
+| `setBlendColor (color)`                            | Constant for the `blendColor` blend factors; sticky across draws.     |
+| `draw (vertexCount, instanceCount, …)`             | Non-indexed, optionally instanced draw.                               |
+| `drawIndexed (indexCount, instanceCount, …)`       | Indexed, optionally instanced draw.                                   |
 | `finish()`                                         | Encodes recorded draws and closes the pass. Idempotent.               |
+
+Binding state is mutable between draws: a second `draw()` in the same pass sees
+whatever pipeline, textures and uniforms were set most recently. The attachments
+are cleared before the **first** draw only - every later draw loads them - so
+several draws accumulate into one surface and share one depth buffer.
 
 ### Fullscreen passes
 
@@ -103,14 +116,26 @@ Controls attachment load behavior for a pass:
 ```cpp
 struct GpuRenderOptions
 {
-    bool clear          = true;                     // clear vs. load existing contents
-    GpuColor clearColor = Colors::transparentBlack; // used when clear == true
+    GpuRenderOptions (bool clear, GpuColor clearColor);              // two-state form
+    GpuRenderOptions (GpuLoadOp, GpuStoreOp, GpuColor clearColor);   // explicit form
+
+    GpuLoadOp  loadOp     = GpuLoadOp::clear;       // clear / load / dontCare
+    GpuStoreOp storeOp    = GpuStoreOp::store;      // store / discard
+    GpuColor   clearColor = Colors::transparentBlack;
 };
 ```
 
-- `clear = true` clears the target to `clearColor` before drawing (`LoadOp::clear`).
-- `clear = false` preserves the existing contents (`LoadOp::load`) - useful when
-  layering multiple passes onto the same target.
+- `GpuLoadOp::clear` clears the target to `clearColor` before drawing.
+- `GpuLoadOp::load` preserves the existing contents - useful when layering
+  multiple passes onto the same target.
+- `GpuLoadOp::dontCare` leaves the contents undefined; the cheapest option when
+  the pass writes every pixel.
+
+The `{ bool, GpuColor }` form is a shorthand for `clear` versus `load`.
+
+Depth and stencil attachments have their own `GpuDepthStencilOptions` with
+independent load / store ops and clear values, passed to
+`setDepthStencilAttachment()`.
 
 ```cpp
 // Clear to a solid background:
