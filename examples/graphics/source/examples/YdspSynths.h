@@ -401,30 +401,34 @@ public:
 
         const auto comboLeftEdge = tabBar.getX();
 
-        auto patchNav = tabBar.removeFromLeft (proportionOfWidth (0.22f));
+        const auto slotWidth = proportionOfWidth (0.13f);
+        const auto midiComboWidth = slotWidth * 2.0f;
+        const auto inputComboWidth = slotWidth * 1.5f;
+        const bool inputComboVisible = inputSourceCombo != nullptr && inputSourceCombo->isVisible();
+
+        const auto expressionBarWidth = getWidth() - comboLeftEdge - midiComboWidth - (inputComboVisible ? inputComboWidth : 0.0f);
+        const auto headerIconSize = tabBar.getHeight();
+
+        clearButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+        editorTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+        performanceTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+
+        oscilloscope.setBounds (tabBar.removeFromRight (midiComboWidth - 3 * headerIconSize).reduced (4.0f, 6.0f));
+
+        // Patch combo spans the Press + Slide columns, Master spans the Prog column.
+        const auto cellWidth = std::min (expressionBarWidth / 3.0f, tabBar.getWidth() / 3.0f);
+
+        auto patchNav = tabBar.removeFromLeft (cellWidth * 2.0f);
+        patchNav.removeFromRight (12.0f); // gap before the combo
 
         const auto arrowWidth = std::min (patchNav.getHeight(), 32.0f);
         patchPrevButton->setBounds (patchNav.removeFromLeft (arrowWidth).reduced (0.0f, patchNav.getHeight() * 0.2f));
         patchNextButton->setBounds (patchNav.removeFromRight (arrowWidth).reduced (0.0f, patchNav.getHeight() * 0.2f));
         synthCombo->setBounds (patchNav.reduced (4.0f, 6.0f));
 
-        tabBar.removeFromLeft (10.0f);
-
-        const auto headerIconSize = tabBar.getHeight();
-
-        if (clearButton != nullptr)
-            clearButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
-
-        editorTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
-        performanceTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
-
-        const auto slotWidth = proportionOfWidth (0.13f);
-
-        auto masterArea = tabBar.removeFromLeft (proportionOfWidth (0.15f));
+        auto masterArea = tabBar.removeFromLeft (cellWidth);
         masterLabel->setBounds (masterArea.removeFromLeft (std::min (masterArea.getWidth() * 0.45f, 56.0f)).reduced (2.0f, 6.0f));
         volumeSlider->setBounds (masterArea.reduced (2.0f, 6.0f));
-
-        oscilloscope.setBounds (tabBar.removeFromLeft (proportionOfWidth (0.13f)).reduced (4.0f, 6.0f));
 
         if (showingEditorTab)
         {
@@ -435,10 +439,10 @@ public:
         auto topBar = rail;
         topBar.removeFromLeft (comboLeftEdge - topBar.getX());
 
-        if (inputSourceCombo != nullptr && inputSourceCombo->isVisible())
-            inputSourceCombo->setBounds (topBar.removeFromRight (slotWidth * 1.5f).reduced (6));
+        if (inputComboVisible)
+            inputSourceCombo->setBounds (topBar.removeFromRight (inputComboWidth).reduced (6));
 
-        midiInputCombo->setBounds (topBar.removeFromRight (slotWidth * 2.0f).reduced (6));
+        midiInputCombo->setBounds (topBar.removeFromRight (midiComboWidth).reduced (6));
 
         layoutExpressionBar (topBar);
 
@@ -453,7 +457,10 @@ public:
         keyboardComponent.setBounds (keyboardRow.withTrimmedLeft (proportionOfWidth (0.01f))); // gap before the keyboard
 
         if (! meters.empty())
+        {
+            bounds.removeFromBottom (proportionOfHeight (0.01f));
             layoutMeters (bounds.removeFromBottom (proportionOfHeight (0.06f)).reduced (proportionOfWidth (0.04f), 0.0f));
+        }
 
         layoutParamArea (bounds);
 

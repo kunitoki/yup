@@ -22,8 +22,8 @@
 // Scalar double-precision SLEEF (Sleef_sin_u10, ...). Each upstream .c is its
 // own translation unit, as SLEEF's own build does - the DORENAME renaming
 // (upstream/src/libm/rename.h) therefore applies to this file alone.
-
 #define DORENAME
+
 // SLEEF sources carry per-call debug diagnostics (fprintf to stderr) behind
 // `#ifndef NDEBUG`, which SLEEF's own release builds disable. YUP debug
 // builds define DEBUG=1 (not NDEBUG) for module code, so this module pins

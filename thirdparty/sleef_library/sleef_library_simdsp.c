@@ -22,8 +22,8 @@
 // SIMD single-precision SLEEF (Sleef_sinf4_u10, ...). The module compiles one
 // ISA; its rename header (upstream/src/libm/renamesse2.h or renameadvsimd.h)
 // exports the canonical names without an ISA suffix.
-
 #define DORENAME
+
 // SLEEF sources carry per-call debug diagnostics (fprintf to stderr) behind
 // `#ifndef NDEBUG`, which SLEEF's own release builds disable. YUP debug
 // builds define DEBUG=1 (not NDEBUG) for module code, so this module pins

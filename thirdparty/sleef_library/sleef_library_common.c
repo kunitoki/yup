@@ -19,18 +19,8 @@
   ==============================================================================
 */
 
-// Scalar single-precision SLEEF (Sleef_sinf_u10, ...), own translation unit as
-// in SLEEF's build; see sleef_library_dp.c.
-#define DORENAME
+// Common SLEEF support code (Sleef_x86CpuID, Sleef_malloc/Sleef_free,
+// Sleef_currentTimeMicros, Sleef_getCpuIdString), own translation unit as in
+// SLEEF's build, which compiles upstream/src/common/common.c into libsleef.
 
-// SLEEF sources carry per-call debug diagnostics (fprintf to stderr) behind
-// `#ifndef NDEBUG`, which SLEEF's own release builds disable. YUP debug
-// builds define DEBUG=1 (not NDEBUG) for module code, so this module pins
-// NDEBUG for its translation units: without it an audio thread would print
-// per sample (crackling, console flood) whenever a double-float helper sees
-// |x| < |y|.
-#ifndef NDEBUG
-#define NDEBUG
-#endif
-
-#include "upstream/src/libm/sleefsp.c"
+#include "upstream/src/common/common.c"
