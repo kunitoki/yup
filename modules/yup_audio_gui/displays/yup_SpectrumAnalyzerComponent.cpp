@@ -95,8 +95,7 @@ void SpectrumAnalyzerComponent::processFFT()
     }
 
     // Apply window function
-    for (int i = 0; i < fftSize; ++i)
-        fftInputBuffer[static_cast<size_t> (i)] *= windowBuffer[static_cast<size_t> (i)];
+    FloatVectorOperations::multiply (fftInputBuffer.data(), windowBuffer.data(), fftInputBuffer.data(), fftSize);
 
     // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
