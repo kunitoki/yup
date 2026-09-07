@@ -229,7 +229,7 @@ private:
     bool isRendering() const;
     void getRenderContext();
     void runWithComputeContext (const std::function<void()>& fn);
-    void renderFrame();
+    bool renderFrame();
 
     friend class WeakReference<SDLComponentNative>;
     WeakReference<SDLComponentNative>::Master masterReference;
@@ -248,6 +248,7 @@ private:
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
 
+    WaitableTimer frameTimer;
     Color clearColor;
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
@@ -304,6 +305,7 @@ private:
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;
+    bool vsyncEnabled = false;
 };
 
 } // namespace yup

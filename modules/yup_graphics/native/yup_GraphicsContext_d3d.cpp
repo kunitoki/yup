@@ -145,7 +145,7 @@ public:
 
         if (! isHeadless)
         {
-            HRESULT hr = swapchain->Present (0, 0);
+            HRESULT hr = swapchain->Present (options.vsync ? 1 : 0, 0);
             if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
             {
                 auto reason = device->GetDeviceRemovedReason();

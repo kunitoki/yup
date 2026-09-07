@@ -203,6 +203,25 @@ TEST_F (ComponentNativeOptionsTests, WithRenderContinuousFalseDisablesFlag)
     EXPECT_FALSE (opts.flags.test (ComponentNative::renderContinuous));
 }
 
+TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveVSyncEnabled)
+{
+    EXPECT_TRUE (opts.flags.test (ComponentNative::vsync));
+}
+
+TEST_F (ComponentNativeOptionsTests, WithVSyncTrueEnablesFlag)
+{
+    auto& result = opts.withVSync (true);
+    EXPECT_EQ (&result, &opts);
+    EXPECT_TRUE (opts.flags.test (ComponentNative::vsync));
+}
+
+TEST_F (ComponentNativeOptionsTests, WithVSyncFalseDisablesFlag)
+{
+    opts.withVSync (true);
+    opts.withVSync (false);
+    EXPECT_FALSE (opts.flags.test (ComponentNative::vsync));
+}
+
 TEST_F (ComponentNativeOptionsTests, WithAllowedHighDensityDisplayTrueEnablesFlag)
 {
     opts.withAllowedHighDensityDisplay (true);
@@ -322,6 +341,7 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
         .withRenderContinuous (true)
         .withAllowedHighDensityDisplay (true)
         .withMouseCapture (true)
+        .withVSync (true)
         .withTemporaryWindow (true)
         .withGraphicsApi (GpuPlatform::Headless)
         .withFramerateRedraw (60.0f)
@@ -334,6 +354,7 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
     EXPECT_TRUE (opts.flags.test (ComponentNative::renderContinuous));
     EXPECT_TRUE (opts.flags.test (ComponentNative::allowHighDensityDisplay));
     EXPECT_TRUE (opts.flags.test (ComponentNative::captureMouse));
+    EXPECT_TRUE (opts.flags.test (ComponentNative::vsync));
     EXPECT_TRUE (opts.flags.test (ComponentNative::temporaryWindow));
     ASSERT_TRUE (opts.graphicsApi.has_value());
     EXPECT_EQ (*opts.graphicsApi, GpuPlatform::Headless);

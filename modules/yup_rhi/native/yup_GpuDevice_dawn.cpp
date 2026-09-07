@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if RIVE_DAWN
+#if YUP_RIVE_USE_DAWN
 #include "dawn/native/DawnNative.h"
 #include "dawn/dawn_proc.h"
 

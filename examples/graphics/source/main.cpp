@@ -106,6 +106,9 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
 #include "examples/FilterDemo.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
+#include "examples/FluidSimulationDemo.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
 #include "examples/GpuAudioProcessingDemo.h"
 #endif
@@ -129,6 +132,9 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
 #include "examples/Paths.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
+#include "examples/PbrDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
 #include "examples/PopupMenu.h"
@@ -282,6 +288,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
+        addDemo ("Fluid Simulation", [] { return std::make_unique<FluidSimulationDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
         addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
 #endif
@@ -305,6 +314,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
         addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
+        addDemo ("PBR IBL", [] { return std::make_unique<PbrDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
         addDemo ("Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
@@ -430,7 +442,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        yup::DocumentWindow::paint (g);
+        // yup::DocumentWindow::paint (g);
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override

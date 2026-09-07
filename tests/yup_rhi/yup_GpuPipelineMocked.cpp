@@ -641,8 +641,8 @@ TEST_F (GpuFrameMockTests, WaitForGpuIsIdempotent)
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
 
-    // A GPU sync is expensive, and the destructor waits too, so repeated waits must
-    // collapse into the single stall the first one already paid for.
+    // A GPU sync is expensive, so repeated waits must collapse into the single
+    // stall the first one already paid for.
     EXPECT_CALL (*mockOreCtx, waitForGPU());
 
     auto frame = GpuFrame::begin (ctx);
@@ -652,20 +652,57 @@ TEST_F (GpuFrameMockTests, WaitForGpuIsIdempotent)
     frame.waitForGPU();
 }
 
-TEST_F (GpuFrameMockTests, DestructorSubmitsAndWaitsIfNotSubmitted)
+TEST_F (GpuFrameMockTests, DestructorSubmitsWithoutStallingOnTheGpu)
 {
     EXPECT_CALL (*mockOreCtx, beginFrame (_));
     EXPECT_CALL (*mockOreCtx, endFrame());
 
-    // The encoded passes reference this frame's transient resources by raw pointer,
-    // and destruction releases them, so the destructor has to drain the GPU first.
-    EXPECT_CALL (*mockOreCtx, waitForGPU());
+    // The frame's transient resources are handed to the device to be freed a few
+    // generations later, so the destructor must never pay for a pipeline stall.
+    // Waiting here used to cost one on every rendered frame.
+    EXPECT_CALL (*mockOreCtx, waitForGPU()).Times (0);
 
     {
         auto frame = GpuFrame::begin (ctx);
         ASSERT_TRUE (frame.isValid());
         // Not explicitly submitted — destructor does it.
     }
+}
+
+TEST_F (GpuFrameMockTests, FrameNumbersAdvanceAndTrailASafeGeneration)
+{
+    std::vector<rive::ore::Context::FrameDescriptor> descriptors;
+
+    EXPECT_CALL (*mockOreCtx, beginFrame (_))
+        .WillRepeatedly (Invoke ([&descriptors] (const rive::ore::Context::FrameDescriptor& desc)
+    {
+        descriptors.push_back (desc);
+    }));
+
+    for (int i = 0; i < 6; ++i)
+    {
+        auto frame = GpuFrame::begin (ctx);
+        ASSERT_TRUE (frame.isValid());
+        frame.submit();
+    }
+
+    ASSERT_EQ (descriptors.size(), 6u);
+
+    // The current frame number is monotonic, and the safe frame number trails it
+    // by the in-flight depth - it is what tells a manager-backed backend which of
+    // its own resources the GPU can no longer be reading. Both used to be zero on
+    // every single frame.
+    for (size_t i = 0; i < descriptors.size(); ++i)
+    {
+        EXPECT_EQ (descriptors[i].currentFrameNumber, (uint64_t) (i + 1));
+        EXPECT_LT (descriptors[i].safeFrameNumber, descriptors[i].currentFrameNumber);
+
+        if (i > 0)
+            EXPECT_GE (descriptors[i].safeFrameNumber, descriptors[i - 1].safeFrameNumber);
+    }
+
+    EXPECT_EQ (descriptors.front().safeFrameNumber, 0u);
+    EXPECT_GT (descriptors.back().safeFrameNumber, 0u);
 }
 
 TEST_F (GpuFrameMockTests, MoveAssignmentSubmitsExisting)
@@ -1062,11 +1099,14 @@ TEST_F (GpuRenderPassMockTests, UniformBuffersAreRecycledAcrossFrames)
     auto target = GpuTarget::create (ctx, 256, 128);
     ASSERT_NE (target, nullptr);
 
+    auto bgl = rive::make_rcp<TestOreBindGroupLayout>();
+    bgl->addEntry (0, rive::ore::BindingKind::uniformBuffer);
+
     EXPECT_CALL (*mockOreCtx, makeShaderModule (_))
         .WillOnce (Return (makeShaderModuleWithBindingMap()))
         .WillOnce (Return (makeShaderModuleWithBindingMap()));
     EXPECT_CALL (*mockOreCtx, makeBindGroupLayout (_))
-        .WillOnce (Return (rive::make_rcp<TestOreBindGroupLayout>()));
+        .WillOnce (Return (bgl));
     EXPECT_CALL (*mockOreCtx, makePipeline (_, _))
         .WillOnce (Return (rive::make_rcp<TestOrePipeline>()));
 

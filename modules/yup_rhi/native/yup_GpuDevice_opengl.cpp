@@ -154,6 +154,9 @@ public:
         if (renderContext == nullptr)
             return false;
 
+#if YUP_WASM
+        return false;
+#else
         return withGLContext ([&]() -> bool
         {
             // GL 4.3+ and GLES 3.1+ support compute shaders natively.
@@ -177,6 +180,7 @@ public:
 
             return false;
         });
+#endif
     }
 
     //==============================================================================
