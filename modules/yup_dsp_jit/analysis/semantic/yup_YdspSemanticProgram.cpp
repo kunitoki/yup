@@ -469,27 +469,85 @@ void YdspSemanticAnalyzer::resolveStateArraySizes (YdspProcessorDecl& processor)
 
 void YdspSemanticAnalyzer::substituteArraySizeCalls (YdspProcessorDecl& processor)
 {
-    const auto stateArraySizeOf = [&processor] (const String& name) -> int
+    const bool isBlockProcess = processor.process != nullptr && processor.process->mode == YdspProcessMode::block;
+
+    const auto elementCountOf = [&processor, isBlockProcess] (const YdspExpr& arg) -> int
     {
-        for (const auto& state : processor.states)
-            if (state.name == name)
-                return state.arraySize;
+        if (arg.kind == YdspExprKind::identifier)
+        {
+            for (const auto& state : processor.states)
+                if (state.name == arg.text)
+                    return state.arraySize > 0 ? state.arraySize : 0; // scalar-element array, or array of struct instances
+
+            if (isBlockProcess)
+                for (const auto& endpoint : processor.endpoints)
+                    if ((endpoint.kind == YdspEndpointKind::inputStream || endpoint.kind == YdspEndpointKind::outputStream)
+                        && endpoint.name == arg.text)
+                        return -1;
+
+            return 0;
+        }
+
+        if (arg.kind == YdspExprKind::member && ! arg.children.empty() && arg.children[0] != nullptr)
+        {
+            const auto& base = *arg.children[0];
+            String stateName;
+
+            if (base.kind == YdspExprKind::identifier)
+                stateName = base.text;
+            else if (base.kind == YdspExprKind::index && ! base.children.empty() && base.children[0] != nullptr
+                     && base.children[0]->kind == YdspExprKind::identifier)
+                stateName = base.children[0]->text;
+            else
+                return 0;
+
+            const YdspStateDecl* state = nullptr;
+
+            for (const auto& candidate : processor.states)
+                if (candidate.name == stateName)
+                {
+                    state = &candidate;
+                    break;
+                }
+
+            if (state == nullptr || state->structName.isEmpty())
+                return 0;
+
+            for (const auto& structDecl : processor.structs)
+                if (structDecl.name == state->structName)
+                    for (const auto& field : structDecl.fields)
+                        if (field.name == arg.text)
+                            return field.arraySize;
+
+            return 0;
+        }
 
         return 0;
     };
 
-    const auto substituteExpr = [&stateArraySizeOf] (auto&& self, YdspExpr& expr) -> void
+    const auto substituteExpr = [&elementCountOf] (auto&& self, YdspExpr& expr) -> void
     {
         if (expr.kind == YdspExprKind::call && expr.text == "size" && expr.children.size() == 1
-            && expr.children[0] != nullptr && expr.children[0]->kind == YdspExprKind::identifier)
+            && expr.children[0] != nullptr)
         {
-            const auto arraySize = stateArraySizeOf (expr.children[0]->text);
+            const auto elementCount = elementCountOf (*expr.children[0]);
 
-            if (arraySize > 0)
+            if (elementCount > 0)
             {
                 expr.kind = YdspExprKind::intLiteral;
-                expr.number = static_cast<double> (arraySize);
+                expr.number = static_cast<double> (elementCount);
                 expr.text.clear();
+                expr.op = YdspOperator::none;
+                expr.children.clear();
+                expr.overrides.clear();
+                return;
+            }
+
+            if (elementCount < 0)
+            {
+                expr.kind = YdspExprKind::identifier;
+                expr.text = "blockSize";
+                expr.number = 0;
                 expr.op = YdspOperator::none;
                 expr.children.clear();
                 expr.overrides.clear();

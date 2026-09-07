@@ -16,7 +16,7 @@ declare description "Four-operator FM bell with self-feedback, four algorithms a
 processor FMBellVoice {
     output stream out;
 
-    input value float algorithm = 0.0 [[ name: "Algorithm", min: 0.0, max: 3.0,
+    input value float algorithm = 1.0 [[ name: "Algorithm", min: 0.0, max: 3.0,
                                          values: { "Stack", "Two Pairs", "One To Three", "Additive" } ]];
 
     input value float index = 3.5 [[ name: "Mod Index", min: 0.0, max: 12.0, smoothing: 0.02 ]];

@@ -2876,6 +2876,53 @@ TEST (YdspSemanticAnalyzerTests, SizeIntrinsicIsAConstantUsableInAnEventHandler)
     EXPECT_NE (nullptr, analyzed);
 }
 
+TEST (YdspSemanticAnalyzerTests, SizeIntrinsicWorksOnStructArrayFields)
+{
+    YdspDiagnostics diagnostics;
+
+    auto analyzed = analyze (R"YDSP(
+        processor P {
+            struct Comb { float buf[64]; int wp; }
+            input stream in;
+            output stream out;
+            state Comb comb;
+            state Comb combs[4];
+            process {
+                float acc = 0.0;
+                for i in 0..size (comb.buf)     { acc = acc + comb.buf[i]; }
+                for j in 0..size (combs[0].buf) { acc = acc + combs[0].buf[j]; }
+                comb.wp = size (comb.buf);
+                out = in + acc;
+            }
+        }
+        graph G { input stream a; output stream b; node p = P; connection { a -> p.in; p.out -> b; } }
+    )YDSP",
+                             diagnostics);
+
+    EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    EXPECT_NE (nullptr, analyzed);
+}
+
+TEST (YdspSemanticAnalyzerTests, SizeIntrinsicOnABlockModeStreamResolvesToBlockSize)
+{
+    YdspDiagnostics diagnostics;
+
+    auto analyzed = analyze (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            process block {
+                for i in 0..size (in) { out[i] = in[i]; }
+            }
+        }
+        graph G { input stream a; output stream b; node p = P; connection { a -> p.in; p.out -> b; } }
+    )YDSP",
+                             diagnostics);
+
+    EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    EXPECT_NE (nullptr, analyzed);
+}
+
 TEST (YdspSemanticAnalyzerTests, RejectsUnsizedArrayStateWithNoInitialiserList)
 {
     YdspDiagnostics diagnostics;

@@ -255,14 +255,19 @@ process {
 }
 ```
 
-`size (name)` is a compile-time pseudo function that resolves to the array's
+`size (name)` is a compile-time pseudo function that resolves to an array's
 element count - the size written explicitly or inferred from the list - and is
-substituted for an integer constant before code generation, so it may appear
-anywhere a constant integer can (a `for` bound, an index, an arithmetic
-expression). It takes the name of a `state` array (including an array of struct
-instances) and nothing else. A `[]` array must carry a **non-empty** `{ ... }`
-list: `state float a[];`, `state float a[] = {}` or a scalar initialiser are
-errors, and arrays of struct instances always state their size explicitly.
+substituted for that constant before code generation, so it may appear anywhere
+a constant integer can (a `for` bound, an index, an arithmetic expression). It
+takes any expression that names an array:
+`size (buf)` / `size (combs)` for a `state` array (an array of struct
+instances yields its instance count), and `size (comb.buf)` /
+`size (combs[i].buf)` for a struct array field. A `[]` array must carry a
+**non-empty** `{ ... }` list: `state float a[];`, `state float a[] = {}` or a
+scalar initialiser are errors, and arrays of struct instances always state
+their size explicitly. In a block-mode processor the streams are arrays of
+`blockSize` samples, so `size (in)` / `size (out)` resolve to the (runtime)
+block size, exactly like writing `blockSize`.
 
 Initialisers are lowered into the processor's `init` kernel (synthesising one if
 the processor has no explicit `init { }` block) and therefore run once per voice
@@ -376,8 +381,10 @@ for j in 0..16     { sum += buf[j]; }               // constant bound
 
 `0..N` iterates `i = 0, 1, ..., N-1` (upper bound exclusive). `N` must be a
 non-negative integer literal, a program constant (which folds to one — see
-[1.0](#10-program-constants)), `size (name)` for a `state` array (which is
-substituted for that constant — see [2.2](#22-state-history)), or `blockSize`
+[1.0](#10-program-constants)), `size (...)` for an array (substituted for its
+element count: a compile-time constant for a `state` array or struct array
+field, or `blockSize` for a stream in a block-mode processor — see
+[2.2](#22-state-history)), or `blockSize`
 (or `blockSize` plus/minus an integer literal, e.g. `blockSize - 1`). Inside an
 event handler the bound must be constant. Nested loops are allowed; the product
 of all loop bounds is the loop's worst-case iteration count, reported by the
@@ -517,9 +524,10 @@ primary    = literal | identifier | call | "(" expression ")" ;
   (recursion composition, [3.2](#32-the-faust-style-algebra)): different
   grammars, different arities, no ambiguity between them.
 - Calls: intrinsic functions (see [2.8](#28-intrinsics)) and the delay
-  primitives. `size (name)` is a compile-time pseudo function, not a runtime
-  call: it is replaced by the element count of the named `state` array before
-  code generation (see [2.2](#22-state-history)).
+  primitives. `size (...)` is a compile-time pseudo function, not a runtime
+  call: it is replaced before code generation by the element count of the array
+  it names - a `state` array, a struct array field, or, in block mode, the
+  runtime length of a stream (see [2.2](#22-state-history)).
 - Indexing: `state` arrays (`buf[i]`) and, in block mode, stream arrays
   (`in[i]`). Indices are `int`.
 - The postfix `'` (one-sample delay) — see [2.9](#29-delay-and-smoothing-primitives).
@@ -550,9 +558,10 @@ the whole program (see [1.0](#10-program-constants)).
 conversions `int(x)`/`int32(x)`, `int64(x)`, `float(x)`/`float32(x)`,
 `float64(x)`.
 
-`size (name)` is not a runtime intrinsic: it is resolved at compile time to the
-element count of a `state` array and substituted for that constant before code
-generation (see [2.2](#22-state-history)).
+`size (...)` is not a runtime intrinsic: it is resolved at compile time to the
+element count of the array it names - a `state` array, a struct array field, or
+the runtime length of a block-mode stream - and substituted for that before
+code generation (see [2.2](#22-state-history)).
 
 Float intrinsics require float operands of a single width and preserve that
 width (f32 lowers to `sinf`/`powf`/..., f64 to `sin`/`pow`/...).

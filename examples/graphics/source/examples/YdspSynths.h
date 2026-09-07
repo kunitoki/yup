@@ -47,6 +47,7 @@ constexpr yup::uint32 paletteInkColor = 0xffe6eaf2;
 constexpr yup::uint32 paletteMutedColor = 0xff7c8798;
 constexpr yup::uint32 paletteGlowColor = 0xff0a84ff;
 constexpr yup::uint32 paletteGlowSoftColor = 0xff6fb6ff;
+constexpr yup::uint32 paletteRaisedColor = 0xff162031;
 constexpr yup::uint32 paletteDangerColor = 0xffff6b5a;
 } // namespace
 
@@ -128,9 +129,13 @@ private:
 class YdspIconButton : public yup::Button
 {
 public:
-    YdspIconButton (const char* glyphText)
+    YdspIconButton (const char* glyphText,
+                    yup::Color backgroundColour = yup::Color (paletteSurfaceColor),
+                    yup::Color idleColour = yup::Color (paletteInkColor))
         : Button ("YdspIconButton")
         , glyphText (glyphText)
+        , backgroundColour (backgroundColour)
+        , idleColour (idleColour)
     {
         setOpaque (false);
         setClickingGrabFocus (false);
@@ -144,7 +149,7 @@ public:
                                                    (float) b.getWidth(),
                                                    (float) b.getHeight());
 
-        g.setFillColor (yup::Color (paletteSurfaceColor));
+        g.setFillColor (backgroundColour);
         g.fillRoundedRect (bounds, 8.0f);
 
         if (isButtonOver() || isButtonDown())
@@ -155,7 +160,7 @@ public:
         }
 
         auto iconColour = isEnabled()
-                            ? (isButtonOver() ? yup::Color (paletteGlowSoftColor) : yup::Color (paletteInkColor))
+                            ? (isButtonOver() ? yup::Color (paletteGlowSoftColor) : idleColour)
                             : yup::Color (paletteMutedColor);
 
         g.setFillColor (iconColour);
@@ -168,6 +173,8 @@ public:
 
 private:
     const char* glyphText = nullptr;
+    yup::Color backgroundColour;
+    yup::Color idleColour;
 };
 
 //==============================================================================
@@ -233,7 +240,7 @@ public:
 
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-        performanceTabButton = std::make_unique<yup::TextButton> ("Performance");
+        performanceTabButton = std::make_unique<YdspIconButton> (YUP_ICON_KEYBOARD, yup::Color (paletteRaisedColor));
         performanceTabButton->setClickingGrabFocus (false);
         performanceTabButton->onClick = [this]
         {
@@ -241,7 +248,7 @@ public:
         };
         addAndMakeVisible (*performanceTabButton);
 
-        editorTabButton = std::make_unique<yup::TextButton> ("Editor");
+        editorTabButton = std::make_unique<YdspIconButton> (YUP_ICON_PENCIL, yup::Color (paletteRaisedColor));
         editorTabButton->setClickingGrabFocus (false);
         editorTabButton->onClick = [this]
         {
@@ -250,7 +257,7 @@ public:
         addAndMakeVisible (*editorTabButton);
 
         brandLabel = std::make_unique<yup::Label> ("Brand");
-        brandLabel->setText ("YUP! Synths");
+        brandLabel->setText ("YUP! DSPJIT");
         brandLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteInkColor));
         brandLabel->setJustification (yup::Justification::centerLeft);
         brandLabel->setClickingGrabFocus (false);
@@ -281,10 +288,18 @@ public:
         };
         addAndMakeVisible (*volumeSlider);
 
-        clearButton = std::make_unique<yup::TextButton> ("All Notes Off");
+        masterLabel = std::make_unique<yup::Label> ("Master");
+        masterLabel->setText ("Master", yup::dontSendNotification);
+        masterLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+        masterLabel->setFont (font.withHeight (12.0f));
+        masterLabel->setJustification (yup::Justification::centerLeft);
+        addAndMakeVisible (*masterLabel);
+
+        clearButton = std::make_unique<YdspIconButton> (YUP_ICON_SKULL, yup::Color (paletteRaisedColor));
         clearButton->onClick = [this]
         {
             keyboardState.allNotesOff (0);
+            keyboardComponent.takeKeyboardFocus();
         };
         addAndMakeVisible (*clearButton);
 
@@ -384,7 +399,7 @@ public:
 
         const auto comboLeftEdge = tabBar.getX();
 
-        auto patchNav = tabBar.removeFromLeft (proportionOfWidth (0.17f));
+        auto patchNav = tabBar.removeFromLeft (proportionOfWidth (0.22f));
 
         const auto arrowWidth = std::min (patchNav.getHeight(), 32.0f);
         patchPrevButton->setBounds (patchNav.removeFromLeft (arrowWidth).reduced (0.0f, patchNav.getHeight() * 0.2f));
@@ -393,14 +408,21 @@ public:
 
         tabBar.removeFromLeft (10.0f);
 
-        const auto slotWidth = tabBar.getWidth() / 5.0f;
-        performanceTabButton->setBounds (tabBar.removeFromLeft (slotWidth).reduced (4.0f, 6.0f));
-        editorTabButton->setBounds (tabBar.removeFromLeft (slotWidth).reduced (4.0f, 6.0f));
-        volumeSlider->setBounds (tabBar.removeFromLeft (slotWidth).reduced (4.0f, 6.0f));
-        oscilloscope.setBounds (tabBar.removeFromLeft (slotWidth).reduced (4.0f, 6.0f));
+        const auto headerIconSize = tabBar.getHeight();
 
         if (clearButton != nullptr)
-            clearButton->setBounds (tabBar.removeFromLeft (slotWidth).reduced (4.0f, 6.0f));
+            clearButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+
+        editorTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+        performanceTabButton->setBounds (tabBar.removeFromRight (headerIconSize).reduced (4.0f, 8.0f));
+
+        const auto slotWidth = proportionOfWidth (0.13f);
+
+        auto masterArea = tabBar.removeFromLeft (proportionOfWidth (0.15f));
+        masterLabel->setBounds (masterArea.removeFromLeft (std::min (masterArea.getWidth() * 0.45f, 56.0f)).reduced (2.0f, 6.0f));
+        volumeSlider->setBounds (masterArea.reduced (2.0f, 6.0f));
+
+        oscilloscope.setBounds (tabBar.removeFromLeft (proportionOfWidth (0.13f)).reduced (4.0f, 6.0f));
 
         if (showingEditorTab)
         {
@@ -1306,7 +1328,8 @@ private:
 
     void createSynthNavButtons()
     {
-        patchPrevButton = std::make_unique<YdspIconButton> ("\xef\x81\x93"); // fa-chevron-left
+        patchPrevButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_LEFT, yup::Color (paletteRaisedColor));
+        patchPrevButton->setClickingGrabFocus (false);
         patchPrevButton->onClick = [this]
         {
             const int current = synthCombo->getSelectedId() - 1;
@@ -1318,7 +1341,8 @@ private:
         };
         addAndMakeVisible (*patchPrevButton);
 
-        patchNextButton = std::make_unique<YdspIconButton> ("\xef\x81\x94"); // fa-chevron-right
+        patchNextButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_RIGHT, yup::Color (paletteRaisedColor));
+        patchNextButton->setClickingGrabFocus (false);
         patchNextButton->onClick = [this]
         {
             const int current = synthCombo->getSelectedId() - 1;
@@ -1382,7 +1406,8 @@ private:
 
     void createParamPageControls()
     {
-        paramPrevButton = std::make_unique<YdspIconButton> ("\xef\x81\x93"); // fa-chevron-left
+        paramPrevButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_LEFT);
+        paramPrevButton->setClickingGrabFocus (false);
         paramPrevButton->onClick = [this]
         {
             paramPageIndex = std::max (0, paramPageIndex - 1);
@@ -1391,7 +1416,8 @@ private:
         };
         addAndMakeVisible (*paramPrevButton);
 
-        paramNextButton = std::make_unique<YdspIconButton> ("\xef\x81\x94"); // fa-chevron-right
+        paramNextButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_RIGHT);
+        paramNextButton->setClickingGrabFocus (false);
         paramNextButton->onClick = [this]
         {
             paramPageIndex = std::min (paramPageCount - 1, paramPageIndex + 1);
@@ -1663,13 +1689,14 @@ private:
     yup::Rectangle<float> railBounds;
     yup::Rectangle<float> keyboardRailBounds;
     std::unique_ptr<yup::Label> brandLabel;
-    std::unique_ptr<yup::TextButton> performanceTabButton;
-    std::unique_ptr<yup::TextButton> editorTabButton;
+    std::unique_ptr<YdspIconButton> performanceTabButton;
+    std::unique_ptr<YdspIconButton> editorTabButton;
     std::unique_ptr<yup::ComboBox> synthCombo;
     std::unique_ptr<YdspIconButton> patchPrevButton;
     std::unique_ptr<YdspIconButton> patchNextButton;
     std::unique_ptr<yup::Slider> volumeSlider;
-    std::unique_ptr<yup::TextButton> clearButton;
+    std::unique_ptr<yup::Label> masterLabel;
+    std::unique_ptr<YdspIconButton> clearButton;
     std::unique_ptr<yup::TextButton> dumpAsmButton;
     std::unique_ptr<yup::ComboBox> midiInputCombo;
     yup::OwnedArray<yup::Slider> expressionSliders;
