@@ -1033,7 +1033,7 @@ void AudioDeviceManager::updateXml()
 void AudioDeviceManager::addAudioCallback (AudioIODeviceCallback* newCallback)
 {
     {
-        const ScopedLock sl (audioCallbackLock);
+        const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
         if (callbacks.contains (newCallback))
             return;
@@ -1042,7 +1042,7 @@ void AudioDeviceManager::addAudioCallback (AudioIODeviceCallback* newCallback)
     if (currentAudioDevice != nullptr && newCallback != nullptr)
         newCallback->audioDeviceAboutToStart (currentAudioDevice.get());
 
-    const ScopedLock sl (audioCallbackLock);
+    const AudioLockType::ScopedLockType sl (audioCallbackLock);
     callbacks.add (newCallback);
 }
 
@@ -1053,7 +1053,7 @@ void AudioDeviceManager::removeAudioCallback (AudioIODeviceCallback* callbackToR
         bool needsDeinitialising = currentAudioDevice != nullptr;
 
         {
-            const ScopedLock sl (audioCallbackLock);
+            const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
             needsDeinitialising = needsDeinitialising && callbacks.contains (callbackToRemove);
             callbacks.removeFirstMatchingValue (callbackToRemove);
@@ -1071,7 +1071,7 @@ void AudioDeviceManager::audioDeviceIOCallbackInt (const float* const* inputChan
                                                    int numSamples,
                                                    const AudioIODeviceCallbackContext& context)
 {
-    const ScopedLock sl (audioCallbackLock);
+    const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
     inputLevelGetter->updateLevel (inputChannelData, numInputChannels, numSamples);
 
@@ -1143,7 +1143,7 @@ void AudioDeviceManager::audioDeviceAboutToStartInt (AudioIODevice* const device
     updateCurrentSetup();
 
     {
-        const ScopedLock sl (audioCallbackLock);
+        const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
         for (int i = callbacks.size(); --i >= 0;)
             callbacks.getUnchecked (i)->audioDeviceAboutToStart (device);
@@ -1156,7 +1156,7 @@ void AudioDeviceManager::audioDeviceStoppedInt()
 {
     sendChangeMessage();
 
-    const ScopedLock sl (audioCallbackLock);
+    const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
     loadMeasurer.reset();
 
@@ -1166,7 +1166,7 @@ void AudioDeviceManager::audioDeviceStoppedInt()
 
 void AudioDeviceManager::audioDeviceErrorInt (const String& message)
 {
-    const ScopedLock sl (audioCallbackLock);
+    const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
     for (int i = callbacks.size(); --i >= 0;)
         callbacks.getUnchecked (i)->audioDeviceError (message);
@@ -1220,7 +1220,7 @@ void AudioDeviceManager::addMidiInputDeviceCallback (const String& identifier, M
 
     if (identifier.isEmpty() || isMidiInputDeviceEnabled (identifier))
     {
-        const ScopedLock sl (midiCallbackLock);
+        const AudioLockType::ScopedLockType sl (midiCallbackLock);
         midiCallbacks.add ({ identifier, callbackToAdd });
     }
 }
@@ -1233,7 +1233,7 @@ void AudioDeviceManager::removeMidiInputDeviceCallback (const String& identifier
 
         if (mc.callback == callbackToRemove && mc.deviceIdentifier == identifier)
         {
-            const ScopedLock sl (midiCallbackLock);
+            const AudioLockType::ScopedLockType sl (midiCallbackLock);
             midiCallbacks.remove (i);
         }
     }
@@ -1243,7 +1243,7 @@ void AudioDeviceManager::handleIncomingMidiMessageInt (MidiInput* source, const 
 {
     if (! message.isActiveSense())
     {
-        const ScopedLock sl (midiCallbackLock);
+        const AudioLockType::ScopedLockType sl (midiCallbackLock);
 
         for (auto& mc : midiCallbacks)
             if (mc.deviceIdentifier.isEmpty() || mc.deviceIdentifier == source->getIdentifier())
@@ -1267,7 +1267,7 @@ void AudioDeviceManager::setDefaultMidiOutputDevice (const String& identifier,
         Array<AudioIODeviceCallback*> oldCallbacks;
 
         {
-            const ScopedLock sl (audioCallbackLock);
+            const AudioLockType::ScopedLockType sl (audioCallbackLock);
             oldCallbacks.swapWith (callbacks);
         }
 
@@ -1290,7 +1290,7 @@ void AudioDeviceManager::setDefaultMidiOutputDevice (const String& identifier,
                 c->audioDeviceAboutToStart (currentAudioDevice.get());
 
         {
-            const ScopedLock sl (audioCallbackLock);
+            const AudioLockType::ScopedLockType sl (audioCallbackLock);
             oldCallbacks.swapWith (callbacks);
         }
 
@@ -1353,7 +1353,7 @@ void AudioDeviceManager::playTestSound()
         std::unique_ptr<AudioBuffer<float>> oldSound;
 
         {
-            const ScopedLock sl (audioCallbackLock);
+            const AudioLockType::ScopedLockType sl (audioCallbackLock);
             std::swap (oldSound, testSound);
         }
     }
@@ -1379,7 +1379,7 @@ void AudioDeviceManager::playTestSound()
         newSound->applyGainRamp (0, soundLength - soundLength / 4, soundLength / 4, 1.0f, 0.0f);
 
         {
-            const ScopedLock sl (audioCallbackLock);
+            const AudioLockType::ScopedLockType sl (audioCallbackLock);
             std::swap (testSound, newSound);
         }
     }

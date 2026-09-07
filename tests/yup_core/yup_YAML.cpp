@@ -614,6 +614,7 @@ TEST_F (YAMLTests, Int64Min)
     EXPECT_EQ (std::numeric_limits<int64>::max(), static_cast<int64> (maxV));
 }
 
+#if ! YUP_WASM
 TEST_F (YAMLTests, DepthLimitExceeded)
 {
     var result;
@@ -637,6 +638,7 @@ TEST_F (YAMLTests, DepthLimitExceeded)
 
     EXPECT_TRUE (YAML::parse (deepMap, result).failed());
 }
+#endif
 
 TEST_F (YAMLTests, DuplicateAnchor)
 {

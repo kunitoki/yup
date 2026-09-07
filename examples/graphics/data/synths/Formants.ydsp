@@ -1,0 +1,198 @@
+/*
+  A formant voice, and parallel processing expressed in the graph rather than
+  inside a processor.
+
+  One glottal source fans out into three independent resonators - F1, F2 and F3 -
+  and all three are summed straight back into `out`. That is the classic source /
+  filter model of a sung vowel: a buzzy pulse train for the vocal folds, and a
+  small bank of resonant peaks for the shape of the mouth. Move the peaks and the
+  vowel changes; the source never does.
+*/
+
+declare name "Formants";
+declare description "A sung-vowel voice: one glottal source fanned out to three formant resonators, summed back.";
+
+let vowels = 5;
+let formants = 3;
+
+let vowelTable = vowels * formants;
+
+processor GlottalVoice {
+    output stream out;
+
+    input value float width = 0.12 [[ name: "Glottal Width", min: 0.02, max: 0.5, smoothing: 0.02 ]];
+    input value float rolloff = 0.6 [[ name: "Source Rolloff", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float attack = 0.03 [[ name: "Attack", min: 0.002, max: 1.0, unit: "s" ]];
+    input value float release = 0.25 [[ name: "Release", min: 0.02, max: 3.0, unit: "s" ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase;
+    state float freq;
+    state float z1;
+
+    state float env;
+    state float level;
+    state float attackCoeff;
+    state float releaseCoeff;
+    state int released;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func polyBlep (t: float, dt: float) : float {
+        float r = 0.0;
+        if (t < dt) {
+            t = t / dt;
+            r = t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            r = t * t + t + t + 1.0;
+        }
+        return r;
+    }
+
+    event midi (e: noteOn) {
+        freq         = noteToFreq (e.pitch);
+        level        = e.velocity;
+        attackCoeff  = 1.0 - exp (-1.0 / (attack * sampleRate));
+        released     = 0;
+        active       = 1;
+        bendFactor   = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    process {
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+            * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        float dt = freq * pitchFactor * samplePeriod;
+
+        phase = phase + dt;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        float falling = phase < width ? phase - width + 1.0 : phase - width;
+        float pulse = (phase < width ? 1.0 : -1.0)
+                    + polyBlep (phase, dt)
+                    - polyBlep (falling, dt);
+
+        float k = 1.0 - exp (-2.0 * pi * 2500.0 * samplePeriod);
+        z1 = z1 + k * (pulse - z1);
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + (level - env) * attackCoeff;
+        }
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = (pulse + rolloff * (z1 - pulse)) * env * 0.5;
+    }
+}
+
+processor Formant {
+    input stream in;
+    output stream out;
+
+    input value float vowel = 0.0 [[ name: "Vowel", min: 0.0, max: 4.0,
+                                     values: { "A", "E", "I", "O", "U" } ]];
+
+    input value float tilt = 1.0 [[ name: "Formant Tilt", min: 0.2, max: 2.0 ]];
+    input value int which = 0;
+
+    state float centres[vowelTable] = {
+        730.0, 1090.0, 2440.0,
+        530.0, 1840.0, 2480.0,
+        270.0, 2290.0, 3010.0,
+        570.0,  840.0, 2410.0,
+        300.0,  870.0, 2240.0
+    };
+
+    state float bandwidths[formants] = { 70.0, 110.0, 160.0 };
+
+    state float levels[formants] = { 1.0, 0.45, 0.22 };
+
+    state float y1;
+    state float y2;
+
+    process {
+        int row = int (vowel);
+        if (row < 0) { row = 0; }
+        if (row > vowels - 1) { row = vowels - 1; }
+
+        float r = exp (-pi * bandwidths[which] * samplePeriod);
+        float theta = 2.0 * pi * centres[row * formants + which] * samplePeriod;
+
+        float cosTheta = smooth (cos (theta), 0.05);
+        float a0 = smooth ((1.0 - r * r) * sin (theta), 0.05);
+
+        float y = a0 * in + 2.0 * r * cosTheta * y1 - r * r * y2;
+
+        y2 = y1;
+        y1 = y;
+
+        out = y * smooth (levels[which] * pow (tilt, float (which)), 0.02);
+    }
+}
+
+//==============================================================================
+
+graph ParallelRack {
+    input event midi;
+    output stream out;
+
+    input value float vowel = 0.0 [[ name: "Vowel", min: 0.0, max: 4.0,
+                                     values: { "A", "E", "I", "O", "U" } ]];
+
+    input value float tilt = 1.0 [[ name: "Formant Tilt", min: 0.2, max: 2.0 ]];
+
+    node voices = GlottalVoice[6];
+
+    node f1 = Formant (which = 0);
+    node f2 = Formant (which = 1);
+    node f3 = Formant (which = 2);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> f1.in;
+        voices.out -> f2.in;
+        voices.out -> f3.in;
+
+        f1.out -> out;
+        f2.out -> out;
+        f3.out -> out;
+
+        vowel -> f1.vowel;
+        vowel -> f2.vowel;
+        vowel -> f3.vowel;
+
+        tilt -> f1.tilt;
+        tilt -> f2.tilt;
+        tilt -> f3.tilt;
+    }
+}

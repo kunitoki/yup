@@ -68,6 +68,26 @@
 #undef Factor
 
 //==============================================================================
+/** The lock type used by the audio thread.
+
+    On wasm a CriticalSection can block in a futex_wait, which is fatal on the
+    browser audio-worklet thread; a RecursiveSpinLock busy-waits on an atomic
+    and never blocks, so contended sections spin for the (microsecond) hold
+    time instead of crashing. It is re-entrant (callers like Synthesiser re-enter
+    the lock while processing MIDI) and, since Thread::getCurrentThreadId() is
+    TLS-based on wasm, its owner tracking is reliable on the audio-worklet
+    thread too. The desktop audio thread may block freely, so it keeps the
+    cheaper (re-entrant) CriticalSection.
+
+    @tags{Audio}
+*/
+#if YUP_WASM
+using AudioLockType = yup::RecursiveSpinLock;
+#else
+using AudioLockType = yup::CriticalSection;
+#endif
+
+//==============================================================================
 #include <chrono>
 #include <type_traits>
 

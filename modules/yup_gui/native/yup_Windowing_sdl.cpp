@@ -1352,7 +1352,8 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
         touchFinger->buttons = static_cast<MouseEvent::Buttons> (touchFinger->buttons | button);
 
         if (touchFinger->buttons == button)
-            touchFinger->clickedComponent = findComponentForMouseEvent (position);
+            touchFinger->clickedComponent = component.findComponentAtForMouseEvent (position);
+
         auto event = MouseEvent()
                          .withButtons (touchFinger->buttons)
                          .withModifiers (currentKeyModifiers)
@@ -1384,12 +1385,15 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
     currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) | button);
 
     if (currentMouseButtons == button)
-        lastComponentClicked = findComponentForMouseEvent (position);
+        lastComponentClicked = component.findComponentAtForMouseEvent (position);
 
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
+
+    if (currentMouseButtons == button)
+        lastComponentClicked = component.findComponentAtForMouseEvent (position);
 
     if (auto* clickedComponent = lastComponentClicked.get())
     {
@@ -1753,13 +1757,13 @@ void SDLComponentNative::handleTextInput (const String& textInput)
 
 void SDLComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
 {
-    if (Component* target = findComponentForMouseEvent (position))
+    if (Component* target = component.findComponentAtForMouseEvent (position))
         target->internalItemsDropped (data, position);
 }
 
 void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
 {
-    Component* target = findComponentForMouseEvent (position);
+    Component* target = component.findComponentAtForMouseEvent (position);
 
     if (target != nullptr)
     {
@@ -2016,35 +2020,6 @@ void SDLComponentNative::handleUserTriedToCloseWindow()
 
 //==============================================================================
 
-Component* SDLComponentNative::findComponentForMouseEvent (const Point<float>& position)
-{
-    Component* child = component.findComponentAt (position);
-    if (child == nullptr)
-        return nullptr;
-
-    Component* current = child;
-    while (current != nullptr)
-    {
-        if (current->doesWantSelfMouseEvents())
-        {
-            Component* parent = current->getParentComponent();
-            while (parent != nullptr)
-            {
-                if (! parent->doesWantChildrenMouseEvents())
-                    return parent;
-
-                parent = parent->getParentComponent();
-            }
-
-            return current;
-        }
-
-        current = current->getParentComponent();
-    }
-
-    return nullptr;
-}
-
 void SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
     lastComponentUnderMouse = updateComponentUnderMouse (event, lastComponentUnderMouse);
@@ -2052,7 +2027,7 @@ void SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 WeakReference<Component> SDLComponentNative::updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent)
 {
-    Component* child = findComponentForMouseEvent (event.getPosition());
+    Component* child = component.findComponentAtForMouseEvent (event.getPosition());
 
     if (child != nullptr)
     {
@@ -2104,9 +2079,13 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_EVENT_WINDOW_RESIZED:
+        {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            // processEvent ([this] { handleResized (windowEvent.data1, windowEvent.data2); });
+            const auto x = static_cast<int> (windowEvent.data1);
+            const auto y = static_cast<int> (windowEvent.data2);
+            processEvent ([this, x, y] { handleResized (x, y); });
             break;
+        }
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);

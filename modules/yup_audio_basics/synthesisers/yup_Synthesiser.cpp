@@ -108,13 +108,13 @@ Synthesiser::~Synthesiser()
 //==============================================================================
 SynthesiserVoice::Ptr Synthesiser::getVoice (const int index) const
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     return voices[index];
 }
 
 void Synthesiser::clearVoices()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     voices.clear();
 }
 
@@ -123,13 +123,13 @@ SynthesiserVoice* Synthesiser::addVoice (const SynthesiserVoice::Ptr newVoice)
     SynthesiserVoice* voice;
 
     {
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
         newVoice->setCurrentPlaybackSampleRate (sampleRate);
         voice = voices.add (newVoice);
     }
 
     {
-        const ScopedLock sl (stealLock);
+        const AudioLockType::ScopedLockType sl (stealLock);
         usableVoicesToStealArray.ensureStorageAllocated (voices.size() + 1);
     }
 
@@ -138,25 +138,25 @@ SynthesiserVoice* Synthesiser::addVoice (const SynthesiserVoice::Ptr newVoice)
 
 void Synthesiser::removeVoice (const int index)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     voices.remove (index);
 }
 
 void Synthesiser::clearSounds()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     sounds.clear();
 }
 
 SynthesiserSound* Synthesiser::addSound (const SynthesiserSound::Ptr& newSound)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     return sounds.add (newSound);
 }
 
 void Synthesiser::removeSound (const int index)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     sounds.remove (index);
 }
 
@@ -177,7 +177,7 @@ void Synthesiser::setCurrentPlaybackSampleRate (const double newRate)
 {
     if (! approximatelyEqual (sampleRate, newRate))
     {
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
         allNotesOff (0, false);
         sampleRate = newRate;
 
@@ -200,7 +200,7 @@ void Synthesiser::processNextBlock (AudioBuffer<floatType>& outputAudio,
 
     bool firstEvent = true;
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (; numSamples > 0; ++midiIterator)
     {
@@ -319,7 +319,7 @@ void Synthesiser::noteOn (const int midiChannel,
                           const int midiNoteNumber,
                           const float velocity)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* sound : sounds)
     {
@@ -378,7 +378,7 @@ void Synthesiser::noteOff (const int midiChannel,
                            const float velocity,
                            const bool allowTailOff)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
     {
@@ -404,7 +404,7 @@ void Synthesiser::noteOff (const int midiChannel,
 
 void Synthesiser::allNotesOff (const int midiChannel, const bool allowTailOff)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if (midiChannel <= 0 || voice->isPlayingChannel (midiChannel))
@@ -415,7 +415,7 @@ void Synthesiser::allNotesOff (const int midiChannel, const bool allowTailOff)
 
 void Synthesiser::handlePitchWheel (const int midiChannel, const int wheelValue)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if (midiChannel <= 0 || voice->isPlayingChannel (midiChannel))
@@ -441,7 +441,7 @@ void Synthesiser::handleController (const int midiChannel,
             break;
     }
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if (midiChannel <= 0 || voice->isPlayingChannel (midiChannel))
@@ -450,7 +450,7 @@ void Synthesiser::handleController (const int midiChannel,
 
 void Synthesiser::handleAftertouch (int midiChannel, int midiNoteNumber, int aftertouchValue)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if (voice->getCurrentlyPlayingNote() == midiNoteNumber
@@ -460,7 +460,7 @@ void Synthesiser::handleAftertouch (int midiChannel, int midiNoteNumber, int aft
 
 void Synthesiser::handleChannelPressure (int midiChannel, int channelPressureValue)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if (midiChannel <= 0 || voice->isPlayingChannel (midiChannel))
@@ -470,7 +470,7 @@ void Synthesiser::handleChannelPressure (int midiChannel, int channelPressureVal
 void Synthesiser::handleSustainPedal (int midiChannel, bool isDown)
 {
     jassert (midiChannel > 0 && midiChannel <= 16);
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (isDown)
     {
@@ -500,7 +500,7 @@ void Synthesiser::handleSustainPedal (int midiChannel, bool isDown)
 void Synthesiser::handleSostenutoPedal (int midiChannel, bool isDown)
 {
     jassert (midiChannel > 0 && midiChannel <= 16);
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
     {
@@ -531,7 +531,7 @@ SynthesiserVoice* Synthesiser::findFreeVoice (SynthesiserSound* soundToPlay,
                                               int midiNoteNumber,
                                               const bool stealIfNoneAvailable) const
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto* voice : voices)
         if ((! voice->isVoiceActive()) && voice->canPlaySound (soundToPlay))
@@ -561,7 +561,7 @@ SynthesiserVoice* Synthesiser::findVoiceToSteal (SynthesiserSound* soundToPlay,
     // All major OSes use double-locking so this will be lock- and wait-free as long as the lock is not
     // contended. This is always the case if you do not call findVoiceToSteal on multiple threads at
     // the same time.
-    const ScopedLock sl (stealLock);
+    const AudioLockType::ScopedLockType sl (stealLock);
 
     // this is a list of voices we can steal, sorted by how long they've been running
     usableVoicesToStealArray.clear();

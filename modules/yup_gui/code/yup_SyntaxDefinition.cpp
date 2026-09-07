@@ -112,6 +112,18 @@ constexpr auto pythonDefinitionJson = R"json({
     "operators": ["**", "//", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "//=", "%=", "**=", "@=", "&=", "|=", "^=", "<<=", ">>=", ":=", "->", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "@", "=", "<", ">", "!", "&", "|", "^", "~"]
 })json";
 
+constexpr auto ydspDefinitionJson = R"json({
+    "name": "YDSP",
+    "extensions": ["ydsp"],
+    "lineComment": "//",
+    "blockComment": { "start": "/*", "end": "*/" },
+    "strings": { "delimiters": ["\""], "escape": "\\", "multiLine": false },
+    "numbers": { "hex": false, "binary": false, "float": true, "exponent": true, "suffix": false },
+    "keywords": ["processor", "graph", "node", "connection", "input", "output", "value", "stream", "state", "process", "block", "for", "if", "else", "let", "true", "false", "declare", "func", "return", "import", "as", "struct", "init", "event"],
+    "types": ["float", "float32", "float64", "int", "int32", "int64", "bool"],
+    "operators": ["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "&=", "|=", "^=", "->", "<:", ":>", "..", "[[", "]]", "?", ":", ";", ",", ".", "(", ")", "[", "]", "{", "}", "+", "-", "*", "/", "%", "=", "<", ">", "!", "&", "|", "^", "~", "@", "'"]
+})json";
+
 constexpr auto xmlDefinitionJson = R"json({
     "name": "XML",
     "extensions": ["xml", "xaml", "svg", "html", "htm", "xhtml", "xsd", "xsl", "xslt", "plist", "resx", "csproj", "vcxproj"],
@@ -343,6 +355,7 @@ const SyntaxDefinition& SyntaxDefinition::getBuiltIn (StringRef languageName)
     static const SyntaxDefinition glsl = parseBuiltIn (glslDefinitionJson);
     static const SyntaxDefinition python = parseBuiltIn (pythonDefinitionJson);
     static const SyntaxDefinition xml = parseBuiltIn (xmlDefinitionJson);
+    static const SyntaxDefinition ydsp = parseBuiltIn (ydspDefinitionJson);
     static const SyntaxDefinition inert;
 
     const String language (languageName);
@@ -359,6 +372,9 @@ const SyntaxDefinition& SyntaxDefinition::getBuiltIn (StringRef languageName)
     if (language == "xml")
         return xml;
 
+    if (language == "ydsp")
+        return ydsp;
+
     return inert;
 }
 
@@ -372,8 +388,9 @@ const SyntaxDefinition* SyntaxDefinition::getBuiltInForExtension (StringRef file
         const auto& glsl = getBuiltIn ("glsl");
         const auto& python = getBuiltIn ("python");
         const auto& xml = getBuiltIn ("xml");
+        const auto& ydsp = getBuiltIn ("ydsp");
 
-        for (const auto& candidate : { &cpp, &glsl, &python, &xml })
+        for (const auto& candidate : { &cpp, &glsl, &python, &xml, &ydsp })
         {
             for (const auto& candidateExtension : candidate->getFileExtensions())
             {

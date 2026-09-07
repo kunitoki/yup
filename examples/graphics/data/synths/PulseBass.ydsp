@@ -1,0 +1,175 @@
+/*
+  A monophonic bass: a band-limited pulse with a square sub-oscillator an octave
+  below it, through a four-pole ladder filter swept by its own envelope.
+
+  This is the demo's monophonic patch: `[[ mode: mono ]]` gives the node a
+  single voice driven by a held-note stack, so playing a new key while another
+  is still down continues the same voice rather than starting a second one. The
+  runtime flags such a note-on as a legato continuation (`e.isLegato`), which
+  this patch uses to skip the re-attack and slide the pitch to the new note
+  instead - the classic mono-synth behaviour. Releasing a key falls back to
+  whichever key is still held (`[[ priority: last ]]`).
+*/
+
+import fx.Distortion as dist;
+import fx.Compressor as comp;
+
+declare name "Pulse Bass";
+declare description "Monophonic pulse and sub through a resonant ladder, with legato phrasing and portamento.";
+
+processor PulseVoice {
+    output stream out;
+
+    input value float width = 0.3 [[ name: "Pulse Width", min: 0.02, max: 0.98, smoothing: 0.02 ]];
+    input value float sub = 0.6 [[ name: "Sub Level", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float cutoff = 220.0 [[ name: "Cutoff", min: 30.0, max: 4000.0 ]];
+    input value float resonance = 0.6 [[ name: "Resonance", min: 0.0, max: 0.95, smoothing: 0.02 ]];
+    input value float filterAmount = 9.0 [[ name: "Filter Amount", min: 0.0, max: 30.0 ]];
+    input value float filterDecay = 0.18 [[ name: "Filter Decay", min: 0.005, max: 2.0, unit: "s" ]];
+    input value float attack = 0.01 [[ name: "Attack", min: 0.001, max: 1.0, unit: "s" ]];
+    input value float release = 0.3 [[ name: "Release", min: 0.02, max: 4.0, unit: "s" ]];
+    input value float glide = 0.06 [[ name: "Glide", min: 0.001, max: 0.5, unit: "s" ]];
+
+    input event midi;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float phase;
+    state float subPhase;
+    state float freq;
+    state float freqTarget;
+    state float glideCoeff;
+    state float env;
+    state float envTarget;
+    state float envCoeff;
+
+    state float fenv;
+    state float fenvCoeff;
+
+    state float z1;
+    state float z2;
+    state float z3;
+    state float z4;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    func polyBlep (t: float, dt: float) : float {
+        float r = 0.0;
+        if (t < dt) {
+            t = t / dt;
+            r = t + t - t * t - 1.0;
+        } else if (t > 1.0 - dt) {
+            t = (t - 1.0) / dt;
+            r = t * t + t + t + 1.0;
+        }
+        return r;
+    }
+
+    event midi (e: noteOn) {
+        freqTarget = noteToFreq (e.pitch);
+        envTarget  = e.velocity;
+        active     = 1;
+
+        if (e.isLegato) {
+            envCoeff   = 1.0 - exp (-1.0 / (0.005 * sampleRate));
+            glideCoeff = 1.0 - exp (-1.0 / (glide * sampleRate));
+        } else {
+            envCoeff   = 1.0 - exp (-1.0 / (attack * sampleRate));
+            glideCoeff = 1.0;
+
+            fenv      = 1.0;
+            fenvCoeff = pow (0.001, 1.0 / (filterDecay * sampleRate));
+
+            bendFactor = pow (2.0, e.bendSemitones / 12.0);
+            vibratoPhase = 0.0;
+        }
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    event midi (e: noteOff) {
+        envTarget = 0.0;
+        envCoeff  = 1.0 - exp (-1.0 / (release * sampleRate));
+    }
+
+    process {
+        freq = freq + (freqTarget - freq) * glideCoeff;
+
+        env = env + (envTarget - env) * envCoeff;
+
+        fenv = fenv * fenvCoeff;
+
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+            * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        float dt = freq * pitchFactor * samplePeriod;
+
+        phase = phase + dt;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        float falling = phase < width ? phase - width + 1.0 : phase - width;
+        float pulse = (phase < width ? 1.0 : -1.0)
+                    + polyBlep (phase, dt)
+                    - polyBlep (falling, dt);
+
+        float dtSub = dt * 0.5;
+
+        subPhase = subPhase + dtSub;
+        if (subPhase >= 1.0) { subPhase = subPhase - 1.0; }
+
+        float subFalling = subPhase < 0.5 ? subPhase + 0.5 : subPhase - 0.5;
+        float square = (subPhase < 0.5 ? 1.0 : -1.0)
+                     + polyBlep (subPhase, dtSub)
+                     - polyBlep (subFalling, dtSub);
+
+        float mix = pulse * (1.0 - 0.5 * sub) + square * sub;
+
+        float k = clamp (smooth (1.0 - exp (-2.0 * pi * cutoff * samplePeriod), 0.02)
+                             * (1.0 + filterAmount * fenv),
+                         0.0005,
+                         0.98);
+
+        float driven = mix - resonance * 4.0 * (z4 - 0.5 * mix);
+
+        z1 = z1 + k * (tanh (driven) - z1);
+        z2 = z2 + k * (z1 - z2);
+        z3 = z3 + k * (z2 - z3);
+        z4 = z4 + k * (z3 - z4);
+
+        active = select (abs (env) < 0.000001, 0, 1);
+
+        out = z4 * env * 1.6;
+    }
+}
+
+graph PulseBass {
+    input event midi;
+    output stream out;
+
+    node voices = PulseVoice [[ mode: mono, priority: last ]];
+    node drive = dist.Distortion (drive = 0.0, tone = 0.35, mix = 0.4);
+    node compressor = comp.Compressor (threshold = -20.0, ratio = 3.0, attack = 0.005, release = 0.15, makeup = 1.5);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> drive.in;
+        drive.out -> compressor.in;
+        compressor.out -> out;
+    }
+}

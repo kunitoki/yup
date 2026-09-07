@@ -25,6 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  ACTION_RUNNER: github-actions
   IOS_PLATFORM: OS64
 
 jobs:

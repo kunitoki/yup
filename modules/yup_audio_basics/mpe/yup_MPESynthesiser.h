@@ -315,13 +315,13 @@ protected:
 
     //==============================================================================
     OwnedArray<MPESynthesiserVoice> voices;
-    CriticalSection voicesLock;
+    AudioLockType voicesLock;
 
 private:
     //==============================================================================
     std::atomic<bool> shouldStealVoices { false };
     uint32 lastNoteOnCounter = 0;
-    mutable CriticalSection stealLock;
+    mutable AudioLockType stealLock;
     mutable Array<MPESynthesiserVoice*> usableVoicesToStealArray;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MPESynthesiser)

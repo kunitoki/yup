@@ -169,7 +169,7 @@ private:
     class CircularBuffer;
     class Impl;
 
-    std::unique_ptr<Impl> pImpl;
+    std::unique_ptr<Impl> impl;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PartitionedConvolver)

@@ -115,12 +115,30 @@ python_uninstall:
 python_test *TEST_OPTS:
   python -m pytest -s {{TEST_OPTS}}
 
-[doc("compile and invoke shader_bundler tool")]
+[doc("compile and invoke yup_shader_bundler tool")]
 [working-directory: 'cmake/tools/shader_bundler']
 shader_bundler *COMPILE_ARGS:
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
   cmake --build build --config Release -j4
   build/yup_shader_bundler {{COMPILE_ARGS}}
+
+[doc("compile and invoke yup_dsp_compiler tool")]
+[working-directory: 'cmake/tools/ydsp_compiler']
+dsp_compiler *COMPILE_ARGS:
+  cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+  cmake --build build --config Release -j4
+  build/yup_dsp_compiler {{COMPILE_ARGS}}
+
+[doc("build and install the YDSP VSCode extension")]
+[working-directory: 'modules/yup_dsp_jit/tools/vscode-ydsp']
+vscode:
+  @just dsp_compiler --help
+  sh tools/package-server.sh
+  npm install
+  npm run compile
+  npx --yes @vscode/vsce package -o vscode-ydsp.vsix
+  npx --yes @vscode/vsce ls --tree
+  code --install-extension vscode-ydsp.vsix --force
 
 [doc("fetch missing coverage lines for a pull request")]
 fetch_coverage PR:

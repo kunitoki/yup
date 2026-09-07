@@ -1,0 +1,153 @@
+/*
+  A four-operator FM bell, and the demo's `pitchBend` example.
+
+  Four sine operators, an inharmonic ratio each, and a selectable routing between
+  them. Operator 4 modulates *itself* - the classic way to get a noisy, metallic
+  strike out of a pure sine bank - through a `state` slot holding its previous
+  output rather than through the `'` primitive, because the same value is also
+  read by three of the four algorithms and one slot is clearer than four reads.
+*/
+
+import fx.Reverb as fx;
+
+declare name "FM Bell";
+declare description "Four-operator FM bell with self-feedback, four algorithms and pitch-bend tracking.";
+
+processor FMBellVoice {
+    output stream out;
+
+    input value float algorithm = 0.0 [[ name: "Algorithm", min: 0.0, max: 3.0,
+                                         values: { "Stack", "Two Pairs", "One To Three", "Additive" } ]];
+
+    input value float index = 3.5 [[ name: "Mod Index", min: 0.0, max: 12.0, smoothing: 0.02 ]];
+    input value float feedback = 0.4 [[ name: "Op 4 Feedback", min: 0.0, max: 2.0, smoothing: 0.02 ]];
+
+    input value float ratio2 = 2.0 [[ name: "Ratio 2", min: 0.25, max: 12.0 ]];
+    input value float ratio3 = 3.51 [[ name: "Ratio 3", min: 0.25, max: 12.0 ]];
+    input value float ratio4 = 7.02 [[ name: "Ratio 4", min: 0.25, max: 12.0 ]];
+
+    input value float decay = 1.1 [[ name: "Strike Decay", min: 0.05, max: 6.0, unit: "s" ]];
+    input value float tail = 4.5 [[ name: "Ring Tail", min: 0.2, max: 12.0, unit: "s" ]];
+
+    input event midi;
+
+    state float p1;
+    state float p2;
+    state float p3;
+    state float p4;
+
+    state float baseFreq;
+
+    state float bendFactor = 1.0;
+    state float modWheel;
+    state float vibratoPhase;
+
+    state float fb;
+
+    state float env1;
+    state float env2;
+    state float coeff1;
+    state float coeff2;
+
+    state int active [[ role: voiceActivity ]];
+
+    event midi (e: noteOn) {
+        baseFreq = 440.0 * pow (2.0, (e.pitch - 69.0) / 12.0);
+
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+        vibratoPhase = 0.0;
+
+        env1 = e.velocity;
+        env2 = e.velocity;
+
+        coeff1 = pow (0.001, 1.0 / (decay * sampleRate));
+        coeff2 = pow (0.001, 1.0 / (tail * sampleRate));
+
+        active = 1;
+    }
+
+    event midi (e: noteOff) {
+        coeff1 = pow (0.001, 1.0 / (0.12 * sampleRate));
+        coeff2 = pow (0.001, 1.0 / (0.5 * sampleRate));
+    }
+
+    event midi (e: pitchBend) {
+        bendFactor = pow (2.0, e.bendSemitones / 12.0);
+    }
+
+    event midi (e: controlChange) {
+        if (e.control == 1) { modWheel = e.value; }
+    }
+
+    process {
+        let twoPi = 2.0 * pi;
+
+        vibratoPhase = vibratoPhase + 5.5 * samplePeriod;
+        vibratoPhase = vibratoPhase - floor (vibratoPhase);
+
+        float pitchFactor = bendFactor
+                          * (1.0 + 0.02888113 * smooth (modWheel, 0.05) * sin (vibratoPhase * 2.0 * pi));
+
+        float dt = baseFreq * pitchFactor * samplePeriod;
+
+        p1 = p1 + dt;
+        p1 = p1 - floor (p1);
+
+        p2 = p2 + dt * ratio2;
+        p2 = p2 - floor (p2);
+
+        p3 = p3 + dt * ratio3;
+        p3 = p3 - floor (p3);
+
+        p4 = p4 + dt * ratio4;
+        p4 = p4 - floor (p4);
+
+        env1 = env1 * coeff1;
+        env2 = env2 * coeff2;
+
+        float op4 = sin (p4 * twoPi + feedback * fb);
+        fb = op4;
+
+        float op3 = sin (p3 * twoPi + index * op4);
+
+        float stack = sin (p1 * twoPi + index * sin (p2 * twoPi + index * op3));
+
+        float pairs = (sin (p1 * twoPi + index * sin (p2 * twoPi)) + op3) * 0.5;
+
+        float fan = (sin (p1 * twoPi + index * op4)
+                   + sin (p2 * twoPi + index * op4)
+                   + op3) * 0.33333333;
+
+        float additive = (sin (p1 * twoPi) + sin (p2 * twoPi) + sin (p3 * twoPi) + op4) * 0.25;
+
+        float voice = select (algorithm < 0.5, stack,
+                      select (algorithm < 1.5, pairs,
+                      select (algorithm < 2.5, fan, additive)));
+
+        float amp = env1 * 0.7 + env2 * 0.3;
+
+        active = select (amp < 0.000001, 0, 1);
+
+        out = voice * amp * 0.6;
+    }
+}
+
+graph FMBell {
+    input event midi;
+    output stream out;
+
+    input value float space = 0.45 [[ name: "Space", min: 0.0, max: 1.0 ]];
+
+    node voices = FMBellVoice[6] [[ mode: poly, stealing: oldest ]];
+    node reverb = fx.Reverb (damping = 0.45);
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> reverb.in;
+        reverb.out -> out;
+
+        space -> reverb.mix;
+        space -> reverb.roomSize;
+    }
+}

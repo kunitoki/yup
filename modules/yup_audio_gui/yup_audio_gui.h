@@ -56,6 +56,8 @@
 #include "waveform/yup_AudioPeakProfileCache.h"
 #include "waveform/yup_AudioThumbnail.h"
 #include "keyboard/yup_MidiKeyboardComponent.h"
+#include "keyboard/yup_PitchWheelComponent.h"
+#include "keyboard/yup_ModWheelComponent.h"
 #include "displays/yup_AudioViewComponent.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
 #include "displays/yup_SpectrogramComponent.h"

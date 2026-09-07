@@ -1,0 +1,168 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "YDSP",
+  "scopeName": "source.ydsp",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#annotations" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#endpoints" },
+    { "include": "#keywords" },
+    { "include": "#event-shapes" },
+    { "include": "#intrinsics" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.ydsp", "match": "//.*$" },
+        { "name": "comment.block.ydsp", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        {
+          "name": "meta.annotation.ydsp",
+          "begin": "\\[\\[",
+          "end": "\\]\\]",
+          "beginCaptures": { "0": { "name": "punctuation.definition.annotation.begin.ydsp" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.annotation.end.ydsp" } },
+          "patterns": [
+            {
+              "name": "support.type.annotation-key.ydsp",
+              "match": "\\b(?:name|author|version|license|description|min|max|step|unit|style|values|init|smoothing|latency|mode|stealing|priority|role|main)\\b"
+            },
+            {
+              "name": "constant.language.annotation-value.ydsp",
+              "match": "\\b(?:true|false|poly|mono|oldest|newest|none|last|low|high|voiceActivity)\\b"
+            },
+            { "include": "#strings" },
+            { "include": "#numbers" }
+          ]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.ydsp",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.ydsp" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.ydsp" } },
+          "patterns": [
+            { "name": "constant.character.escape.ydsp", "match": "\\\\." }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.ydsp",
+          "match": "\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.definition.type.ydsp",
+          "match": "\\b(processor|graph|struct)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.ydsp" },
+            "2": { "name": "entity.name.type.ydsp" }
+          }
+        },
+        {
+          "name": "meta.definition.function.ydsp",
+          "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+          "captures": {
+            "1": { "name": "keyword.declaration.ydsp" },
+            "2": { "name": "entity.name.function.ydsp" }
+          }
+        },
+        {
+          "name": "meta.definition.node.ydsp",
+          "match": "\\b(node)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.ydsp" },
+            "2": { "name": "variable.other.node.ydsp" }
+          }
+        }
+      ]
+    },
+    "endpoints": {
+      "patterns": [
+        {
+          "name": "meta.endpoint.ydsp",
+          "match": "\\b(input|output)\\s+(stream|value|event)\\b",
+          "captures": {
+            "1": { "name": "keyword.declaration.ydsp" },
+            "2": { "name": "variable.other.endpoint.ydsp" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.ydsp", "match": "\\b(?:if|else|for|return)\\b" },
+        {
+          "name": "keyword.declaration.ydsp",
+          "match": "\\b(?:processor|graph|node|input|output|connection|process|event|func|init|struct|state|import|declare|as|let)\\b"
+        },
+        {
+          "name": "storage.type.ydsp",
+          "match": "\\b(?:bool|float|float32|float64|int|int32|int64)\\b"
+        },
+        { "name": "constant.language.ydsp", "match": "\\b(?:true|false)\\b" },
+        {
+          "name": "constant.language.ydsp",
+          "match": "\\b(?:blockSize|e|inf|nan|pi|samplePeriod|sampleRate)\\b"
+        }
+      ]
+    },
+    "event-shapes": {
+      "patterns": [
+        {
+          "name": "support.type.event.ydsp",
+          "match": "(?<!\\.)\\b(?:noteOff|noteOn|pitchBend|pressure|controlChange|programChange|slide)\\b"
+        }
+      ]
+    },
+    "intrinsics": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.ydsp",
+          "match": "\\b(?:abs|acos|asin|atan|atan2|ceil|clamp|cos|cosh|exp|floor|fma|fmod|lerp|log|log10|max|mem|min|pow|rint|select|sign|sin|sinh|smooth|sqrt|tan|tanh)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.composition.ydsp", "match": "<:|:>|~" },
+        { "name": "keyword.operator.stream.ydsp", "match": "->" },
+        { "name": "keyword.operator.range.ydsp", "match": "\\.\\." },
+        {
+          "name": "keyword.operator.arithmetic.ydsp",
+          "match": "\\+|-|\\*|/|%|&&|\\|\\||==|!=|<=|>=|!|<|>"
+        },
+        { "name": "keyword.operator.delay.ydsp", "match": "@|'" },
+        { "name": "keyword.operator.passthrough.ydsp", "match": "_" },
+        { "name": "keyword.operator.composition.ydsp", "match": ":" },
+        { "name": "keyword.operator.assignment.ydsp", "match": "=" }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.section.block.ydsp", "match": "[{}]" },
+        { "name": "punctuation.section.parens.ydsp", "match": "[()]" },
+        { "name": "punctuation.section.brackets.ydsp", "match": "\\[|\\]" },
+        { "name": "punctuation.separator.ydsp", "match": ";|,|\\." }
+      ]
+    }
+  }
+}

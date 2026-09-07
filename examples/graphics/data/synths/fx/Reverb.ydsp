@@ -1,0 +1,94 @@
+/*
+  A Freeverb-style Schroeder reverb: eight parallel comb filters with per-comb
+  one-pole damping, followed by four series allpass diffusers. Ported from the
+  Freeverb code; each '@' delay primitive owns its own ring buffer.
+*/
+
+processor Reverb {
+    input stream in;
+    output stream out;
+
+    input value float mix = 0.33 [[ name: "Mix", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float damping = 0.5 [[ name: "Damping", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float roomSize = 0.8 [[ name: "Room Size", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    state float c1;
+    state float c2;
+    state float c3;
+    state float c4;
+    state float c5;
+    state float c6;
+    state float c7;
+    state float c8;
+
+    state float last1;
+    state float last2;
+    state float last3;
+    state float last4;
+    state float last5;
+    state float last6;
+    state float last7;
+    state float last8;
+
+    state float a1;
+    state float a2;
+    state float a3;
+    state float a4;
+
+    process {
+        float feedback = roomSize * 0.28 + 0.7;
+        float gain = 0.015;
+
+        let d1 = c1 @ 1116;
+        last1 = last1 * damping + d1 * (1.0 - damping);
+        c1 = last1 * feedback + gain * in;
+
+        let d2 = c2 @ 1188;
+        last2 = last2 * damping + d2 * (1.0 - damping);
+        c2 = last2 * feedback + gain * in;
+
+        let d3 = c3 @ 1277;
+        last3 = last3 * damping + d3 * (1.0 - damping);
+        c3 = last3 * feedback + gain * in;
+
+        let d4 = c4 @ 1356;
+        last4 = last4 * damping + d4 * (1.0 - damping);
+        c4 = last4 * feedback + gain * in;
+
+        let d5 = c5 @ 1422;
+        last5 = last5 * damping + d5 * (1.0 - damping);
+        c5 = last5 * feedback + gain * in;
+
+        let d6 = c6 @ 1491;
+        last6 = last6 * damping + d6 * (1.0 - damping);
+        c6 = last6 * feedback + gain * in;
+
+        let d7 = c7 @ 1557;
+        last7 = last7 * damping + d7 * (1.0 - damping);
+        c7 = last7 * feedback + gain * in;
+
+        let d8 = c8 @ 1617;
+        last8 = last8 * damping + d8 * (1.0 - damping);
+        c8 = last8 * feedback + gain * in;
+
+        let wet = d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8;
+
+        let e1 = a1 @ 225;
+        a1 = wet + e1 * 0.5;
+        let ap1 = e1 - wet;
+
+        let e2 = a2 @ 341;
+        a2 = ap1 + e2 * 0.5;
+        let ap2 = e2 - ap1;
+
+        let e3 = a3 @ 441;
+        a3 = ap2 + e3 * 0.5;
+        let ap3 = e3 - ap2;
+
+        let e4 = a4 @ 556;
+        a4 = ap3 + e4 * 0.5;
+        let ap4 = e4 - ap3;
+
+        out = (1.0 - mix) * in + mix * ap4;
+    }
+}

@@ -246,18 +246,26 @@ void CPUInformation::initialise() noexcept
 }
 
 //==============================================================================
+double yup_millisecondsSinceStartupHiRes() noexcept
+{
+#if YUP_EMSCRIPTEN
+    static const auto startupTimePoint = emscripten_get_now();
+    return emscripten_get_now() - startupTimePoint;
+#else
+    static const auto startupTimePoint = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - startupTimePoint);
+    return elapsed.count() * 1000.0;
+#endif
+}
+
 uint32 yup_millisecondsSinceStartup() noexcept
 {
-    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - yup_getTimeSinceStartupFallback());
-
-    return static_cast<uint32> (elapsed.count() * 1000.0);
+    return static_cast<uint32> (yup_millisecondsSinceStartupHiRes());
 }
 
 int64 Time::getHighResolutionTicks() noexcept
 {
-    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - yup_getTimeSinceStartupFallback());
-
-    return static_cast<int64> (elapsed.count() * double (getHighResolutionTicksPerSecond()));
+    return static_cast<int64> (yup_millisecondsSinceStartupHiRes() * 0.001 * double (getHighResolutionTicksPerSecond()));
 }
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
@@ -267,9 +275,7 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 
 double Time::getMillisecondCounterHiRes() noexcept
 {
-    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - yup_getTimeSinceStartupFallback());
-
-    return static_cast<double> (elapsed.count() * 1000.0);
+    return yup_millisecondsSinceStartupHiRes();
 }
 
 bool Time::setSystemTimeToThisTime() const

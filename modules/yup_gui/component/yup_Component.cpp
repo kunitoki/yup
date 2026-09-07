@@ -916,6 +916,27 @@ Component* Component::findComponentAt (const Point<float>& p)
     return this;
 }
 
+Component* Component::findComponentAtForMouseEvent (const Point<float>& p)
+{
+    if (! options.isVisible || ! boundsInParent.withZeroPosition().contains (p))
+        return nullptr;
+
+    if (doesWantChildrenMouseEvents())
+    {
+        for (int index = children.size(); --index >= 0;)
+        {
+            auto child = children.getUnchecked (index);
+            if (! child->isVisible() || ! child->boundsInParent.contains (p))
+                continue;
+
+            if (auto* hit = child->findComponentAtForMouseEvent (p - child->boundsInParent.getPosition()))
+                return hit;
+        }
+    }
+
+    return doesWantSelfMouseEvents() ? this : nullptr;
+}
+
 Component* Component::getTopLevelComponent()
 {
     auto currentComponent = this;

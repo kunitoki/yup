@@ -1,0 +1,114 @@
+/*
+  The per-voice effect chain: a graph instantiated with a voice bank ([N])
+  replicates the WHOLE chain - not just the source - so every note carries its
+  own effect state.
+
+  Contrast with the other sine patches, where `voices = SineVoice[8]` feeds a
+  single shared delay after the summed bank: here `VoiceChain[8]` gives each of
+  the eight voices its own feedback delay, so a chord does not pump one shared
+  delay tail and a released note's echo decays on its own voice.
+
+  The chain subgraph must declare an input event and exactly one float32 output
+  stream, and its members must be ordinary single-voice float32 processors
+  (nested banks and per-member rate changes are rejected).
+*/
+
+import fx.Delay as fx;
+
+declare name "Per-Voice Echo";
+declare description "8-voice sine, each voice passing through a soft saturator and its own feedback delay: a banked graph replicates the whole chain, not just the oscillator.";
+
+processor SineVoice {
+    output stream out;
+
+    input value float attack = 0.02 [[ name: "Attack", min: 0.001, max: 2.0, unit: "s" ]];
+    input value float release = 0.45 [[ name: "Release", min: 0.02, max: 4.0, unit: "s" ]];
+
+    input event midi;
+
+    state float phase;
+    state float freq;
+
+    state float env;
+    state float level;
+    state float attackCoeff;
+    state float releaseCoeff;
+    state int released;
+
+    state int active [[ role: voiceActivity ]];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    event midi (e: noteOn) {
+        freq        = noteToFreq (e.pitch);
+        level       = e.velocity;
+        attackCoeff = 1.0 - exp (-1.0 / (attack * sampleRate));
+        released    = 0;
+        active      = 1;
+    }
+
+    event midi (e: noteOff) {
+        releaseCoeff = pow (0.001, 1.0 / (release * sampleRate));
+        released     = 1;
+    }
+
+    process {
+        phase = phase + freq * samplePeriod;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        if (released > 0) {
+            env = env * releaseCoeff;
+        } else {
+            env = env + (level - env) * attackCoeff;
+        }
+
+        active = select (env < 0.000001, 0, 1);
+
+        out = sin (phase * 2.0 * pi) * env * 0.4;
+    }
+}
+
+processor Saturator {
+    input stream in;
+    output stream out;
+
+    input value float drive = 1.5 [[ name: "Drive", min: 0.0, max: 4.0, smoothing: 0.02 ]];
+    input value float mix = 1.0 [[ name: "Mix", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    process {
+        float shaped = tanh (in * drive);
+        out = (1.0 - mix) * in + mix * shaped;
+    }
+}
+
+graph VoiceChain {
+    input event midi;
+    output stream out;
+
+    node osc = SineVoice;
+    node sat = Saturator (drive = 1.5, mix = 1.0);
+    node echo = fx.Delay (time = 0.375, feedback = 0.5, damping = 0.6, mix = 0.4);
+
+    connection {
+        midi -> osc.midi;
+
+        osc.out -> sat.in;
+        sat.out -> echo.in;
+        echo.out -> out;
+    }
+}
+
+graph PerVoiceEcho [[ main ]] {
+    input event midi;
+    output stream out;
+
+    node voices = VoiceChain[8];
+
+    connection {
+        midi -> voices.midi;
+
+        voices.out -> out;
+    }
+}

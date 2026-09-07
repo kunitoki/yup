@@ -43,13 +43,19 @@ namespace yup
 MidiKeyboardState::MidiKeyboardState()
 {
     zerostruct (noteStates);
+    zerostruct (pitchWheelPositions);
 }
 
 //==============================================================================
 void MidiKeyboardState::reset()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     zerostruct (noteStates);
+    zerostruct (pitchWheelPositions);
+
+    for (auto& controllerList : controllers)
+        controllerList.clear();
+
     eventsToAdd.clear();
 }
 
@@ -72,7 +78,7 @@ void MidiKeyboardState::noteOn (const int midiChannel, const int midiNoteNumber,
     jassert (midiChannel > 0 && midiChannel <= 16);
     jassert (isPositiveAndBelow (midiNoteNumber, 128));
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (isPositiveAndBelow (midiNoteNumber, 128))
     {
@@ -98,7 +104,7 @@ void MidiKeyboardState::noteOnInternal (const int midiChannel, const int midiNot
 
 void MidiKeyboardState::noteOff (const int midiChannel, const int midiNoteNumber, const float velocity)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (isNoteOn (midiChannel, midiNoteNumber))
     {
@@ -124,7 +130,7 @@ void MidiKeyboardState::noteOffInternal (const int midiChannel, const int midiNo
 
 void MidiKeyboardState::allNotesOff (const int midiChannel)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (midiChannel <= 0)
     {
@@ -136,6 +142,95 @@ void MidiKeyboardState::allNotesOff (const int midiChannel)
         for (int i = 0; i < 128; ++i)
             noteOff (midiChannel, i, 0.0f);
     }
+}
+
+void MidiKeyboardState::pitchWheel (const int midiChannel, const int wheelPosition)
+{
+    jassert (midiChannel >= 1 && midiChannel <= 16);
+
+    if (! isPositiveAndBelow (midiChannel, 17))
+        return;
+
+    const AudioLockType::ScopedLockType sl (lock);
+
+    if (pitchWheelPositions[midiChannel - 1] != wheelPosition)
+    {
+        pitchWheelPositions[midiChannel - 1] = static_cast<uint16> (wheelPosition);
+
+        listeners.call ([&] (Listener& l)
+        {
+            l.handlePitchWheelMoved (this, midiChannel, wheelPosition);
+        });
+    }
+}
+
+void MidiKeyboardState::controlChange (const int midiChannel, const int controllerNumber, const int controllerValue)
+{
+    jassert (midiChannel >= 1 && midiChannel <= 16);
+
+    if (! isPositiveAndBelow (midiChannel, 17))
+        return;
+
+    const AudioLockType::ScopedLockType sl (lock);
+
+    auto& controllersForChannel = controllers[midiChannel - 1];
+
+    for (int i = controllersForChannel.size(); --i >= 0;)
+    {
+        auto& controller = controllersForChannel.getReference (i);
+
+        if (controller.number == controllerNumber)
+        {
+            if (controller.value == controllerValue)
+                return;
+
+            controller.value = controllerValue;
+
+            listeners.call ([&] (Listener& l)
+            {
+                l.handleControllerMoved (this, midiChannel, controllerNumber, controllerValue);
+            });
+
+            return;
+        }
+    }
+
+    controllersForChannel.add ({ controllerNumber, controllerValue });
+
+    listeners.call ([&] (Listener& l)
+    {
+        l.handleControllerMoved (this, midiChannel, controllerNumber, controllerValue);
+    });
+}
+
+int MidiKeyboardState::getPitchWheelPosition (const int midiChannel) const noexcept
+{
+    jassert (midiChannel >= 1 && midiChannel <= 16);
+
+    if (! isPositiveAndBelow (midiChannel, 17))
+        return 0;
+
+    const AudioLockType::ScopedLockType sl (lock);
+
+    return pitchWheelPositions[midiChannel - 1];
+}
+
+int MidiKeyboardState::getControllerValue (const int midiChannel, const int controllerNumber) const noexcept
+{
+    jassert (midiChannel >= 1 && midiChannel <= 16);
+
+    if (! isPositiveAndBelow (midiChannel, 17))
+        return -1;
+
+    const AudioLockType::ScopedLockType sl (lock);
+
+    for (const auto& controller : controllers[midiChannel - 1])
+    {
+        if (controller.number == controllerNumber)
+            return controller.value;
+    }
+
+    return -1;
 }
 
 void MidiKeyboardState::processNextMidiEvent (const MidiMessage& message)
@@ -153,6 +248,14 @@ void MidiKeyboardState::processNextMidiEvent (const MidiMessage& message)
         for (int i = 0; i < 128; ++i)
             noteOffInternal (message.getChannel(), i, 0.0f);
     }
+    else if (message.isPitchWheel())
+    {
+        pitchWheel (message.getChannel(), message.getPitchWheelValue());
+    }
+    else if (message.isController())
+    {
+        controlChange (message.getChannel(), message.getControllerNumber(), message.getControllerValue());
+    }
 }
 
 void MidiKeyboardState::processNextMidiBuffer (MidiBuffer& buffer,
@@ -160,7 +263,7 @@ void MidiKeyboardState::processNextMidiBuffer (MidiBuffer& buffer,
                                                const int numSamples,
                                                const bool injectIndirectEvents)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (const auto metadata : buffer)
         processNextMidiEvent (metadata.getMessage());
@@ -183,13 +286,13 @@ void MidiKeyboardState::processNextMidiBuffer (MidiBuffer& buffer,
 //==============================================================================
 void MidiKeyboardState::addListener (Listener* listener)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     listeners.add (listener);
 }
 
 void MidiKeyboardState::removeListener (Listener* listener)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     listeners.remove (listener);
 }
 

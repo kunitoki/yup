@@ -24,6 +24,7 @@
 #include "yup_audio_basics/yup_ADSR.cpp"
 #include "yup_audio_basics/yup_AudioChannelSet.cpp"
 #include "yup_audio_basics/yup_AudioDataConverters.cpp"
+#include "yup_audio_basics/yup_AudioLockType.cpp"
 #include "yup_audio_basics/yup_AudioPlayHead.cpp"
 #include "yup_audio_basics/yup_AudioProcessLoadMeasurer.cpp"
 #include "yup_audio_basics/yup_AudioSampleBuffer.cpp"

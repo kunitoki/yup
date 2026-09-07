@@ -1,0 +1,55 @@
+/*
+  A fractionally addressable feedback delay with a one-pole lowpass (damping)
+  in the feedback path and a dry/wet mix.
+
+  The read tap is a linear interpolation between the two ring samples either
+  side of the requested (fractional) delay, and `time` itself is smoothed, so
+  changing the delay time while a note is playing glides the tap instead of
+  clicking. One delay per voice is cheap enough to put inside a banked chain
+  (see `../PerVoiceEcho.ydsp`).
+*/
+
+processor Delay {
+    input stream in;
+    output stream out;
+
+    input value float time = 0.375 [[ name: "Delay Time", min: 0.01, max: 2.0, unit: "s", smoothing: 0.02 ]];
+    input value float feedback = 0.4 [[ name: "Feedback", min: 0.0, max: 0.95, smoothing: 0.02 ]];
+    input value float damping = 0.5 [[ name: "Damping", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+    input value float mix = 0.35 [[ name: "Mix", min: 0.0, max: 1.0, smoothing: 0.02 ]];
+
+    state float buf[96000];
+    state int wp;
+    state float damped;
+
+    process {
+        // Fractionally addressable read: keep the whole tap inside the ring
+        // (write position stays an integer; only the read address is split),
+        // clamp the fractional delay to at least one sample so both neighbours
+        // of the tap exist, and interpolate linearly between them. `time` is
+        // smoothed, so the integer part only advances by one sample at a time
+        // and the interpolation keeps the output continuous.
+        float fdelay = time * sampleRate;
+        if (fdelay > 96000.0) { fdelay = 96000.0; }
+        if (fdelay < 1.0) { fdelay = 1.0; }
+
+        int d0 = int (fdelay);
+        float frac = fdelay - float (d0);
+
+        int readA = wp - d0;
+        if (readA < 0) { readA = readA + 96000; }
+
+        int readB = readA - 1;
+        if (readB < 0) { readB = readB + 96000; }
+
+        float delayed = buf[readA] * (1.0 - frac) + buf[readB] * frac;
+
+        damped = damped * damping + delayed * (1.0 - damping);
+
+        buf[wp] = in + feedback * damped;
+        wp = wp + 1;
+        if (wp >= 96000) { wp = 0; }
+
+        out = (1.0 - mix) * in + mix * delayed;
+    }
+}

@@ -269,7 +269,10 @@ void AudioViewComponent::resized()
 void AudioViewComponent::mouseDown (const MouseEvent& event)
 {
     if (selectable)
-        takeKeyboardFocus();
+    {
+        if (getWantsKeyboardFocus())
+            takeKeyboardFocus();
+    }
 
     Component::mouseDown (event);
 }

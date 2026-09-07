@@ -116,7 +116,7 @@ public:
 private:
     //==============================================================================
     double lastCallbackTime = 0;
-    CriticalSection midiCallbackLock;
+    AudioLockType midiCallbackLock;
     MidiBuffer incomingMessages;
     double sampleRate = 44100.0;
 #if YUP_DEBUG

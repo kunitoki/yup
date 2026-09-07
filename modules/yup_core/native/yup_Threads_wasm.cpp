@@ -36,6 +36,8 @@ bool Thread::createNativeThread (Priority)
     {
         auto* myself = static_cast<Thread*> (userData);
 
+        myself->threadId = Thread::getCurrentThreadId();
+
         yup_threadEntryPoint (myself);
 
         return nullptr;
@@ -50,7 +52,23 @@ void Thread::killThread()
         pthread_cancel ((pthread_t) threadHandle.load());
 }
 
-// Until we implement Nice awareness, these don't do anything on Linux.
+//==============================================================================
+namespace
+{
+std::atomic<uint64> nextThreadId { 1 };
+} // namespace
+
+Thread::ThreadID YUP_CALLTYPE Thread::getCurrentThreadId()
+{
+    static thread_local Thread::ThreadID tlsId = []
+    {
+        return reinterpret_cast<Thread::ThreadID> (static_cast<uintptr_t> (nextThreadId.fetch_add (1)));
+    }();
+
+    return tlsId;
+}
+
+// Until we implement Nice awareness, these don't do anything on WASM.
 Thread::Priority Thread::getPriority() const
 {
     jassert (Thread::getCurrentThreadId() == getThreadId());

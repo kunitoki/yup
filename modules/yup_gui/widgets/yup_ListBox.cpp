@@ -625,7 +625,8 @@ void ListBox::resized()
 //==============================================================================
 void ListBox::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     auto rowIndex = getRowIndexAt (event.getPosition());
 

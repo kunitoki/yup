@@ -103,7 +103,7 @@ void MPEInstrument::setZoneLayout (MPEZoneLayout newLayout)
 {
     releaseAllNotes();
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     legacyMode.isEnabled = false;
 
     if (zoneLayout != newLayout)
@@ -124,7 +124,7 @@ void MPEInstrument::enableLegacyMode (int pitchbendRange, Range<int> channelRang
 
     releaseAllNotes();
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     legacyMode.isEnabled = true;
     legacyMode.pitchbendRange = pitchbendRange;
@@ -152,7 +152,7 @@ void MPEInstrument::setLegacyModeChannelRange (Range<int> channelRange)
     jassert (allChannels.contains (channelRange));
 
     releaseAllNotes();
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (legacyMode.channelRange != channelRange)
     {
@@ -174,7 +174,7 @@ void MPEInstrument::setLegacyModePitchbendRange (int pitchbendRange)
     jassert (pitchbendRange >= 0 && pitchbendRange <= 96);
 
     releaseAllNotes();
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (legacyMode.pitchbendRange != pitchbendRange)
     {
@@ -402,7 +402,7 @@ void MPEInstrument::noteOn (int midiChannel,
                      getInitialValueForNewNote (midiChannel, timbreDimension),
                      isMemberChannelSustained[midiChannel - 1] ? MPENote::keyDownAndSustained : MPENote::keyDown);
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     updateNoteTotalPitchbend (newNote);
 
     if (auto* alreadyPlayingNote = getNotePtr (midiChannel, midiNoteNumber))
@@ -429,7 +429,7 @@ void MPEInstrument::noteOff (int midiChannel,
                              int midiNoteNumber,
                              MPEValue midiNoteOffVelocity)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (notes.isEmpty() || ! isUsingChannel (midiChannel))
         return;
@@ -468,25 +468,25 @@ void MPEInstrument::noteOff (int midiChannel,
 //==============================================================================
 void MPEInstrument::pitchbend (int midiChannel, MPEValue value)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     updateDimension (midiChannel, pitchbendDimension, value);
 }
 
 void MPEInstrument::pressure (int midiChannel, MPEValue value)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     updateDimension (midiChannel, pressureDimension, value);
 }
 
 void MPEInstrument::timbre (int midiChannel, MPEValue value)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     updateDimension (midiChannel, timbreDimension, value);
 }
 
 void MPEInstrument::polyAftertouch (int midiChannel, int midiNoteNumber, MPEValue value)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (int i = notes.size(); --i >= 0;)
     {
@@ -662,13 +662,13 @@ void MPEInstrument::updateNoteTotalPitchbend (MPENote& note)
 //==============================================================================
 void MPEInstrument::sustainPedal (int midiChannel, bool isDown)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     handleSustainOrSostenuto (midiChannel, isDown, false);
 }
 
 void MPEInstrument::sostenutoPedal (int midiChannel, bool isDown)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     handleSustainOrSostenuto (midiChannel, isDown, true);
 }
 
@@ -787,7 +787,7 @@ MPENote MPEInstrument::getNote (int index) const noexcept
 
 MPENote MPEInstrument::getNoteWithID (uint16 noteID) const noexcept
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto& note : notes)
         if (note.noteID == noteID)
@@ -862,7 +862,7 @@ MPENote* MPEInstrument::getNotePtr (int midiChannel, TrackingMode mode) noexcept
 //==============================================================================
 const MPENote* MPEInstrument::getLastNotePlayedPtr (int midiChannel) const noexcept
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto i = notes.size(); --i >= 0;)
     {
@@ -937,7 +937,7 @@ MPENote* MPEInstrument::getLowestNotePtr (int midiChannel) noexcept
 //==============================================================================
 void MPEInstrument::releaseAllNotes()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (auto i = notes.size(); --i >= 0;)
     {
@@ -951,6 +951,13 @@ void MPEInstrument::releaseAllNotes()
     }
 
     notes.clear();
+}
+
+void MPEInstrument::reserveNotes (int numNotes)
+{
+    const AudioLockType::ScopedLockType sl (lock);
+
+    notes.ensureStorageAllocated (numNotes);
 }
 
 //==============================================================================

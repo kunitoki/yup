@@ -1,0 +1,85 @@
+/*
+  Block comment: a YDSP demo exercising the grammar.
+*/
+
+// line comment
+import fx.Delay as fx;
+
+declare name "Demo";
+declare description "Grammar smoke test patch.";
+
+let harmonics = 32;              // program constant
+
+processor Voice {
+    input  stream in;
+    input  stream side;
+    output stream out;
+
+    input  value float drive = 0.5 [[ name: "Drive", min: 0, max: 2, smoothing: 0.02 ]];
+    input  value float wave  = 0.0 [[ name: "Waveform", values: { "Saw", "Square" } ]];
+    output value float level;
+
+    input  event midi;
+
+    state float z;
+    state float buf[256] = { 1.0, 0.5 };
+    state int   wp;
+    state int   active [[ role: voiceActivity ]];
+
+    struct Comb {
+        float mem[1024];
+        int   writePos;
+    }
+    state Comb combs[4];
+
+    func noteToFreq (pitch: float) : float {
+        return 440.0 * pow (2.0, (pitch - 69.0) / 12.0);
+    }
+
+    event midi (e: noteOn) {
+        freq  = noteToFreq (e.pitch);
+        level = e.velocity;
+        if (! e.isLegato) { env = e.velocity; }
+        active = 1;
+    }
+
+    event midi (e: pitchBend)     { bend = e.bendSemitones; }
+    event midi (e: controlChange) { if (e.control == 1) { modWheel = e.value; } }
+
+    process {
+        float c = smooth (drive, 0.02);
+        out = tanh (in * c) * (1 + 0.5 * side);
+        z   = 0.999 * z + in;
+        level = abs (z);
+        if (z' > 1e-3) { out = out @ 4; }
+        active = select (level < 0.000001, 0, 1);
+    }
+}
+
+graph Patch [[ main ]] {
+    input  event midi;
+    input  stream in;
+    output stream out;
+    input  value float master = 0.8;
+
+    node voices = Voice[8] [[ mode: poly, stealing: oldest ]];
+    node dly    = fx.Delay (time = 0.25);
+    node dist   = Dist * 4;
+
+    connection {
+        in -> voices.in;
+        voices.out -> dly.in;
+        dly.out -> [32] -> dist.in;
+        dist.out -> out;
+        master -> dly.time;
+    }
+}
+
+graph Chain {
+    input stream dry; output stream wet;
+    node sat = Saturator (drive = 1.5);
+    process = dry <: (sat , Chorus) :> wet;
+    process = dry : sat : wet;
+    process = _ : Gain;
+    for i in 0..blockSize { out[i] = in[i] * drive; }
+}

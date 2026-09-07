@@ -83,7 +83,9 @@ namespace yup
 #if YUP_LOG_ASSERTIONS || YUP_DEBUG
 #define YUP_LOG_CURRENT_ASSERTION yup::logAssertion (YUP_JOIN_MACRO (L, __FILE__), __LINE__);
 #else
-#define YUP_LOG_CURRENT_ASSERTION
+#define YUP_LOG_CURRENT_ASSERTION \
+    {                             \
+    }
 #endif
 #endif
 
@@ -195,6 +197,23 @@ constexpr bool isConstantEvaluated() noexcept
     return false;
 #endif
 }
+
+//==============================================================================
+#if YUP_CLANG
+#if __has_cpp_attribute(clang::nonblocking)
+#define YUP_NONBLOCKING [[clang::nonblocking]]
+#else
+#define YUP_NONBLOCKING
+#endif
+#if __has_cpp_attribute(clang::nonallocating)
+#define YUP_NONALLOCATING [[clang::nonallocating]]
+#else
+#define YUP_NONALLOCATING
+#endif
+#else
+#define YUP_NONBLOCKING
+#define YUP_NONALLOCATING
+#endif
 
 //==============================================================================
 // clang-format off

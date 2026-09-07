@@ -250,8 +250,10 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 
 #elif YUP_WASM
 #if YUP_EMSCRIPTEN
-#include <emscripten/webaudio.h>
+#include <emscripten.h>
 #include <emscripten/em_math.h>
+#include <emscripten/threading.h>
+#include <emscripten/webaudio.h>
 
 #include "native/yup_AudioWorklet_emscripten.cpp"
 #endif

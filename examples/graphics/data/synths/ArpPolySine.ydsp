@@ -1,0 +1,38 @@
+/*
+  Wires the corpus's flagship MIDI-only processor into an existing voice bank:
+  `midi.Arp` collects every held note - single notes or chords - and steps
+  through them up, down or up-down at its `rate`, routed straight onto
+  `PolySine`'s own `SineVoice` bank through its `midi` event input, then
+  through the same delay `PolySine` itself uses.
+
+  The graph's one host-facing event input, `midiIn`, is wired explicitly to
+  `arp` alone: `voices` hears no host notes directly, only arp's re-emitted,
+  arpeggiated ones.
+*/
+
+import fx.Delay as fx;
+import fx.Distortion as dist;
+import midi.Arp as arpLib;
+import PolySine as poly;
+
+declare name "Arp Poly Sine";
+declare description "PolySine's SineVoice bank driven by the round-robin midi.Arp processor.";
+
+graph ArpPolySine {
+    input event midiIn;
+    output stream out;
+
+    node arp = arpLib.Arp;
+    node voices = poly.SineVoice[8];
+    node dist = dist.Distortion (drive = 1.0, tone = 0.5, mix = 0.2);
+    node delay = fx.Delay (time = 0.35, feedback = 0.4, damping = 0.5, mix = 0.28);
+
+    connection {
+        midiIn -> arp.midiIn;
+
+        arp.midiOut -> voices.midi;
+        voices.out -> dist.in;
+        dist.out -> delay.in;
+        delay.out -> out;
+    }
+}

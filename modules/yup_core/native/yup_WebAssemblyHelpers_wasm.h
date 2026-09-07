@@ -24,12 +24,6 @@ namespace yup
 namespace
 {
 
-std::chrono::steady_clock::time_point yup_getTimeSinceStartupFallback() noexcept
-{
-    static const auto timeSinceStartup = std::chrono::steady_clock::now();
-    return timeSinceStartup;
-}
-
 bool yup_isRunningUnderBrowser()
 {
 #if YUP_EMSCRIPTEN

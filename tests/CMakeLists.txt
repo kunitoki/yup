@@ -88,10 +88,15 @@ set (target_gtest_modules
     GTest::gtest
     GTest::gmock)
 
-if (YUP_PLATFORM_DESKTOP)
+if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules
-        yup_audio_plugin_host
-        yup_audio_plugin_client)
+        yup_dsp_jit)
+
+    if (YUP_PLATFORM_DESKTOP)
+        list (APPEND target_modules
+            yup_audio_plugin_host
+            yup_audio_plugin_client)
+    endif()
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)

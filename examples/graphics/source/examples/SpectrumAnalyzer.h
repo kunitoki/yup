@@ -581,7 +581,7 @@ public:
         const int maxBlockSize = yup::jmax (1, device->getCurrentBufferSizeSamples());
 
         {
-            const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+            const AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
 
             // Setup signal generator
             signalGenerator.prepare (sampleRate, maxBlockSize);
@@ -843,7 +843,7 @@ private:
     template <typename Callback>
     void updateSignalGenerator (Callback&& callback)
     {
-        const yup::ScopedLock lock (deviceManager.getAudioCallbackLock());
+        const AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
         callback (signalGenerator);
     }
 

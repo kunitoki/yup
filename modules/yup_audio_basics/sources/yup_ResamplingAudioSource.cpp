@@ -79,7 +79,7 @@ void ResamplingAudioSource::prepareToPlay (int samplesPerBlockExpected, double s
 
 void ResamplingAudioSource::flushBuffers()
 {
-    const ScopedLock sl (callbackLock);
+    const AudioLockType::ScopedLockType sl (callbackLock);
 
     buffer.clear();
     bufferPos = 0;
@@ -96,7 +96,7 @@ void ResamplingAudioSource::releaseResources()
 
 void ResamplingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 {
-    const ScopedLock sl (callbackLock);
+    const AudioLockType::ScopedLockType sl (callbackLock);
 
     double localRatio;
 

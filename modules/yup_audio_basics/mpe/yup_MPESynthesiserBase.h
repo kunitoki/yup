@@ -222,7 +222,7 @@ private:
     //==============================================================================
     MPEInstrument defaultInstrument { MPEZone (MPEZone::Type::lower, 15) };
 
-    CriticalSection noteStateLock;
+    AudioLockType noteStateLock;
     double sampleRate = 0.0;
     int minimumSubBlockSize = 32;
     bool subBlockSubdivisionIsStrict = false;
