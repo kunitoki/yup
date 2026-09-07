@@ -45,6 +45,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
     , shouldCaptureMouse (options.flags.test (captureMouse))
+    , vsyncEnabled (options.flags.test (vsync))
 {
     incReferenceCount();
 
@@ -174,6 +175,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
+        SDL_GL_SetSwapInterval (vsyncEnabled ? 1 : 0);
 
 #if ! YUP_EMSCRIPTEN
         SDL_GL_SetAttribute (SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
@@ -191,6 +193,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     // Create the rendering context
     GraphicsContext::Options graphicsOptions;
     graphicsOptions.retinaDisplay = options.flags.test (allowHighDensityDisplay);
+    graphicsOptions.vsync = vsyncEnabled;
     graphicsOptions.loaderFunction = [] (const char* name) -> void*
     {
         return reinterpret_cast<void*> (SDL_GL_GetProcAddress (name));
@@ -877,12 +880,6 @@ void SDLComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    WaitableTimer frameTimer;
-    const auto waitUntil = [&frameTimer] (double waitUntilSeconds)
-    {
-        frameTimer.waitUntil (waitUntilSeconds * 1000.0);
-    };
-
     while (! threadShouldExit())
     {
         const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -901,12 +898,14 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        // Cap the frame rate with the waitable timer.
+        if (vsyncEnabled)
+            continue;
+
         const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
 
         if (secondsToWait > 0.0)
-            waitUntil ((yup::Time::getMillisecondCounterHiRes() / 1000.0) + secondsToWait);
+            frameTimer.waitUntil (yup::Time::getMillisecondCounterHiRes() + secondsToWait * 1000.0);
     }
 }
 
@@ -1001,7 +1000,7 @@ void SDLComponentNative::timerCallback()
 
 //==============================================================================
 
-void SDLComponentNative::renderFrame()
+bool SDLComponentNative::renderFrame()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
@@ -1175,15 +1174,15 @@ void SDLComponentNative::renderFrame()
         {
             const MessageManagerLock mmLock (Thread::getCurrentThread());
             if (! mmLock.lockWasGained())
-                return;
+                return false;
 
             if (! renderInternal())
-                return;
+                return false;
         }
         else
         {
             if (! renderInternal())
-                return;
+                return false;
         }
     }
 
@@ -1200,6 +1199,8 @@ void SDLComponentNative::renderFrame()
 
         SDL_GL_SwapWindow (window);
     }
+
+    return true;
 }
 
 //==============================================================================

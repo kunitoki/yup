@@ -24,6 +24,26 @@
 #include <yup_rhi/yup_rhi.h>
 
 using namespace yup;
+using ::testing::_;
+using ::testing::Invoke;
+using ::testing::NiceMock;
+
+namespace
+{
+
+/** The headless backend has no ore context, so it cannot allocate buffers at all.
+    Tests that need a real GpuBuffer to exercise readBuffer / updateBuffer inject a
+    mocked one instead, which is also what keeps them off a real GPU. */
+void bindBufferAllocation (NiceMock<MockOreContext>& oreCtx)
+{
+    ON_CALL (oreCtx, makeBuffer (_))
+        .WillByDefault (Invoke ([] (const rive::ore::BufferDesc& desc)
+    {
+        return rive::rcp<rive::ore::Buffer> (rive::make_rcp<NiceMock<MockOreBuffer>> (desc.size, desc.usage));
+    }));
+}
+
+} // namespace
 
 //==============================================================================
 // GpuDevice — error path tests
@@ -34,10 +54,16 @@ class GpuDeviceErrorTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        device = GpuDevice::create (GpuPlatform::Headless, {});
+        mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
+        bindBufferAllocation (*mockOreCtx);
+
+        // Still a headless device - only the ore context is injected, so the
+        // platform and the compute capability it reports are unchanged.
+        device = new OreInjectedGpuDevice (mockOreCtx.get());
         ASSERT_NE (device, nullptr);
     }
 
+    std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
     GpuDevice::Ptr device;
 };
 
@@ -195,10 +221,14 @@ class GpuBufferErrorTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        device = GpuDevice::create (GpuPlatform::Headless, {});
+        mockOreCtx = std::make_unique<NiceMock<MockOreContext>>();
+        bindBufferAllocation (*mockOreCtx);
+
+        device = new OreInjectedGpuDevice (mockOreCtx.get());
         ASSERT_NE (device, nullptr);
     }
 
+    std::unique_ptr<NiceMock<MockOreContext>> mockOreCtx;
     GpuDevice::Ptr device;
 };
 

@@ -60,6 +60,7 @@ public:
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
         bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
+        bool vsync = false;                         ///< Synchronizes presentation to the display refresh (vsync).
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
 
         /** Optional callback that runs GPU work with the native rendering context made
@@ -156,6 +157,33 @@ public:
     virtual rive::ore::Context* getGpuContext() const noexcept { return nullptr; }
 
     //==============================================================================
+    /** Returns the backend's native device object, or nullptr where the backend
+        has no such handle.
+
+        Metal returns the @c MTLDevice every resource this GpuDevice owns was
+        created on. A windowing layer that allocates its own textures must use it
+        rather than creating a second device, since resources are not shared
+        across Metal devices.
+
+        @returns An opaque native handle, or nullptr.
+    */
+    virtual void* getNativeDevice() const noexcept { return nullptr; }
+
+    /** Returns the backend's native command queue, or nullptr where the backend
+        has no such handle.
+
+        Metal returns the @c MTLCommandQueue that both the Rive render context and
+        the ore context submit to. A windowing layer that encodes its own present
+        work **must** submit on this queue rather than creating its own: Metal
+        does not order work between two queues, so a second queue would let a
+        frame present before the offscreen work it samples has finished. Every
+        other backend has a single command stream and returns nullptr.
+
+        @returns An opaque native handle, or nullptr.
+    */
+    virtual void* getNativeCommandQueue() const noexcept { return nullptr; }
+
+    //==============================================================================
     /** Runs GPU work with the backend's rendering context current on the calling
         thread.
 
@@ -172,10 +200,43 @@ public:
     //==============================================================================
     /** Returns true if compute shaders are available on this backend.
 
-        Compute shaders are available on Metal, D3D11, D3D12, Vulkan, and
-        WebGPU backends. Not available on OpenGL/GLES or Headless.
+        Implemented on Metal, Direct3D 11, WebGPU and OpenGL / OpenGL ES; the GL
+        path additionally probes the runtime version, since compute needs desktop
+        GL 4.3 or GLES 3.1 and WebGL2 has no compute at all. Always false on the
+        headless backend.
     */
     virtual bool isComputeAvailable() const noexcept { return false; }
+
+    //==============================================================================
+    /** Returns true if textures of the given format can be created and sampled.
+
+        Only the block-compressed formats are ever unavailable; every uncompressed
+        format ore exposes is required on all backends.
+
+        @param format  The format to probe.
+    */
+    bool isFormatSupported (GpuTextureFormat format) const noexcept;
+
+    /** Returns true if textures of the given format can be used as a color or
+        depth/stencil render attachment.
+
+        Float render targets are extension-gated on OpenGL ES and WebGL2
+        (@c GL_EXT_color_buffer_float), so a demo that renders into an
+        rgba16float or rg16float target must probe this and fall back to an
+        8-bit encoding rather than silently rendering black.
+
+        @param format  The format to probe.
+    */
+    bool isFormatRenderable (GpuTextureFormat format) const noexcept;
+
+    /** Returns true if GpuSamplerDesc::maxAnisotropy above 1 has any effect. */
+    bool isAnisotropicFilteringAvailable() const noexcept;
+
+    /** Returns the highest MSAA sample count supported for color render targets.
+
+        Always a power of two, and 1 when no GPU context is available.
+    */
+    uint32_t getMaximumSampleCount() const noexcept;
 
     /** Runs GPU compute work with the backend's compute context current on the
         calling thread.
@@ -413,6 +474,55 @@ private:
     };
 
     UniformBufferPool uniformBufferPool;
+
+    //==============================================================================
+    /** Transient resources of one submitted frame, held until the GPU is known to
+        have finished with them.
+
+        A frame's texture views, samplers and pooled uniform buffers are still
+        referenced by the commands it submitted, so they cannot be released the
+        moment submit() returns. Blocking on the GPU to find out when they are
+        free costs a full pipeline stall every frame; instead each frame hands its
+        resources here tagged with a generation, and a generation is released once
+        enough later frames have begun that the GPU cannot still be reading it.
+
+        The count is a safety margin, not a correctness requirement on the
+        backends YUP ships: Metal retains resources on the command buffer, OpenGL
+        defers deletion of names still referenced by queued commands, and D3D11
+        and WebGPU hold their own references. It *is* what a manager-backed
+        backend (ore's Vulkan and D3D12 paths) would rely on, which is why the
+        matching safeFrameNumber is also reported to the ore context.
+    */
+    static constexpr uint64_t framesInFlight = 3;
+
+    struct RetiredFrame
+    {
+        uint64_t generation = 0;
+        std::vector<rive::rcp<rive::ore::Buffer>> buffers;
+        std::vector<rive::rcp<rive::ore::TextureView>> views;
+        std::vector<rive::rcp<rive::ore::Sampler>> samplers;
+    };
+
+    /** Starts a new frame generation and releases any that are now safe.
+
+        @returns The generation number the new frame should be tagged with.
+    */
+    uint64_t beginFrameGeneration();
+
+    /** Returns the generation whose work the GPU is guaranteed to have finished. */
+    uint64_t getSafeFrameGeneration() const noexcept;
+
+    /** Takes ownership of a submitted frame's transient resources. */
+    void retireFrameResources (uint64_t generation,
+                               std::vector<rive::rcp<rive::ore::Buffer>> buffers,
+                               std::vector<rive::rcp<rive::ore::TextureView>> views,
+                               std::vector<rive::rcp<rive::ore::Sampler>> samplers);
+
+    /** Releases every retired generation up to and including @p generation. */
+    void releaseRetiredFrames (uint64_t generation);
+
+    uint64_t frameGeneration = 0;
+    std::vector<RetiredFrame> retiredFrames;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GpuDevice)
 };

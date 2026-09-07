@@ -117,7 +117,22 @@ std::vector<uint8_t> makeShaderBindingMapBlob (const ShaderReflection& reflectio
 
 The blob maps uniform buffers, separate images (textures), separate samplers,
 and read/write storage buffers to their GPU resource kinds, carrying the
-reflected native backend slot for the stage.
+reflected native backend slot for the stage. Texture entries also carry the
+reflected view dimension, sample type and multisampled flag, which WebGPU
+validates against the shader itself - so a `textureCube`, `texture3D`,
+`texture2DArray` or depth texture is declared accurately rather than assumed 2D.
+
+> **Shaders must declare textures and samplers separately.** A combined
+> `uniform sampler2D` produces *no* binding-map entries at all and will not bind.
+> Write Vulkan-style instead - a `texture2D` / `textureCube` plus a `sampler`,
+> combined at the use site:
+>
+> ```glsl
+> layout(set = 0, binding = 0) uniform textureCube u_env;
+> layout(set = 0, binding = 1) uniform sampler     u_samp;
+> ...
+> vec3 c = textureLod (samplerCube (u_env, u_samp), direction, lod).rgb;
+> ```
 
 ### The GL fixup blob
 
@@ -194,8 +209,11 @@ options.depthStencil.enabled = true;
 The pipeline configuration draws on a family of small enums, all mirroring the
 `ore` formats:
 
-- **`GpuVertexFormat`** - `float1`…`float4`, `uint8x4`, `snorm8x4`, `unorm8x4`.
-- **`GpuVertexStepMode`** - `vertex`, `instance`.
+- **`GpuVertexFormat`** - `float1`…`float4`, `uint8x4`, `sint8x4`, `snorm8x4`,
+  `unorm8x4`, `uint16x2`, `sint16x2`, `unorm16x2`, `snorm16x2`, `uint16x4`,
+  `sint16x4`, `float16x2`, `float16x4`, `uint32`.
+- **`GpuVertexStepMode`** - `vertex`, `instance`. Per-instance buffers advance
+  once per instance of a `draw()` / `drawIndexed()` with `instanceCount > 1`.
 - **`GpuPrimitiveTopology`** - `pointList`, `lineList`, `lineStrip`,
   `triangleList`, `triangleStrip`.
 - **`GpuIndexFormat`** - `none`, `uint16`, `uint32`.
@@ -205,9 +223,20 @@ The pipeline configuration draws on a family of small enums, all mirroring the
   `notEqual`, `greaterEqual`, `always`.
 - **`GpuStencilOp`** - `keep`, `zero`, `replace`, `incrementClamp`,
   `decrementClamp`, `invert`, `incrementWrap`, `decrementWrap`.
-- **`GpuBlendFactor`** / **`GpuBlendOp`** - standard blend factors and equations.
-- **`GpuTextureFormat`** - `rgba8unorm`, `bgra8unorm`, `rgba16float`,
-  `depth24plusStencil8`, `depth32float`.
+- **`GpuBlendFactor`** / **`GpuBlendOp`** - standard blend factors and equations,
+  including `srcAlphaSaturated`, `blendColor` and `oneMinusBlendColor` (the last
+  two read the constant set by `GpuRenderPass::setBlendColor()`).
+- **`GpuColorWriteMask`** - per-channel write mask on `GpuColorTarget::writeMask`.
+- **`GpuTextureFormat`** - the full format set, documented under
+  [Buffers & Textures](buffers-and-textures.md#gputexture).
+
+When `colorTargetCount` is greater than one, the pass must bind a matching
+attachment for each target with `GpuRenderPass::setColorAttachment()`, and each
+`colorTargets[i].format` must equal the format of the texture bound there.
+Likewise `depthStencil.enabled` requires the pass to bind a depth attachment of
+`depthStencil.format` via `GpuRenderPass::setDepthStencilAttachment()`. A
+mismatch is rejected by the backend, which YUP surfaces as a debug assertion
+rather than letting the draw silently render nothing.
 
 ## `GpuPipelineCache`
 
