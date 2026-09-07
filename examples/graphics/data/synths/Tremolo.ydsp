@@ -1,0 +1,57 @@
+/*
+  A mono tremolo whose LFO blends between a triangle and a low-passed square
+  wave. The square leg runs through a 50 Hz one-pole low pass so its edges
+  only soften the amplitude wobble instead of clicking, and depth scales the
+  LFO's swing around the half-way gain point.
+*/
+
+declare name "Tremolo";
+declare description "Triangle/square tremolo with rate, depth, shape and bypass.";
+
+processor TremoloEffect {
+    input stream in;
+    output stream out;
+
+    input value float bypass = 0.0 [[ name: "Bypass", min: 0.0, max: 1.0, values: { "Off", "On" } ]];
+    input value float shape = 0.0 [[ name: "Shape", min: 0.0, max: 100.0, smoothing: 0.03 ]];
+    input value float rate = 8.0 [[ name: "Rate", min: 0.1, max: 20.0, unit: "Hz" ]];
+    input value float depth = 100.0 [[ name: "Depth", min: 0.0, max: 100.0, unit: "%", smoothing: 0.03 ]];
+
+    state float phase;
+    state float lp;
+
+    process {
+        phase = phase + rate * samplePeriod;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        float shapeAmount = shape * 0.01;
+        float depthAmount = depth * 0.01;
+
+        float tri = 1.0 - 4.0 * abs (phase - 0.5);
+
+        float sq = 1.0;
+        if (phase >= 0.5) { sq = -1.0; }
+
+        float lpCoeff = 1.0 - exp (-2.0 * pi * 50.0 / sampleRate);
+        lp = lp + lpCoeff * (sq - lp);
+
+        float lfo = tri * (1.0 - shapeAmount) + lp * shapeAmount;
+
+        float gainValue = 0.5 + 0.5 * lfo * depthAmount;
+        if (bypass >= 0.5) { gainValue = 1.0; }
+
+        out = in * gainValue;
+    }
+}
+
+graph Tremolo {
+    input stream in;
+    output stream out;
+
+    node fx = TremoloEffect;
+
+    connection {
+        in -> fx.in;
+        fx.out -> out;
+    }
+}

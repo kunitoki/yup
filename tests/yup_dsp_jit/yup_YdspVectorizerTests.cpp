@@ -1434,3 +1434,103 @@ TEST (YdspVectorizerTests, MissedVectorizationIsSilentUnlessRequested)
 
     EXPECT_FALSE (graph.getDiagnostics().toString().contains ("was not vectorized"));
 }
+
+//==============================================================================
+// Widened comparison values.
+//
+// Each relational operator contributes a distinct power of two to the sum, so
+// the per-sample result is a bitmask and a single wrong predicate names itself.
+// The values are whole numbers, so the comparison below is exact.
+//
+// Worth having as a *value* test rather than a "did it assemble" one: the
+// legacy SSE2 CMPPS is two-operand and only decodes a three-bit predicate, so
+// the four-lane x86 path has to seed its destination and swap the operands of
+// the greater-than forms, none of which an assembler would reject.
+
+namespace
+{
+
+constexpr auto vectorizerCompareSource = R"YDSP(
+    processor P {
+        input stream in;
+        output stream out;
+        process block {
+            for i in 0..blockSize {
+                let x = in[i];
+                out[i] = select (x >  0.0,  1.0, 0.0)
+                       + select (x >= 0.0,  2.0, 0.0)
+                       + select (x <  0.0,  4.0, 0.0)
+                       + select (x <= 0.0,  8.0, 0.0)
+                       + select (x == 0.0, 16.0, 0.0)
+                       + select (x != 0.0, 32.0, 0.0);
+            }
+        }
+    }
+)YDSP";
+
+/** The mask the six operators produce for `x`, computed the way the patch
+    spells them. */
+float vectorizerCompareExpected (float x)
+{
+    return (x > 0.0f ? 1.0f : 0.0f)
+         + (x >= 0.0f ? 2.0f : 0.0f)
+         + (x < 0.0f ? 4.0f : 0.0f)
+         + (x <= 0.0f ? 8.0f : 0.0f)
+         + (x == 0.0f ? 16.0f : 0.0f)
+         + (x != 0.0f ? 32.0f : 0.0f);
+}
+
+void vectorizerCheckCompares (YdspAudioGraph& graph, const char* what)
+{
+    ASSERT_TRUE (graph.isValid());
+
+    // Not a multiple of four, so the widened body and the scalar remainder both
+    // run and both have to agree.
+    constexpr int numSamples = 11;
+
+    graph.prepare (44100.0, numSamples);
+
+    const std::vector<float> input { 1.0f, -1.0f, 0.0f, 2.5f, -2.5f, 0.0f, 0.25f, -0.25f, 7.0f, -7.0f, 0.0f };
+    std::vector<float> output (numSamples, 0.0f);
+
+    vectorizerRunBlock (graph, input.data(), output.data(), numSamples);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const auto x = input[static_cast<size_t> (i)];
+
+        EXPECT_EQ (vectorizerCompareExpected (x), output[static_cast<size_t> (i)])
+            << what << ": sample " << i << " (x = " << x << ")";
+    }
+}
+
+} // namespace
+
+TEST (YdspVectorizerTests, WidenedComparesProduceTheExpectedValues)
+{
+    YdspCompiler compiler;
+    auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerCompareSource), compiler);
+
+    vectorizerCheckCompares (graph, "host target");
+
+    if (::testing::Test::HasFailure())
+        std::cout << "\n[AsmJit] " << graph.getDiagnostics().toString() << std::endl;
+}
+
+TEST (YdspVectorizerTests, WidenedComparesAgreeOnTheFourLaneBaselineTarget)
+{
+    // Requesting the SSE2 baseline is what reaches the legacy four-lane CMPPS
+    // path on x86-64; on a host without SSE2 the request is declined and the
+    // kernel compiles scalar, which still has to produce the same values.
+    YdspCompileOptions options;
+    options.targetPolicy = YdspTargetPolicy::baseline;
+    options.baselineTarget = YdspNativeTarget::sse2;
+
+    YdspCompiler compiler;
+    auto graph = vectorizerCompileGraph (vectorizerPatch (vectorizerCompareSource), compiler, options);
+
+    vectorizerCheckCompares (graph, "sse2 baseline target");
+
+    if (::testing::Test::HasFailure())
+        std::cout << "\n[AsmJit] " << graph.getDiagnostics().toString() << std::endl;
+}

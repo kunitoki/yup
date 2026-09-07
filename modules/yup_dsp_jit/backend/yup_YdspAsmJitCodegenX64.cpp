@@ -24,36 +24,6 @@
 namespace yup
 {
 
-namespace
-{
-
-// Small helpers used by the generated code for integer division/modulo on x86
-// (AArch64 lowers these natively with sdiv/msub). Division by zero yields 0
-// for both the quotient and the remainder, matching the explicit zero-guard
-// used in the AArch64 lowering.
-int32_t yupDspIdiv (int32_t a, int32_t b)
-{
-    return b != 0 && ! (a == std::numeric_limits<int32_t>::min() && b == -1) ? a / b : 0;
-}
-
-int32_t yupDspImod (int32_t a, int32_t b)
-{
-    return b != 0 && ! (a == std::numeric_limits<int32_t>::min() && b == -1) ? a % b : 0;
-}
-
-// 64-bit integer div/mod helpers for the x86 backend (AArch64 lowers natively).
-int64_t yupDspIdiv64 (int64_t a, int64_t b)
-{
-    return b != 0 && ! (a == std::numeric_limits<int64_t>::min() && b == -1) ? a / b : 0;
-}
-
-int64_t yupDspImod64 (int64_t a, int64_t b)
-{
-    return b != 0 && ! (a == std::numeric_limits<int64_t>::min() && b == -1) ? a % b : 0;
-}
-
-} // namespace
-
 //==============================================================================
 
 bool YdspAsmJitCodegenX64::isDoubleFloat (const YdspFp& reg) const
@@ -494,23 +464,42 @@ void YdspAsmJitCodegenX64::vectorUnary (YdspIrOp op, const YdspFp& dst, const Yd
 
 void YdspAsmJitCodegenX64::vectorFloatCompare (YdspIrOp op, const YdspFp& dst, const YdspFp& srcA, const YdspFp& srcB)
 {
+    if (activeVectorWidth > 4)
+    {
+        // VEX CMPPS takes the full 5-bit predicate and is a three-operand form.
+        uint32_t predicate = 0;
+
+        switch (op)
+        {
+            case YdspIrOp::eqF: predicate = 0x00; break;
+            case YdspIrOp::neF: predicate = 0x0c; break;
+            case YdspIrOp::ltF: predicate = 0x11; break;
+            case YdspIrOp::leF: predicate = 0x12; break;
+            case YdspIrOp::gtF: predicate = 0x1e; break;
+            case YdspIrOp::geF: predicate = 0x1d; break;
+            default: return;
+        }
+
+        cc->vcmpps (dst, srcA, srcB, asmjit::Imm (predicate));
+        return;
+    }
+
     uint32_t predicate = 0;
+    bool swapOperands = false;
 
     switch (op)
     {
-        case YdspIrOp::eqF: predicate = 0x00; break;
-        case YdspIrOp::neF: predicate = 0x0c; break;
-        case YdspIrOp::ltF: predicate = 0x11; break;
-        case YdspIrOp::leF: predicate = 0x12; break;
-        case YdspIrOp::gtF: predicate = 0x1e; break;
-        case YdspIrOp::geF: predicate = 0x1d; break;
+        case YdspIrOp::eqF: predicate = 0; break;
+        case YdspIrOp::ltF: predicate = 1; break;
+        case YdspIrOp::leF: predicate = 2; break;
+        case YdspIrOp::neF: predicate = 4; break;
+        case YdspIrOp::gtF: predicate = 1; swapOperands = true; break;
+        case YdspIrOp::geF: predicate = 2; swapOperands = true; break;
         default: return;
     }
 
-    if (activeVectorWidth > 4)
-        cc->vcmpps (dst, srcA, srcB, asmjit::Imm (predicate));
-    else
-        cc->cmpps (dst, srcA, asmjit::Imm (predicate));
+    moveVector (dst, swapOperands ? srcB : srcA);
+    cc->cmpps (dst, swapOperands ? srcA : srcB, asmjit::Imm (predicate));
 }
 
 void YdspAsmJitCodegenX64::vectorSelectFloat (const YdspFp& mask, const YdspFp& dst, const YdspFp& whenTrue, const YdspFp& whenFalse)
@@ -666,39 +655,58 @@ void YdspAsmJitCodegenX64::intUnaryNeg (const YdspGp& dst, const YdspGp& src)
 
 void YdspAsmJitCodegenX64::emitIntDivision (YdspIrOp op, const YdspGp& dst, const YdspGp& a, const YdspGp& b, bool is64)
 {
+    // IDIV inline behind the same zero guard the AArch64 lowering uses, so both
+    // targets keep answering 0 for a zero divisor - previously an out-of-line
+    // helper call per occurrence, which cost more than the division.
+    asmjit::Label zeroLabel = cc->new_label();
+    asmjit::Label divideLabel = cc->new_label();
+    asmjit::Label doneLabel = cc->new_label();
+
+    branchIfZero (b, zeroLabel);
+
+    // INT_MIN / -1 is the one dividend/divisor pair that overflows, and x86
+    // raises #DE rather than wrapping. Both branches of the check sit behind
+    // `divisor == -1`, so the common path pays a single compare.
+    cc->cmp (b, asmjit::Imm (-1));
+    cc->jne (divideLabel);
+
     if (is64)
     {
-        YdspGp target = cc->new_gp64 ("fn");
-        cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (op == YdspIrOp::divI ? reinterpret_cast<void*> (&yupDspIdiv64) : reinterpret_cast<void*> (&yupDspImod64))));
-
-        asmjit::InvokeNode* node = nullptr;
-        auto err = cc->invoke (asmjit::Out (node), target, asmjit::FuncSignature::build<int64_t, int64_t, int64_t>());
-
-        if (err == asmjit::kErrorOk && node != nullptr)
-        {
-            node->set_arg (0, a);
-            node->set_arg (1, b);
-            node->set_ret (0, dst);
-        }
+        YdspGp limit = cc->new_gp64 ("intMin");
+        cc->mov (limit, asmjit::Imm (std::numeric_limits<int64_t>::min()));
+        cc->cmp (a, limit);
     }
     else
     {
-        YdspGp target = cc->new_gp64 ("fn");
-        cc->mov (target, asmjit::Imm (ydspFnPtrToInt64 (op == YdspIrOp::divI
-                                                            ? reinterpret_cast<void*> (&yupDspIdiv)
-                                                            : reinterpret_cast<void*> (&yupDspImod))));
-
-        auto err = cc->invoke (asmjit::Out (divInvoke),
-                               target,
-                               asmjit::FuncSignature::build<int32_t, int32_t, int32_t>());
-
-        if (err == asmjit::kErrorOk && divInvoke != nullptr)
-        {
-            divInvoke->set_arg (0, a);
-            divInvoke->set_arg (1, b);
-            divInvoke->set_ret (0, dst);
-        }
+        cc->cmp (a, asmjit::Imm (std::numeric_limits<int32_t>::min()));
     }
+
+    cc->je (zeroLabel);
+
+    cc->bind (divideLabel);
+
+    // asmjit's explicit three-operand form pins the first operand to xDX (the
+    // remainder) and the second to xAX (the quotient), matching the widening
+    // sign-extend that has to seed xDX first.
+    YdspGp quotient = is64 ? cc->new_gp64 ("quot") : cc->new_gp32 ("quot");
+    YdspGp remainder = is64 ? cc->new_gp64 ("rem") : cc->new_gp32 ("rem");
+
+    cc->mov (quotient, a);
+
+    if (is64)
+        cc->cqo (remainder, quotient);
+    else
+        cc->cdq (remainder, quotient);
+
+    cc->idiv (remainder, quotient, b);
+    cc->mov (dst, op == YdspIrOp::divI ? quotient : remainder);
+
+    jump (doneLabel);
+
+    cc->bind (zeroLabel);
+    cc->mov (dst, asmjit::Imm (0));
+
+    cc->bind (doneLabel);
 }
 
 void YdspAsmJitCodegenX64::emitNotB (const YdspGp& dst, const YdspGp& src)

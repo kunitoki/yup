@@ -335,9 +335,7 @@ void YdspAsmJitCodegenARM64::emitFusedMultiplyAdd (const YdspFp& dst, const Ydsp
 
 void YdspAsmJitCodegenARM64::emitFusedMultiplySubtract (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
 {
-    YdspFp product = newFp ("fmsubProduct");
-    cc->fmul (product, a, b);
-    cc->fsub (dst, c, product);
+    cc->fmsub (dst, a, b, c);
 }
 
 void YdspAsmJitCodegenARM64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
@@ -523,9 +521,32 @@ void YdspAsmJitCodegenARM64::emitIntDivision (YdspIrOp op, const YdspGp& dst, co
     // a - (0 * b) = a for the remainder, not 0. Guard explicitly so
     // both div and mod return 0 on a zero divisor, matching the x86 path.
     asmjit::Label zeroLabel = cc->new_label();
+    asmjit::Label divideLabel = cc->new_label();
     asmjit::Label doneLabel = cc->new_label();
 
     branchIfZero (b, zeroLabel);
+
+    // INT_MIN / -1 has no representable quotient. SDIV wraps it to INT_MIN,
+    // where the x86 lowering answers 0 (as its out-of-line helpers always did)
+    // and the wasm lowering answers 0 as well (`div_s` would otherwise trap).
+    // This target used to be the odd one out, silently returning a different
+    // value for the same patch. `CMN b, #1` sets Z when b is -1, so the
+    // INT_MIN compare - which needs a register, the value being too wide for a
+    // compare immediate - sits behind it and the common path pays one compare.
+    cc->cmn (b, asmjit::Imm (1));
+    cc->b (asmjit::arm::CondCode::kNE, divideLabel);
+
+    YdspGp limit = is64 ? cc->new_gp64 ("intMin") : cc->new_gp32 ("intMin");
+
+    if (is64)
+        cc->mov (limit, asmjit::Imm (std::numeric_limits<int64_t>::min()));
+    else
+        cc->mov (limit, asmjit::Imm (0x80000000u));
+
+    cc->cmp (a, limit);
+    cc->b (asmjit::arm::CondCode::kEQ, zeroLabel);
+
+    cc->bind (divideLabel);
 
     YdspGp quotient = is64 ? cc->new_gp64 ("quot") : cc->new_gp32 ("quot");
     cc->sdiv (quotient, a, b);

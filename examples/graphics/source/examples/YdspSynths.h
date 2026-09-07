@@ -21,9 +21,11 @@
 
 #pragma once
 
-#include <yup_dsp_jit/yup_dsp_jit.h>
+#include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_audio_devices/yup_audio_devices.h>
+#include <yup_audio_formats/yup_audio_formats.h>
 #include <yup_audio_gui/yup_audio_gui.h>
+#include <yup_dsp_jit/yup_dsp_jit.h>
 
 #include <algorithm>
 #include <atomic>
@@ -83,7 +85,14 @@ public:
         path.moveTo (bounds.getX(), bounds.getY() + (renderData[0] + 1.0f) * halfHeight);
 
         for (std::size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (bounds.getX() + static_cast<float> (i) * xSize, bounds.getY() + (renderData[i] + 1.0f) * halfHeight);
+        {
+            const float s = renderData[i];
+            float sign = (s >= 0) ? 1.0f : -1.0f;
+            const float absVal = powf(fabsf(s), 0.5f);
+            const float sample = sign * absVal;
+            const float y = (sample + 1.0f) * halfHeight;
+            path.lineTo (bounds.getX() + static_cast<float> (i) * xSize, bounds.getY() + y);
+        }
 
         filledPath = path.createStrokePolygon (2.0f);
 
@@ -112,6 +121,53 @@ private:
     std::vector<float> renderData;
     yup::Path path;
     yup::Path filledPath;
+};
+
+//==============================================================================
+/** A small icon button drawn with the theme's Font Awesome icon font. */
+class YdspIconButton : public yup::Button
+{
+public:
+    YdspIconButton (const char* glyphText)
+        : Button ("YdspIconButton")
+        , glyphText (glyphText)
+    {
+        setOpaque (false);
+        setClickingGrabFocus (false);
+    }
+
+    void paintButton (yup::Graphics& g) override
+    {
+        const auto b = getLocalBounds();
+        const auto bounds = yup::Rectangle<float> ((float) b.getX(),
+                                                   (float) b.getY(),
+                                                   (float) b.getWidth(),
+                                                   (float) b.getHeight());
+
+        g.setFillColor (yup::Color (paletteSurfaceColor));
+        g.fillRoundedRect (bounds, 8.0f);
+
+        if (isButtonOver() || isButtonDown())
+        {
+            g.setStrokeColor (yup::Color (isButtonDown() ? paletteGlowColor : paletteEdgeColor));
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (bounds, 8.0f);
+        }
+
+        auto iconColour = isEnabled()
+                            ? (isButtonOver() ? yup::Color (paletteGlowSoftColor) : yup::Color (paletteInkColor))
+                            : yup::Color (paletteMutedColor);
+
+        g.setFillColor (iconColour);
+        auto iconFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont();
+        g.fillFittedText (yup::String (yup::CharPointer_UTF8 (glyphText)),
+                          iconFont.withHeight (bounds.getHeight() * 0.4f),
+                          bounds,
+                          yup::Justification::center);
+    }
+
+private:
+    const char* glyphText = nullptr;
 };
 
 //==============================================================================
@@ -178,6 +234,7 @@ public:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         performanceTabButton = std::make_unique<yup::TextButton> ("Performance");
+        performanceTabButton->setClickingGrabFocus (false);
         performanceTabButton->onClick = [this]
         {
             setEditorTabActive (false);
@@ -185,6 +242,7 @@ public:
         addAndMakeVisible (*performanceTabButton);
 
         editorTabButton = std::make_unique<yup::TextButton> ("Editor");
+        editorTabButton->setClickingGrabFocus (false);
         editorTabButton->onClick = [this]
         {
             setEditorTabActive (true);
@@ -195,6 +253,7 @@ public:
         brandLabel->setText ("YUP! Synths");
         brandLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteInkColor));
         brandLabel->setJustification (yup::Justification::centerLeft);
+        brandLabel->setClickingGrabFocus (false);
         {
             auto brandFont = font.withHeight (21.0f);
             if (brandFont.getAxisDescription ("wght").has_value())
@@ -209,6 +268,8 @@ public:
             selectSynth (synthCombo->getSelectedId() - 1);
         };
         addAndMakeVisible (*synthCombo);
+
+        createSynthNavButtons();
 
         volumeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Volume");
         volumeSlider->setRange ({ 0.0, 1.0 });
@@ -247,6 +308,10 @@ public:
             refreshMidiInputCombo();
         });
 
+        createEffectInputControls();
+        createParamPageControls();
+        loadDrumLoop();
+
         addAndMakeVisible (oscilloscope);
 
         codeEditor.setSyntaxDefinition ("ydsp");
@@ -283,9 +348,6 @@ public:
     //==============================================================================
     // yup::Component
 
-    // Measures the wordmark's text width, so its box grows with whatever it
-    // says instead of clipping - same measurement PopupMenu uses to size its
-    // own items.
     float measureBrandLabelWidth() const
     {
         auto font = brandLabel->getFont();
@@ -306,9 +368,6 @@ public:
     {
         auto bounds = getLocalBounds();
 
-        // Row 2 (MIDI selector + expression sliders) only exists in the
-        // Performance tab - the editor tab gives that height back to the
-        // code editor and its buttons instead of leaving it empty.
         const auto tabBarHeight = proportionOfHeight (0.06f);
         const auto topBarHeight = showingEditorTab ? 0.0f : proportionOfHeight (0.07f);
 
@@ -321,10 +380,17 @@ public:
         logoBounds = tabBar.removeFromLeft (logoSize + 8.0f).withSizeKeepingCenter (logoSize, logoSize);
 
         brandLabel->setBounds (tabBar.removeFromLeft (measureBrandLabelWidth() + 12.0f));
-        tabBar.removeFromLeft (18.0f); // breathing room before the first dropdown
+        tabBar.removeFromLeft (18.0f);
 
         const auto comboLeftEdge = tabBar.getX();
-        synthCombo->setBounds (tabBar.removeFromLeft (proportionOfWidth (0.14f)).reduced (6));
+
+        auto patchNav = tabBar.removeFromLeft (proportionOfWidth (0.17f));
+
+        const auto arrowWidth = std::min (patchNav.getHeight(), 32.0f);
+        patchPrevButton->setBounds (patchNav.removeFromLeft (arrowWidth).reduced (0.0f, patchNav.getHeight() * 0.2f));
+        patchNextButton->setBounds (patchNav.removeFromRight (arrowWidth).reduced (0.0f, patchNav.getHeight() * 0.2f));
+        synthCombo->setBounds (patchNav.reduced (4.0f, 6.0f));
+
         tabBar.removeFromLeft (10.0f);
 
         const auto slotWidth = tabBar.getWidth() / 5.0f;
@@ -345,6 +411,9 @@ public:
         auto topBar = rail;
         topBar.removeFromLeft (comboLeftEdge - topBar.getX());
 
+        if (inputSourceCombo != nullptr && inputSourceCombo->isVisible())
+            inputSourceCombo->setBounds (topBar.removeFromRight (slotWidth * 1.5f).reduced (6));
+
         midiInputCombo->setBounds (topBar.removeFromRight (slotWidth * 2.0f).reduced (6));
 
         layoutExpressionBar (topBar);
@@ -362,7 +431,7 @@ public:
         if (! meters.empty())
             layoutMeters (bounds.removeFromBottom (proportionOfHeight (0.06f)).reduced (proportionOfWidth (0.04f), 0.0f));
 
-        layoutParamSliders (bounds);
+        layoutParamArea (bounds);
     }
 
     void paint (yup::Graphics& g) override
@@ -506,7 +575,39 @@ public:
             yup::Span<float> (renderBufferRight.data(), static_cast<size_t> (numSamples))
         };
 
-        graph->process ({}, yup::Span<yup::YdspOutputBuffer> (outputBuffers, static_cast<size_t> (graphOutputs)), numSamples, &midiMessages, nullptr, 0);
+        const auto graphInputs = graph->getInputStreamCount();
+
+        yup::Span<const yup::YdspInputBuffer> inputBuffersSpan;
+        yup::YdspInputBuffer inputBuffers[2] = {};
+
+        if (graphInputs > 0)
+        {
+            if (inputBufferL.size() < static_cast<size_t> (numSamples)
+                || inputBufferR.size() < static_cast<size_t> (numSamples))
+            {
+                inputBufferL.resize (static_cast<size_t> (numSamples), 0.0f);
+                inputBufferR.resize (static_cast<size_t> (numSamples), 0.0f);
+            }
+
+            fillEffectInputSource (inputChannelData, numInputChannels, numSamples);
+
+            if (graphInputs == 1)
+            {
+                for (int sample = 0; sample < numSamples; ++sample)
+                    inputBufferL[static_cast<size_t> (sample)] = (inputBufferL[static_cast<size_t> (sample)]
+                                                                 + inputBufferR[static_cast<size_t> (sample)])
+                                                                * 0.5f;
+            }
+
+            inputBuffers[0] = yup::Span<const float> (inputBufferL.data(), static_cast<size_t> (numSamples));
+
+            if (graphInputs > 1)
+                inputBuffers[1] = yup::Span<const float> (inputBufferR.data(), static_cast<size_t> (numSamples));
+
+            inputBuffersSpan = yup::Span<const yup::YdspInputBuffer> (inputBuffers, static_cast<size_t> (graphInputs));
+        }
+
+        graph->process (inputBuffersSpan, yup::Span<yup::YdspOutputBuffer> (outputBuffers, static_cast<size_t> (graphOutputs)), numSamples, &midiMessages, nullptr, 0);
 
         const AudioLockType::ScopedLockType sl (renderMutex);
 
@@ -574,9 +675,6 @@ private:
                 selectedIndex = i + 1;
         }
 
-        // Nothing enabled yet and devices are available - enable the first one,
-        // e.g. at startup or when devices first appear after the WASM permission
-        // grant.
         if (selectedIndex == 0 && ! midiInputDevices.isEmpty())
         {
             setEnabledMidiInput (midiInputDevices.getReference (0).identifier);
@@ -761,6 +859,9 @@ private:
         if (index < 0 || index >= static_cast<int> (synthSources.size()))
             return;
 
+        synthCombo->setSelectedItemIndex (index, yup::dontSendNotification);
+        updateSynthNavButtons();
+
         codeEditor.setText (yup::String (synthSources[static_cast<size_t> (index)].source));
         hideCompileError();
 
@@ -775,7 +876,7 @@ private:
             yup::YdspCompiler compiler;
 
             yup::YdspCompileOptions options;
-            options.fastMath = false;
+            options.fastMath = true;
 
             auto result = compiler.compile (synthSources[static_cast<size_t> (index)].source,
                                             options,
@@ -852,6 +953,13 @@ private:
 
         for (auto* valueLabel : paramValueLabels)
             valueLabel->setVisible (visible);
+
+        inputSourceCombo->setVisible (visible && currentGraphInputs > 0);
+
+        const bool showParamPaging = visible && paramPageCount > 1;
+        paramPrevButton->setVisible (showParamPaging);
+        paramNextButton->setVisible (showParamPaging);
+        paramPageLabel->setVisible (showParamPaging);
     }
 
     void updateEditorControlsVisible()
@@ -931,6 +1039,9 @@ private:
 
         rebuildMeters (graph);
 
+        paramPageIndex = 0;
+        currentGraphInputs = graph.getInputStreamCount();
+
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         auto monospaceFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont();
 
@@ -955,9 +1066,6 @@ private:
             auto slider = paramSliders.add (std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag));
             slider->setRange (info.minValue, info.maxValue, sliderStep);
 
-            // [[ mid: ... ]] gives the value that should sit at the middle of the
-            // knob's travel, so frequency-like controls get a logarithmic skew.
-            // Discrete controls keep their evenly-spaced label positions.
             std::optional<float> mid;
             if (info.midValue.has_value())
                 mid = static_cast<float> (*info.midValue);
@@ -1021,13 +1129,76 @@ private:
         }
     }
 
-    void layoutParamSliders (yup::Rectangle<float> bounds)
+    void layoutParamArea (yup::Rectangle<float> bounds)
+    {
+        const int total = paramSliders.size();
+
+        if (total == 0)
+        {
+            paramPageCount = 1;
+            paramPageIndex = 0;
+            setParamPageControlsVisible (false);
+            return;
+        }
+
+        constexpr float navHeight = 40.0f;
+
+        yup::Rectangle<float> gridBounds;
+        yup::Rectangle<float> navBounds;
+
+        if (total > computeParamPageCapacity (bounds))
+        {
+            navBounds = bounds.removeFromTop (navHeight);
+            gridBounds = bounds;
+        }
+        else
+        {
+            gridBounds = bounds;
+        }
+
+        const int capacity = computeParamPageCapacity (gridBounds);
+        paramPageCount = std::max (1, (total + capacity - 1) / capacity);
+        paramPageIndex = std::clamp (paramPageIndex, 0, paramPageCount - 1);
+
+        const int startIndex = paramPageIndex * capacity;
+        const int countOnPage = std::min (capacity, total - startIndex);
+
+        layoutParamSliders (gridBounds, startIndex, countOnPage);
+
+        setParamPageControlsVisible (paramPageCount > 1);
+
+        if (paramPageCount > 1)
+            layoutParamNav (navBounds);
+    }
+
+    int computeParamPageCapacity (const yup::Rectangle<float>& bounds) const
+    {
+        constexpr float minKnobCell = 110.0f;
+        constexpr int maxKnobsPerPage = 8;
+
+        const int columns = std::max (1, (int) std::floor (bounds.getWidth() / minKnobCell));
+        const int rows = std::max (1, (int) std::floor (bounds.getHeight() / minKnobCell));
+
+        return std::min (columns * rows, maxKnobsPerPage);
+    }
+
+    void layoutParamSliders (yup::Rectangle<float> bounds, int startIndex, int countOnPage)
     {
         paramCardBounds.clear();
 
-        const int count = paramSliders.size();
-        if (count == 0)
+        const int total = paramSliders.size();
+
+        if (total == 0 || countOnPage <= 0)
+        {
+            for (int i = 0; i < total; ++i)
+            {
+                paramSliders.getUnchecked (i)->setVisible (false);
+                paramLabels.getUnchecked (i)->setVisible (false);
+                paramValueLabels.getUnchecked (i)->setVisible (false);
+            }
+
             return;
+        }
 
         auto grid = bounds.reduced (proportionOfWidth (0.04f), proportionOfHeight (0.02f));
 
@@ -1035,9 +1206,9 @@ private:
         int columns = 1;
         float cellSize = 0.0f;
 
-        for (int c = 1; c <= count; ++c)
+        for (int c = 1; c <= countOnPage; ++c)
         {
-            const int rows = (count + c - 1) / c;
+            const int rows = (countOnPage + c - 1) / c;
             const float candidate = std::min ({ grid.getWidth() / static_cast<float> (c),
                                                 grid.getHeight() / static_cast<float> (rows),
                                                 maxCellSize });
@@ -1049,18 +1220,28 @@ private:
             }
         }
 
-        const int rows = (count + columns - 1) / columns;
+        const int rows = (countOnPage + columns - 1) / columns;
         const float gridWidth = cellSize * static_cast<float> (columns);
         const float gridHeight = cellSize * static_cast<float> (rows);
         const float originX = grid.getX() + (grid.getWidth() - gridWidth) * 0.5f;
         const float originY = grid.getY() + (grid.getHeight() - gridHeight) * 0.5f;
 
-        paramCardBounds.reserve (static_cast<size_t> (count));
+        paramCardBounds.reserve (static_cast<size_t> (countOnPage));
 
-        for (int i = 0; i < count; ++i)
+        for (int i = 0; i < total; ++i)
         {
-            const float col = static_cast<float> (i % columns);
-            const float row = static_cast<float> (i / columns);
+            const bool onPage = i >= startIndex && i < startIndex + countOnPage;
+
+            paramSliders.getUnchecked (i)->setVisible (onPage);
+            paramLabels.getUnchecked (i)->setVisible (onPage);
+            paramValueLabels.getUnchecked (i)->setVisible (onPage);
+
+            if (! onPage)
+                continue;
+
+            const int local = i - startIndex;
+            const float col = static_cast<float> (local % columns);
+            const float row = static_cast<float> (local / columns);
 
             auto card = yup::Rectangle<float> (originX + col * cellSize, originY + row * cellSize, cellSize, cellSize)
                             .reduced (9.0f);
@@ -1080,6 +1261,29 @@ private:
         }
     }
 
+    void setParamPageControlsVisible (bool visible)
+    {
+        paramPrevButton->setVisible (visible && ! showingEditorTab);
+        paramNextButton->setVisible (visible && ! showingEditorTab);
+        paramPageLabel->setVisible (visible && ! showingEditorTab);
+    }
+
+    void layoutParamNav (yup::Rectangle<float> bounds)
+    {
+        auto area = bounds.reduced (proportionOfWidth (0.03f), 1.0f);
+
+        const auto buttonWidth = std::max (area.getHeight(), 32.0f);
+        paramPrevButton->setBounds (area.removeFromLeft (buttonWidth).reduced (2.0f));
+        paramNextButton->setBounds (area.removeFromRight (buttonWidth).reduced (2.0f));
+        paramPageLabel->setBounds (area);
+
+        paramPageLabel->setText (yup::String (paramPageIndex + 1) + " / " + yup::String (paramPageCount),
+                                 yup::dontSendNotification);
+
+        paramPrevButton->setEnabled (paramPageIndex > 0);
+        paramNextButton->setEnabled (paramPageIndex < paramPageCount - 1);
+    }
+
     void layoutExpressionBar (yup::Rectangle<float> bounds)
     {
         const int count = expressionSliders.size();
@@ -1095,6 +1299,261 @@ private:
             expressionLabels.getUnchecked (i)->setBounds (cell.removeFromLeft (cell.getWidth() * 0.38f));
             expressionSliders.getUnchecked (i)->setBounds (cell);
         }
+    }
+
+    //==============================================================================
+    // Synth navigation
+
+    void createSynthNavButtons()
+    {
+        patchPrevButton = std::make_unique<YdspIconButton> ("\xef\x81\x93"); // fa-chevron-left
+        patchPrevButton->onClick = [this]
+        {
+            const int current = synthCombo->getSelectedId() - 1;
+            if (current > 0)
+                selectSynth (current - 1);
+
+            if (! showingEditorTab)
+                keyboardComponent.takeKeyboardFocus();
+        };
+        addAndMakeVisible (*patchPrevButton);
+
+        patchNextButton = std::make_unique<YdspIconButton> ("\xef\x81\x94"); // fa-chevron-right
+        patchNextButton->onClick = [this]
+        {
+            const int current = synthCombo->getSelectedId() - 1;
+            const int last = static_cast<int> (synthSources.size()) - 1;
+            if (current >= 0 && current < last)
+                selectSynth (current + 1);
+
+            if (! showingEditorTab)
+                keyboardComponent.takeKeyboardFocus();
+        };
+        addAndMakeVisible (*patchNextButton);
+
+        patchPrevButton->setEnabled (false);
+        patchNextButton->setEnabled (false);
+    }
+
+    void updateSynthNavButtons()
+    {
+        const int current = synthCombo->getSelectedId() - 1;
+        const int last = static_cast<int> (synthSources.size()) - 1;
+
+        patchPrevButton->setEnabled (current > 0);
+        patchNextButton->setEnabled (current >= 0 && current < last);
+    }
+
+    //==============================================================================
+    // Effect audio input
+
+    void createEffectInputControls()
+    {
+        inputSourceCombo = std::make_unique<yup::ComboBox> ("Input Source");
+        inputSourceCombo->addItem ("Input: Test Tone", 1);
+        inputSourceCombo->addItem ("Input: Drum Loop", 2);
+        inputSourceCombo->addItem ("Input: Audio Device", 3);
+        inputSourceCombo->onSelectedItemChanged = [this]
+        {
+            setEffectInputSource (inputSourceCombo->getSelectedId());
+            keyboardComponent.takeKeyboardFocus();
+        };
+        inputSourceCombo->setSelectedItemIndex (1, yup::dontSendNotification); // Drum Loop
+        inputSourceCombo->setClickingGrabFocus (false);
+        inputSourceCombo->setVisible (false);
+        addAndMakeVisible (*inputSourceCombo);
+    }
+
+    void setEffectInputSource (int sourceId)
+    {
+        const bool wantsDeviceInput = (sourceId == 3);
+
+        if (wantsDeviceInput != deviceInputChannelsEnabled)
+        {
+            deviceManager.initialiseWithDefaultDevices (wantsDeviceInput ? 2 : 0, 2);
+            deviceInputChannelsEnabled = wantsDeviceInput;
+        }
+
+        effectInputSource.store (sourceId, std::memory_order_relaxed);
+
+        if (sourceId == 2)
+            drumReadPos.store (0.0);
+    }
+
+    void createParamPageControls()
+    {
+        paramPrevButton = std::make_unique<YdspIconButton> ("\xef\x81\x93"); // fa-chevron-left
+        paramPrevButton->onClick = [this]
+        {
+            paramPageIndex = std::max (0, paramPageIndex - 1);
+            resized();
+            repaint();
+        };
+        addAndMakeVisible (*paramPrevButton);
+
+        paramNextButton = std::make_unique<YdspIconButton> ("\xef\x81\x94"); // fa-chevron-right
+        paramNextButton->onClick = [this]
+        {
+            paramPageIndex = std::min (paramPageCount - 1, paramPageIndex + 1);
+            resized();
+            repaint();
+        };
+        addAndMakeVisible (*paramNextButton);
+
+        paramPageLabel = std::make_unique<yup::Label> ("ParamPage");
+        paramPageLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+        paramPageLabel->setFont (yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont().withHeight (13.0f));
+        paramPageLabel->setJustification (yup::Justification::center);
+        paramPageLabel->setVisible (false);
+        addAndMakeVisible (*paramPageLabel);
+
+        paramPrevButton->setVisible (false);
+        paramNextButton->setVisible (false);
+    }
+
+    void loadDrumLoop()
+    {
+        const auto drumFile = getAssetPath ("data/audio/break_boomblastic_92bpm.wav");
+        if (! drumFile.existsAsFile())
+            return;
+
+        yup::AudioFormatManager formatManager;
+        formatManager.registerDefaultFormats();
+        auto reader = formatManager.createReaderFor (drumFile);
+        if (reader == nullptr)
+            return;
+
+        const int numChannels = std::min (reader->numChannels, 2);
+        const auto numSamples = static_cast<int> (reader->lengthInSamples);
+
+        if (numChannels <= 0 || numSamples <= 0)
+            return;
+
+        yup::AudioBuffer<float> buffer;
+        buffer.setSize (numChannels, numSamples);
+
+        if (! reader->read (&buffer, 0, numSamples, 0, true, true))
+            return;
+
+        drumSampleRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
+
+        const auto* left = buffer.getReadPointer (0);
+        drumBufferL.assign (left, left + numSamples);
+
+        if (numChannels > 1)
+        {
+            const auto* right = buffer.getReadPointer (1);
+            drumBufferR.assign (right, right + numSamples);
+        }
+        else
+        {
+            drumBufferR = drumBufferL;
+        }
+
+        drumLoopReady = true;
+        drumReadPos.store (0.0);
+    }
+
+    void fillEffectInputSource (const float* const* deviceInputs, int numDeviceInputChannels, int numSamples)
+    {
+        switch (effectInputSource.load (std::memory_order_relaxed))
+        {
+            case 2:
+                if (drumLoopReady)
+                    fillDrumLoop (numSamples);
+                else
+                    fillZeros (numSamples);
+                break;
+
+            case 3:
+                if (deviceInputs != nullptr && numDeviceInputChannels > 0)
+                {
+                    for (int i = 0; i < numSamples; ++i)
+                    {
+                        inputBufferL[static_cast<size_t> (i)] = deviceInputs[0][i];
+                        inputBufferR[static_cast<size_t> (i)] = numDeviceInputChannels > 1
+                                                                  ? deviceInputs[1][i]
+                                                                  : deviceInputs[0][i];
+                    }
+                }
+                else
+                {
+                    fillZeros (numSamples);
+                }
+                break;
+
+            default:
+                fillTestTone (numSamples);
+                break;
+        }
+    }
+
+    void fillDrumLoop (int numSamples)
+    {
+        const auto length = static_cast<int> (drumBufferL.size());
+        if (length <= 0)
+        {
+            fillZeros (numSamples);
+            return;
+        }
+
+        const double step = drumSampleRate / (deviceSampleRate > 0.0 ? deviceSampleRate : 44100.0);
+
+        auto pos = drumReadPos.load (std::memory_order_relaxed);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            while (pos >= static_cast<double> (length))
+                pos -= static_cast<double> (length);
+
+            const int index0 = static_cast<int> (pos);
+            const int index1 = index0 + 1 < length ? index0 + 1 : 0;
+            const float frac = static_cast<float> (pos - static_cast<double> (index0));
+
+            const auto sampleL = drumBufferL[static_cast<size_t> (index0)]
+                                 + (drumBufferL[static_cast<size_t> (index1)] - drumBufferL[static_cast<size_t> (index0)]) * frac;
+            const auto sampleR = drumBufferR[static_cast<size_t> (index0)]
+                                 + (drumBufferR[static_cast<size_t> (index1)] - drumBufferR[static_cast<size_t> (index0)]) * frac;
+
+            inputBufferL[static_cast<size_t> (i)] = sampleL;
+            inputBufferR[static_cast<size_t> (i)] = sampleR;
+
+            pos += step;
+        }
+
+        drumReadPos.store (pos, std::memory_order_relaxed);
+    }
+
+    void fillTestTone (int numSamples)
+    {
+        const double sampleRate = deviceSampleRate > 0.0 ? deviceSampleRate : 44100.0;
+        constexpr double twoPi = 6.283185307179586476925286766559005768;
+
+        constexpr double freqA = 220.0;    // A3
+        constexpr double freqB = 329.6276; // E4
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float sample = static_cast<float> (0.4 * std::sin (tonePhaseA) + 0.22 * std::sin (tonePhaseB));
+
+            inputBufferL[static_cast<size_t> (i)] = sample;
+            inputBufferR[static_cast<size_t> (i)] = sample;
+
+            tonePhaseA += twoPi * freqA / sampleRate;
+            tonePhaseB += twoPi * freqB / sampleRate;
+
+            if (tonePhaseA >= twoPi)
+                tonePhaseA -= twoPi;
+
+            if (tonePhaseB >= twoPi)
+                tonePhaseB -= twoPi;
+        }
+    }
+
+    void fillZeros (int numSamples)
+    {
+        std::fill (inputBufferL.begin(), inputBufferL.begin() + numSamples, 0.0f);
+        std::fill (inputBufferR.begin(), inputBufferR.begin() + numSamples, 0.0f);
     }
 
     //==============================================================================
@@ -1151,6 +1610,20 @@ private:
     int deviceBufferSize = 0;
     float masterVolume = 0.5f;
 
+    std::unique_ptr<yup::ComboBox> inputSourceCombo;
+    std::atomic<int> effectInputSource { 2 };
+    bool deviceInputChannelsEnabled = false;
+    int currentGraphInputs = 0;
+    bool drumLoopReady = false;
+    double drumSampleRate = 44100.0;
+    std::atomic<double> drumReadPos { 0.0 };
+    std::vector<float> drumBufferL;
+    std::vector<float> drumBufferR;
+    std::vector<float> inputBufferL;
+    std::vector<float> inputBufferR;
+    double tonePhaseA = 0.0;
+    double tonePhaseB = 0.0;
+
     // The patch currently being processed
     mutable AudioLockType graphLock;
     std::shared_ptr<yup::YdspAudioGraph> currentGraph;
@@ -1193,6 +1666,8 @@ private:
     std::unique_ptr<yup::TextButton> performanceTabButton;
     std::unique_ptr<yup::TextButton> editorTabButton;
     std::unique_ptr<yup::ComboBox> synthCombo;
+    std::unique_ptr<YdspIconButton> patchPrevButton;
+    std::unique_ptr<YdspIconButton> patchNextButton;
     std::unique_ptr<yup::Slider> volumeSlider;
     std::unique_ptr<yup::TextButton> clearButton;
     std::unique_ptr<yup::TextButton> dumpAsmButton;
@@ -1204,6 +1679,13 @@ private:
     yup::OwnedArray<yup::Label> paramLabels;
     yup::OwnedArray<yup::Label> paramValueLabels;
     std::vector<yup::Rectangle<float>> paramCardBounds;
+
+    std::unique_ptr<YdspIconButton> paramPrevButton;
+    std::unique_ptr<YdspIconButton> paramNextButton;
+    std::unique_ptr<yup::Label> paramPageLabel;
+    int paramPageIndex = 0;
+    int paramPageCount = 1;
+
     YdspSynthOscilloscope oscilloscope;
 
     // Editor tab

@@ -191,6 +191,7 @@ void YdspSemanticAnalyzer::preprocessProgram (YdspProgram& program)
     for (auto& processor : program.processors)
     {
         resolveStateArraySizes (processor);
+        substituteArraySizeCalls (processor);
         applyInitAnnotationDefaults (processor.endpoints);
         applySmoothingAnnotations (processor);
 
@@ -426,6 +427,15 @@ void YdspSemanticAnalyzer::resolveStateArraySizes (YdspProcessorDecl& processor)
 
             state.arraySize = static_cast<int> (size);
         }
+        else if (state.arraySize < 0)
+        {
+            if (! state.structName.isEmpty())
+                error (state.location, "An array of struct instances must state its size explicitly, so state '" + state.name + "' cannot use '[]'");
+            else
+                error (state.location, "State '" + state.name + "' declares an array without a size; declare one (e.g. '" + state.name + "[4]') or initialise it with a non-empty '{ ... }' list");
+
+            continue;
+        }
         else if (state.arraySize > 1'000'000)
         {
             error (state.location,
@@ -453,6 +463,82 @@ void YdspSemanticAnalyzer::resolveStateArraySizes (YdspProcessorDecl& processor)
             state.initialisers.resize (expected);
         }
     }
+}
+
+//==============================================================================
+
+void YdspSemanticAnalyzer::substituteArraySizeCalls (YdspProcessorDecl& processor)
+{
+    const auto stateArraySizeOf = [&processor] (const String& name) -> int
+    {
+        for (const auto& state : processor.states)
+            if (state.name == name)
+                return state.arraySize;
+
+        return 0;
+    };
+
+    const auto substituteExpr = [&stateArraySizeOf] (auto&& self, YdspExpr& expr) -> void
+    {
+        if (expr.kind == YdspExprKind::call && expr.text == "size" && expr.children.size() == 1
+            && expr.children[0] != nullptr && expr.children[0]->kind == YdspExprKind::identifier)
+        {
+            const auto arraySize = stateArraySizeOf (expr.children[0]->text);
+
+            if (arraySize > 0)
+            {
+                expr.kind = YdspExprKind::intLiteral;
+                expr.number = static_cast<double> (arraySize);
+                expr.text.clear();
+                expr.op = YdspOperator::none;
+                expr.children.clear();
+                expr.overrides.clear();
+                return;
+            }
+        }
+
+        ydspForEachSubExpr (expr, [&] (YdspExpr& child)
+        {
+            self (self, child);
+        });
+    };
+
+    const auto substituteStmt = [&substituteExpr] (auto&& self, YdspStmt& stmt) -> void
+    {
+        ydspForEachSubExpr (stmt, [&] (YdspExpr& expr)
+        {
+            substituteExpr (substituteExpr, expr);
+        });
+
+        ydspForEachSubStmt (stmt, [&] (YdspStmt& child)
+        {
+            self (self, child);
+        });
+    };
+
+    const auto substituteBody = [&substituteStmt] (const std::vector<YdspStmtPtr>& body)
+    {
+        for (const auto& stmt : body)
+            if (stmt != nullptr)
+                substituteStmt (substituteStmt, *stmt);
+    };
+
+    for (auto& state : processor.states)
+        for (auto& initialiser : state.initialisers)
+            if (initialiser != nullptr)
+                substituteExpr (substituteExpr, *initialiser);
+
+    for (auto& function : processor.functions)
+        substituteBody (function.body);
+
+    if (processor.process != nullptr)
+        substituteBody (processor.process->body);
+
+    if (processor.init != nullptr)
+        substituteBody (processor.init->body);
+
+    for (auto& handler : processor.eventHandlers)
+        substituteBody (handler.body);
 }
 
 //==============================================================================

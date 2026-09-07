@@ -680,7 +680,13 @@ YdspStateDecl YdspParser::parseState()
 
     if (match (YdspTokenType::lBracket))
     {
-        if (at (YdspTokenType::identifier))
+        if (at (YdspTokenType::rBracket))
+        {
+            // `[]` without a size: the element count comes from the
+            // `{ ... }` initialiser list parsed below (-1 = to be inferred).
+            state.arraySize = -1;
+        }
+        else if (at (YdspTokenType::identifier))
         {
             state.arraySizeName = current().text;
             advance();
@@ -716,6 +722,9 @@ YdspStateDecl YdspParser::parseState()
             }
 
             expect (YdspTokenType::rBrace, "'}' to close the state initialiser list");
+
+            if (state.arraySize < 0 && state.structName.isEmpty() && ! state.initialisers.empty())
+                state.arraySize = static_cast<int> (state.initialisers.size());
         }
         else
         {

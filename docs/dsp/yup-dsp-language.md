@@ -244,6 +244,26 @@ state float feedback = 0.5;                 // scalar
 state float table[4]  = { 1.0, 0.5, 0.25 }; // fewer values than N: the rest stay zero
 ```
 
+An array size may instead be omitted: `state float wavetable[] = { ... }` sizes
+the array from the number of values in the `{ ... }` list, so a table never has
+to keep a hand-written `N` in step with its contents:
+
+```ydsp
+state float wavetable[] = { 0.0, 0.707, 1.0, 0.707, 0.0 };
+process {
+    for i in 0..size (wavetable) { /* ... */ }
+}
+```
+
+`size (name)` is a compile-time pseudo function that resolves to the array's
+element count - the size written explicitly or inferred from the list - and is
+substituted for an integer constant before code generation, so it may appear
+anywhere a constant integer can (a `for` bound, an index, an arithmetic
+expression). It takes the name of a `state` array (including an array of struct
+instances) and nothing else. A `[]` array must carry a **non-empty** `{ ... }`
+list: `state float a[];`, `state float a[] = {}` or a scalar initialiser are
+errors, and arrays of struct instances always state their size explicitly.
+
 Initialisers are lowered into the processor's `init` kernel (synthesising one if
 the processor has no explicit `init { }` block) and therefore run once per voice
 slice before audio, and again on `reset()`. They are prepended, so an explicit
@@ -356,11 +376,12 @@ for j in 0..16     { sum += buf[j]; }               // constant bound
 
 `0..N` iterates `i = 0, 1, ..., N-1` (upper bound exclusive). `N` must be a
 non-negative integer literal, a program constant (which folds to one — see
-[1.0](#10-program-constants)), or `blockSize` (or `blockSize` plus/minus an
-integer literal, e.g. `blockSize - 1`). Inside an event handler the bound must
-be constant. Nested loops are allowed; the product of all loop bounds is the
-loop's worst-case iteration count, reported by the optimiser (see
-[7](#7-realtime-safety-and-the-execution-report)).
+[1.0](#10-program-constants)), `size (name)` for a `state` array (which is
+substituted for that constant — see [2.2](#22-state-history)), or `blockSize`
+(or `blockSize` plus/minus an integer literal, e.g. `blockSize - 1`). Inside an
+event handler the bound must be constant. Nested loops are allowed; the product
+of all loop bounds is the loop's worst-case iteration count, reported by the
+optimiser (see [7](#7-realtime-safety-and-the-execution-report)).
 
 The loop variable is scoped to the body: it is not visible after the loop, and
 sibling loops may reuse the same name.
@@ -496,7 +517,9 @@ primary    = literal | identifier | call | "(" expression ")" ;
   (recursion composition, [3.2](#32-the-faust-style-algebra)): different
   grammars, different arities, no ambiguity between them.
 - Calls: intrinsic functions (see [2.8](#28-intrinsics)) and the delay
-  primitives.
+  primitives. `size (name)` is a compile-time pseudo function, not a runtime
+  call: it is replaced by the element count of the named `state` array before
+  code generation (see [2.2](#22-state-history)).
 - Indexing: `state` arrays (`buf[i]`) and, in block mode, stream arrays
   (`in[i]`). Indices are `int`.
 - The postfix `'` (one-sample delay) — see [2.9](#29-delay-and-smoothing-primitives).
@@ -526,6 +549,10 @@ the whole program (see [1.0](#10-program-constants)).
 `smooth(x,tau)` (stateful, see [2.9](#29-delay-and-smoothing-primitives)) ·
 conversions `int(x)`/`int32(x)`, `int64(x)`, `float(x)`/`float32(x)`,
 `float64(x)`.
+
+`size (name)` is not a runtime intrinsic: it is resolved at compile time to the
+element count of a `state` array and substituted for that constant before code
+generation (see [2.2](#22-state-history)).
 
 Float intrinsics require float operands of a single width and preserve that
 width (f32 lowers to `sinf`/`powf`/..., f64 to `sin`/`pow`/...).
@@ -726,7 +753,7 @@ struct_declaration = "struct" identifier "{"
     { type identifier [ "[" integer "]" ] ";" } "}" ;
 
 state_declaration = "state" ( type | struct_name ) identifier
-    [ "[" ( integer | constant_name ) "]" ] [ "=" initialiser ]
+    [ "[" [ ( integer | constant_name ) ] "]" ] [ "=" initialiser ]
     [ annotations ] ";" ;
 
 initialiser = expression | "{" [ expression { "," expression } [ "," ] ] "}" ;

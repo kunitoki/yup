@@ -137,7 +137,7 @@
       "patterns": [
         {
           "name": "support.function.builtin.ydsp",
-          "match": "\\b(?:abs|acos|asin|atan|atan2|ceil|clamp|cos|cosh|exp|floor|fma|fmod|lerp|log|log10|max|mem|min|pow|rint|select|sign|sin|sinh|smooth|sqrt|tan|tanh)\\b"
+          "match": "\\b(?:abs|acos|asin|atan|atan2|ceil|clamp|cos|cosh|exp|floor|fma|fmod|lerp|log|log10|max|mem|min|pow|rint|select|sign|sin|sinh|smooth|sqrt|size|tan|tanh)\\b"
         }
       ]
     },

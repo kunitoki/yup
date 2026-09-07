@@ -32,8 +32,9 @@ namespace yup
 /** x86-64 (SSE) lowering of the Ydsp IR.
 
     Implements every architecture hook of YdspAsmJitCodegenImpl with SSE2
-    instructions; integer division/modulo by a zero divisor call the shared
-    yupDspIdiv/yupDspImod helpers (which return 0) instead of trapping.
+    instructions; integer division/modulo lower to an inline IDIV behind a
+    zero-divisor guard that yields 0 rather than trapping, which is the same
+    contract the AArch64 lowering keeps.
 
     @internal
 */
@@ -108,8 +109,6 @@ protected:
 
 private:
     bool isDoubleFloat (const YdspFp& reg) const;
-
-    asmjit::InvokeNode* divInvoke = nullptr;
 };
 
 } // namespace yup

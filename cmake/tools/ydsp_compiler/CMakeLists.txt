@@ -37,6 +37,7 @@ yup_add_module ("${yup_root}/modules/yup_audio_basics" "" "Modules")
 yup_add_module ("${yup_root}/modules/yup_dsp_jit" "" "Modules")
 yup_add_module ("${yup_root}/modules/yup_simd" "" "Modules")
 yup_add_module ("${yup_root}/thirdparty/asmjit_library" "" "Thirdparty")
+yup_add_module ("${yup_root}/thirdparty/sleef_library" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/xsimd" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
 

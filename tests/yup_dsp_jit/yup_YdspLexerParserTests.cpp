@@ -403,6 +403,30 @@ TEST (YdspParserTests, ParsesProcessorWithEndpointsStateAndProcess)
     EXPECT_EQ (3u, processor.process->body.size());
 }
 
+TEST (YdspParserTests, ParsesStateArrayWithoutExplicitSizeInferringFromTheList)
+{
+    YdspDiagnostics diagnostics;
+
+    auto program = parse (R"YDSP(
+        processor Wavetable {
+            output stream out;
+            state  float melodyPitch[] = { 440.0, 554.37, 659.25, 880.0 };
+            process { out = melodyPitch[0]; }
+        }
+    )YDSP",
+                          diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors());
+    ASSERT_NE (nullptr, program);
+    ASSERT_EQ (1u, program->processors.size());
+
+    const auto& processor = program->processors[0];
+    ASSERT_EQ (1u, processor.states.size());
+    EXPECT_EQ ("melodyPitch", processor.states[0].name);
+    EXPECT_EQ (4, processor.states[0].arraySize);
+    EXPECT_EQ (4u, processor.states[0].initialisers.size());
+}
+
 TEST (YdspParserTests, ParsesBracedListAnnotationValue)
 {
     YdspDiagnostics diagnostics;

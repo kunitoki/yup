@@ -2794,6 +2794,182 @@ TEST (YdspSemanticAnalyzerTests, RejectsTooManyStateInitialisers)
 }
 
 //==============================================================================
+// State array size inference (`[]`) and the compile-time `size ()` intrinsic
+
+TEST (YdspSemanticAnalyzerTests, InfersStateArraySizeFromTheInitialiserListAndExposesItViaSize)
+{
+    YdspDiagnostics diagnostics;
+
+    auto analyzed = analyze (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float melodyPitch[] = { 440.0, 554.37, 659.25, 880.0 };
+            process {
+                float sum = 0.0;
+                for i in 0..size (melodyPitch) { sum = sum + melodyPitch[i]; }
+                out = in + sum;
+            }
+        }
+        graph G { input stream a; output stream b; node p = P; connection { a -> p.in; p.out -> b; } }
+    )YDSP",
+                             diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, analyzed);
+
+    ASSERT_EQ (1u, analyzed->processors.size());
+    ASSERT_EQ (1u, analyzed->processors[0].states.size());
+    EXPECT_EQ (4, analyzed->processors[0].states[0]->arraySize);
+
+    // The four values become four `melodyPitch[i] = ...` statements in the
+    // synthesized init kernel.
+    ASSERT_NE (nullptr, analyzed->processors[0].decl->init);
+    EXPECT_EQ (4u, analyzed->processors[0].decl->init->body.size());
+}
+
+TEST (YdspSemanticAnalyzerTests, SizeIntrinsicWorksOnExplicitlySizedAndConstantSizedArrays)
+{
+    YdspDiagnostics diagnostics;
+
+    auto analyzed = analyze (R"YDSP(
+        let taps = 3;
+        processor P {
+            input stream in;
+            output stream out;
+            state float direct[8];
+            state float named[taps];
+            process {
+                float acc = 0.0;
+                for i in 0..size (direct) { acc = acc + direct[i]; }
+                for j in 0..size (named)  { acc = acc + named[j]; }
+                out = in + acc;
+            }
+        }
+        graph G { input stream a; output stream b; node p = P; connection { a -> p.in; p.out -> b; } }
+    )YDSP",
+                             diagnostics);
+
+    EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    EXPECT_NE (nullptr, analyzed);
+}
+
+TEST (YdspSemanticAnalyzerTests, SizeIntrinsicIsAConstantUsableInAnEventHandler)
+{
+    YdspDiagnostics diagnostics;
+
+    auto analyzed = analyze (R"YDSP(
+        processor P {
+            output stream out;
+            input event midi;
+            state float table[] = { 1.0, 0.5, 0.25 };
+            event midi (e: noteOn) {
+                for i in 0..size (table) { table[i] = table[i] * e.velocity; }
+            }
+            process { out = table[0]; }
+        }
+        graph G { input event midi; output stream b; node p = P; connection { midi -> p.midi; p.out -> b; } }
+    )YDSP",
+                             diagnostics);
+
+    EXPECT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    EXPECT_NE (nullptr, analyzed);
+}
+
+TEST (YdspSemanticAnalyzerTests, RejectsUnsizedArrayStateWithNoInitialiserList)
+{
+    YdspDiagnostics diagnostics;
+
+    analyze (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[];
+            process { out = in; }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+             diagnostics);
+
+    bool found = false;
+    for (int i = 0; i < diagnostics.getCount(); ++i)
+        if (diagnostics.getItem (i).message.contains ("declares an array without a size"))
+            found = true;
+
+    EXPECT_TRUE (found);
+}
+
+TEST (YdspSemanticAnalyzerTests, RejectsUnsizedArrayStateWithAScalarInitialiser)
+{
+    YdspDiagnostics diagnostics;
+
+    analyze (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[] = 5.0;
+            process { out = in; }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+             diagnostics);
+
+    bool found = false;
+    for (int i = 0; i < diagnostics.getCount(); ++i)
+        if (diagnostics.getItem (i).message.contains ("declares an array without a size"))
+            found = true;
+
+    EXPECT_TRUE (found);
+}
+
+TEST (YdspSemanticAnalyzerTests, RejectsEmptyInitialiserListForAnUnsizedArrayState)
+{
+    YdspDiagnostics diagnostics;
+
+    analyze (R"YDSP(
+        processor P {
+            input stream in;
+            output stream out;
+            state float a[] = {};
+            process { out = in; }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+             diagnostics);
+
+    bool found = false;
+    for (int i = 0; i < diagnostics.getCount(); ++i)
+        if (diagnostics.getItem (i).message.contains ("declares an array without a size"))
+            found = true;
+
+    EXPECT_TRUE (found);
+}
+
+TEST (YdspSemanticAnalyzerTests, RejectsUnsizedStructArrayState)
+{
+    YdspDiagnostics diagnostics;
+
+    analyze (R"YDSP(
+        processor P {
+            struct Comb { float buf[2]; int wp; }
+            input stream in;
+            output stream out;
+            state Comb combs[];
+            process { out = in; }
+        }
+        graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+             diagnostics);
+
+    bool found = false;
+    for (int i = 0; i < diagnostics.getCount(); ++i)
+        if (diagnostics.getItem (i).message.contains ("must state its size explicitly"))
+            found = true;
+
+    EXPECT_TRUE (found);
+}
+
+//==============================================================================
 // samplePeriod and [[ init: ... ]]
 
 TEST (YdspSemanticAnalyzerTests, AcceptsSamplePeriodBuiltin)

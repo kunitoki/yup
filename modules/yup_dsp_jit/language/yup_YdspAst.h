@@ -249,7 +249,7 @@ struct YdspStateDecl
 
     YdspPrimitiveType type = YdspPrimitiveType::float32Type;
     String name;
-    int arraySize = 0;    // 0 = scalar, otherwise compile-time constant size
+    int arraySize = 0;    // 0 = scalar, otherwise compile-time constant size; -1 while parsing means the size must be inferred from the `{ ... }` initialiser list
     String arraySizeName; // non-empty when the size was written as a program constant
     String structName;    // non-empty when the state is a struct instance/array
     YdspLocation location;

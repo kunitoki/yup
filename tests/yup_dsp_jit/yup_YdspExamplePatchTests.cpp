@@ -105,10 +105,15 @@ protected:
         if (! graph.isValid())
             return;
 
-        EXPECT_GT (graph.getParameterCount(), 0) << patchName;
-        EXPECT_EQ (graph.getInputStreamCount(), 0) << patchName;
+        const auto patchFileName = patchFile.getFileName();
+        const auto hasNoParameters = patchFileName == "HelloWorld.ydsp";
 
-        const auto isMidiOnlyPatch = patchFile.getFileName() == "ArpTranspose.ydsp";
+        if (! hasNoParameters)
+            EXPECT_GT (graph.getParameterCount(), 0) << patchName;
+
+        EXPECT_LE (graph.getInputStreamCount(), 2) << patchName;
+
+        const auto isMidiOnlyPatch = patchFileName == "ArpTranspose.ydsp";
 
         if (! isMidiOnlyPatch)
             EXPECT_GE (graph.getOutputStreamCount(), 1) << patchName;
@@ -129,6 +134,36 @@ protected:
             Span<float> (right.data(), right.size())
         };
 
+        const auto numInputs = graph.getInputStreamCount();
+
+        std::vector<float> inputA (static_cast<size_t> (blockSize), 0.0f);
+        std::vector<float> inputB (static_cast<size_t> (blockSize), 0.0f);
+
+        if (numInputs > 0)
+        {
+            constexpr double twoPi = 6.283185307179586476925286766559005768;
+            constexpr double freqA = 220.0;
+            constexpr double freqB = 329.6276;
+
+            double phaseA = 0.0;
+            double phaseB = 0.0;
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto sample = static_cast<float> (0.4 * std::sin (phaseA) + 0.22 * std::sin (phaseB));
+                inputA[static_cast<size_t> (i)] = sample;
+                inputB[static_cast<size_t> (i)] = sample;
+
+                phaseA += twoPi * freqA / sampleRate;
+                phaseB += twoPi * freqB / sampleRate;
+            }
+        }
+
+        YdspInputBuffer inputs[] = {
+            Span<const float> (inputA.data(), inputA.size()),
+            Span<const float> (inputB.data(), inputB.size())
+        };
+
         MidiBuffer midi;
         midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
 
@@ -136,7 +171,7 @@ protected:
 
         for (int block = 0; block < 8; ++block)
         {
-            graph.process ({},
+            graph.process (Span<const YdspInputBuffer> (inputs, static_cast<size_t> (numInputs)),
                            Span<YdspOutputBuffer> (outputs, static_cast<size_t> (numOutputs)),
                            blockSize,
                            &midi,
@@ -207,11 +242,6 @@ protected:
 TEST_F (YdspExamplePatchTests, AnalogSawCompilesAndRenders)
 {
     testPatch ("AnalogSaw.ydsp");
-}
-
-TEST_F (YdspExamplePatchTests, ArpPolySineCompilesAndRenders)
-{
-    testPatch ("ArpPolySine.ydsp");
 }
 
 TEST_F (YdspExamplePatchTests, ControlRateWahCompilesAndRenders)
@@ -347,14 +377,34 @@ TEST_F (YdspExamplePatchTests, HaasWidenerCompilesAndRenders)
     testPatch ("HaasWidener.ydsp");
 }
 
+TEST_F (YdspExamplePatchTests, HelloWorldCompilesAndRenders)
+{
+    testPatch ("HelloWorld.ydsp");
+}
+
 TEST_F (YdspExamplePatchTests, PolySineCompilesAndRenders)
 {
     testPatch ("PolySine.ydsp");
 }
 
+TEST_F (YdspExamplePatchTests, PolySineArpCompilesAndRenders)
+{
+    testPatch ("PolySineArp.ydsp");
+}
+
 TEST_F (YdspExamplePatchTests, PulseBassCompilesAndRenders)
 {
     testPatch ("PulseBass.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, TremoloCompilesAndRenders)
+{
+    testPatch ("Tremolo.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, FreeverbCompilesAndRenders)
+{
+    testPatch ("Freeverb.ydsp");
 }
 
 TEST_F (YdspExamplePatchTests, WaveLabCompilesAndRenders)

@@ -64,6 +64,7 @@ private:
     void substituteConstants (YdspStmt& stmt) const;
     void substituteConstants (const std::vector<YdspStmtPtr>& body) const;
     void resolveStateArraySizes (YdspProcessorDecl& processor);
+    void substituteArraySizeCalls (YdspProcessorDecl& processor);
     void lowerStateInitialisers (YdspProcessorDecl& processor);
     void applyInitAnnotationDefaults (std::vector<YdspEndpointDecl>& endpoints);
     void applySmoothingAnnotations (YdspProcessorDecl& processor);

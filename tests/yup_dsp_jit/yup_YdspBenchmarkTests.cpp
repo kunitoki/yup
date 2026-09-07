@@ -47,8 +47,10 @@ namespace
 // The shapes below each isolate one codegen or optimiser property of the JIT,
 // measured against a hand-written C++ routine computing the same thing:
 //
-//   BenchmarkDelayTaps    - the `@` ring-buffer wrap (a per-sample integer
-//                           modulo, which is a helper *call* on x86-64)
+//   BenchmarkDelayTaps    - the `@` ring-buffer wrap, lowered to the dedicated
+//                           advanceWrapI opcode (a compare and a conditional
+//                           subtract - no modulo and no helper call on either
+//                           native target)
 //   BenchmarkLadderFilter - per-sample scalar `state` round-trips
 //   BenchmarkHarmonicBank - constant-heavy inner loop (float-constant
 //                           materialisation, array addressing, register
@@ -79,7 +81,7 @@ constexpr double benchmarkRatioLimit = 10.0;
 // A shape that sits well under the general limit carries its own ceiling, so the
 // guard catches it getting *worse* rather than only catching a collapse.
 //
-// The mode bank measures ~1.11-1.20x, having come down in four steps: 11.7x before
+// The mode bank came down in four steps: 11.7x before
 // per-loop invariant code motion, 7.5x before the vectoriser widened its 16
 // modes the way the reference is compiled, 2.2x before the unroller wrote the
 // four widened iterations out straight, 1.24x before the accumulator was
@@ -981,8 +983,9 @@ private:
 };
 
 //==============================================================================
-// Shape 4: compares plus `select` in the sample loop. On AArch64 every compare
-// is currently a branch, so this is the shape that hurts most there.
+// Shape 4: compares plus `select` in the sample loop. A compare that only feeds
+// a branch is folded into it; anything else lowers to `fcmp` + `cset` and the
+// select to `fcsel`, so the shape measures branchless comparison throughput.
 
 constexpr auto benchmarkShaperSource = R"YDSP(
     processor Shaper {
@@ -1140,7 +1143,8 @@ private:
 
 //==============================================================================
 // Shape 6: a wavefolder with two data-dependent if/else diamonds per sample.
-// Compiled code turns both into conditional moves; the JIT still branches.
+// Both sides turn into conditional moves - the compiler by itself, the JIT via
+// ifConversion() plus the backend's `fcsel` lowering of `select`.
 
 constexpr auto benchmarkFolderSource = R"YDSP(
     processor Folder {

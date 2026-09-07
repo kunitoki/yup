@@ -24,7 +24,9 @@
 #include <yup_dsp_jit/yup_dsp_jit.h>
 
 #include <cmath>
+#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace yup::test
@@ -1045,6 +1047,79 @@ TEST (YdspAsmJitCodegenTests, IntDivModByRuntimeZeroDivisorReturnsZero)
         const auto r = n != 0 ? 100 % n : 0;
         const auto expected = static_cast<float> (q) + static_cast<float> (r);
         EXPECT_NEAR (expected, output[i], 1e-5f) << "at index " << i << " with n=" << n;
+    }
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
+TEST (YdspAsmJitCodegenTests, IntDivModGuardsTheOverflowingPair)
+{
+    YdspDiagnostics diagnostics;
+
+    // Both operands come from streams, so nothing folds and the signs vary at
+    // runtime. INT_MIN / -1 is the pair with no representable quotient: x86
+    // raises #DE on it rather than wrapping, and AArch64's SDIV wraps to
+    // INT_MIN. Both lowerings answer 0 instead, which is the same answer they
+    // give for a zero divisor.
+    auto kernel = compileKernel (R"YDSP(
+        processor IntDivMod2 {
+            input stream num;
+            input stream den;
+            output stream quot;
+            output stream rem;
+            process {
+                let a = int (num);
+                let b = int (den);
+                quot = float (a / b);
+                rem = float (a % b);
+            }
+        }
+        graph G {
+            input stream x; input stream y;
+            output stream p; output stream q;
+            node d = IntDivMod2;
+            connection { x -> d.num; y -> d.den; d.quot -> p; d.rem -> q; }
+        }
+    )YDSP",
+                                 "IntDivMod2",
+                                 diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+    ASSERT_EQ (2, kernel.numInputs);
+    ASSERT_EQ (2, kernel.numOutputs);
+
+    constexpr auto intMin = std::numeric_limits<int32_t>::min();
+
+    const std::vector<int32_t> numerators { 100, -100, 100, -100, 100, intMin, intMin, 0 };
+    const std::vector<int32_t> denominators { 7, 7, -7, -7, 0, -1, 1, 5 };
+
+    const auto numSamples = static_cast<int> (numerators.size());
+
+    // runKernel lays the streams out back to back: all of `num`, then all of `den`.
+    std::vector<float> input;
+    input.reserve (numerators.size() * 2);
+
+    for (const auto value : numerators)
+        input.push_back (static_cast<float> (value));
+
+    for (const auto value : denominators)
+        input.push_back (static_cast<float> (value));
+
+    auto output = runKernel (kernel, input, numSamples);
+
+    ASSERT_EQ (static_cast<size_t> (numSamples * 2), output.size());
+
+    for (size_t i = 0; i < numerators.size(); ++i)
+    {
+        const auto a = numerators[i];
+        const auto b = denominators[i];
+        const bool defined = b != 0 && ! (a == intMin && b == -1);
+
+        EXPECT_FLOAT_EQ (static_cast<float> (defined ? a / b : 0), output[i])
+            << "quotient at index " << i << " with a=" << a << " b=" << b;
+        EXPECT_FLOAT_EQ (static_cast<float> (defined ? a % b : 0), output[numerators.size() + i])
+            << "remainder at index " << i << " with a=" << a << " b=" << b;
     }
 
     dumpAsmOnFailureCodegen (kernel);

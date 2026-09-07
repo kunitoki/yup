@@ -151,6 +151,24 @@ constexpr auto fmaIntrinsicSource = R"(
     }
 )";
 
+/** The same requirement for the fused multiply-*subtract* contraction forms
+    from `c - a * b`, and a separate triple because the fma one does not meet
+    it: `1.0 - 0.1 * 0.6` is 0.939999998 whichever way it is computed.
+
+    `1.0 - 0.3 * 0.7` does differ - two roundings give 0.789999962, one gives
+    0.790000021 - so it is the triple the fmsub tests below use. */
+constexpr float fmsubAwkwardA = 0.3f;
+constexpr float fmsubAwkwardB = 0.7f;
+constexpr float fmsubAwkwardC = 1.0f;
+
+constexpr auto fmsubContractedSource = R"(
+    processor P {
+        input stream in;
+        output stream out;
+        process { out = 1.0 - in * 0.7; }
+    }
+)";
+
 constexpr auto fmaVectorBankSource = R"(
     processor P {
         input stream in;
@@ -503,6 +521,61 @@ TEST (YdspFusedMultiplyAddTests, TheExpansionMatchesTheInstruction)
 
     for (const auto sample : output)
         EXPECT_EQ (std::fma (fmaAwkwardA, fmaAwkwardB, fmaAwkwardC), sample);
+}
+
+//==============================================================================
+// The fused multiply-subtract. There is no `fmsub()` to spell in a patch, so
+// the only way to reach `fmsubF` is contraction of `c - a * b` - which is
+// exactly why its rounding needs pinning: on AArch64 the operation has a
+// hardware instruction (`fmsub d, n, m, a` = a - n * m, one rounding), while a
+// target without one reaches it through lowerFusedMultiplyAdd()'s float64
+// expansion, also one rounding. The requirement is that those agree.
+
+TEST (YdspFusedMultiplyAddTests, TheFmsubOperandsMakeFusingObservable)
+{
+    // The guard on the two tests below, for the same reason the fma one exists:
+    // with operands where the removed rounding did nothing, they would pass
+    // against either lowering.
+    EXPECT_NE (std::fma (-fmsubAwkwardA, fmsubAwkwardB, fmsubAwkwardC),
+               fmsubAwkwardC - fmsubAwkwardA * fmsubAwkwardB);
+}
+
+TEST (YdspFusedMultiplyAddTests, ContractionFusesAMultiplyFeedingASubtract)
+{
+    YdspDiagnostics diagnostics;
+
+    const auto ir = fmaBuildIr (fmaPatch (fmsubContractedSource), diagnostics, true);
+
+    ASSERT_NE (nullptr, ir);
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+
+    const auto* kernel = fmaKernel (*ir);
+    ASSERT_NE (nullptr, kernel);
+
+    EXPECT_EQ (1, fmaCountInst (*kernel, YdspIrOp::fmsubF));
+    EXPECT_EQ (0, fmaCountInst (*kernel, YdspIrOp::mulF));
+}
+
+TEST (YdspFusedMultiplyAddTests, TheContractedSubtractRoundsOnce)
+{
+    // `c - a * b` fused is `fma (-a, b, c)`: the product is formed exactly and
+    // the subtraction rounds once. Exact equality, not EXPECT_FLOAT_EQ - the
+    // whole difference under test is a single ULP.
+    //
+    // This is what the AArch64 lowering of fmsubF has to deliver. Emitting
+    // `fmul` + `fsub` there would round twice and fail here, while every
+    // target *without* the instruction already rounds once through the float64
+    // expansion - so this pins the two together rather than letting the
+    // FMA-capable target be the less accurate one.
+    const std::vector<float> input (8, fmsubAwkwardA);
+    const auto output = fmaRun (fmaPatch (fmsubContractedSource), input);
+
+    ASSERT_EQ (input.size(), output.size());
+
+    const auto expected = std::fma (-fmsubAwkwardA, fmsubAwkwardB, fmsubAwkwardC);
+
+    for (const auto sample : output)
+        EXPECT_EQ (expected, sample);
 }
 
 } // namespace yup::test

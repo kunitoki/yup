@@ -1,0 +1,129 @@
+/*
+  The classic Freeverb topology: the input runs through two independent
+  Schroeder networks (eight damped parallel combs into four serial allpasses)
+  whose comb/allpass delays are offset by 23 samples so the two channels
+  decorrelate into a wide stereo field. Wet and dry paths are mixed with a
+  cross-feed width matrix, and every parameter is smoothed before it touches
+  the feedback loops.
+*/
+
+declare name "Freeverb";
+declare description "Classic Freeverb reverb with room size, damping, width, wet and dry.";
+
+processor FreeverbEffect {
+    input stream in;
+    output stream outL;
+    output stream outR;
+
+    input value float roomSize = 80.0 [[ name: "Room Size", min: 0.0, max: 100.0 ]];
+    input value float damping = 50.0 [[ name: "Damping Factor", min: 0.0, max: 100.0, unit: "%" ]];
+    input value float width = 100.0 [[ name: "Width", min: 0.0, max: 100.0, unit: "%" ]];
+    input value float wetLevel = 33.0 [[ name: "Wet Level", min: 0.0, max: 100.0, unit: "%" ]];
+    input value float dryLevel = 40.0 [[ name: "Dry Level", min: 0.0, max: 100.0, unit: "%" ]];
+
+    struct Comb {
+        float buf[1640];
+        int idx;
+        float last;
+    }
+
+    struct Allpass {
+        float buf[600];
+        int idx;
+    }
+
+    state Comb combL[8];
+    state Comb combR[8];
+    state Allpass allpassL[4];
+    state Allpass allpassR[4];
+
+    state int combLenL[8] = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
+    state int combLenR[8] = { 1139, 1211, 1300, 1379, 1445, 1514, 1580, 1640 };
+    state int allpassLenL[4] = { 225, 341, 441, 556 };
+    state int allpassLenR[4] = { 248, 364, 464, 579 };
+
+    state float sRoom = 80.0;
+    state float sDamping = 50.0;
+    state float sWidth = 100.0;
+    state float sWet = 33.0;
+    state float sDry = 40.0;
+
+    process {
+        float sm = 1.0 - exp (-1.0 / (0.02 * sampleRate));
+        sRoom += (roomSize - sRoom) * sm;
+        sDamping += (damping - sDamping) * sm;
+        sWidth += (width - sWidth) * sm;
+        sWet += (wetLevel - sWet) * sm;
+        sDry += (dryLevel - sDry) * sm;
+
+        float feedback = 0.7 + 0.28 * sRoom * 0.01;
+        float dampCoeff = sDamping * 0.4 * 0.01;
+        float wetGain = sWet * 1.5 * 0.01;
+        float dryGain = sDry * 2.0 * 0.01;
+        float widthMix = sWidth * 0.01;
+
+        float sumL = 0.0;
+        for i in 0..8 {
+            float delayed = combL[i].buf[combL[i].idx];
+            combL[i].last = combL[i].last * dampCoeff + delayed * (1.0 - dampCoeff);
+            combL[i].buf[combL[i].idx] = combL[i].last * feedback + 0.015 * in;
+
+            combL[i].idx = combL[i].idx + 1;
+            if (combL[i].idx >= combLenL[i]) { combL[i].idx = 0; }
+
+            sumL = sumL + delayed;
+        }
+
+        float wetL = sumL;
+        for i in 0..4 {
+            float delayed = allpassL[i].buf[allpassL[i].idx];
+            allpassL[i].buf[allpassL[i].idx] = wetL + delayed * 0.5;
+            wetL = delayed - wetL;
+
+            allpassL[i].idx = allpassL[i].idx + 1;
+            if (allpassL[i].idx >= allpassLenL[i]) { allpassL[i].idx = 0; }
+        }
+
+        float sumR = 0.0;
+        for i in 0..8 {
+            float delayed = combR[i].buf[combR[i].idx];
+            combR[i].last = combR[i].last * dampCoeff + delayed * (1.0 - dampCoeff);
+            combR[i].buf[combR[i].idx] = combR[i].last * feedback + 0.015 * in;
+
+            combR[i].idx = combR[i].idx + 1;
+            if (combR[i].idx >= combLenR[i]) { combR[i].idx = 0; }
+
+            sumR = sumR + delayed;
+        }
+
+        float wetR = sumR;
+        for i in 0..4 {
+            float delayed = allpassR[i].buf[allpassR[i].idx];
+            allpassR[i].buf[allpassR[i].idx] = wetR + delayed * 0.5;
+            wetR = delayed - wetR;
+
+            allpassR[i].idx = allpassR[i].idx + 1;
+            if (allpassR[i].idx >= allpassLenR[i]) { allpassR[i].idx = 0; }
+        }
+
+        float wetGain1 = wetGain * (1.0 + widthMix);
+        float wetGain2 = wetGain * (1.0 - widthMix);
+
+        outL = wetL * wetGain1 + wetR * wetGain2 + dryGain * in;
+        outR = wetR * wetGain1 + wetL * wetGain2 + dryGain * in;
+    }
+}
+
+graph Freeverb {
+    input stream in;
+    output stream outL;
+    output stream outR;
+
+    node fx = FreeverbEffect;
+
+    connection {
+        in -> fx.in;
+        fx.outL -> outL;
+        fx.outR -> outR;
+    }
+}
