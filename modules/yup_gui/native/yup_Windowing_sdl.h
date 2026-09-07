@@ -199,7 +199,7 @@ private:
         if (! MessageManager::getInstance()->isThisTheMessageThread())
             MessageManager::callAsync (std::move (eventHandler));
         else
-            function();
+            eventHandler();
     }
 
     static bool requestMouseCapture();
