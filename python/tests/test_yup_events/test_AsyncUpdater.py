@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 class AsyncUpdater(yup.AsyncUpdater):
@@ -20,7 +22,7 @@ def test_single_trigger(juce_app):
     a.triggerAsyncUpdate()
     assert a.isUpdatePending()
     assert a.timesCalled == 0
-    next(juce_app)
+    pump_until(juce_app, lambda: (a.timesCalled == 1))
     assert a.timesCalled == 1
 
 #==================================================================================================
@@ -35,7 +37,7 @@ def test_multiple_trigger(juce_app):
     a.triggerAsyncUpdate()
     assert a.isUpdatePending()
     assert a.timesCalled == 0
-    next(juce_app)
+    pump_until(juce_app, lambda: (not a.isUpdatePending()) and (a.timesCalled == 1))
     assert not a.isUpdatePending()
     assert a.timesCalled == 1
 

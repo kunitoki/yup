@@ -90,8 +90,11 @@ private:
 
 ## Parent/child tree
 
-Components form a tree. There is no separate "layout manager" — you build the
-hierarchy by calling `addChildComponent()` or `addAndMakeVisible()`.
+Components form a tree: you build the hierarchy by calling
+`addChildComponent()` or `addAndMakeVisible()`. Parenting and layout are
+separate concerns — adding a child does not position it. You can set bounds by
+hand from `resized()`, or hand the work to one of the layout containers
+described in [Components Layout](component-layout.md).
 
 ### Adding children
 

@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <memory>
 
 #include "yup_ImageFormatTools.h"
@@ -30,8 +31,10 @@ using namespace yup;
 namespace
 {
 
-// Helper: load image from memory block with options
-static Image loadFromBlock (const MemoryBlock& block, const ImageFormat::Options& opts)
+// Helper: load image from memory block with options. Named for this file rather than
+// loadFromBlock, because yup_ImageFormatMetadata.cpp defines an identical helper and both
+// land in the same unity translation unit via tests/yup_graphics.cpp.
+static Image loadExtendedFromBlock (const MemoryBlock& block, const ImageFormat::Options& opts)
 {
     auto data = block.asBytes();
     auto result = Image::loadFromData (data, opts);
@@ -64,7 +67,7 @@ TEST (JpegMetadataExtendedTest, DpiInDotsPerCmSurvivesRoundTrip)
     auto block = writeImageToBlock<JpegImageFormatWriter> (img, 0);
 
     ImageFormat::Options opts = ImageFormat::Options().withMetadata (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -87,7 +90,7 @@ TEST (JpegMetadataExtendedTest, XmpRawChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<JpegImageFormatWriter> (img, 0);
 
     ImageFormat::Options opts = ImageFormat::Options().withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -97,28 +100,22 @@ TEST (JpegMetadataExtendedTest, XmpRawChunkSurvivesRoundTrip)
     EXPECT_EQ (sizeof (xmpData), xmpChunk->getSize());
 }
 
-TEST (JpegMetadataExtendedTest, JfifRawChunkSurvivesRoundTrip)
+TEST (JpegMetadataExtendedTest, JfifApp0IsExposedAsARawChunk)
 {
     Image img = generateSolidImage (16, 16, PixelFormat::RGB, 0xFF336699u);
-
-    // A minimal JFIF APP0 marker body (without the "JFIF\0" header).
-    const uint8 jfifBody[] = { 0x01, 0x02, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0x00 };
-
-    auto meta = ImageMetadata::create();
-    meta->setRawChunk ("jpeg/jfif", MemoryBlock (jfifBody, sizeof (jfifBody)));
-    img.setMetadata (meta);
 
     auto block = writeImageToBlock<JpegImageFormatWriter> (img, 0);
 
     ImageFormat::Options opts = ImageFormat::Options().withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
 
     auto* jfifChunk = reloaded.getMetadata()->getRawChunk ("jpeg/jfif");
     ASSERT_NE (nullptr, jfifChunk);
-    EXPECT_EQ (sizeof (jfifBody), jfifChunk->getSize());
+    ASSERT_EQ (14u, jfifChunk->getSize());
+    EXPECT_EQ (0, std::memcmp (jfifChunk->getData(), "JFIF", 4));
 }
 
 TEST (JpegMetadataExtendedTest, CommentTextSurvivesRoundTrip)
@@ -132,7 +129,7 @@ TEST (JpegMetadataExtendedTest, CommentTextSurvivesRoundTrip)
     auto block = writeImageToBlock<JpegImageFormatWriter> (img, 0);
 
     ImageFormat::Options opts = ImageFormat::Options().withMetadata (true).withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -152,7 +149,7 @@ TEST (JpegMetadataExtendedTest, IccProfileRawChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<JpegImageFormatWriter> (img, 0);
 
     ImageFormat::Options opts = ImageFormat::Options().withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -210,7 +207,7 @@ TEST (PngMetadataExtendedTest, TimeChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<PngImageFormatWriter> (img);
 
     ImageFormat::Options opts = ImageFormat::Options().withMetadata (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -228,7 +225,7 @@ TEST (PngMetadataExtendedTest, SRgbChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<PngImageFormatWriter> (img);
 
     ImageFormat::Options opts = ImageFormat::Options().withMetadata (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -246,7 +243,7 @@ TEST (PngMetadataExtendedTest, GammaChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<PngImageFormatWriter> (img);
 
     ImageFormat::Options opts = ImageFormat::Options().withMetadata (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -266,7 +263,7 @@ TEST (PngMetadataExtendedTest, IccpRawChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<PngImageFormatWriter> (img);
 
     ImageFormat::Options opts = ImageFormat::Options().withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());
@@ -289,7 +286,7 @@ TEST (PngMetadataExtendedTest, ChrmRawChunkSurvivesRoundTrip)
     auto block = writeImageToBlock<PngImageFormatWriter> (img);
 
     ImageFormat::Options opts = ImageFormat::Options().withRawChunks (true);
-    auto reloaded = loadFromBlock (block, opts);
+    auto reloaded = loadExtendedFromBlock (block, opts);
 
     ASSERT_TRUE (reloaded.isValid());
     ASSERT_TRUE (reloaded.hasMetadata());

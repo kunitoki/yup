@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#include "yup_audio_gui/yup_AudioDeviceManagerWindow.cpp"
 #include "yup_audio_gui/yup_AudioPeakProfile.cpp"
 #include "yup_audio_gui/yup_AudioPeakProfileCache.cpp"
 #include "yup_audio_gui/yup_AudioThumbnail.cpp"
