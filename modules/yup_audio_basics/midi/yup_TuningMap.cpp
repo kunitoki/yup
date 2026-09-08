@@ -30,6 +30,8 @@ namespace TuningMapHelpers
 
 constexpr int maxMidiNote = 127;
 
+constexpr int maxScaleDegree = 100000;
+
 // Returns true and sets the result if the token is a plain non-negative integer.
 static bool parseInteger (const String& token, int& result) noexcept
 {
@@ -93,15 +95,24 @@ static bool parseScalaInterval (const String& token, double& ratioOut) noexcept
     }
 
     const int slash = token.indexOfChar ('/');
-    if (slash <= 0 || slash == token.length() - 1)
-        return false;
 
     int numerator = 0;
-    int denominator = 0;
-    if (! parseInteger (token.substring (0, slash), numerator))
-        return false;
-    if (! parseInteger (token.substring (slash + 1), denominator))
-        return false;
+    int denominator = 1; // a token without a slash is a ratio over 1, so "2" means "2/1"
+
+    if (slash < 0)
+    {
+        if (! parseInteger (token, numerator))
+            return false;
+    }
+    else
+    {
+        if (slash == 0 || slash == token.length() - 1)
+            return false;
+
+        if (! parseInteger (token.substring (0, slash), numerator)
+            || ! parseInteger (token.substring (slash + 1), denominator))
+            return false;
+    }
 
     if (numerator <= 0 || denominator <= 0)
         return false;
@@ -238,7 +249,7 @@ Result TuningMap::loadScale (const File& file)
     for (int i = 0; i < lines.size(); ++i)
     {
         const String line = lines[i].trim();
-        if (line.isEmpty() || line.startsWithChar ('!'))
+        if (line.startsWithChar ('!'))
             continue;
 
         if (! descriptionSeen)
@@ -246,6 +257,9 @@ Result TuningMap::loadScale (const File& file)
             descriptionSeen = true;
             continue;
         }
+
+        if (line.isEmpty())
+            continue;
 
         if (noteCount < 0)
         {
@@ -258,7 +272,7 @@ Result TuningMap::loadScale (const File& file)
         }
 
         double ratio = 0.0;
-        if (! TuningMapHelpers::parseScalaInterval (line, ratio))
+        if (! TuningMapHelpers::parseScalaInterval (line.initialSectionNotContaining (" \t"), ratio))
             return Result::fail ("The scale file contains an invalid interval");
 
         newScale.push_back (ratio);
@@ -322,7 +336,7 @@ Result TuningMap::loadKeyMap (const File& file)
         }
         else if (lastNote < 0)
         {
-            if (! TuningMapHelpers::parseInteger (line, lastNote) || ! isPositiveAndBelow (lastNote, 128))
+            if (! TuningMapHelpers::parseInteger (line, lastNote) || ! isPositiveAndBelow (lastNote, 128) || lastNote < firstNote)
                 return Result::fail ("The key map file contains an invalid last note");
         }
         else if (newZeroNote < 0)
@@ -342,7 +356,7 @@ Result TuningMap::loadKeyMap (const File& file)
         }
         else if (newRepeatInc < 0)
         {
-            if (! TuningMapHelpers::parseInteger (line, newRepeatInc))
+            if (! TuningMapHelpers::parseInteger (line, newRepeatInc) || newRepeatInc > TuningMapHelpers::maxScaleDegree)
                 return Result::fail ("The key map file contains an invalid repeat increment");
         }
         else
@@ -354,7 +368,7 @@ Result TuningMap::loadKeyMap (const File& file)
             else
             {
                 int scaleDegree = 0;
-                if (! TuningMapHelpers::parseInteger (line, scaleDegree))
+                if (! TuningMapHelpers::parseInteger (line, scaleDegree) || scaleDegree > TuningMapHelpers::maxScaleDegree)
                     return Result::fail ("The key map file contains an invalid mapping entry");
 
                 newMapping.push_back (scaleDegree);
@@ -396,10 +410,13 @@ Result TuningMap::loadKeyMap (const File& file)
         mapping = std::move (newMapping);
     }
 
-    if (rangeDeclared)
-        activeRange = newActiveRange;
-    else
-        activateRange (0, TuningMapHelpers::maxMidiNote);
+    if (! rangeDeclared)
+    {
+        for (int i = firstNote; i <= lastNote; ++i)
+            newActiveRange[static_cast<size_t> (i)] = true;
+    }
+
+    activeRange = newActiveRange;
 
     keyMapFile = file.getFullPathName();
     updateBasePitch();

@@ -57,15 +57,17 @@ namespace yup
       - loadKeyMap() reads a .kbm file describing how the MIDI keys map onto the
         scale, including which notes to retune, which note carries the reference
         frequency, and how the mapping repeats. Keys can be excluded from the
-        map with "x" entries, and the optional "&lt; first last" range lines
-        declare which notes are considered playable (see isNoteActive()).
+        map with "x" entries, and the notes to retune - either the range in the
+        file header or the optional "&lt; first last" range lines that override
+        it - are the ones considered playable (see isNoteActive()).
 
     Loading never leaves the tuning half-modified: if a file fails to parse, a
     failed yup::Result is returned and the previously loaded scale/key map stays
     in effect.
 
-    noteToPitch() performs no allocation and can be called from real-time
-    threads.
+    noteToPitch() performs no allocation, but it reads state that loadScale()
+    and loadKeyMap() replace, so it can be called from a real-time thread only
+    while no load is in progress.
 
     @tags{Audio}
 */
@@ -94,7 +96,7 @@ public:
         @param note    the MIDI note number to look up, in the range 0 to 127
 
         @returns       the frequency in Hz, or a negative value if the note is
-                       unmapped by the current key map (or out of range)
+                       unmapped by the current key map
 
         @see isNoteMapped, loadScale, loadKeyMap
     */
@@ -112,9 +114,10 @@ public:
     /** Returns true if the given MIDI note falls inside the active note range
         declared by the current key map.
 
-        This reflects the optional "&lt; first last" range lines of a .kbm
-        file. When a key map declares no range at all, every note is
-        considered active.
+        This reflects the notes a .kbm file asks to retune: the range declared
+        by its header, or the optional "&lt; first last" range lines when the
+        file has any, which take precedence. Notes outside the active range are
+        still retuned by noteToPitch(), they are simply reported as inactive.
 
         @param note    the MIDI note number to look up, in the range 0 to 127
 
@@ -125,11 +128,12 @@ public:
     //==============================================================================
     /** Loads a scale from a Scala .scl file.
 
-        The file must contain a description line, the number of intervals in
-        the scale, and that many intervals, one per line. Comments ("!" lines)
-        and blank lines are ignored. An interval is either a rational ratio
-        such as "5/4", or a number of cents written with a decimal point (e.g.
-        "386.313714").
+        The file must contain a description line, which may be empty, the
+        number of intervals in the scale, and that many intervals, one per
+        line. Comments ("!" lines) and blank lines are ignored. An interval is
+        either a rational ratio such as "5/4" or "2" (a whole number being a
+        ratio over 1), or a number of cents written with a decimal point (e.g.
+        "386.313714"). Any text following an interval is ignored.
 
         If the file cannot be read or does not describe the declared number of
         intervals, a failed yup::Result is returned and the previously loaded
@@ -145,9 +149,10 @@ public:
 
         The file describes the size of the key map, the range of notes to
         retune, the note whose frequency is fixed by the reference pitch, and
-        the mapping from keys to scale degrees. A "x" entry unmaps its key,
-        and the optional "&lt; first last" lines declare the active note range
-        (see isNoteActive()).
+        the mapping from keys to scale degrees. A "x" entry unmaps its key. The
+        range of notes to retune becomes the active note range, unless the file
+        carries "&lt; first last" lines, which declare it instead (see
+        isNoteActive()).
 
         A key map size of 0 selects the automatic linear layout, where every
         key is mapped to the consecutive scale degree. Keys listed after the

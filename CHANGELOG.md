@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Audio
 
-- Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse)
+- Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse). `isNoteActive()` reports the notes a key map asks to retune, taken from the range in its header unless the file carries `< first last` lines, which declare it instead
 
 ### Graphics
 

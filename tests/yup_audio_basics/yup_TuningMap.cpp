@@ -155,6 +155,43 @@ TEST_F (TuningMapTests, LoadingRatioScaleMapsScaleDegreesToRatios)
     EXPECT_NEAR (map.noteToPitch (59), 440.0 * 5.0 / 6.0, 1e-6);
 }
 
+TEST_F (TuningMapTests, ScaleDescriptionCanBeEmpty)
+{
+    // A .scl file with no description carries a blank line in its place.
+    auto file = writeTempFile (
+        "! a scale without a description\n"
+        "\n"
+        "1\n"
+        "2/1\n");
+
+    EXPECT_TRUE (map.loadScale (file).wasOk());
+    EXPECT_EQ (map.getNumberOfScaleDegrees(), 1);
+
+    EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
+    EXPECT_NEAR (map.noteToPitch (70), 880.0, 1e-6);
+}
+
+TEST_F (TuningMapTests, IntervalsAcceptWholeNumberRatiosAndTrailingText)
+{
+    auto file = writeTempFile (
+        "! every interval form the format allows\n"
+        "annotated scale\n"
+        "3\n"
+        "386.313714 major third\n"
+        "3/2 fifth\n"
+        "2\n");
+
+    EXPECT_TRUE (map.loadScale (file).wasOk());
+    EXPECT_EQ (map.getNumberOfScaleDegrees(), 3);
+
+    EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
+    EXPECT_NEAR (map.noteToPitch (70), 440.0 * std::pow (2.0, 386.313714 / 1200.0), 1e-6);
+    EXPECT_NEAR (map.noteToPitch (71), 440.0 * 3.0 / 2.0, 1e-6);
+
+    // The bare "2" is the octave, so the scale repeats after three keys.
+    EXPECT_NEAR (map.noteToPitch (72), 880.0, 1e-6);
+}
+
 TEST_F (TuningMapTests, AutomaticKeyMapMapsKeysToConsecutiveDegrees)
 {
     auto file = writeTempFile (
@@ -247,6 +284,43 @@ TEST_F (TuningMapTests, ActiveRangeReflectsDeclaredRanges)
     EXPECT_FALSE (map.isNoteActive (59));
 }
 
+TEST_F (TuningMapTests, ActiveRangeDefaultsToTheDeclaredRetuneRange)
+{
+    auto file = writeTempFile (
+        "! key map retuning the middle octave only\n"
+        "12\n"
+        "60\n"
+        "72\n"
+        "60\n"
+        "69\n"
+        "440\n"
+        "12\n"
+        "0\n"
+        "1\n"
+        "2\n"
+        "3\n"
+        "4\n"
+        "5\n"
+        "6\n"
+        "7\n"
+        "8\n"
+        "9\n"
+        "10\n"
+        "11\n");
+
+    EXPECT_TRUE (map.loadKeyMap (file).wasOk());
+
+    EXPECT_FALSE (map.isNoteActive (0));
+    EXPECT_FALSE (map.isNoteActive (59));
+    EXPECT_TRUE (map.isNoteActive (60));
+    EXPECT_TRUE (map.isNoteActive (72));
+    EXPECT_FALSE (map.isNoteActive (73));
+
+    // Notes outside the range are still mapped and still retuned.
+    EXPECT_TRUE (map.isNoteMapped (59));
+    EXPECT_GT (map.noteToPitch (59), 0.0);
+}
+
 TEST_F (TuningMapTests, MissingAndExtraKeyMapEntriesAreLenient)
 {
     // Extra entries beyond the declared map size are dropped.
@@ -318,6 +392,9 @@ TEST_F (TuningMapTests, FailedScaleLoadKeepsPreviousTuning)
     EXPECT_TRUE (map.loadScale (scaleFile).wasOk());
     EXPECT_EQ (map.getNumberOfScaleDegrees(), 5);
 
+    const auto pitch60 = map.noteToPitch (60);
+    const auto pitch61 = map.noteToPitch (61);
+
     auto badFile = writeTempFile (
         "broken scale\n"
         "5\n"
@@ -327,8 +404,9 @@ TEST_F (TuningMapTests, FailedScaleLoadKeepsPreviousTuning)
     EXPECT_TRUE (map.loadScale (badFile).failed());
 
     EXPECT_EQ (map.getNumberOfScaleDegrees(), 5);
-    EXPECT_NEAR (map.noteToPitch (60), 440.0, 1e-6);
-    EXPECT_NEAR (map.noteToPitch (61), 440.0 * 9.0 / 8.0, 1e-6);
+    EXPECT_EQ (map.noteToPitch (60), pitch60);
+    EXPECT_EQ (map.noteToPitch (61), pitch61);
+    EXPECT_NEAR (map.noteToPitch (61) / map.noteToPitch (60), 9.0 / 8.0, 1e-9);
     EXPECT_EQ (map.getScaleFile(), scaleFile.getFullPathName());
 }
 
@@ -396,6 +474,30 @@ TEST_F (TuningMapTests, InvalidScaleAndKeyMapFilesAreRejected)
         "0\n"
         "127\n");
     EXPECT_TRUE (map.loadKeyMap (truncated).failed());
+
+    auto invertedRetuneRange = writeTempFile (
+        "! key map whose retune range ends before it starts\n"
+        "1\n"
+        "72\n"
+        "60\n"
+        "60\n"
+        "60\n"
+        "440\n"
+        "1\n"
+        "0\n");
+    EXPECT_TRUE (map.loadKeyMap (invertedRetuneRange).failed());
+
+    auto unreachableScaleDegree = writeTempFile (
+        "! key map referencing a scale degree no tuning can reach\n"
+        "1\n"
+        "0\n"
+        "127\n"
+        "60\n"
+        "60\n"
+        "440\n"
+        "1\n"
+        "2000000000\n");
+    EXPECT_TRUE (map.loadKeyMap (unreachableScaleDegree).failed());
 
     EXPECT_NEAR (map.noteToPitch (69), 440.0, 1e-6);
 }
