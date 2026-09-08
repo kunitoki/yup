@@ -48,20 +48,20 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 <div>
 </div>
 
+<div>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
-<div>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.5%;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.2%;" /></a>
 </div>
 
+<div>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/_static/images/yup_dsp_spectrum_fill.png" style="width:42.5%;" /></a>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/_static/images/yup_dsp_spectrum_line.png" style="width:54.7%;" /></a>
-<div>
 </div>
 
+<div>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_waveform_onsets.jpg" style="width:31.2%;" /></a>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_audio_scope.png" style="width:66%;" /></a>
-<div>
 </div>
 
 <div>
@@ -71,16 +71,16 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
   <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:23.8%;" /></a>
 </div>
 
+<div>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_tiger.jpg" style="width:23.8%;" /></a>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_lambo.jpg" style="width:23.8%;" /></a>
-<div>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_yellow_car.jpg" style="width:23.8%;" /></a>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_scimitar.jpg" style="width:23.8%;" /></a>
 </div>
 
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_gradient_editor.png" style="width:46%;" /></a>
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_color_picker.png" style="width:50.8%;" /></a>
 <div>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_gradient_editor.png" style="width:46.4%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_color_picker.png" style="width:51.3%;" /></a>
 </div>
 
 <div>
