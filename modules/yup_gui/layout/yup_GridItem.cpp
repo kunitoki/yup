@@ -70,4 +70,95 @@ GridItem GridItem::withMargin (float newMargin) const
     return copy;
 }
 
+GridItem GridItem::withWidth (float newWidth) const
+{
+    auto copy = *this;
+    copy.width = newWidth;
+    return copy;
+}
+
+GridItem GridItem::withHeight (float newHeight) const
+{
+    auto copy = *this;
+    copy.height = newHeight;
+    return copy;
+}
+
+GridItem GridItem::withWidthPercent (float newWidthPercent) const
+{
+    auto copy = *this;
+    copy.widthPercent = newWidthPercent;
+    return copy;
+}
+
+GridItem GridItem::withHeightPercent (float newHeightPercent) const
+{
+    auto copy = *this;
+    copy.heightPercent = newHeightPercent;
+    return copy;
+}
+
+GridItem GridItem::withMinWidth (float newMinWidth) const
+{
+    auto copy = *this;
+    copy.minWidth = newMinWidth;
+    return copy;
+}
+
+GridItem GridItem::withMinHeight (float newMinHeight) const
+{
+    auto copy = *this;
+    copy.minHeight = newMinHeight;
+    return copy;
+}
+
+GridItem GridItem::withMaxWidth (float newMaxWidth) const
+{
+    auto copy = *this;
+    copy.maxWidth = newMaxWidth;
+    return copy;
+}
+
+GridItem GridItem::withMaxHeight (float newMaxHeight) const
+{
+    auto copy = *this;
+    copy.maxHeight = newMaxHeight;
+    return copy;
+}
+
+GridItem GridItem::withJustifySelf (AlignSelf newJustifySelf) const
+{
+    auto copy = *this;
+    copy.justifySelf = newJustifySelf;
+    return copy;
+}
+
+GridItem GridItem::withAlignSelf (AlignSelf newAlignSelf) const
+{
+    auto copy = *this;
+    copy.alignSelf = newAlignSelf;
+    return copy;
+}
+
+GridItem GridItem::withArea (const String& areaName) const
+{
+    auto copy = *this;
+    copy.area = areaName;
+    return copy;
+}
+
+GridItem GridItem::withColumnStart (const String& lineName) const
+{
+    auto copy = *this;
+    copy.columnStartName = lineName;
+    return copy;
+}
+
+GridItem GridItem::withRowStart (const String& lineName) const
+{
+    auto copy = *this;
+    copy.rowStartName = lineName;
+    return copy;
+}
+
 } // namespace yup

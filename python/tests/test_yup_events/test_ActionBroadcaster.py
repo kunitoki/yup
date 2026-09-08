@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 class ActionListener(yup.ActionListener):
@@ -24,7 +26,7 @@ def test_single_send(juce_app):
     b.sendActionMessage("abc")
     assert l.timesCalled == 0
     assert l.lastMessage is None
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastMessage == "abc"))
     assert l.timesCalled == 1
     assert l.lastMessage == "abc"
 
@@ -42,7 +44,7 @@ def test_multi_send(juce_app):
     b.sendActionMessage("3")
     assert l.timesCalled == 0
     assert l.lastMessage is None
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 3) and (l.lastMessage == "3"))
     assert l.timesCalled == 3
     assert l.lastMessage == "3"
 
@@ -56,13 +58,13 @@ def test_remove_listener(juce_app):
     b.addActionListener(l)
 
     b.sendActionMessage("1")
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastMessage == "1"))
     assert l.timesCalled == 1
     assert l.lastMessage == "1"
 
     b.removeActionListener(l)
     b.sendActionMessage("2")
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastMessage == "1"))
     assert l.timesCalled == 1
     assert l.lastMessage == "1"
 
@@ -80,14 +82,14 @@ def test_remove_all_listeners(juce_app):
     b.addActionListener(l3)
 
     b.sendActionMessage("bark")
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 1) and (l2.timesCalled == 1) and (l3.timesCalled == 1))
     assert l1.timesCalled == 1
     assert l2.timesCalled == 1
     assert l3.timesCalled == 1
 
     b.removeAllActionListeners()
     b.sendActionMessage("bork")
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 1) and (l2.timesCalled == 1) and (l3.timesCalled == 1))
     assert l1.timesCalled == 1
     assert l2.timesCalled == 1
     assert l3.timesCalled == 1

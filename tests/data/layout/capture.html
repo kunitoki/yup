@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<!--
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+
+  Browser-derived golden corpus generator for yup::FlexBox and yup::Grid.
+
+  Open this page in a browser and call window.captureAll() (or just read the
+  <pre> it dumps on load). Every case is rendered with real CSS and each child's
+  getBoundingClientRect() is recorded relative to the container's content box.
+  The output is written to flexbox_golden.json / grid_golden.json next to this
+  file and replayed in C++ by tests/yup_gui/yup_FlexBoxParity.cpp and
+  yup_GridParity.cpp.
+
+  Corpus design notes - read before adding cases:
+
+  * Every item is an EMPTY div. That is deliberate, not laziness: YUP's layout
+    engine has no intrinsic-size query yet (see the IntrinsicSize seam in
+    yup_FlexBox.cpp), so an "auto" size falls back to the component's current
+    bounds. Replaying with components reset to 0x0 makes YUP's auto equal an
+    empty div's content size, which is 0 in both engines. The same trick makes
+    CSS's min-width:auto floor (min-content = 0) agree with YUP's 0 shrink
+    floor, so flex-shrink cases are comparable too.
+
+  * No `auto` grid tracks, and no fit-content/auto-fill/auto-fit/minmax with an
+    intrinsic argument. Those are defined as intrinsic queries and cannot match
+    under the stub; they are the documented Phase 5b exclusions.
+
+  * Chrome computes layout in LayoutUnits of 1/64px, so thirds come back as
+    73.3281 rather than 73.3333. That is why the C++ replay compares with a
+    0.5px tolerance instead of exactly; the tolerance absorbs the engine's
+    fixed-point quantization, not a difference in the algorithm.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>YUP layout golden capture</title>
+<style>
+  * { margin: 0; padding: 0; border: 0; box-sizing: border-box; }
+  body { font-size: 0; line-height: 0; }
+  .case { position: relative; }
+  .container { position: relative; overflow: visible; }
+  .item { }
+</style>
+</head>
+<body>
+<pre id="out" style="font-size: 11px; line-height: 1.3; white-space: pre-wrap;"></pre>
+<script>
+"use strict";
+
+//==============================================================================
+// Case construction helpers.
+
+/** An item with an explicit width and height. */
+function item (w, h, extra)
+{
+    return Object.assign ({ width: w, height: h }, extra || {});
+}
+
+/** An item with an auto (content-sized, i.e. 0 for an empty div) cross size. */
+function autoItem (extra)
+{
+    return Object.assign ({}, extra || {});
+}
+
+function flexCase (name, container, items)
+{
+    return {
+        name: name,
+        container: Object.assign ({
+            width: 300,
+            height: 100,
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            justifyContent: 'flex-start',
+            alignItems: 'stretch',
+            alignContent: 'stretch',
+            gap: 0,
+            rowGap: -1,
+            columnGap: -1,
+            padding: [0, 0, 0, 0]
+        }, container),
+        items: items
+    };
+}
+
+function gridCase (name, container, items)
+{
+    return {
+        name: name,
+        container: Object.assign ({
+            width: 300,
+            height: 200,
+            templateColumns: [],
+            templateRows: [],
+            columnGap: 0,
+            rowGap: 0,
+            autoColumns: 100,
+            autoRows: 40,
+            justifyItems: 'stretch',
+            alignItems: 'stretch',
+            justifyContent: 'start',
+            alignContent: 'start',
+            autoFlow: 'row',
+            areas: []
+        }, container),
+        items: items
+    };
+}
+
+//==============================================================================
+// The FlexBox corpus.
+
+const DIRECTIONS = ['row', 'row-reverse', 'column', 'column-reverse'];
+const JUSTIFY = ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'];
+const ALIGN_ITEMS = ['flex-start', 'flex-end', 'center', 'stretch', 'baseline'];
+const ALIGN_CONTENT = ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly', 'stretch'];
+
+function buildFlexCorpus()
+{
+    const cases = [];
+
+    // --- Set A: direction x justify-content -------------------------------
+    // Three fixed-size items that leave free space on the main axis, so every
+    // justify-content mode produces a distinct result. Covers F3 (justify must
+    // not double-count grown space - here nothing grows), F7 (space-around is
+    // extra/2n at the edges, not extra/(n+1)) and F12 (reverse directions
+    // mirror within the line).
+    for (const dir of DIRECTIONS)
+    {
+        const isRow = dir.startsWith ('row');
+
+        for (const jc of JUSTIFY)
+        {
+            cases.push (flexCase ('justify/' + dir + '/' + jc,
+                { flexDirection: dir, justifyContent: jc,
+                  width: isRow ? 400 : 100, height: isRow ? 100 : 400,
+                  alignItems: 'flex-start' },
+                [
+                    item (isRow ? 60 : 40, isRow ? 40 : 60),
+                    item (isRow ? 60 : 40, isRow ? 40 : 60),
+                    item (isRow ? 60 : 40, isRow ? 40 : 60)
+                ]));
+        }
+    }
+
+    // --- Set B: direction x align-items (single line) ---------------------
+    // The container is single-line, so per CSS align-content does not apply and
+    // the line's cross size IS the container's cross size. Item 1 has an auto
+    // cross size (stretches), item 2 has a definite one (must not stretch, F9),
+    // item 3 is definite and shorter. Covers F1 and F9 together, which is the
+    // pairing the plan requires because they can silently cancel.
+    for (const dir of DIRECTIONS)
+    {
+        const isRow = dir.startsWith ('row');
+
+        for (const ai of ALIGN_ITEMS)
+        {
+            cases.push (flexCase ('alignItems/' + dir + '/' + ai,
+                { flexDirection: dir, alignItems: ai,
+                  width: isRow ? 300 : 120, height: isRow ? 120 : 300 },
+                [
+                    isRow ? item (60, null) : item (null, 60),
+                    isRow ? item (60, 50) : item (50, 60),
+                    isRow ? item (60, 24) : item (24, 60)
+                ]));
+        }
+    }
+
+    // --- Set C: wrap x align-content --------------------------------------
+    // Five 100px items in a 250px row wrap onto three lines, so the middle line
+    // is neither first nor last. Covers F5 (space-between must accumulate the
+    // preceding lines' cross sizes) and F8 (every align-content mode needs a
+    // per-line leading offset, not just the first line).
+    for (const wrap of ['wrap', 'wrap-reverse'])
+    {
+        for (const ac of ALIGN_CONTENT)
+        {
+            cases.push (flexCase ('alignContent/row/' + wrap + '/' + ac,
+                { flexWrap: wrap, alignContent: ac, width: 250, height: 200,
+                  alignItems: 'flex-start' },
+                [item (100, 30), item (100, 30), item (100, 30), item (100, 30), item (100, 30)]));
+
+            cases.push (flexCase ('alignContent/column/' + wrap + '/' + ac,
+                { flexDirection: 'column', flexWrap: wrap, alignContent: ac,
+                  width: 200, height: 250, alignItems: 'flex-start' },
+                [item (30, 100), item (30, 100), item (30, 100), item (30, 100), item (30, 100)]));
+        }
+    }
+
+    // --- Set C2: wrap-reverse mirroring -----------------------------------
+    // wrap-reverse flips the cross axis, so it is not enough to reverse the
+    // line order: align-items must also resolve against the flipped axis, or a
+    // short item in a tall line lands on the wrong edge. Uniform item sizes (as
+    // in Set C) cannot tell the two implementations apart, so these lines mix
+    // heights deliberately.
+    for (const ai of ['flex-start', 'flex-end', 'center', 'stretch'])
+    {
+        cases.push (flexCase ('wrapReverse/alignItems/' + ai,
+            { flexWrap: 'wrap-reverse', alignItems: ai, alignContent: 'flex-start',
+              width: 250, height: 200 },
+            [item (100, 60), item (100, 20), item (100, 40), item (100, null)]));
+
+        cases.push (flexCase ('wrapReverse/column/alignItems/' + ai,
+            { flexDirection: 'column', flexWrap: 'wrap-reverse', alignItems: ai,
+              alignContent: 'flex-start', width: 200, height: 250 },
+            [item (60, 100), item (20, 100), item (40, 100), item (null, 100)]));
+    }
+
+    // Cross margins under wrap-reverse: the flipped axis makes margin-bottom
+    // the leading margin, so an implementation that mirrors positions but not
+    // margin roles lands these items on the wrong edge.
+    cases.push (flexCase ('wrapReverse/crossMargins',
+        { flexWrap: 'wrap-reverse', alignItems: 'flex-start', alignContent: 'flex-start',
+          width: 250, height: 200 },
+        [item (100, 60), item (100, 20, { margin: [0, 0, 7, 13] }),
+         item (100, 40), item (100, 10, { margin: [0, 0, 3, 9] })]));
+
+    // Reverse direction combined with a gap: the gap must land between items in
+    // the mirrored order too.
+    cases.push (flexCase ('gap/rowReverse/20',
+        { flexDirection: 'row-reverse', gap: 20, width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40), item (60, 40)]));
+
+    // Single-line-by-content but still a wrapping container: CSS applies
+    // align-content here (unlike nowrap, where it never applies), so this is
+    // the case that pins down exactly what "single-line" means in F1.
+    for (const ac of ALIGN_CONTENT)
+    {
+        cases.push (flexCase ('wrapOneLine/alignContent/' + ac,
+            { flexWrap: 'wrap', alignContent: ac, width: 300, height: 200,
+              alignItems: 'flex-start' },
+            [item (100, 40), item (100, 40)]));
+
+        cases.push (flexCase ('noWrapOneLine/alignContent/' + ac,
+            { flexWrap: 'nowrap', alignContent: ac, width: 300, height: 200,
+              alignItems: 'flex-start' },
+            [item (100, 40), item (100, 40)]));
+    }
+
+    // align-content: stretch must grow the LINE, while items with a definite
+    // cross size keep theirs and auto items fill the grown line.
+    cases.push (flexCase ('wrapOneLine/stretchGrowsLineNotDefiniteItems',
+        { flexWrap: 'wrap', alignContent: 'stretch', alignItems: 'stretch',
+          width: 300, height: 200 },
+        [item (100, 40), item (100, null)]));
+
+    // --- Set D: gaps ------------------------------------------------------
+    // F6: line breaking must count the gaps already consumed on the line. With
+    // gap 20 and 100px items in 250px, only two items fit per line (100+20+100
+    // = 220 <= 250 but a third needs 340), so the correct result is 3 lines.
+    cases.push (flexCase ('gap/wrap/row/20',
+        { flexWrap: 'wrap', gap: 20, width: 250, height: 200, alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30), item (100, 30), item (100, 30), item (100, 30)]));
+
+    cases.push (flexCase ('gap/wrap/column/20',
+        { flexDirection: 'column', flexWrap: 'wrap', gap: 20, width: 200, height: 250,
+          alignItems: 'flex-start' },
+        [item (30, 100), item (30, 100), item (30, 100), item (30, 100), item (30, 100)]));
+
+    cases.push (flexCase ('gap/nowrap/row/24',
+        { gap: 24, width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40), item (60, 40)]));
+
+    // A gap larger than the container: every item still gets its own line.
+    cases.push (flexCase ('gap/wrap/row/oversized',
+        { flexWrap: 'wrap', gap: 400, width: 250, height: 400, alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30)]));
+
+    // Gap combined with grow: F3's canonical failure. The items consume the
+    // whole line, so free space is 0 and justify-content must be a no-op.
+    for (const jc of JUSTIFY)
+    {
+        cases.push (flexCase ('gapGrow/' + jc,
+            { gap: 20, justifyContent: jc, width: 320, height: 100, alignItems: 'flex-start' },
+            [item (0, 40, { flexGrow: 1 }), item (0, 40, { flexGrow: 1 }), item (0, 40, { flexGrow: 1 })]));
+    }
+
+    // --- Set E: flexible lengths ------------------------------------------
+    // F2: flex: 1 1 0 is the most common flex idiom and needs flex-basis 0 to
+    // be representable at all.
+    cases.push (flexCase ('flex/oneOneZero',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexGrow: 1, flexShrink: 1, flexBasis: 0 }),
+         item (null, 40, { flexGrow: 1, flexShrink: 1, flexBasis: 0 }),
+         item (null, 40, { flexGrow: 1, flexShrink: 1, flexBasis: 0 })]));
+
+    cases.push (flexCase ('flex/oneOneZeroWeighted',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexGrow: 1, flexBasis: 0 }),
+         item (null, 40, { flexGrow: 2, flexBasis: 0 }),
+         item (null, 40, { flexGrow: 3, flexBasis: 0 })]));
+
+    cases.push (flexCase ('flex/growFromBasis',
+        { width: 400, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexGrow: 1, flexBasis: 50 }),
+         item (null, 40, { flexGrow: 1, flexBasis: 100 }),
+         item (null, 40, { flexGrow: 0, flexBasis: 50 })]));
+
+    // F4: the freeze-and-loop. Item 1 wants to grow to 150 but is capped at 80,
+    // so the 70px it cannot take must be redistributed to the others.
+    cases.push (flexCase ('flex/growClampedByMaxRedistributes',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexGrow: 1, flexBasis: 0, maxWidth: 80 }),
+         item (null, 40, { flexGrow: 1, flexBasis: 0 })]));
+
+    cases.push (flexCase ('flex/growClampedByMaxTwiceRedistributes',
+        { width: 400, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexGrow: 1, flexBasis: 0, maxWidth: 40 }),
+         item (null, 40, { flexGrow: 1, flexBasis: 0, maxWidth: 60 }),
+         item (null, 40, { flexGrow: 1, flexBasis: 0 })]));
+
+    // F4 on the shrink side: the proportional pass wants 75px each, but item 1
+    // cannot go below 80, so it freezes there and the remaining deficit is
+    // re-spread over item 2 (which ends at 70, not 75).
+    cases.push (flexCase ('flex/shrinkClampedByMinRedistributes',
+        { width: 150, height: 100, alignItems: 'flex-start' },
+        [item (200, 40, { flexShrink: 1, minWidth: 80 }),
+         item (200, 40, { flexShrink: 1 })]));
+
+    // The same on the cross axis of a column container.
+    cases.push (flexCase ('flex/shrinkClampedByMinRedistributesColumn',
+        { flexDirection: 'column', width: 100, height: 150, alignItems: 'flex-start' },
+        [item (40, 200, { flexShrink: 1, minHeight: 80 }),
+         item (40, 200, { flexShrink: 1 })]));
+
+    cases.push (flexCase ('flex/shrinkWeighted',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (200, 40, { flexShrink: 1 }),
+         item (200, 40, { flexShrink: 3 })]));
+
+    cases.push (flexCase ('flex/shrinkDisabled',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (200, 40, { flexShrink: 0 }), item (200, 40, { flexShrink: 1 })]));
+
+    cases.push (flexCase ('flex/growColumn',
+        { flexDirection: 'column', width: 100, height: 300, alignItems: 'flex-start' },
+        [item (40, null, { flexGrow: 1, flexBasis: 0 }),
+         item (40, null, { flexGrow: 3, flexBasis: 0 })]));
+
+    cases.push (flexCase ('flex/noGrowLeavesFreeSpace',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (50, 40), item (50, 40)]));
+
+    // --- Set F: margins, order, baseline ----------------------------------
+    cases.push (flexCase ('margin/row',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: [10, 5, 8, 0] }), item (60, 40, { margin: [0, 12, 4, 0] })]));
+
+    // F12: in row-reverse, margin-left must stay a LEFT margin.
+    cases.push (flexCase ('margin/rowReverse',
+        { flexDirection: 'row-reverse', width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: [10, 5, 8, 0] }), item (60, 40, { margin: [0, 12, 4, 0] })]));
+
+    cases.push (flexCase ('margin/columnReverse',
+        { flexDirection: 'column-reverse', width: 100, height: 300, alignItems: 'flex-start' },
+        [item (40, 60, { margin: [10, 5, 8, 0] }), item (40, 60, { margin: [0, 12, 4, 0] })]));
+
+    // Cross-axis margins under stretch: the stretched size is the line minus
+    // both cross margins.
+    cases.push (flexCase ('margin/stretchCross',
+        { width: 300, height: 100, alignItems: 'stretch' },
+        [item (60, null, { margin: [0, 0, 10, 10] }), item (60, null)]));
+
+    // F10: equal order values must keep source order (stable sort).
+    cases.push (flexCase ('order/mixed',
+        { width: 400, height: 100, alignItems: 'flex-start' },
+        [item (40, 40, { order: 2 }), item (50, 40, { order: 1 }),
+         item (60, 40, { order: 1 }), item (70, 40, { order: 0 })]));
+
+    // F11: baseline. Empty divs synthesize their baseline from the bottom
+    // margin edge, so bottom edges line up; a min/max clamp must be applied
+    // before the baseline is derived.
+    cases.push (flexCase ('baseline/plain',
+        { width: 300, height: 120, alignItems: 'baseline' },
+        [item (60, 40), item (60, 70), item (60, 20)]));
+
+    cases.push (flexCase ('baseline/withTopMargins',
+        { width: 300, height: 120, alignItems: 'baseline' },
+        [item (60, 40, { margin: [0, 0, 15, 0] }), item (60, 70), item (60, 20, { margin: [0, 0, 5, 0] })]));
+
+    cases.push (flexCase ('baseline/clamped',
+        { width: 300, height: 120, alignItems: 'baseline' },
+        [item (60, 90, { maxHeight: 50 }), item (60, 70)]));
+
+    // --- Set G: percentages, min/max, align-self --------------------------
+    cases.push (flexCase ('percent/row',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { widthPercent: 25 }), item (null, 40, { widthPercent: 50 })]));
+
+    cases.push (flexCase ('percent/column',
+        { flexDirection: 'column', width: 100, height: 300, alignItems: 'flex-start' },
+        [item (40, null, { heightPercent: 25 }), item (40, null, { heightPercent: 50 })]));
+
+    cases.push (flexCase ('percent/cross',
+        { width: 300, height: 200, alignItems: 'flex-start' },
+        [item (60, null, { heightPercent: 25 }), item (60, null, { heightPercent: 50 })]));
+
+    cases.push (flexCase ('minmax/crossClamped',
+        { width: 300, height: 200, alignItems: 'stretch' },
+        [item (60, null, { maxHeight: 60 }), item (60, null, { minHeight: 250 }), item (60, null)]));
+
+    for (const as of ['flex-start', 'flex-end', 'center', 'stretch', 'baseline'])
+    {
+        cases.push (flexCase ('alignSelf/' + as,
+            { width: 300, height: 120, alignItems: 'flex-start' },
+            [item (60, 40), item (60, null, { alignSelf: as }), item (60, 80)]));
+    }
+
+    // --- Set H: degenerate ------------------------------------------------
+    cases.push (flexCase ('degenerate/singleItem',
+        { width: 300, height: 100 },
+        [autoItem()]));
+
+    cases.push (flexCase ('degenerate/zeroSizedItems',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (0, 0), item (0, 0)]));
+
+    cases.push (flexCase ('degenerate/overflowNoWrap',
+        { width: 100, height: 100, alignItems: 'flex-start' },
+        [item (200, 40, { flexShrink: 0 }), item (200, 40, { flexShrink: 0 })]));
+
+    cases.push (flexCase ('degenerate/zeroHeightContainer',
+        { width: 300, height: 0, alignItems: 'stretch' },
+        [item (60, null), item (60, null)]));
+
+
+    // --- Set I: Phase 4 - independent gaps, padding, auto margins ---------
+    // row-gap and column-gap are separate properties; the `gap` shorthand just
+    // sets both. In a row container column-gap separates items and row-gap
+    // separates lines, and in a column container it is the other way round.
+    cases.push (flexCase ('gaps/independent/row',
+        { flexWrap: 'wrap', rowGap: 40, columnGap: 10, width: 250, height: 250,
+          alignContent: 'flex-start', alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30), item (100, 30), item (100, 30), item (100, 30)]));
+
+    cases.push (flexCase ('gaps/independent/column',
+        { flexDirection: 'column', flexWrap: 'wrap', rowGap: 10, columnGap: 40,
+          width: 250, height: 250, alignContent: 'flex-start', alignItems: 'flex-start' },
+        [item (30, 100), item (30, 100), item (30, 100), item (30, 100), item (30, 100)]));
+
+    cases.push (flexCase ('gaps/rowGapOnly',
+        { flexWrap: 'wrap', rowGap: 25, width: 250, height: 250,
+          alignContent: 'flex-start', alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30), item (100, 30)]));
+
+    cases.push (flexCase ('gaps/columnGapOnly',
+        { flexWrap: 'wrap', columnGap: 25, width: 250, height: 250,
+          alignContent: 'flex-start', alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30), item (100, 30)]));
+
+    // Container padding shrinks the content box every item is laid out in.
+    cases.push (flexCase ('padding/row',
+        { padding: [20, 10, 5, 15], width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40)]));
+
+    cases.push (flexCase ('padding/stretch',
+        { padding: [20, 10, 5, 15], width: 300, height: 100, alignItems: 'stretch' },
+        [item (60, null), item (60, null)]));
+
+    cases.push (flexCase ('padding/justifyEnd',
+        { padding: [20, 10, 5, 15], width: 300, height: 100,
+          justifyContent: 'flex-end', alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40)]));
+
+    cases.push (flexCase ('padding/rowReverse',
+        { padding: [20, 10, 5, 15], flexDirection: 'row-reverse', width: 300, height: 100,
+          alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40)]));
+
+    cases.push (flexCase ('padding/wrap',
+        { padding: [20, 20, 10, 10], flexWrap: 'wrap', width: 260, height: 200,
+          alignContent: 'flex-start', alignItems: 'flex-start' },
+        [item (100, 30), item (100, 30), item (100, 30)]));
+
+    // Auto margins absorb the free space on their axis BEFORE justify-content
+    // gets a look in, which is how `margin-left: auto` pushes one item to the
+    // far end of a toolbar.
+    cases.push (flexCase ('autoMargin/pushRight',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40, { margin: ['auto', 0, 0, 0] })]));
+
+    cases.push (flexCase ('autoMargin/centerOne',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: ['auto', 'auto', 0, 0] })]));
+
+    cases.push (flexCase ('autoMargin/sharedBetweenTwo',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: ['auto', 0, 0, 0] }), item (60, 40, { margin: ['auto', 0, 0, 0] })]));
+
+    // An auto margin wins over justify-content entirely.
+    cases.push (flexCase ('autoMargin/overridesJustifyContent',
+        { width: 300, height: 100, justifyContent: 'center', alignItems: 'flex-start' },
+        [item (60, 40), item (60, 40, { margin: ['auto', 0, 0, 0] })]));
+
+    // With no free space left there is nothing for the auto margin to take.
+    cases.push (flexCase ('autoMargin/noFreeSpace',
+        { width: 120, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { flexShrink: 0 }), item (60, 40, { flexShrink: 0, margin: ['auto', 0, 0, 0] })]));
+
+    // On the cross axis an auto margin also suppresses stretching.
+    cases.push (flexCase ('autoMargin/crossPushesDown',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: [0, 0, 'auto', 0] }), item (60, 40)]));
+
+    cases.push (flexCase ('autoMargin/crossCenters',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (60, 40, { margin: [0, 0, 'auto', 'auto'] }), item (60, 40)]));
+
+    cases.push (flexCase ('autoMargin/crossBeatsStretch',
+        { width: 300, height: 100, alignItems: 'stretch' },
+        [item (60, null, { margin: [0, 0, 'auto', 0] }), item (60, null)]));
+
+    cases.push (flexCase ('autoMargin/column',
+        { flexDirection: 'column', width: 100, height: 300, alignItems: 'flex-start' },
+        [item (40, 60), item (40, 60, { margin: [0, 0, 'auto', 0] })]));
+
+    // flex-basis as a percentage of the container's main size.
+    cases.push (flexCase ('flexBasisPercent/row',
+        { width: 300, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexBasisPercent: 25 }), item (null, 40, { flexBasisPercent: 50 })]));
+
+    cases.push (flexCase ('flexBasisPercent/column',
+        { flexDirection: 'column', width: 100, height: 300, alignItems: 'flex-start' },
+        [item (40, null, { flexBasisPercent: 25 }), item (40, null, { flexBasisPercent: 50 })]));
+
+    cases.push (flexCase ('flexBasisPercent/withGrow',
+        { width: 400, height: 100, alignItems: 'flex-start' },
+        [item (null, 40, { flexBasisPercent: 25, flexGrow: 1 }),
+         item (null, 40, { flexBasisPercent: 25, flexGrow: 1 })]));
+
+    return cases;
+}
+
+//==============================================================================
+// The Grid corpus.
+
+function buildGridCorpus()
+{
+    const cases = [];
+
+    function autoItems (n)
+    {
+        const out = [];
+        for (let i = 0; i < n; ++i)
+            out.push ({ column: -1, row: -1 });
+        return out;
+    }
+
+    // G1: fr tracks must subtract the gaps before dividing. With a 300px grid,
+    // 3 equal fr columns and a 30px column gap the tracks are 80px, not 100px.
+    cases.push (gridCase ('fr/noGap',
+        { templateColumns: ['1fr', '1fr', '1fr'], templateRows: ['50px'] }, autoItems (3)));
+
+    cases.push (gridCase ('fr/columnGap',
+        { templateColumns: ['1fr', '1fr', '1fr'], templateRows: ['50px'], columnGap: 30 }, autoItems (3)));
+
+    cases.push (gridCase ('fr/rowGap',
+        { templateColumns: ['100px'], templateRows: ['1fr', '1fr', '1fr'], rowGap: 20 }, autoItems (3)));
+
+    cases.push (gridCase ('fr/bothGaps',
+        { templateColumns: ['1fr', '1fr'], templateRows: ['1fr', '1fr'], columnGap: 20, rowGap: 40 },
+        autoItems (4)));
+
+    cases.push (gridCase ('fr/weighted',
+        { templateColumns: ['1fr', '2fr', '1fr'], templateRows: ['50px'], columnGap: 20 }, autoItems (3)));
+
+    cases.push (gridCase ('fr/mixedWithPx',
+        { templateColumns: ['80px', '1fr', '1fr'], templateRows: ['50px'], columnGap: 10 }, autoItems (3)));
+
+    // Fr tracks in templateRows only - the plan notes fr/auto were only ever
+    // exercised on columns.
+    cases.push (gridCase ('fr/rowsOnly',
+        { templateColumns: ['150px', '150px'], templateRows: ['1fr', '2fr'], rowGap: 10 }, autoItems (4)));
+
+    // Overconstrained: the fixed tracks plus the gaps already exceed the grid,
+    // so the fr tracks get nothing.
+    cases.push (gridCase ('fr/overconstrained',
+        { templateColumns: ['200px', '200px', '1fr'], templateRows: ['50px'], columnGap: 20 },
+        autoItems (3)));
+
+    // --- placement --------------------------------------------------------
+    cases.push (gridCase ('placement/explicit',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'] },
+        [{ column: 0, row: 0 }, { column: 2, row: 0 }, { column: 1, row: 1 }]));
+
+    cases.push (gridCase ('placement/spans',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'], columnGap: 10, rowGap: 10 },
+        [{ column: 0, row: 0, columnSpan: 2 }, { column: 2, row: 0, rowSpan: 2 }, { column: 0, row: 1 }]));
+
+    // G2: an item with an explicit row but an auto column must keep its row.
+    cases.push (gridCase ('placement/rowDefiniteColumnAuto',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px', '50px'] },
+        [{ column: -1, row: 2 }, { column: -1, row: -1 }, { column: -1, row: 2 }]));
+
+    cases.push (gridCase ('placement/columnDefiniteRowAuto',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px', '50px'] },
+        [{ column: 2, row: -1 }, { column: 2, row: -1 }, { column: -1, row: -1 }]));
+
+    // G3: auto-placed items must not claim a cell a LATER explicit item owns.
+    cases.push (gridCase ('placement/autoAvoidsLaterExplicit',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'] },
+        [{ column: -1, row: -1 }, { column: 0, row: 0 }, { column: -1, row: -1 }]));
+
+    cases.push (gridCase ('placement/autoAvoidsLaterExplicitSpan',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'] },
+        [{ column: -1, row: -1 }, { column: -1, row: -1 }, { column: 0, row: 0, columnSpan: 2 }]));
+
+    cases.push (gridCase ('placement/autoWraps',
+        { templateColumns: ['100px', '100px'], templateRows: ['50px', '50px', '50px'] },
+        autoItems (5)));
+
+    cases.push (gridCase ('placement/autoWithSpan',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'] },
+        [{ column: -1, row: -1, columnSpan: 2 }, { column: -1, row: -1, columnSpan: 2 }]));
+
+    // G4: implicit tracks past the template use grid-auto-columns/rows.
+    cases.push (gridCase ('placement/implicitRows',
+        { templateColumns: ['100px', '100px'], templateRows: ['50px'], autoRows: 40 },
+        autoItems (5)));
+
+    cases.push (gridCase ('placement/implicitColumns',
+        { templateColumns: [], templateRows: ['50px'], autoColumns: 90 },
+        [{ column: 0, row: 0 }, { column: 1, row: 0 }, { column: 2, row: 0 }]));
+
+    // --- alignment / sizing -----------------------------------------------
+    for (const ji of ['start', 'end', 'center', 'stretch'])
+    {
+        cases.push (gridCase ('align/justifyItems/' + ji,
+            { templateColumns: ['150px', '150px'], templateRows: ['80px'], justifyItems: ji, alignItems: 'stretch' },
+            [{ column: 0, row: 0, width: 40 }, { column: 1, row: 0, width: 60 }]));
+    }
+
+    for (const ai of ['start', 'end', 'center', 'stretch'])
+    {
+        cases.push (gridCase ('align/alignItems/' + ai,
+            { templateColumns: ['150px', '150px'], templateRows: ['80px'], alignItems: ai, justifyItems: 'stretch' },
+            [{ column: 0, row: 0, height: 20 }, { column: 1, row: 0, height: 50 }]));
+    }
+
+    // Baseline alignment inside a row. With no text to measure, a browser
+    // synthesizes the baseline from the box's bottom edge, so the items in a
+    // row end up bottom-aligned against the tallest baseline item.
+    cases.push (gridCase ('align/alignItems/baseline',
+        { templateColumns: ['150px', '150px'], templateRows: ['80px'], alignItems: 'baseline' },
+        [{ column: 0, row: 0, height: 20 }, { column: 1, row: 0, height: 50 }]));
+
+    cases.push (gridCase ('align/alignItems/baselineTwoRows',
+        { templateColumns: ['100px', '100px'], templateRows: ['60px', '60px'], alignItems: 'baseline' },
+        [{ column: 0, row: 0, height: 20 }, { column: 1, row: 0, height: 40 },
+         { column: 0, row: 1, height: 50 }, { column: 1, row: 1, height: 15 }]));
+
+    cases.push (gridCase ('align/margins',
+        { templateColumns: ['150px', '150px'], templateRows: ['80px'], columnGap: 10 },
+        [{ column: 0, row: 0, margin: [8, 4, 6, 2] }, { column: 1, row: 0, margin: [0, 0, 0, 0] }]));
+
+    cases.push (gridCase ('size/percent',
+        { templateColumns: ['200px'], templateRows: ['100px'], justifyItems: 'start', alignItems: 'start' },
+        [{ column: 0, row: 0, widthPercent: 50, heightPercent: 25 }]));
+
+    cases.push (gridCase ('size/minMax',
+        { templateColumns: ['200px', '200px'], templateRows: ['100px'], justifyItems: 'stretch', alignItems: 'stretch' },
+        [{ column: 0, row: 0, maxWidth: 60 }, { column: 1, row: 0, minWidth: 250 }]));
+
+
+    // --- Phase 5a: minmax, percent and the iterative fr resolution --------
+    // A track whose fr share would fall below its own minimum freezes at that
+    // minimum and the remainder is redistributed - the same freeze-and-loop
+    // shape as flex-grow, and the reason `minmax(100px, 1fr)` behaves.
+    cases.push (gridCase ('track/minmaxFixed',
+        { templateColumns: ['minmax(50px, 200px)', '100px'], templateRows: ['50px'] },
+        autoItems (2)));
+
+    cases.push (gridCase ('track/minmaxClampedByContainer',
+        { templateColumns: ['minmax(50px, 200px)', '100px'], templateRows: ['50px'], width: 120 },
+        autoItems (2)));
+
+    cases.push (gridCase ('track/minmaxWithFr',
+        { templateColumns: ['minmax(100px, 1fr)', 'minmax(100px, 1fr)', '1fr'], templateRows: ['50px'],
+          width: 250 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/minmaxWithFrRoomy',
+        { templateColumns: ['minmax(100px, 1fr)', 'minmax(100px, 1fr)', '1fr'], templateRows: ['50px'],
+          width: 600 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/minmaxFrFreezesOne',
+        { templateColumns: ['minmax(160px, 1fr)', '1fr', '1fr'], templateRows: ['50px'], width: 300 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/percent',
+        { templateColumns: ['25%', '50%', '25%'], templateRows: ['50px'] }, autoItems (3)));
+
+    cases.push (gridCase ('track/percentWithGap',
+        { templateColumns: ['25%', '25%'], templateRows: ['50px'], columnGap: 20 }, autoItems (2)));
+
+    cases.push (gridCase ('track/percentRows',
+        { templateColumns: ['100px'], templateRows: ['25%', '50%'] }, autoItems (2)));
+
+    cases.push (gridCase ('track/minmaxPercent',
+        { templateColumns: ['minmax(20%, 1fr)', '1fr'], templateRows: ['50px'], width: 400 },
+        autoItems (2)));
+
+    // repeat() with an explicit count is just a shorthand for the expanded
+    // list, so it must produce exactly the same tracks.
+    cases.push (gridCase ('track/repeatFixed',
+        { templateColumns: ['repeat(3, 1fr)'], templateRows: ['50px'], columnGap: 15 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/repeatMixed',
+        { templateColumns: ['80px', 'repeat(2, minmax(40px, 1fr))'], templateRows: ['50px'], width: 400 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/repeatRows',
+        { templateColumns: ['100px'], templateRows: ['repeat(3, 40px)'], rowGap: 10 },
+        autoItems (3)));
+
+    // auto-fill's repetition count is pure arithmetic on the container size and
+    // the gap, so unlike auto-fit it needs no content measurement.
+    cases.push (gridCase ('track/autoFill',
+        { templateColumns: ['repeat(auto-fill, 100px)'], templateRows: ['50px'], width: 350 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/autoFillWithGap',
+        { templateColumns: ['repeat(auto-fill, 100px)'], templateRows: ['50px'], width: 350, columnGap: 10 },
+        autoItems (3)));
+
+    cases.push (gridCase ('track/autoFillMinmax',
+        { templateColumns: ['repeat(auto-fill, minmax(90px, 1fr))'], templateRows: ['50px'],
+          width: 300, columnGap: 10 },
+        autoItems (3)));
+
+    // --- Phase 5a: grid-auto-flow ----------------------------------------
+    cases.push (gridCase ('flow/column',
+        { templateColumns: ['100px', '100px'], templateRows: ['50px', '50px'], autoFlow: 'column' },
+        autoItems (4)));
+
+    cases.push (gridCase ('flow/columnWraps',
+        { templateColumns: ['100px', '100px'], templateRows: ['50px', '50px'], autoFlow: 'column' },
+        autoItems (5)));
+
+    // Sparse flow leaves the hole a too-wide item could not fit into; dense
+    // flow goes back and fills it with a later item that does fit.
+    cases.push (gridCase ('flow/rowSparseLeavesHole',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'], autoFlow: 'row' },
+        [{ column: -1, row: -1 }, { column: -1, row: -1, columnSpan: 3 }, { column: -1, row: -1 }]));
+
+    cases.push (gridCase ('flow/rowDenseFillsHole',
+        { templateColumns: ['100px', '100px', '100px'], templateRows: ['50px', '50px'],
+          autoFlow: 'row dense' },
+        [{ column: -1, row: -1 }, { column: -1, row: -1, columnSpan: 3 }, { column: -1, row: -1 }]));
+
+    cases.push (gridCase ('flow/columnDense',
+        { templateColumns: ['100px', '100px'], templateRows: ['50px', '50px', '50px'],
+          autoFlow: 'column dense' },
+        [{ column: -1, row: -1 }, { column: -1, row: -1, rowSpan: 3 }, { column: -1, row: -1 }]));
+
+    // --- Phase 5a: container justify-content / align-content --------------
+    for (const jc of ['start', 'end', 'center', 'space-between', 'space-around', 'space-evenly'])
+    {
+        cases.push (gridCase ('content/justify/' + jc,
+            { templateColumns: ['60px', '60px', '60px'], templateRows: ['50px'],
+              justifyContent: jc, width: 300 },
+            autoItems (3)));
+    }
+
+    for (const ac of ['start', 'end', 'center', 'space-between', 'space-around', 'space-evenly'])
+    {
+        cases.push (gridCase ('content/align/' + ac,
+            { templateColumns: ['100px'], templateRows: ['30px', '30px', '30px'],
+              alignContent: ac, height: 240 },
+            autoItems (3)));
+    }
+
+    cases.push (gridCase ('content/justifyWithGap',
+        { templateColumns: ['60px', '60px'], templateRows: ['50px'], columnGap: 20,
+          justifyContent: 'center', width: 300 },
+        autoItems (2)));
+
+    cases.push (gridCase ('content/bothCentered',
+        { templateColumns: ['60px', '60px'], templateRows: ['40px', '40px'],
+          justifyContent: 'center', alignContent: 'center' },
+        autoItems (4)));
+
+    // --- Phase 5a: named lines and template areas -------------------------
+    cases.push (gridCase ('named/lines',
+        { templateColumns: ['[left]', '100px', '[mid]', '100px', '[right]', '100px'],
+          templateRows: ['[top]', '50px', '[bottom]', '50px'] },
+        [{ columnStartName: 'mid', rowStartName: 'top' },
+         { columnStartName: 'left', rowStartName: 'bottom' },
+         { columnStartName: 'right', rowStartName: 'bottom' }]));
+
+    cases.push (gridCase ('named/lineWithSpan',
+        { templateColumns: ['[a]', '100px', '[b]', '100px', '[c]', '100px'],
+          templateRows: ['50px', '50px'] },
+        [{ columnStartName: 'a', row: 0, columnSpan: 2 }, { columnStartName: 'c', row: 0 }]));
+
+    cases.push (gridCase ('named/areas',
+        { templateColumns: ['100px', '100px', '100px'],
+          templateRows: ['50px', '50px', '50px'],
+          areas: ['header header header', 'side main main', 'side foot foot'] },
+        [{ area: 'header' }, { area: 'side' }, { area: 'main' }, { area: 'foot' }]));
+
+    cases.push (gridCase ('named/areasWithGaps',
+        { templateColumns: ['100px', '100px'],
+          templateRows: ['50px', '50px'],
+          columnGap: 10, rowGap: 20,
+          areas: ['a b', 'c c'] },
+        [{ area: 'a' }, { area: 'b' }, { area: 'c' }]));
+
+    cases.push (gridCase ('named/areasMixedWithAuto',
+        { templateColumns: ['100px', '100px', '100px'],
+          templateRows: ['50px', '50px'],
+          areas: ['head head head', '. . .'] },
+        [{ area: 'head' }, { column: -1, row: -1 }, { column: -1, row: -1 }]));
+
+    return cases;
+}
+
+//==============================================================================
+// Rendering.
+
+function applyMargin (el, m)
+{
+    if (! m)
+        return;
+
+    const v = x => (x === 'auto' ? 'auto' : x + 'px');
+    el.style.marginLeft = v (m[0]);
+    el.style.marginRight = v (m[1]);
+    el.style.marginTop = v (m[2]);
+    el.style.marginBottom = v (m[3]);
+}
+
+function applyBoxSizing (el, spec)
+{
+    if (spec.widthPercent !== undefined)
+        el.style.width = spec.widthPercent + '%';
+    else if (spec.width !== undefined && spec.width !== null)
+        el.style.width = spec.width + 'px';
+
+    if (spec.heightPercent !== undefined)
+        el.style.height = spec.heightPercent + '%';
+    else if (spec.height !== undefined && spec.height !== null)
+        el.style.height = spec.height + 'px';
+
+    if (spec.minWidth !== undefined) el.style.minWidth = spec.minWidth + 'px';
+    if (spec.maxWidth !== undefined) el.style.maxWidth = spec.maxWidth + 'px';
+    if (spec.minHeight !== undefined) el.style.minHeight = spec.minHeight + 'px';
+    if (spec.maxHeight !== undefined) el.style.maxHeight = spec.maxHeight + 'px';
+}
+
+function measure (container)
+{
+    const base = container.getBoundingClientRect();
+    const out = [];
+
+    for (const child of container.children)
+    {
+        const r = child.getBoundingClientRect();
+        out.push ({
+            x: +(r.left - base.left).toFixed (4),
+            y: +(r.top - base.top).toFixed (4),
+            w: +r.width.toFixed (4),
+            h: +r.height.toFixed (4)
+        });
+    }
+
+    return out;
+}
+
+function renderFlexCase (c)
+{
+    const host = document.createElement ('div');
+    host.className = 'container';
+    host.style.display = 'flex';
+    host.style.width = c.container.width + 'px';
+    host.style.height = c.container.height + 'px';
+    host.style.flexDirection = c.container.flexDirection;
+    host.style.flexWrap = c.container.flexWrap;
+    host.style.justifyContent = c.container.justifyContent;
+    host.style.alignItems = c.container.alignItems;
+    host.style.alignContent = c.container.alignContent;
+    // rowGap / columnGap default to -1 meaning "fall back to the gap shorthand".
+    const rg = c.container.rowGap >= 0 ? c.container.rowGap : c.container.gap;
+    const cg = c.container.columnGap >= 0 ? c.container.columnGap : c.container.gap;
+    host.style.rowGap = rg + 'px';
+    host.style.columnGap = cg + 'px';
+
+    const p = c.container.padding || [0, 0, 0, 0];
+    host.style.paddingLeft = p[0] + 'px';
+    host.style.paddingRight = p[1] + 'px';
+    host.style.paddingTop = p[2] + 'px';
+    host.style.paddingBottom = p[3] + 'px';
+
+    for (const spec of c.items)
+    {
+        const el = document.createElement ('div');
+        el.className = 'item';
+
+        applyBoxSizing (el, spec);
+        applyMargin (el, spec.margin);
+
+        // CSS defaults are flex-grow 0 / flex-shrink 1 / flex-basis auto, which
+        // are exactly the FlexItem defaults, so only explicit values are set.
+        el.style.flexGrow = spec.flexGrow !== undefined ? spec.flexGrow : 0;
+        el.style.flexShrink = spec.flexShrink !== undefined ? spec.flexShrink : 1;
+        el.style.flexBasis = spec.flexBasisPercent !== undefined
+            ? spec.flexBasisPercent + '%'
+            : ((spec.flexBasis !== undefined && spec.flexBasis !== null) ? spec.flexBasis + 'px' : 'auto');
+
+        if (spec.alignSelf !== undefined) el.style.alignSelf = spec.alignSelf;
+        if (spec.order !== undefined) el.style.order = spec.order;
+
+        host.appendChild (el);
+    }
+
+    document.body.appendChild (host);
+    const rects = measure (host);
+    document.body.removeChild (host);
+
+    return rects;
+}
+
+function renderGridCase (c)
+{
+    const host = document.createElement ('div');
+    host.className = 'container';
+    host.style.display = 'grid';
+    host.style.width = c.container.width + 'px';
+    host.style.height = c.container.height + 'px';
+    host.style.columnGap = c.container.columnGap + 'px';
+    host.style.rowGap = c.container.rowGap + 'px';
+    host.style.justifyItems = c.container.justifyItems;
+    host.style.alignItems = c.container.alignItems;
+    host.style.gridAutoColumns = c.container.autoColumns + 'px';
+    host.style.gridAutoRows = c.container.autoRows + 'px';
+    host.style.gridAutoFlow = c.container.autoFlow;
+    host.style.justifyContent = c.container.justifyContent;
+    host.style.alignContent = c.container.alignContent;
+
+    if (c.container.areas.length > 0)
+        host.style.gridTemplateAreas = c.container.areas.map (r => '"' + r + '"').join (' ');
+
+    if (c.container.templateColumns.length > 0)
+        host.style.gridTemplateColumns = c.container.templateColumns.join (' ');
+    if (c.container.templateRows.length > 0)
+        host.style.gridTemplateRows = c.container.templateRows.join (' ');
+
+    for (const spec of c.items)
+    {
+        const el = document.createElement ('div');
+        el.className = 'item';
+
+        applyBoxSizing (el, spec);
+        applyMargin (el, spec.margin);
+
+        // YUP grid lines are 0-based with -1 meaning auto-place; CSS lines are
+        // 1-based with `auto`. Convert here, in the one place that knows about
+        // the divergence (decision D3).
+        const colSpan = spec.columnSpan !== undefined ? spec.columnSpan : 1;
+        const rowSpan = spec.rowSpan !== undefined ? spec.rowSpan : 1;
+
+        el.style.gridColumn = (spec.column !== undefined && spec.column >= 0)
+            ? (spec.column + 1) + ' / span ' + colSpan
+            : 'auto / span ' + colSpan;
+        el.style.gridRow = (spec.row !== undefined && spec.row >= 0)
+            ? (spec.row + 1) + ' / span ' + rowSpan
+            : 'auto / span ' + rowSpan;
+
+        if (spec.justifySelf !== undefined) el.style.justifySelf = spec.justifySelf;
+        if (spec.alignSelf !== undefined) el.style.alignSelf = spec.alignSelf;
+
+        // A named area or named lines override the numeric placement above.
+        if (spec.area !== undefined)
+        {
+            el.style.gridArea = spec.area;
+        }
+        else
+        {
+            if (spec.columnStartName !== undefined)
+                el.style.gridColumn = spec.columnStartName + ' / span ' + colSpan;
+            if (spec.rowStartName !== undefined)
+                el.style.gridRow = spec.rowStartName + ' / span ' + rowSpan;
+        }
+
+        host.appendChild (el);
+    }
+
+    document.body.appendChild (host);
+    const rects = measure (host);
+    document.body.removeChild (host);
+
+    return rects;
+}
+
+//==============================================================================
+window.captureAll = function()
+{
+    const flex = buildFlexCorpus().map (c => Object.assign ({}, c, { expected: renderFlexCase (c) }));
+    const grid = buildGridCorpus().map (c => Object.assign ({}, c, { expected: renderGridCase (c) }));
+
+    return {
+        flexbox: { generator: 'tests/data/layout/capture.html', cases: flex },
+        grid: { generator: 'tests/data/layout/capture.html', cases: grid }
+    };
+};
+
+document.addEventListener ('DOMContentLoaded', function()
+{
+    const result = window.captureAll();
+    document.getElementById ('out').textContent =
+        'flexbox cases: ' + result.flexbox.cases.length + '\n' +
+        'grid cases: ' + result.grid.cases.length + '\n\n' +
+        'Call window.captureAll() to get the full JSON.';
+});
+</script>
+</body>
+</html>

@@ -60,6 +60,20 @@ FlexItem FlexItem::withFlex (float newFlexGrow) const
     return copy;
 }
 
+FlexItem FlexItem::withFlexShrink (float newFlexShrink) const
+{
+    auto copy = *this;
+    copy.flexShrink = newFlexShrink;
+    return copy;
+}
+
+FlexItem FlexItem::withFlexBasis (float newFlexBasis) const
+{
+    auto copy = *this;
+    copy.flexBasis = newFlexBasis;
+    return copy;
+}
+
 FlexItem FlexItem::withWidth (float newWidth) const
 {
     auto copy = *this;
@@ -71,6 +85,27 @@ FlexItem FlexItem::withHeight (float newHeight) const
 {
     auto copy = *this;
     copy.height = newHeight;
+    return copy;
+}
+
+FlexItem FlexItem::withWidthPercent (float newWidthPercent) const
+{
+    auto copy = *this;
+    copy.widthPercent = newWidthPercent;
+    return copy;
+}
+
+FlexItem FlexItem::withHeightPercent (float newHeightPercent) const
+{
+    auto copy = *this;
+    copy.heightPercent = newHeightPercent;
+    return copy;
+}
+
+FlexItem FlexItem::withFlexBasisPercent (float newFlexBasisPercent) const
+{
+    auto copy = *this;
+    copy.flexBasisPercent = newFlexBasisPercent;
     return copy;
 }
 
@@ -112,10 +147,27 @@ FlexItem FlexItem::withMargin (float newMargin) const
     return copy;
 }
 
+FlexItem FlexItem::withAutoMargins (bool left, bool right, bool top, bool bottom) const
+{
+    auto copy = *this;
+    copy.marginLeftAuto = left;
+    copy.marginRightAuto = right;
+    copy.marginTopAuto = top;
+    copy.marginBottomAuto = bottom;
+    return copy;
+}
+
 FlexItem FlexItem::withAlignSelf (AlignSelf newAlignSelf) const
 {
     auto copy = *this;
     copy.alignSelf = newAlignSelf;
+    return copy;
+}
+
+FlexItem FlexItem::withBaseline (float newBaseline) const
+{
+    auto copy = *this;
+    copy.baseline = newBaseline;
     return copy;
 }
 

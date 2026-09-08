@@ -407,6 +407,344 @@ void registerYupGuiBindings (py::module_& m)
         .def ("centreWithSize", &DocumentWindow::centreWithSize)
     ;
 
+    // ============================================================================================ yup::FlexItem
+
+    py::class_<FlexItem> classFlexItem (m, "FlexItem");
+
+    py::enum_<FlexItem::AlignSelf> (classFlexItem, "AlignSelf")
+        .value ("autoAlign", FlexItem::AlignSelf::autoAlign)
+        .value ("flexStart", FlexItem::AlignSelf::flexStart)
+        .value ("flexEnd", FlexItem::AlignSelf::flexEnd)
+        .value ("center", FlexItem::AlignSelf::center)
+        .value ("stretch", FlexItem::AlignSelf::stretch)
+        .value ("baseline", FlexItem::AlignSelf::baseline);
+
+    classFlexItem
+        .def (py::init<>())
+        .def (py::init<Component&>(), "component"_a, py::keep_alive<1, 2>())
+        .def (py::init<float, float>(), "width"_a, "height"_a)
+        .def (py::init<Component&, float, float>(), "component"_a, "width"_a, "height"_a, py::keep_alive<1, 2>())
+
+        // The FlexItem only stores a raw pointer, so the component must be kept alive by the
+        // caller for as long as the item is used - see the note on FlexBox.performLayout.
+        .def_property ("associatedComponent",
+                       py::cpp_function ([] (const FlexItem& self)
+                       {
+                           return self.associatedComponent;
+                       }, py::return_value_policy::reference),
+                       py::cpp_function ([] (FlexItem& self, Component* newComponent)
+                       {
+                           self.associatedComponent = newComponent;
+                       }, py::keep_alive<1, 2>()))
+
+        .def_readwrite ("flexGrow", &FlexItem::flexGrow)
+        .def_readwrite ("flexShrink", &FlexItem::flexShrink)
+        .def_readwrite ("flexBasis", &FlexItem::flexBasis)
+        .def_readwrite ("flexBasisPercent", &FlexItem::flexBasisPercent)
+        .def_readwrite ("width", &FlexItem::width)
+        .def_readwrite ("height", &FlexItem::height)
+        .def_readwrite ("widthPercent", &FlexItem::widthPercent)
+        .def_readwrite ("heightPercent", &FlexItem::heightPercent)
+        .def_readwrite ("minWidth", &FlexItem::minWidth)
+        .def_readwrite ("minHeight", &FlexItem::minHeight)
+        .def_readwrite ("maxWidth", &FlexItem::maxWidth)
+        .def_readwrite ("maxHeight", &FlexItem::maxHeight)
+        .def_readwrite ("alignSelf", &FlexItem::alignSelf)
+        .def_readwrite ("baseline", &FlexItem::baseline)
+        .def_readwrite ("marginLeft", &FlexItem::marginLeft)
+        .def_readwrite ("marginRight", &FlexItem::marginRight)
+        .def_readwrite ("marginTop", &FlexItem::marginTop)
+        .def_readwrite ("marginBottom", &FlexItem::marginBottom)
+        .def_readwrite ("marginLeftAuto", &FlexItem::marginLeftAuto)
+        .def_readwrite ("marginRightAuto", &FlexItem::marginRightAuto)
+        .def_readwrite ("marginTopAuto", &FlexItem::marginTopAuto)
+        .def_readwrite ("marginBottomAuto", &FlexItem::marginBottomAuto)
+        .def_readwrite ("order", &FlexItem::order)
+
+        .def ("withFlex", &FlexItem::withFlex, "flexGrow"_a)
+        .def ("withFlexShrink", &FlexItem::withFlexShrink, "flexShrink"_a)
+        .def ("withFlexBasis", &FlexItem::withFlexBasis, "flexBasis"_a)
+        .def ("withFlexBasisPercent", &FlexItem::withFlexBasisPercent, "flexBasisPercent"_a)
+        .def ("withWidth", &FlexItem::withWidth, "width"_a)
+        .def ("withHeight", &FlexItem::withHeight, "height"_a)
+        .def ("withWidthPercent", &FlexItem::withWidthPercent, "widthPercent"_a)
+        .def ("withHeightPercent", &FlexItem::withHeightPercent, "heightPercent"_a)
+        .def ("withMinWidth", &FlexItem::withMinWidth, "minWidth"_a)
+        .def ("withMinHeight", &FlexItem::withMinHeight, "minHeight"_a)
+        .def ("withMaxWidth", &FlexItem::withMaxWidth, "maxWidth"_a)
+        .def ("withMaxHeight", &FlexItem::withMaxHeight, "maxHeight"_a)
+        .def ("withMargin", &FlexItem::withMargin, "margin"_a)
+        .def ("withAutoMargins", &FlexItem::withAutoMargins, "left"_a, "right"_a, "top"_a, "bottom"_a)
+        .def ("withAlignSelf", &FlexItem::withAlignSelf, "alignSelf"_a)
+        .def ("withBaseline", &FlexItem::withBaseline, "baseline"_a)
+        .def ("withOrder", &FlexItem::withOrder, "order"_a)
+    ;
+
+    registerArray<Array, FlexItem> (m);
+
+    // ============================================================================================ yup::FlexBox
+
+    py::class_<FlexBox> classFlexBox (m, "FlexBox");
+
+    py::enum_<FlexBox::Direction> (classFlexBox, "Direction")
+        .value ("row", FlexBox::Direction::row)
+        .value ("rowReverse", FlexBox::Direction::rowReverse)
+        .value ("column", FlexBox::Direction::column)
+        .value ("columnReverse", FlexBox::Direction::columnReverse);
+
+    py::enum_<FlexBox::Wrap> (classFlexBox, "Wrap")
+        .value ("noWrap", FlexBox::Wrap::noWrap)
+        .value ("wrap", FlexBox::Wrap::wrap)
+        .value ("wrapReverse", FlexBox::Wrap::wrapReverse);
+
+    py::enum_<FlexBox::JustifyContent> (classFlexBox, "JustifyContent")
+        .value ("flexStart", FlexBox::JustifyContent::flexStart)
+        .value ("flexEnd", FlexBox::JustifyContent::flexEnd)
+        .value ("center", FlexBox::JustifyContent::center)
+        .value ("spaceBetween", FlexBox::JustifyContent::spaceBetween)
+        .value ("spaceAround", FlexBox::JustifyContent::spaceAround)
+        .value ("spaceEvenly", FlexBox::JustifyContent::spaceEvenly);
+
+    py::enum_<FlexBox::AlignItems> (classFlexBox, "AlignItems")
+        .value ("flexStart", FlexBox::AlignItems::flexStart)
+        .value ("flexEnd", FlexBox::AlignItems::flexEnd)
+        .value ("center", FlexBox::AlignItems::center)
+        .value ("stretch", FlexBox::AlignItems::stretch)
+        .value ("baseline", FlexBox::AlignItems::baseline);
+
+    py::enum_<FlexBox::AlignContent> (classFlexBox, "AlignContent")
+        .value ("flexStart", FlexBox::AlignContent::flexStart)
+        .value ("flexEnd", FlexBox::AlignContent::flexEnd)
+        .value ("center", FlexBox::AlignContent::center)
+        .value ("spaceBetween", FlexBox::AlignContent::spaceBetween)
+        .value ("spaceAround", FlexBox::AlignContent::spaceAround)
+        .value ("spaceEvenly", FlexBox::AlignContent::spaceEvenly)
+        .value ("stretch", FlexBox::AlignContent::stretch);
+
+    classFlexBox
+        .def (py::init<>())
+        .def (py::init<FlexBox::Direction>(), "direction"_a)
+        .def (py::init<FlexBox::Direction, FlexBox::Wrap, FlexBox::AlignItems, FlexBox::JustifyContent, FlexBox::AlignContent>(),
+              "direction"_a, "wrap"_a, "alignItems"_a, "justifyContent"_a, "alignContent"_a)
+
+        .def_readwrite ("flexDirection", &FlexBox::flexDirection)
+        .def_readwrite ("flexWrap", &FlexBox::flexWrap)
+        .def_readwrite ("alignItems", &FlexBox::alignItems)
+        .def_readwrite ("justifyContent", &FlexBox::justifyContent)
+        .def_readwrite ("alignContent", &FlexBox::alignContent)
+        .def_readwrite ("gap", &FlexBox::gap)
+        .def_readwrite ("rowGap", &FlexBox::rowGap)
+        .def_readwrite ("columnGap", &FlexBox::columnGap)
+        .def_readwrite ("paddingLeft", &FlexBox::paddingLeft)
+        .def_readwrite ("paddingRight", &FlexBox::paddingRight)
+        .def_readwrite ("paddingTop", &FlexBox::paddingTop)
+        .def_readwrite ("paddingBottom", &FlexBox::paddingBottom)
+        .def_readwrite ("items", &FlexBox::items)
+
+        .def ("setPadding", py::overload_cast<float> (&FlexBox::setPadding), "padding"_a)
+        .def ("setPadding", py::overload_cast<float, float> (&FlexBox::setPadding), "horizontal"_a, "vertical"_a)
+
+        .def ("performLayout", py::overload_cast<Rectangle<float>> (&FlexBox::performLayout), "targetArea"_a,
+              "Lays the items out inside the given area, calling setBounds on every associated component.\n\n"
+              "The items only hold raw component pointers, so every component referenced by an item must\n"
+              "be kept alive by the caller until this call returns.")
+        .def ("performLayout", py::overload_cast<Rectangle<int>> (&FlexBox::performLayout), "targetArea"_a)
+    ;
+
+    // ============================================================================================ yup::GridItem
+
+    py::class_<GridItem> classGridItem (m, "GridItem");
+
+    py::enum_<GridItem::AlignSelf> (classGridItem, "AlignSelf")
+        .value ("autoAlign", GridItem::AlignSelf::autoAlign)
+        .value ("flexStart", GridItem::AlignSelf::flexStart)
+        .value ("flexEnd", GridItem::AlignSelf::flexEnd)
+        .value ("center", GridItem::AlignSelf::center)
+        .value ("stretch", GridItem::AlignSelf::stretch)
+        .value ("baseline", GridItem::AlignSelf::baseline);
+
+    classGridItem
+        .def (py::init<>())
+        .def (py::init<Component&>(), "component"_a, py::keep_alive<1, 2>())
+
+        .def_property_readonly_static ("autoPlace", [] (py::object)
+        {
+            return GridItem::autoPlace;
+        })
+
+        .def_property ("associatedComponent",
+                       py::cpp_function ([] (const GridItem& self)
+                       {
+                           return self.associatedComponent;
+                       }, py::return_value_policy::reference),
+                       py::cpp_function ([] (GridItem& self, Component* newComponent)
+                       {
+                           self.associatedComponent = newComponent;
+                       }, py::keep_alive<1, 2>()))
+
+        .def_readwrite ("column", &GridItem::column)
+        .def_readwrite ("row", &GridItem::row)
+        .def_readwrite ("columnSpan", &GridItem::columnSpan)
+        .def_readwrite ("rowSpan", &GridItem::rowSpan)
+        .def_readwrite ("area", &GridItem::area)
+        .def_readwrite ("columnStartName", &GridItem::columnStartName)
+        .def_readwrite ("rowStartName", &GridItem::rowStartName)
+        .def_readwrite ("width", &GridItem::width)
+        .def_readwrite ("height", &GridItem::height)
+        .def_readwrite ("widthPercent", &GridItem::widthPercent)
+        .def_readwrite ("heightPercent", &GridItem::heightPercent)
+        .def_readwrite ("minWidth", &GridItem::minWidth)
+        .def_readwrite ("minHeight", &GridItem::minHeight)
+        .def_readwrite ("maxWidth", &GridItem::maxWidth)
+        .def_readwrite ("maxHeight", &GridItem::maxHeight)
+        .def_readwrite ("justifySelf", &GridItem::justifySelf)
+        .def_readwrite ("alignSelf", &GridItem::alignSelf)
+        .def_readwrite ("marginLeft", &GridItem::marginLeft)
+        .def_readwrite ("marginRight", &GridItem::marginRight)
+        .def_readwrite ("marginTop", &GridItem::marginTop)
+        .def_readwrite ("marginBottom", &GridItem::marginBottom)
+
+        .def ("withColumn", &GridItem::withColumn, "column"_a)
+        .def ("withRow", &GridItem::withRow, "row"_a)
+        .def ("withColumnSpan", &GridItem::withColumnSpan, "span"_a)
+        .def ("withRowSpan", &GridItem::withRowSpan, "span"_a)
+        .def ("withMargin", &GridItem::withMargin, "margin"_a)
+        .def ("withWidth", &GridItem::withWidth, "width"_a)
+        .def ("withHeight", &GridItem::withHeight, "height"_a)
+        .def ("withWidthPercent", &GridItem::withWidthPercent, "widthPercent"_a)
+        .def ("withHeightPercent", &GridItem::withHeightPercent, "heightPercent"_a)
+        .def ("withMinWidth", &GridItem::withMinWidth, "minWidth"_a)
+        .def ("withMinHeight", &GridItem::withMinHeight, "minHeight"_a)
+        .def ("withMaxWidth", &GridItem::withMaxWidth, "maxWidth"_a)
+        .def ("withMaxHeight", &GridItem::withMaxHeight, "maxHeight"_a)
+        .def ("withJustifySelf", &GridItem::withJustifySelf, "justifySelf"_a)
+        .def ("withAlignSelf", &GridItem::withAlignSelf, "alignSelf"_a)
+        .def ("withArea", &GridItem::withArea, "areaName"_a)
+        .def ("withColumnStart", &GridItem::withColumnStart, "lineName"_a)
+        .def ("withRowStart", &GridItem::withRowStart, "lineName"_a)
+    ;
+
+    registerArray<Array, GridItem> (m);
+
+    // ============================================================================================ yup::Grid
+
+    py::class_<Grid> classGrid (m, "Grid");
+    py::class_<Grid::TrackInfo> classGridTrackInfo (classGrid, "TrackInfo");
+
+    py::enum_<Grid::TrackInfo::SizeType> (classGridTrackInfo, "SizeType")
+        .value ("pixels", Grid::TrackInfo::SizeType::pixels)
+        .value ("percent", Grid::TrackInfo::SizeType::percent)
+        .value ("fraction", Grid::TrackInfo::SizeType::fraction)
+        .value ("autoSize", Grid::TrackInfo::SizeType::autoSize);
+
+    py::class_<Grid::TrackInfo::SizingFunction> (classGridTrackInfo, "SizingFunction")
+        .def (py::init<>())
+        .def_readwrite ("type", &Grid::TrackInfo::SizingFunction::type)
+        .def_readwrite ("value", &Grid::TrackInfo::SizingFunction::value);
+
+    // TrackInfo is deliberately factory-only - its default constructor is private, so there is
+    // no py::init here either and Python can only build one through px/percent/fr/auto_/minmax.
+    classGridTrackInfo
+        .def_static ("px", &Grid::TrackInfo::px, "pixelSize"_a)
+        .def_static ("percent", &Grid::TrackInfo::percent, "percentage"_a)
+        .def_static ("fr", &Grid::TrackInfo::fr, "fraction"_a)
+        .def_static ("auto_", &Grid::TrackInfo::auto_)
+        .def_static ("minmax", &Grid::TrackInfo::minmax, "minimum"_a, "maximum"_a)
+        .def_static ("fitContent", &Grid::TrackInfo::fitContent, "maximumSize"_a)
+        .def_readwrite ("minimum", &Grid::TrackInfo::minimum)
+        .def_readwrite ("maximum", &Grid::TrackInfo::maximum)
+        .def ("isFractional", &Grid::TrackInfo::isFractional)
+    ;
+
+    // Hand-rolled rather than registerArray, because that binds resize/fill/set, all of which
+    // need a public default constructor for the element type - which TrackInfo does not have.
+    using TrackInfoArray = Array<Grid::TrackInfo>;
+
+    py::class_<TrackInfoArray> (m, "ArrayTrackInfo")
+        .def (py::init<>())
+        .def ("size", &TrackInfoArray::size)
+        .def ("isEmpty", &TrackInfoArray::isEmpty)
+        .def ("clear", &TrackInfoArray::clear)
+        .def ("clearQuick", &TrackInfoArray::clearQuick)
+        .def ("__len__", &TrackInfoArray::size)
+        .def ("__getitem__", [] (const TrackInfoArray& self, int index)
+        {
+            if (! isPositiveAndBelow (index, self.size()))
+                throw py::index_error();
+
+            return self.getUnchecked (index);
+        }, "index"_a)
+        .def ("__iter__", [] (TrackInfoArray& self)
+        {
+            return py::make_iterator (self.begin(), self.end());
+        }, py::keep_alive<0, 1>())
+        .def ("add", [] (TrackInfoArray& self, const Grid::TrackInfo& track)
+        {
+            self.add (track);
+        }, "track"_a)
+        .def ("addArray", [] (TrackInfoArray& self, const TrackInfoArray& other)
+        {
+            for (const auto& track : other)
+                self.add (track);
+        }, "other"_a)
+        .def ("remove", [] (TrackInfoArray& self, int index)
+        {
+            self.remove (index);
+        }, "index"_a)
+    ;
+
+    py::enum_<Grid::AlignItems> (classGrid, "AlignItems")
+        .value ("flexStart", Grid::AlignItems::flexStart)
+        .value ("flexEnd", Grid::AlignItems::flexEnd)
+        .value ("center", Grid::AlignItems::center)
+        .value ("stretch", Grid::AlignItems::stretch)
+        .value ("baseline", Grid::AlignItems::baseline);
+
+    py::enum_<Grid::AlignContent> (classGrid, "AlignContent")
+        .value ("flexStart", Grid::AlignContent::flexStart)
+        .value ("flexEnd", Grid::AlignContent::flexEnd)
+        .value ("center", Grid::AlignContent::center)
+        .value ("spaceBetween", Grid::AlignContent::spaceBetween)
+        .value ("spaceAround", Grid::AlignContent::spaceAround)
+        .value ("spaceEvenly", Grid::AlignContent::spaceEvenly);
+
+    py::enum_<Grid::AutoFlow> (classGrid, "AutoFlow")
+        .value ("row", Grid::AutoFlow::row)
+        .value ("column", Grid::AutoFlow::column)
+        .value ("rowDense", Grid::AutoFlow::rowDense)
+        .value ("columnDense", Grid::AutoFlow::columnDense);
+
+    classGrid
+        .def (py::init<>())
+
+        .def_static ("repeat", &Grid::repeat, "count"_a, "track"_a)
+        .def_static ("repeatToFill", &Grid::repeatToFill, "track"_a, "availableSize"_a, "gap"_a, "defaultSize"_a)
+
+        .def_readwrite ("templateColumns", &Grid::templateColumns)
+        .def_readwrite ("templateRows", &Grid::templateRows)
+        .def_readwrite ("autoRows", &Grid::autoRows)
+        .def_readwrite ("autoColumns", &Grid::autoColumns)
+        .def_readwrite ("gap", &Grid::gap)
+        .def_readwrite ("columnGap", &Grid::columnGap)
+        .def_readwrite ("rowGap", &Grid::rowGap)
+        .def_readwrite ("justifyItems", &Grid::justifyItems)
+        .def_readwrite ("alignItems", &Grid::alignItems)
+        .def_readwrite ("justifyContent", &Grid::justifyContent)
+        .def_readwrite ("alignContent", &Grid::alignContent)
+        .def_readwrite ("autoFlow", &Grid::autoFlow)
+        .def_readwrite ("items", &Grid::items)
+
+        .def ("setTemplateAreas", &Grid::setTemplateAreas, "rowPatterns"_a)
+        .def ("setColumnLineName", &Grid::setColumnLineName, "lineIndex"_a, "name"_a)
+        .def ("setRowLineName", &Grid::setRowLineName, "lineIndex"_a, "name"_a)
+
+        .def ("performLayout", py::overload_cast<Rectangle<float>> (&Grid::performLayout), "targetArea"_a,
+              "Lays the items out inside the given area, calling setBounds on every associated component.\n\n"
+              "The items only hold raw component pointers, so every component referenced by an item must\n"
+              "be kept alive by the caller until this call returns.")
+        .def ("performLayout", py::overload_cast<Rectangle<int>> (&Grid::performLayout), "targetArea"_a)
+    ;
+
     // =================================================================================================
 
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER

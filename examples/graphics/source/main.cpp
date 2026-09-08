@@ -80,13 +80,16 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/CodeEditor.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
+#include "examples/FluidSimulationDemo.h"
 #include "examples/GpuAudioProcessingDemo.h"
 #include "examples/Images.h"
+#include "examples/Layout.h"
 #include "examples/LayoutFonts.h"
 #include "examples/LottieDemo.h"
 #include "examples/OffscreenRenderDemo.h"
 #include "examples/OpaqueDemo.h"
 #include "examples/PaintProfilerDemo.h"
+#include "examples/PbrDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/ScrollBarDemo.h"
@@ -189,13 +192,16 @@ public:
         addDemo ("Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
+        addDemo ("Fluid Simulation", [] { return std::make_unique<FluidSimulationDemo>(); });
         addDemo ("GPU Audio", [] { return std::make_unique<GpuAudioProcessingDemo>(); });
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+        addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
         addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
         addDemo ("Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
         addDemo ("Paint Profiler", [] { return std::make_unique<PaintProfilerDemo>(); });
+        addDemo ("PBR IBL", [] { return std::make_unique<PbrDemo>(); });
         addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
         addDemo ("Popup Menu", [] { return std::make_unique<PopupMenuDemo>(); });
         addDemo ("ScrollBar", [] { return std::make_unique<ScrollBarDemo>(); });
@@ -286,7 +292,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        yup::DocumentWindow::paint (g);
+        // yup::DocumentWindow::paint (g);
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override

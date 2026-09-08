@@ -35,7 +35,10 @@ class GpuDevice;
     completes or the frame is destroyed.
 
     The type is move-only stack RAII: the destructor submits the frame if it has
-    not already been submitted.
+    not already been submitted, and hands its transient resources to the device
+    to be freed once the GPU has moved on - so ending a frame never stalls the
+    calling thread. Call waitForGPU() explicitly only when the CPU has to read
+    the results back.
 
     @code
         auto frame = GpuFrame::begin (ctx);
@@ -72,7 +75,8 @@ public:
     /** Move assignment operator. */
     GpuFrame& operator= (GpuFrame&&) noexcept;
 
-    /** Destructor. Submits the frame if not already submitted. */
+    /** Destructor. Submits the frame if not already submitted, and retires its
+        transient resources without blocking on the GPU. */
     ~GpuFrame();
 
     //==============================================================================
@@ -82,7 +86,7 @@ public:
     /** Submits all render passes recorded since begin().
 
         Idempotent: a second call is a no-op and returns false. Does not block
-        the CPU.
+        the CPU, and neither does letting the frame go out of scope afterwards.
 
         @return true on success; false if invalid or already submitted.
     */
@@ -91,14 +95,15 @@ public:
     /** Blocks the calling thread until all submitted GPU work has completed,
         then releases the transient resources held for this frame.
 
-        Idempotent: a second call is a no-op, so waiting explicitly costs no more
-        than letting the frame go out of scope.
+        Idempotent: a second call is a no-op, so the stall is only ever paid once.
 
-        Call this explicitly only when results are needed earlier than the end of
-        the frame's scope (e.g. before a CPU readback). The destructor already
-        waits, because the encoded render passes hold *raw* pointers to the
-        texture views, uniform buffers and samplers this frame keeps alive, so
-        releasing them while the GPU is still reading would corrupt the output.
+        **Call this only when the CPU genuinely needs the results** - before a
+        pixel or buffer readback, or before tearing down resources the frame
+        referenced. It is a full pipeline stall, and letting the frame simply go
+        out of scope is both cheaper and sufficient: the destructor submits and
+        then hands the frame's texture views, uniform buffers and samplers to the
+        device, which frees them once enough later frames have begun that the GPU
+        cannot still be reading them.
     */
     void waitForGPU();
 

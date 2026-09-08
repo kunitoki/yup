@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 @pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
@@ -18,7 +20,7 @@ def test_single_trigger(juce_app):
     a.triggerAsyncUpdate()
     assert a.isUpdatePending()
     assert timesCalled == 0
-    next(juce_app)
+    pump_until(juce_app, lambda: (timesCalled == 1))
     assert timesCalled == 1
 
 #==================================================================================================
@@ -39,7 +41,7 @@ def test_multiple_trigger(juce_app):
     a.triggerAsyncUpdate()
     assert a.isUpdatePending()
     assert timesCalled == 0
-    next(juce_app)
+    pump_until(juce_app, lambda: (not a.isUpdatePending()) and (timesCalled == 1))
     assert not a.isUpdatePending()
     assert timesCalled == 1
 
