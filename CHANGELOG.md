@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added a `CancelToken` class (`threads/yup_CancelToken.h`): a thread-safe, copyable observer token with `wasCancelled()`, blocking observation via `waitForCancellation()`, and callback observation via `registerCallback()`/`Registration`
 - Added a `CancelTokenSource` class (`threads/yup_CancelTokenSource.h`): a move-only RAII owner of a `CancelToken` that is the sole canceller, requesting cancellation automatically when destroyed (unless moved-from), with observer copies obtained via `getToken()`
 
+### Audio
+
+- Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse)
+
 ### Graphics
 
 - `GpuTexture` now caches the backend texture views it hands out, keyed by view descriptor. A render pass previously allocated a fresh `ore::TextureView` for every attachment on every pass and for every sampled texture on every draw - all identical frame after frame - which on Metal made building the attachment descriptors cost more than creating the command encoder they were for. The cache needs no invalidation because a `GpuTexture` wraps one underlying texture for its whole lifetime: `GpuCanvas` and `GpuTarget` build a new `GpuTexture` whenever their backing changes
