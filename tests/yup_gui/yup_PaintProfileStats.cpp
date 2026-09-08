@@ -28,7 +28,9 @@ using namespace yup;
 namespace
 {
 
-PaintProfileSample makeSample (double totalMicros,
+// Named for this file rather than makeSample, because yup_PaintProfiler.cpp defines an
+// identical helper and both land in the same unity translation unit via tests/yup_gui.cpp.
+PaintProfileSample makeStatsSample (double totalMicros,
                                double selfMicros = 0.0,
                                double childrenMicros = 0.0)
 {
@@ -74,9 +76,9 @@ TEST (PaintProfileStatsTests, OptionsPreserved)
 TEST (PaintProfileStatsTests, RecordingBelowCapacity)
 {
     PaintProfileStats stats;
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
 
     EXPECT_EQ (3, stats.getSampleCount());
 
@@ -90,9 +92,9 @@ TEST (PaintProfileStatsTests, RecordingBelowCapacity)
 TEST (PaintProfileStatsTests, LastSampleReturnsNewest)
 {
     PaintProfileStats stats;
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
 
     EXPECT_DOUBLE_EQ (30.0, stats.getLastSample().totalMicros);
 }
@@ -104,7 +106,7 @@ TEST (PaintProfileStatsTests, RingBufferWrapsAtCapacity)
     PaintProfileStats stats (opts);
 
     for (int i = 1; i <= 10; ++i)
-        stats.recordSample (makeSample (static_cast<double> (i) * 10.0));
+        stats.recordSample (makeStatsSample (static_cast<double> (i) * 10.0));
 
     EXPECT_EQ (5, stats.getSampleCount());
 
@@ -123,11 +125,11 @@ TEST (PaintProfileStatsTests, LastSampleAfterWrapping)
     opts.sampleCapacity = 3;
     PaintProfileStats stats (opts);
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
-    stats.recordSample (makeSample (40.0));
-    stats.recordSample (makeSample (50.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
+    stats.recordSample (makeStatsSample (40.0));
+    stats.recordSample (makeStatsSample (50.0));
 
     EXPECT_DOUBLE_EQ (50.0, stats.getLastSample().totalMicros);
 }
@@ -135,9 +137,9 @@ TEST (PaintProfileStatsTests, LastSampleAfterWrapping)
 TEST (PaintProfileStatsTests, ResetClearsSamples)
 {
     PaintProfileStats stats;
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
 
     stats.reset();
 
@@ -151,7 +153,7 @@ TEST (PaintProfileStatsTests, ResetDoesNotChangeCapacity)
     PaintProfileOptions opts;
     opts.sampleCapacity = 50;
     PaintProfileStats stats (opts);
-    stats.recordSample (makeSample (10.0));
+    stats.recordSample (makeStatsSample (10.0));
 
     stats.reset();
 
@@ -164,16 +166,16 @@ TEST (PaintProfileStatsTests, MinimumSampleThresholdFilters)
     opts.minimumSampleMicros = 100.0;
     PaintProfileStats stats (opts);
 
-    stats.recordSample (makeSample (50.0));
+    stats.recordSample (makeStatsSample (50.0));
     EXPECT_EQ (0, stats.getSampleCount());
 
-    stats.recordSample (makeSample (100.0));
+    stats.recordSample (makeStatsSample (100.0));
     EXPECT_EQ (1, stats.getSampleCount());
 
-    stats.recordSample (makeSample (200.0));
+    stats.recordSample (makeStatsSample (200.0));
     EXPECT_EQ (2, stats.getSampleCount());
 
-    stats.recordSample (makeSample (99.9));
+    stats.recordSample (makeStatsSample (99.9));
     EXPECT_EQ (2, stats.getSampleCount());
 }
 
@@ -197,11 +199,11 @@ TEST (PaintProfileStatsTests, SummarizeTotalMicros)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
-    stats.recordSample (makeSample (40.0));
-    stats.recordSample (makeSample (50.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
+    stats.recordSample (makeStatsSample (40.0));
+    stats.recordSample (makeStatsSample (50.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::total);
 
@@ -219,11 +221,11 @@ TEST (PaintProfileStatsTests, SummarizeSelfMicros)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (100.0, 10.0, 50.0));
-    stats.recordSample (makeSample (100.0, 20.0, 50.0));
-    stats.recordSample (makeSample (100.0, 30.0, 50.0));
-    stats.recordSample (makeSample (100.0, 40.0, 50.0));
-    stats.recordSample (makeSample (100.0, 50.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 10.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 20.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 30.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 50.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::self);
 
@@ -238,11 +240,11 @@ TEST (PaintProfileStatsTests, SummarizeChildrenMicros)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (100.0, 40.0, 10.0));
-    stats.recordSample (makeSample (100.0, 40.0, 20.0));
-    stats.recordSample (makeSample (100.0, 40.0, 30.0));
-    stats.recordSample (makeSample (100.0, 40.0, 40.0));
-    stats.recordSample (makeSample (100.0, 40.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 10.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 20.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 30.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 50.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::children);
 
@@ -257,11 +259,11 @@ TEST (PaintProfileStatsTests, SummarizeFrameworkMicros)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (100.0, 50.0, 50.0));
-    stats.recordSample (makeSample (100.0, 50.0, 40.0));
-    stats.recordSample (makeSample (100.0, 50.0, 30.0));
-    stats.recordSample (makeSample (100.0, 50.0, 20.0));
-    stats.recordSample (makeSample (100.0, 50.0, 10.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 50.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 30.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 20.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 10.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::framework);
 
@@ -288,16 +290,16 @@ TEST (PaintProfileStatsTests, CreateHistogramCoversSamples)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
-    stats.recordSample (makeSample (40.0));
-    stats.recordSample (makeSample (50.0));
-    stats.recordSample (makeSample (60.0));
-    stats.recordSample (makeSample (70.0));
-    stats.recordSample (makeSample (80.0));
-    stats.recordSample (makeSample (90.0));
-    stats.recordSample (makeSample (100.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
+    stats.recordSample (makeStatsSample (40.0));
+    stats.recordSample (makeStatsSample (50.0));
+    stats.recordSample (makeStatsSample (60.0));
+    stats.recordSample (makeStatsSample (70.0));
+    stats.recordSample (makeStatsSample (80.0));
+    stats.recordSample (makeStatsSample (90.0));
+    stats.recordSample (makeStatsSample (100.0));
 
     auto histogram = stats.createHistogram (PaintProfileTimeKind::total, 10);
 
@@ -315,11 +317,11 @@ TEST (PaintProfileStatsTests, CreateHistogramWithSelfMicros)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (100.0, 10.0, 40.0));
-    stats.recordSample (makeSample (100.0, 20.0, 40.0));
-    stats.recordSample (makeSample (100.0, 30.0, 40.0));
-    stats.recordSample (makeSample (100.0, 40.0, 40.0));
-    stats.recordSample (makeSample (100.0, 50.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 10.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 20.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 30.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 40.0, 40.0));
+    stats.recordSample (makeStatsSample (100.0, 50.0, 40.0));
 
     auto histogram = stats.createHistogram (PaintProfileTimeKind::self, 5);
 
@@ -336,12 +338,12 @@ TEST (PaintProfileStatsTests, CopySamplesOrderAfterWrapping)
     opts.sampleCapacity = 3;
     PaintProfileStats stats (opts);
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
-    stats.recordSample (makeSample (40.0));
-    stats.recordSample (makeSample (50.0));
-    stats.recordSample (makeSample (60.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
+    stats.recordSample (makeStatsSample (40.0));
+    stats.recordSample (makeStatsSample (50.0));
+    stats.recordSample (makeStatsSample (60.0));
 
     auto samples = stats.copySamples();
 
@@ -355,7 +357,7 @@ TEST (PaintProfileStatsTests, SingleSampleStatistics)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (42.0));
+    stats.recordSample (makeStatsSample (42.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::total);
 
@@ -375,9 +377,9 @@ TEST (PaintProfileStatsTests, ResetAfterWrapping)
     opts.sampleCapacity = 2;
     PaintProfileStats stats (opts);
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
 
     stats.reset();
 
@@ -392,9 +394,9 @@ TEST (PaintProfileStatsTests, MinimumThresholdZeroRecordsAll)
     opts.minimumSampleMicros = 0.0;
     PaintProfileStats stats (opts);
 
-    stats.recordSample (makeSample (0.0));
-    stats.recordSample (makeSample (0.001));
-    stats.recordSample (makeSample (1000.0));
+    stats.recordSample (makeStatsSample (0.0));
+    stats.recordSample (makeStatsSample (0.001));
+    stats.recordSample (makeStatsSample (1000.0));
 
     EXPECT_EQ (3, stats.getSampleCount());
 }
@@ -404,7 +406,7 @@ TEST (PaintProfileStatsTests, HistogramBucketCountMatches)
     PaintProfileStats stats;
 
     for (int i = 1; i <= 50; ++i)
-        stats.recordSample (makeSample (static_cast<double> (i)));
+        stats.recordSample (makeStatsSample (static_cast<double> (i)));
 
     auto hist5 = stats.createHistogram (PaintProfileTimeKind::total, 5);
     auto hist20 = stats.createHistogram (PaintProfileTimeKind::total, 20);
@@ -417,11 +419,11 @@ TEST (PaintProfileStatsTests, SummarizePercentileOrdering)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
-    stats.recordSample (makeSample (30.0));
-    stats.recordSample (makeSample (40.0));
-    stats.recordSample (makeSample (50.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
+    stats.recordSample (makeStatsSample (30.0));
+    stats.recordSample (makeStatsSample (40.0));
+    stats.recordSample (makeStatsSample (50.0));
 
     auto summary = stats.summarize (PaintProfileTimeKind::total);
 
@@ -435,8 +437,8 @@ TEST (PaintProfileStatsTests, CopySamplesDoesNotModifyState)
 {
     PaintProfileStats stats;
 
-    stats.recordSample (makeSample (10.0));
-    stats.recordSample (makeSample (20.0));
+    stats.recordSample (makeStatsSample (10.0));
+    stats.recordSample (makeStatsSample (20.0));
 
     auto first = stats.copySamples();
     auto second = stats.copySamples();

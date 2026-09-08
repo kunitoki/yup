@@ -1012,21 +1012,15 @@ bool PngImageFormatWriter::writeImage (const Image& image)
                 png_set_text (pngPtr, infoPtr, textChunks.data(), static_cast<int> (textChunks.size()));
         }
 
-        // iCCP chunk
-        if (auto* icc = meta->getRawChunk ("png/iCCP"))
-        {
-            // iCCP data in rawChunks is the raw data; libpng expects name + compressed profile
-            // For simplicity, write as unknown chunk
-        }
-
-        // Collect unknown/raw chunks to write
         std::vector<png_unknown_chunk> unknownChunks;
+        std::vector<png_byte> keepList;
+
         for (const auto& [key, chunk] : meta->rawChunks)
         {
-            if (! key.startsWith ("png/chunk_") && key != "png/eXIf" && key != "png/cHRM")
+            if (! key.startsWith ("png/chunk_") && key != "png/eXIf" && key != "png/cHRM" && key != "png/iCCP")
                 continue;
 
-            png_unknown_chunk unk;
+            png_unknown_chunk unk {};
             unk.data = const_cast<png_byte*> (static_cast<const png_byte*> (chunk.getData()));
             unk.size = chunk.getSize();
 
@@ -1037,15 +1031,27 @@ bool PngImageFormatWriter::writeImage (const Image& image)
                 std::memcpy (unk.name, "eXIf", 4);
             else if (key == "png/cHRM")
                 std::memcpy (unk.name, "cHRM", 4);
+            else if (key == "png/iCCP")
+                std::memcpy (unk.name, "iCCP", 4);
             else
                 continue;
 
             unk.location = PNG_HAVE_IHDR;
             unknownChunks.push_back (unk);
+
+            keepList.insert (keepList.end(), unk.name, unk.name + 4);
+            keepList.push_back (0);
         }
 
         if (! unknownChunks.empty())
+        {
+            png_set_keep_unknown_chunks (pngPtr,
+                                         PNG_HANDLE_CHUNK_ALWAYS,
+                                         keepList.data(),
+                                         static_cast<int> (keepList.size() / 5));
+
             png_set_unknown_chunks (pngPtr, infoPtr, unknownChunks.data(), static_cast<int> (unknownChunks.size()));
+        }
     }
 
     png_write_info (pngPtr, infoPtr);

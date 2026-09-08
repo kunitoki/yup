@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 timesMessageCalled = 0
@@ -39,7 +41,7 @@ def test_construct_and_post(juce_app):
     assert l.lastName is None
     assert timesMessageCalled == 0
 
-    next(juce_app)
+    pump_until(juce_app, lambda: (timesMessageCalled == 1))
     # assert l.timesCalled == 1
     # assert l.lastName == "Gilles"
     assert timesMessageCalled == 1
