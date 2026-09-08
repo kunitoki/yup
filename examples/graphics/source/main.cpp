@@ -115,6 +115,9 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
+#include "examples/Layout.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
 #include "examples/LayoutFonts.h"
 #endif
@@ -296,6 +299,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
         addDemo ("Images", [] { return std::make_unique<ImagesDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Layout
+        addDemo ("Layout", [] { return std::make_unique<LayoutExample>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });

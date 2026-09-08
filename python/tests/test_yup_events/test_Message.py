@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 timesCalled = 0
@@ -23,5 +25,5 @@ def test_construct_and_post(juce_app):
     m.post()
     assert timesCalled == 0
 
-    next(juce_app)
+    pump_until(juce_app, lambda: (timesCalled == 1))
     assert timesCalled == 1

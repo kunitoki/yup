@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 
 import common
@@ -69,3 +70,28 @@ def save_component_snapshot_to_file(component: yup.Component, file: yup.File) ->
     return True
 
 """
+
+#==================================================================================================
+
+def pump_until(app, predicate, timeout_seconds = 5.0, slice_ms = 5):
+    """Pumps the message loop until `predicate()` is true, or the timeout expires.
+
+    A single `next(app)` runs the dispatch loop for a fixed 20ms and then returns. That is a race:
+    the message manager can dispatch the callback inside that window, but the callback still has to
+    re-acquire the GIL to run the Python side, and on a loaded machine it can land after the pump
+    has already returned. Raising the constant cannot fix a one-shot pump - waiting on the actual
+    condition can.
+
+    Returns the final value of `predicate()`, so callers can simply assert on it. The predicate is
+    re-evaluated after the timeout too, in case the callback landed during the last slice.
+    """
+    deadline = time.monotonic() + timeout_seconds
+
+    while True:
+        if predicate():
+            return True
+
+        if time.monotonic() >= deadline:
+            return predicate()
+
+        app.processEvents(slice_ms)
