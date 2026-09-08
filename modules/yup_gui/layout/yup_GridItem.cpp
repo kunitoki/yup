@@ -140,4 +140,25 @@ GridItem GridItem::withAlignSelf (AlignSelf newAlignSelf) const
     return copy;
 }
 
+GridItem GridItem::withArea (const String& areaName) const
+{
+    auto copy = *this;
+    copy.area = areaName;
+    return copy;
+}
+
+GridItem GridItem::withColumnStart (const String& lineName) const
+{
+    auto copy = *this;
+    copy.columnStartName = lineName;
+    return copy;
+}
+
+GridItem GridItem::withRowStart (const String& lineName) const
+{
+    auto copy = *this;
+    copy.rowStartName = lineName;
+    return copy;
+}
+
 } // namespace yup

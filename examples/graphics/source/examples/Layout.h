@@ -272,9 +272,9 @@ public:
         innerBox.gap = 6.0f;
 
         innerBox.items.clear();
-        innerBox.items.add (yup::FlexItem (*cells[0], 0, 0).withFlex (1));
-        innerBox.items.add (yup::FlexItem (*cells[1], 0, 0).withFlex (1));
-        innerBox.items.add (yup::FlexItem (*cells[2], 0, 0).withFlex (2));
+        innerBox.items.add (yup::FlexItem (*cells[0]).withFlex (1));
+        innerBox.items.add (yup::FlexItem (*cells[1]).withFlex (1));
+        innerBox.items.add (yup::FlexItem (*cells[2]).withFlex (2));
         innerBox.performLayout (getLocalBounds().reduced (6.0f));
     }
 
@@ -314,8 +314,8 @@ public:
         footerCell->setBounds (footerArea);
 
         middleBox.items.clear();
-        middleBox.items.add (yup::FlexItem (*sidebarCell, 56.0f, 0));
-        middleBox.items.add (yup::FlexItem (*mainCell, 0, 0).withFlex (1));
+        middleBox.items.add (yup::FlexItem (*sidebarCell).withWidth (56.0f));
+        middleBox.items.add (yup::FlexItem (*mainCell).withFlex (1));
         middleBox.performLayout (middleArea);
     }
 
@@ -405,8 +405,8 @@ public:
     void resized() override
     {
         flexBox.items.clear();
-        flexBox.items.add (yup::FlexItem (*leftGrid, 0, 0).withFlex (1));
-        flexBox.items.add (yup::FlexItem (*rightGrid, 0, 0).withFlex (1));
+        flexBox.items.add (yup::FlexItem (*leftGrid).withFlex (1));
+        flexBox.items.add (yup::FlexItem (*rightGrid).withFlex (1));
         flexBox.performLayout (getContentArea());
     }
 
@@ -1143,6 +1143,380 @@ static DemoPage* makeNestedPage()
 }
 
 //==============================================================================
+/** Page: independent row/column gaps, container padding and space-evenly. */
+static DemoPage* makeFlexGapsPaddingPage()
+{
+    auto* page = new DemoPage();
+
+    {
+        auto* panel = new FlexPanel ("row-gap 24 / column-gap 6");
+        panel->box().flexWrap = yup::FlexBox::Wrap::wrap;
+        panel->box().alignContent = yup::FlexBox::AlignContent::flexStart;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+        panel->box().rowGap = 24.0f;
+        panel->box().columnGap = 6.0f;
+
+        for (int i = 0; i < 6; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 64.0f, 28.0f);
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("gap 6 shorthand, row-gap overridden to 24");
+        panel->box().flexWrap = yup::FlexBox::Wrap::wrap;
+        panel->box().alignContent = yup::FlexBox::AlignContent::flexStart;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+        panel->box().gap = 6.0f;
+        panel->box().rowGap = 24.0f;
+
+        for (int i = 0; i < 6; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 64.0f, 28.0f);
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("padding 20 / 10");
+        panel->box().alignItems = yup::FlexBox::AlignItems::stretch;
+        panel->box().setPadding (20.0f, 10.0f);
+        panel->box().gap = 8.0f;
+
+        for (int i = 0; i < 3; ++i)
+            panel->box().items.add (yup::FlexItem (*panel->addCell (yup::String (i + 1), cellColor (i)))
+                                        .withFlex (1)
+                                        .withFlexBasis (0));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("justify: space-evenly");
+        panel->box().justifyContent = yup::FlexBox::JustifyContent::spaceEvenly;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 56.0f, 40.0f);
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("justify: space-around (compare)");
+        panel->box().justifyContent = yup::FlexBox::JustifyContent::spaceAround;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 56.0f, 40.0f);
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("align-content: space-evenly");
+        panel->box().flexWrap = yup::FlexBox::Wrap::wrap;
+        panel->box().alignContent = yup::FlexBox::AlignContent::spaceEvenly;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+
+        for (int i = 0; i < 6; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)), 80.0f, 24.0f);
+
+        page->addPanel (panel, 240.0f, 200.0f);
+    }
+
+    return page;
+}
+
+//==============================================================================
+/** Page: CSS auto margins on both axes. */
+static DemoPage* makeFlexAutoMarginPage()
+{
+    auto* page = new DemoPage();
+
+    {
+        auto* panel = new FlexPanel ("margin-left: auto on the last item");
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+        panel->box().gap = 6.0f;
+
+        panel->addItem (panel->addCell ("file", cellColor (0)), 52.0f, 32.0f);
+        panel->addItem (panel->addCell ("edit", cellColor (1)), 52.0f, 32.0f);
+        panel->box().items.add (yup::FlexItem (*panel->addCell ("cfg", cellColor (2)), 52.0f, 32.0f)
+                                    .withAutoMargins (true, false, false, false));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("margin: auto on both sides centers");
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+
+        panel->box().items.add (yup::FlexItem (*panel->addCell ("mid", cellColor (3)), 64.0f, 32.0f)
+                                    .withAutoMargins (true, true, false, false));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("auto margins beat justify: center");
+        panel->box().justifyContent = yup::FlexBox::JustifyContent::center;
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+
+        panel->addItem (panel->addCell ("a", cellColor (0)), 56.0f, 32.0f);
+        panel->box().items.add (yup::FlexItem (*panel->addCell ("b", cellColor (1)), 56.0f, 32.0f)
+                                    .withAutoMargins (true, false, false, false));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("cross-axis auto margins");
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+        panel->box().gap = 8.0f;
+
+        panel->addItem (panel->addCell ("top", cellColor (0)), 56.0f, 32.0f);
+        panel->box().items.add (yup::FlexItem (*panel->addCell ("mid", cellColor (1)), 56.0f, 32.0f)
+                                    .withAutoMargins (false, false, true, true));
+        panel->box().items.add (yup::FlexItem (*panel->addCell ("btm", cellColor (2)), 56.0f, 32.0f)
+                                    .withAutoMargins (false, false, true, false));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new FlexPanel ("flex-basis: 25% + grow");
+        panel->box().alignItems = yup::FlexBox::AlignItems::flexStart;
+        panel->box().gap = 6.0f;
+
+        for (int i = 0; i < 3; ++i)
+            panel->box().items.add (yup::FlexItem (*panel->addCell ("25%", cellColor (i)))
+                                        .withHeight (32.0f)
+                                        .withFlexBasisPercent (25.0f)
+                                        .withFlex (1));
+
+        page->addPanel (panel);
+    }
+
+    return page;
+}
+
+//==============================================================================
+/** Page: minmax, percent, repeat and auto-fill tracks. */
+static DemoPage* makeGridTrackFunctionsPage()
+{
+    auto* page = new DemoPage();
+
+    {
+        auto* panel = new GridPanel ("minmax(50, 200) + 100px");
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::minmax (yup::Grid::TrackInfo::px (50.0f),
+                                                                        yup::Grid::TrackInfo::px (200.0f)));
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::px (100.0f));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (56.0f));
+
+        for (int i = 0; i < 2; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("minmax(100px, 1fr) x2 + 1fr");
+        for (int i = 0; i < 2; ++i)
+            panel->grid().templateColumns.add (yup::Grid::TrackInfo::minmax (yup::Grid::TrackInfo::px (100.0f),
+                                                                            yup::Grid::TrackInfo::fr (1.0f)));
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::fr (1.0f));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (56.0f));
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("percent: 25% / 50% / 25%");
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::percent (25.0f));
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::percent (50.0f));
+        panel->grid().templateColumns.add (yup::Grid::TrackInfo::percent (25.0f));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (56.0f));
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("repeat(4, 1fr), gap 8");
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (4, yup::Grid::TrackInfo::fr (1.0f)));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (56.0f));
+        panel->grid().gap = 8.0f;
+
+        for (int i = 0; i < 4; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        // repeatToFill needs the width up front, which a resizing panel does not
+        // know, so this one rebuilds its template on every resize.
+        class AutoFillPanel : public GridPanel
+        {
+        public:
+            AutoFillPanel()
+                : GridPanel ("repeat(auto-fill, 70px), gap 6")
+            {
+                grid().gap = 6.0f;
+                grid().templateRows.add (yup::Grid::TrackInfo::px (48.0f));
+
+                for (int i = 0; i < 6; ++i)
+                    addItem (addCell (yup::String (i + 1), cellColor (i)));
+            }
+
+            void resized() override
+            {
+                grid().templateColumns.clearQuick();
+                grid().templateColumns.addArray (yup::Grid::repeatToFill (yup::Grid::TrackInfo::px (70.0f),
+                                                                          getContentArea().getWidth(),
+                                                                          grid().gap,
+                                                                          grid().autoColumns));
+                GridPanel::resized();
+            }
+        };
+
+        page->addPanel (new AutoFillPanel(), 260.0f, 180.0f);
+    }
+
+    return page;
+}
+
+//==============================================================================
+/** Page: auto-flow, template areas, named lines and container alignment. */
+static DemoPage* makeGridFlowAreasPage()
+{
+    auto* page = new DemoPage();
+
+    {
+        auto* panel = new GridPanel ("auto-flow: column");
+        panel->grid().autoFlow = yup::Grid::AutoFlow::column;
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (64.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (36.0f)));
+
+        for (int i = 0; i < 6; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("auto-flow: row (sparse) leaves a hole");
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (64.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (36.0f)));
+
+        panel->addItem (panel->addCell ("1", cellColor (0)));
+        panel->addItem (panel->addCell ("wide", cellColor (1))).columnSpan = 3;
+        panel->addItem (panel->addCell ("3", cellColor (2)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("auto-flow: row dense backfills it");
+        panel->grid().autoFlow = yup::Grid::AutoFlow::rowDense;
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (64.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (36.0f)));
+
+        panel->addItem (panel->addCell ("1", cellColor (0)));
+        panel->addItem (panel->addCell ("wide", cellColor (1))).columnSpan = 3;
+        panel->addItem (panel->addCell ("3", cellColor (2)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("grid-template-areas");
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (60.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (34.0f)));
+        panel->grid().gap = 4.0f;
+
+        const auto areas = panel->grid().setTemplateAreas ({ "head head head",
+                                                             "side main main",
+                                                             "side foot foot" });
+        jassert (areas.wasOk());
+        yup::ignoreUnused (areas);
+
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("head", cellColor (0))).withArea ("head"));
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("side", cellColor (1))).withArea ("side"));
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("main", cellColor (2))).withArea ("main"));
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("foot", cellColor (3))).withArea ("foot"));
+
+        page->addPanel (panel, 240.0f, 190.0f);
+    }
+
+    {
+        auto* panel = new GridPanel ("named lines");
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (64.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (36.0f)));
+        panel->grid().setColumnLineName (0, "left");
+        panel->grid().setColumnLineName (1, "mid");
+        panel->grid().setColumnLineName (2, "right");
+        panel->grid().setRowLineName (0, "top");
+        panel->grid().setRowLineName (1, "bottom");
+
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("mid", cellColor (0)))
+                                     .withColumnStart ("mid").withRowStart ("top"));
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("left", cellColor (1)))
+                                     .withColumnStart ("left").withRowStart ("bottom"));
+        panel->grid().items.add (yup::GridItem (*panel->addCell ("right", cellColor (2)))
+                                     .withColumnStart ("right").withRowStart ("bottom"));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("justify/align-content: center");
+        panel->grid().justifyContent = yup::Grid::AlignContent::center;
+        panel->grid().alignContent = yup::Grid::AlignContent::center;
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (56.0f)));
+        panel->grid().templateRows.addArray (yup::Grid::repeat (2, yup::Grid::TrackInfo::px (32.0f)));
+        panel->grid().gap = 6.0f;
+
+        for (int i = 0; i < 4; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("justify-content: space-between");
+        panel->grid().justifyContent = yup::Grid::AlignContent::spaceBetween;
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (52.0f)));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (44.0f));
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i)));
+
+        page->addPanel (panel);
+    }
+
+    {
+        auto* panel = new GridPanel ("align-items: baseline");
+        panel->grid().alignItems = yup::Grid::AlignItems::baseline;
+        panel->grid().templateColumns.addArray (yup::Grid::repeat (3, yup::Grid::TrackInfo::px (64.0f)));
+        panel->grid().templateRows.add (yup::Grid::TrackInfo::px (80.0f));
+
+        const float heights[] = { 24.0f, 52.0f, 36.0f };
+
+        for (int i = 0; i < 3; ++i)
+            panel->addItem (panel->addCell (yup::String (i + 1), cellColor (i))).height = heights[i];
+
+        page->addPanel (panel);
+    }
+
+    return page;
+}
+
+//==============================================================================
 /** Creates the page for the given selector index. */
 static DemoPage* createLayoutPage (int index)
 {
@@ -1180,6 +1554,14 @@ static DemoPage* createLayoutPage (int index)
             return makeGridPercentMinMaxPage();
         case 15:
             return makeNestedPage();
+        case 16:
+            return makeFlexGapsPaddingPage();
+        case 17:
+            return makeFlexAutoMarginPage();
+        case 18:
+            return makeGridTrackFunctionsPage();
+        case 19:
+            return makeGridFlowAreasPage();
         default:
             return new DemoPage();
     }
@@ -1247,6 +1629,10 @@ private:
         selector->addItem ("Grid Alignment", 14);
         selector->addItem ("Grid Percent & Min/Max", 15);
         selector->addItem ("Nested Layout", 16);
+        selector->addItem ("Flex Gaps & Padding", 17);
+        selector->addItem ("Flex Auto Margins", 18);
+        selector->addItem ("Grid Track Functions", 19);
+        selector->addItem ("Grid Flow & Areas", 20);
 
         selector->setSelectedId (1, yup::dontSendNotification);
         selector->onSelectedItemChanged = [this]

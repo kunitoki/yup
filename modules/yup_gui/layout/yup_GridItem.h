@@ -48,22 +48,58 @@ public:
     /** Creates a GridItem that controls the layout of the given component. */
     GridItem (Component* component);
 
+
     //==============================================================================
     /** The component associated with this grid item, or nullptr. */
     Component* associatedComponent = nullptr;
 
     //==============================================================================
-    /** The column position (0-based). -1 places the item automatically. */
-    int column = -1;
+    /** The value of column/row that asks the grid to position the item itself.
 
-    /** The row position (0-based). -1 places the item automatically. */
-    int row = -1;
+        Note the deliberate divergence from CSS here: CSS numbers grid lines
+        from 1 and gives -1 the meaning "the last line", whereas YUP numbers
+        them from 0 and uses -1 for automatic placement. An axis can be set
+        independently, so an item may pin its row and let the grid choose its
+        column. */
+    static constexpr int autoPlace = -1;
 
-    /** Number of columns this item spans. */
+    /** The column position (0-based), or autoPlace. */
+    int column = autoPlace;
+
+    /** The row position (0-based), or autoPlace. */
+    int row = autoPlace;
+
+    /** Number of columns this item spans. Must be >= 1. */
     int columnSpan = 1;
 
-    /** Number of rows this item spans. */
+    /** Number of rows this item spans. Must be >= 1. */
     int rowSpan = 1;
+
+    //==============================================================================
+    /** The name of a grid area declared with Grid::setTemplateAreas().
+
+        When set and the name is known to the grid, the area supplies the item's
+        row, column and both spans, overriding all four fields above. An unknown
+        name is ignored and the numeric placement applies instead.
+
+        @see withArea, Grid::setTemplateAreas
+    */
+    String area;
+
+    /** The name of the column line this item starts at.
+
+        Resolved against Grid::setColumnLineName(). Takes priority over the
+        numeric `column` but not over `area`.
+
+        @see withColumnStart, Grid::setColumnLineName
+    */
+    String columnStartName;
+
+    /** The name of the row line this item starts at.
+
+        @see withRowStart, Grid::setRowLineName
+    */
+    String rowStartName;
 
     //==============================================================================
     /** The width of the item. -1 means the cell's width is used (fill). */
@@ -100,7 +136,8 @@ public:
         flexStart, /**< Align to start */
         flexEnd,   /**< Align to end */
         center,    /**< Center */
-        stretch    /**< Stretch to fill */
+        stretch,   /**< Stretch to fill */
+        baseline   /**< Align with the other baseline items in the same row */
     };
 
     /** Horizontal alignment within the cell. */
@@ -133,6 +170,15 @@ public:
     GridItem withMaxHeight (float newMaxHeight) const;
     GridItem withJustifySelf (AlignSelf newJustifySelf) const;
     GridItem withAlignSelf (AlignSelf newAlignSelf) const;
+
+    /** Returns a copy of this GridItem placed in the named grid area. */
+    GridItem withArea (const String& areaName) const;
+
+    /** Returns a copy of this GridItem starting at the named column line. */
+    GridItem withColumnStart (const String& lineName) const;
+
+    /** Returns a copy of this GridItem starting at the named row line. */
+    GridItem withRowStart (const String& lineName) const;
 };
 
 } // namespace yup

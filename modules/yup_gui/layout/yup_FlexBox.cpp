@@ -38,401 +38,832 @@ FlexBox::FlexBox (Direction d, Wrap w, AlignItems ai, JustifyContent jc, AlignCo
 }
 
 //==============================================================================
-static bool isRowDirection (FlexBox::Direction direction)
+namespace
+{
+
+bool isRowDirection (FlexBox::Direction direction)
 {
     return direction == FlexBox::Direction::row || direction == FlexBox::Direction::rowReverse;
 }
 
-static bool isReverseDirection (FlexBox::Direction direction)
+bool isReverseDirection (FlexBox::Direction direction)
 {
     return direction == FlexBox::Direction::rowReverse || direction == FlexBox::Direction::columnReverse;
 }
 
+/** Clamps a size against a min/max pair where a negative bound means "unset". */
+float applyMinMax (float size, float minSize, float maxSize)
+{
+    if (minSize >= 0.0f)
+        size = std::max (size, minSize);
+
+    if (maxSize >= 0.0f)
+        size = std::min (size, maxSize);
+
+    return size;
+}
+
 //==============================================================================
-// Resolves the item's main-axis size, honoring (in priority order) flex-basis,
-// percentage sizing, fixed sizing, and finally the component's current size.
-static float resolveItemMainSize (const FlexItem& item, bool isRow, float containerMainSize)
+/**
+    The min-content and max-content sizes of an item along one axis.
+
+    @see getIntrinsicSize
+*/
+struct IntrinsicSize
 {
-    if (item.flexBasis > 0.0f)
-        return item.flexBasis;
+    float minContent = 0.0f;
+    float maxContent = 0.0f;
+};
 
-    const float mainPercent = isRow ? item.widthPercent : item.heightPercent;
-    if (mainPercent >= 0.0f)
-        return containerMainSize * mainPercent / 100.0f;
+/**
+    The single point at which the flex algorithm asks an item how big its
+    content is.
 
-    const float mainSize = isRow ? item.width : item.height;
-    if (mainSize > 0.0f)
-        return mainSize;
+    CSS needs this query in several places - `flex-basis: auto`, an auto cross
+    size, and the §4.5 automatic minimum size that floors flex-shrink - and YUP
+    has no content-measurement hook on Component yet, so this is deliberately a
+    stub with a designed-for shape rather than a real implementation.
 
-    if (item.associatedComponent != nullptr)
-        return isRow ? item.associatedComponent->getWidth()
-                     : item.associatedComponent->getHeight();
+    It reports:
 
-    return 0.0f;
+    - `maxContent` as the component's current bounds, which is the established
+      YUP behaviour for an unspecified size (measured/intrinsic sizing).
+    - `minContent` as 0. A box whose content cannot be measured has no known
+      lower bound, and 0 is the only safe floor. This matches a browser exactly
+      whenever the real min-content size is 0 (an empty box), and under-reports
+      otherwise - a divergence that is documented rather than papered over,
+      because substituting the current size here would make a shrinking item
+      refuse to shrink at all.
+
+    When Component grows a `getContentSize()` hook, only this function changes:
+    every caller in the file routes through it, so the freeze loop, the line
+    breaker and the cross-size resolution do not need to be re-plumbed.
+*/
+IntrinsicSize getIntrinsicSize (const FlexItem& item, bool horizontal)
+{
+    const float measured = item.associatedComponent != nullptr
+                             ? (horizontal ? item.associatedComponent->getWidth()
+                                           : item.associatedComponent->getHeight())
+                             : 0.0f;
+
+    return { 0.0f, measured };
 }
 
-// Resolves the item's cross-axis size, honoring (in priority order) percentage
-// sizing, fixed sizing, and finally the component's current size.
-static float resolveItemCrossSize (const FlexItem& item, bool isRow, float containerCrossSize)
+//==============================================================================
+LayoutDistributionMode toDistribution (FlexBox::JustifyContent value)
 {
-    const float crossPercent = isRow ? item.heightPercent : item.widthPercent;
-    if (crossPercent >= 0.0f)
-        return containerCrossSize * crossPercent / 100.0f;
-
-    const float crossSize = isRow ? item.height : item.width;
-    if (crossSize > 0.0f)
-        return crossSize;
-
-    if (item.associatedComponent != nullptr)
-        return isRow ? item.associatedComponent->getHeight()
-                     : item.associatedComponent->getWidth();
-
-    return 0.0f;
-}
-
-// Resolves the item's cross-axis alignment, mapping the container's align-items
-// value onto the item's align-self when the item uses auto alignment.
-static FlexItem::AlignSelf resolveItemAlign (const FlexItem& item, FlexBox::AlignItems alignItems)
-{
-    if (item.alignSelf != FlexItem::AlignSelf::autoAlign)
-        return item.alignSelf;
-
-    switch (alignItems)
+    switch (value)
     {
-        case FlexBox::AlignItems::flexStart:
-            return FlexItem::AlignSelf::flexStart;
-        case FlexBox::AlignItems::flexEnd:
-            return FlexItem::AlignSelf::flexEnd;
-        case FlexBox::AlignItems::center:
-            return FlexItem::AlignSelf::center;
-        case FlexBox::AlignItems::stretch:
-            return FlexItem::AlignSelf::stretch;
-        case FlexBox::AlignItems::baseline:
-            return FlexItem::AlignSelf::baseline;
+        case FlexBox::JustifyContent::flexStart:    return LayoutDistributionMode::start;
+        case FlexBox::JustifyContent::flexEnd:      return LayoutDistributionMode::end;
+        case FlexBox::JustifyContent::center:       return LayoutDistributionMode::center;
+        case FlexBox::JustifyContent::spaceBetween: return LayoutDistributionMode::spaceBetween;
+        case FlexBox::JustifyContent::spaceAround:  return LayoutDistributionMode::spaceAround;
+        case FlexBox::JustifyContent::spaceEvenly:  return LayoutDistributionMode::spaceEvenly;
     }
 
-    return FlexItem::AlignSelf::autoAlign;
+    return LayoutDistributionMode::start;
+}
+
+LayoutDistributionMode toDistribution (FlexBox::AlignContent value)
+{
+    switch (value)
+    {
+        case FlexBox::AlignContent::flexStart:    return LayoutDistributionMode::start;
+        case FlexBox::AlignContent::flexEnd:      return LayoutDistributionMode::end;
+        case FlexBox::AlignContent::center:       return LayoutDistributionMode::center;
+        case FlexBox::AlignContent::spaceBetween: return LayoutDistributionMode::spaceBetween;
+        case FlexBox::AlignContent::spaceAround:  return LayoutDistributionMode::spaceAround;
+        case FlexBox::AlignContent::spaceEvenly:  return LayoutDistributionMode::spaceEvenly;
+        case FlexBox::AlignContent::stretch:      return LayoutDistributionMode::stretch;
+    }
+
+    return LayoutDistributionMode::stretch;
+}
+
+//==============================================================================
+/**
+    An item with every input the algorithm needs resolved exactly once.
+
+    Sizes and margins are expressed in the container's *logical* axes: main and
+    cross, with "start" always meaning the direction the items flow in. The
+    mapping back to physical left/top/width/height - including the mirroring
+    that row-reverse, column-reverse and wrap-reverse need - happens in a single
+    step at the very end, so no pass in between has to think about direction.
+*/
+struct ResolvedItem
+{
+    FlexItem* item = nullptr;
+    int sourceOrder = 0;
+
+    float baseMainSize = 0.0f;         /**< The flex base size. */
+    float hypotheticalMainSize = 0.0f; /**< Base size clamped by min/max. */
+    float mainSize = 0.0f;             /**< Final size, after the freeze loop. */
+
+    float hypotheticalCrossSize = 0.0f; /**< Cross size before stretching. */
+    float crossSize = 0.0f;             /**< Final cross size. */
+
+    float mainMarginStart = 0.0f;
+    float mainMarginEnd = 0.0f;
+    float crossMarginStart = 0.0f;
+    float crossMarginEnd = 0.0f;
+
+    bool mainMarginStartIsAuto = false;
+    bool mainMarginEndIsAuto = false;
+    bool crossMarginStartIsAuto = false;
+    bool crossMarginEndIsAuto = false;
+
+    float minMainSize = -1.0f;
+    float maxMainSize = -1.0f;
+    float minCrossSize = -1.0f;
+    float maxCrossSize = -1.0f;
+
+    float flexGrow = 0.0f;
+    float flexShrink = 1.0f;
+
+    FlexItem::AlignSelf align = FlexItem::AlignSelf::flexStart;
+    bool crossSizeIsAuto = false;
+
+    bool frozen = false;
+    float violation = 0.0f;
+
+    float mainPosition = 0.0f;
+    float crossPosition = 0.0f;
+
+    /** The item's outer (margin box) size along the main axis. */
+    float outerMainSize() const noexcept { return mainSize + mainMarginStart + mainMarginEnd; }
+
+    /** The item's outer (margin box) size along the cross axis, before stretching. */
+    float outerHypotheticalCrossSize() const noexcept { return hypotheticalCrossSize + crossMarginStart + crossMarginEnd; }
+
+    /** The distance from the item's margin-box cross start to its baseline. */
+    float baselineOffset() const noexcept { return item->baseline >= 0.0f ? item->baseline : crossSize; }
+
+    /** How many of the item's cross-axis margins are auto. */
+    int numAutoCrossMargins() const noexcept
+    {
+        return (crossMarginStartIsAuto ? 1 : 0) + (crossMarginEndIsAuto ? 1 : 0);
+    }
+};
+
+/** A run of items sharing one flex line, as a range into the resolved array. */
+struct FlexLine
+{
+    int firstItem = 0;
+    int numItems = 0;
+    float crossSize = 0.0f;
+    float crossPosition = 0.0f;
+};
+
+//==============================================================================
+/**
+    Resolves the flexible lengths of one line per CSS Flexbox §9.7.
+
+    A single proportional pass is not enough: an item whose grown or shrunk size
+    violates its own min/max must be frozen at the clamped value and the space
+    it could not take redistributed over the items that are still flexible. That
+    loop is what makes `max-width` on a growing item behave, and what makes a
+    `min-width` floor on a shrinking item push the deficit onto its siblings.
+*/
+void resolveFlexibleLengths (ResolvedItem* lineItems, int numItems, float containerMainSize, float gap)
+{
+    if (numItems <= 0)
+        return;
+
+    const float totalGap = gap * static_cast<float> (std::max (0, numItems - 1));
+
+    float totalMargins = 0.0f;
+    float totalHypothetical = 0.0f;
+
+    for (int i = 0; i < numItems; ++i)
+    {
+        totalMargins += lineItems[i].mainMarginStart + lineItems[i].mainMarginEnd;
+        totalHypothetical += lineItems[i].hypotheticalMainSize;
+    }
+
+    const float initialFreeSpace = containerMainSize - totalMargins - totalGap - totalHypothetical;
+    const bool isGrowing = initialFreeSpace > 0.0f;
+
+    // Freeze the items that cannot flex in the direction we need, and the ones
+    // whose base size was already clamped away from that direction.
+    for (int i = 0; i < numItems; ++i)
+    {
+        auto& r = lineItems[i];
+        const float factor = isGrowing ? r.flexGrow : r.flexShrink;
+
+        if (factor <= 0.0f
+            || (isGrowing && r.baseMainSize > r.hypotheticalMainSize)
+            || (! isGrowing && r.baseMainSize < r.hypotheticalMainSize))
+        {
+            r.frozen = true;
+            r.mainSize = r.hypotheticalMainSize;
+        }
+        else
+        {
+            r.frozen = false;
+            r.mainSize = r.baseMainSize;
+        }
+    }
+
+    // Each iteration freezes at least one item, so numItems passes is an upper
+    // bound; the extra one lets the final all-satisfied pass run.
+    for (int pass = 0; pass <= numItems; ++pass)
+    {
+        int numUnfrozen = 0;
+        float totalGrow = 0.0f;
+        float totalShrink = 0.0f;
+        float totalScaledShrink = 0.0f;
+        float used = 0.0f;
+
+        for (int i = 0; i < numItems; ++i)
+        {
+            const auto& r = lineItems[i];
+            used += r.frozen ? r.mainSize : r.baseMainSize;
+
+            if (r.frozen)
+                continue;
+
+            ++numUnfrozen;
+            totalGrow += r.flexGrow;
+            totalShrink += r.flexShrink;
+            totalScaledShrink += r.flexShrink * r.baseMainSize;
+        }
+
+        if (numUnfrozen == 0)
+            break;
+
+        const float remainingFreeSpace = containerMainSize - totalMargins - totalGap - used;
+
+        if (isGrowing)
+        {
+            if (totalGrow <= 0.0f)
+                break;
+
+            // §9.7.4b: flex factors summing to less than one only claim that
+            // fraction of the original free space, so `flex-grow: 0.5` grows by
+            // half the slack rather than absorbing all of it.
+            float distributable = remainingFreeSpace;
+
+            if (totalGrow < 1.0f && std::abs (initialFreeSpace * totalGrow) < std::abs (remainingFreeSpace))
+                distributable = initialFreeSpace * totalGrow;
+
+            for (int i = 0; i < numItems; ++i)
+            {
+                auto& r = lineItems[i];
+
+                if (! r.frozen)
+                    r.mainSize = r.baseMainSize + distributable * r.flexGrow / totalGrow;
+            }
+        }
+        else
+        {
+            if (totalScaledShrink <= 0.0f)
+                break;
+
+            float distributable = remainingFreeSpace;
+
+            if (totalShrink < 1.0f && std::abs (initialFreeSpace * totalShrink) < std::abs (remainingFreeSpace))
+                distributable = initialFreeSpace * totalShrink;
+
+            // Weighted by flexShrink * base size, so a large item gives up more
+            // than a small one at the same shrink factor.
+            for (int i = 0; i < numItems; ++i)
+            {
+                auto& r = lineItems[i];
+
+                if (! r.frozen)
+                    r.mainSize = r.baseMainSize + distributable * (r.flexShrink * r.baseMainSize) / totalScaledShrink;
+            }
+        }
+
+        // Clamp, and total up which way the clamps pushed.
+        float totalViolation = 0.0f;
+
+        for (int i = 0; i < numItems; ++i)
+        {
+            auto& r = lineItems[i];
+
+            if (r.frozen)
+                continue;
+
+            const float unclamped = r.mainSize;
+
+            r.mainSize = applyMinMax (r.mainSize, r.minMainSize, r.maxMainSize);
+
+            // The §4.5 automatic minimum size, via the D1 seam: with no
+            // explicit min the floor is the item's min-content size.
+            if (r.minMainSize < 0.0f)
+                r.mainSize = std::max (r.mainSize, 0.0f);
+
+            r.violation = r.mainSize - unclamped;
+            totalViolation += r.violation;
+        }
+
+        // An absolute epsilon, not a relative one: the violations are pixel
+        // sizes summed over the line, so comparing the total against zero
+        // relatively (which is what approximatelyEqual would do) never
+        // succeeds once rounding has crept in.
+        constexpr float violationEpsilon = 1.0e-4f;
+
+        bool frozeAnyItem = false;
+
+        auto freeze = [&] (ResolvedItem& item)
+        {
+            item.frozen = true;
+            frozeAnyItem = true;
+        };
+
+        if (std::abs (totalViolation) < violationEpsilon)
+        {
+            for (int i = 0; i < numItems; ++i)
+                freeze (lineItems[i]);
+        }
+        else if (totalViolation > 0.0f)
+        {
+            for (int i = 0; i < numItems; ++i)
+                if (lineItems[i].violation > 0.0f)
+                    freeze (lineItems[i]);
+        }
+        else
+        {
+            for (int i = 0; i < numItems; ++i)
+                if (lineItems[i].violation < 0.0f)
+                    freeze (lineItems[i]);
+        }
+
+        // Every pass must make progress. One that freezes nothing would
+        // otherwise repeat until the iteration bound and leave the sizes a
+        // partial distribution happened to produce.
+        if (! frozeAnyItem)
+            for (int i = 0; i < numItems; ++i)
+                lineItems[i].frozen = true;
+    }
+
+    for (int i = 0; i < numItems; ++i)
+        lineItems[i].mainSize = std::max (0.0f, lineItems[i].mainSize);
+}
+
+} // namespace
+
+//==============================================================================
+void FlexBox::setPadding (float newPadding) noexcept
+{
+    paddingLeft = paddingRight = paddingTop = paddingBottom = newPadding;
+}
+
+void FlexBox::setPadding (float horizontal, float vertical) noexcept
+{
+    paddingLeft = paddingRight = horizontal;
+    paddingTop = paddingBottom = vertical;
 }
 
 //==============================================================================
 void FlexBox::performLayout (Rectangle<float> targetArea)
 {
-    if (items.size() == 0)
+    if (items.isEmpty())
         return;
 
-    // Sort items by order
-    Array<FlexItem*> sortedItems;
-    sortedItems.ensureStorageAllocated (items.size());
+    const bool isRow = isRowDirection (flexDirection);
+    const bool isReverseMain = isReverseDirection (flexDirection);
+    const bool isReverseCross = (flexWrap == Wrap::wrapReverse);
+    const bool isSingleLine = (flexWrap == Wrap::noWrap);
 
-    for (auto& item : items)
-        sortedItems.add (&item);
+    jassert (gap >= 0.0f); // a negative gap is meaningless and is clamped away
+    jassert (paddingLeft >= 0.0f && paddingRight >= 0.0f);
+    jassert (paddingTop >= 0.0f && paddingBottom >= 0.0f);
 
-    std::sort (sortedItems.begin(), sortedItems.end(), [] (const FlexItem* a, const FlexItem* b)
+    // Padding shrinks the content box the items are laid out in, so every
+    // pass below works in content-box coordinates and only the final mapping
+    // adds the origin back.
+    const auto paddedArea = targetArea.reduced (std::max (0.0f, paddingLeft),
+                                                std::max (0.0f, paddingTop),
+                                                std::max (0.0f, paddingRight),
+                                                std::max (0.0f, paddingBottom));
+
+    // Padding larger than the area would otherwise invert the rectangle.
+    const Rectangle<float> contentArea (paddedArea.getX(),
+                                        paddedArea.getY(),
+                                        std::max (0.0f, paddedArea.getWidth()),
+                                        std::max (0.0f, paddedArea.getHeight()));
+
+    const float containerMainSize = isRow ? contentArea.getWidth() : contentArea.getHeight();
+    const float containerCrossSize = isRow ? contentArea.getHeight() : contentArea.getWidth();
+    const float containerMainStart = isRow ? contentArea.getX() : contentArea.getY();
+    const float containerCrossStart = isRow ? contentArea.getY() : contentArea.getX();
+
+    // row-gap and column-gap fall back to the `gap` shorthand when unset. In a
+    // row container the columns separate items and the rows separate lines; in
+    // a column container it is the other way round.
+    const float shorthandGap = std::max (0.0f, gap);
+    const float usedRowGap = rowGap >= 0.0f ? rowGap : shorthandGap;
+    const float usedColumnGap = columnGap >= 0.0f ? columnGap : shorthandGap;
+
+    const float mainGap = isRow ? usedColumnGap : usedRowGap;
+    const float crossGap = isRow ? usedRowGap : usedColumnGap;
+
+    //==============================================================================
+    // Pass 1: resolve every input once, in logical (main/cross) terms.
+
+    Array<ResolvedItem> resolved;
+    resolved.ensureStorageAllocated (items.size());
+
+    for (int i = 0; i < items.size(); ++i)
     {
-        return a->order < b->order;
+        auto& item = items.getReference (i);
+
+        ResolvedItem r;
+        r.item = &item;
+        r.sourceOrder = item.order;
+
+        jassert (item.flexGrow >= 0.0f);
+        jassert (item.flexShrink >= 0.0f);
+        r.flexGrow = std::max (0.0f, item.flexGrow);
+        r.flexShrink = std::max (0.0f, item.flexShrink);
+
+        // Margins follow the logical axes. In a reversed direction the item
+        // flows from the far edge, so its *leading* margin is the physically
+        // trailing one - which is why mirroring the final rectangle instead
+        // makes marginLeft behave as a right margin in row-reverse.
+        if (isRow)
+        {
+            r.mainMarginStart = isReverseMain ? item.marginRight : item.marginLeft;
+            r.mainMarginEnd = isReverseMain ? item.marginLeft : item.marginRight;
+            r.crossMarginStart = isReverseCross ? item.marginBottom : item.marginTop;
+            r.crossMarginEnd = isReverseCross ? item.marginTop : item.marginBottom;
+
+            r.mainMarginStartIsAuto = isReverseMain ? item.marginRightAuto : item.marginLeftAuto;
+            r.mainMarginEndIsAuto = isReverseMain ? item.marginLeftAuto : item.marginRightAuto;
+            r.crossMarginStartIsAuto = isReverseCross ? item.marginBottomAuto : item.marginTopAuto;
+            r.crossMarginEndIsAuto = isReverseCross ? item.marginTopAuto : item.marginBottomAuto;
+
+            r.minMainSize = item.minWidth;
+            r.maxMainSize = item.maxWidth;
+            r.minCrossSize = item.minHeight;
+            r.maxCrossSize = item.maxHeight;
+        }
+        else
+        {
+            r.mainMarginStart = isReverseMain ? item.marginBottom : item.marginTop;
+            r.mainMarginEnd = isReverseMain ? item.marginTop : item.marginBottom;
+            r.crossMarginStart = isReverseCross ? item.marginRight : item.marginLeft;
+            r.crossMarginEnd = isReverseCross ? item.marginLeft : item.marginRight;
+
+            r.mainMarginStartIsAuto = isReverseMain ? item.marginBottomAuto : item.marginTopAuto;
+            r.mainMarginEndIsAuto = isReverseMain ? item.marginTopAuto : item.marginBottomAuto;
+            r.crossMarginStartIsAuto = isReverseCross ? item.marginRightAuto : item.marginLeftAuto;
+            r.crossMarginEndIsAuto = isReverseCross ? item.marginLeftAuto : item.marginRightAuto;
+
+            r.minMainSize = item.minHeight;
+            r.maxMainSize = item.maxHeight;
+            r.minCrossSize = item.minWidth;
+            r.maxCrossSize = item.maxWidth;
+        }
+
+        // Flex base size: flex-basis, then a percentage, then a fixed size,
+        // then the item's max-content size through the D1 seam.
+        const float mainPercent = isRow ? item.widthPercent : item.heightPercent;
+        const float mainFixed = isRow ? item.width : item.height;
+
+        if (item.flexBasisPercent >= 0.0f)
+            r.baseMainSize = containerMainSize * item.flexBasisPercent / 100.0f;
+        else if (item.flexBasis >= 0.0f)
+            r.baseMainSize = item.flexBasis;
+        else if (mainPercent >= 0.0f)
+            r.baseMainSize = containerMainSize * mainPercent / 100.0f;
+        else if (mainFixed >= 0.0f)
+            r.baseMainSize = mainFixed;
+        else
+            r.baseMainSize = getIntrinsicSize (item, isRow).maxContent;
+
+        r.hypotheticalMainSize = applyMinMax (r.baseMainSize, r.minMainSize, r.maxMainSize);
+
+        // Cross size: a percentage, then a fixed size, then max-content. Only
+        // an item with none of those is "auto", and only an auto item is
+        // resized by align-items: stretch.
+        const float crossPercent = isRow ? item.heightPercent : item.widthPercent;
+        const float crossFixed = isRow ? item.height : item.width;
+
+        r.crossSizeIsAuto = (crossPercent < 0.0f && crossFixed < 0.0f);
+
+        if (crossPercent >= 0.0f)
+            r.hypotheticalCrossSize = containerCrossSize * crossPercent / 100.0f;
+        else if (crossFixed >= 0.0f)
+            r.hypotheticalCrossSize = crossFixed;
+        else
+            r.hypotheticalCrossSize = getIntrinsicSize (item, ! isRow).maxContent;
+
+        r.hypotheticalCrossSize = applyMinMax (r.hypotheticalCrossSize, r.minCrossSize, r.maxCrossSize);
+
+        // Resolve align-self against the container's align-items.
+        r.align = item.alignSelf;
+
+        if (r.align == FlexItem::AlignSelf::autoAlign)
+        {
+            switch (alignItems)
+            {
+                case AlignItems::flexStart: r.align = FlexItem::AlignSelf::flexStart; break;
+                case AlignItems::flexEnd:   r.align = FlexItem::AlignSelf::flexEnd; break;
+                case AlignItems::center:    r.align = FlexItem::AlignSelf::center; break;
+                case AlignItems::stretch:   r.align = FlexItem::AlignSelf::stretch; break;
+                case AlignItems::baseline:  r.align = FlexItem::AlignSelf::baseline; break;
+            }
+        }
+
+        // In a column container the cross axis is the inline axis, where a box
+        // with no text has no baseline to share, so CSS aligns it as
+        // flex-start instead.
+        if (r.align == FlexItem::AlignSelf::baseline && ! isRow)
+            r.align = FlexItem::AlignSelf::flexStart;
+
+        resolved.add (r);
+    }
+
+    // CSS orders by the `order` property but keeps source order within a group,
+    // so this must be a stable sort.
+    std::stable_sort (resolved.begin(), resolved.end(), [] (const ResolvedItem& a, const ResolvedItem& b)
+    {
+        return a.sourceOrder < b.sourceOrder;
     });
 
-    const bool isRow = isRowDirection (flexDirection);
-    const bool isReverse = isReverseDirection (flexDirection);
+    //==============================================================================
+    // Pass 2: collect items into lines.
 
-    const float containerMainSize = isRow ? targetArea.getWidth() : targetArea.getHeight();
-    const float containerCrossSize = isRow ? targetArea.getHeight() : targetArea.getWidth();
-    const float containerMainStart = isRow ? targetArea.getX() : targetArea.getY();
-    const float containerCrossStart = isRow ? targetArea.getY() : targetArea.getX();
+    Array<FlexLine> lines;
 
-    // Build lines
-    Array<FlexBox::LineInfo> lines;
-    FlexBox::LineInfo currentLine;
-    float currentMainSize = 0.0f;
-
-    for (int i = 0; i < sortedItems.size(); ++i)
     {
-        auto* item = sortedItems.getUnchecked (i);
+        FlexLine current;
+        current.firstItem = 0;
+        float lineMainSize = 0.0f;
 
-        float itemMainSize = resolveItemMainSize (*item, isRow, containerMainSize);
-        float itemMainMarginStart = isRow ? item->marginLeft : item->marginTop;
-        float itemMainMarginEnd = isRow ? item->marginRight : item->marginBottom;
-
-        const float totalItemMainSize = itemMainSize + itemMainMarginStart + itemMainMarginEnd;
-
-        if (flexWrap != Wrap::noWrap && ! currentLine.items.isEmpty()
-            && currentMainSize + totalItemMainSize + gap > containerMainSize)
+        for (int i = 0; i < resolved.size(); ++i)
         {
-            // Start a new line
-            lines.add (currentLine);
-            currentLine = {};
-            currentMainSize = 0.0f;
+            const auto& r = resolved.getReference (i);
+
+            // CSS breaks on the hypothetical main size, and the gap that would
+            // be inserted before this item counts against the line just like
+            // the item does.
+            const float outer = r.hypotheticalMainSize + r.mainMarginStart + r.mainMarginEnd;
+
+            if (! isSingleLine && current.numItems > 0
+                && lineMainSize + mainGap + outer > containerMainSize)
+            {
+                lines.add (current);
+
+                current = {};
+                current.firstItem = i;
+                lineMainSize = 0.0f;
+            }
+
+            lineMainSize += (current.numItems > 0 ? mainGap : 0.0f) + outer;
+            ++current.numItems;
         }
 
-        currentLine.items.add (item);
-        currentMainSize += totalItemMainSize;
+        if (current.numItems > 0)
+            lines.add (current);
     }
 
-    if (! currentLine.items.isEmpty())
-        lines.add (currentLine);
+    //==============================================================================
+    // Pass 3: resolve flexible lengths, one line at a time.
 
-    // Reverse the line order for wrap-reverse, so the first line is laid out at
-    // the end of the cross axis instead of the start.
-    if (flexWrap == Wrap::wrapReverse)
-        std::reverse (lines.begin(), lines.end());
+    for (const auto& line : lines)
+        resolveFlexibleLengths (resolved.begin() + line.firstItem, line.numItems, containerMainSize, mainGap);
 
-    // Calculate cross sizes for lines
+    //==============================================================================
+    // Pass 4: size the lines on the cross axis.
+
     for (auto& line : lines)
     {
-        float maxCrossSize = 0.0f;
-
-        for (auto* item : line.items)
+        if (isSingleLine)
         {
-            float itemCrossSize = resolveItemCrossSize (*item, isRow, containerCrossSize);
-            float crossMarginStart = isRow ? item->marginTop : item->marginLeft;
-            float crossMarginEnd = isRow ? item->marginBottom : item->marginRight;
-            maxCrossSize = std::max (maxCrossSize, itemCrossSize + crossMarginStart + crossMarginEnd);
+            // A single-line container has exactly one line and it IS the
+            // container on the cross axis - align-content does not apply. This
+            // is what makes the default align-items: stretch actually stretch.
+            line.crossSize = containerCrossSize;
+            continue;
         }
 
-        line.crossSize = maxCrossSize;
-        line.totalMainSize = 0.0f;
+        float maxOuter = 0.0f;
+        float maxAscent = 0.0f;
+        float maxDescent = 0.0f;
+        bool hasBaselineItem = false;
 
-        for (auto* item : line.items)
+        for (int i = 0; i < line.numItems; ++i)
         {
-            float itemMainSize = resolveItemMainSize (*item, isRow, containerMainSize);
-            float mainMarginStart = isRow ? item->marginLeft : item->marginTop;
-            float mainMarginEnd = isRow ? item->marginRight : item->marginBottom;
-            line.totalMainSize += itemMainSize + mainMarginStart + mainMarginEnd;
+            const auto& r = resolved.getReference (line.firstItem + i);
+            maxOuter = std::max (maxOuter, r.outerHypotheticalCrossSize());
+
+            if (r.align != FlexItem::AlignSelf::baseline)
+                continue;
+
+            // A baseline-aligned item can force a taller line than the tallest
+            // item on its own, because the shared baseline pushes items down.
+            const float offset = r.item->baseline >= 0.0f ? r.item->baseline : r.hypotheticalCrossSize;
+
+            hasBaselineItem = true;
+            maxAscent = std::max (maxAscent, r.crossMarginStart + offset);
+            maxDescent = std::max (maxDescent, r.hypotheticalCrossSize + r.crossMarginEnd - offset);
+        }
+
+        line.crossSize = hasBaselineItem ? std::max (maxOuter, maxAscent + maxDescent) : maxOuter;
+    }
+
+    //==============================================================================
+    // Pass 5: place the lines along the cross axis (align-content).
+
+    {
+        float totalLinesCrossSize = crossGap * static_cast<float> (std::max (0, lines.size() - 1));
+
+        for (const auto& line : lines)
+            totalLinesCrossSize += line.crossSize;
+
+        // align-content never applies to a single-line container; it does apply
+        // to a wrapping container that happens to produce only one line.
+        const auto distributed = isSingleLine
+                                   ? LayoutDistribution { 0.0f, crossGap, 0.0f }
+                                   : LayoutDistribution::calculate (toDistribution (alignContent),
+                                                                    containerCrossSize - totalLinesCrossSize,
+                                                                    lines.size(),
+                                                                    crossGap);
+
+        float crossPosition = distributed.leading;
+
+        for (auto& line : lines)
+        {
+            line.crossSize += distributed.growEach;
+            line.crossPosition = crossPosition;
+            crossPosition += line.crossSize + distributed.between;
         }
     }
 
-    // Calculate total cross size
-    float totalCrossSize = 0.0f;
+    //==============================================================================
+    // Pass 6: place the items within each line, then map back to physical
+    // coordinates and apply the bounds.
+
     for (const auto& line : lines)
-        totalCrossSize += line.crossSize + gap;
-
-    if (lines.size() > 0)
-        totalCrossSize -= gap;
-
-    // Align lines on cross axis
-    float crossOffset;
-
-    switch (alignContent)
     {
-        case AlignContent::flexStart:
-            crossOffset = 0.0f;
-            break;
-        case AlignContent::flexEnd:
-            crossOffset = containerCrossSize - totalCrossSize;
-            break;
-        case AlignContent::center:
-            crossOffset = (containerCrossSize - totalCrossSize) / 2.0f;
-            break;
-        case AlignContent::spaceBetween:
-            crossOffset = 0.0f;
-            break;
-        case AlignContent::spaceAround:
-            crossOffset = (containerCrossSize - totalCrossSize) / (float) (lines.size() + 1);
-            break;
-        case AlignContent::stretch:
-            crossOffset = 0.0f;
-            break;
-    }
+        auto* lineItems = resolved.begin() + line.firstItem;
 
-    // Position items
-    float currentCrossPos = containerCrossStart + crossOffset;
+        // The free space justify-content gets to play with is what is left
+        // AFTER the flexible lengths were resolved. Reusing the pre-flex figure
+        // hands the same space out twice and pushes items past the container.
+        float usedMainSize = mainGap * static_cast<float> (std::max (0, line.numItems - 1));
 
-    for (int lineIdx = 0; lineIdx < lines.size(); ++lineIdx)
-    {
-        auto& line = lines.getReference (lineIdx);
+        for (int i = 0; i < line.numItems; ++i)
+            usedMainSize += lineItems[i].outerMainSize();
 
-        // Calculate cross size for this line
-        float lineCrossSize = line.crossSize;
+        float freeMainSpace = containerMainSize - usedMainSize;
 
-        if (alignContent == AlignContent::stretch && lines.size() > 1)
-            lineCrossSize = (containerCrossSize - totalCrossSize) / (float) lines.size() + line.crossSize;
+        // Auto margins on the main axis take ALL the positive free space and
+        // split it equally, before justify-content is consulted - which is why
+        // `marginLeftAuto` beats a `justifyContent` of center.
+        int numAutoMainMargins = 0;
 
-        if (alignContent == AlignContent::spaceBetween && lines.size() > 1)
+        for (int i = 0; i < line.numItems; ++i)
+            numAutoMainMargins += (lineItems[i].mainMarginStartIsAuto ? 1 : 0)
+                                + (lineItems[i].mainMarginEndIsAuto ? 1 : 0);
+
+        if (numAutoMainMargins > 0 && freeMainSpace > 0.0f)
         {
-            if (lineIdx == 0)
-                currentCrossPos = containerCrossStart;
-            else if (lineIdx == lines.size() - 1)
-                currentCrossPos = containerCrossStart + containerCrossSize - lineCrossSize;
-            else
-                currentCrossPos = containerCrossStart + (containerCrossSize - totalCrossSize) * (float) lineIdx / (float) (lines.size() - 1);
+            const float share = freeMainSpace / static_cast<float> (numAutoMainMargins);
+
+            for (int i = 0; i < line.numItems; ++i)
+            {
+                auto& r = lineItems[i];
+
+                if (r.mainMarginStartIsAuto)
+                    r.mainMarginStart = share;
+
+                if (r.mainMarginEndIsAuto)
+                    r.mainMarginEnd = share;
+            }
+
+            freeMainSpace = 0.0f;
         }
 
-        // Pre-compute the shared baseline for baseline-aligned items
+        const auto justified = LayoutDistribution::calculate (toDistribution (justifyContent),
+                                                              freeMainSpace,
+                                                              line.numItems,
+                                                              mainGap);
+
+        // Stretch resizes only auto-sized items; an explicit cross size wins,
+        // and so does an auto cross margin - an item whose margin is going to
+        // absorb the leftover cannot also be sized to fill it.
+        for (int i = 0; i < line.numItems; ++i)
+        {
+            auto& r = lineItems[i];
+
+            if (r.align == FlexItem::AlignSelf::stretch
+                && r.crossSizeIsAuto
+                && r.numAutoCrossMargins() == 0)
+            {
+                r.crossSize = applyMinMax (std::max (0.0f, line.crossSize - r.crossMarginStart - r.crossMarginEnd),
+                                           r.minCrossSize,
+                                           r.maxCrossSize);
+            }
+            else
+            {
+                r.crossSize = r.hypotheticalCrossSize;
+            }
+
+            // Auto cross margins share whatever room is left in the line.
+            if (const int numAuto = r.numAutoCrossMargins(); numAuto > 0)
+            {
+                const float leftover = line.crossSize - r.crossSize - r.crossMarginStart - r.crossMarginEnd;
+
+                if (leftover > 0.0f)
+                {
+                    const float share = leftover / static_cast<float> (numAuto);
+
+                    if (r.crossMarginStartIsAuto)
+                        r.crossMarginStart = share;
+
+                    if (r.crossMarginEndIsAuto)
+                        r.crossMarginEnd = share;
+                }
+            }
+        }
+
+        // The line's shared baseline, measured from each margin box's start so
+        // that a leading cross margin shifts an item without being counted
+        // twice when the position is derived from it below.
         float lineBaseline = 0.0f;
 
-        for (auto* item : line.items)
+        for (int i = 0; i < line.numItems; ++i)
         {
-            if (resolveItemAlign (*item, alignItems) == FlexItem::AlignSelf::baseline)
+            const auto& r = lineItems[i];
+
+            if (r.align == FlexItem::AlignSelf::baseline)
+                lineBaseline = std::max (lineBaseline, r.crossMarginStart + r.baselineOffset());
+        }
+
+        float mainPosition = justified.leading;
+
+        for (int i = 0; i < line.numItems; ++i)
+        {
+            auto& r = lineItems[i];
+
+            if (i > 0)
+                mainPosition += justified.between;
+
+            mainPosition += r.mainMarginStart;
+            r.mainPosition = mainPosition;
+            mainPosition += r.mainSize + r.mainMarginEnd;
+
+            // An item with an auto cross margin has already been positioned by
+            // that margin; align-items must not move it again.
+            if (r.numAutoCrossMargins() > 0)
             {
-                float crossMarginStart = isRow ? item->marginTop : item->marginLeft;
-                float itemBaseline = item->baseline >= 0.0f ? item->baseline
-                                                            : resolveItemCrossSize (*item, isRow, containerCrossSize);
-                lineBaseline = std::max (lineBaseline, crossMarginStart + itemBaseline);
+                r.crossPosition = line.crossPosition + r.crossMarginStart;
             }
-        }
-
-        // Calculate flex-grow / flex-shrink weights
-        float totalFlexGrow = 0.0f;
-        float totalShrinkWeight = 0.0f;
-        float totalFixedSize = 0.0f;
-
-        for (auto* item : line.items)
-        {
-            float itemMainSize = resolveItemMainSize (*item, isRow, containerMainSize);
-            float mainMarginStart = isRow ? item->marginLeft : item->marginTop;
-            float mainMarginEnd = isRow ? item->marginRight : item->marginBottom;
-
-            totalFixedSize += itemMainSize + mainMarginStart + mainMarginEnd;
-
-            if (item->flexGrow > 0.0f)
-                totalFlexGrow += item->flexGrow;
-
-            if (item->flexShrink > 0.0f)
-                totalShrinkWeight += item->flexShrink * itemMainSize;
-        }
-
-        const float interItemGapTotal = line.items.size() > 1 ? (line.items.size() - 1) * gap : 0.0f;
-
-        float extraSpace = containerMainSize - totalFixedSize - interItemGapTotal;
-
-        // Calculate main axis offset
-        float mainOffset;
-
-        switch (justifyContent)
-        {
-            case JustifyContent::flexStart:
-                mainOffset = 0.0f;
-                break;
-            case JustifyContent::flexEnd:
-                mainOffset = extraSpace;
-                break;
-            case JustifyContent::center:
-                mainOffset = extraSpace / 2.0f;
-                break;
-            case JustifyContent::spaceBetween:
-                mainOffset = 0.0f;
-                break;
-            case JustifyContent::spaceAround:
-                mainOffset = extraSpace / (float) (line.items.size() + 1);
-                break;
-        }
-
-        float currentMainPos = containerMainStart + mainOffset;
-        int gapCount = 0;
-
-        for (auto* item : line.items)
-        {
-            float itemMainSize = resolveItemMainSize (*item, isRow, containerMainSize);
-            float itemCrossSize = resolveItemCrossSize (*item, isRow, containerCrossSize);
-            const float resolvedItemCrossSize = itemCrossSize;
-            float mainMarginStart = isRow ? item->marginLeft : item->marginTop;
-            float mainMarginEnd = isRow ? item->marginRight : item->marginBottom;
-            float crossMarginStart = isRow ? item->marginTop : item->marginLeft;
-            float crossMarginEnd = isRow ? item->marginBottom : item->marginRight;
-
-            // Apply flex-grow when there is extra space, or flex-shrink when
-            // the line overflows. The shrink deficit is distributed across the
-            // shrinkable items weighted by flexShrink * base main size.
-            if (extraSpace > 0.0f && totalFlexGrow > 0.0f && item->flexGrow > 0.0f)
-                itemMainSize += extraSpace * item->flexGrow / totalFlexGrow;
-            else if (extraSpace < 0.0f && totalShrinkWeight > 0.0f && item->flexShrink > 0.0f)
-                itemMainSize -= (-extraSpace) * item->flexShrink * itemMainSize / totalShrinkWeight;
-
-            // Apply min/max constraints on the main axis
-            float constraintMinMainSize = isRow ? item->minWidth : item->minHeight;
-            float constraintMaxMainSize = isRow ? item->maxWidth : item->maxHeight;
-
-            if (constraintMinMainSize >= 0)
-                itemMainSize = std::max (itemMainSize, constraintMinMainSize);
-            if (constraintMaxMainSize >= 0)
-                itemMainSize = std::min (itemMainSize, constraintMaxMainSize);
-
-            // Resolve alignment on the cross axis
-            FlexItem::AlignSelf align = resolveItemAlign (*item, alignItems);
-
-            // Apply min/max constraints on the cross axis for every alignment
-            float constraintMinCrossSize = isRow ? item->minHeight : item->minWidth;
-            float constraintMaxCrossSize = isRow ? item->maxHeight : item->maxWidth;
-
-            if (align == FlexItem::AlignSelf::stretch)
-                itemCrossSize = lineCrossSize - crossMarginStart - crossMarginEnd;
-
-            if (constraintMinCrossSize >= 0)
-                itemCrossSize = std::max (itemCrossSize, constraintMinCrossSize);
-            if (constraintMaxCrossSize >= 0)
-                itemCrossSize = std::min (itemCrossSize, constraintMaxCrossSize);
-
-            float itemCrossPos;
-
-            switch (align)
+            else switch (r.align)
             {
-                case FlexItem::AlignSelf::stretch:
-                case FlexItem::AlignSelf::flexStart:
-                    itemCrossPos = currentCrossPos + crossMarginStart;
-                    break;
                 case FlexItem::AlignSelf::flexEnd:
-                    itemCrossPos = currentCrossPos + lineCrossSize - itemCrossSize - crossMarginEnd;
+                    r.crossPosition = line.crossPosition + line.crossSize - r.crossMarginEnd - r.crossSize;
                     break;
-                case FlexItem::AlignSelf::baseline:
-                {
-                    float itemBaseline = item->baseline >= 0.0f ? item->baseline : resolvedItemCrossSize;
-                    itemCrossPos = currentCrossPos + lineBaseline - crossMarginStart - itemBaseline;
-                    break;
-                }
+
                 case FlexItem::AlignSelf::center:
+                    // The margin box is what gets centred, so asymmetric cross
+                    // margins shift the border box off the line's midpoint.
+                    r.crossPosition = line.crossPosition
+                                    + r.crossMarginStart
+                                    + (line.crossSize - r.crossMarginStart - r.crossMarginEnd - r.crossSize) / 2.0f;
+                    break;
+
+                case FlexItem::AlignSelf::baseline:
+                    r.crossPosition = line.crossPosition + lineBaseline - r.baselineOffset();
+                    break;
+
+                case FlexItem::AlignSelf::autoAlign:
+                case FlexItem::AlignSelf::flexStart:
+                case FlexItem::AlignSelf::stretch:
                 default:
-                    itemCrossPos = currentCrossPos + (lineCrossSize - itemCrossSize) / 2.0f;
+                    r.crossPosition = line.crossPosition + r.crossMarginStart;
                     break;
             }
 
-            // Apply spacing
-            if (justifyContent == JustifyContent::spaceBetween && line.items.size() > 1 && gapCount > 0)
-                currentMainPos += extraSpace / (float) (line.items.size() - 1);
-            else if (justifyContent == JustifyContent::spaceAround && gapCount > 0)
-                currentMainPos += mainOffset;
+            if (r.item->associatedComponent == nullptr)
+                continue;
 
-            currentMainPos += mainMarginStart;
+            // Mirror within the container, not around the final rectangle, so
+            // margins and gaps keep the meaning they were resolved with.
+            const float mainPos = isReverseMain
+                                    ? containerMainStart + containerMainSize - r.mainPosition - r.mainSize
+                                    : containerMainStart + r.mainPosition;
 
-            // Set bounds
-            if (item->associatedComponent != nullptr)
-            {
-                float x, y, w, h;
 
-                if (isRow)
-                {
-                    x = currentMainPos;
-                    y = itemCrossPos;
-                    w = itemMainSize;
-                    h = itemCrossSize;
-                }
-                else
-                {
-                    x = itemCrossPos;
-                    y = currentMainPos;
-                    w = itemCrossSize;
-                    h = itemMainSize;
-                }
+            const float crossPos = isReverseCross
+                                     ? containerCrossStart + containerCrossSize - r.crossPosition - r.crossSize
+                                     : containerCrossStart + r.crossPosition;
 
-                if (isReverse)
-                {
-                    if (isRow)
-                        x = targetArea.getRight() - (x - targetArea.getX()) - w;
-                    else
-                        y = targetArea.getBottom() - (y - targetArea.getY()) - h;
-                }
+            // Component::setBounds takes floats, so rounding here would only
+            // lose precision and make adjacent items disagree about the edge
+            // they share.
+            const auto bounds = isRow
+                                  ? Rectangle<float> (mainPos, crossPos, r.mainSize, r.crossSize)
+                                  : Rectangle<float> (crossPos, mainPos, r.crossSize, r.mainSize);
 
-                item->associatedComponent->setBounds (Rectangle<float> (x, y, w, h).toNearestInt());
-            }
-
-            currentMainPos += itemMainSize + mainMarginEnd;
-
-            if (gapCount < line.items.size() - 1)
-                currentMainPos += gap;
-
-            ++gapCount;
+            r.item->associatedComponent->setBounds (bounds);
         }
-
-        currentCrossPos += lineCrossSize + gap;
     }
 }
 
