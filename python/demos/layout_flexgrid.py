@@ -59,11 +59,11 @@ class LayoutFlexGridComponent(yup.Component):
 
         # Use FlexBox for the main layout (column direction)
         flex = yup.FlexBox(
-            yup.FlexDirection.column,
-            yup.FlexWrap.noWrap,
-            yup.FlexAlignItems.stretch,
-            yup.FlexJustifyContent.flexStart,
-            yup.FlexAlignContent.stretch,
+            yup.FlexBox.Direction.column,
+            yup.FlexBox.Wrap.noWrap,
+            yup.FlexBox.AlignItems.stretch,
+            yup.FlexBox.JustifyContent.flexStart,
+            yup.FlexBox.AlignContent.stretch,
         )
         flex.gap = 4
 
@@ -79,11 +79,11 @@ class LayoutFlexGridComponent(yup.Component):
 
         # Body area: use a nested FlexBox for sidebar-content-sidebar
         bodyFlex = yup.FlexBox(
-            yup.FlexDirection.row,
-            yup.FlexWrap.noWrap,
-            yup.FlexAlignItems.stretch,
-            yup.FlexJustifyContent.flexStart,
-            yup.FlexAlignContent.stretch,
+            yup.FlexBox.Direction.row,
+            yup.FlexBox.Wrap.noWrap,
+            yup.FlexBox.AlignItems.stretch,
+            yup.FlexBox.JustifyContent.flexStart,
+            yup.FlexBox.AlignContent.stretch,
         )
         bodyFlex.gap = 4
         bodyFlex.items.add(

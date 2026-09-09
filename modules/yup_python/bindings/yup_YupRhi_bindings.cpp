@@ -140,6 +140,15 @@ void registerYupRhiBindings (py::module_& m)
         .value ("index", GpuBufferType::index)
         .value ("uniform", GpuBufferType::uniform);
 
+    py::enum_<GpuLoadOp> (m, "GpuLoadOp")
+        .value ("clear", GpuLoadOp::clear)
+        .value ("load", GpuLoadOp::load)
+        .value ("dontCare", GpuLoadOp::dontCare);
+
+    py::enum_<GpuStoreOp> (m, "GpuStoreOp")
+        .value ("store", GpuStoreOp::store)
+        .value ("discard", GpuStoreOp::discard);
+
     // ============================================================================================ GPU config structs
 
     py::class_<GpuColor> (m, "GpuColor")
@@ -243,7 +252,20 @@ void registerYupRhiBindings (py::module_& m)
     py::class_<GpuRenderOptions> (m, "GpuRenderOptions")
         .def (py::init<>())
         .def (py::init<bool, GpuColor>(), "clear"_a, "clearColor"_a)
-        .def_readwrite ("clear", &GpuRenderOptions::clear)
+        .def (py::init<GpuLoadOp, GpuStoreOp, GpuColor>(), "loadOp"_a, "storeOp"_a, "clearColor"_a = GpuColor::transparentBlack())
+        .def_readwrite ("loadOp", &GpuRenderOptions::loadOp)
+        .def_readwrite ("storeOp", &GpuRenderOptions::storeOp)
+        // The two-state view of loadOp, kept because it reads better from Python than
+        // comparing against GpuLoadOp.clear and because it matches the bool constructor.
+        .def_property ("clear",
+                       [] (const GpuRenderOptions& self)
+                       {
+                           return self.loadOp == GpuLoadOp::clear;
+                       },
+                       [] (GpuRenderOptions& self, bool shouldClear)
+                       {
+                           self.loadOp = shouldClear ? GpuLoadOp::clear : GpuLoadOp::load;
+                       })
         .def_readwrite ("clearColor", &GpuRenderOptions::clearColor);
 
     // ============================================================================================ yup::GpuDevice
@@ -320,7 +342,7 @@ void registerYupRhiBindings (py::module_& m)
     // ============================================================================================ yup::GpuTarget
 
     py::class_<GpuTarget, ReferenceCountedObjectPtr<GpuTarget>> (m, "GpuTarget")
-        .def_static ("create", &GpuTarget::create)
+        .def_static ("create", py::overload_cast<GpuDevice::Ptr, int, int> (&GpuTarget::create), "device"_a, "width"_a, "height"_a)
         .def ("getWidth", &GpuTarget::getWidth)
         .def ("getHeight", &GpuTarget::getHeight)
         .def ("asTexture", &GpuTarget::asTexture)

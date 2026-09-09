@@ -98,6 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - New `GpuTarget` class (`rhi/yup_GpuTarget.h`): low-level render-pass-only offscreen GPU surface (`create`, `beginRenderPass`, `asTexture`, `asImage`, `readPixels`). Its backing texture is allocated from the context's main render context, so it does not reserve a dedicated `rive::gpu::RenderContext` — use it for custom `GpuPipeline` work (e.g. post-process passes) that needs no 2D drawing.
 - New `GpuCanvas` class (`rhi/yup_GpuCanvas.h`): consolidated backend-agnostic offscreen GPU surface that now composes a `GpuTarget` (over a `RenderableTarget`) and creates a non-owning `Graphics` lazily only when 2D drawing is requested.
 - Python bindings now expose `GpuColor` as `yup.GpuColor` (backing `GpuRenderOptions.clearColor`), comparable with `yup.Color`.
+- Python bindings now expose `GpuLoadOp` / `GpuStoreOp` and `GpuRenderOptions.loadOp` / `.storeOp`. `GpuRenderOptions.clear` is kept as a bool view of `loadOp`, so `GpuRenderOptions(True, color)` and `opts.clear` still read the same as before.
 
 #### RHI module extraction & GpuDevice
 
