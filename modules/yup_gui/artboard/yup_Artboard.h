@@ -26,46 +26,22 @@ namespace yup
 /** Represents a Rive artboard.
 
     This class is used to display a Rive artboard.
+
+    Artboards are not internally synchronized. Beyond the message thread, the
+    artboard also advances from refreshDisplay(), which YUP runs on the render
+    thread while holding the message manager lock, so the two never run
+    concurrently. Everything the advance reaches runs on that thread too: the
+    NodeBoundsCallbacks registered with setNodeBoundsListener(), the bounds and
+    transform updates pushed into components attached with
+    attachComponentToNode(), onPropertyChanged / propertyChanged, and the
+    ArtboardViewModelInstance::PropertyChangedCallback of a bound instance.
+    A slow callback therefore stalls rendering.
 */
-class YUP_API Artboard : public Component
+class YUP_API Artboard
+    : public Component
+    , private ComponentListener
 {
 public:
-    //==============================================================================
-    /** Describes how the artboard is fitted inside the component bounds. */
-    enum class Layout
-    {
-        /** Scale independently in X and Y to fill the bounds. */
-        fill,
-        /** Uniform scale to fit inside bounds while preserving aspect ratio. */
-        contain,
-        /** Uniform scale to cover bounds while preserving aspect ratio. */
-        cover,
-        /** Uniform scale so the content width matches the bounds. */
-        fitWidth,
-        /** Uniform scale so the content height matches the bounds. */
-        fitHeight,
-        /** No scaling or alignment. */
-        none,
-        /** Like contain, but never scale above 1.0. */
-        scaleDown,
-        /** Use the artboard's own layout constraints. */
-        layout
-    };
-
-    /** Describes the alignment used to position the artboard inside the bounds. */
-    enum class Alignment
-    {
-        topLeft,
-        topCenter,
-        topRight,
-        centerLeft,
-        center,
-        centerRight,
-        bottomLeft,
-        bottomCenter,
-        bottomRight
-    };
-
     //==============================================================================
     /** Creates a new Rive artboard.
 
@@ -80,10 +56,14 @@ public:
     */
     Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> artboardFile);
 
+    /** Destructor. Detaches every attached component and invalidates all outstanding
+        ArtboardNode handles. */
     ~Artboard() override;
 
     //==============================================================================
     /** Sets the Rive artboard file to display.
+
+        Passing a null file unloads the current one, leaving the artboard empty.
 
         @param artboardFile The Rive artboard file to display.
         @param artboardName The name of the artboard to load from the file. When
@@ -103,21 +83,34 @@ public:
 
         This affects the view transform used for rendering and input handling.
 
-        @param newLayout The new layout mode.
+        Pass std::nullopt to apply no fitting of our own and instead hand the
+        component's size to the artboard, letting its authored Rive layout
+        constraints resolve it. That is what makes nodes reflow on resize, and is
+        the mode responsive artboards are designed for.
+
+        Fitting values Rive has no equivalent for (Fitting::tile,
+        Fitting::centerCrop, Fitting::stretchWidth and Fitting::stretchHeight)
+        fall back to Fitting::scaleToFit.
+
+        @param newFitting The new fitting mode, or nullopt for the artboard's own layout.
     */
-    void setLayout (Layout newLayout);
+    void setFitting (std::optional<Fitting> newFitting);
 
-    /** Returns the current layout mode. */
-    Layout getLayout() const;
+    /** Returns the current fitting mode, or nullopt when the artboard lays itself out. */
+    std::optional<Fitting> getFitting() const;
 
-    /** Sets the alignment used when positioning the artboard in the bounds.
+    /** Sets the justification used when positioning the artboard in the bounds.
 
-        @param newAlignment The new alignment value.
+        This only has a visible effect when the fitting leaves spare room along an
+        axis, so not for Fitting::fill nor for the artboard's own layout. An axis
+        with no flag set is centered on that axis.
+
+        @param newJustification The new justification value.
     */
-    void setAlignment (Alignment newAlignment);
+    void setJustification (Justification newJustification);
 
-    /** Returns the current alignment. */
-    Alignment getAlignment() const;
+    /** Returns the current justification. */
+    Justification getJustification() const;
 
     //==============================================================================
     /** Returns true if the Rive artboard is paused. */
@@ -183,24 +176,39 @@ public:
     */
     void triggerInput (const String& name);
 
-    /** Returns all the inputs of the Rive artboard.
-    
-        @return A var containing all the inputs of the Rive artboard.
+    /** Returns all the state machine inputs of the Rive artboard.
+
+        Each entry is a DynamicObject with:
+        - "id": the input name, as a String.
+        - "type": one of "number", "boolean" or "trigger".
+        - "value": the current value, as a double for "number" and a bool for
+          "boolean". Triggers are stateless and carry no "value".
+
+        @return An Array<var> of input descriptions, or an empty var when the
+                artboard is not driven by a state machine.
     */
     var getAllInputs() const;
 
-    /** Sets all the inputs of the Rive artboard.
+    /** Applies a set of state machine inputs previously read with getAllInputs().
 
-        @param value The value to set the inputs to.
+        Accepts the array getAllInputs() returns and writes each entry back
+        through setInput(), matching entries by their "id". Entries whose "id"
+        is unknown to the current state machine are ignored, so a snapshot taken
+        from one artboard can be applied to another without failing. Triggers are
+        not fired: an input snapshot describes state, and a trigger has none.
+
+        @param value The Array<var> of input descriptions to apply.
     */
     void setAllInputs (const var& value);
 
     /** Sets the value of an input with the given name.
 
+        Triggers ignore the value and simply fire.
+
         @param name The name of the input.
         @param value The value to set the input to.
     */
-    void setInput (const String& state, const var& value);
+    void setInput (const String& name, const var& value);
 
     //==============================================================================
     /** Callback invoked when a named node's bounds or on-screen orientation change.
@@ -259,6 +267,7 @@ public:
             trackPosition
         };
 
+        /** How the artboard positions the attached component. */
         Mode mode;
 
         /** When true, the node's orientation (rotation) is applied to the attached
@@ -347,10 +356,22 @@ public:
         changes the node's bounds, the artboard updates the component according to
         the given options. Ownership of the component remains with the caller, and
         the component is immediately positioned at the node's current bounds upon
-        attachment. Attaching again to the same node replaces the previous attachment.
+        attachment. Attaching again to the same node replaces the previous attachment,
+        and attaching a component that is already attached to a different node moves
+        it, so a component is never driven by two nodes at once.
+
+        The artboard listens for the component's destruction and detaches it
+        automatically, so deleting an attached component without calling
+        detachComponentFromNode() is safe.
+
+        In trackPosition mode the component keeps its own size, and that size
+        decides where its pivot sits; resizing it therefore re-derives its
+        position immediately, so the size can be set before or after attaching
+        with the same result. In fillNode mode the node owns the size, so a
+        resize is simply overwritten.
 
         @param nodeName   The name of the node in the .riv file.
-        @param component  The component to attach; must outlive the attachment.
+        @param component  The component to attach.
         @param options    How the node should drive the component's bounds.
         @return True if the node exists and the component was attached.
     */
@@ -390,7 +411,7 @@ public:
         bindViewModelInstance(). Returns an empty string if the artboard does
         not use a ViewModel.
     */
-    String getViewModelName();
+    String getViewModelName() const;
 
     /** Binds a ViewModel instance to this artboard, enabling its data bindings.
 
@@ -415,20 +436,35 @@ public:
     ArtboardViewModelInstance::Ptr getBoundViewModelInstance() const noexcept;
 
     //==============================================================================
-    /** A callback that is called when a property of the Rive artboard changes. 
-     
-        @param eventName The name of the event.
-        @param propertyName The name of the property.
-        @param oldValue The old value of the property.
-        @param newValue The new value of the property.
+    /** A callback that is called when a custom property of a reported state machine
+        event changes.
+
+        Events are drained after every advance and after every pointer interaction,
+        so the callback fires from advanceAndApply(), refreshDisplay() and the mouse
+        handlers, on the thread described above. Only actual changes are reported: the
+        artboard remembers the last value seen for each event and skips repeats.
+
+        @param artboard     The artboard that reported the event.
+        @param eventName    The name of the event.
+        @param propertyName The name of the custom property carried by the event.
+        @param oldValue     The previous value of the property, or an empty var the
+                            first time the event is seen.
+        @param newValue     The new value of the property.
     */
-    std::function<void (Artboard&, const String&, const String&, const var&, const var&)> onPropertyChanged;
+    std::function<void (Artboard& artboard,
+                        const String& eventName,
+                        const String& propertyName,
+                        const var& oldValue,
+                        const var& newValue)>
+        onPropertyChanged;
 
-    /** A callback that is called when a property of the Rive artboard changes.
+    /** Called when a custom property of a reported state machine event changes.
+
+        Invoked immediately before onPropertyChanged, under the same conditions.
 
         @param eventName The name of the event.
-        @param propertyName The name of the property.
-        @param oldValue The old value of the property.
+        @param propertyName The name of the custom property carried by the event.
+        @param oldValue The previous value of the property.
         @param newValue The new value of the property.
     */
     virtual void propertyChanged (const String& eventName,
@@ -467,13 +503,24 @@ private:
         NodeAttachmentOptions options;
     };
 
+    /** @internal */
+    void componentBeingDeleted (Component& component) override;
+    /** @internal */
+    void componentResized (Component& component) override;
+
     void updateSceneFromFile();
+    void advanceScene (float elapsedSeconds);
     void pullEventsFromStateMachines();
     void updateViewTransform();
     void updateNodeBounds();
     void notifyNodeBoundsChanged();
-    void checkNodeBounds (const String& nodeName);
-    void applyNodeAttachment (const NodeAttachment& attachment, rive::Component* node, const Rectangle<float>& nodeBounds);
+    void checkNodeBounds (const String& nodeName, rive::Component* node);
+    // Taken by value: it is applied by moving a component, whose resized() may
+    // detach it and destroy the attachment record this was read from.
+    void applyNodeAttachment (NodeAttachment attachment, rive::Component* node, const Rectangle<float>& nodeBounds);
+    void detachComponentEverywhere (Component* component);
+    void reapplyNodeAttachment (Component* component);
+    ArtboardNode::Ptr nodeHandleFor (const String& nodeName, rive::Component* node) const;
     float computeNodeRotation (rive::Component* node) const;
     Rectangle<float> computeNodeBounds (rive::Component* node) const;
     AffineTransform computeNodeViewTransform (rive::Component* node) const;
@@ -499,10 +546,15 @@ private:
 
     rive::Mat2D viewTransform;
     String selectedArtboardName;
-    Layout layout = Layout::contain;
-    Alignment alignment = Alignment::center;
+    std::optional<Fitting> fitting = Fitting::scaleToFit;
+    Justification justification = Justification::center;
     bool paused = false;
     bool pauseWhenHidden = true;
+    bool notifyingNodeBounds = false;
+    bool drainingEvents = false;
+    bool applyingNodeAttachment = false;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Artboard)
 };
 
 } // namespace yup

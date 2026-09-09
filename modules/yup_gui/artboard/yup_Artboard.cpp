@@ -26,56 +26,58 @@ namespace yup
 namespace
 {
 
-rive::Fit toRiveFit (Artboard::Layout layout)
+rive::Fit toRiveFit (std::optional<Fitting> fitting)
 {
-    switch (layout)
+    // No fitting of our own means the artboard resolves its own layout.
+    if (! fitting.has_value())
+        return rive::Fit::layout;
+
+    switch (*fitting)
     {
-        case Artboard::Layout::fill:
+        case Fitting::fill:
             return rive::Fit::fill;
-        case Artboard::Layout::contain:
+        case Fitting::scaleToFit:
             return rive::Fit::contain;
-        case Artboard::Layout::cover:
+        case Fitting::scaleToFill:
             return rive::Fit::cover;
-        case Artboard::Layout::fitWidth:
+        case Fitting::fitWidth:
             return rive::Fit::fitWidth;
-        case Artboard::Layout::fitHeight:
+        case Fitting::fitHeight:
             return rive::Fit::fitHeight;
-        case Artboard::Layout::none:
+        case Fitting::none:
             return rive::Fit::none;
-        case Artboard::Layout::scaleDown:
+        case Fitting::centerInside:
             return rive::Fit::scaleDown;
-        case Artboard::Layout::layout:
-            return rive::Fit::layout;
+
+        // Rive has no equivalent for these, so they degrade to a uniform fit.
+        case Fitting::tile:
+        case Fitting::centerCrop:
+        case Fitting::stretchWidth:
+        case Fitting::stretchHeight:
+            return rive::Fit::contain;
     }
 
     return rive::Fit::contain;
 }
 
-rive::Alignment toRiveAlignment (Artboard::Alignment alignment)
+rive::Alignment toRiveAlignment (Justification justification)
 {
-    switch (alignment)
-    {
-        case Artboard::Alignment::topLeft:
-            return rive::Alignment::topLeft;
-        case Artboard::Alignment::topCenter:
-            return rive::Alignment::topCenter;
-        case Artboard::Alignment::topRight:
-            return rive::Alignment::topRight;
-        case Artboard::Alignment::centerLeft:
-            return rive::Alignment::centerLeft;
-        case Artboard::Alignment::center:
-            return rive::Alignment::center;
-        case Artboard::Alignment::centerRight:
-            return rive::Alignment::centerRight;
-        case Artboard::Alignment::bottomLeft:
-            return rive::Alignment::bottomLeft;
-        case Artboard::Alignment::bottomCenter:
-            return rive::Alignment::bottomCenter;
-        case Artboard::Alignment::bottomRight:
-            return rive::Alignment::bottomRight;
-    }
+    const bool left = justification.testFlags (Justification::left);
+    const bool right = ! left && justification.testFlags (Justification::right);
 
-    return rive::Alignment::center;
+    const bool top = justification.testFlags (Justification::top);
+    const bool bottom = ! top && justification.testFlags (Justification::bottom);
+
+    if (top)
+        return left ? rive::Alignment::topLeft : right ? rive::Alignment::topRight
+                                                       : rive::Alignment::topCenter;
+
+    if (bottom)
+        return left ? rive::Alignment::bottomLeft : right ? rive::Alignment::bottomRight
+                                                          : rive::Alignment::bottomCenter;
+
+    return left ? rive::Alignment::centerLeft : right ? rive::Alignment::centerRight
+                                                      : rive::Alignment::center;
 }
 
 constexpr float kNodeBoundsEpsilon = 0.01f;
@@ -93,6 +95,30 @@ bool areNodeBoundsEqual (const Rectangle<float>& a, const Rectangle<float>& b)
         && isClose (a.getHeight(), b.getHeight());
 }
 
+void expandNodeWorldBounds (rive::Component* component, rive::AABB& result, bool& found)
+{
+    if (component == nullptr)
+        return;
+
+    if (component->is<rive::Shape>())
+    {
+        const auto bounds = component->as<rive::Shape>()->worldBounds();
+        if (! bounds.isEmptyOrNaN())
+        {
+            if (! found)
+                result = bounds;
+            else
+                result.expand (bounds);
+
+            found = true;
+        }
+    }
+
+    if (component->is<rive::ContainerComponent>())
+        for (auto* child : component->as<rive::ContainerComponent>()->children())
+            expandNodeWorldBounds (child, result, found);
+}
+
 std::optional<rive::AABB> collectNodeWorldBounds (rive::Component* node)
 {
     if (node == nullptr)
@@ -101,31 +127,7 @@ std::optional<rive::AABB> collectNodeWorldBounds (rive::Component* node)
     rive::AABB result = rive::AABB::forExpansion();
     bool found = false;
 
-    std::function<void (rive::Component*)> visit = [&] (rive::Component* component)
-    {
-        if (component == nullptr)
-            return;
-
-        if (component->is<rive::Shape>())
-        {
-            const auto bounds = component->as<rive::Shape>()->worldBounds();
-            if (! bounds.isEmptyOrNaN())
-            {
-                if (! found)
-                    result = bounds;
-                else
-                    result.expand (bounds);
-
-                found = true;
-            }
-        }
-
-        if (component->is<rive::ContainerComponent>())
-            for (auto* child : component->as<rive::ContainerComponent>()->children())
-                visit (child);
-    };
-
-    visit (node);
+    expandNodeWorldBounds (node, result, found);
 
     return found ? std::optional<rive::AABB> (result) : std::nullopt;
 }
@@ -140,13 +142,14 @@ Artboard::Artboard (StringRef componentID)
 }
 
 Artboard::Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> file)
-    : Component (componentID)
+    : Artboard (componentID)
 {
     setFile (std::move (file));
 }
 
 Artboard::~Artboard()
 {
+    detachAllComponents();
 }
 
 //==============================================================================
@@ -186,34 +189,34 @@ void Artboard::clear()
 
 //==============================================================================
 
-void Artboard::setLayout (Layout newLayout)
+void Artboard::setFitting (std::optional<Fitting> newFitting)
 {
-    if (layout == newLayout)
+    if (fitting == newFitting)
         return;
 
-    layout = newLayout;
+    fitting = newFitting;
     updateNodeBounds();
     repaint();
 }
 
-Artboard::Layout Artboard::getLayout() const
+std::optional<Fitting> Artboard::getFitting() const
 {
-    return layout;
+    return fitting;
 }
 
-void Artboard::setAlignment (Alignment newAlignment)
+void Artboard::setJustification (Justification newJustification)
 {
-    if (alignment == newAlignment)
+    if (justification == newJustification)
         return;
 
-    alignment = newAlignment;
+    justification = newJustification;
     updateNodeBounds();
     repaint();
 }
 
-Artboard::Alignment Artboard::getAlignment() const
+Justification Artboard::getJustification() const
 {
-    return alignment;
+    return justification;
 }
 
 //==============================================================================
@@ -246,10 +249,7 @@ void Artboard::shouldPauseWhenHidden (bool shouldPause)
 
 void Artboard::advanceAndApply (float elapsedSeconds)
 {
-    if (scene == nullptr)
-        return;
-
-    scene->advanceAndApply (elapsedSeconds);
+    advanceScene (elapsedSeconds);
 
     notifyNodeBoundsChanged();
 }
@@ -354,7 +354,7 @@ var Artboard::getAllInputs() const
             object->setProperty ("type", "boolean");
             object->setProperty ("value", boolean->value());
         }
-        else if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        else if (dynamic_cast<rive::SMITrigger*> (inputObject) != nullptr)
         {
             object->setProperty ("type", "trigger");
         }
@@ -367,9 +367,28 @@ var Artboard::getAllInputs() const
 
 void Artboard::setAllInputs (const var& value)
 {
+    if (stateMachine == nullptr)
+        return;
+
+    auto* inputs = value.getArray();
+    if (inputs == nullptr)
+        return;
+
+    for (const auto& input : *inputs)
+    {
+        auto* object = input.getDynamicObject();
+        if (object == nullptr)
+            continue;
+
+        const auto inputValue = object->getProperty ("value");
+        if (inputValue.isVoid())
+            continue;
+
+        setInput (object->getProperty ("id").toString(), inputValue);
+    }
 }
 
-void Artboard::setInput (const String& inputName, const var& value)
+void Artboard::setInput (const String& name, const var& value)
 {
     if (stateMachine == nullptr)
         return;
@@ -378,7 +397,7 @@ void Artboard::setInput (const String& inputName, const var& value)
     {
         auto inputObject = stateMachine->input (inputIndex);
 
-        if (StringRef (inputObject->name()) != inputName)
+        if (StringRef (inputObject->name()) != name)
             continue;
 
         if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
@@ -413,13 +432,14 @@ void Artboard::setNodeBoundsListener (StringRef nodeName, NodeBoundsCallback cal
     {
         nodeBoundsListeners.set (name, std::move (callback));
 
-        // Cache the node's current state so the listener only fires on actual changes.
         if (artboard != nullptr)
+        {
             if (auto* node = artboard->find<rive::Component> (name.toStdString()))
             {
                 lastNodeBounds.set (name, computeNodeBounds (node));
                 lastNodeViewTransforms.set (name, computeNodeViewTransform (node));
             }
+        }
     }
     else
     {
@@ -462,10 +482,14 @@ bool Artboard::attachComponentToNode (StringRef nodeName, Component* component, 
     if (node == nullptr)
         return false;
 
+    detachComponentEverywhere (component);
+
     NodeAttachment attachment;
     attachment.component = component;
     attachment.options = options;
     attachedComponents.set (name, attachment);
+
+    component->addComponentListener (this);
 
     const auto bounds = computeNodeBounds (node);
     applyNodeAttachment (attachment, node, bounds);
@@ -483,6 +507,7 @@ bool Artboard::detachComponentFromNode (StringRef nodeName, Component* component
     if (existing == nullptr || existing->component != component)
         return false;
 
+    component->removeComponentListener (this);
     attachedComponents.remove (name);
 
     return true;
@@ -490,7 +515,66 @@ bool Artboard::detachComponentFromNode (StringRef nodeName, Component* component
 
 void Artboard::detachAllComponents()
 {
+    for (auto it = attachedComponents.begin(); it != attachedComponents.end(); ++it)
+        if (auto* component = it.getValue().component)
+            component->removeComponentListener (this);
+
     attachedComponents.clear();
+}
+
+void Artboard::detachComponentEverywhere (Component* component)
+{
+    if (component == nullptr)
+        return;
+
+    String attachedNodeName;
+    bool found = false;
+
+    for (auto it = attachedComponents.begin(); it != attachedComponents.end(); ++it)
+    {
+        if (it.getValue().component == component)
+        {
+            attachedNodeName = it.getKey();
+            found = true;
+            break;
+        }
+    }
+
+    if (! found)
+        return;
+
+    component->removeComponentListener (this);
+    attachedComponents.remove (attachedNodeName);
+}
+
+void Artboard::componentBeingDeleted (Component& component)
+{
+    detachComponentEverywhere (std::addressof (component));
+}
+
+void Artboard::componentResized (Component& component)
+{
+    if (applyingNodeAttachment)
+        return;
+
+    reapplyNodeAttachment (std::addressof (component));
+}
+
+void Artboard::reapplyNodeAttachment (Component* component)
+{
+    if (component == nullptr || artboard == nullptr)
+        return;
+
+    for (auto it = attachedComponents.begin(); it != attachedComponents.end(); ++it)
+    {
+        if (it.getValue().component != component)
+            continue;
+
+        if (auto* node = artboard->find<rive::Component> (it.getKey().toStdString()))
+            applyNodeAttachment (it.getValue(), node, computeNodeBounds (node));
+
+        return;
+    }
 }
 
 //==============================================================================
@@ -506,17 +590,22 @@ ArtboardNode::Ptr Artboard::findNode (StringRef nodeName) const
     if (node == nullptr)
         return nullptr;
 
-    if (auto* cached = cachedNodeHandles.getPointer (name); cached != nullptr && (*cached)->isValid())
+    return nodeHandleFor (name, node);
+}
+
+ArtboardNode::Ptr Artboard::nodeHandleFor (const String& nodeName, rive::Component* node) const
+{
+    if (auto* cached = cachedNodeHandles.getPointer (nodeName); cached != nullptr && (*cached)->isValid())
         return *cached;
 
     auto handle = ArtboardNode::Ptr (new ArtboardNode (*const_cast<Artboard*> (this), node));
-    cachedNodeHandles.set (name, handle);
+    cachedNodeHandles.set (nodeName, handle);
     return handle;
 }
 
 //==============================================================================
 
-String Artboard::getViewModelName()
+String Artboard::getViewModelName() const
 {
     if (artboard == nullptr || artboardFile == nullptr)
         return {};
@@ -540,34 +629,28 @@ bool Artboard::bindViewModelInstance (const ArtboardViewModelInstance::Ptr& mode
     if (model == nullptr || artboard == nullptr || scene == nullptr)
         return false;
 
-    // The instance must originate from the same Rive file as this artboard.
     if (artboardFile == nullptr || model->getArtboardFile() != artboardFile.get())
         return false;
 
-    auto* riveInstance = static_cast<rive::ViewModelInstance*> (model->internalRiveInstance());
+    auto* riveInstance = model->internalRiveInstance();
     if (riveInstance == nullptr)
         return false;
 
-    // Bind through the state machine when one drives this artboard, so both the
-    // scene and the artboard share the data context; otherwise bind the artboard.
+    riveInstance->ref();
+
     if (stateMachine != nullptr)
     {
-        stateMachine->clearDataContext();
-
-        riveInstance->ref();
         stateMachine->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
     }
     else
     {
         artboard->unbind();
-
-        riveInstance->ref();
         artboard->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
     }
 
     boundViewModelInstance = model;
 
-    scene->advanceAndApply (0.0f);
+    advanceScene (0.0f);
     repaint();
 
     return true;
@@ -646,6 +729,8 @@ void Artboard::mouseEnter (const MouseEvent& event)
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerMove (rive::Vec2D (x, y));
 
+    pullEventsFromStateMachines();
+
     repaint();
 }
 
@@ -656,6 +741,8 @@ void Artboard::mouseExit (const MouseEvent& event)
 
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerExit (rive::Vec2D (x, y));
+
+    pullEventsFromStateMachines();
 
     repaint();
 }
@@ -668,6 +755,8 @@ void Artboard::mouseDown (const MouseEvent& event)
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerDown (rive::Vec2D (x, y));
 
+    pullEventsFromStateMachines();
+
     repaint();
 }
 
@@ -679,6 +768,8 @@ void Artboard::mouseUp (const MouseEvent& event)
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerUp (rive::Vec2D (x, y));
 
+    pullEventsFromStateMachines();
+
     repaint();
 }
 
@@ -689,6 +780,8 @@ void Artboard::mouseMove (const MouseEvent& event)
 
     auto [x, y] = transformPoint (event.getPosition());
     scene->pointerMove (rive::Vec2D (x, y));
+
+    pullEventsFromStateMachines();
 
     repaint();
 }
@@ -710,7 +803,7 @@ void Artboard::mouseDrag (const MouseEvent& event)
 
 void Artboard::propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue)
 {
-    // YUP_DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
+    ignoreUnused (eventName, propertyName, oldValue, newValue);
 }
 
 //==============================================================================
@@ -720,6 +813,9 @@ void Artboard::updateSceneFromFile()
     scene.reset();
     artboard.reset();
     stateMachine = nullptr;
+
+    if (artboardFile == nullptr)
+        return;
 
     auto rivFile = artboardFile->getRiveFile();
     if (rivFile == nullptr)
@@ -761,17 +857,38 @@ void Artboard::updateSceneFromFile()
 
 //==============================================================================
 
-void Artboard::pullEventsFromStateMachines()
+void Artboard::advanceScene (float elapsedSeconds)
 {
-    if (stateMachine == nullptr)
+    if (scene == nullptr)
         return;
 
-    for (std::size_t eventIndex = 0; eventIndex < stateMachine->reportedEventCount(); ++eventIndex)
-    {
-        auto event = stateMachine->reportedEventAt (eventIndex).event();
-        if (event == nullptr)
-            continue;
+    scene->advanceAndApply (elapsedSeconds);
 
+    pullEventsFromStateMachines();
+}
+
+//==============================================================================
+
+void Artboard::pullEventsFromStateMachines()
+{
+    if (stateMachine == nullptr || drainingEvents)
+        return;
+
+    const auto reportedCount = stateMachine->reportedEventCount();
+    if (reportedCount == 0)
+        return;
+
+    const ScopedValueSetter<bool> draining (drainingEvents, true);
+
+    Array<rive::Event*> reportedEvents;
+    reportedEvents.ensureStorageAllocated (static_cast<int> (reportedCount));
+
+    for (std::size_t eventIndex = 0; eventIndex < reportedCount; ++eventIndex)
+        if (auto* event = stateMachine->reportedEventAt (eventIndex).event())
+            reportedEvents.add (event);
+
+    for (auto* event : reportedEvents)
+    {
         const auto eventName = String (event->name());
 
         for (const auto& child : event->children())
@@ -818,7 +935,7 @@ void Artboard::updateNodeBounds()
     if (artboard == nullptr)
         return;
 
-    if (layout == Layout::layout || layout == Layout::fill)
+    if (! fitting.has_value() || *fitting == Fitting::fill)
     {
         const auto bounds = getLocalBounds();
 
@@ -831,8 +948,7 @@ void Artboard::updateNodeBounds()
             artboard->resetSize();
     }
 
-    if (scene != nullptr)
-        scene->advanceAndApply (0.0f);
+    advanceScene (0.0f);
 
     updateViewTransform();
     notifyNodeBoundsChanged();
@@ -842,8 +958,10 @@ void Artboard::updateNodeBounds()
 
 void Artboard::notifyNodeBoundsChanged()
 {
-    if (nodeBoundsListeners.isEmpty() && attachedComponents.isEmpty())
+    if (artboard == nullptr || (nodeBoundsListeners.isEmpty() && attachedComponents.isEmpty()) || notifyingNodeBounds)
         return;
+
+    const ScopedValueSetter<bool> notifying (notifyingNodeBounds, true);
 
     nodeNames.clear();
 
@@ -854,20 +972,19 @@ void Artboard::notifyNodeBoundsChanged()
         nodeNames.addIfNotAlreadyThere (it.getKey());
 
     for (const auto& nodeName : nodeNames)
-        checkNodeBounds (nodeName);
+    {
+        if (artboard == nullptr)
+            break;
+
+        if (auto* node = artboard->find<rive::Component> (nodeName.toStdString()))
+            checkNodeBounds (nodeName, node);
+    }
 }
 
 //==============================================================================
 
-void Artboard::checkNodeBounds (const String& nodeName)
+void Artboard::checkNodeBounds (const String& nodeName, rive::Component* node)
 {
-    if (artboard == nullptr)
-        return;
-
-    auto* node = artboard->find<rive::Component> (nodeName.toStdString());
-    if (node == nullptr)
-        return;
-
     const auto newBounds = computeNodeBounds (node);
     const auto newViewTransform = computeNodeViewTransform (node);
 
@@ -893,17 +1010,19 @@ void Artboard::checkNodeBounds (const String& nodeName)
     if (auto* callback = nodeBoundsListeners.getPointer (nodeName))
     {
         if (*callback)
-            (*callback) (*this, nodeName, findNode (nodeName));
+            (*callback) (*this, nodeName, nodeHandleFor (nodeName, node));
     }
 }
 
 //==============================================================================
 
-void Artboard::applyNodeAttachment (const NodeAttachment& attachment, rive::Component* node, const Rectangle<float>& nodeBounds)
+void Artboard::applyNodeAttachment (NodeAttachment attachment, rive::Component* node, const Rectangle<float>& nodeBounds)
 {
     auto* component = attachment.component;
     if (component == nullptr)
         return;
+
+    const ScopedValueSetter<bool> applying (applyingNodeAttachment, true);
 
     Rectangle<float> bounds = nodeBounds;
     Point<float> rotationPivot = { bounds.getWidth() * 0.5f, bounds.getHeight() * 0.5f };
@@ -913,7 +1032,6 @@ void Artboard::applyNodeAttachment (const NodeAttachment& attachment, rive::Comp
         const auto width = component->getWidth();
         const auto height = component->getHeight();
 
-        // Offsets of a justification point within a rect of the given size.
         const auto justificationOffsets = [] (Justification justification, float w, float h) -> Point<float>
         {
             const auto offsetX = justification.testFlags (Justification::horizontalCenter)
@@ -931,12 +1049,10 @@ void Artboard::applyNodeAttachment (const NodeAttachment& attachment, rive::Comp
             return { offsetX, offsetY };
         };
 
-        // Where on the node the component's pivot is anchored.
         const auto anchor = justificationOffsets (attachment.options.anchor,
                                                   nodeBounds.getWidth(),
                                                   nodeBounds.getHeight());
 
-        // Which point of the component is the pivot placed on the anchor.
         const auto pivot = justificationOffsets (attachment.options.pivot,
                                                  width,
                                                  height);
@@ -946,9 +1062,6 @@ void Artboard::applyNodeAttachment (const NodeAttachment& attachment, rive::Comp
                    width,
                    height };
 
-        // Rotate around the anchored point (the pivot point within the component,
-        // in its local coordinates), so the anchor does not drift while the
-        // component follows the rotation.
         rotationPivot = pivot;
     }
 
@@ -991,7 +1104,6 @@ Rectangle<float> Artboard::computeNodeBounds (rive::Component* node) const
     if (node == nullptr)
         return {};
 
-    // Layout nodes report their laid-out size.
     if (node->is<rive::LayoutComponent>())
     {
         auto* layoutNode = node->as<rive::LayoutComponent>();
@@ -1000,14 +1112,12 @@ Rectangle<float> Artboard::computeNodeBounds (rive::Component* node) const
         return { mapped.left(), mapped.top(), mapped.width(), mapped.height() };
     }
 
-    // Other nodes report their real geometry (shapes, or anything under them).
     if (auto worldBounds = collectNodeWorldBounds (node))
     {
         const auto mapped = viewTransform.mapBoundingBox (*worldBounds);
         return { mapped.left(), mapped.top(), mapped.width(), mapped.height() };
     }
 
-    // Fall back to a unit rect at the node's origin.
     const auto nodeRect = rive::AABB::fromLTWH (0.0f, 0.0f, 1.0f, 1.0f);
 
     rive::Mat2D transform = viewTransform;
@@ -1030,8 +1140,8 @@ void Artboard::updateViewTransform()
     }
 
     viewTransform = rive::computeAlignment (
-        toRiveFit (layout),
-        toRiveAlignment (alignment),
+        toRiveFit (fitting),
+        toRiveAlignment (justification),
         getLocalBounds().toAABB(),
         artboard->bounds());
 }

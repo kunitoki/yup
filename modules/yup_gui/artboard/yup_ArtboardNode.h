@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#pragma once
-
 namespace yup
 {
 
@@ -75,7 +73,13 @@ public:
     /** Returns the Rive core type key of the node, or 0 when invalid. */
     uint16_t getTypeKey() const;
 
-    /** Returns a human-readable type name for the node, or an empty string when invalid. */
+    /** Returns a human-readable type name for the node.
+
+        Returns an empty string when the handle is invalid, and also for any node
+        whose Rive core type is outside the set this maps: Artboard, LayoutComponent,
+        Node, Shape, Rectangle, Ellipse, Image, Text, Bone, Solo and NestedArtboard.
+        Use getTypeKey() to tell an unmapped type from an invalid handle.
+    */
     String getTypeName() const;
 
     //==============================================================================

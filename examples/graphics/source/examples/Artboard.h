@@ -93,8 +93,8 @@ public:
             addAndMakeVisible (art);
 
             art->setFile (loadedArtboardFile);
-            art->setLayout (getSelectedLayout());
-            art->setAlignment (getSelectedAlignment());
+            art->setFitting (getSelectedFitting());
+            art->setJustification (getSelectedJustification (alignmentCombo));
 
             art->advanceAndApply (i * art->durationSeconds());
 
@@ -215,7 +215,7 @@ private:
         fitCombo.setSelectedId (defaultFitComboId);
         fitCombo.onSelectedItemChanged = [this]
         {
-            updateArtboardsLayout();
+            updateArtboardsFitting();
         };
         addAndMakeVisible (fitCombo);
 
@@ -223,19 +223,10 @@ private:
         alignmentLabel.setFont (labelFont);
         addAndMakeVisible (alignmentLabel);
 
-        alignmentCombo.addItem ("Top Left", 1);
-        alignmentCombo.addItem ("Top Center", 2);
-        alignmentCombo.addItem ("Top Right", 3);
-        alignmentCombo.addItem ("Center Left", 4);
-        alignmentCombo.addItem ("Center", 5);
-        alignmentCombo.addItem ("Center Right", 6);
-        alignmentCombo.addItem ("Bottom Left", 7);
-        alignmentCombo.addItem ("Bottom Center", 8);
-        alignmentCombo.addItem ("Bottom Right", 9);
-        alignmentCombo.setSelectedId (5);
+        addJustificationItems (alignmentCombo, 5);
         alignmentCombo.onSelectedItemChanged = [this]
         {
-            updateArtboardsLayout();
+            updateArtboardsFitting();
         };
         addAndMakeVisible (alignmentCombo);
 
@@ -286,67 +277,40 @@ private:
         updateMarkerControlsEnabled();
     }
 
-    yup::Artboard::Layout getSelectedLayout() const
+    std::optional<yup::Fitting> getSelectedFitting() const
     {
         switch (fitCombo.getSelectedId())
         {
             case 1:
-                return yup::Artboard::Layout::fill;
+                return yup::Fitting::fill;
             case 2:
-                return yup::Artboard::Layout::contain;
+                return yup::Fitting::scaleToFit;
             case 3:
-                return yup::Artboard::Layout::cover;
+                return yup::Fitting::scaleToFill;
             case 4:
-                return yup::Artboard::Layout::fitWidth;
+                return yup::Fitting::fitWidth;
             case 5:
-                return yup::Artboard::Layout::fitHeight;
+                return yup::Fitting::fitHeight;
             case 6:
-                return yup::Artboard::Layout::none;
+                return yup::Fitting::none;
             case 7:
-                return yup::Artboard::Layout::scaleDown;
+                return yup::Fitting::centerInside;
             case 8:
-                return yup::Artboard::Layout::layout;
+                return std::nullopt;
         }
 
-        return yup::Artboard::Layout::contain;
+        return yup::Fitting::scaleToFit;
     }
 
-    yup::Artboard::Alignment getSelectedAlignment() const
+    void updateArtboardsFitting()
     {
-        switch (alignmentCombo.getSelectedId())
-        {
-            case 1:
-                return yup::Artboard::Alignment::topLeft;
-            case 2:
-                return yup::Artboard::Alignment::topCenter;
-            case 3:
-                return yup::Artboard::Alignment::topRight;
-            case 4:
-                return yup::Artboard::Alignment::centerLeft;
-            case 5:
-                return yup::Artboard::Alignment::center;
-            case 6:
-                return yup::Artboard::Alignment::centerRight;
-            case 7:
-                return yup::Artboard::Alignment::bottomLeft;
-            case 8:
-                return yup::Artboard::Alignment::bottomCenter;
-            case 9:
-                return yup::Artboard::Alignment::bottomRight;
-        }
-
-        return yup::Artboard::Alignment::center;
-    }
-
-    void updateArtboardsLayout()
-    {
-        auto newLayout = getSelectedLayout();
-        auto newAlignment = getSelectedAlignment();
+        const auto newFitting = getSelectedFitting();
+        const auto newJustification = getSelectedJustification (alignmentCombo);
 
         for (auto* artboard : artboards)
         {
-            artboard->setLayout (newLayout);
-            artboard->setAlignment (newAlignment);
+            artboard->setFitting (newFitting);
+            artboard->setJustification (newJustification);
         }
     }
 
@@ -477,7 +441,7 @@ class ArtboardDemo : public ArtboardDemoBase
 {
 public:
     ArtboardDemo()
-        : ArtboardDemoBase (YUP_EXAMPLE_GRAPHICS_RIVE_FILE, "Mouth")
+        : ArtboardDemoBase ("data/alien.riv", "Mouth")
     {
     }
 };
@@ -497,7 +461,7 @@ private:
     {
         auto keyboardArtboard = std::make_unique<yup::Artboard> ("keyboardArtboard");
         keyboardArtboard->setFile (loadedArtboardFile, "Keyboard");
-        keyboardArtboard->setLayout (yup::Artboard::Layout::fill);
+        keyboardArtboard->setFitting (yup::Fitting::fill);
         return keyboardArtboard;
     }
 };

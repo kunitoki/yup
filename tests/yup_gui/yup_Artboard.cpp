@@ -74,62 +74,14 @@ TEST_F (ArtboardTests, DefaultConstruction)
 {
     EXPECT_FALSE (artboard->isPaused());
     EXPECT_TRUE (artboard->isPausingWhenHidden());
-    EXPECT_EQ (Artboard::Layout::contain, artboard->getLayout());
-    EXPECT_EQ (Artboard::Alignment::center, artboard->getAlignment());
+    EXPECT_EQ (Fitting::scaleToFit, artboard->getFitting());
+    EXPECT_EQ (Justification::center, artboard->getJustification());
 }
 
 TEST_F (ArtboardTests, ConstructWithComponentId)
 {
     Artboard a ("myCustomId");
     EXPECT_EQ (String ("myCustomId"), a.getComponentID());
-}
-
-TEST_F (ArtboardTests, SetAndGetLayout)
-{
-    artboard->setLayout (Artboard::Layout::fill);
-    EXPECT_EQ (Artboard::Layout::fill, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::cover);
-    EXPECT_EQ (Artboard::Layout::cover, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::fitWidth);
-    EXPECT_EQ (Artboard::Layout::fitWidth, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::fitHeight);
-    EXPECT_EQ (Artboard::Layout::fitHeight, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::none);
-    EXPECT_EQ (Artboard::Layout::none, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::scaleDown);
-    EXPECT_EQ (Artboard::Layout::scaleDown, artboard->getLayout());
-
-    artboard->setLayout (Artboard::Layout::layout);
-    EXPECT_EQ (Artboard::Layout::layout, artboard->getLayout());
-}
-
-TEST_F (ArtboardTests, SetAndGetAlignment)
-{
-    artboard->setAlignment (Artboard::Alignment::topLeft);
-    EXPECT_EQ (Artboard::Alignment::topLeft, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::topRight);
-    EXPECT_EQ (Artboard::Alignment::topRight, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::centerLeft);
-    EXPECT_EQ (Artboard::Alignment::centerLeft, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::centerRight);
-    EXPECT_EQ (Artboard::Alignment::centerRight, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::bottomLeft);
-    EXPECT_EQ (Artboard::Alignment::bottomLeft, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::bottomCenter);
-    EXPECT_EQ (Artboard::Alignment::bottomCenter, artboard->getAlignment());
-
-    artboard->setAlignment (Artboard::Alignment::bottomRight);
-    EXPECT_EQ (Artboard::Alignment::bottomRight, artboard->getAlignment());
 }
 
 TEST_F (ArtboardTests, SetAndGetPaused)
@@ -242,9 +194,28 @@ TEST_F (ArtboardTests, ClearDoesNotCrash)
 
     EXPECT_FALSE (artboard->isPaused());
     EXPECT_TRUE (artboard->isPausingWhenHidden());
-    EXPECT_EQ (Artboard::Layout::contain, artboard->getLayout());
-    EXPECT_EQ (Artboard::Alignment::center, artboard->getAlignment());
+    EXPECT_EQ (Fitting::scaleToFit, artboard->getFitting());
+    EXPECT_EQ (Justification::center, artboard->getJustification());
     EXPECT_FLOAT_EQ (0.0f, artboard->durationSeconds());
+}
+
+TEST_F (ArtboardTests, PointerHandlersDoNotCrashWithoutFile)
+{
+    const MouseEvent moved (MouseEvent::noButtons, KeyModifiers(), Point<float> (10.0f, 10.0f));
+    const MouseEvent pressed (MouseEvent::leftButton, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    EXPECT_NO_THROW (artboard->mouseEnter (moved));
+    EXPECT_NO_THROW (artboard->mouseMove (moved));
+    EXPECT_NO_THROW (artboard->mouseDown (pressed));
+    EXPECT_NO_THROW (artboard->mouseDrag (pressed));
+    EXPECT_NO_THROW (artboard->mouseUp (moved));
+    EXPECT_NO_THROW (artboard->mouseExit (moved));
+}
+
+TEST_F (ArtboardTests, ContentScaleChangedDoesNotCrashWithoutFile)
+{
+    EXPECT_NO_THROW (artboard->contentScaleChanged (1.0f));
+    EXPECT_NO_THROW (artboard->contentScaleChanged (2.0f));
 }
 
 TEST_F (ArtboardTests, RefreshDisplayDoesNotCrashWithoutFile)
@@ -257,8 +228,8 @@ TEST_F (ArtboardTests, ClearResetsState)
 {
     artboard->setPaused (true);
     artboard->shouldPauseWhenHidden (false);
-    artboard->setLayout (Artboard::Layout::cover);
-    artboard->setAlignment (Artboard::Alignment::topLeft);
+    artboard->setFitting (Fitting::scaleToFill);
+    artboard->setJustification (Justification::topLeft);
 
     artboard->clear();
 
@@ -266,41 +237,85 @@ TEST_F (ArtboardTests, ClearResetsState)
     EXPECT_FALSE (artboard->hasBoolInput ("test"));
 }
 
-TEST_F (ArtboardTests, LayoutEnumValuesAreDistinct)
+TEST_F (ArtboardTests, EveryFittingValueRoundTrips)
 {
-    EXPECT_EQ (static_cast<int> (Artboard::Layout::fill), 0);
-    EXPECT_NE (Artboard::Layout::fill, Artboard::Layout::contain);
-    EXPECT_NE (Artboard::Layout::contain, Artboard::Layout::cover);
-    EXPECT_NE (Artboard::Layout::cover, Artboard::Layout::fitWidth);
-    EXPECT_NE (Artboard::Layout::fitWidth, Artboard::Layout::fitHeight);
-    EXPECT_NE (Artboard::Layout::fitHeight, Artboard::Layout::none);
-    EXPECT_NE (Artboard::Layout::none, Artboard::Layout::scaleDown);
-    EXPECT_NE (Artboard::Layout::scaleDown, Artboard::Layout::layout);
+    // Including the four Rive has no equivalent for: they degrade to a uniform
+    // fit internally, but the artboard still reports back what was asked for.
+    const Fitting all[] = {
+        Fitting::none,
+        Fitting::scaleToFit,
+        Fitting::fitWidth,
+        Fitting::fitHeight,
+        Fitting::scaleToFill,
+        Fitting::fill,
+        Fitting::tile,
+        Fitting::centerCrop,
+        Fitting::centerInside,
+        Fitting::stretchWidth,
+        Fitting::stretchHeight
+    };
+
+    for (const auto fitting : all)
+    {
+        artboard->setFitting (fitting);
+        EXPECT_EQ (fitting, artboard->getFitting());
+    }
+
+    artboard->setFitting (std::nullopt);
+    EXPECT_FALSE (artboard->getFitting().has_value());
 }
 
-TEST_F (ArtboardTests, AlignmentEnumValuesAreDistinct)
+TEST_F (ArtboardTests, EveryJustificationCornerRoundTrips)
 {
-    EXPECT_EQ (static_cast<int> (Artboard::Alignment::topLeft), 0);
-    EXPECT_NE (Artboard::Alignment::topLeft, Artboard::Alignment::topCenter);
-    EXPECT_NE (Artboard::Alignment::topCenter, Artboard::Alignment::topRight);
-    EXPECT_NE (Artboard::Alignment::topRight, Artboard::Alignment::centerLeft);
-    EXPECT_NE (Artboard::Alignment::centerLeft, Artboard::Alignment::center);
-    EXPECT_NE (Artboard::Alignment::center, Artboard::Alignment::centerRight);
-    EXPECT_NE (Artboard::Alignment::centerRight, Artboard::Alignment::bottomLeft);
-    EXPECT_NE (Artboard::Alignment::bottomLeft, Artboard::Alignment::bottomCenter);
-    EXPECT_NE (Artboard::Alignment::bottomCenter, Artboard::Alignment::bottomRight);
+    const Justification all[] = {
+        Justification::topLeft,
+        Justification::centerTop,
+        Justification::topRight,
+        Justification::centerLeft,
+        Justification::center,
+        Justification::centerRight,
+        Justification::bottomLeft,
+        Justification::centerBottom,
+        Justification::bottomRight
+    };
+
+    for (const auto justification : all)
+    {
+        artboard->setJustification (justification);
+        EXPECT_EQ (justification, artboard->getJustification());
+    }
+}
+
+TEST_F (ArtboardTests, PartialJustificationFlagsAreAccepted)
+{
+    // Justification is a bitfield, so it admits states with only one axis set.
+    // Those are accepted verbatim; the unset axis is centered when mapping to Rive.
+    artboard->setJustification (Justification::left);
+    EXPECT_EQ (Justification (Justification::left), artboard->getJustification());
+
+    artboard->setJustification (Justification::bottom);
+    EXPECT_EQ (Justification (Justification::bottom), artboard->getJustification());
+
+    EXPECT_NO_THROW (artboard->setBounds (0.0f, 0.0f, 100.0f, 100.0f));
 }
 
 //==============================================================================
-// Artboard layout tests (require tests/data/rive/layout_test.riv)
+// Artboard layout tests (require tests/data/rive/layout-ui.riv)
+//
+// layout-ui.riv's default artboard ("Wireframe", 669x509) is authored with
+// Rive's layout engine: a "root" LayoutComponent holding "topbar", "main",
+// "keyboard_slot" and "statusbar", with "main" holding "browser_slot",
+// "center" and "inspector". Both nodes used here are LayoutComponents that
+// reflow when the artboard is resized, which is what these tests drive.
 //==============================================================================
 
 namespace
 {
 
-// Names of the layout nodes expected in tests/data/rive/layout_test.riv
-constexpr const char* kHeaderNodeName = "header";
-constexpr const char* kPanelNodeName = "knob-panel";
+// Names of the layout nodes expected in tests/data/rive/layout-ui.riv.
+// topbar spans the width of root; inspector is a column inside main.
+constexpr const char* kHeaderNodeName = "topbar";
+constexpr const char* kPanelNodeName = "inspector";
 
 const File getTestDataRiveDirectory()
 {
@@ -335,10 +350,10 @@ class ArtboardLayoutTests : public ::testing::Test
 protected:
     void SetUp() override
     {
-        const auto file = getTestDataRiveDirectory().getChildFile ("layout_test.riv");
+        const auto file = getTestDataRiveDirectory().getChildFile ("layout-ui.riv");
         if (! file.existsAsFile())
         {
-            GTEST_SKIP() << "Missing test asset: tests/data/rive/layout_test.riv";
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/layout-ui.riv";
             return;
         }
 
@@ -351,7 +366,7 @@ protected:
 
         artboardFile = result.getValue();
         artboard = std::make_unique<Artboard> ("testArtboard", artboardFile);
-        artboard->setLayout (Artboard::Layout::layout);
+        artboard->setFitting (std::nullopt);
         artboard->setBounds (0.0f, 0.0f, 400.0f, 300.0f);
 
         // Layout bounds are animated over frames, so advance until they settle.
@@ -711,11 +726,13 @@ TEST_F (ArtboardLayoutTests, TrackPositionAnchorSupportsAllJustifications)
         options.mode = yup::Artboard::NodeAttachmentOptions::Mode::trackPosition;
         options.anchor = testCase.anchor;
 
-        ASSERT_TRUE (artboard->attachComponentToNode (kPanelNodeName, &component, options));
+        // trackPosition keeps the component's own size, which is what the pivot
+        // is measured against.
+        component.setBounds (0.0f, 0.0f, 50.0f, 30.0f);
 
         // With the default pivot (top-left) the component's top-left corner
         // should land on the requested point of the node bounds.
-        component.setBounds (0.0f, 0.0f, 50.0f, 30.0f);
+        ASSERT_TRUE (artboard->attachComponentToNode (kPanelNodeName, &component, options));
 
         artboard->setBounds (0.0f, 0.0f, 600.0f, 400.0f);
 
@@ -729,6 +746,64 @@ TEST_F (ArtboardLayoutTests, TrackPositionAnchorSupportsAllJustifications)
         EXPECT_FLOAT_EQ (expectedX, component.getX()) << "anchor x factor " << testCase.xFactor;
         EXPECT_FLOAT_EQ (expectedY, component.getY()) << "anchor y factor " << testCase.yFactor;
     }
+}
+
+TEST_F (ArtboardLayoutTests, ResizingAnAttachedComponentRederivesItsPosition)
+{
+    Component component ("test");
+
+    yup::Artboard::NodeAttachmentOptions options;
+    options.mode = yup::Artboard::NodeAttachmentOptions::Mode::trackPosition;
+    options.pivot = yup::Justification::center;
+    options.anchor = yup::Justification::center;
+
+    component.setBounds (0.0f, 0.0f, 50.0f, 30.0f);
+    ASSERT_TRUE (artboard->attachComponentToNode (kPanelNodeName, &component, options));
+
+    const auto nodeBounds = artboard->getNodeBounds (kPanelNodeName);
+    EXPECT_FLOAT_EQ (nodeBounds.getCenterX(), component.getBounds().getCenterX());
+    EXPECT_FLOAT_EQ (nodeBounds.getCenterY(), component.getBounds().getCenterY());
+
+    // The pivot is measured against the component's own size, so resizing it
+    // must re-derive the position straight away rather than waiting for the node
+    // to move, which for a static layout would be never.
+    component.setSize (120.0f, 80.0f);
+
+    EXPECT_FLOAT_EQ (120.0f, component.getWidth());
+    EXPECT_FLOAT_EQ (80.0f, component.getHeight());
+    EXPECT_FLOAT_EQ (nodeBounds.getCenterX(), component.getBounds().getCenterX());
+    EXPECT_FLOAT_EQ (nodeBounds.getCenterY(), component.getBounds().getCenterY());
+}
+
+TEST_F (ArtboardLayoutTests, ResizingAFillNodeComponentIsOverwrittenByTheNode)
+{
+    Component component ("test");
+
+    // fillNode gives the node ownership of the size, so a resize by the owner
+    // is put back.
+    ASSERT_TRUE (artboard->attachComponentToNode (kPanelNodeName, &component));
+
+    const auto nodeBounds = artboard->getNodeBounds (kPanelNodeName);
+
+    component.setSize (17.0f, 13.0f);
+
+    EXPECT_FLOAT_EQ (nodeBounds.getWidth(), component.getWidth());
+    EXPECT_FLOAT_EQ (nodeBounds.getHeight(), component.getHeight());
+}
+
+TEST_F (ArtboardLayoutTests, ResizingADetachedComponentIsIgnored)
+{
+    Component component ("test");
+
+    ASSERT_TRUE (artboard->attachComponentToNode (kPanelNodeName, &component));
+    ASSERT_TRUE (artboard->detachComponentFromNode (kPanelNodeName, &component));
+
+    component.setBounds (5.0f, 7.0f, 50.0f, 30.0f);
+
+    EXPECT_FLOAT_EQ (5.0f, component.getX());
+    EXPECT_FLOAT_EQ (7.0f, component.getY());
+    EXPECT_FLOAT_EQ (50.0f, component.getWidth());
+    EXPECT_FLOAT_EQ (30.0f, component.getHeight());
 }
 
 TEST_F (ArtboardLayoutTests, ApplyTransformKeepsBoundsForUnrotatedNode)
@@ -944,7 +1019,10 @@ TEST_F (ArtboardLayoutTests, ParentAndChildrenTraversal)
     auto parent = node->getParent();
     ASSERT_NE (nullptr, parent.get());
     EXPECT_TRUE (parent->isValid());
-    EXPECT_EQ (String ("Artboard"), parent->getTypeName());
+
+    // topbar sits inside the "root" layout, not directly under the artboard.
+    EXPECT_EQ (String ("root"), parent->getName());
+    EXPECT_TRUE (parent->isLayout());
 
     auto siblings = parent->getChildren();
     bool found = false;
@@ -1055,7 +1133,7 @@ protected:
 
         artboardFile = result.getValue();
         artboard = std::make_unique<Artboard> ("testArtboard", artboardFile);
-        artboard->setLayout (Artboard::Layout::contain);
+        artboard->setFitting (Fitting::scaleToFit);
         artboard->setBounds (0.0f, 0.0f, 500.0f, 500.0f);
 
         for (int i = 0; i < 5; ++i)
@@ -1127,7 +1205,7 @@ TEST_F (ArtboardGameAnimationTests, ClearResetsTheLoadedFile)
     EXPECT_TRUE (artboard->getNodeBounds (kGameNestedArtboardNodeName).isEmpty());
     EXPECT_EQ (nullptr, artboard->findNode (kGameRootArtboardNodeName).get());
     EXPECT_EQ (nullptr, artboard->findNode (kGameNestedArtboardNodeName).get());
-    EXPECT_EQ (Artboard::Layout::contain, artboard->getLayout()); // layout survives clear
+    EXPECT_EQ (Fitting::scaleToFit, artboard->getFitting()); // fitting survives clear
 }
 
 TEST_F (ArtboardGameAnimationTests, ReloadingTheFileRestoresTheScene)
@@ -1325,7 +1403,7 @@ TEST_F (ArtboardGameAnimationTests, DestroyingTheArtboardInvalidatesHandles)
 
     {
         Artboard temp ("temp", artboardFile);
-        temp.setLayout (Artboard::Layout::contain);
+        temp.setFitting (Fitting::scaleToFit);
         temp.setBounds (0.0f, 0.0f, 500.0f, 500.0f);
 
         for (int i = 0; i < 5; ++i)
@@ -1694,7 +1772,7 @@ protected:
 
         artboardFile = result.getValue();
         artboard = std::make_unique<Artboard> ("testArtboard", artboardFile);
-        artboard->setLayout (Artboard::Layout::contain);
+        artboard->setFitting (Fitting::scaleToFit);
         artboard->setBounds (0.0f, 0.0f, 500.0f, 500.0f);
 
         for (int i = 0; i < 5; ++i)
@@ -1855,7 +1933,7 @@ TEST_F (ArtboardDataBindingTests, ClearResetsTheLoadedFile)
 
     EXPECT_TRUE (artboard->getNodeBounds (kDataBindingArtboardRootName).isEmpty());
     EXPECT_EQ (nullptr, artboard->findNode (kDataBindingArtboardRootName).get());
-    EXPECT_EQ (Artboard::Layout::contain, artboard->getLayout()); // layout survives clear
+    EXPECT_EQ (Fitting::scaleToFit, artboard->getFitting()); // fitting survives clear
 }
 
 TEST_F (ArtboardDataBindingTests, ReloadingTheFileRestoresTheScene)
@@ -1911,7 +1989,7 @@ TEST_F (ArtboardDataBindingTests, DestroyingTheArtboardInvalidatesHandles)
 
     {
         Artboard temp ("temp", artboardFile);
-        temp.setLayout (Artboard::Layout::contain);
+        temp.setFitting (Fitting::scaleToFit);
         temp.setBounds (0.0f, 0.0f, 500.0f, 500.0f);
 
         for (int i = 0; i < 5; ++i)
@@ -2133,4 +2211,309 @@ TEST_F (ArtboardDataBindingTests, DetachStopsFollowingAfterResize)
         artboard->advanceAndApply (0.0f);
 
     EXPECT_TRUE (component.getBounds() == boundsBefore);
+}
+
+//==============================================================================
+// Artboard file lifecycle edge cases
+//==============================================================================
+
+TEST_F (ArtboardTests, ConstructorsAgreeOnOpacity)
+{
+    Artboard plain ("plain");
+    Artboard withFile ("withFile", nullptr);
+
+    EXPECT_TRUE (plain.isOpaque());
+    EXPECT_EQ (plain.isOpaque(), withFile.isOpaque());
+}
+
+TEST_F (ArtboardTests, SetFileWithNullUnloadsSafely)
+{
+    // The parameter is a shared_ptr and every other method null-guards, so
+    // unloading this way must not dereference a null file.
+    EXPECT_NO_THROW (artboard->setFile (nullptr));
+
+    EXPECT_EQ (nullptr, artboard->findNode ("anything").get());
+    EXPECT_TRUE (artboard->getNodeBounds ("anything").isEmpty());
+    EXPECT_TRUE (artboard->getViewModelName().isEmpty());
+    EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+    EXPECT_NO_THROW (artboard->setBounds (0.0f, 0.0f, 100.0f, 100.0f));
+}
+
+//==============================================================================
+// Artboard state machine inputs round-trip (game-animation.riv)
+//==============================================================================
+
+TEST_F (ArtboardGameAnimationTests, GetAllInputsDescribesEveryInput)
+{
+    const auto inputs = artboard->getAllInputs();
+
+    if (! inputs.isArray() || inputs.getArray()->isEmpty())
+    {
+        GTEST_SKIP() << "Test asset exposes no state machine inputs";
+        return;
+    }
+
+    for (const auto& input : *inputs.getArray())
+    {
+        auto* object = input.getDynamicObject();
+        ASSERT_NE (nullptr, object);
+
+        EXPECT_TRUE (object->hasProperty ("id"));
+        EXPECT_TRUE (object->hasProperty ("type"));
+
+        const auto type = object->getProperty ("type").toString();
+        EXPECT_TRUE (type == "number" || type == "boolean" || type == "trigger");
+
+        // Triggers are stateless and deliberately carry no "value".
+        EXPECT_EQ (type != "trigger", object->hasProperty ("value"));
+    }
+}
+
+TEST_F (ArtboardGameAnimationTests, SetAllInputsRoundTripsASnapshot)
+{
+    const auto snapshot = artboard->getAllInputs();
+
+    if (! snapshot.isArray() || snapshot.getArray()->isEmpty())
+    {
+        GTEST_SKIP() << "Test asset exposes no state machine inputs";
+        return;
+    }
+
+    EXPECT_NO_THROW (artboard->setAllInputs (snapshot));
+
+    const auto restored = artboard->getAllInputs();
+    ASSERT_TRUE (restored.isArray());
+    ASSERT_EQ (snapshot.getArray()->size(), restored.getArray()->size());
+
+    for (int i = 0; i < snapshot.getArray()->size(); ++i)
+    {
+        auto* before = snapshot.getArray()->getReference (i).getDynamicObject();
+        auto* after = restored.getArray()->getReference (i).getDynamicObject();
+        ASSERT_NE (nullptr, before);
+        ASSERT_NE (nullptr, after);
+
+        EXPECT_EQ (before->getProperty ("id"), after->getProperty ("id"));
+        EXPECT_EQ (before->getProperty ("value"), after->getProperty ("value"));
+    }
+}
+
+TEST_F (ArtboardGameAnimationTests, SetAllInputsIgnoresUnknownAndMalformedEntries)
+{
+    Array<var> inputs;
+
+    DynamicObject::Ptr unknown = new DynamicObject;
+    unknown->setProperty ("id", "definitelyNotAnInput");
+    unknown->setProperty ("type", "number");
+    unknown->setProperty ("value", 3.0);
+    inputs.add (var (unknown.get()));
+
+    // A bare value, and an object with no "value", must both be skipped.
+    inputs.add (var (42));
+
+    DynamicObject::Ptr valueless = new DynamicObject;
+    valueless->setProperty ("id", "alsoNotAnInput");
+    valueless->setProperty ("type", "trigger");
+    inputs.add (var (valueless.get()));
+
+    EXPECT_NO_THROW (artboard->setAllInputs (var (inputs)));
+}
+
+//==============================================================================
+// Node bounds listener re-entrancy (A3)
+//==============================================================================
+
+TEST_F (ArtboardGameAnimationTests, BoundsListenerMayReflowTheArtboardFromWithin)
+{
+    int callCount = 0;
+
+    // notifyNodeBoundsChanged walks a member scratch array and hands references
+    // into it to the listener. Reflowing from the listener used to clear that
+    // array underneath the running loop.
+    artboard->setNodeBoundsListener (kGameNestedArtboardNodeName,
+                                     [&] (Artboard& self, const String&, const ArtboardNode::Ptr& node)
+                                     {
+                                         ++callCount;
+
+                                         EXPECT_NE (nullptr, node.get());
+
+                                         self.setFitting (self.getFitting() == Fitting::scaleToFit
+                                                             ? Fitting::scaleToFill
+                                                             : Fitting::scaleToFit);
+                                     });
+
+    artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
+
+    for (int i = 0; i < 10; ++i)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_GT (callCount, 0);
+}
+
+TEST_F (ArtboardGameAnimationTests, BoundsListenerMayReplaceTheFileFromWithin)
+{
+    int callCount = 0;
+
+    artboard->setNodeBoundsListener (kGameNestedArtboardNodeName,
+                                     [&] (Artboard& self, const String&, const ArtboardNode::Ptr&)
+                                     {
+                                         ++callCount;
+                                         self.setFile (nullptr);
+                                     });
+
+    artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
+
+    EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+    EXPECT_EQ (1, callCount);
+}
+
+//==============================================================================
+// Attached component lifetime (A8)
+//==============================================================================
+
+TEST_F (ArtboardGameAnimationTests, AttachingMovesAComponentOffItsPreviousNode)
+{
+    Component follower ("follower");
+
+    ASSERT_TRUE (artboard->attachComponentToNode (kGameRootArtboardNodeName, &follower));
+    ASSERT_TRUE (artboard->attachComponentToNode (kGameNestedArtboardNodeName, &follower));
+
+    // The component now follows only the second node.
+    EXPECT_FALSE (artboard->detachComponentFromNode (kGameRootArtboardNodeName, &follower));
+    EXPECT_TRUE (artboard->detachComponentFromNode (kGameNestedArtboardNodeName, &follower));
+}
+
+TEST_F (ArtboardGameAnimationTests, DeletingAnAttachedComponentDetachesItAutomatically)
+{
+    {
+        Component follower ("follower");
+        ASSERT_TRUE (artboard->attachComponentToNode (kGameNestedArtboardNodeName, &follower));
+    }
+
+    // The attachment held a raw pointer; without the deletion hook the next
+    // notification would write through it.
+    artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
+
+    for (int i = 0; i < 5; ++i)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+}
+
+TEST_F (ArtboardGameAnimationTests, DestroyingTheArtboardReleasesItsAttachments)
+{
+    Component follower ("follower");
+
+    ASSERT_TRUE (artboard->attachComponentToNode (kGameNestedArtboardNodeName, &follower));
+
+    // The artboard registered itself as a listener on the component; it must
+    // deregister before the component outlives it.
+    EXPECT_NO_THROW (artboard.reset());
+}
+
+TEST_F (ArtboardGameAnimationTests, AttachingIsRejectedForUnknownNodes)
+{
+    Component follower ("follower");
+
+    EXPECT_FALSE (artboard->attachComponentToNode ("definitelyNotANode", &follower));
+    EXPECT_FALSE (artboard->attachComponentToNode (kGameNestedArtboardNodeName, nullptr));
+    EXPECT_FALSE (artboard->detachComponentFromNode ("definitelyNotANode", &follower));
+}
+
+//==============================================================================
+// State machine event draining (A2)
+//
+// Draining used to happen only from mouseDrag, so events reported by an advance
+// or by a pointer press were wiped by the next advance before anyone saw them.
+// The shipped fixtures are not guaranteed to report events with custom
+// properties, so these skip rather than fail when nothing is reported.
+//==============================================================================
+
+TEST_F (ArtboardGameAnimationTests, AdvancingAndPressingDoNotLoseReportedEvents)
+{
+    // NOTE: neither shipped fixture is known to report state machine events with
+    // custom properties, so this cannot positively prove the drain fires; it pins
+    // that the widened drain does not crash, recurse or double-report. The
+    // end-to-end check is ArtboardDemo's onPropertyChanged handler firing without
+    // a drag. See docs/ui/artboard.md.
+    Array<String> reported;
+
+    artboard->onPropertyChanged = [&] (Artboard&, const String& eventName, const String& propertyName, const var&, const var& newValue)
+    {
+        reported.add (eventName + "." + propertyName + "=" + newValue.toString());
+    };
+
+    for (int i = 0; i < 30; ++i)
+    {
+        artboard->advanceAndApply (0.016f);
+
+        // A resize advances the scene too, and used to swallow the frame's events.
+        if (i == 10)
+            artboard->setBounds (0.0f, 0.0f, 640.0f, 480.0f);
+    }
+
+    const MouseEvent press (MouseEvent::leftButton, KeyModifiers(), Point<float> (250.0f, 250.0f));
+    artboard->mouseDown (press);
+    artboard->mouseUp (press);
+
+    for (int i = 0; i < 30; ++i)
+        artboard->advanceAndApply (0.016f);
+
+    // Whatever was reported, the dedup cache means no value is reported twice in
+    // a row for the same event, and draining more often must not change that.
+    for (int i = 1; i < reported.size(); ++i)
+        EXPECT_NE (reported[i], reported[i - 1]);
+
+    if (reported.isEmpty())
+        GTEST_SKIP() << "Test asset reports no state machine events with custom properties";
+}
+
+TEST_F (ArtboardGameAnimationTests, EveryPointerHandlerDrainsWithoutCrashing)
+{
+    const MouseEvent moved (MouseEvent::noButtons, KeyModifiers(), Point<float> (250.0f, 250.0f));
+    const MouseEvent pressed (MouseEvent::leftButton, KeyModifiers(), Point<float> (250.0f, 250.0f));
+
+    // All six handlers now drain the reported event queue after their pointer
+    // call, where only mouseDrag used to.
+    EXPECT_NO_THROW (artboard->mouseEnter (moved));
+    EXPECT_NO_THROW (artboard->mouseMove (moved));
+    EXPECT_NO_THROW (artboard->mouseDown (pressed));
+    EXPECT_NO_THROW (artboard->mouseDrag (pressed));
+    EXPECT_NO_THROW (artboard->mouseUp (moved));
+    EXPECT_NO_THROW (artboard->mouseExit (moved));
+
+    for (int i = 0; i < 5; ++i)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+}
+
+TEST_F (ArtboardGameAnimationTests, ContentScaleChangedReRunsTheLayoutPass)
+{
+    auto node = artboard->findNode (kGameNestedArtboardNodeName);
+    ASSERT_NE (nullptr, node.get());
+
+    const auto before = artboard->getNodeBounds (kGameNestedArtboardNodeName);
+
+    // contentScaleChanged re-runs resized(); the DPI value itself is not used by
+    // the artboard, so the layout must come out unchanged rather than drifting.
+    EXPECT_NO_THROW (artboard->contentScaleChanged (2.0f));
+
+    const auto after = artboard->getNodeBounds (kGameNestedArtboardNodeName);
+
+    EXPECT_FLOAT_EQ (before.getX(), after.getX());
+    EXPECT_FLOAT_EQ (before.getY(), after.getY());
+    EXPECT_FLOAT_EQ (before.getWidth(), after.getWidth());
+    EXPECT_FLOAT_EQ (before.getHeight(), after.getHeight());
+
+    EXPECT_TRUE (node->isValid());
+}
+
+TEST_F (ArtboardGameAnimationTests, PropertyChangedHandlerMayAdvanceTheArtboard)
+{
+    // Draining now happens from every advance, so a handler that advances again
+    // must not re-enter the drain loop or recurse without bound. The assertion
+    // here is that these calls return at all.
+    artboard->onPropertyChanged = [] (Artboard& self, const String&, const String&, const var&, const var&)
+    {
+        self.advanceAndApply (0.016f);
+    };
+
+    for (int i = 0; i < 20; ++i)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
 }

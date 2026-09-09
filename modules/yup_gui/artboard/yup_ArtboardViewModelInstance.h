@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#pragma once
-
 namespace yup
 {
 
@@ -42,9 +40,19 @@ class ArtboardViewModel;
 
     Property values can be read and written by property name or through dotted
     paths into nested viewmodels and lists, e.g. "score", "player.name" or
-    "items.2.quantity". Property names are the ones authored in the Rive
-    editor. Value writes are applied to the artboard data bindings on the next
-    Artboard::advanceAndApply().
+    "items.2.quantity". A path may also terminate on a list index ("items.2"),
+    which designates the item's viewmodel instance rather than a property value;
+    such paths resolve through hasProperty() and getNestedInstance(), but not
+    through the value accessors. Property names are the ones authored in the
+    Rive editor. Value writes are applied to the artboard data bindings on the
+    next Artboard::advanceAndApply().
+
+    A path segment made only of decimal digits is always read as a list index,
+    so a property literally named "2" cannot be addressed through a path.
+
+    Instances are not internally synchronized. They are safe to use from the
+    message thread and from Component::refreshDisplay (which YUP serialises
+    against the message thread), but not concurrently from both.
 
     @see ArtboardFile::createArtboardViewModelInstance, Artboard::bindViewModelInstance
 */
@@ -81,16 +89,21 @@ public:
     String getInstanceName() const;
 
     //==============================================================================
-    /** Returns true if a property (or nested dotted path) is defined by this instance. */
-    bool hasProperty (StringRef nameOrPath) const noexcept;
+    /** Returns true if a property (or nested dotted path) is defined by this instance.
+
+        Index-terminated paths ("items.2") are accepted and report whether the
+        list item exists.
+    */
+    bool hasProperty (StringRef nameOrPath) const;
 
     //==============================================================================
     /** Reads a property value by name or dotted path.
 
         Mapping: boolean → var(bool), number → var(double), string → var(String),
         color → var(int64 ARGB), enum → var(String) of the selected option.
-        Container values (viewmodels, lists) and triggers return an empty var.
-        Returns an empty var for unknown paths or mismatched types.
+        Container values (viewmodels, lists), triggers and index-terminated paths
+        return an empty var, as do unknown paths: the two cases are not
+        distinguishable through this accessor, use hasProperty() to tell them apart.
 
         @param nameOrPath The property name or dotted path, e.g. "player.health".
     */
@@ -116,7 +129,11 @@ public:
     bool trigger (StringRef nameOrPath);
 
     //==============================================================================
-    /** Reads a boolean property, or nullopt if the path is unknown or not a boolean. */
+    /** Reads a boolean property, or nullopt if the path is unknown or not a boolean.
+
+        Every typed getter below collapses "unknown path" and "wrong type" into
+        nullopt; use hasProperty() to distinguish them.
+    */
     std::optional<bool> getBoolProperty (StringRef nameOrPath) const;
 
     /** Reads a number property as double, or nullopt if the path is unknown or not a number. */
@@ -164,7 +181,8 @@ public:
 
     //==============================================================================
     /** Returns a handle to the nested viewmodel instance behind a viewModel-typed
-        property (by name or dotted path), or null if the path is unknown.
+        property, or behind an index-terminated list path ("items.2"), or null if
+        the path is unknown or names something else.
 
         The returned handle shares the same ArtboardFile and observes the same
         underlying Rive instance as its parent.
@@ -172,10 +190,12 @@ public:
     ArtboardViewModelInstance::Ptr getNestedInstance (StringRef nameOrPath) const;
 
     //==============================================================================
-    /** Returns the number of items of a list property, or -1 if the path is unknown. */
+    /** Returns the number of items of a list property, or -1 if the path is unknown
+        or does not name a list. */
     int getListSize (StringRef nameOrPath) const;
 
-    /** Returns a handle to the item at the given index of a list property, or null. */
+    /** Returns a handle to the item at the given index of a list property, or null
+        if the path does not name a list or the index is out of range. */
     ArtboardViewModelInstance::Ptr getListItem (StringRef nameOrPath, int index) const;
 
     /** Appends a new item to a list property.
@@ -216,11 +236,19 @@ public:
     /** Registers a callback invoked whenever any property of this instance (and its
         nested viewmodels and list items) changes.
 
+        Structural list changes (addListItem, removeListItem, swapListItems,
+        clearListItems) also notify, reporting the path of the list itself and an
+        empty var as the value.
+
         Pass an empty callback to remove the listener. Callbacks are delivered
-        synchronously on the thread that performed the write. Mutating this
-        instance from within the callback (writing values or resizing lists) is
-        supported; the last reference to the instance must however not be
-        released from inside the callback itself.
+        synchronously on the thread that performed the write; when the write comes
+        from the artboard's data bindings, that is the thread running
+        Artboard::refreshDisplay, on the thread described above.
+
+        Mutating this instance from within the callback (writing values or
+        resizing lists) is supported, as is replacing or clearing the callback
+        itself. The last reference to the instance must however not be released
+        from inside the callback.
 
         @param callback The callback to invoke on property changes.
     */
@@ -234,13 +262,13 @@ public:
     static Ptr createFromFile (const std::shared_ptr<ArtboardFile>& file, StringRef viewModelName, StringRef instanceName);
 
     /** @internal */
-    static Ptr createFromRive (const std::shared_ptr<ArtboardFile>& file, void* riveInstance);
+    static Ptr createFromRive (const std::shared_ptr<ArtboardFile>& file, rive::ViewModelInstance* riveInstance);
 
     /** @internal */
-    void* internalRiveInstance() const noexcept;
+    rive::ViewModelInstance* internalRiveInstance() const noexcept;
 
 private:
-    ArtboardViewModelInstance (const std::shared_ptr<ArtboardFile>& file, void* riveInstance);
+    ArtboardViewModelInstance (const std::shared_ptr<ArtboardFile>& file, rive::ViewModelInstance* riveInstance);
 
     struct Impl;
 
@@ -248,14 +276,14 @@ private:
     void leaveObserverDispatch() noexcept;
     bool isObserverDispatchInProgress() const noexcept;
 
-    void notifyValueChanged (void* riveValue, const String& name);
-    void attachObserversToTree (void* instance, const String& prefix);
+    void notifyValueChanged (rive::ViewModelInstanceValue* riveValue, const String& name);
+    void attachObserversToTree (rive::ViewModelInstance* instance, const String& prefix);
     void detachObservers();
     void syncObservers();
     void purgeRetiredObservers();
 
     std::shared_ptr<ArtboardFile> file;
-    std::shared_ptr<Impl> impl;
+    std::unique_ptr<Impl> impl;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArtboardViewModelInstance)
 };

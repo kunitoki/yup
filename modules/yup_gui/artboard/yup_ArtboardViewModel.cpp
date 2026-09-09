@@ -97,7 +97,7 @@ ArtboardViewModel::PropertyInfo propertyInfoOf (rive::ViewModelProperty* propert
 
 //==============================================================================
 
-ArtboardViewModel::ArtboardViewModel (const std::shared_ptr<ArtboardFile>& fileToUse, void* riveViewModel)
+ArtboardViewModel::ArtboardViewModel (const std::shared_ptr<ArtboardFile>& fileToUse, rive::ViewModel* riveViewModel)
     : file (fileToUse)
     , viewModel (riveViewModel)
 {
@@ -109,7 +109,7 @@ ArtboardViewModel::~ArtboardViewModel() = default;
 
 String ArtboardViewModel::getName() const
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return String (vm->name());
 
     return {};
@@ -124,7 +124,7 @@ ArtboardFile* ArtboardViewModel::getArtboardFile() const noexcept
 
 int ArtboardViewModel::getNumProperties() const noexcept
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return static_cast<int> (vm->properties().size());
 
     return 0;
@@ -132,7 +132,7 @@ int ArtboardViewModel::getNumProperties() const noexcept
 
 ArtboardViewModel::PropertyInfo ArtboardViewModel::getPropertyAt (int index) const
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return propertyInfoOf (vm->property (static_cast<size_t> (index)));
 
     return {};
@@ -140,15 +140,15 @@ ArtboardViewModel::PropertyInfo ArtboardViewModel::getPropertyAt (int index) con
 
 ArtboardViewModel::PropertyInfo ArtboardViewModel::getProperty (StringRef name) const
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return propertyInfoOf (vm->property (String (name).toStdString()));
 
     return {};
 }
 
-bool ArtboardViewModel::hasProperty (StringRef name) const noexcept
+bool ArtboardViewModel::hasProperty (StringRef name) const
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return vm->property (String (name).toStdString()) != nullptr;
 
     return false;
@@ -158,7 +158,7 @@ bool ArtboardViewModel::hasProperty (StringRef name) const noexcept
 
 int ArtboardViewModel::getNumInstances() const noexcept
 {
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         return static_cast<int> (vm->instanceCount());
 
     return 0;
@@ -168,7 +168,7 @@ StringArray ArtboardViewModel::getInstanceNames() const
 {
     StringArray names;
 
-    if (auto* vm = static_cast<rive::ViewModel*> (viewModel))
+    if (auto* vm = viewModel)
         for (auto* instance : vm->instances())
             names.add (String (instance->name()));
 

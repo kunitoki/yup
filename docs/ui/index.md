@@ -22,6 +22,8 @@ windowing, layout, widgets, and theming are still to come.
 - **Events** — the message loop, timers, and event dispatch (`yup_events`).
 - **Widgets** — buttons, sliders, labels, text editors, and audio displays
   (waveform, spectrogram, scope) from `yup_audio_gui`.
+- **Artboards** — Rive artboards as components, with node access and
+  ViewModel data binding.
 
 ## Guides
 
@@ -46,6 +48,8 @@ windowing, layout, widgets, and theming are still to come.
 
 - [Code editor](code-editor.md) — `CodeDocument`, `SyntaxDefinition`,
   `CodeTokeniser`, and the syntax-highlighting `CodeEditor` component.
+- [Artboards (Rive)](artboard.md) — `ArtboardFile`, `Artboard`,
+  `ArtboardNode`, and ViewModel data binding.
 
 ```{toctree}
 :hidden:
@@ -59,4 +63,5 @@ component-caching
 component-snapshots
 component-profiling
 code-editor
+artboard
 ```

@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#pragma once
-
 namespace yup
 {
 
@@ -147,7 +145,7 @@ public:
     PropertyInfo getProperty (StringRef name) const;
 
     /** Returns true if the schema defines a property with the given name. */
-    bool hasProperty (StringRef name) const noexcept;
+    bool hasProperty (StringRef name) const;
 
     //==============================================================================
     /** Returns the number of authored instances stored in the schema.
@@ -169,10 +167,10 @@ public:
     static Ptr createFromFile (const std::shared_ptr<ArtboardFile>& file, StringRef name);
 
 private:
-    ArtboardViewModel (const std::shared_ptr<ArtboardFile>& file, void* riveViewModel);
+    ArtboardViewModel (const std::shared_ptr<ArtboardFile>& file, rive::ViewModel* riveViewModel);
 
     std::shared_ptr<ArtboardFile> file;
-    void* viewModel = nullptr;
+    rive::ViewModel* viewModel = nullptr;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArtboardViewModel)
 };

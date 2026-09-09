@@ -43,7 +43,7 @@ public:
 
         ArtboardFile::AssetInfo assetInfo;
         assetInfo.uniqueName = String (asset.uniqueName());
-        assetInfo.uniquePath = String (asset.uniqueFilename());
+        assetInfo.uniqueFilename = String (asset.uniqueFilename());
         assetInfo.extension = String (asset.fileExtension());
 
         return assetCallback (assetInfo, Span<const uint8> { inBandBytes.data(), inBandBytes.size() }, *factory);
@@ -81,7 +81,7 @@ int ArtboardFile::getNumViewModels() const noexcept
     return rivFile != nullptr ? static_cast<int> (rivFile->viewModelCount()) : 0;
 }
 
-StringArray ArtboardFile::getViewModelNames()
+StringArray ArtboardFile::getViewModelNames() const
 {
     StringArray names;
 
@@ -115,34 +115,38 @@ ArtboardViewModelInstance::Ptr ArtboardFile::createArtboardViewModelInstance (St
 
 //==============================================================================
 
-ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory)
+ResultValue<ArtboardFile::Ptr> ArtboardFile::load (const File& file, rive::Factory& factory)
 {
     return load (file, factory, nullptr);
 }
 
-ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory, const AssetLoadCallback& assetCallback)
+ResultValue<ArtboardFile::Ptr> ArtboardFile::load (const File& file, rive::Factory& factory, const AssetLoadCallback& assetCallback)
 {
     if (! file.existsAsFile())
-        return LoadResult::fail ("Failed to find artboard file to load");
+        return makeResultValueFail ("Failed to find artboard file to load");
 
     auto is = file.createInputStream();
     if (is == nullptr || ! is->openedOk())
-        return LoadResult::fail ("Failed to open artboard file for reading");
+        return makeResultValueFail ("Failed to open artboard file for reading");
 
     return load (*is, factory, assetCallback);
 }
 
 //==============================================================================
 
-ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& factory)
+ResultValue<ArtboardFile::Ptr> ArtboardFile::load (InputStream& is, rive::Factory& factory)
 {
     return load (is, factory, nullptr);
 }
 
-ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& factory, const AssetLoadCallback& assetCallback)
+ResultValue<ArtboardFile::Ptr> ArtboardFile::load (InputStream& is, rive::Factory& factory, const AssetLoadCallback& assetCallback)
 {
     yup::MemoryBlock mb;
-    is.readIntoMemoryBlock (mb);
+
+    // Distinguish a stream that yielded nothing from a stream that yielded bytes
+    // Rive could not parse, which would otherwise both report "Malformed".
+    if (is.readIntoMemoryBlock (mb) == 0)
+        return makeResultValueFail ("Failed to read artboard file");
 
     rive::ImportResult result;
     rive::rcp<rive::File> rivFile;
@@ -164,15 +168,15 @@ ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& fac
     }
 
     if (result == rive::ImportResult::malformed)
-        return LoadResult::fail ("Malformed artboard file");
+        return makeResultValueFail ("Malformed artboard file");
 
     if (result == rive::ImportResult::unsupportedVersion)
-        return LoadResult::fail ("Unsupported artboard file for current runtime");
+        return makeResultValueFail ("Unsupported artboard file for current runtime");
 
     if (rivFile == nullptr)
-        return LoadResult::fail ("Failed to import artboard file");
+        return makeResultValueFail ("Failed to import artboard file");
 
-    return LoadResult::ok (std::shared_ptr<ArtboardFile> (new ArtboardFile { std::move (rivFile) }));
+    return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (rivFile) }));
 }
 
 } // namespace yup
