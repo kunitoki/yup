@@ -80,10 +80,8 @@ GpuShaderSource makeShaderSource (const char* code = "void main() {}")
 
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
-    src.code = code;
-    src.codeSize = (uint32_t) strlen (code);
-    src.bindingMap = sBlob.data();
-    src.bindingMapSize = (uint32_t) sBlob.size();
+    src.code = gpuShaderSourceBytes (code);
+    src.bindingMap = sBlob;
 
     return src;
 }
@@ -209,7 +207,6 @@ TEST_F (GpuPipelineMockTests, CompileValidatesEmptyVertexCode)
     GpuShaderSource vs;
     vs.language = GpuShaderLanguage::glsl;
     vs.bindingMap = makeShaderSource().bindingMap;
-    vs.bindingMapSize = makeShaderSource().bindingMapSize;
 
     auto fs = makeShaderSource ("// FS");
 
@@ -253,8 +250,7 @@ TEST_F (GpuPipelineMockTests, CompileWithColorTargetAndDepthStencil)
     colorTarget.blend = blend;
 
     GpuPipelineOptions options;
-    options.colorTargets[0] = colorTarget;
-    options.colorTargetCount = 1;
+    options.colorTargets.push_back (colorTarget);
     options.depthStencil.enabled = true;
     options.depthStencil.format = GpuTextureFormat::depth32float;
     options.depthStencil.depthCompare = GpuCompareFunction::less;
@@ -284,12 +280,9 @@ TEST_F (GpuPipelineMockTests, CompileWithVertexBuffers)
     auto vs = makeShaderSource ("// VS");
     auto fs = makeShaderSource ("// FS");
 
-    GpuVertexAttribute attr { GpuVertexFormat::float3, 0, 0 };
-    GpuVertexBufferLayout layout { 12, GpuVertexStepMode::vertex, &attr, 1 };
-
     GpuPipelineOptions options;
-    options.vertexBuffers = &layout;
-    options.vertexBufferCount = 1;
+    options.vertexBuffers.emplace_back (12, GpuVertexStepMode::vertex,
+                                        std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, 0, 0 } });
 
     auto result = GpuPipeline::compile (ctx, vs, fs, options);
     ASSERT_TRUE (result.wasOk());

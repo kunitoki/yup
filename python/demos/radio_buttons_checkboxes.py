@@ -14,24 +14,29 @@ class RadioCheckComponent(yup.Component):
     def __init__(self):
         yup.Component.__init__(self)
 
-        self.radio1 = yup.ToggleButton("Option A")
+        self.radio1 = yup.ToggleButton("OptionA")
+        self.radio1.setButtonText("Option A")
         self.radio1.setToggleState(True, yup.NotificationType.dontSendNotification)
         self.radio1.onClick = lambda: self.onRadioChanged(0)
         self.addAndMakeVisible(self.radio1)
 
-        self.radio2 = yup.ToggleButton("Option B")
+        self.radio2 = yup.ToggleButton("OptionB")
+        self.radio2.setButtonText("Option B")
         self.radio2.onClick = lambda: self.onRadioChanged(1)
         self.addAndMakeVisible(self.radio2)
 
-        self.radio3 = yup.ToggleButton("Option C")
+        self.radio3 = yup.ToggleButton("OptionC")
+        self.radio3.setButtonText("Option C")
         self.radio3.onClick = lambda: self.onRadioChanged(2)
         self.addAndMakeVisible(self.radio3)
 
-        self.check1 = yup.ToggleButton("Enable Feature X")
+        self.check1 = yup.ToggleButton("EnableFeatureX")
+        self.check1.setButtonText("Enable Feature X")
         self.check1.onClick = self.onCheckChanged
         self.addAndMakeVisible(self.check1)
 
-        self.check2 = yup.ToggleButton("Enable Feature Y")
+        self.check2 = yup.ToggleButton("EnableFeatureY")
+        self.check2.setButtonText("Enable Feature Y")
         self.check2.onClick = self.onCheckChanged
         self.addAndMakeVisible(self.check2)
 
@@ -90,7 +95,7 @@ class RadioCheckComponent(yup.Component):
         self.statusLabel.setBounds(20, y, 300, 24)
 
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
 

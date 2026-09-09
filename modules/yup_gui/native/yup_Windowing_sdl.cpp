@@ -890,10 +890,14 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        YUP_AUTORELEASEPOOL
+        YUP_TRY
         {
-            renderFrame();
+            YUP_AUTORELEASEPOOL
+            {
+                renderFrame();
+            }
         }
+        YUP_CATCH_EXCEPTION
 
         if (threadShouldExit())
             break;

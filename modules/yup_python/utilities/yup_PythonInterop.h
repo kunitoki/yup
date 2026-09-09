@@ -39,11 +39,8 @@ namespace yup::Helpers
 
 inline void printPythonException (const pybind11::error_already_set& e)
 {
-    pybind11::print ("Traceback (most recent call last):");
-
-    pybind11::module_::import ("traceback").attr ("print_tb") (e.trace());
-
-    pybind11::print (e.what());
+    pybind11::module_::import ("traceback")
+        .attr ("print_exception") (e.type(), e.value(), e.trace() ? e.trace() : pybind11::none());
 }
 
 //==============================================================================

@@ -81,33 +81,36 @@ class TriangleComponent(yup.Component):
         yup.Component.__init__(self)
         self.setOpaque(True)
         self._ctx = None
+        self._device = None
         self._pipeline = None
         self._target = None
         self._gpuTexture = None
         self._initOk = False
         self._didInit = False
-        self.timer = yup.Timer(self.onTimer)
-        self.timer.startTimerHz(30)
-
-    def onTimer(self):
-        self.repaint()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        pass
+        # The per-frame hook, called on the render thread immediately before
+        # painting. Driving repaints from a yup.Timer instead would call
+        # repaint() from the message thread while the render thread is inside
+        # paint(), which trips Component's isRepainting assertion.
+        self.repaint()
 
     # ------------------------------------------------------------------
     def _ensureInit(self):
-        if self._didInit or self._ctx is None:
+        if self._didInit or self._device is None:
             return
         self._didInit = True
 
-        result = yup.GpuPipeline.compileFromGlsl(
-            self._ctx, VERT_GLSL, FRAG_GLSL, yup.GpuPipelineOptions(),
-        )
-        if result:
-            self._pipeline = result.getValue()
-            self._target = yup.GpuTarget.create(self._ctx, self.TARGET_SIZE, self.TARGET_SIZE)
-            self._initOk = self._target is not None
+        try:
+            self._pipeline = yup.GpuPipeline.compileFromGlsl(
+                self._device, VERT_GLSL, FRAG_GLSL, yup.GpuPipelineOptions(),
+            )
+        except RuntimeError as error:
+            print(f"pipeline compile failed: {error}")
+            return
+
+        self._target = yup.GpuTarget.create(self._device, self.TARGET_SIZE, self.TARGET_SIZE)
+        self._initOk = self._target is not None
 
     # ------------------------------------------------------------------
     def _render(self):
@@ -115,7 +118,7 @@ class TriangleComponent(yup.Component):
             return
 
         # Single frame, single render pass, 3-vertex fullscreen triangle
-        frame = yup.GpuFrame.begin(self._ctx)
+        frame = yup.GpuFrame.begin(self._device)
         ropts = yup.GpuRenderOptions(True, yup.Colors.black)
         rp = self._target.beginRenderPass(frame, ropts)
 
@@ -128,11 +131,12 @@ class TriangleComponent(yup.Component):
 
     # ------------------------------------------------------------------
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
         if self._ctx is None:
             self._ctx = g.getGraphicsContext()
+            self._device = self._ctx.getGpuDevice() if self._ctx is not None else None
 
         if self._ctx is None or not self._ctx.isGpuAvailable():
             return
@@ -146,7 +150,7 @@ class TriangleComponent(yup.Component):
                 "Pipeline compilation failed", font,
                 yup.Rectangle[float](0, self.getHeight() / 2 - 20,
                                      self.getWidth(), 40),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
             return
 
@@ -168,7 +172,7 @@ class TriangleComponent(yup.Component):
 
         apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
                     3: "Direct3D", 4: "Metal", 5: "WebGPU"}
-        api = apiNames.get(self._ctx.getApi(), "?")
+        api = apiNames.get(int(self._ctx.getPlatform()), "?")
         font = yup.Font(yup.FontOptions(14.0))
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(

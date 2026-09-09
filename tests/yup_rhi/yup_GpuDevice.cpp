@@ -271,8 +271,7 @@ TEST_F (GpuDeviceErrorTests, ComputePipelineCompileOnHeadlessFails)
 {
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
-    src.code = "void main() {}";
-    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
+    src.code = gpuShaderSourceBytes ("void main() {}");
 
     auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 8, 1, 1 });
     EXPECT_TRUE (result.failed());

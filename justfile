@@ -96,6 +96,7 @@ emscripten_serve:
 [doc("generate python wheel for yup_python bindings")]
 [working-directory: 'python']
 python_wheel:
+  uv venv --allow-existing
   uv pip install build
   uv run python -m build --wheel
   @just python_install

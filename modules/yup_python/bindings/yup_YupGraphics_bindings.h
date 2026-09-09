@@ -30,6 +30,10 @@
 #include "yup_YupCore_bindings.h"
 
 #include "../utilities/yup_PyBind11Includes.h"
+#include "../pybind11/trampoline_self_life_support.h"
+
+#include <memory>
+#include <string>
 
 namespace yup::Bindings
 {
@@ -41,215 +45,288 @@ void registerYupGraphicsBindings (pybind11::module_& m);
 // =================================================================================================
 
 /*
-struct PyImageType : yup::ImageType
-{
-    yup::ImagePixelData::Ptr create (yup::Image::PixelFormat format, int width, int height, bool shouldClearImage) const override
-    {
-        PYBIND11_OVERRIDE_PURE (yup::ImagePixelData::Ptr, yup::ImageType, create, format, width, height, shouldClearImage);
-    }
+    Trampoline that lets Python subclasses implement a decoder.
 
-    int getTypeID() const override
-    {
-        PYBIND11_OVERRIDE_PURE (int, yup::ImageType, getTypeID);
-    }
+    Python instances are constructed from raw bytes (the data is copied into an
+    internal MemoryInputStream, so Python never hands an owned stream to C++).
+    readSourceBytes() exposes the full source data to Python overrides.
 
-    yup::Image convert (const yup::Image& source) const override
-    {
-        PYBIND11_OVERRIDE (yup::Image, yup::ImageType, convert, source);
-    }
-};
-
-// =================================================================================================
-
-struct PyImageFileFormat : yup::ImageFileFormat
-{
-    using yup::ImageFileFormat::ImageFileFormat;
-
-    yup::String getFormatName() override
-    {
-        PYBIND11_OVERRIDE_PURE (yup::String, yup::ImageFileFormat, getFormatName);
-    }
-
-    bool canUnderstand (yup::InputStream& input) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, yup::ImageFileFormat, canUnderstand, input);
-    }
-
-    bool usesFileExtension (const yup::File& possibleFile) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, yup::ImageFileFormat, usesFileExtension, possibleFile);
-    }
-
-    yup::Image decodeImage (yup::InputStream& input) override
-    {
-        PYBIND11_OVERRIDE_PURE (yup::Image, yup::ImageFileFormat, decodeImage, input);
-    }
-
-    bool writeImageToStream (const yup::Image& sourceImage, yup::OutputStream& destStream) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, yup::ImageFileFormat, writeImageToStream, sourceImage, destStream);
-    }
-};
-
-// =================================================================================================
-
-template <class Base = yup::LowLevelGraphicsContext>
-struct PyLowLevelGraphicsContext : Base
-{
-    using Base::Base;
-
-    bool isVectorDevice() const override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, Base, isVectorDevice);
-    }
-
-    void setOrigin (yup::Point<int> origin) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, setOrigin, origin);
-    }
-
-    void addTransform (const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, addTransform, transform);
-    }
-
-    float getPhysicalPixelScaleFactor() const override
-    {
-        PYBIND11_OVERRIDE_PURE (float, Base, getPhysicalPixelScaleFactor);
-    }
-
-    bool clipToRectangle (const yup::Rectangle<int>& rect) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, Base, clipToRectangle, rect);
-    }
-
-    bool clipToRectangleList (const yup::RectangleList<int>& rects) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, Base, clipToRectangleList, rects);
-    }
-
-    void excludeClipRectangle (const yup::Rectangle<int>& rect) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, excludeClipRectangle, rect);
-    }
-
-    void clipToPath (const yup::Path& path, const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, clipToPath, path, transform);
-    }
-
-    void clipToImageAlpha (const yup::Image& image, const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, clipToImageAlpha, image, transform);
-    }
-
-    bool clipRegionIntersects (const yup::Rectangle<int>& rect) override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, Base, clipRegionIntersects, rect);
-    }
-
-    yup::Rectangle<int> getClipBounds() const override
-    {
-        PYBIND11_OVERRIDE_PURE (yup::Rectangle<int>, Base, getClipBounds);
-    }
-
-    bool isClipEmpty() const override
-    {
-        PYBIND11_OVERRIDE_PURE (bool, Base, isClipEmpty);
-    }
-
-    void saveState() override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, saveState);
-    }
-
-    void restoreState() override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, restoreState);
-    }
-
-    void beginTransparencyLayer (float opacity) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, beginTransparencyLayer, opacity);
-    }
-
-    void endTransparencyLayer() override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, endTransparencyLayer);
-    }
-
-    void setFill (const yup::FillType& fill) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, setFill, fill);
-    }
-
-    void setOpacity (float opacity) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, setOpacity, opacity);
-    }
-
-    void setInterpolationQuality (yup::Graphics::ResamplingQuality quality) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, setInterpolationQuality, quality);
-    }
-
-    void fillAll() override
-    {
-        PYBIND11_OVERRIDE (void, Base, fillAll);
-    }
-
-    void fillRect (const yup::Rectangle<int>& rect, bool replaceExistingContents) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, fillRect, rect, replaceExistingContents);
-    }
-
-    void fillRect (const yup::Rectangle<float>& rect) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, fillRect, rect);
-    }
-
-    void fillRectList (const yup::RectangleList<float>& rects) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, fillRectList, rects);
-    }
-
-    void fillPath (const yup::Path& path, const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, fillPath, path, transform);
-    }
-
-    void drawImage (const yup::Image& image, const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, drawImage, image, transform);
-    }
-
-    void drawLine (const yup::Line<float>& line) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, drawLine, line);
-    }
-
-    void setFont (const yup::Font& font) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, setFont, font);
-    }
-
-    const yup::Font& getFont() override
-    {
-        PYBIND11_OVERRIDE_PURE (const yup::Font&, Base, getFont);
-    }
-
-    void drawGlyphs (yup::Span<const uint16_t> glyphs,
-                     yup::Span<const yup::Point<float>> glyphsPositions,
-                     const yup::AffineTransform& transform) override
-    {
-        PYBIND11_OVERRIDE_PURE (void, Base, drawGlyphs, glyphs, glyphsPositions, transform);
-    }
-
-    uint64_t getFrameId() const override
-    {
-        PYBIND11_OVERRIDE_PURE (uint64_t, Base, getFrameId);
-    }
-};
+    The trampoline derives from pybind11::trampoline_self_life_support, which
+    (together with registering the class with py::smart_holder) keeps the Python
+    wrapper alive while the C++ object is owned by C++, so virtual dispatch keeps
+    reaching the Python overrides even after ownership crossed a C++ boundary.
 */
+struct PyImageFormatReader : yup::ImageFormatReader, pybind11::trampoline_self_life_support
+{
+    PyImageFormatReader (yup::InputStream* sourceStream, const yup::String& formatName)
+        : yup::ImageFormatReader (sourceStream, formatName)
+    {
+    }
+
+    yup::Image readImage() override
+    {
+        PYBIND11_OVERRIDE_PURE (yup::Image, yup::ImageFormatReader, readImage);
+    }
+
+    yup::Image readFrame (int frameIndex) override
+    {
+        PYBIND11_OVERRIDE (yup::Image, yup::ImageFormatReader, readFrame, frameIndex);
+    }
+
+    bool readFrame (int frameIndex, yup::Image& dest) override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatReader, readFrame, frameIndex, dest);
+    }
+
+    bool isAnimated() const override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatReader, isAnimated);
+    }
+
+    int getFrameCount() const override
+    {
+        PYBIND11_OVERRIDE (int, yup::ImageFormatReader, getFrameCount);
+    }
+
+    int getLoopCount() const override
+    {
+        PYBIND11_OVERRIDE (int, yup::ImageFormatReader, getLoopCount);
+    }
+
+    int getFrameDelayMs (int frameIndex) const override
+    {
+        PYBIND11_OVERRIDE (int, yup::ImageFormatReader, getFrameDelayMs, frameIndex);
+    }
+
+    /** Returns the full contents of the source stream (position is reset to 0). */
+    std::string readSourceBytes()
+    {
+        input->setPosition (0);
+
+        yup::MemoryBlock block;
+        input->readIntoMemoryBlock (block);
+        input->setPosition (0);
+
+        return std::string (static_cast<const char*> (block.getData()), block.getSize());
+    }
+};
+
+// =================================================================================================
+
+/*
+    Trampoline that lets Python subclasses implement an encoder.
+
+    Python instances wrap an OutputStream whose ownership is transferred to the
+    writer; writeRawData() lets Python push encoded bytes into that stream and
+    flushStream() flushes the underlying output. Self-life-support semantics are
+    the same as PyImageFormatReader.
+*/
+struct PyImageFormatWriter : yup::ImageFormatWriter, pybind11::trampoline_self_life_support
+{
+    PyImageFormatWriter (yup::OutputStream* destStream, const yup::String& formatName, yup::PixelFormat pixelFormat)
+        : yup::ImageFormatWriter (destStream, formatName, pixelFormat)
+    {
+    }
+
+    bool writeImage (const yup::Image& image) override
+    {
+        PYBIND11_OVERRIDE_PURE (bool, yup::ImageFormatWriter, writeImage, image);
+    }
+
+    bool flush() override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatWriter, flush);
+    }
+
+    bool supportsAnimation() const override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatWriter, supportsAnimation);
+    }
+
+    bool beginAnimation (int loopCount) override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatWriter, beginAnimation, loopCount);
+    }
+
+    bool writeFrame (const yup::Image& frame, int delayMs) override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatWriter, writeFrame, frame, delayMs);
+    }
+
+    bool endAnimation() override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormatWriter, endAnimation);
+    }
+
+    /** Writes raw bytes into the owned output stream. */
+    bool writeRawData (const std::string& data)
+    {
+        return output != nullptr && output->write (data.data(), data.size());
+    }
+
+    /** Flushes the owned output stream. */
+    bool flushStream()
+    {
+        if (output == nullptr)
+            return false;
+
+        output->flush();
+        return true;
+    }
+
+    /** Returns the underlying MemoryOutputStream when this writer was created
+        with an in-memory destination, or nullptr otherwise. */
+    yup::MemoryOutputStream* getMemoryOutputStream() noexcept
+    {
+        return dynamic_cast<yup::MemoryOutputStream*> (output.get());
+    }
+};
+
+// =================================================================================================
+
+/*
+    Trampoline that lets Python subclasses implement yup::ImageFormat.
+
+    Pure virtual members fall back to empty/neutral values when a Python subclass
+    does not override them, so a Python format can decide which parts (detection,
+    decode, encode) it actually implements. Returning None from createReaderFor()
+    or createWriterFor() reports "not handled" to the ImageFormatManager.
+
+    Formats registered through ImageFormatManager::registerFormat() transfer
+    ownership to the manager. Self-life-support (py::smart_holder registration)
+    keeps the Python wrapper alive while the manager owns the format, so the
+    Python overrides remain reachable for as long as the format stays registered.
+*/
+struct PyImageFormat : yup::ImageFormat, pybind11::trampoline_self_life_support
+{
+    PyImageFormat() = default;
+
+    const yup::String& getFormatName() const override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<const yup::ImageFormat*> (this), "getFormatName");
+        if (overrideFn)
+        {
+            nameCache = overrideFn().cast<yup::String>();
+            return nameCache;
+        }
+
+        nameCache.clear();
+        return nameCache;
+    }
+
+    yup::StringArray getFileExtensions (yup::ImageFormat::Mode mode) const override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<const yup::ImageFormat*> (this), "getFileExtensions");
+        if (overrideFn)
+        {
+            pybind11::object result = overrideFn (mode);
+            return toStringArray (result);
+        }
+
+        return {};
+    }
+
+    bool canHandleFile (const yup::File& file, yup::ImageFormat::Mode mode) const override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormat, canHandleFile, file, mode);
+    }
+
+    bool canHandleStream (yup::InputStream& stream, yup::ImageFormat::Mode mode) const override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormat, canHandleStream, stream, mode);
+    }
+
+    std::unique_ptr<yup::ImageFormatReader> createReaderFor (yup::InputStream* sourceStream, const yup::ImageFormat::Options& options = {}) override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<yup::ImageFormat*> (this), "createReaderFor");
+        if (! overrideFn)
+            return nullptr;
+
+        pybind11::object result = overrideFn (sourceStream, options);
+        if (result.is_none())
+            return nullptr;
+
+        return result.cast<std::unique_ptr<yup::ImageFormatReader>>();
+    }
+
+    std::unique_ptr<yup::ImageFormatWriter> createWriterFor (yup::OutputStream* destStream,
+                                                             yup::PixelFormat pixelFormat,
+                                                             const yup::StringPairArray& metadataValues,
+                                                             int qualityOptionIndex) override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<yup::ImageFormat*> (this), "createWriterFor");
+        if (! overrideFn)
+            return nullptr;
+
+        pybind11::object result = overrideFn (destStream, pixelFormat, metadataValues, qualityOptionIndex);
+        if (result.is_none())
+            return nullptr;
+
+        return result.cast<std::unique_ptr<yup::ImageFormatWriter>>();
+    }
+
+    yup::Array<yup::PixelFormat> getPossiblePixelFormats() const override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<const yup::ImageFormat*> (this), "getPossiblePixelFormats");
+        if (overrideFn)
+        {
+            yup::Array<yup::PixelFormat> result;
+
+            for (auto item : overrideFn())
+            {
+                try
+                {
+                    result.add (item.cast<yup::PixelFormat>());
+                }
+                catch (const pybind11::cast_error&)
+                {
+                    result.add (static_cast<yup::PixelFormat> (item.cast<int>()));
+                }
+            }
+
+            return result;
+        }
+
+        return {};
+    }
+
+    bool isCompressed() const override
+    {
+        PYBIND11_OVERRIDE (bool, yup::ImageFormat, isCompressed);
+    }
+
+    yup::StringArray getQualityOptions() const override
+    {
+        pybind11::gil_scoped_acquire gil;
+        pybind11::function overrideFn = pybind11::get_override (static_cast<const yup::ImageFormat*> (this), "getQualityOptions");
+        if (overrideFn)
+            return toStringArray (overrideFn());
+
+        return yup::ImageFormat::getQualityOptions();
+    }
+
+private:
+    static yup::StringArray toStringArray (const pybind11::object& sequence)
+    {
+        yup::StringArray result;
+
+        if (! sequence.is_none())
+        {
+            for (auto item : sequence)
+                result.add (item.cast<yup::String>());
+        }
+
+        return result;
+    }
+
+    mutable yup::String nameCache;
+};
+
+// =================================================================================================
 
 } // namespace yup::Bindings

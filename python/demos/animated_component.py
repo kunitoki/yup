@@ -16,16 +16,10 @@ class AnimatedComponent(yup.Component):
     def __init__(self):
         yup.Component.__init__(self)
         self.setOpaque(True)
-
         self.startTime = time.perf_counter()
-        self.timer = yup.Timer(self.onTimer)
-        self.timer.startTimerHz(60)
-
-    def onTimer(self):
-        self.repaint()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        pass  # Timer handles repainting
+        self.repaint()
 
     def paint(self, g: yup.Graphics):
         g.setFillColor(yup.Colors.black)
@@ -47,12 +41,12 @@ class AnimatedComponent(yup.Component):
 
         gradient = yup.ColorGradient(
             yup.Colors.red,
-            yup.Colors.yellow,
             yup.Point[float](cx - r, ball_y - r),
+            yup.Colors.yellow,
             yup.Point[float](cx + r, ball_y + r),
-            False,
+            yup.ColorGradient.Type.Linear
         )
-        g.setFillColor(gradient)
+        g.setFillColorGradient(gradient)
         g.fillEllipse(cx - r, ball_y - r, r * 2, r * 2)
 
         # Rotating squares

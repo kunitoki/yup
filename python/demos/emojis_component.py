@@ -24,7 +24,7 @@ class EmojiComponent(yup.Component):
         self.setOpaque(True)
 
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
         w = self.getWidth()
@@ -32,7 +32,7 @@ class EmojiComponent(yup.Component):
 
         # Try to use emoji font, fall back to default
         emoji_font_path = os.path.join(
-            os.path.dirname(__file__), "NotoColorEmoji.ttf"
+            os.path.dirname(__file__), "data", "NotoColorEmoji.ttf"
         )
         emoji_size = min(w, h) // 5
 
@@ -47,7 +47,7 @@ class EmojiComponent(yup.Component):
                 emoji,
                 yup.Rectangle[float](x - emoji_size // 2, y - emoji_size // 2,
                                      emoji_size, emoji_size),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
 
 

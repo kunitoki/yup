@@ -58,13 +58,13 @@ class SliderValuesComponent(yup.Component):
 
     def resized(self):
         bounds = self.getLocalBounds()
-        self.frequencySlider.setBounds(20, 20, 100, 100)
+        self.frequencySlider.setBounds(20, 20, 100, 120)
         self.gainSlider.setBounds(160, 20, 60, 200)
         self.freqLabel.setBounds(20, 130, 200, 24)
         self.gainLabel.setBounds(160, 230, 200, 24)
 
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
 

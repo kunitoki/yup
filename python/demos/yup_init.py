@@ -118,6 +118,7 @@ def START_YUP_COMPONENT(
 
             def showWindow():
                 yup.Process.makeForegroundProcess()
+
                 self.window.setVisible(True)
                 self.window.centreWithSize(yup.Size[int](width, height))
 
@@ -130,7 +131,7 @@ def START_YUP_COMPONENT(
         def systemRequestedQuit(self):
             self.quit()
 
-    yup.START_YUP_APPLICATION(DemoApplication)
+    yup.START_YUP_APPLICATION(DemoApplication, catchExceptionsAndContinue)
 
 
 # Re-export for convenience

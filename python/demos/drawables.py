@@ -38,12 +38,12 @@ class DrawablesComponent(yup.Component):
         # --- Color gradient
         gradient = yup.ColorGradient(
             yup.Colors.red,
-            yup.Colors.blue,
             yup.Point[float](400, 20),
+            yup.Colors.blue,
             yup.Point[float](550, 100),
-            False,
+            yup.ColorGradient.Type.Linear,
         )
-        g.setFillColor(gradient)
+        g.setFillColorGradient(gradient)
         g.fillRoundedRect(380, 20, 170, 80, 10)
 
         # --- Custom path with stroke

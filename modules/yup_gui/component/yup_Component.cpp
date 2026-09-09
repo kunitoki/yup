@@ -1426,6 +1426,11 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
+    const ErasedScopeGuard clearRepaintingFlag ([this]
+    {
+        isRepainting.store (false, std::memory_order_relaxed);
+    });
+
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
 
@@ -1499,8 +1504,6 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
             paintChildrenAndOverChildren (g, clipArea, renderContinuous);
         }
     }
-
-    isRepainting.store (false, std::memory_order_relaxed);
 }
 
 //==============================================================================

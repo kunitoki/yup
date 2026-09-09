@@ -45,13 +45,41 @@ enum class GpuShaderLanguage : uint8_t
 };
 
 //==============================================================================
+/** Views a NUL-terminated shader source string as the byte span GpuShaderSource
+    expects, excluding the terminating NUL.
+
+    @warning The span borrows @p text, which must outlive every use of it. RSTB
+             binding-map blobs are not NUL-terminated, which is why the shader
+             blob fields are sized spans rather than C strings.
+*/
+inline Span<const uint8> gpuShaderSourceBytes (const char* text) noexcept
+{
+    return { reinterpret_cast<const uint8*> (text), text != nullptr ? std::strlen (text) : 0u };
+}
+
+/** Views a String's UTF-8 bytes as the byte span GpuShaderSource expects.
+
+    @warning The span borrows @p text, which must outlive every use of it.
+*/
+inline Span<const uint8> gpuShaderSourceBytes (const String& text) noexcept
+{
+    return { reinterpret_cast<const uint8*> (text.toRawUTF8()), text.getNumBytesAsUTF8() };
+}
+
+//==============================================================================
 /** Compiled shader source for one pipeline stage (vertex, fragment, or compute).
 
-    The binding-map sidecar (@c bindingMap / @c bindingMapSize) is mandatory for
-    vertex/fragment stages. Compute shaders may omit it when using the native
-    compute path (GpuComputePipeline).
+    The binding-map sidecar (@c bindingMap) is mandatory for vertex/fragment
+    stages. Compute shaders may omit it when using the native compute path
+    (GpuComputePipeline).
 
-    @see GpuPipeline, GpuComputePipeline
+    @warning The three blob fields are non-owning views. Every backend consumes
+             them synchronously while compiling the shader module, so they only
+             have to stay alive for the duration of the compile call - but they
+             do have to stay alive for all of it. Use gpuShaderSourceBytes() to
+             build them from source text.
+
+    @see GpuPipeline, GpuComputePipeline, gpuShaderSourceBytes
 */
 struct GpuShaderSource
 {
@@ -60,32 +88,23 @@ struct GpuShaderSource
     /** Shading language of the source code. */
     GpuShaderLanguage language = GpuShaderLanguage::wgsl;
 
-    /** Shader source code bytes. */
-    const void* code = nullptr;
+    /** Shader source code bytes (borrowed). */
+    Span<const uint8> code;
 
-    /** Number of bytes in @c code. */
-    uint32_t codeSize = 0;
+    /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines, borrowed). */
+    Span<const uint8> bindingMap;
 
-    /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines). */
-    const uint8_t* bindingMap = nullptr;
-
-    /** Number of bytes in @c bindingMap. */
-    uint32_t bindingMapSize = 0;
-
-    /** Optional GL program-link fixup blob (GLSL/ESSL only).
+    /** Optional GL program-link fixup blob (GLSL/ESSL only, borrowed).
 
         On the OpenGL / OpenGL ES backend, UBO block bindings and sampler
         texture units are assigned by name after linking rather than via
         @c layout(binding=) qualifiers (which GLES 3.00 / WebGL2 cannot use).
         This blob carries the name→slot table; it is ignored by every non-GL
         backend. Produced by makeGLFixupBlob(). */
-    const uint8_t* glFixup = nullptr;
+    Span<const uint8> glFixup;
 
-    /** Number of bytes in @c glFixup. */
-    uint32_t glFixupSize = 0;
-
-    /** Override the stage entry-point name. nullptr → "vs_main" / "fs_main". */
-    const char* entryPoint = nullptr;
+    /** Override the stage entry-point name. Empty → "vs_main" / "fs_main". */
+    String entryPoint;
 };
 
 //==============================================================================
@@ -360,10 +379,10 @@ enum class GpuWrapMode : uint8_t
 */
 struct GpuTextureDesc
 {
-    constexpr GpuTextureDesc() = default;
+    GpuTextureDesc() = default;
 
     /** Convenience constructor for the common 2D case. */
-    constexpr GpuTextureDesc (uint32_t width, uint32_t height, GpuTextureFormat format, bool renderTarget = false)
+    GpuTextureDesc (uint32_t width, uint32_t height, GpuTextureFormat format, bool renderTarget = false)
         : width (width)
         , height (height)
         , format (format)
@@ -396,7 +415,7 @@ struct GpuTextureDesc
     uint32_t sampleCount = 1;
 
     /** Optional debug label passed through to the native API. */
-    const char* label = nullptr;
+    String label;
 };
 
 //==============================================================================
@@ -505,7 +524,7 @@ struct GpuSamplerDesc
     uint32_t maxAnisotropy = 1;
 
     /** Optional debug label passed through to the native API. */
-    const char* label = nullptr;
+    String label;
 };
 
 //==============================================================================
@@ -526,23 +545,25 @@ struct GpuVertexAttribute
     uint32_t shaderLocation = 0;                      ///< Shader @location index.
 };
 
-/** Describes the layout of one vertex buffer bound to a pipeline. */
+/** Describes the layout of one vertex buffer bound to a pipeline.
+
+    The layout owns its attribute list, so a descriptor built from temporaries
+    stays valid for as long as the descriptor does.
+*/
 struct GpuVertexBufferLayout
 {
-    constexpr GpuVertexBufferLayout() = default;
+    GpuVertexBufferLayout() = default;
 
-    constexpr GpuVertexBufferLayout (uint32_t stride, GpuVertexStepMode stepMode, const GpuVertexAttribute* attributes, uint32_t attributeCount)
+    GpuVertexBufferLayout (uint32_t stride, GpuVertexStepMode stepMode, std::vector<GpuVertexAttribute> attributes)
         : stride (stride)
         , stepMode (stepMode)
-        , attributes (attributes)
-        , attributeCount (attributeCount)
+        , attributes (std::move (attributes))
     {
     }
 
     uint32_t stride = 0;                                    ///< Byte stride between vertices.
     GpuVertexStepMode stepMode = GpuVertexStepMode::vertex; ///< Per-vertex or per-instance.
-    const GpuVertexAttribute* attributes = nullptr;         ///< Attribute array.
-    uint32_t attributeCount = 0;                            ///< Number of attributes.
+    std::vector<GpuVertexAttribute> attributes;             ///< The attributes packed into each vertex.
 };
 
 /** Blend state for a single color target. */
@@ -612,20 +633,18 @@ struct GpuPipelineOptions
 {
     GpuPipelineOptions() = default;
 
-    /** Vertex buffer layouts. Leave null/zero for fullscreen passes that
-        generate vertices from the vertex index. */
-    const GpuVertexBufferLayout* vertexBuffers = nullptr;
-    uint32_t vertexBufferCount = 0;
+    /** Vertex buffer layouts. Leave empty for fullscreen passes that generate
+        vertices from the vertex index. */
+    std::vector<GpuVertexBufferLayout> vertexBuffers;
 
     GpuPrimitiveTopology topology = GpuPrimitiveTopology::triangleList;
     GpuIndexFormat indexFormat = GpuIndexFormat::none;
     GpuCullMode cullMode = GpuCullMode::none;
     GpuFaceWinding winding = GpuFaceWinding::counterClockwise;
 
-    /** Color targets. When @c colorTargetCount is zero a single default
-        alpha-blended rgba8unorm target is used. Up to four are supported. */
-    GpuColorTarget colorTargets[4] = {};
-    uint32_t colorTargetCount = 0;
+    /** Color targets. When empty, a single default alpha-blended rgba8unorm
+        target is used. At most four are supported; extra entries are ignored. */
+    std::vector<GpuColorTarget> colorTargets;
 
     GpuDepthStencilState depthStencil;
     GpuStencilFaceState stencilFront;

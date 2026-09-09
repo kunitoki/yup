@@ -72,6 +72,7 @@ class EffectsComponent(yup.Component):
         yup.Component.__init__(self)
         self.setOpaque(True)
         self._ctx = None
+        self._device = None
         self._canvas2D = None     # pass 1: 2D drawing
         self._target = None       # pass 2: render target
         self._pipeline = None
@@ -79,33 +80,35 @@ class EffectsComponent(yup.Component):
         self._initOk = False
         self._didInit = False
         self._startTime = time.perf_counter()
-        self.timer = yup.Timer(self.onTimer)
-        self.timer.startTimerHz(30)
-
-    def onTimer(self):
-        self.repaint()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        pass
+        # The per-frame hook, called on the render thread immediately before
+        # painting. Driving repaints from a yup.Timer instead would call
+        # repaint() from the message thread while the render thread is inside
+        # paint(), which trips Component's isRepainting assertion.
+        self.repaint()
 
     # ------------------------------------------------------------------
     def _ensureInit(self):
-        if self._didInit or self._ctx is None:
+        if self._didInit or self._device is None:
             return
         self._didInit = True
 
-        self._canvas2D = yup.GpuCanvas.create(self._ctx, self.SIZE, self.SIZE)
-        self._target = yup.GpuTarget.create(self._ctx, self.SIZE, self.SIZE)
+        self._canvas2D = yup.GpuCanvas.create(self._device, self.SIZE, self.SIZE)
+        self._target = yup.GpuTarget.create(self._device, self.SIZE, self.SIZE)
 
         if self._canvas2D is None or self._target is None:
             return
 
-        result = yup.GpuPipeline.compileFromGlsl(
-            self._ctx, VERT_GLSL, FRAG_GLSL, yup.GpuPipelineOptions(),
-        )
-        if result:
-            self._pipeline = result.getValue()
-            self._initOk = True
+        try:
+            self._pipeline = yup.GpuPipeline.compileFromGlsl(
+                self._device, VERT_GLSL, FRAG_GLSL, yup.GpuPipelineOptions(),
+            )
+        except RuntimeError as error:
+            print(f"pipeline compile failed: {error}")
+            return
+
+        self._initOk = True
 
     # ------------------------------------------------------------------
     def _render(self):
@@ -136,7 +139,7 @@ class EffectsComponent(yup.Component):
             g2.fillFittedText(
                 "Multi-Pass GPU", font,
                 yup.Rectangle[float](0.0, ch - 50.0, cw, 40.0),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
         finally:
             self._canvas2D.commit()
@@ -145,7 +148,7 @@ class EffectsComponent(yup.Component):
 
         # --- Pass 2: fullscreen pipeline with vignette effect ---
         # Both passes share one GpuFrame — GPU serialises them.
-        frame = yup.GpuFrame.begin(self._ctx)
+        frame = yup.GpuFrame.begin(self._device)
 
         ropts = yup.GpuRenderOptions(True, yup.Colors.transparentBlack)
         rp = self._target.beginRenderPass(frame, ropts)
@@ -160,11 +163,12 @@ class EffectsComponent(yup.Component):
 
     # ------------------------------------------------------------------
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
         if self._ctx is None:
             self._ctx = g.getGraphicsContext()
+            self._device = self._ctx.getGpuDevice() if self._ctx is not None else None
 
         if self._ctx is None or not self._ctx.isGpuAvailable():
             return
@@ -178,7 +182,7 @@ class EffectsComponent(yup.Component):
                 "Pipeline compilation failed", font,
                 yup.Rectangle[float](0, self.getHeight() / 2 - 20,
                                      self.getWidth(), 40),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
             return
 
@@ -200,7 +204,7 @@ class EffectsComponent(yup.Component):
 
         apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
                     3: "Direct3D", 4: "Metal", 5: "WebGPU"}
-        api = apiNames.get(self._ctx.getApi(), "?")
+        api = apiNames.get(int(self._ctx.getPlatform()), "?")
         font = yup.Font(yup.FontOptions(14.0))
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(

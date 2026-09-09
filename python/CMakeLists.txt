@@ -68,6 +68,7 @@ yup_standalone_app (
         yup::yup_python
         yup::yup_shading
         yup::yup_simd
+        yup::yup_rhi
         bungee_library
         pffft_library
         opus_library

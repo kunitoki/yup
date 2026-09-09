@@ -84,21 +84,31 @@ Describes one pipeline stage's compiled source plus its mandatory metadata:
 struct GpuShaderSource
 {
     GpuShaderLanguage language = GpuShaderLanguage::wgsl; // wgsl | glsl | msl | hlsl
-    const void*       code     = nullptr;                 // source/bytecode
-    uint32_t          codeSize = 0;
-
-    const uint8_t*    bindingMap     = nullptr;           // mandatory RSTB sidecar
-    uint32_t          bindingMapSize = 0;
-
-    const uint8_t*    glFixup     = nullptr;              // GL-only name→slot table
-    uint32_t          glFixupSize = 0;
-
-    const char*       entryPoint = nullptr;               // null → "vs_main" / "fs_main"
+    Span<const uint8> code;                               // source/bytecode
+    Span<const uint8> bindingMap;                         // mandatory RSTB sidecar
+    Span<const uint8> glFixup;                            // GL-only name→slot table
+    String            entryPoint;                         // empty → "vs_main" / "fs_main"
 };
 ```
 
 `GpuShaderLanguage` values: `wgsl` (WebGPU), `glsl` (GLES 3.0+, GL path only),
 `msl` (Metal only), `hlsl` (Direct3D only).
+
+The three blob fields are **non-owning views**. Every backend consumes them
+synchronously while compiling the shader module, so they only have to stay alive
+for the duration of the `compile()` call - but they do have to stay alive for all
+of it. `gpuShaderSourceBytes()` builds one from source text:
+
+```cpp
+GpuShaderSource vs;
+vs.language   = GpuShaderLanguage::glsl;
+vs.code       = gpuShaderSourceBytes (vertexSource);   // const char* or String
+vs.bindingMap = bindingMapBlob;                        // std::vector<uint8_t>
+```
+
+Because they borrow, `GpuShaderSource` is not exposed to Python - a settable
+attribute there would store a pointer into a temporary. Scripts compile through
+`compileFromGlsl` instead; see [GPU rendering from Python](../../scripting/python-rhi.md).
 
 ### Binding maps
 
@@ -156,16 +166,14 @@ post-process pipeline: no vertex buffers, no culling, a single alpha-blended
 ```cpp
 struct GpuPipelineOptions
 {
-    const GpuVertexBufferLayout* vertexBuffers     = nullptr; // null for fullscreen
-    uint32_t                     vertexBufferCount = 0;
+    std::vector<GpuVertexBufferLayout> vertexBuffers; // empty for fullscreen
 
     GpuPrimitiveTopology topology    = GpuPrimitiveTopology::triangleList;
     GpuIndexFormat       indexFormat = GpuIndexFormat::none;
     GpuCullMode          cullMode    = GpuCullMode::none;
     GpuFaceWinding       winding     = GpuFaceWinding::counterClockwise;
 
-    GpuColorTarget colorTargets[4]  = {};   // up to 4; count 0 → one default target
-    uint32_t       colorTargetCount = 0;
+    std::vector<GpuColorTarget> colorTargets;  // up to 4; empty → one default target
 
     GpuDepthStencilState depthStencil;       // enabled = false by default
     GpuStencilFaceState  stencilFront, stencilBack;
@@ -176,31 +184,30 @@ struct GpuPipelineOptions
 };
 ```
 
+`vertexBuffers` and `colorTargets` own their contents, and so does
+`GpuVertexBufferLayout::attributes`. Building a descriptor from temporaries is
+therefore safe - no `static constexpr` table has to be kept alive alongside it.
+
 ### Custom geometry example
 
 For 3D or custom 2D geometry, describe the vertex layout, enable culling, and
 (optionally) depth testing:
 
 ```cpp
-const GpuVertexAttribute attribs[] = {
-    { GpuVertexFormat::float3, 0,                    0 }, // position @location(0)
-    { GpuVertexFormat::float4, sizeof (float) * 3,   1 }, // color    @location(1)
-    { GpuVertexFormat::float3, sizeof (float) * 7,   2 }, // normal   @location(2)
-};
+GpuPipelineOptions options;
 
-const GpuVertexBufferLayout layout {
+options.vertexBuffers.emplace_back (
     sizeof (float) * 10,          // stride
     GpuVertexStepMode::vertex,
-    attribs,
-    (uint32_t) std::size (attribs)
-};
+    std::vector<GpuVertexAttribute> {
+        { GpuVertexFormat::float3, 0,                  0 }, // position @location(0)
+        { GpuVertexFormat::float4, sizeof (float) * 3, 1 }, // color    @location(1)
+        { GpuVertexFormat::float3, sizeof (float) * 7, 2 }, // normal   @location(2)
+    });
 
-GpuPipelineOptions options;
-options.vertexBuffers     = &layout;
-options.vertexBufferCount = 1;
-options.indexFormat       = GpuIndexFormat::uint16;
-options.cullMode          = GpuCullMode::back;
-options.winding           = GpuFaceWinding::counterClockwise;
+options.indexFormat = GpuIndexFormat::uint16;
+options.cullMode    = GpuCullMode::back;
+options.winding     = GpuFaceWinding::counterClockwise;
 options.depthStencil.enabled = true;
 ```
 
@@ -230,7 +237,7 @@ The pipeline configuration draws on a family of small enums, all mirroring the
 - **`GpuTextureFormat`** - the full format set, documented under
   [Buffers & Textures](buffers-and-textures.md#gputexture).
 
-When `colorTargetCount` is greater than one, the pass must bind a matching
+When `colorTargets` holds more than one entry, the pass must bind a matching
 attachment for each target with `GpuRenderPass::setColorAttachment()`, and each
 `colorTargets[i].format` must equal the format of the texture bound there.
 Likewise `depthStencil.enabled` requires the pass to bind a depth attachment of

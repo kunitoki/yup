@@ -50,14 +50,14 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevi
                                                                          const GpuShaderSource& source,
                                                                          const GpuWorkgroupSize& workgroupSize)
 {
-    if (source.code == nullptr || source.codeSize == 0)
+    if (source.code.empty())
         return makeResultValueFail ("Compute shader source is empty");
 
     if (source.language != GpuShaderLanguage::wgsl)
         return makeResultValueFail ("WebGPU compute shaders must be WGSL");
 
-    const char* wgslSource = static_cast<const char*> (source.code);
-    const char* entryPointName = source.entryPoint != nullptr ? source.entryPoint : "main";
+    const std::string wgslSource (reinterpret_cast<const char*> (source.code.data()), source.code.size());
+    const char* entryPointName = source.entryPoint.isNotEmpty() ? source.entryPoint.toRawUTF8() : "main";
 
     wgpu::Device device;
 #if YUP_EMSCRIPTEN && RIVE_WEBGPU
@@ -67,7 +67,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineWebGPU (GpuDevi
 #endif
 
     wgpu::ShaderSourceWGSL wgslDesc {};
-    wgslDesc.code = wgslSource;
+    wgslDesc.code = wgslSource.c_str();
 
     wgpu::ShaderModuleDescriptor shaderModuleDesc {};
     shaderModuleDesc.nextInChain = &wgslDesc;

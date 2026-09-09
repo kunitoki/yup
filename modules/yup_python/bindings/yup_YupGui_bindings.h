@@ -127,7 +127,7 @@ struct PyYUPApplication : yup::YUPApplication
             }
             else
             {
-                auto runtimeError = pybind11::module_::import ("__builtins__").attr ("RuntimeError");
+                auto runtimeError = pybind11::module_::import (PYBIND11_BUILTINS_MODULE).attr ("RuntimeError");
                 auto newPyEx = runtimeError (ex != nullptr ? ex->what() : "unknown exception");
                 PyException_SetTraceback (newPyEx.ptr(), traceback.attr ("extract_stack")().ptr());
 
@@ -139,18 +139,23 @@ struct PyYUPApplication : yup::YUPApplication
 
         if (pyEx != nullptr)
         {
-            pybind11::print (ex->what());
-            traceback.attr ("print_tb") (pyEx->trace());
+            traceback.attr ("print_exception") (pyEx->type(),
+                                                pyEx->value(),
+                                                pyEx->trace() ? pyEx->trace() : pybind11::none());
 
             if (pyEx->matches (PyExc_KeyboardInterrupt) || PyErr_CheckSignals() != 0)
             {
                 globalOptions().caughtKeyboardInterrupt = true;
+
+                if (auto* mm = yup::MessageManager::getInstanceWithoutCreating())
+                    mm->stopDispatchLoop();
+
                 return;
             }
         }
         else
         {
-            pybind11::print (ex->what());
+            pybind11::print (ex != nullptr ? ex->what() : "unknown exception");
             traceback.attr ("print_stack")();
 
             if (PyErr_CheckSignals() != 0)
@@ -160,8 +165,14 @@ struct PyYUPApplication : yup::YUPApplication
             }
         }
 
-        if (! globalOptions().caughtKeyboardInterrupt)
-            std::terminate();
+        if (globalOptions().caughtKeyboardInterrupt)
+            return;
+
+        if (globalOptions().catchExceptionsAndContinue)
+            return;
+
+        if (auto* mm = yup::MessageManager::getInstanceWithoutCreating())
+            mm->stopDispatchLoop();
     }
 
     void memoryWarningReceived() override

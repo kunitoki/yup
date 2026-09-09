@@ -634,10 +634,8 @@ protected:
         {
             GpuShaderSource source;
             source.language = GpuShaderLanguage::glsl;
-            source.code = code;
-            source.codeSize = (uint32_t) strlen (code);
-            source.bindingMap = blob.data();
-            source.bindingMapSize = (uint32_t) blob.size();
+            source.code = gpuShaderSourceBytes (code);
+            source.bindingMap = blob;
             return source;
         };
 

@@ -49,12 +49,12 @@ class DecibelSliderComponent(yup.Component):
         )
 
     def resized(self):
-        self.gainSlider.setBounds(20, 20, 120, 120)
+        self.gainSlider.setBounds(20, 20, 120, 140)
         self.valueLabel.setBounds(160, 40, 200, 24)
         self.linearLabel.setBounds(160, 70, 200, 24)
 
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
 

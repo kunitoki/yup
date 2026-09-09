@@ -36,6 +36,7 @@ class MainContentComponent(yup.Component):
                 random.nextFloat() * self.getHeight(),
             )
 
+            g.setStrokeWidth(4)
             g.setStrokeColor(
                 yup.Color.fromRGBA(
                     random.nextInt(255),

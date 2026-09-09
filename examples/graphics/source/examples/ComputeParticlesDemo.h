@@ -397,28 +397,22 @@ void main() {
         yup::String vertSource = yup::String::fromUTF8 (kRenderVertSource, sizeof (kRenderVertSource) - 1);
         yup::String fragSource = yup::String::fromUTF8 (kRenderFragSource, sizeof (kRenderFragSource) - 1);
 
-        // Vertex buffer layout: 4 attributes, 40-byte stride.
-        static const yup::GpuVertexAttribute kVertexAttrs[] = {
-            { yup::GpuVertexFormat::float2, 0, 0 },  // center
-            { yup::GpuVertexFormat::float2, 8, 1 },  // offset
-            { yup::GpuVertexFormat::float4, 16, 2 }, // color
-            { yup::GpuVertexFormat::float2, 32, 3 }, // size (x,y)
-        };
+        yup::GpuPipelineOptions pipelineOpts;
 
-        static const yup::GpuVertexBufferLayout kVertexLayout = {
+        // Vertex buffer layout: 4 attributes, 40-byte stride.
+        pipelineOpts.vertexBuffers.emplace_back (
             kVertexStrideFloats * (uint32_t) sizeof (float),
             yup::GpuVertexStepMode::vertex,
-            kVertexAttrs,
-            (uint32_t) yup::numElementsInArray (kVertexAttrs)
-        };
+            std::vector<yup::GpuVertexAttribute> {
+                { yup::GpuVertexFormat::float2, 0, 0 },  // center
+                { yup::GpuVertexFormat::float2, 8, 1 },  // offset
+                { yup::GpuVertexFormat::float4, 16, 2 }, // color
+                { yup::GpuVertexFormat::float2, 32, 3 }, // size (x,y)
+            });
 
-        yup::GpuPipelineOptions pipelineOpts;
-        pipelineOpts.vertexBuffers = &kVertexLayout;
-        pipelineOpts.vertexBufferCount = 1;
         pipelineOpts.topology = yup::GpuPrimitiveTopology::triangleList;
         pipelineOpts.cullMode = yup::GpuCullMode::none;
-        pipelineOpts.colorTargets[0].blendEnabled = false;
-        pipelineOpts.colorTargetCount = 1;
+        pipelineOpts.colorTargets.emplace_back().blendEnabled = false;
 
         auto renderResult = yup::GpuPipeline::compileFromGlsl (device, vertSource, fragSource, pipelineOpts);
         if (renderResult.failed())

@@ -97,8 +97,8 @@ class PILComponent(yup.Component):
         for y in range(0, ph, step):
             for x in range(0, pw, step):
                 try:
-                    _, _, r, g, b, a = self.pattern["pixels"][y][x]
-                    color = yup.Color.fromRGBA(r, g, b, min(a, 255))
+                    _, _, R, G, B, A = self.pattern["pixels"][y][x]
+                    color = yup.Color.fromRGBA(R, G, B, min(A, 255))
                     g.setFillColor(color)
                     g.fillRect(
                         ox + x / pw * pw,

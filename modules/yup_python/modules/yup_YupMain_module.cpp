@@ -34,6 +34,9 @@
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
 #include "../bindings/yup_YupGraphics_bindings.h"
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_rhi
 #include "../bindings/yup_YupRhi_bindings.h"
 #endif
 
@@ -95,6 +98,9 @@ PYBIND11_MODULE (YUP_PYTHON_MODULE_NAME, m)
 
 #if YUP_MODULE_AVAILABLE_yup_graphics
     yup::Bindings::registerYupGraphicsBindings (m);
+#endif
+
+#if YUP_MODULE_AVAILABLE_yup_rhi
     yup::Bindings::registerYupRhiBindings (m);
 #endif
 
