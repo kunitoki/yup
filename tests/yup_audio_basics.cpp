@@ -55,6 +55,7 @@
 #include "yup_audio_basics/yup_SmoothedValue.cpp"
 #include "yup_audio_basics/yup_Synthesiser.cpp"
 #include "yup_audio_basics/yup_ToneGeneratorAudioSource.cpp"
+#include "yup_audio_basics/yup_TuningMap.cpp"
 #include "yup_audio_basics/yup_UMP.cpp"
 #include "yup_audio_basics/yup_UMPCapabilityInquiry.cpp"
 #include "yup_audio_basics/yup_UMPChannelVoice.cpp"
