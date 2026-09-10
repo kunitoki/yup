@@ -601,7 +601,7 @@ void main() {
 
     void initLottie()
     {
-        auto anim = yup::Animation::loadFromFile (getAssetPath (YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE));
+        auto anim = yup::Animation::loadFromFile (getAssetPath ("data/goal.lottie"));
 
         if (! anim.isValid())
         {

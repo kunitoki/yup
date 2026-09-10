@@ -27,6 +27,7 @@ project (${target_name} VERSION ${target_version})
 
 set (rive_file "data/alien.riv")
 set (lottie_file "data/goal.lottie")
+set (layout_ui_rive_file "data/layout-ui.riv")
 
 # ==== Prepare Android build
 set (link_libraries "")
@@ -41,7 +42,8 @@ set (bundle_resources "")
 if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND bundle_resources
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}"
-        "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}")
+        "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}"
+        "${CMAKE_CURRENT_LIST_DIR}/${layout_ui_rive_file}@${layout_ui_rive_file}")
 endif()
 
 # ==== Embed shaders

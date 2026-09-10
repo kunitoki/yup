@@ -23,6 +23,7 @@
 
 #include <gmock/gmock.h>
 
+#include <rive/renderer.hpp>
 #include <rive/renderer/gpu.hpp>
 #include <rive/renderer/texture.hpp>
 #include <rive/renderer/render_canvas.hpp>
@@ -48,12 +49,36 @@ struct TestGpuTexture : public rive::gpu::Texture
 };
 
 // ==============================================================================
+// Minimal CPU-side render paint: shape paint initialization during file import
+// only requires a non-null paint, and these tests never draw, so every paint
+// operation is a no-op.
+// ==============================================================================
+
+class TestRenderPaint : public rive::RenderPaint
+{
+public:
+    void style (rive::RenderPaintStyle) override {}
+    void color (rive::ColorInt) override {}
+    void thickness (float) override {}
+    void join (rive::StrokeJoin) override {}
+    void cap (rive::StrokeCap) override {}
+    void blendMode (rive::BlendMode) override {}
+    void shader (rive::rcp<rive::RenderShader>) override {}
+    void invalidateStroke() override {}
+};
+
+// ==============================================================================
 // Minimal mock rive::Factory — only override the methods that get called.
 // ==============================================================================
 
 class MockRiveFactory : public rive::Factory
 {
 public:
+    MockRiveFactory()
+    {
+        ON_CALL (*this, makeRenderPaint()).WillByDefault ([] { return rive::rcp<rive::RenderPaint> (rive::make_rcp<TestRenderPaint>()); });
+    }
+
     MOCK_METHOD (rive::rcp<rive::RenderBuffer>, makeRenderBuffer, (rive::RenderBufferType, rive::RenderBufferFlags, size_t), (override));
     MOCK_METHOD (rive::rcp<rive::RenderShader>, makeLinearGradient, (float, float, float, float, const rive::ColorInt*, const float*, size_t), (override));
     MOCK_METHOD (rive::rcp<rive::RenderShader>, makeRadialGradient, (float, float, float, const rive::ColorInt*, const float*, size_t), (override));
