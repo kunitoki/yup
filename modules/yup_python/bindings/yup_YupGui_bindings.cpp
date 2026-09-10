@@ -169,6 +169,21 @@ void registerYupGuiBindings (py::module_& m)
         .def_static ("isStandaloneApp", &YUPApplication::isStandaloneApp)
         .def ("isInitialising", &YUPApplication::isInitialising);
 
+    // ============================================================================================ yup::ApplicationTheme
+
+    py::class_<ApplicationTheme, ReferenceCountedObjectPtr<ApplicationTheme>> (m, "ApplicationTheme")
+        .def_static ("getGlobalTheme", [] () -> ApplicationTheme::Ptr
+        {
+            auto theme = ApplicationTheme::getGlobalTheme();
+            if (theme == nullptr)
+                throw py::value_error ("No global theme is set: the gui subsystem has not been initialised yet");
+
+            return theme;
+        })
+        .def ("getDefaultFont", &ApplicationTheme::getDefaultFont)
+        .def ("getDefaultIconFont", &ApplicationTheme::getDefaultIconFont)
+        .def ("getDefaultMonospaceFont", &ApplicationTheme::getDefaultMonospaceFont);
+
     // ============================================================================================ yup::MouseCursor
 
     py::class_<MouseCursor> classMouseCursor (m, "MouseCursor");

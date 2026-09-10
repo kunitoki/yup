@@ -90,7 +90,7 @@ class OpenCVComponent(yup.Component):
 
         # Draw title
         g.setFillColor(yup.Colors.white)
-        font = yup.Font(yup.FontOptions(18.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
         g.fillFittedText(
             f"OpenCV + YUP - {len(self.circles)} circles detected",
             font,

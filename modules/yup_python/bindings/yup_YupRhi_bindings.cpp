@@ -261,6 +261,9 @@ void registerYupRhiBindings (py::module_& m)
     py::class_<GpuColor> (m, "GpuColor")
         .def (py::init<>())
         .def (py::init<float, float, float, float>(), "red"_a, "green"_a, "blue"_a, "alpha"_a = 1.0f)
+#if YUP_MODULE_AVAILABLE_yup_graphics
+        .def (py::init<const Color&>())
+#endif
         .def_readwrite ("red", &GpuColor::red)
         .def_readwrite ("green", &GpuColor::green)
         .def_readwrite ("blue", &GpuColor::blue)
@@ -292,6 +295,10 @@ void registerYupRhiBindings (py::module_& m)
                 << "(" << self.red << ", " << self.green << ", " << self.blue << ", " << self.alpha << ")";
             return repr;
         });
+
+#if YUP_MODULE_AVAILABLE_yup_graphics
+    py::implicitly_convertible<Color, GpuColor>();
+#endif
 
     py::class_<GpuTextureDesc> (m, "GpuTextureDesc")
         .def (py::init<>())

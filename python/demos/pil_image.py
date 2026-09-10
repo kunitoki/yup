@@ -109,7 +109,7 @@ class PILComponent(yup.Component):
                     pass
 
         # Title
-        font = yup.Font(yup.FontOptions(18.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
         g.setFillColor(yup.Colors.white)
         g.fillFittedText(
             "PIL/Pillow + YUP",

@@ -106,7 +106,7 @@ class VideoComponent(yup.Component):
                         g.strokeLine(px, py, px + 1, py + 1)
 
         # Draw info
-        font = yup.Font(yup.FontOptions(14.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         g.setFillColor(yup.Colors.white)
 
         if self.cap is None or not self.cap.isOpened():

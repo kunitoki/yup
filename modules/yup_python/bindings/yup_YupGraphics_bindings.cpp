@@ -778,7 +778,11 @@ void registerYupGraphicsBindings (py::module_& m)
         //.def ("appliedToRectangle", &Justification::template appliedToRectangle<float>)
     ;
 
-    // py::implicitly_convertible<Justification::Flags, Justification>();
+    py::implicitly_convertible<Justification::Flags, Justification>();
+
+    // Combining flags yields the underlying integer (see Helpers::makeArithmeticEnum's __or__), so
+    // an int has to convert too, or `Justification.left | Justification.top` would not be accepted.
+    py::implicitly_convertible<int, Justification>();
 
     // ============================================================================================ yup::AffineTransform
 
@@ -2055,12 +2059,17 @@ void registerYupGraphicsBindings (py::module_& m)
     // ============================================================================================ yup::GpuCanvas
 
     py::class_<GpuCanvas, ReferenceCountedObjectPtr<GpuCanvas>> (m, "GpuCanvas")
-        .def_static ("create", &GpuCanvas::create)
+        .def_static ("create",
+                     &GpuCanvas::create,
+                     py::arg ("ctx"),
+                     py::arg ("width"),
+                     py::arg ("height"),
+                     py::arg ("clearColor") = Colors::transparentBlack)
         .def ("getWidth", &GpuCanvas::getWidth)
         .def ("getHeight", &GpuCanvas::getHeight)
         .def ("asTexture", &GpuCanvas::asTexture)
         .def ("asImage", &GpuCanvas::asImage)
-        .def ("beginDraw", &GpuCanvas::beginDraw)
+        .def ("beginDraw", &GpuCanvas::beginDraw, py::return_value_policy::reference_internal)
         .def ("commit", &GpuCanvas::commit)
         .def ("getTarget", &GpuCanvas::getTarget)
         .def ("__repr__", [] (const GpuCanvas& self)

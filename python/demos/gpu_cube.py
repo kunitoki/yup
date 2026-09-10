@@ -336,7 +336,7 @@ class CubeComponent(yup.Component):
         h = float(self.getHeight())
 
         if not self._initOk:
-            font = yup.Font(yup.FontOptions(16.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(16.0)
             g.setFillColor(yup.Colors.orange)
             g.fillFittedText(
                 self._failure or "GPU initialisation failed", font,
@@ -362,7 +362,7 @@ class CubeComponent(yup.Component):
         apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
                     3: "Direct3D", 4: "Metal", 5: "WebGPU"}
         api = apiNames.get(int(self._ctx.getPlatform()), "?")
-        font = yup.Font(yup.FontOptions(14.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(
             f"GPU: {api}  |  {self._indexCount} indices  |  depth-tested, textured",

@@ -20,15 +20,18 @@ import time
 sys.path.insert(0, os.path.dirname(__file__))
 
 
-class HotReloadWindow(yup.DocumentWindow):
+class HotReloadWindow(yup.DocumentWindow, yup.Timer):
     def __init__(self):
-        super().__init__()
+        yup.DocumentWindow.__init__()
+        yup.Timer.__init__(self)
         self.setTitle("Hot Reload Demo")
         self.component = None
         self.last_mtime = 0
         self.reload_component()
-        self.timer = yup.Timer(self.checkReload)
-        self.timer.startTimer(500)
+        self.startTimer(500)
+
+    def timerCallback(self):
+        self.checkReload()
 
     def reload_component(self):
         try:

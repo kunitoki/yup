@@ -144,7 +144,7 @@ class TriangleComponent(yup.Component):
         self._ensureInit()
 
         if not self._initOk:
-            font = yup.Font(yup.FontOptions(18.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
             g.setFillColor(yup.Colors.orange)
             g.fillFittedText(
                 "Pipeline compilation failed", font,
@@ -173,7 +173,7 @@ class TriangleComponent(yup.Component):
         apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
                     3: "Direct3D", 4: "Metal", 5: "WebGPU"}
         api = apiNames.get(int(self._ctx.getPlatform()), "?")
-        font = yup.Font(yup.FontOptions(14.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(
             f"GPU: {api}  |  GLSL 450  |  Hello Triangle", font,

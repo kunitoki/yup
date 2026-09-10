@@ -94,8 +94,8 @@ class EffectsComponent(yup.Component):
             return
         self._didInit = True
 
-        self._canvas2D = yup.GpuCanvas.create(self._device, self.SIZE, self.SIZE)
-        self._target = yup.GpuTarget.create(self._device, self.SIZE, self.SIZE)
+        self._canvas2D = yup.GpuCanvas.create(self._ctx, self.SIZE, self.SIZE)
+        self._target = yup.GpuTarget.create(self._ctx, self.SIZE, self.SIZE)
 
         if self._canvas2D is None or self._target is None:
             return
@@ -134,7 +134,7 @@ class EffectsComponent(yup.Component):
                     yup.Rectangle[float](cw / 2.0 - r, ch / 2.0 - r, r * 2.0, r * 2.0)
                 )
 
-            font = yup.Font(yup.FontOptions(24.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(24.0)
             g2.setFillColor(yup.Colors.white)
             g2.fillFittedText(
                 "Multi-Pass GPU", font,
@@ -176,7 +176,7 @@ class EffectsComponent(yup.Component):
         self._ensureInit()
 
         if not self._initOk:
-            font = yup.Font(yup.FontOptions(18.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
             g.setFillColor(yup.Colors.orange)
             g.fillFittedText(
                 "Pipeline compilation failed", font,
@@ -205,7 +205,7 @@ class EffectsComponent(yup.Component):
         apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
                     3: "Direct3D", 4: "Metal", 5: "WebGPU"}
         api = apiNames.get(int(self._ctx.getPlatform()), "?")
-        font = yup.Font(yup.FontOptions(14.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(
             f"GPU: {api}  |  GLSL 450  |  Canvas → Vignette → Screen", font,

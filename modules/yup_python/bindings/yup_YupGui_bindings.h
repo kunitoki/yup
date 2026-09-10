@@ -171,8 +171,11 @@ struct PyYUPApplication : yup::YUPApplication
         if (globalOptions().catchExceptionsAndContinue)
             return;
 
-        if (auto* mm = yup::MessageManager::getInstanceWithoutCreating())
-            mm->stopDispatchLoop();
+        auto* mm = yup::MessageManager::getInstanceWithoutCreating();
+        if (mm == nullptr || ! mm->isThisTheMessageThread())
+            return;
+
+        mm->stopDispatchLoop();
     }
 
     void memoryWarningReceived() override

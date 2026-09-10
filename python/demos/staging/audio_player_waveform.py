@@ -89,7 +89,7 @@ class WaveformComponent(yup.Component):
         reader = self.player.getReader()
         if reader is None:
             g.setFillColor(yup.Colors.white)
-            font = yup.Font(yup.FontOptions(16.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(16.0)
             g.fillFittedText(
                 "No audio file loaded",
                 font,
@@ -141,7 +141,7 @@ class WaveformComponent(yup.Component):
 
         # Draw time info
         g.setFillColor(yup.Colors.white)
-        font = yup.Font(yup.FontOptions(14.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         time_str = f"{pos:.1f}s / {length:.1f}s"
         g.fillFittedText(
             time_str,

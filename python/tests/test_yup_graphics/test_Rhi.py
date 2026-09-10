@@ -232,6 +232,16 @@ def test_gpu_render_options_with_args():
     assert opts.clearColor == yup.GpuColor.black()
 
 
+def test_gpu_render_options_accepts_color():
+    # A 2D yup.Color converts to a yup.GpuColor, matching the implicit conversion the C++
+    # GpuColor constructor performs for any type with float-component accessors.
+    opts = yup.GpuRenderOptions(True, yup.Colors.black)
+    assert opts.clear is True
+    assert opts.clearColor == yup.GpuColor.black()
+    assert opts.clearColor == yup.Colors.black
+    assert yup.GpuRenderOptions(True, yup.Colors.cornflowerblue).clearColor == yup.Colors.cornflowerblue
+
+
 def test_gpu_device_options_defaults():
     opts = yup.GpuDevice.Options()
     assert opts.retinaDisplay is True

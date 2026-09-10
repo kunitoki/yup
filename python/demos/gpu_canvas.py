@@ -37,18 +37,13 @@ class CanvasComponent(yup.Component):
         self._canvas = None
         self._image = None
         self._startTime = time.perf_counter()
-        self.timer = yup.Timer(self.onTimer)
-        self.timer.startTimerHz(30)
-
-    def onTimer(self):
-        self.repaint()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        pass
+        self.repaint()
 
     # ------------------------------------------------------------------
     def paint(self, g: yup.Graphics):
-        g.setFillColor(yup.Colors.darkgrey)
+        g.setFillColor(yup.Colors.darkgray)
         g.fillAll()
 
         if self._ctx is None:
@@ -85,12 +80,12 @@ class CanvasComponent(yup.Component):
             g2.setStrokeWidth(3)
             g2.strokeRect(yup.Rectangle[float](10, 10, w - 20, h - 20))
 
-            font = yup.Font(yup.FontOptions(28.0))
+            font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(28.0)
             g2.setFillColor(yup.Colors.white)
             g2.fillFittedText(
                 "GPU Canvas", font,
                 yup.Rectangle[float](0, h - 50, w, 40),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
         finally:
             self._canvas.commit()
@@ -111,10 +106,8 @@ class CanvasComponent(yup.Component):
                 yup.Rectangle[float]((w - dw) / 2, (h - dh) / 2, dw, dh),
             )
 
-        apiNames = {0: "Headless", 1: "OpenGL", 2: "OpenGL ES",
-                    3: "Direct3D", 4: "Metal", 5: "WebGPU"}
-        api = apiNames.get(self._ctx.getApi(), "?")
-        font = yup.Font(yup.FontOptions(14.0))
+        api = self._ctx.getPlatform().name
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(14.0)
         g.setFillColor(yup.Colors.white.withAlpha(0.7))
         g.fillFittedText(
             f"GPU: {api}", font,

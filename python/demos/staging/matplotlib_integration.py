@@ -33,14 +33,9 @@ class MatplotlibComponent(yup.Component):
         yup.Component.__init__(self)
         self.setOpaque(True)
         self.startTime = time.perf_counter()
-        self.timer = yup.Timer(self.onTimer)
-        self.timer.startTimerHz(30)
-
-    def onTimer(self):
-        self.repaint()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        pass
+        self.repaint()
 
     def paint(self, g: yup.Graphics):
         g.setFillColor(yup.Colors.black)
@@ -99,7 +94,7 @@ class MatplotlibComponent(yup.Component):
         g.setFillColor(yup.Colors.orange)
         g.fillRect(400, 40, 15, 12)
 
-        font = yup.Font(yup.FontOptions(12.0))
+        font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(12.0)
         g.setFillColor(yup.Colors.white)
         g.fillFittedText(
             "sin(t)",
@@ -115,7 +110,7 @@ class MatplotlibComponent(yup.Component):
         )
 
         # Title
-        title_font = yup.Font(yup.FontOptions(18.0))
+        title_font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(18.0)
         g.setFillColor(yup.Colors.white)
         g.fillFittedText(
             "Matplotlib + NumPy + YUP",
