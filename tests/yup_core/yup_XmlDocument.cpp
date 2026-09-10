@@ -530,3 +530,76 @@ TEST_F (XmlDocumentTests, ParseCompleteXmlDocument)
     EXPECT_EQ (xml->getStringAttribute ("attr"), "value");
     EXPECT_EQ (xml->getNumChildElements(), 3);
 }
+
+//==================================================================================================
+
+namespace
+{
+
+/** An InputSource that counts how many instances are alive.
+
+    setInputSource() documents that the object passed in "will be deleted automatically
+    when no longer needed", so counting live instances is a direct way of proving the
+    document takes ownership rather than borrowing the pointer.
+*/
+class CountingInputSource final : public InputSource
+{
+public:
+    explicit CountingInputSource (const String& sourceContents)
+        : contents (sourceContents)
+    {
+        ++numLivingInstances;
+    }
+
+    ~CountingInputSource() override
+    {
+        --numLivingInstances;
+    }
+
+    InputStream* createInputStream() override
+    {
+        return new MemoryInputStream (contents.toUTF8(), (size_t) contents.getNumBytesAsUTF8(), true);
+    }
+
+    InputStream* createInputStreamFor (const String&) override
+    {
+        return nullptr;
+    }
+
+    int64 hashCode() const override
+    {
+        return 0;
+    }
+
+    static int numLivingInstances;
+
+private:
+    String contents;
+};
+
+int CountingInputSource::numLivingInstances = 0;
+
+} // namespace
+
+//==================================================================================================
+
+TEST_F (XmlDocumentTests, SetInputSourceTakesOwnershipOfTheSource)
+{
+    ASSERT_EQ (CountingInputSource::numLivingInstances, 0);
+
+    {
+        auto source = std::make_unique<CountingInputSource> ("<root><child/></root>");
+        ASSERT_EQ (CountingInputSource::numLivingInstances, 1);
+
+        XmlDocument doc { String() };
+        doc.setInputSource (source.release());
+
+        EXPECT_EQ (CountingInputSource::numLivingInstances, 1);
+
+        auto element = doc.getDocumentElement();
+        ASSERT_NE (element, nullptr);
+        EXPECT_EQ (element->getTagName(), "root");
+    }
+
+    EXPECT_EQ (CountingInputSource::numLivingInstances, 0);
+}

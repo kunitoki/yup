@@ -50,14 +50,14 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineMetal (GpuDevic
                                                                         const GpuShaderSource& source,
                                                                         const GpuWorkgroupSize& workgroupSize)
 {
-    if (source.code == nullptr || source.codeSize == 0)
+    if (source.code.empty())
         return makeResultValueFail ("Compute shader source is empty");
 
     auto& metalCtx = static_cast<GpuDeviceMetal&> (ctx);
     id<MTLDevice> device = metalCtx.getDevice();
 
-    NSString* mslSource = [[NSString alloc] initWithBytes:source.code
-                                                   length:source.codeSize
+    NSString* mslSource = [[NSString alloc] initWithBytes:source.code.data()
+                                                   length:source.code.size()
                                                  encoding:NSUTF8StringEncoding];
     if (mslSource == nil)
         return makeResultValueFail ("Failed to create MSL source string");
@@ -76,7 +76,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineMetal (GpuDevic
         return makeResultValueFail (errMsg);
     }
 
-    const char* entryPointName = source.entryPoint != nullptr ? source.entryPoint : "main0";
+    const char* entryPointName = source.entryPoint.isNotEmpty() ? source.entryPoint.toRawUTF8() : "main0";
     NSString* entryPoint = [NSString stringWithUTF8String:entryPointName];
 
     id<MTLFunction> function = [library newFunctionWithName:entryPoint];

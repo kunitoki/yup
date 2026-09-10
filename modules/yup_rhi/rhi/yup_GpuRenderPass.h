@@ -136,9 +136,9 @@ public:
     /** Adds a colour attachment beyond the one the pass was begun on (MRT).
 
         Attachment 0 is always the surface beginRenderPass() was called on, so
-        @p index must be 1..3. The pipeline's GpuPipelineOptions::colorTargetCount
-        and per-target formats must match the attachments bound here, or the draw
-        is rejected by the backend.
+        @p index must be 1..3. The pipeline's GpuPipelineOptions::colorTargets must
+        describe as many targets as are bound here, with matching formats, or the
+        draw is rejected by the backend.
 
         @param index    Attachment index, 1..3.
         @param texture  The texture to render into. Must be a render target.

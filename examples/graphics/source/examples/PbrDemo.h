@@ -627,44 +627,39 @@ private:
     static yup::GpuPipelineOptions bakePipelineOptions (yup::GpuTextureFormat format)
     {
         yup::GpuPipelineOptions options;
-        options.colorTargetCount = 1;
-        options.colorTargets[0].format = format;
-        options.colorTargets[0].blendEnabled = false;
+        auto& colorTarget = options.colorTargets.emplace_back();
+        colorTarget.format = format;
+        colorTarget.blendEnabled = false;
         return options;
     }
 
-    static const yup::GpuVertexBufferLayout* sceneVertexLayouts()
+    static std::vector<yup::GpuVertexBufferLayout> sceneVertexLayouts()
     {
-        static constexpr yup::GpuVertexAttribute meshAttributes[3] = {
-            { yup::GpuVertexFormat::float3, 0, 0 },
-            { yup::GpuVertexFormat::float3, 12, 1 },
-            { yup::GpuVertexFormat::float2, 24, 2 },
+        return {
+            { (uint32_t) sizeof (PbrVertex), yup::GpuVertexStepMode::vertex, {
+                  { yup::GpuVertexFormat::float3, 0, 0 },
+                  { yup::GpuVertexFormat::float3, 12, 1 },
+                  { yup::GpuVertexFormat::float2, 24, 2 },
+              } },
+            { (uint32_t) sizeof (InstanceMaterial), yup::GpuVertexStepMode::instance, {
+                  { yup::GpuVertexFormat::float4, 0, 3 },  // a_material
+                  { yup::GpuVertexFormat::float4, 16, 4 }, // a_tint
+                  { yup::GpuVertexFormat::float4, 32, 5 }, // a_extra
+              } },
         };
-
-        static constexpr yup::GpuVertexAttribute instanceAttributes[3] = {
-            { yup::GpuVertexFormat::float4, 0, 3 },  // a_material
-            { yup::GpuVertexFormat::float4, 16, 4 }, // a_tint
-            { yup::GpuVertexFormat::float4, 32, 5 }, // a_extra
-        };
-
-        static constexpr yup::GpuVertexBufferLayout layouts[2] = {
-            { (uint32_t) sizeof (PbrVertex), yup::GpuVertexStepMode::vertex, meshAttributes, 3 },
-            { (uint32_t) sizeof (InstanceMaterial), yup::GpuVertexStepMode::instance, instanceAttributes, 3 },
-        };
-
-        return layouts;
     }
 
     static yup::GpuPipelineOptions scenePipelineOptions()
     {
         yup::GpuPipelineOptions options;
         options.vertexBuffers = sceneVertexLayouts();
-        options.vertexBufferCount = 2;
         options.indexFormat = yup::GpuIndexFormat::uint16;
         options.cullMode = yup::GpuCullMode::none;
-        options.colorTargetCount = 1;
-        options.colorTargets[0].format = yup::GpuTextureFormat::rgba8unorm;
-        options.colorTargets[0].blendEnabled = false;
+
+        auto& colorTarget = options.colorTargets.emplace_back();
+        colorTarget.format = yup::GpuTextureFormat::rgba8unorm;
+        colorTarget.blendEnabled = false;
+
         options.depthStencil.enabled = true;
         options.depthStencil.format = yup::GpuTextureFormat::depth24plusStencil8;
         options.depthStencil.depthCompare = yup::GpuCompareFunction::less;

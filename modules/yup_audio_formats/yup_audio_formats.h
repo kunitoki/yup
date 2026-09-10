@@ -168,6 +168,7 @@
 #include "format/yup_AudioFormatReader.h"
 #include "format/yup_AudioFormatWriter.h"
 #include "common/yup_AudioFormatManager.h"
+#include "sources/yup_AudioFormatReaderSource.h"
 
 //==============================================================================
 

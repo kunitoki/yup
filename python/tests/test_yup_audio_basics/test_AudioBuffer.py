@@ -151,6 +151,29 @@ def test_audio_buffer_get_rms_level():
 
 #==================================================================================================
 
+def test_audio_buffer_subscript_is_the_float_specialization():
+    # `yup.AudioBuffer[float]` is the spelling the other templated types use
+    # (Rectangle, StatisticsAccumulator) and what the demos are written against.
+    assert yup.AudioBuffer[float] is yup.AudioBufferFloat
+
+#==================================================================================================
+
+def test_audio_buffer_subscript_builds_a_usable_buffer():
+    buffer = yup.AudioBuffer[float](2, 512)
+    assert buffer.getNumChannels() == 2
+    assert buffer.getNumSamples() == 512
+
+    buffer.setSample(1, 3, 0.25)
+    assert abs(buffer.getSample(1, 3) - 0.25) < 0.001
+
+#==================================================================================================
+
+def test_audio_buffer_subscript_rejects_other_keys():
+    with pytest.raises(TypeError):
+        yup.AudioBuffer[int]
+
+#==================================================================================================
+
 def test_audio_buffer_double():
     # Test double precision buffer
     buffer = yup.AudioBufferDouble(2, 512)

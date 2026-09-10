@@ -24,11 +24,15 @@ namespace yup
 
 ImageFormatWriter::ImageFormatWriter (OutputStream* destStream,
                                       const String& formatName_,
-                                      PixelFormat pixelFormat_)
+                                      PixelFormat pixelFormat_,
+                                      bool deleteSourceWhenDestroyed_)
     : output (destStream)
+    , deleteSourceWhenDestroyed (deleteSourceWhenDestroyed_)
     , formatName (formatName_)
     , pixelFormat (pixelFormat_)
 {
+    if (! deleteSourceWhenDestroyed)
+        output.release();
 }
 
 ImageFormatWriter::~ImageFormatWriter()

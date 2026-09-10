@@ -70,14 +70,14 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineGL (GpuDevice::
                                                                      const GpuShaderSource& source,
                                                                      const GpuWorkgroupSize& workgroupSize)
 {
-    if (source.code == nullptr || source.codeSize == 0)
+    if (source.code.empty())
         return makeResultValueFail ("Compute shader source is empty");
 
     if (source.language != GpuShaderLanguage::glsl)
         return makeResultValueFail ("OpenGL compute shaders must be GLSL");
 
-    const auto* glslSource = static_cast<const char*> (source.code);
-    auto glslLength = static_cast<GLint> (source.codeSize);
+    const auto* glslSource = reinterpret_cast<const char*> (source.code.data());
+    auto glslLength = static_cast<GLint> (source.code.size());
 
     GLuint shader = glCreateShader (GL_COMPUTE_SHADER);
     if (shader == 0)

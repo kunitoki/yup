@@ -51,7 +51,7 @@ public:
 
     std::unique_ptr<yup::RenderableTarget> createRenderableTarget (int width, int height) override { return real->createRenderableTarget (width, height); }
 
-    void beginOffscreen (yup::OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
+    void beginOffscreen (yup::OffscreenTarget& target, const yup::GpuFrameDescriptor& frameDesc) override { real->beginOffscreen (target, frameDesc); }
 
     void endOffscreen (yup::OffscreenTarget& target) override { real->endOffscreen (target); }
 

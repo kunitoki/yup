@@ -145,9 +145,9 @@ GpuPipeline::Ptr AnimationRenderResources::getMattePipeline (GraphicsContext& co
     // src-alpha / one-minus-src-alpha blend would premultiply the RGB a second
     // time and darken the result (white matte -> grey).
     GpuPipelineOptions options;
-    options.colorTargetCount = 1;
-    options.colorTargets[0].format = GpuTextureFormat::rgba8unorm;
-    options.colorTargets[0].blendEnabled = false;
+    auto& colorTarget = options.colorTargets.emplace_back();
+    colorTarget.format = GpuTextureFormat::rgba8unorm;
+    colorTarget.blendEnabled = false;
 
     auto result = GpuPipeline::compileFromGlsl (context.getGpuDevice(),
                                                 String::fromUTF8 (kMatteVertSource, (int) sizeof (kMatteVertSource) - 1),

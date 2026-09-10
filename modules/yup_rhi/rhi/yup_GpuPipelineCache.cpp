@@ -59,14 +59,15 @@ void appendPipelineOptions (String& payload, const GpuPipelineOptions& o)
             << "|idx:" << (int) o.indexFormat
             << "|cull:" << (int) o.cullMode
             << "|wind:" << (int) o.winding
-            << "|ctc:" << (int) o.colorTargetCount;
+            << "|ctc:" << (int) o.colorTargets.size();
 
-    for (uint32_t i = 0; i < o.colorTargetCount && i < 4; ++i)
+    for (size_t i = 0; i < o.colorTargets.size() && i < 4; ++i)
     {
         const auto& t = o.colorTargets[i];
         payload << "|ct" << (int) i << ':' << (int) t.format << ',' << (int) t.blendEnabled
                 << ',' << (int) t.blend.srcColor << ',' << (int) t.blend.dstColor << ',' << (int) t.blend.colorOp
-                << ',' << (int) t.blend.srcAlpha << ',' << (int) t.blend.dstAlpha << ',' << (int) t.blend.alphaOp;
+                << ',' << (int) t.blend.srcAlpha << ',' << (int) t.blend.dstAlpha << ',' << (int) t.blend.alphaOp
+                << ',' << (int) t.writeMask;
     }
 
     payload << "|ds:" << (int) o.depthStencil.enabled << ',' << (int) o.depthStencil.format
@@ -83,14 +84,14 @@ void appendPipelineOptions (String& payload, const GpuPipelineOptions& o)
 
     payload << "|srm:" << (int) o.stencilReadMask << "|swm:" << (int) o.stencilWriteMask
             << "|smp:" << (int) o.sampleCount
-            << "|vbc:" << (int) o.vertexBufferCount;
+            << "|vbc:" << (int) o.vertexBuffers.size();
 
-    for (uint32_t i = 0; i < o.vertexBufferCount; ++i)
+    for (size_t i = 0; i < o.vertexBuffers.size(); ++i)
     {
         const auto& vb = o.vertexBuffers[i];
-        payload << "|vb" << (int) i << ':' << (int) vb.stride << ',' << (int) vb.stepMode << ',' << (int) vb.attributeCount;
+        payload << "|vb" << (int) i << ':' << (int) vb.stride << ',' << (int) vb.stepMode << ',' << (int) vb.attributes.size();
 
-        for (uint32_t a = 0; a < vb.attributeCount; ++a)
+        for (size_t a = 0; a < vb.attributes.size(); ++a)
         {
             const auto& at = vb.attributes[a];
             payload << ",a" << (int) a << ':' << (int) at.format << ',' << (int) at.offset << ',' << (int) at.shaderLocation;

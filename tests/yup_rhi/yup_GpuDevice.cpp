@@ -271,8 +271,7 @@ TEST_F (GpuDeviceErrorTests, ComputePipelineCompileOnHeadlessFails)
 {
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
-    src.code = "void main() {}";
-    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
+    src.code = gpuShaderSourceBytes ("void main() {}");
 
     auto result = GpuComputePipeline::compile (device, src, GpuWorkgroupSize { 8, 1, 1 });
     EXPECT_TRUE (result.failed());
@@ -306,4 +305,21 @@ TEST_F (GpuDeviceErrorTests, ComputePassSettersOnInvalidPassAreNoOps)
     EXPECT_NO_THROW (pass.setStorageBuffer (0, 0, nullptr));
     EXPECT_NO_THROW (pass.setUniformBuffer (0, 0, nullptr, 0));
     EXPECT_NO_THROW (pass.setTexture (0, 0, nullptr));
+}
+
+//==============================================================================
+// gpuShaderSourceBytes
+//==============================================================================
+
+TEST (GpuShaderSourceBytesTests, RoundTripsTextFromCString)
+{
+    auto bytes = gpuShaderSourceBytes ("void main() {}");
+    ASSERT_EQ (bytes.size(), std::strlen ("void main() {}"));
+    EXPECT_EQ (std::memcmp (bytes.data(), "void main() {}", bytes.size()), 0);
+}
+
+TEST (GpuShaderSourceBytesTests, TreatsNullptrAsEmpty)
+{
+    auto bytes = gpuShaderSourceBytes (static_cast<const char*> (nullptr));
+    EXPECT_TRUE (bytes.empty());
 }

@@ -156,6 +156,19 @@ public:
     */
     Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor = 0) noexcept;
 
+    /** Constructs a Graphics object rendering into an externally-owned renderable target,
+        with full control over the offscreen frame's msaa/dither/loadOp/clearColor.
+
+        The target is not owned by this Graphics and must outlive it. Begins the
+        offscreen GPU frame immediately. Used by GpuCanvas, which owns the target.
+
+        @param context    Reference to the GraphicsContext to use for offscreen rendering.
+        @param target     Reference to the externally-owned renderable target.
+        @param frameDesc  Frame descriptor for the offscreen frame. Its renderTargetWidth/
+                          renderTargetHeight are ignored and overwritten from @p target.
+    */
+    Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc) noexcept;
+
     /** Finalizes an uncommitted offscreen frame without retaining its result. */
     ~Graphics();
 
@@ -760,6 +773,8 @@ private:
 
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
+
+    void beginOffscreenFrame (const GpuFrameDescriptor& frameDesc);
 
     void restoreState();
 

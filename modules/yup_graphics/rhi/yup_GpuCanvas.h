@@ -132,8 +132,13 @@ public:
         resource reallocation.
 
         Not applicable to canvases used only via beginRenderPass().
+
+        @param frameDesc  Controls msaa/dither/loadOp/clearColor for the offscreen
+                          frame. Its renderTargetWidth/renderTargetHeight are ignored
+                          and auto-filled from the canvas. Defaults reproduce the
+                          previous hardcoded behaviour (clear to transparent black).
     */
-    Graphics& beginDraw();
+    Graphics& beginDraw (const GpuFrameDescriptor& frameDesc = {});
 
     /** Finalises any open 2D GPU render command.
 

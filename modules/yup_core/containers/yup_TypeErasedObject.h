@@ -29,6 +29,9 @@ namespace yup
     The `TypeErasedObject` template struct stores an object of a specified type in a type-erased manner, provided that the size
     of the object is less than or equal to the specified `NumBytes`. This struct ensures that objects are move-only, and it uses type erasure
     to store them in a generic way while still allowing retrieval of the original type at a later point.
+
+    Moving a `TypeErasedObject` relocates the payload through the payload's own move constructor, so
+    types that point into themselves (such as `std::string` or `std::map`) are safe to store.
  
     @tparam NumBytes The maximum number of bytes available for storing the payload object.
 
@@ -61,95 +64,88 @@ struct TypeErasedObject
         {
             destroyAt (std::launder (reinterpret_cast<T*> (buffer)));
         };
+
+        moverCallback = +[] (void* destination, void* source)
+        {
+            auto* sourceObject = std::launder (reinterpret_cast<T*> (source));
+            constructAt (reinterpret_cast<T*> (destination), std::move (*sourceObject));
+            destroyAt (sourceObject);
+        };
     }
 
     /** Destroys the payload and calls the stored deleter to clean up the contained object. */
     ~TypeErasedObject()
     {
-        if (deleterCallback != nullptr)
-            deleterCallback (static_cast<void*> (&objectBuffer[0]));
+        destroyPayload();
     }
 
     /**
 	    Move constructor that transfers ownership of the payload from another instance.
-	 
-	    Moves the contents of the payload from `other` into this instance, ensuring that the
-	    other instance is left in a valid but empty state.
-	 
+
+	    Relocates the payload from `other` into this instance through the payload's own move
+	    constructor, then destroys the source payload, leaving `other` in a valid but empty state.
+
 	    @param other The payload to move from.
 	*/
     TypeErasedObject (TypeErasedObject&& other) noexcept
-        : deleterCallback (std::exchange (other.deleterCallback, nullptr))
-        , type (std::exchange (other.type, typeid (void)))
     {
-        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+        takePayloadFrom (other);
     }
 
     /**
 	    Move constructor that transfers ownership of the payload from a smaller instance.
-	 
-	    Moves the contents of the payload from `other`, whose storage size must be less than or equal
-	    to this instance's storage size, ensuring that `other` is left in a valid but empty state.
-	 
+
+	    Relocates the payload from `other`, whose storage size must be less than or equal to this
+	    instance's storage size, through the payload's own move constructor, then destroys the
+	    source payload, leaving `other` in a valid but empty state.
+
 	    @tparam OtherBytes The storage size of the source payload. Must be less than or equal to `NumBytes`.
-	 
+
 	    @param other The payload to move from.
 	*/
     template <std::size_t OtherBytes>
     TypeErasedObject (TypeErasedObject<OtherBytes>&& other) noexcept
         requires (OtherBytes <= NumBytes)
-        : deleterCallback (std::exchange (other.deleterCallback, nullptr))
-        , type (std::exchange (other.type, typeid (void)))
     {
-        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
+        takePayloadFrom (other);
     }
 
     /**
 	    Move assignment operator that transfers ownership of the payload from another instance.
-	 
-	    Moves the contents of the payload from `other` into this instance, properly destroying the
-	    current payload object if one exists, and leaving `other` in a valid but empty state.
-	 
+
+	    Destroys the current payload object if one exists, then relocates the payload from `other`
+	    through its own move constructor, leaving `other` in a valid but empty state.
+
 	    @param other The payload to move from.
-	 
+
 	    @return A reference to this `TypeErasedObject` after the move.
 	*/
     TypeErasedObject& operator= (TypeErasedObject&& other)
     {
-        if (auto deleter = std::exchange (deleterCallback, nullptr))
-            deleter (reinterpret_cast<void*> (&objectBuffer[0]));
-
-        deleterCallback = std::exchange (other.deleterCallback, nullptr);
-        type = std::exchange (other.type, typeid (void));
-        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
-
+        destroyPayload();
+        takePayloadFrom (other);
         return *this;
     }
 
     /**
 	    Move assignment operator that transfers ownership of the payload from a smaller instance.
-	 
-	    Moves the contents of the payload from `other`, whose storage size must be less than or equal
-	    to this instance's storage size, properly destroying the current payload object if one exists,
-	    and leaving `other` in a valid but empty state.
-	 
+
+	    Destroys the current payload object if one exists, then relocates the payload from `other`,
+	    whose storage size must be less than or equal to this instance's storage size, through its
+	    own move constructor, leaving `other` in a valid but empty state.
+
 	    @tparam OtherBytes The storage size of the source payload. Must be less than or equal to `NumBytes`.
-	 
+
 	    @param other The payload to move from.
-	 
+
 	    @return A reference to this `TypeErasedObject` after the move.
 	*/
     template <std::size_t OtherBytes>
     TypeErasedObject& operator= (TypeErasedObject<OtherBytes>&& other)
         requires (OtherBytes <= NumBytes)
     {
-        if (auto deleter = std::exchange (deleterCallback, nullptr))
-            deleter (reinterpret_cast<void*> (&objectBuffer[0]));
-
-        deleterCallback = std::exchange (other.deleterCallback, nullptr);
-        type = std::exchange (other.type, typeid (void));
-        std::memcpy (objectBuffer, other.objectBuffer, jmin (sizeof (objectBuffer), sizeof (other.objectBuffer)));
-
+        destroyPayload();
+        takePayloadFrom (other);
         return *this;
     }
 
@@ -201,8 +197,31 @@ private:
     template <std::size_t>
     friend struct TypeErasedObject;
 
+    /** Destroys the current payload, if any, and returns to the empty state. */
+    void destroyPayload() noexcept
+    {
+        if (auto deleter = std::exchange (deleterCallback, nullptr))
+            deleter (static_cast<void*> (&objectBuffer[0]));
+
+        moverCallback = nullptr;
+        type = typeid (void);
+    }
+
+    /** Relocates the payload of `other` into this empty instance and empties `other`. */
+    template <std::size_t OtherBytes>
+    void takePayloadFrom (TypeErasedObject<OtherBytes>& other) noexcept
+    {
+        deleterCallback = std::exchange (other.deleterCallback, nullptr);
+        moverCallback = std::exchange (other.moverCallback, nullptr);
+        type = std::exchange (other.type, typeid (void));
+
+        if (moverCallback != nullptr)
+            moverCallback (static_cast<void*> (&objectBuffer[0]), static_cast<void*> (&other.objectBuffer[0]));
+    }
+
     alignas (alignof (std::max_align_t)) uint8 objectBuffer[NumBytes] = {};
     void (*deleterCallback) (void*) = nullptr;
+    void (*moverCallback) (void*, void*) = nullptr;
     std::type_index type = typeid (void);
 };
 
