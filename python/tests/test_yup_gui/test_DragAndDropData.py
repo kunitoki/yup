@@ -30,12 +30,16 @@ def test_default_is_empty():
 
 
 def test_with_files_sets_files():
-    data = yup.DragAndDropData().withFiles([yup.File("/tmp/one.txt"), yup.File("/tmp/two.txt")])
+    expected = [yup.File("/tmp/one.txt"), yup.File("/tmp/two.txt")]
+
+    data = yup.DragAndDropData().withFiles(expected)
 
     assert data.hasFiles() is True
     assert data.isEmpty() is False
     assert data.getFiles().size() == 2
-    assert [file.getFullPathName() for file in data.getFiles()] == ["/tmp/one.txt", "/tmp/two.txt"]
+    # File normalises and absolutises the path it is given, so compare File objects instead of
+    # raw path strings (on Windows a "/tmp" path gains the current drive prefix).
+    assert list(data.getFiles()) == expected
 
 
 def test_with_files_rejects_anything_that_is_not_a_file():
@@ -182,4 +186,4 @@ def test_override_can_read_a_file_payload():
     _, _, data = component.log[0]
 
     assert data.hasFiles() is True
-    assert data.getFiles()[0].getFullPathName() == "/tmp/one.txt"
+    assert data.getFiles()[0] == yup.File("/tmp/one.txt")
