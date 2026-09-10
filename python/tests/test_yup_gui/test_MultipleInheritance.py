@@ -28,7 +28,7 @@ fixed, which is the signal to delete the marker.
 
 def run_in_child_interpreter(source: str) -> subprocess.CompletedProcess:
     """Runs source in a fresh interpreter, with the bound yup module importable."""
-    yup_folder = os.path.dirname(os.path.abspath(__file__))
+    yup_folder = os.path.dirname(os.path.abspath(yup.__file__))
     preamble = f"import sys; sys.path.insert(0, {yup_folder!r})\n"
 
     return subprocess.run(
@@ -75,6 +75,7 @@ print("survived")
 """
 
 
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
 def test_single_bound_base_survives_destruction():
     result = run_in_child_interpreter(SINGLE_BOUND_BASE)
 
@@ -82,10 +83,8 @@ def test_single_bound_base_survives_destruction():
     assert "survived" in result.stdout
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="pybind11 3.0.1 (vendored) corrupts the teardown of a Python class with two bound bases",
-)
+@pytest.mark.skipif(yup.__embedded_interpreter__, reason="Embedded interpreter does not support the test application")
+@pytest.mark.xfail(strict=False, reason="pybind11 3.0.1 (vendored) corrupts the teardown of a Python class with two bound bases",)
 def test_two_bound_bases_never_corrupt_memory():
     result = run_in_child_interpreter(TWO_BOUND_BASES)
 
