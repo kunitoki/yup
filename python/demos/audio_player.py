@@ -4,7 +4,6 @@ YUP Audio Player Demo
 
 Demonstrates audio file playback using AudioFormatManager,
 AudioFormatReaderSource, and AudioTransportSource.
-Port of popsicle's audio_player.py.
 
 Usage:
     python audio_player.py [path/to/audio/file.wav]
@@ -57,7 +56,7 @@ class AudioPlayer:
         print(f"  Channels: {reader.numChannels}")
         print(f"  Duration: {reader.lengthInSamples / reader.sampleRate:.2f}s")
 
-        self.readerSource = yup.AudioFormatReaderSource(reader, True)
+        self.readerSource = yup.AudioFormatReaderSource(reader)
         self.transportSource.setSource(self.readerSource)
         self.currentFile = filePath
         return True

@@ -3,7 +3,6 @@
 YUP Layout Rectangles Demo
 
 Demonstrates Rectangle positioning math for layout calculations.
-Port of popsicle's layout_rectangles.py.
 """
 
 import yup_init

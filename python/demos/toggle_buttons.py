@@ -3,7 +3,6 @@
 YUP Radio Buttons and Checkboxes Demo
 
 Demonstrates ToggleButton as radio buttons and checkboxes.
-Port of popsicle's radio_buttons_checkboxes.py.
 """
 
 import yup_init

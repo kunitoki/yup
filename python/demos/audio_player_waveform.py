@@ -3,7 +3,6 @@
 YUP Audio Player with Waveform Demo
 
 Audio file playback with real-time waveform visualization.
-Port of popsicle's audio_player_waveform.py.
 
 Usage:
     python audio_player_waveform.py [path/to/audio/file.wav]
@@ -14,6 +13,34 @@ import yup
 import sys
 import os
 import threading
+
+
+# The peak envelope is reduced to this many buckets, in one pass taken before
+# playback starts. The reader is shared with playback - every read seeks its
+# stream and allocates, and it is not thread-safe - so reading it from the paint
+# thread while the audio thread pulls it makes both stutter. 4096 buckets is more
+# resolution than any window width needs.
+PEAK_BUCKETS = 4096
+
+
+def compute_peaks(reader, buckets=PEAK_BUCKETS):
+    """Returns the peak level of each bucket across the whole file, in one pass."""
+    numSamples = reader.lengthInSamples
+    numChannels = reader.numChannels
+
+    if numSamples <= 0 or numChannels <= 0:
+        return []
+
+    step = int(max(1, numSamples // buckets))
+    chunk = yup.AudioBuffer[float](numChannels, step)
+
+    peaks = []
+    for start in range(0, numSamples, step):
+        count = min(step, numSamples - start)
+        reader.read(chunk, 0, count, start, True, True)
+        peaks.append(chunk.getMagnitude(0, 0, count))
+
+    return peaks
 
 
 class AudioPlayer:
@@ -29,6 +56,7 @@ class AudioPlayer:
         self.player.setSource(self.transportSource)
 
         self.readerSource = None
+        self.peaks = []
 
     def initialise(self) -> str:
         return self.deviceManager.initialise(0, 2, None, True)
@@ -40,12 +68,16 @@ class AudioPlayer:
 
         self.transportSource.stop()
         self.readerSource = None
+        self.peaks = []
 
         reader = self.formatManager.createReaderFor(file)
         if reader is None:
             return False
 
-        self.readerSource = yup.AudioFormatReaderSource(reader, True)
+        # Read the envelope here, before playback can start pulling the same reader.
+        self.peaks = compute_peaks(reader)
+
+        self.readerSource = yup.AudioFormatReaderSource(reader)
         self.transportSource.setSource(self.readerSource)
         return True
 
@@ -67,11 +99,9 @@ class AudioPlayer:
     def getLength(self) -> float:
         return self.transportSource.getLengthInSeconds()
 
-    def getReader(self):
-        """Get the underlying format reader for waveform analysis."""
-        if self.readerSource:
-            return self.readerSource.getAudioFormatReader()
-        return None
+    def getPeaks(self):
+        """The peak envelope computed when the file was loaded."""
+        return self.peaks
 
 
 class WaveformComponent(yup.Component):
@@ -86,49 +116,35 @@ class WaveformComponent(yup.Component):
         g.setFillColor(yup.Colors.black)
         g.fillAll()
 
-        reader = self.player.getReader()
-        if reader is None:
+        peaks = self.player.getPeaks()
+        if not peaks:
             g.setFillColor(yup.Colors.white)
             font = yup.ApplicationTheme.getGlobalTheme().getDefaultFont().withHeight(16.0)
             g.fillFittedText(
                 "No audio file loaded",
                 font,
                 yup.Rectangle[float](0, 0, self.getWidth(), self.getHeight()),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
             return
 
         w = self.getWidth()
         h = self.getHeight()
 
-        # Draw waveform
-        numSamples = reader.lengthInSamples
-        numChannels = reader.numChannels
-        sampleRate = reader.sampleRate
-
-        # Downsample to fit the width
-        downsample = max(1, numSamples // w)
+        # Draw the waveform, a column per pixel, without touching the audio file:
+        # the envelope was read once, when the file was loaded.
         g.setStrokeColor(yup.Colors.green)
         g.setStrokeWidth(1)
 
         mid_y = h / 2
         scale = h / 2
 
-        # Read samples and draw waveform
-        buffer = yup.AudioBuffer[float](numChannels, downsample)
-        x = 0.0
-        for i in range(0, numSamples, downsample):
-            samples_to_read = min(downsample, numSamples - i)
-            reader.read(buffer, 0, samples_to_read, i, True, True)
-
-            # Find peak in this chunk
-            peak = 0.0
-            for s in range(samples_to_read):
-                peak = max(peak, abs(buffer.getSample(0, s)))
-
-            y = peak * scale
+        num_peaks = len(peaks)
+        for x in range(int(w)):
+            first = x * num_peaks // w
+            last = max(first + 1, (x + 1) * num_peaks // w)
+            y = max(peaks[int(first):int(last)]) * scale
             g.strokeLine(x, mid_y - y, x, mid_y + y)
-            x += 1.0
 
         # Draw playback position
         pos = self.player.getPosition()
@@ -195,8 +211,13 @@ def main():
                     yup.YUPApplication.getInstance().systemRequestedQuit()
 
             self.win = Win()
-            self.win.setVisible(True)
-            self.win.centreWithSize(yup.Size[int](800, 300))
+
+            def showWindow():
+                yup.Process.makeForegroundProcess()
+                self.win.setVisible(True)
+                self.win.centreWithSize(yup.Size[int](800, 300))
+
+            yup.MessageManager.callAsync(showWindow)
 
         def shutdown(self):
             player.stop()

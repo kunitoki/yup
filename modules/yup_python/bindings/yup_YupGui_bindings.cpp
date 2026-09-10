@@ -384,7 +384,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // Registered before Component, which derives from it in C++. The MouseListener overrides a
     // Python subclass writes are dispatched through PyMouseListener, which Component shares.
-    py::class_<MouseListener, PyMouseListener<>> classMouseListener (m, "MouseListener");
+    py::class_<MouseListener, PyMouseListener<>, py::smart_holder> classMouseListener (m, "MouseListener");
 
     classMouseListener
         .def (py::init<>())
@@ -553,7 +553,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // Component derives from MouseListener in C++, so declaring the base here gives Python
     // issubclass (Component, MouseListener) and lets a component be used as a mouse listener.
-    py::class_<Component, MouseListener, PyComponent<>> classComponent (m, "Component");
+    py::class_<Component, MouseListener, PyComponent<>, py::smart_holder> classComponent (m, "Component");
 
     classComponent
         // Construction and identification
@@ -752,7 +752,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::DocumentWindow
 
-    py::class_<DocumentWindow, Component, PyDocumentWindow<>> classDocumentWindow (m, "DocumentWindow");
+    py::class_<DocumentWindow, Component, PyDocumentWindow<>, py::smart_holder> classDocumentWindow (m, "DocumentWindow");
 
     classDocumentWindow
         .def (py::init<>())
@@ -1101,7 +1101,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::Button
 
-    py::class_<Button, Component, PyButton<>> (m, "Button")
+    py::class_<Button, Component, PyButton<>, py::smart_holder> (m, "Button")
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("isButtonOver", &Button::isButtonOver)
         .def ("isButtonDown", &Button::isButtonDown)
@@ -1110,14 +1110,14 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::TextButton
 
-    py::class_<TextButton, Button, PyButton<TextButton>> (m, "TextButton")
+    py::class_<TextButton, Button, PyButton<TextButton>, py::smart_holder> (m, "TextButton")
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("getButtonText", &TextButton::getButtonText)
         .def ("setButtonText", &TextButton::setButtonText);
 
     // ============================================================================================ yup::ToggleButton
 
-    py::class_<ToggleButton, Button, PyButton<ToggleButton>> (m, "ToggleButton")
+    py::class_<ToggleButton, Button, PyButton<ToggleButton>, py::smart_holder> (m, "ToggleButton")
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("getToggleState", &ToggleButton::getToggleState)
         .def ("setToggleState", &ToggleButton::setToggleState,
@@ -1143,7 +1143,7 @@ void registerYupGuiBindings (py::module_& m)
         .export_values();
 
     // Make SliderType accessible as Slider.SliderType via the class
-    py::class_<Slider, Component, PySlider<>> (m, "Slider")
+    py::class_<Slider, Component, PySlider<>, py::smart_holder> (m, "Slider")
         .def (py::init<Slider::SliderType, StringRef>(),
               "sliderType"_a, "componentID"_a = StringRef())
         .def (py::init<Slider::SliderType>(),
@@ -1191,7 +1191,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::Label
 
-    py::class_<Label, Component, PyComponent<Label>> labelClass (m, "Label");
+    py::class_<Label, Component, PyComponent<Label>, py::smart_holder> labelClass (m, "Label");
 
     labelClass
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
@@ -1463,7 +1463,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::ProgressBar
 
-    py::class_<ProgressBar, Component, PyProgressBar<>> classProgressBar (m, "ProgressBar");
+    py::class_<ProgressBar, Component, PyProgressBar<>, py::smart_holder> classProgressBar (m, "ProgressBar");
 
     classProgressBar
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
@@ -1476,7 +1476,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::SwitchButton
 
-    py::class_<SwitchButton, Button, PySwitchButton<>> classSwitchButton (m, "SwitchButton");
+    py::class_<SwitchButton, Button, PySwitchButton<>, py::smart_holder> classSwitchButton (m, "SwitchButton");
 
     classSwitchButton
         .def (py::init<StringRef, bool>(), "componentID"_a = StringRef(), "isVertical"_a = false)
@@ -1490,7 +1490,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::ScrollBar
 
-    py::class_<ScrollBar, Component, PyComponent<ScrollBar>> classScrollBar (m, "ScrollBar");
+    py::class_<ScrollBar, Component, PyComponent<ScrollBar>, py::smart_holder> classScrollBar (m, "ScrollBar");
 
     py::enum_<ScrollBar::Orientation> (classScrollBar, "Orientation")
         .value ("vertical", ScrollBar::Orientation::vertical)
@@ -1572,7 +1572,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::ListBoxItem
 
-    py::class_<ListBoxItem, Component, PyComponent<ListBoxItem>> classListBoxItem (m, "ListBoxItem");
+    py::class_<ListBoxItem, Component, PyComponent<ListBoxItem>, py::smart_holder> classListBoxItem (m, "ListBoxItem");
 
     py::enum_<ListBoxItem::IconPosition> (classListBoxItem, "IconPosition")
         .value ("left", ListBoxItem::IconPosition::left)
@@ -1607,7 +1607,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::ListBox
 
-    py::class_<ListBox, Component, PyComponent<ListBox>> classListBox (m, "ListBox");
+    py::class_<ListBox, Component, PyComponent<ListBox>, py::smart_holder> classListBox (m, "ListBox");
 
     py::enum_<ListBox::Orientation> (classListBox, "Orientation")
         .value ("vertical", ListBox::Orientation::vertical)
@@ -1684,7 +1684,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::ComboBox
 
-    py::class_<ComboBox, Component, PyComboBox<>> classComboBox (m, "ComboBox");
+    py::class_<ComboBox, Component, PyComboBox<>, py::smart_holder> classComboBox (m, "ComboBox");
 
     classComboBox
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
@@ -1726,7 +1726,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::TextEditor
 
-    py::class_<TextEditor, Component, PyTextEditor<>> classTextEditor (m, "TextEditor");
+    py::class_<TextEditor, Component, PyTextEditor<>, py::smart_holder> classTextEditor (m, "TextEditor");
 
     classTextEditor
         .def (py::init<StringRef>(), "componentID"_a = StringRef())

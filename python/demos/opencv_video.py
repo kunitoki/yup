@@ -3,10 +3,9 @@
 YUP OpenCV Video Demo
 
 Displays webcam feed processed with OpenCV in a YUP window.
-Port of popsicle's opencv_video.py.
 
 NOTE: Requires 'opencv-python' and 'numpy'.
-    pip install opencv-python numpy
+    uv pip install opencv-python numpy
 """
 
 import yup_init
@@ -19,8 +18,7 @@ try:
     import numpy as np
 except ImportError:
     raise ImportError(
-        "This demo requires opencv-python and numpy. "
-        "Install with: pip install opencv-python numpy"
+        "This demo requires opencv-python and numpy (uv pip install opencv-python numpy)"
     )
 
 
@@ -53,8 +51,25 @@ class VideoComponent(yup.Component):
             self.cap = None
 
     def _captureLoop(self):
-        """Background thread for video capture."""
-        while self.running and self.cap and self.cap.isOpened():
+        """
+        Background thread for video capture.
+
+        Three details here are what keep the demo from crashing on close, which it used to do
+        inside OpenCV's allocator (PyGILState_Ensure) with the trace ending in NumpyAllocator:
+
+        * the loop only touches the camera while the window shows this component, so a hidden or
+          minimised window never sits inside read() - and it resumes by itself when shown again;
+        * the thread that owns the capture is the one that releases it, so no release can free the
+          capture under an active read();
+        * stopCapture() (below) is what ends the loop for good, from visibilityChanged() when the
+          window goes away. __del__ cannot do it: this thread was started with a bound method, so
+          it keeps the component alive and __del__ never runs while the loop is running.
+        """
+        while self.running:
+            if self.cap is None or not self.cap.isOpened() or not self.isShowing():
+                time.sleep(0.01)
+                continue
+
             ret, frame = self.cap.read()
             if ret:
                 # Process frame: convert to grayscale and detect edges
@@ -73,6 +88,9 @@ class VideoComponent(yup.Component):
                     self.last_time = now
             else:
                 time.sleep(0.01)
+
+        if self.cap is not None:
+            self.cap.release()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
         self.repaint()
@@ -94,7 +112,7 @@ class VideoComponent(yup.Component):
             scale = min(scale_x, scale_y)
 
             g.setStrokeColor(yup.Colors.green)
-            g.setStrokeWidth(1)
+            g.setStrokeWidth(2)
 
             # Simple visualization: draw detected edge points
             step = 4  # Downsample for performance
@@ -114,20 +132,51 @@ class VideoComponent(yup.Component):
                 "No webcam available - showing test pattern",
                 font,
                 yup.Rectangle[float](0, h - 30, w, 25),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
         else:
             g.fillFittedText(
                 f"Webcam [Edge Detection] | FPS: {self.fps:.1f}",
                 font,
                 yup.Rectangle[float](0, h - 30, w, 25),
-                yup.Justification.centred,
+                yup.Justification.center,
             )
 
-    def __del__(self):
+    def stopCapture(self):
+        """
+        Stops the capture thread, waits for it and then releases the camera.
+
+        The wait is the point: releasing the capture while the thread is inside read() frees it
+        under that thread, and the thread then calls into OpenCV's allocator - and so into
+        PyGILState_Ensure - while the interpreter is shutting down, which segfaults.
+        """
         self.running = False
-        if self.cap:
+
+        thread, self.thread = self.thread, None
+
+        # is_alive() first: a thread that was never started (no webcam, so nothing to capture)
+        # cannot be joined at all.
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
+
+            if thread.is_alive():
+                # Still inside read(): releasing the capture here would race the thread, so leave
+                # the camera to the process instead of freeing it under an active read.
+                return
+
+        if self.cap is not None:
             self.cap.release()
+            self.cap = None
+
+    def visibilityChanged(self):
+        # The window going away is what has to end the capture loop: this component is kept alive
+        # by the capture thread's bound method, so __del__ (below) is not reachable while the
+        # loop runs.
+        if not self.isVisible():
+            self.stopCapture()
+
+    def __del__(self):
+        self.stopCapture()
 
 
 if __name__ == "__main__":

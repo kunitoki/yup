@@ -1,3 +1,6 @@
+import gc
+import weakref
+
 import pytest
 import yup
 
@@ -83,3 +86,81 @@ def test_transport_set_source_none():
     transport = yup.AudioTransportSource()
     transport.setSource(None)
     assert transport.hasStreamFinished() is True
+
+
+# ==============================================================================
+# Ownership
+# ==============================================================================
+
+class SilentPositionableSource(yup.PositionableAudioSource):
+    """A source that plays silence, for driving the ownership tests."""
+
+    def __init__(self):
+        super().__init__()
+        self.position = 0
+
+    def prepareToPlay(self, samplesPerBlockExpected, sampleRate):
+        pass
+
+    def releaseResources(self):
+        pass
+
+    def getNextAudioBlock(self, bufferToFill):
+        pass
+
+    def setNextReadPosition(self, newPosition):
+        self.position = newPosition
+
+    def getNextReadPosition(self):
+        return self.position
+
+    def getTotalLength(self):
+        return 0
+
+    def isLooping(self):
+        return False
+
+    def setLooping(self, shouldLoop):
+        pass
+
+
+def test_transport_is_an_audio_source():
+    transport = yup.AudioTransportSource()
+
+    assert isinstance(transport, yup.PositionableAudioSource)
+    assert isinstance(transport, yup.AudioSource)
+
+
+def test_player_set_source_accepts_a_transport_source():
+    player = yup.AudioSourcePlayer()
+    transport = yup.AudioTransportSource()
+
+    player.setSource(transport)
+
+    assert isinstance(player.getCurrentSource(), yup.AudioTransportSource)
+
+
+def test_player_set_source_keeps_the_source_alive():
+    # Neither the player nor the transport owns its source, so the binding has to
+    # hold a reference for as long as the object playing it is alive.
+    player = yup.AudioSourcePlayer()
+    transport = yup.AudioTransportSource()
+    player.setSource(transport)
+
+    remaining = weakref.ref(transport)
+    del transport
+    gc.collect()
+
+    assert remaining() is not None
+
+
+def test_transport_set_source_keeps_the_source_alive():
+    transport = yup.AudioTransportSource()
+    source = SilentPositionableSource()
+    transport.setSource(source)
+
+    remaining = weakref.ref(source)
+    del source
+    gc.collect()
+
+    assert remaining() is not None

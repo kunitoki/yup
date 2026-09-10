@@ -5,8 +5,6 @@ YUP Hot Reload Demo - Main
 Demonstrates a hot-reload pattern where the component is reloaded
 from disk when the file changes. Run this script, then edit
 hotreload_component.py while the window is open to see changes.
-
-Port of popsicle's hotreload_main.py.
 """
 
 import yup_init

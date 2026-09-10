@@ -245,7 +245,7 @@ void registerYupEventsBindings (py::module_& m)
 
     // ============================================================================================ yup::Timer
 
-    py::class_<Timer, PyTimer> classTimer (m, "Timer");
+    py::class_<Timer, PyTimer, py::smart_holder> classTimer (m, "Timer");
 
     classTimer
         .def (py::init<>())
@@ -260,7 +260,7 @@ void registerYupEventsBindings (py::module_& m)
 
     // ============================================================================================ yup::MultiTimer
 
-    py::class_<MultiTimer, PyMultiTimer> classMultiTimer (m, "MultiTimer");
+    py::class_<MultiTimer, PyMultiTimer, py::smart_holder> classMultiTimer (m, "MultiTimer");
 
     classMultiTimer
         .def (py::init<>())

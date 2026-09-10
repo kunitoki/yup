@@ -4,7 +4,6 @@ YUP FlexBox & Grid Layout Demo
 
 Demonstrates CSS-style FlexBox and Grid layout engines for
 arranging components in a window.
-Port of popsicle's layout_flexgrid.py.
 """
 
 import yup_init

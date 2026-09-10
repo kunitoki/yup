@@ -1,6 +1,9 @@
+import gc
+import os
+import weakref
+
 import pytest
 import yup
-import os
 
 
 # ==============================================================================
@@ -9,17 +12,17 @@ import os
 
 def test_reader_source_construction_with_null():
     # Passing None should work; the source just produces silence
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     assert source is not None
 
 
 def test_reader_source_looping_defaults():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     assert source.isLooping() is False
 
 
 def test_reader_source_set_looping():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     source.setLooping(True)
     assert source.isLooping() is True
     source.setLooping(False)
@@ -27,25 +30,25 @@ def test_reader_source_set_looping():
 
 
 def test_reader_source_total_length():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     assert source.getTotalLength() >= 0
 
 
 def test_reader_source_position():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     assert source.getNextReadPosition() >= 0
     source.setNextReadPosition(100)
     assert source.getNextReadPosition() == 100
 
 
 def test_reader_source_negative_position_clamped():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     source.setNextReadPosition(-50)
     assert source.getNextReadPosition() == 0
 
 
 def test_reader_source_get_audio_format_reader():
-    source = yup.AudioFormatReaderSource(None, False)
+    source = yup.AudioFormatReaderSource(None)
     reader = source.getAudioFormatReader()
     assert reader is None
 
@@ -123,12 +126,52 @@ def test_format_reader_integration(temp_wav_file):
     reader = mgr.createReaderFor(yup.File(temp_wav_file))
     assert reader is not None
 
-    # Create AudioFormatReaderSource from the reader
-    # Don't transfer ownership — Python still manages the reader
-    source = yup.AudioFormatReaderSource(reader, False)
+    # The reader stays Python's; the source borrows it and is pinned to it
+    source = yup.AudioFormatReaderSource(reader)
     assert source is not None
-    assert source.getTotalLength() >= 0
+    assert source.getTotalLength() == 100
 
     retrieved = source.getAudioFormatReader()
     assert retrieved is not None
     assert retrieved.sampleRate == 44100.0
+
+
+# ==============================================================================
+# Reader ownership
+# ==============================================================================
+
+def test_reader_source_keeps_the_reader_alive(temp_wav_file):
+    # The source borrows the reader Python owns, so it has to be pinned to the
+    # source: without that the reader dies with its last Python reference and the
+    # source reads freed memory, reporting a total length of 0.
+    mgr = yup.AudioFormatManager()
+    mgr.registerDefaultFormats()
+
+    reader = mgr.createReaderFor(yup.File(temp_wav_file))
+    source = yup.AudioFormatReaderSource(reader)
+
+    remaining = weakref.ref(reader)
+    del reader
+    gc.collect()
+
+    assert remaining() is not None
+    assert source.getTotalLength() == 100
+
+
+def test_transport_of_a_reader_source_starts_and_keeps_playing(temp_wav_file):
+    # What the player demo does, minus the audio device: a transport whose source
+    # reports 0 as its total length looks finished as soon as it is started, so
+    # start() silently reverts and the demo never sees isPlaying() come true.
+    mgr = yup.AudioFormatManager()
+    mgr.registerDefaultFormats()
+
+    reader_source = yup.AudioFormatReaderSource(mgr.createReaderFor(yup.File(temp_wav_file)))
+    transport = yup.AudioTransportSource()
+
+    transport.setSource(reader_source)
+    transport.prepareToPlay(512, 44100.0)
+    transport.start()
+
+    assert transport.hasStreamFinished() is False
+    assert transport.isPlaying() is True
+    assert transport.getLengthInSeconds() == pytest.approx(100 / 44100.0)

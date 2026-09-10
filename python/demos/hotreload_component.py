@@ -4,8 +4,6 @@ YUP Hot Reload Demo - Component
 
 The dynamically reloaded component used by hotreload_main.py.
 Edit this file while hotreload_main.py is running to see live updates.
-
-Port of popsicle's hotreload_component.py.
 """
 
 import yup

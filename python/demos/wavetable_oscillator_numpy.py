@@ -5,8 +5,7 @@ YUP NumPy Wavetable Oscillator Demo
 Wavetable synthesis with NumPy for efficient processing.
 Uses AudioSource + AudioSourcePlayer (not raw AudioIODeviceCallback).
 
-NOTE: Requires 'numpy' (pip install numpy).
-Port of popsicle's wavetable_oscillator_numpy.py.
+NOTE: Requires 'numpy' (uv pip install numpy).
 """
 
 import yup_init
@@ -16,7 +15,7 @@ import math
 try:
     import numpy as np
 except ImportError:
-    raise ImportError("This demo requires numpy. Install with: pip install numpy")
+    raise ImportError("This demo requires numpy (uv pip install numpy)")
 
 
 class WavetableOscillator:
@@ -72,8 +71,9 @@ class WavetableSource(yup.AudioSource):
         print(f"Audio started: {sampleRate:.0f} Hz, block: {samplesPerBlockExpected}")
 
     def releaseResources(self):
-        print("Audio stopped")
-        self.oscillator = None
+        if self.oscillator is not None:
+            print("Audio stopped")
+            self.oscillator = None
 
     def getNextAudioBlock(self, bufferToFill):
         if self.oscillator is None:

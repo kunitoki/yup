@@ -111,12 +111,11 @@ void registerYupAudioFormatsBindings (py::module_& m)
     // ============================================================================================ yup::AudioFormatReaderSource
 
     py::class_<AudioFormatReaderSource, PositionableAudioSource> (m, "AudioFormatReaderSource")
-        .def (py::init ([] (AudioFormatReader* reader, bool deleteReaderWhenThisIsDeleted)
+        .def (py::init ([] (AudioFormatReader* reader)
         {
-            // Transfer ownership: release the Python-owned reader to C++
-            return std::make_unique<AudioFormatReaderSource> (reader, deleteReaderWhenThisIsDeleted);
+            return std::make_unique<AudioFormatReaderSource> (reader, false);
         }),
-              "sourceReader"_a, "deleteReaderWhenThisIsDeleted"_a = true)
+              "sourceReader"_a, py::keep_alive<1, 2>())
         .def ("getAudioFormatReader", [] (AudioFormatReaderSource& self) -> AudioFormatReader*
         {
             if (auto* reader = self.getAudioFormatReader())

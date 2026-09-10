@@ -101,6 +101,27 @@ void registerYupAudioDevicesBindings (py::module_& m)
             return result;
         });
 
+    // ============================================================================================ yup::AudioIODeviceType
+
+    py::class_<AudioIODeviceType> (m, "AudioIODeviceType")
+        .def ("getTypeName", &AudioIODeviceType::getTypeName)
+        .def ("scanForDevices", &AudioIODeviceType::scanForDevices)
+        .def ("getDeviceNames", &AudioIODeviceType::getDeviceNames, "wantInputNames"_a = false)
+        .def ("getDefaultDeviceIndex", &AudioIODeviceType::getDefaultDeviceIndex, "forInput"_a)
+        .def ("getIndexOfDevice", &AudioIODeviceType::getIndexOfDevice, "device"_a, "asInput"_a)
+        .def ("hasSeparateInputsAndOutputs", &AudioIODeviceType::hasSeparateInputsAndOutputs)
+        .def ("createDevice", &AudioIODeviceType::createDevice,
+              "outputDeviceName"_a, "inputDeviceName"_a,
+              py::return_value_policy::take_ownership)
+        .def ("__repr__", [] (const AudioIODeviceType& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " typeName=\"" << self.getTypeName() << "\">";
+            return result;
+        });
+
     // ============================================================================================ yup::AudioDeviceManager::AudioDeviceSetup
 
     py::class_<AudioDeviceManager::AudioDeviceSetup> (m, "AudioDeviceSetup")
@@ -162,6 +183,17 @@ void registerYupAudioDevicesBindings (py::module_& m)
               py::return_value_policy::reference)
         .def ("setCurrentAudioDeviceType", &AudioDeviceManager::setCurrentAudioDeviceType,
               "type"_a, "treatAsChosenDevice"_a)
+        .def ("getAvailableDeviceTypes", [] (AudioDeviceManager& self)
+        {
+            auto& deviceTypes = self.getAvailableDeviceTypes();
+
+            py::list result;
+
+            for (int i = 0; i < deviceTypes.size(); ++i)
+                result.append (py::cast (deviceTypes[i], py::return_value_policy::reference));
+
+            return result;
+        })
         .def ("closeAudioDevice", &AudioDeviceManager::closeAudioDevice)
         .def ("restartLastAudioDevice", &AudioDeviceManager::restartLastAudioDevice)
         .def ("addAudioCallback", &AudioDeviceManager::addAudioCallback)
@@ -186,7 +218,7 @@ void registerYupAudioDevicesBindings (py::module_& m)
         .def ("setSource", [] (AudioSourcePlayer& self, AudioSource* source)
         {
             self.setSource (source);
-        }, "newSource"_a)
+        }, "newSource"_a, py::keep_alive<1, 2>())
         .def ("getCurrentSource", [] (AudioSourcePlayer& self) -> py::object
         {
             auto* src = self.getCurrentSource();
@@ -207,7 +239,8 @@ void registerYupAudioDevicesBindings (py::module_& m)
               "readAheadBufferSize"_a = 0,
               "readAheadThread"_a = nullptr,
               "sourceSampleRateToCorrectFor"_a = 0.0,
-              "maxNumChannels"_a = 2)
+              "maxNumChannels"_a = 2,
+              py::keep_alive<1, 2>())
         .def ("setPosition", &AudioTransportSource::setPosition)
         .def ("getCurrentPosition", &AudioTransportSource::getCurrentPosition)
         .def ("getLengthInSeconds", &AudioTransportSource::getLengthInSeconds)

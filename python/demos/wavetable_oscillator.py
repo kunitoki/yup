@@ -6,8 +6,6 @@ Generates a sine wave using a wavetable oscillator.
 Pure Python version (no NumPy required). Uses AudioSource + AudioSourcePlayer
 instead of raw AudioIODeviceCallback (which can't be overridden from Python
 due to raw float** pointer marshalling limits).
-
-Port of popsicle's wavetable_oscillator.py.
 """
 
 import yup_init
@@ -70,8 +68,9 @@ class SineWaveSource(yup.AudioSource):
         print(f"Audio started: {sampleRate:.0f} Hz, block: {samplesPerBlockExpected}")
 
     def releaseResources(self):
-        print("Audio stopped")
-        self.oscillator = None
+        if self.oscillator is not None:
+            print("Audio stopped")
+            self.oscillator = None
 
     def getNextAudioBlock(self, bufferToFill):
         if self.oscillator is None:

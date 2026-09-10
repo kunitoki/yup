@@ -5,8 +5,7 @@ YUP NumPy Audio Demo
 Generates modulated white noise using NumPy for efficient DSP.
 Uses AudioSource + AudioSourcePlayer.
 
-NOTE: Requires 'numpy' (pip install numpy).
-Port of popsicle's numpy_audio.py.
+NOTE: Requires 'numpy' (uv pip install numpy).
 """
 
 import yup_init
@@ -16,7 +15,7 @@ import math
 try:
     import numpy as np
 except ImportError:
-    raise ImportError("This demo requires numpy. Install with: pip install numpy")
+    raise ImportError("This demo requires numpy (uv pip install numpy)")
 
 
 class NoiseSource(yup.AudioSource):
@@ -27,13 +26,17 @@ class NoiseSource(yup.AudioSource):
         self.sampleRate = 44100.0
         self.phase = 0.0
         self.gain = 0.1
+        self.playing = False
 
     def prepareToPlay(self, samplesPerBlockExpected: int, sampleRate: float):
         self.sampleRate = sampleRate
+        self.playing = True
         print(f"Audio started: {sampleRate:.0f} Hz")
 
     def releaseResources(self):
-        print("Audio stopped")
+        if self.playing:
+            self.playing = False
+            print("Audio stopped")
 
     def getNextAudioBlock(self, bufferToFill):
         n = bufferToFill.numSamples

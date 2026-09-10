@@ -4,10 +4,9 @@ YUP OpenCV Integration Demo
 
 Demonstrates using OpenCV for image processing and displaying
 results in a YUP window using Component painting.
-Port of popsicle's opencv_integration.py.
 
 NOTE: Requires 'opencv-python' and 'numpy'.
-    pip install opencv-python numpy
+    uv pip install opencv-python numpy
 """
 
 import yup_init
@@ -19,8 +18,7 @@ try:
     import numpy as np
 except ImportError:
     raise ImportError(
-        "This demo requires opencv-python and numpy. "
-        "Install with: pip install opencv-python numpy"
+        "This demo requires opencv-python and numpy (uv pip install opencv-python numpy)"
     )
 
 
@@ -47,9 +45,15 @@ class OpenCVComponent(yup.Component):
         cv2.circle(img, (150, 300), 45, 255, -1)
         cv2.circle(img, (350, 300), 35, 255, -1)
 
-        # Find circles with Hough transform
+        # Find circles with Hough transform. The blur is not cosmetic: HoughCircles expects a
+        # smoothed image, and on this perfectly sharp binary image it returns None with the
+        # parameters below (measured on OpenCV 5.0.0, where dropping param2 to ~20 would find
+        # only four of the five circles and place their radii a few pixels out). Blurred, it
+        # finds all five to within a pixel or two.
+        blurred = cv2.GaussianBlur(img, (5, 5), 0)
+
         circles = cv2.HoughCircles(
-            img, cv2.HOUGH_GRADIENT, 1, 20,
+            blurred, cv2.HOUGH_GRADIENT, 1, 20,
             param1=50, param2=30, minRadius=0, maxRadius=0,
         )
 
@@ -95,7 +99,7 @@ class OpenCVComponent(yup.Component):
             f"OpenCV + YUP - {len(self.circles)} circles detected",
             font,
             yup.Rectangle[float](0, h - 40, w, 30),
-            yup.Justification.centred,
+            yup.Justification.center,
         )
 
 

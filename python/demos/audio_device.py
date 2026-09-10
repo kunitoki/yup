@@ -3,7 +3,6 @@
 YUP Audio Device Info Demo
 
 Lists available audio devices and their capabilities.
-Port of popsicle's audio_device.py.
 """
 
 import yup_init

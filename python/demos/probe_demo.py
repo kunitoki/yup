@@ -3,7 +3,6 @@ import traceback as _tb
 YUP Animated Component Demo
 
 Demonstrates a self-animating component using Timer + repaint().
-Port of popsicle's animated_component.py.
 """
 import yup_init
 import yup

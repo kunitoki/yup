@@ -3,7 +3,6 @@
 YUP Slider Decibels Demo
 
 Demonstrates a slider with decibel-range mapping for audio gain control.
-Port of popsicle's slider_decibels.py.
 """
 
 import yup_init

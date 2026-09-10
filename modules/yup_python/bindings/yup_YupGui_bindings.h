@@ -33,6 +33,7 @@
 #define YUP_PYTHON_INCLUDE_PYBIND11_IOSTREAM
 #define YUP_PYTHON_INCLUDE_PYBIND11_OPERATORS
 #include "../utilities/yup_PyBind11Includes.h"
+#include "../pybind11/trampoline_self_life_support.h"
 
 #include <atomic>
 #include <cstddef>
@@ -156,7 +157,7 @@ struct PyYUPApplication : yup::YUPApplication
 // =================================================================================================
 
 template <class Base = yup::MouseListener>
-struct PyMouseListener : Base
+struct PyMouseListener : Base, pybind11::trampoline_self_life_support
 {
     using Base::Base;
 
@@ -316,7 +317,7 @@ struct PyComponent : PyMouseListener<Base>
 
     ~PyComponent()
     {
-        if (! Base::isOnDesktop())
+        if (! Base::isOnDesktop() || MessageManager::getInstanceWithoutCreating() == nullptr)
             return;
 
         pybind11::gil_scoped_release release;

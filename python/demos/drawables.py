@@ -3,7 +3,6 @@
 YUP Drawables Demo
 
 Demonstrates path drawing, color gradients, and stroke styles.
-Port of popsicle's drawables.py.
 """
 
 import yup_init

@@ -4,9 +4,8 @@ YUP PIL/Pillow Image Demo
 
 Demonstrates generating images with PIL/Pillow and displaying them
 in a YUP window using Component painting.
-Port of popsicle's pil_image.py.
 
-NOTE: Requires 'Pillow' (pip install Pillow).
+NOTE: Requires 'Pillow' (uv pip install Pillow).
 """
 
 import yup_init
@@ -17,7 +16,7 @@ try:
     from PIL import Image as PILImage, ImageDraw, ImageFilter
 except ImportError:
     raise ImportError(
-        "This demo requires Pillow. Install with: pip install Pillow"
+        "This demo requires Pillow (uv pip install Pillow)"
     )
 
 

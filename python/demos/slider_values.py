@@ -3,7 +3,6 @@
 YUP Slider Values Demo
 
 Demonstrates different slider types (linear, rotary) with value displays.
-Port of popsicle's slider_values.py.
 """
 
 import yup_init
