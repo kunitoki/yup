@@ -51,6 +51,34 @@ void registerYupGuiBindings (pybind11::module_& m);
 
 // =================================================================================================
 
+/** Reports an exception that escaped into one of the YUP dispatch loops or worker threads.
+
+    This is the single entry point behind PyYUPApplication::unhandledException, and it never
+    throws: every caller is a YUP_CATCH_EXCEPTION handler running inside a C or Objective-C frame
+    (an SDL event watch, a CFRunLoop timer, the render thread loop), where letting an exception
+    escape leaves the platform locks in an unrecoverable state.
+
+    When called from a thread other than the message thread it never acquires the GIL, and marshals
+    the reporting to the message thread instead. The message thread can be holding the GIL while it
+    joins the calling thread - tearing a window down joins the render thread - so acquiring the GIL
+    here would deadlock the two threads against each other.
+
+    That is necessary but not sufficient: the caller's catch handler still destroys the exception on
+    the throwing thread, and pybind11's deleter takes the GIL when that was the last reference. The
+    matching half of the fix is PyComponent's destructor, which releases the GIL across the join.
+
+    @param application    The application to report to, may be nullptr.
+    @param ex             The exception being reported, may be nullptr for unknown exceptions.
+    @param sourceFilename The name of the file the exception was caught in.
+    @param lineNumber     The line the exception was caught at.
+*/
+void reportUnhandledException (yup::YUPApplication* application,
+                               const std::exception* ex,
+                               const yup::String& sourceFilename,
+                               int lineNumber) noexcept;
+
+// =================================================================================================
+
 struct Options
 {
     std::atomic_bool catchExceptionsAndContinue = false;
@@ -111,71 +139,7 @@ struct PyYUPApplication : yup::YUPApplication
 
     void unhandledException (const std::exception* ex, const yup::String& sourceFilename, int lineNumber) override
     {
-        pybind11::gil_scoped_acquire gil;
-
-        const auto* pyEx = dynamic_cast<const pybind11::error_already_set*> (ex);
-        auto traceback = pybind11::module_::import ("traceback");
-
-        if (pybind11::function override_ = pybind11::get_override (static_cast<yup::YUPApplication*> (this), "unhandledException"); override_)
-        {
-            if (pyEx != nullptr)
-            {
-                auto newPyEx = pyEx->type() (pyEx->value());
-                PyException_SetTraceback (newPyEx.ptr(), pyEx->trace().ptr());
-
-                override_ (newPyEx, sourceFilename, lineNumber);
-            }
-            else
-            {
-                auto runtimeError = pybind11::module_::import (PYBIND11_BUILTINS_MODULE).attr ("RuntimeError");
-                auto newPyEx = runtimeError (ex != nullptr ? ex->what() : "unknown exception");
-                PyException_SetTraceback (newPyEx.ptr(), traceback.attr ("extract_stack")().ptr());
-
-                override_ (newPyEx, sourceFilename, lineNumber);
-            }
-
-            return;
-        }
-
-        if (pyEx != nullptr)
-        {
-            traceback.attr ("print_exception") (pyEx->type(),
-                                                pyEx->value(),
-                                                pyEx->trace() ? pyEx->trace() : pybind11::none());
-
-            if (pyEx->matches (PyExc_KeyboardInterrupt) || PyErr_CheckSignals() != 0)
-            {
-                globalOptions().caughtKeyboardInterrupt = true;
-
-                if (auto* mm = yup::MessageManager::getInstanceWithoutCreating())
-                    mm->stopDispatchLoop();
-
-                return;
-            }
-        }
-        else
-        {
-            pybind11::print (ex != nullptr ? ex->what() : "unknown exception");
-            traceback.attr ("print_stack")();
-
-            if (PyErr_CheckSignals() != 0)
-            {
-                globalOptions().caughtKeyboardInterrupt = true;
-                return;
-            }
-        }
-
-        if (globalOptions().caughtKeyboardInterrupt)
-            return;
-
-        if (globalOptions().catchExceptionsAndContinue)
-            return;
-
-        auto* mm = yup::MessageManager::getInstanceWithoutCreating();
-        if (mm == nullptr || ! mm->isThisTheMessageThread())
-            return;
-
-        mm->stopDispatchLoop();
+        reportUnhandledException (this, ex, sourceFilename, lineNumber);
     }
 
     void memoryWarningReceived() override
@@ -293,15 +257,50 @@ struct PyComponent : PyMouseListener<Base>
 {
     using PyMouseListener<Base>::PyMouseListener;
 
-    //void setTitle (const yup::String& newName) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, setName, newName);
-    //}
+    ~PyComponent()
+    {
+        if (! Base::isOnDesktop())
+            return;
 
-    //void setVisible (bool shouldBeVisible) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, setVisible, shouldBeVisible);
-    //}
+        pybind11::gil_scoped_release release;
+
+        Base::removeFromDesktop();
+    }
+
+    void setTitle (const yup::String& newName) override
+    {
+        PYBIND11_OVERRIDE (void, Base, setTitle, newName);
+    }
+
+    void setVisible (bool shouldBeVisible) override
+    {
+        PYBIND11_OVERRIDE (void, Base, setVisible, shouldBeVisible);
+    }
+
+    void attachedToNative() override
+    {
+        PYBIND11_OVERRIDE (void, Base, attachedToNative);
+    }
+
+    void detachedFromNative() override
+    {
+        PYBIND11_OVERRIDE (void, Base, detachedFromNative);
+    }
+
+    void displayChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, displayChanged);
+    }
+
+    void contentScaleChanged (float dpiScale) override
+    {
+        PYBIND11_OVERRIDE (void, Base, contentScaleChanged, dpiScale);
+    }
+
+    void transformChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, transformChanged);
+    }
 
     void visibilityChanged() override
     {
@@ -348,6 +347,11 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, enablementChanged);
     }
 
+    void safeAreaChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, safeAreaChanged);
+    }
+
     //void alphaChanged() override
     //{
     //    PYBIND11_OVERRIDE (void, Base, alphaChanged);
@@ -389,10 +393,50 @@ struct PyComponent : PyMouseListener<Base>
         Base::paintOverChildren (g);
     }
 
-    //bool keyPressed (const yup::KeyPress& key) override
-    //{
-    //    PYBIND11_OVERRIDE (bool, Base, keyPressed, key);
-    //}
+    void styleChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, styleChanged);
+    }
+
+    bool isInterestedInDrag (const DragAndDropData& data) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isInterestedInDrag, data);
+    }
+
+    bool itemsDropped (const Point<float>& position, const DragAndDropData& data) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, itemsDropped, position, data);
+    }
+
+    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragEnter, data, position);
+    }
+
+    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragMove, data, position);
+    }
+
+    void itemDragExit (const DragAndDropData& data) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragExit, data);
+    }
+
+    void keyDown (const yup::KeyPress& key, const Point<float>& position) override
+    {
+        PYBIND11_OVERRIDE (void, Base, keyDown, key, position);
+    }
+
+    void keyUp (const yup::KeyPress& key, const Point<float>& position) override
+    {
+        PYBIND11_OVERRIDE (void, Base, keyUp, key, position);
+    }
+
+    void textInput (const String& text) override
+    {
+        PYBIND11_OVERRIDE (void, Base, textInput, text);
+    }
 
     //bool keyStateChanged (bool isDown) override
     //{
@@ -471,6 +515,11 @@ struct PyDocumentWindow : PyComponent<Base>
     //{
     //    PYBIND11_OVERRIDE (void, Base, maximiseButtonPressed);
     //}
+
+    void userTriedToCloseWindow() override
+    {
+        PYBIND11_OVERRIDE (void, Base, userTriedToCloseWindow);
+    }
 };
 
 // ============================================================================================
@@ -488,23 +537,24 @@ struct PyButton : PyComponent<Base>
 
 // ============================================================================================
 
-struct PySlider : yup::Slider
+template <class Base = yup::Slider>
+struct PySlider : PyComponent<Base>
 {
-    using Slider::Slider;
+    using PyComponent<Base>::PyComponent;
 
     void valueChanged() override
     {
-        PYBIND11_OVERRIDE (void, yup::Slider, valueChanged);
+        PYBIND11_OVERRIDE (void, Base, valueChanged);
     }
 
     void minValueChanged() override
     {
-        PYBIND11_OVERRIDE (void, yup::Slider, minValueChanged);
+        PYBIND11_OVERRIDE (void, Base, minValueChanged);
     }
 
     void maxValueChanged() override
     {
-        PYBIND11_OVERRIDE (void, yup::Slider, maxValueChanged);
+        PYBIND11_OVERRIDE (void, Base, maxValueChanged);
     }
 };
 

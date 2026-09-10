@@ -88,8 +88,13 @@ lower-level `GpuDevice::createOffscreenTarget` / `beginOffscreen` /
 `endOffscreen` API.
 
 ```cpp
-static GpuCanvas::Ptr GpuCanvas::create (GpuDevice::Ptr ctx, int width, int height);
+static GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height,
+                                         std::optional<Color> clearColor = Colors::transparentBlack);
 ```
+
+Unlike `GpuTarget::create()`, which takes a `GpuDevice::Ptr`, the canvas takes the
+`GraphicsContext`: its 2D drawing path constructs a `Graphics`, and every
+`Graphics` constructor requires a graphics context.
 
 ### 2D drawing path
 

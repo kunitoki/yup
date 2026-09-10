@@ -34,6 +34,7 @@
 #endif
 
 #include <functional>
+#include <optional>
 #include <string_view>
 #include <typeinfo>
 #include <tuple>
@@ -90,52 +91,167 @@ Options& globalOptions() noexcept
 
 // ============================================================================================
 
+namespace
+{
+
+/** Reports an unhandled exception through python, returning true if it was a KeyboardInterrupt.
+
+    Must only be called on the message thread.
+*/
+bool reportToPython (YUPApplication* application,
+                     const std::exception* ex,
+                     const String& sourceFilename,
+                     int lineNumber) noexcept
+{
+    bool wasInterrupt = false;
+
+    try
+    {
+        py::gil_scoped_acquire gil;
+
+        const auto* pyEx = dynamic_cast<const py::error_already_set*> (ex);
+        auto traceback = py::module_::import ("traceback");
+
+        auto override_ = (application != nullptr)
+                           ? py::get_override (application, "unhandledException")
+                           : py::function();
+
+        if (override_)
+        {
+            if (pyEx != nullptr)
+            {
+                auto newPyEx = pyEx->type() (pyEx->value());
+                PyException_SetTraceback (newPyEx.ptr(), pyEx->trace().ptr());
+
+                override_ (newPyEx, sourceFilename, lineNumber);
+            }
+            else
+            {
+                auto runtimeError = py::module_::import (PYBIND11_BUILTINS_MODULE).attr ("RuntimeError");
+                auto newPyEx = runtimeError (ex != nullptr ? ex->what() : "unknown exception");
+                PyException_SetTraceback (newPyEx.ptr(), traceback.attr ("extract_stack")().ptr());
+
+                override_ (newPyEx, sourceFilename, lineNumber);
+            }
+        }
+        else if (pyEx != nullptr)
+        {
+            traceback.attr ("print_exception") (pyEx->type(),
+                                                pyEx->value(),
+                                                pyEx->trace() ? pyEx->trace() : py::none());
+        }
+        else
+        {
+            py::print (ex != nullptr ? ex->what() : "unknown exception");
+            traceback.attr ("print_stack")();
+        }
+
+        if (pyEx != nullptr && pyEx->matches (PyExc_KeyboardInterrupt))
+        {
+            wasInterrupt = true;
+            globalOptions().caughtKeyboardInterrupt = true;
+        }
+    }
+    catch (...)
+    {
+        Logger::writeToLog ("Failed to report an unhandled exception at " + sourceFilename + ":" + String (lineNumber));
+    }
+
+    return wasInterrupt;
+}
+
+} // namespace
+
+void reportUnhandledException (YUPApplication* application,
+                               const std::exception* ex,
+                               const String& sourceFilename,
+                               int lineNumber) noexcept
+{
+    try
+    {
+        auto* mm = MessageManager::getInstanceWithoutCreating();
+        const bool shouldStop = ! globalOptions().catchExceptionsAndContinue;
+
+        if (mm != nullptr && mm->isThisTheMessageThread())
+        {
+            const bool wasInterrupt = reportToPython (application, ex, sourceFilename, lineNumber);
+
+            if (shouldStop || wasInterrupt)
+                mm->stopDispatchLoop();
+
+            return;
+        }
+
+        bool posted = false;
+
+        if (mm != nullptr)
+        {
+            if (const auto* pyEx = dynamic_cast<const py::error_already_set*> (ex))
+            {
+                posted = MessageManager::callAsync ([application, e = *pyEx, sourceFilename, lineNumber, shouldStop]
+                {
+                    const bool wasInterrupt = reportToPython (application, std::addressof (e), sourceFilename, lineNumber);
+
+                    if (! shouldStop && ! wasInterrupt)
+                        return;
+
+                    if (auto* messageManager = MessageManager::getInstanceWithoutCreating())
+                        messageManager->stopDispatchLoop();
+                });
+            }
+        }
+
+        if (! posted)
+        {
+            const auto description = (dynamic_cast<const py::error_already_set*> (ex) != nullptr)
+                                       ? String ("python exception, traceback unavailable")
+                                       : String (ex != nullptr ? ex->what() : "unknown exception");
+
+            Logger::writeToLog ("Unhandled exception at " + sourceFilename + ":" + String (lineNumber) + " - " + description);
+
+            if (shouldStop && mm != nullptr)
+                mm->stopDispatchLoop();
+        }
+    }
+    catch (...)
+    {
+        jassertfalse;
+    }
+}
+
+// ============================================================================================
+
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
 namespace
 {
+
+/** Polls python's signal handlers so that ctrl+c interrupts the message loop.
+
+    The raised error is kept here and re-raised by the caller once the application has shut down:
+    throwing it from the callback would unwind through the platform timer's C frame.
+*/
 struct PythonSignalCheckTimer final : public Timer
 {
     void timerCallback() override
     {
         py::gil_scoped_acquire gil;
 
-        if (PyErr_CheckSignals() != 0)
-            throw py::error_already_set();
+        if (PyErr_CheckSignals() == 0)
+            return;
+
+        pendingInterrupt.emplace(); // fetches and clears the error the signal handler raised
+        globalOptions().caughtKeyboardInterrupt = true;
+
+        stopTimer();
+
+        if (auto* mm = MessageManager::getInstanceWithoutCreating())
+            mm->stopDispatchLoop();
     }
+
+    /** The error a python signal handler raised, if any. Only read it with the GIL held. */
+    std::optional<py::error_already_set> pendingInterrupt;
 };
 
-void runApplication (YUPApplicationBase* application, int milliseconds)
-{
-    try
-    {
-        py::gil_scoped_release release;
-
-        if (! application->initialiseApp())
-            return;
-
-        PythonSignalCheckTimer signalCheckTimer;
-        signalCheckTimer.startTimer (jmax (1, milliseconds));
-
-        MessageManager::getInstance()->runDispatchLoop();
-    }
-    catch (const py::error_already_set& e)
-    {
-        if (globalOptions().caughtKeyboardInterrupt)
-            return;
-
-        if (globalOptions().catchExceptionsAndContinue)
-        {
-            Helpers::printPythonException (e);
-        }
-        else
-        {
-            throw e;
-        }
-    }
-
-    if (! globalOptions().caughtKeyboardInterrupt && PyErr_CheckSignals() != 0)
-        throw py::error_already_set();
-}
 } // namespace
 #endif
 
@@ -223,11 +339,12 @@ void registerYupGuiBindings (py::module_& m)
         .def ("withRenderContinuous", &ComponentNative::Options::withRenderContinuous)
         .def ("withAllowedHighDensityDisplay", &ComponentNative::Options::withAllowedHighDensityDisplay)
         .def ("withMouseCapture", &ComponentNative::Options::withMouseCapture)
-        //.def ("withGraphicsApi", &ComponentNative::Options::withGraphicsApi)
+        .def ("withGraphicsApi", &ComponentNative::Options::withGraphicsApi)
         .def ("withFramerateRedraw", &ComponentNative::Options::withFramerateRedraw)
         .def ("withClearColor", &ComponentNative::Options::withClearColor)
         .def ("withDoubleClickTime", &ComponentNative::Options::withDoubleClickTime)
         .def ("withUpdateOnlyFocused", &ComponentNative::Options::withUpdateOnlyFocused)
+        .def ("withVSync", &ComponentNative::Options::withVSync)
     ;
 
     classComponentNative
@@ -365,8 +482,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getNativeHandle", &Component::getNativeHandle, py::return_value_policy::reference_internal)
         .def ("getNativeComponent", py::overload_cast<>(&Component::getNativeComponent), py::return_value_policy::reference_internal)
         .def ("isOnDesktop", &Component::isOnDesktop)
-        .def ("addToDesktop", &Component::addToDesktop, "nativeOptions"_a, "parent"_a = nullptr)
-        .def ("removeFromDesktop", &Component::removeFromDesktop)
+        .def ("addToDesktop", &Component::addToDesktop, "nativeOptions"_a, "parent"_a = nullptr, py::call_guard<py::gil_scoped_release>())
+        .def ("removeFromDesktop", &Component::removeFromDesktop, py::call_guard<py::gil_scoped_release>())
         .def ("userTriedToCloseWindow", &Component::userTriedToCloseWindow)
 
         // Z-order
@@ -818,7 +935,7 @@ void registerYupGuiBindings (py::module_& m)
         .export_values();
 
     // Make SliderType accessible as Slider.SliderType via the class
-    py::class_<Slider, Component, PySlider> (m, "Slider")
+    py::class_<Slider, Component, PySlider<>> (m, "Slider")
         .def (py::init<Slider::SliderType, StringRef>(),
               "sliderType"_a, "componentID"_a = StringRef())
         .def (py::init<Slider::SliderType>(),
@@ -866,7 +983,9 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::Label
 
-    py::class_<Label, Component> (m, "Label")
+    py::class_<Label, Component> labelClass (m, "Label");
+
+    labelClass
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("getText", &Label::getText)
         .def ("setText", &Label::setText,
@@ -880,13 +999,27 @@ void registerYupGuiBindings (py::module_& m)
             return result;
         });
 
+    // The nested C++ Style struct, so Python can name the same identifiers the widget's theme
+    // style reads, e.g. label.setColor (Label.Style.backgroundColorId, color). The struct only
+    // holds static members, so it is intentionally not constructible from Python.
+    py::class_<Label::Style> labelStyle (labelClass, "Style");
+    labelStyle.attr ("textFillColorId") = Label::Style::textFillColorId;
+    labelStyle.attr ("textStrokeColorId") = Label::Style::textStrokeColorId;
+    labelStyle.attr ("backgroundColorId") = Label::Style::backgroundColorId;
+    labelStyle.attr ("outlineColorId") = Label::Style::outlineColorId;
+    labelStyle.attr ("textHeightProportionMetricId") = Label::Style::textHeightProportionMetricId;
+
     // =================================================================================================
 
 #if ! YUP_PYTHON_EMBEDDED_INTERPRETER
     m.def ("START_YUP_APPLICATION", [] (py::handle applicationType, bool catchExceptionsAndContinue)
     {
-        globalOptions().catchExceptionsAndContinue = catchExceptionsAndContinue;
-        globalOptions().caughtKeyboardInterrupt = false;
+        if (! applicationType)
+            throw py::value_error ("Argument must be a YUPApplication subclass");
+
+        auto& options = globalOptions();
+        options.catchExceptionsAndContinue = catchExceptionsAndContinue;
+        options.caughtKeyboardInterrupt = false;
 
 #if YUP_MAC
         Process::setDockIconVisible (true);
@@ -894,25 +1027,7 @@ void registerYupGuiBindings (py::module_& m)
 
         py::scoped_ostream_redirect output;
 
-        if (! applicationType)
-            throw py::value_error ("Argument must be a YUPApplication subclass");
-
-        YUPApplicationBase* application = nullptr;
-
         auto sys = py::module_::import ("sys");
-        auto systemExit = [sys, &application]
-        {
-            int returnValue = 255;
-
-            {
-                py::gil_scoped_release release;
-
-                if (application != nullptr)
-                    returnValue = application->shutdownApp();
-            }
-
-            sys.attr ("exit") (returnValue);
-        };
 
 #if ! YUP_WINDOWS
         StringArray arguments;
@@ -927,13 +1042,50 @@ void registerYupGuiBindings (py::module_& m)
         yup_argc = argv.size();
 #endif
 
-        auto pyApplication = applicationType(); // TODO - error checking (python)
+        auto pyApplication = applicationType();
 
-        application = pyApplication.cast<YUPApplication*>();
-        if (application != nullptr)
-            runApplication (application, globalOptions().messageManagerGranularityMilliseconds);
+        auto* application = pyApplication.cast<YUPApplication*>();
+        if (application == nullptr)
+            throw py::value_error ("Argument must be a YUPApplication subclass");
 
-        systemExit();
+        int returnValue = 255;
+        std::optional<py::error_already_set> pendingInterrupt;
+
+        {
+            PythonSignalCheckTimer signalCheckTimer;
+
+            {
+                py::gil_scoped_release release;
+
+                YUP_TRY
+                {
+                    if (application->initialiseApp())
+                    {
+                        signalCheckTimer.startTimer (jmax (1, options.messageManagerGranularityMilliseconds.load()));
+
+                        MessageManager::getInstance()->runDispatchLoop();
+                    }
+                }
+                YUP_CATCH_EXCEPTION
+
+                signalCheckTimer.stopTimer();
+
+                returnValue = application->shutdownApp();
+            }
+
+            pendingInterrupt = std::move (signalCheckTimer.pendingInterrupt);
+        }
+
+        if (pendingInterrupt.has_value())
+            throw *pendingInterrupt;
+
+        if (options.caughtKeyboardInterrupt)
+        {
+            PyErr_SetNone (PyExc_KeyboardInterrupt);
+            throw py::error_already_set();
+        }
+
+        sys.attr ("exit") (returnValue);
     }, "applicationType"_a, "catchExceptionsAndContinue"_a = false);
 
     // =================================================================================================

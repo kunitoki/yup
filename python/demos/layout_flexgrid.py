@@ -21,35 +21,40 @@ class LayoutFlexGridComponent(yup.Component):
         # Child components
         self.header = yup.Label("Header")
         self.header.setOpaque(True)
-        self.header.setColor(yup.Label.backgroundColorId, yup.Colors.darkblue)
+        self.header.setColor(yup.Label.Style.backgroundColorId, yup.Colors.darkblue)
+        self.header.setColor(yup.Label.Style.textFillColorId, yup.Colors.white)
         self.header.setText("FlexBox & Grid Layout Demo",
                             yup.NotificationType.dontSendNotification)
         self.addAndMakeVisible(self.header)
 
         self.sidebarLeft = yup.Label("Sidebar Left")
         self.sidebarLeft.setOpaque(True)
-        self.sidebarLeft.setColor(yup.Label.backgroundColorId, yup.Colors.darkgreen)
+        self.sidebarLeft.setColor(yup.Label.Style.backgroundColorId, yup.Colors.darkgreen)
+        self.sidebarLeft.setColor(yup.Label.Style.textFillColorId, yup.Colors.white)
         self.sidebarLeft.setText("Sidebar\nLeft",
                                  yup.NotificationType.dontSendNotification)
         self.addAndMakeVisible(self.sidebarLeft)
 
         self.sidebarRight = yup.Label("Sidebar Right")
         self.sidebarRight.setOpaque(True)
-        self.sidebarRight.setColor(yup.Label.backgroundColorId, yup.Colors.darkgreen)
+        self.sidebarRight.setColor(yup.Label.Style.backgroundColorId, yup.Colors.darkgreen)
+        self.sidebarRight.setColor(yup.Label.Style.textFillColorId, yup.Colors.white)
         self.sidebarRight.setText("Sidebar\nRight",
                                   yup.NotificationType.dontSendNotification)
         self.addAndMakeVisible(self.sidebarRight)
 
         self.content = yup.Label("Content")
         self.content.setOpaque(True)
-        self.content.setColor(yup.Label.backgroundColorId, yup.Colors.darkgrey)
+        self.content.setColor(yup.Label.Style.backgroundColorId, yup.Colors.darkgray)
+        self.content.setColor(yup.Label.Style.textFillColorId, yup.Colors.white)
         self.content.setText("Main Content Area",
                              yup.NotificationType.dontSendNotification)
         self.addAndMakeVisible(self.content)
 
         self.footer = yup.Label("Footer")
         self.footer.setOpaque(True)
-        self.footer.setColor(yup.Label.backgroundColorId, yup.Colors.darkred)
+        self.footer.setColor(yup.Label.Style.backgroundColorId, yup.Colors.darkred)
+        self.footer.setColor(yup.Label.Style.textFillColorId, yup.Colors.white)
         self.footer.setText("Footer - Status Bar",
                             yup.NotificationType.dontSendNotification)
         self.addAndMakeVisible(self.footer)

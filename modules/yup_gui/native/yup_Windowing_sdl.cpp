@@ -2547,10 +2547,14 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
     if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
     {
-        if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
-            nativeComponent->handleEvent (event);
-        else
-            YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+        YUP_TRY
+        {
+            if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                nativeComponent->handleEvent (event);
+            else
+                YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+        }
+        YUP_CATCH_EXCEPTION
     }
 
     return true;

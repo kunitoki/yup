@@ -73,62 +73,27 @@ pybind11::enum_<E> makeArithmeticEnum (pybind11::object& parent, const char* nam
 
     pybind11::enum_<E> classEnum (parent, name);
 
+    // clang-format off
     classEnum
-        .def ("__and__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) & static_cast<T> (rhs));
-    }).def ("__eq__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) == static_cast<T> (rhs));
-    }).def ("__eq__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) == rhs);
-    }).def ("__ge__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) >= static_cast<T> (rhs));
-    }).def ("__ge__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) >= rhs);
-    }).def ("__gt__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) > static_cast<T> (rhs));
-    }).def ("__gt__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) > rhs);
-    }).def ("__hash__", [] (E lhs)
-    {
-        return static_cast<T> (lhs);
-    }).def ("__int__", [] (E lhs)
-    {
-        return static_cast<T> (lhs);
-    }).def ("__invert__", [] (E lhs)
-    {
-        return ~static_cast<T> (lhs);
-    }).def ("__le__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) <= static_cast<T> (rhs));
-    }).def ("__le__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) <= rhs);
-    }).def ("__lt__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) < static_cast<T> (rhs));
-    }).def ("__lt__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) < rhs);
-    }).def ("__ne__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) != static_cast<T> (rhs));
-    }).def ("__ne__", [] (E lhs, T rhs)
-    {
-        return (static_cast<T> (lhs) != rhs);
-    }).def ("__or__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) | static_cast<T> (rhs));
-    }).def ("__xor__", [] (E lhs, E rhs)
-    {
-        return (static_cast<T> (lhs) ^ static_cast<T> (rhs));
-    });
+        .def ("__and__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) & static_cast<T> (rhs)); })
+        .def ("__eq__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) == static_cast<T> (rhs)); })
+        .def ("__eq__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) == rhs); })
+        .def ("__ge__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) >= static_cast<T> (rhs)); })
+        .def ("__ge__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) >= rhs); })
+        .def ("__gt__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) > static_cast<T> (rhs)); })
+        .def ("__gt__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) > rhs); })
+        .def ("__hash__", [] (E lhs) { return static_cast<T> (lhs); })
+        .def ("__int__", [] (E lhs) { return static_cast<T> (lhs); })
+        .def ("__invert__", [] (E lhs) { return ~static_cast<T> (lhs); })
+        .def ("__le__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) <= static_cast<T> (rhs)); })
+        .def ("__le__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) <= rhs); })
+        .def ("__lt__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) < static_cast<T> (rhs)); })
+        .def ("__lt__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) < rhs); })
+        .def ("__ne__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) != static_cast<T> (rhs)); })
+        .def ("__ne__", [] (E lhs, T rhs) { return (static_cast<T> (lhs) != rhs); })
+        .def ("__or__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) | static_cast<T> (rhs)); })
+        .def ("__xor__", [] (E lhs, E rhs) { return (static_cast<T> (lhs) ^ static_cast<T> (rhs)); });
+    // clang-format on
 
     return classEnum;
 }

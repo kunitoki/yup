@@ -82,10 +82,6 @@ class EffectsComponent(yup.Component):
         self._startTime = time.perf_counter()
 
     def refreshDisplay(self, lastFrameTimeSeconds: float):
-        # The per-frame hook, called on the render thread immediately before
-        # painting. Driving repaints from a yup.Timer instead would call
-        # repaint() from the message thread while the render thread is inside
-        # paint(), which trips Component's isRepainting assertion.
         self.repaint()
 
     # ------------------------------------------------------------------
@@ -95,7 +91,7 @@ class EffectsComponent(yup.Component):
         self._didInit = True
 
         self._canvas2D = yup.GpuCanvas.create(self._ctx, self.SIZE, self.SIZE)
-        self._target = yup.GpuTarget.create(self._ctx, self.SIZE, self.SIZE)
+        self._target = yup.GpuTarget.create(self._device, self.SIZE, self.SIZE)
 
         if self._canvas2D is None or self._target is None:
             return
