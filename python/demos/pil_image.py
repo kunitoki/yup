@@ -115,7 +115,7 @@ class PILComponent(yup.Component):
             "PIL/Pillow + YUP",
             font,
             yup.Rectangle[float](0, 10, w, 30),
-            yup.Justification.centred,
+            yup.Justification.center,
         )
 
 
