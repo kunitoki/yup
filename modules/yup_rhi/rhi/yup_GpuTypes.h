@@ -45,25 +45,23 @@ enum class GpuShaderLanguage : uint8_t
 };
 
 //==============================================================================
-/** Views a NUL-terminated shader source string as the byte span GpuShaderSource
+/** Copies a NUL-terminated shader source string into the byte blob GpuShaderSource
     expects, excluding the terminating NUL.
-
-    @warning The span borrows @p text, which must outlive every use of it. RSTB
-             binding-map blobs are not NUL-terminated, which is why the shader
-             blob fields are sized spans rather than C strings.
 */
-inline Span<const uint8> gpuShaderSourceBytes (const char* text) noexcept
+inline std::vector<uint8> gpuShaderSourceBytes (const char* text)
 {
-    return { reinterpret_cast<const uint8*> (text), text != nullptr ? std::strlen (text) : 0u };
+    if (text == nullptr)
+        return {};
+
+    auto* bytes = reinterpret_cast<const uint8*> (text);
+    return std::vector<uint8> (bytes, bytes + std::strlen (text));
 }
 
-/** Views a String's UTF-8 bytes as the byte span GpuShaderSource expects.
-
-    @warning The span borrows @p text, which must outlive every use of it.
-*/
-inline Span<const uint8> gpuShaderSourceBytes (const String& text) noexcept
+/** Copies a String's UTF-8 bytes into the byte blob GpuShaderSource expects. */
+inline std::vector<uint8> gpuShaderSourceBytes (const String& text)
 {
-    return { reinterpret_cast<const uint8*> (text.toRawUTF8()), text.getNumBytesAsUTF8() };
+    auto* bytes = reinterpret_cast<const uint8*> (text.toRawUTF8());
+    return std::vector<uint8> (bytes, bytes + text.getNumBytesAsUTF8());
 }
 
 //==============================================================================
@@ -73,11 +71,9 @@ inline Span<const uint8> gpuShaderSourceBytes (const String& text) noexcept
     stages. Compute shaders may omit it when using the native compute path
     (GpuComputePipeline).
 
-    @warning The three blob fields are non-owning views. Every backend consumes
-             them synchronously while compiling the shader module, so they only
-             have to stay alive for the duration of the compile call - but they
-             do have to stay alive for all of it. Use gpuShaderSourceBytes() to
-             build them from source text.
+    Each blob field owns its data, so a descriptor built from temporaries stays
+    valid for as long as the descriptor does. Use gpuShaderSourceBytes() to
+    build them from source text.
 
     @see GpuPipeline, GpuComputePipeline, gpuShaderSourceBytes
 */
@@ -88,20 +84,20 @@ struct GpuShaderSource
     /** Shading language of the source code. */
     GpuShaderLanguage language = GpuShaderLanguage::wgsl;
 
-    /** Shader source code bytes (borrowed). */
-    Span<const uint8> code;
+    /** Shader source code bytes. */
+    std::vector<uint8> code;
 
-    /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines, borrowed). */
-    Span<const uint8> bindingMap;
+    /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines). */
+    std::vector<uint8> bindingMap;
 
-    /** Optional GL program-link fixup blob (GLSL/ESSL only, borrowed).
+    /** Optional GL program-link fixup blob (GLSL/ESSL only).
 
         On the OpenGL / OpenGL ES backend, UBO block bindings and sampler
         texture units are assigned by name after linking rather than via
         @c layout(binding=) qualifiers (which GLES 3.00 / WebGL2 cannot use).
         This blob carries the name→slot table; it is ignored by every non-GL
         backend. Produced by makeGLFixupBlob(). */
-    Span<const uint8> glFixup;
+    std::vector<uint8> glFixup;
 
     /** Override the stage entry-point name. Empty → "vs_main" / "fs_main". */
     String entryPoint;
@@ -355,6 +351,13 @@ enum class GpuStoreOp : uint8_t
 {
     store,   ///< Write the results back to the attachment.
     discard, ///< Throw the results away (e.g. a transient depth buffer).
+};
+
+/** Dithering applied to reduce banding in gradients. Mirrors rive::gpu::DitherMode. */
+enum class GpuDitherMode : uint8_t
+{
+    none,                     ///< No dithering.
+    interleavedGradientNoise, ///< Interleaved gradient noise dithering.
 };
 
 /** Texture minification / magnification / mipmap filter. */
@@ -714,6 +717,40 @@ struct GpuColor
 
     /** Opaque white (1, 1, 1, 1). */
     static constexpr GpuColor white() { return { 1.0f, 1.0f, 1.0f, 1.0f }; }
+};
+
+//==============================================================================
+/** Describes the GPU frame to open for offscreen 2D rendering.
+
+    Mirrors rive::gpu::RenderContext::FrameDescriptor field-for-field, so it can
+    reach GpuDevice::beginOffscreen() and GpuCanvas::beginDraw() without a Python
+    or public-API dependency on the Rive renderer's own type.
+
+    @c synthesizedFailureType is deliberately omitted: it is gated behind
+    @c WITH_RIVE_TOOLS in Rive's header, and that macro is never defined
+    anywhere in this repo's CMake, so there is nothing to mirror.
+*/
+struct GpuFrameDescriptor
+{
+    uint32_t renderTargetWidth = 0;  ///< Ignored by GpuCanvas::beginDraw(), which fills it from the canvas.
+    uint32_t renderTargetHeight = 0; ///< Ignored by GpuCanvas::beginDraw(), which fills it from the canvas.
+
+    GpuLoadOp loadOp = GpuLoadOp::clear; ///< Attachment load behaviour at the start of the frame.
+    GpuColor clearColor = GpuColor::transparentBlack(); ///< Clear color used when loadOp is clear.
+
+    uint32_t msaaSampleCount = 0; ///< If nonzero, the number of MSAA samples to use; forces msaa mode.
+    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or msaa instead of rasterOrdering.
+    GpuDitherMode ditherMode = GpuDitherMode::interleavedGradientNoise; ///< Dithering applied to gradients.
+
+    // Vulkan-only virtual tiling; inert on every current YUP backend.
+    uint32_t virtualTileWidth = 0;
+    uint32_t virtualTileHeight = 0;
+
+    // Testing flags.
+    bool wireframe = false;
+    bool fillsDisabled = false;
+    bool strokesDisabled = false;
+    bool clockwiseFillOverride = false; ///< Override all paths' fill rules to emulate clockwiseAtomic mode.
 };
 
 //==============================================================================

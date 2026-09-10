@@ -33,7 +33,7 @@ GpuShaderSource makeStubShader (const char* code, const uint8_t* map, size_t map
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
     src.code = gpuShaderSourceBytes (code);
-    src.bindingMap = { map, mapSize };
+    src.bindingMap = std::vector<uint8> (map, map + mapSize);
     return src;
 }
 
@@ -278,7 +278,7 @@ TEST_F (GpuPipelineTests, CompileWithEmptyVertexCodeFailsFastWhenOreAvailable)
     const uint8_t map[] = { 2, 1 };
     GpuShaderSource vs;
     vs.language = GpuShaderLanguage::glsl;
-    vs.bindingMap = map;
+    vs.bindingMap = std::vector<uint8> (map, map + sizeof (map));
 
     auto fs = makeStubShader ("void main() {}", map, sizeof (map));
 

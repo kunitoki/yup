@@ -298,7 +298,7 @@ public:
         @param target The OffscreenTarget to render into.
         @param frameDesc The frame descriptor that contains frame-specific data.
     */
-    virtual void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) = 0;
+    virtual void beginOffscreen (OffscreenTarget& target, const GpuFrameDescriptor& frameDesc) = 0;
 
     /** Flushes GPU commands into the offscreen target.
     

@@ -58,9 +58,6 @@ public:
         @returns A compiled compute pipeline, or a failure description.
 
         @warning Requires ctx->isComputeAvailable().
-        @warning GpuShaderSource::code is a non-owning view. It is consumed within
-                 this call, but it must stay alive for all of it - build it with
-                 gpuShaderSourceBytes() from storage that outlives the call.
     */
     static ResultValue<Ptr> compile (GpuDevice::Ptr ctx,
                                      const GpuShaderSource& source,

@@ -2081,7 +2081,11 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getHeight", &GpuCanvas::getHeight)
         .def ("asTexture", &GpuCanvas::asTexture)
         .def ("asImage", &GpuCanvas::asImage)
-        .def ("beginDraw", &GpuCanvas::beginDraw, py::return_value_policy::reference_internal)
+        .def ("beginDraw", [] (GpuCanvas& self) -> Graphics& { return self.beginDraw(); },
+              py::return_value_policy::reference_internal)
+        .def ("beginDraw", [] (GpuCanvas& self, const GpuFrameDescriptor& frameDesc) -> Graphics&
+              { return self.beginDraw (frameDesc); },
+              py::return_value_policy::reference_internal, "frameDesc"_a)
         .def ("commit", &GpuCanvas::commit)
         .def ("getTarget", &GpuCanvas::getTarget)
         .def ("__repr__", [] (const GpuCanvas& self)

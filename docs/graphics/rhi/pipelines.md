@@ -94,10 +94,9 @@ struct GpuShaderSource
 `GpuShaderLanguage` values: `wgsl` (WebGPU), `glsl` (GLES 3.0+, GL path only),
 `msl` (Metal only), `hlsl` (Direct3D only).
 
-The three blob fields are **non-owning views**. Every backend consumes them
-synchronously while compiling the shader module, so they only have to stay alive
-for the duration of the `compile()` call - but they do have to stay alive for all
-of it. `gpuShaderSourceBytes()` builds one from source text:
+The three blob fields **own their data** (`std::vector<uint8>`), so a descriptor
+built from temporaries stays valid for as long as the descriptor does.
+`gpuShaderSourceBytes()` builds one from source text:
 
 ```cpp
 GpuShaderSource vs;
@@ -106,9 +105,9 @@ vs.code       = gpuShaderSourceBytes (vertexSource);   // const char* or String
 vs.bindingMap = bindingMapBlob;                        // std::vector<uint8_t>
 ```
 
-Because they borrow, `GpuShaderSource` is not exposed to Python - a settable
-attribute there would store a pointer into a temporary. Scripts compile through
-`compileFromGlsl` instead; see [GPU rendering from Python](../../scripting/python-rhi.md).
+`GpuShaderSource` is exposed to Python too, with `code` / `bindingMap` /
+`glFixup` as bytes-in, bytes-out properties; see
+[GPU rendering from Python](../../scripting/python-rhi.md).
 
 ### Binding maps
 

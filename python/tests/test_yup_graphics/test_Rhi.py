@@ -148,15 +148,43 @@ def test_gpu_platform_enum():
 # GPU Config Structs
 # ==============================================================================
 
-def test_gpu_shader_source_is_not_exposed():
-    # Its code/bindingMap/glFixup fields are borrowed views, so a settable Python
-    # attribute would store a pointer into a temporary. Compile through
-    # GpuPipeline.compileFromGlsl instead.
-    #
-    # The positive assertion is deliberate: on its own, the absence check would also
-    # pass if the RHI bindings had never been registered at all.
-    assert hasattr(yup, "GpuVertexBufferLayout")
-    assert not hasattr(yup, "GpuShaderSource")
+def test_gpu_shader_source_round_trips_blob_fields():
+    # code/bindingMap/glFixup own their data (std::vector<uint8>), so they are
+    # exposed as bytes-in, bytes-out properties accepting any buffer-protocol object.
+    src = yup.GpuShaderSource()
+    src.language = yup.GpuShaderLanguage.glsl
+    src.code = b"void main() {}"
+    src.bindingMap = bytearray([2, 1])
+    src.glFixup = memoryview(b"\x03\x04")
+    src.entryPoint = "main"
+
+    assert src.language == yup.GpuShaderLanguage.glsl
+    assert bytes(src.code) == b"void main() {}"
+    assert bytes(src.bindingMap) == b"\x02\x01"
+    assert bytes(src.glFixup) == b"\x03\x04"
+    assert src.entryPoint == "main"
+
+
+def test_gpu_dither_mode_enum():
+    assert yup.GpuDitherMode.none is not None
+    assert yup.GpuDitherMode.interleavedGradientNoise is not None
+
+
+def test_gpu_frame_descriptor_defaults():
+    desc = yup.GpuFrameDescriptor()
+    assert desc.renderTargetWidth == 0
+    assert desc.renderTargetHeight == 0
+    assert desc.loadOp == yup.GpuLoadOp.clear
+    assert desc.clearColor == yup.GpuColor.transparentBlack()
+    assert desc.msaaSampleCount == 0
+    assert desc.disableRasterOrdering is False
+    assert desc.ditherMode == yup.GpuDitherMode.interleavedGradientNoise
+    assert desc.virtualTileWidth == 0
+    assert desc.virtualTileHeight == 0
+    assert desc.wireframe is False
+    assert desc.fillsDisabled is False
+    assert desc.strokesDisabled is False
+    assert desc.clockwiseFillOverride is False
 
 
 def test_gpu_vertex_attribute_construction():
@@ -473,6 +501,33 @@ def test_gpu_pipeline_compile_from_glsl_raises_on_bad_source(headless_device):
         yup.GpuPipeline.compileFromGlsl(
             headless_device, "not glsl at all", "nor is this", yup.GpuPipelineOptions()
         )
+
+
+def test_gpu_pipeline_compile_raises_on_headless_device(headless_device):
+    # The raw compile() overload takes a hand-built GpuShaderSource. Headless has no
+    # GPU context to compile against, so this must raise rather than crash or hang.
+    if headless_device is None:
+        pytest.skip("no headless GPU device available")
+
+    source = yup.GpuShaderSource()
+    source.language = yup.GpuShaderLanguage.glsl
+    source.code = b"void main() {}"
+    source.bindingMap = bytes([2, 1])
+
+    with pytest.raises(RuntimeError):
+        yup.GpuPipeline.compile(headless_device, source, source, yup.GpuPipelineOptions())
+
+
+def test_gpu_compute_pipeline_compile_raises_on_headless_device(headless_device):
+    if headless_device is None:
+        pytest.skip("no headless GPU device available")
+
+    source = yup.GpuShaderSource()
+    source.language = yup.GpuShaderLanguage.glsl
+    source.code = b"void main() {}"
+
+    with pytest.raises(RuntimeError):
+        yup.GpuComputePipeline.compile(headless_device, source, yup.GpuWorkgroupSize(8, 1, 1))
 
 
 def test_gpu_buffer_create_accepts_any_buffer_protocol_object(headless_device):

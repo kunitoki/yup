@@ -256,6 +256,10 @@ void registerYupRhiBindings (py::module_& m)
         .value ("store", GpuStoreOp::store)
         .value ("discard", GpuStoreOp::discard);
 
+    py::enum_<GpuDitherMode> (m, "GpuDitherMode")
+        .value ("none", GpuDitherMode::none)
+        .value ("interleavedGradientNoise", GpuDitherMode::interleavedGradientNoise);
+
     // ============================================================================================ GPU config structs
 
     py::class_<GpuColor> (m, "GpuColor")
@@ -464,6 +468,71 @@ void registerYupRhiBindings (py::module_& m)
                        })
         .def_readwrite ("clearColor", &GpuRenderOptions::clearColor);
 
+    py::class_<GpuFrameDescriptor> (m, "GpuFrameDescriptor")
+        .def (py::init<>())
+        .def_readwrite ("renderTargetWidth", &GpuFrameDescriptor::renderTargetWidth)
+        .def_readwrite ("renderTargetHeight", &GpuFrameDescriptor::renderTargetHeight)
+        .def_readwrite ("loadOp", &GpuFrameDescriptor::loadOp)
+        .def_readwrite ("clearColor", &GpuFrameDescriptor::clearColor)
+        .def_readwrite ("msaaSampleCount", &GpuFrameDescriptor::msaaSampleCount)
+        .def_readwrite ("disableRasterOrdering", &GpuFrameDescriptor::disableRasterOrdering)
+        .def_readwrite ("ditherMode", &GpuFrameDescriptor::ditherMode)
+        .def_readwrite ("virtualTileWidth", &GpuFrameDescriptor::virtualTileWidth)
+        .def_readwrite ("virtualTileHeight", &GpuFrameDescriptor::virtualTileHeight)
+        .def_readwrite ("wireframe", &GpuFrameDescriptor::wireframe)
+        .def_readwrite ("fillsDisabled", &GpuFrameDescriptor::fillsDisabled)
+        .def_readwrite ("strokesDisabled", &GpuFrameDescriptor::strokesDisabled)
+        .def_readwrite ("clockwiseFillOverride", &GpuFrameDescriptor::clockwiseFillOverride)
+        .def ("__repr__", [] (const GpuFrameDescriptor& self)
+        {
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << (int) self.renderTargetWidth << ", " << (int) self.renderTargetHeight << ")";
+            return result;
+        });
+
+    // The code/bindingMap/glFixup blobs own their data, so they are exposed as bytes-in,
+    // bytes-out properties rather than def_readwrite (which would default to a list-of-ints
+    // caster for std::vector<uint8>).
+    py::class_<GpuShaderSource> (m, "GpuShaderSource")
+        .def (py::init<>())
+        .def_readwrite ("language", &GpuShaderSource::language)
+        .def_property ("code",
+                       [] (const GpuShaderSource& self)
+                       {
+                           return py::bytes (reinterpret_cast<const char*> (self.code.data()), self.code.size());
+                       },
+                       [] (GpuShaderSource& self, py::buffer data)
+                       {
+                           auto info = data.request();
+                           auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
+                           self.code.assign (bytePtr, bytePtr + byteSizeOf (info));
+                       })
+        .def_property ("bindingMap",
+                       [] (const GpuShaderSource& self)
+                       {
+                           return py::bytes (reinterpret_cast<const char*> (self.bindingMap.data()), self.bindingMap.size());
+                       },
+                       [] (GpuShaderSource& self, py::buffer data)
+                       {
+                           auto info = data.request();
+                           auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
+                           self.bindingMap.assign (bytePtr, bytePtr + byteSizeOf (info));
+                       })
+        .def_property ("glFixup",
+                       [] (const GpuShaderSource& self)
+                       {
+                           return py::bytes (reinterpret_cast<const char*> (self.glFixup.data()), self.glFixup.size());
+                       },
+                       [] (GpuShaderSource& self, py::buffer data)
+                       {
+                           auto info = data.request();
+                           auto* bytePtr = reinterpret_cast<const uint8*> (info.ptr);
+                           self.glFixup.assign (bytePtr, bytePtr + byteSizeOf (info));
+                       })
+        .def_readwrite ("entryPoint", &GpuShaderSource::entryPoint);
+
     // ============================================================================================ yup::GpuDevice
 
     auto gpuDevice = py::class_<GpuDevice, ReferenceCountedObjectPtr<GpuDevice>>(m, "GpuDevice");
@@ -570,6 +639,15 @@ void registerYupRhiBindings (py::module_& m)
              "Compiles a pipeline from GLSL 450 sources. Raises RuntimeError with the compiler\n"
              "diagnostics when compilation fails.")
 #endif
+        .def_static ("compile", [] (GpuDevice::Ptr device,
+                                    const GpuShaderSource& vertexShader,
+                                    const GpuShaderSource& fragmentShader,
+                                    const GpuPipelineOptions& options)
+        {
+            return unwrapOrRaise (GpuPipeline::compile (std::move (device), vertexShader, fragmentShader, options));
+        }, "device"_a, "vertexShader"_a, "fragmentShader"_a, "options"_a = GpuPipelineOptions {},
+             "Compiles a pipeline from native shader sources. Raises RuntimeError with a\n"
+             "human-readable description when compilation fails.")
         .def ("isValid", [] (const GpuPipeline&) { return true; });
 
     // ============================================================================================ yup::GpuComputePipeline
@@ -585,6 +663,14 @@ void registerYupRhiBindings (py::module_& m)
              "Compiles a compute pipeline from GLSL 450 source. Raises RuntimeError with the\n"
              "compiler diagnostics when compilation fails.")
 #endif
+        .def_static ("compile", [] (GpuDevice::Ptr device,
+                                    const GpuShaderSource& source,
+                                    const GpuWorkgroupSize& workgroupSize)
+        {
+            return unwrapOrRaise (GpuComputePipeline::compile (std::move (device), source, workgroupSize));
+        }, "device"_a, "source"_a, "workgroupSize"_a = GpuWorkgroupSize {},
+             "Compiles a compute pipeline from a native shader source. Raises RuntimeError with a\n"
+             "human-readable description when compilation fails.")
         .def ("getWorkgroupSize", &GpuComputePipeline::getWorkgroupSize);
 
     // ============================================================================================ yup::GpuPipelineCache

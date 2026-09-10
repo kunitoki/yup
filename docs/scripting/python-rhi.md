@@ -48,9 +48,17 @@ except RuntimeError as error:
 Factories that return a null pointer in C++ - `GpuTarget.create`,
 `GpuTexture.create`, `GpuSampler.create`, `GpuBuffer.create` - return `None`.
 
-`GpuShaderSource` is deliberately not exposed: its `code`, `bindingMap` and
-`glFixup` fields are non-owning views, and a settable Python attribute would
-store a pointer into a temporary. Compile through `compileFromGlsl` instead.
+`GpuShaderSource` owns its blob fields, so it is fully exposed. `code`,
+`bindingMap` and `glFixup` are bytes-in, bytes-out properties accepting any
+object supporting the buffer protocol, and read back as `bytes`:
+
+```python
+source = yup.GpuShaderSource()
+source.language = yup.GpuShaderLanguage.glsl
+source.code = vertexGlslBytes
+source.bindingMap = bindingMapBlob
+pipeline = yup.GpuPipeline.compile(device, source, fragmentSource, options)
+```
 
 ## Descriptors own their data, and convert by value
 
@@ -152,9 +160,29 @@ device.readBuffer(buffer, result)
 error - on WebGPU the readback trails the GPU by a frame or two - so keep the
 destination between calls and redraw its previous contents.
 
-Only `compileFromGlsl` is exposed. The raw `compile()` overload takes a
-`GpuShaderSource`, which Python cannot populate, and `compileFromBundle()` needs
-a `ShaderBundle`, which has no Python binding yet.
+Both `compileFromGlsl` and the raw `compile()` overload (taking a
+`GpuShaderSource` per stage) are exposed. `compileFromBundle()` still needs a
+`ShaderBundle`, which has no Python binding yet.
+
+## Controlling the offscreen frame with `GpuFrameDescriptor`
+
+`GpuCanvas.beginDraw()` takes an optional `GpuFrameDescriptor`, giving control
+over msaa/dither/loadOp/clearColor for the offscreen 2D frame it opens.
+`renderTargetWidth`/`renderTargetHeight` are ignored - they are always
+auto-filled from the canvas:
+
+```python
+frameDesc = yup.GpuFrameDescriptor()
+frameDesc.msaaSampleCount = 4
+frameDesc.ditherMode = yup.GpuDitherMode.none
+frameDesc.loadOp = yup.GpuLoadOp.clear
+frameDesc.clearColor = yup.GpuColor.black()
+
+g = canvas.beginDraw(frameDesc)
+```
+
+Calling `beginDraw()` with no argument keeps the previous behaviour: clear to
+transparent black, no msaa, interleaved-gradient-noise dithering.
 
 ## Bit flags
 
