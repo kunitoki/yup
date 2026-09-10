@@ -541,8 +541,6 @@ TEST_F (GpuTextureMockTests, ReadPixelsIsUnsupportedForDirectlyAllocatedTargets)
 // backend rather than on read-back pixels.
 // ==============================================================================
 
-#if 0
-
 class GpuAttachmentMockTests : public GpuTextureMockTests
 {
 protected:
@@ -981,5 +979,3 @@ TEST_F (GpuAttachmentMockTests, ClearOnlyPassCreatesTheAttachmentViewOnly)
     EXPECT_EQ (viewDescs[0].baseMipLevel, 0u);
     EXPECT_EQ (viewDescs[0].layerCount, 1u);
 }
-
-#endif
