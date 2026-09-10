@@ -28,7 +28,7 @@ fixed, which is the signal to delete the marker.
 
 def run_in_child_interpreter(source: str) -> subprocess.CompletedProcess:
     """Runs source in a fresh interpreter, with the bound yup module importable."""
-    yup_folder = os.path.dirname(os.path.abspath(yup.__file__))
+    yup_folder = os.path.dirname(os.path.abspath(__file__))
     preamble = f"import sys; sys.path.insert(0, {yup_folder!r})\n"
 
     return subprocess.run(
