@@ -381,3 +381,116 @@ TEST_F (TypeErasedObjectTests, NonConstGetPayloadOnDefaultReturnsNull)
     EXPECT_EQ (object.getPayload<Payload>(), nullptr);
     EXPECT_EQ (object.getPayload<double>(), nullptr);
 }
+
+// ==============================================================================
+// Relocation must go through the payload's move constructor.
+//
+// A payload that points into itself - libstdc++'s SSO std::string, a std::map's
+// header node, or any object caching the address of one of its own members -
+// is only valid at the address it was constructed at. Moving it with a byte copy
+// leaves those pointers aimed at the old storage, which is dead once the source
+// TypeErasedObject goes away, so the payload later reads or frees memory it
+// never owned. These payloads keep a pointer to their own member, so a byte copy
+// fails on every platform rather than only on the one whose std::string points
+// into itself.
+// ==============================================================================
+
+namespace
+{
+
+struct SelfReferential
+{
+    explicit SelfReferential (int initialValue) noexcept
+        : value (initialValue)
+        , self (&value)
+    {
+    }
+
+    SelfReferential (SelfReferential&& other) noexcept
+        : value (other.value)
+        , self (&value)
+    {
+        other.value = 0;
+    }
+
+    SelfReferential& operator= (SelfReferential&&) = delete;
+    SelfReferential (const SelfReferential&) = delete;
+    SelfReferential& operator= (const SelfReferential&) = delete;
+
+    bool pointsIntoItself() const noexcept { return self == &value; }
+
+    int value;
+    int* self;
+};
+
+} // namespace
+
+TEST_F (TypeErasedObjectTests, MoveConstructionRelocatesSelfReferentialPayload)
+{
+    TypeErasedObject<64> source (SelfReferential { 5 });
+    TypeErasedObject<64> destination (std::move (source));
+
+    auto* payload = destination.getPayload<SelfReferential>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 5);
+    EXPECT_TRUE (payload->pointsIntoItself());
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentRelocatesSelfReferentialPayload)
+{
+    TypeErasedObject<64> source (SelfReferential { 6 });
+    TypeErasedObject<64> destination;
+
+    destination = std::move (source);
+
+    auto* payload = destination.getPayload<SelfReferential>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 6);
+    EXPECT_TRUE (payload->pointsIntoItself());
+}
+
+TEST_F (TypeErasedObjectTests, MoveFromSmallerSizeRelocatesSelfReferentialPayload)
+{
+    TypeErasedObject<16> source (SelfReferential { 7 });
+    TypeErasedObject<64> destination;
+
+    destination = std::move (source);
+
+    auto* payload = destination.getPayload<SelfReferential>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 7);
+    EXPECT_TRUE (payload->pointsIntoItself());
+}
+
+TEST_F (TypeErasedObjectTests, MoveAssignmentFromTemporaryRelocatesSelfReferentialPayload)
+{
+    // The pattern the RHI uses: `impl = TypeErasedObject (Impl {})` moves out of
+    // a temporary sized exactly to the payload and into a larger buffer.
+    TypeErasedObject<64> destination;
+    destination = TypeErasedObject (SelfReferential { 8 });
+
+    auto* payload = destination.getPayload<SelfReferential>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->value, 8);
+    EXPECT_TRUE (payload->pointsIntoItself());
+}
+
+TEST_F (TypeErasedObjectTests, ShortStringPayloadSurvivesMoveAssignmentFromTemporary)
+{
+    struct Named
+    {
+        std::string name;
+    };
+
+    TypeErasedObject<128> destination;
+    destination = TypeErasedObject (Named { "vs" });
+
+    auto* payload = destination.getPayload<Named>();
+    ASSERT_NE (payload, nullptr);
+    EXPECT_EQ (payload->name, "vs");
+
+    // Growing past the small-string buffer releases the old storage, which must
+    // be the payload's own and not the dead temporary's.
+    payload->name = "a name long enough to leave the small string buffer behind";
+    EXPECT_EQ (payload->name.size(), 58u);
+}

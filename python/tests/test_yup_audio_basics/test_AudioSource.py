@@ -238,3 +238,14 @@ def test_positionable_audio_source_looping_wraparound():
 
     # Position should have wrapped around due to looping
     assert source.getNextReadPosition() < 900
+
+#==================================================================================================
+
+def test_positionable_audio_source_is_an_audio_source():
+    # pybind11 only knows the inheritance the py::class_ registrations declare, so
+    # a PositionableAudioSource subclass has to come back as an AudioSource too -
+    # otherwise it is rejected wherever an AudioSource is expected.
+    source = PositionableTestSource(1000)
+
+    assert isinstance(source, yup.PositionableAudioSource)
+    assert isinstance(source, yup.AudioSource)

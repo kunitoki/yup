@@ -74,16 +74,12 @@ bool Image::isValid() const noexcept
 //==============================================================================
 int Image::getWidth() const noexcept
 {
-    jassert (pixelData != nullptr);
-
-    return pixelData->getWidth();
+    return pixelData != nullptr ? pixelData->getWidth() : 0;
 }
 
 int Image::getHeight() const noexcept
 {
-    jassert (pixelData != nullptr);
-
-    return pixelData->getHeight();
+    return pixelData != nullptr ? pixelData->getHeight() : 0;
 }
 
 PixelFormat Image::getPixelFormat() const noexcept

@@ -64,6 +64,7 @@
 #endif
 
 //==============================================================================
+#include "rhi/yup_GpuTypes.cpp"
 #include "rhi/yup_GpuBuffer.cpp"
 
 #include "native/yup_GpuDevice_headless.cpp"

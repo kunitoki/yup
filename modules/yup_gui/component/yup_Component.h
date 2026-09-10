@@ -100,7 +100,7 @@ public:
 
         @param shouldBeVisible True if the component should be visible, false otherwise.
      */
-    void setVisible (bool shouldBeVisible);
+    virtual void setVisible (bool shouldBeVisible);
 
     /**
         Check if the component is showing.
@@ -129,7 +129,7 @@ public:
 
         @param title The new title of the component.
      */
-    void setTitle (const String& title);
+    virtual void setTitle (const String& title);
 
     //==============================================================================
     /**
@@ -617,6 +617,11 @@ public:
         @param opacity The new opacity of the component.
      */
     void setOpacity (float opacity);
+
+    /**
+        Called when the opacity of the component changes.
+     */
+    virtual void opacityChanged();
 
     //==============================================================================
     /**

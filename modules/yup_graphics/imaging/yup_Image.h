@@ -74,10 +74,10 @@ public:
     bool isValid() const noexcept;
 
     //==============================================================================
-    /** Returns the width of the image in pixels. */
+    /** Returns the width of the image in pixels, or 0 if the image is invalid. */
     int getWidth() const noexcept;
 
-    /** Returns the height of the image in pixels. */
+    /** Returns the height of the image in pixels, or 0 if the image is invalid. */
     int getHeight() const noexcept;
 
     /** Returns the pixel format of the image. */

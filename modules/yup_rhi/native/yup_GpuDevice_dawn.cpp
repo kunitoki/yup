@@ -189,7 +189,7 @@ public:
 
     std::unique_ptr<RenderableTarget> createRenderableTarget (int, int) override { return nullptr; }
 
-    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override {}
+    void beginOffscreen (OffscreenTarget&, const GpuFrameDescriptor&) override {}
 
     void endOffscreen (OffscreenTarget&) override {}
 

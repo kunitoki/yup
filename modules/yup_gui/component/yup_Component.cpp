@@ -499,18 +499,24 @@ void Component::contentScaleChanged ([[maybe_unused]] float dpiScale) {}
 
 void Component::setOpacity (float newOpacity)
 {
-    newOpacity = jlimit (0.0f, 1.0f, newOpacity);
+    auto clampedOpacity = static_cast<uint8> (jlimit (0.0f, 1.0f, newOpacity) * 255);
+    if (opacity == clampedOpacity)
+        return;
 
-    opacity = static_cast<uint8> (newOpacity * 255);
+    opacity = clampedOpacity;
 
     if (options.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
+
+    opacityChanged();
 }
 
 float Component::getOpacity() const
 {
     return opacity / 255.0f;
 }
+
+void Component::opacityChanged() {}
 
 //==============================================================================
 
@@ -1227,8 +1233,6 @@ std::optional<float> Component::findMetric (const Identifier& metricId) const
 
 //==============================================================================
 
-//==============================================================================
-
 void Component::setComponentEffect (ComponentEffect::Ptr effect)
 {
     componentEffect = std::move (effect);
@@ -1447,6 +1451,11 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
+    const ErasedScopeGuard clearRepaintingFlag ([this]
+    {
+        isRepainting.store (false, std::memory_order_relaxed);
+    });
+
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
 
@@ -1520,8 +1529,6 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
             paintChildrenAndOverChildren (g, clipArea, renderContinuous);
         }
     }
-
-    isRepainting.store (false, std::memory_order_relaxed);
 }
 
 //==============================================================================

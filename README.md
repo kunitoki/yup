@@ -14,6 +14,8 @@ YUP is a C++20 framework for building native applications, audio tools, and audi
 [![Coverage Report](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 [![Documentation](https://app.readthedocs.org/projects/yup/badge/?version=latest)](https://yup.readthedocs.io/en/latest)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kunitoki/yup)
+[![Top Language](https://img.shields.io/github/languages/top/kunitoki/yup)](https://github.com/kunitoki/yup)
+[![Commit Activity](https://img.shields.io/github/commit-activity/w/kunitoki/yup)](https://github.com/kunitoki/yup/commits/main)
 [![Discord](https://img.shields.io/discord/1533809375762976908?logo=discord)](https://discord.gg/E6pSdcj4R)
 
 > [!WARNING]
@@ -38,60 +40,60 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 ## Screenshots
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
     <img src="./docs/demos/web_render_0.png" style="width:99%" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_graph.png" style="width:57.5%;" /></a>
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_host.png" style="width:39.5%;" /></a>
+<div>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
   <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.5%;" /></a>
+  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.2%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/_static/images/yup_dsp_spectrum_fill.png" style="width:42.5%;" /></a>
   <a href="./examples/graphics/source/examples/SpectrumAnalyzer.h"><img src="./docs/_static/images/yup_dsp_spectrum_line.png" style="width:54.7%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_waveform_onsets.jpg" style="width:31.2%;" /></a>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_audio_scope.png" style="width:66%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:23.8%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:23.8%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:23.8%;" /></a>
   <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:23.8%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
+<div>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_tiger.jpg" style="width:23.8%;" /></a>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_lambo.jpg" style="width:23.8%;" /></a>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_yellow_car.jpg" style="width:23.8%;" /></a>
   <a href="./examples/graphics/source/examples/Svg.h"><img src="./docs/_static/images/yup_svg_scimitar.jpg" style="width:23.8%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_gradient_editor.png" style="width:46%;" /></a>
-  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_color_picker.png" style="width:50.8%;" /></a>
+<div>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_gradient_editor.png" style="width:46.4%;" /></a>
+  <a href="./examples/graphics/source/examples/ColorLab.h"><img src="./docs/_static/images/yup_color_picker.png" style="width:51.3%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/_static/images/yup_lottie.gif" style="height:340px;" /></a>
-  <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.5%;" /></a>
+<div>
+  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/_static/images/yup_lottie.png" style="width:43.4%;" /></a>
+  <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.4%;" /></a>
 </div>
 
-<div style="display: flex; width: 100%; flex-wrap: nowrap;">
-  <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:20.1%;" /></a>
-  <a href="./examples/graphics/source/examples/PbrDemo.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:39.4%;" /></a>
-  <a href="./examples/graphics/source/examples/FluidSimulationDemo.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:39.4%;" /></a>
+<div>
+  <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:19.4%;" /></a>
+  <a href="./examples/graphics/source/examples/PbrDemo.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:38.5%;" /></a>
+  <a href="./examples/graphics/source/examples/FluidSimulationDemo.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:38.5%;" /></a>
 </div>
 
 Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).

@@ -40,24 +40,43 @@
 namespace yup
 {
 
-/** Union used to split a 16-bit unsigned integer into 2 8-bit unsigned integers or vice-versa */
+namespace
+{
+
 union IPAddressByteUnion
 {
     uint16 combined;
     uint8 split[2];
 };
 
-static void zeroUnusedBytes (uint8* address) noexcept
+void zeroUnusedBytes (uint8* address) noexcept
 {
     for (int i = 4; i < 16; ++i)
         address[i] = 0;
 }
+
+uint16 getAddressGroup (const uint8* address, int groupIndex) noexcept
+{
+    const auto lowByte = static_cast<uint16> (address[groupIndex * 2]);
+    const auto highByte = static_cast<uint16> (address[groupIndex * 2 + 1]);
+
+    return static_cast<uint16> ((highByte << 8) | lowByte);
+}
+
+void setAddressGroup (uint8* address, int groupIndex, uint16 value) noexcept
+{
+    address[groupIndex * 2] = static_cast<uint8> (value & 0xff);
+    address[groupIndex * 2 + 1] = static_cast<uint8> (value >> 8);
+}
+
+} // namespace
 
 IPAddress::IPAddress() noexcept
 {
     for (int i = 0; i < 16; ++i)
         address[i] = 0;
 }
+
 
 IPAddress::IPAddress (const uint8 bytes[], bool IPv6) noexcept
     : isIPv6 (IPv6)
@@ -72,15 +91,8 @@ IPAddress::IPAddress (const uint8 bytes[], bool IPv6) noexcept
 IPAddress::IPAddress (const uint16 bytes[8]) noexcept
     : isIPv6 (true)
 {
-    IPAddressByteUnion temp;
-
     for (int i = 0; i < 8; ++i)
-    {
-        temp.combined = bytes[i];
-
-        address[i * 2] = temp.split[0];
-        address[i * 2 + 1] = temp.split[1];
-    }
+        setAddressGroup (address, i, bytes[i]);
 }
 
 IPAddress::IPAddress (uint8 a0, uint8 a1, uint8 a2, uint8 a3) noexcept
@@ -100,14 +112,8 @@ IPAddress::IPAddress (uint16 a1, uint16 a2, uint16 a3, uint16 a4, uint16 a5, uin
 {
     uint16 array[8] = { a1, a2, a3, a4, a5, a6, a7, a8 };
 
-    IPAddressByteUnion temp;
-
     for (int i = 0; i < 8; ++i)
-    {
-        temp.combined = array[i];
-        address[i * 2] = temp.split[0];
-        address[i * 2 + 1] = temp.split[1];
-    }
+        setAddressGroup (address, i, array[i]);
 }
 
 IPAddress::IPAddress (uint32 n) noexcept
@@ -180,19 +186,13 @@ IPAddress::IPAddress (const String& adr)
             {
                 IPAddress v4Address (tokens[i]);
 
-                address[12] = v4Address.address[0];
-                address[13] = v4Address.address[1];
-                address[14] = v4Address.address[2];
-                address[15] = v4Address.address[3];
+                setAddressGroup (address, 6, static_cast<uint16> ((v4Address.address[0] << 8) | v4Address.address[1]));
+                setAddressGroup (address, 7, static_cast<uint16> ((v4Address.address[2] << 8) | v4Address.address[3]));
 
                 break;
             }
 
-            IPAddressByteUnion temp;
-            temp.combined = CharacterFunctions::HexParser<uint16>::parse (tokens[i].getCharPointer());
-
-            address[i * 2] = temp.split[0];
-            address[i * 2 + 1] = temp.split[1];
+            setAddressGroup (address, i, CharacterFunctions::HexParser<uint16>::parse (tokens[i].getCharPointer()));
         }
     }
 }
@@ -209,20 +209,10 @@ String IPAddress::toString() const
         return s;
     }
 
-    IPAddressByteUnion temp;
-
-    temp.split[0] = address[0];
-    temp.split[1] = address[1];
-
-    auto addressString = String::toHexString (temp.combined);
+    auto addressString = String::toHexString (getAddressGroup (address, 0));
 
     for (int i = 1; i < 8; ++i)
-    {
-        temp.split[0] = address[i * 2];
-        temp.split[1] = address[i * 2 + 1];
-
-        addressString << ':' << String::toHexString (temp.combined);
-    }
+        addressString << ':' << String::toHexString (getAddressGroup (address, i));
 
     return getFormattedAddress (addressString);
 }
@@ -366,11 +356,18 @@ bool IPAddress::isIPv4MappedAddress (const IPAddress& mappedAddress)
 
 IPAddress IPAddress::convertIPv4MappedAddressToIPv4 (const IPAddress& mappedAddress)
 {
-    // The address that you're converting needs to be IPv6!
     jassert (mappedAddress.isIPv6);
 
     if (isIPv4MappedAddress (mappedAddress))
-        return { mappedAddress.address[12], mappedAddress.address[13], mappedAddress.address[14], mappedAddress.address[15] };
+    {
+        const auto high = getAddressGroup (mappedAddress.address, 6);
+        const auto low = getAddressGroup (mappedAddress.address, 7);
+
+        return { static_cast<uint8> (high >> 8),
+                 static_cast<uint8> (high & 0xff),
+                 static_cast<uint8> (low >> 8),
+                 static_cast<uint8> (low & 0xff) };
+    }
 
     return {};
 }

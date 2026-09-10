@@ -271,18 +271,7 @@ Graphics::Graphics (GraphicsContext& context, std::unique_ptr<RenderableTarget> 
     renderOptions.emplace_back();
     currentRenderOptions().scale = 1.0f;
 
-    if (offscreenTarget == nullptr)
-        return;
-
-    rive::gpu::RenderContext::FrameDescriptor frameDesc;
-    frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
-    frameDesc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
-    frameDesc.loadAction = rive::gpu::LoadAction::clear;
-    frameDesc.clearColor = clearColor;
-
-    context.getGpuDevice()->beginOffscreen (*offscreenTarget, frameDesc);
-
-    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
+    beginOffscreenFrame ({ .clearColor = GpuColor (clearColor) });
 }
 
 Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t clearColor) noexcept
@@ -296,13 +285,33 @@ Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t
     renderOptions.emplace_back();
     currentRenderOptions().scale = 1.0f;
 
-    rive::gpu::RenderContext::FrameDescriptor frameDesc;
-    frameDesc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
-    frameDesc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
-    frameDesc.loadAction = rive::gpu::LoadAction::clear;
-    frameDesc.clearColor = clearColor;
+    beginOffscreenFrame ({ .clearColor = GpuColor (clearColor) });
+}
 
-    context.getGpuDevice()->beginOffscreen (*offscreenTarget, frameDesc);
+Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc) noexcept
+    : context (context)
+    , offscreenTarget (std::addressof (target))
+    , factory (*getOffscreenFactory (context, offscreenTarget))
+    , ownedRenderer (makeOffscreenRenderer (context, offscreenTarget, target.getWidth(), target.getHeight()))
+    , renderer (*ownedRenderer)
+    , contextScale (1.0f)
+{
+    renderOptions.emplace_back();
+    currentRenderOptions().scale = 1.0f;
+
+    beginOffscreenFrame (frameDesc);
+}
+
+void Graphics::beginOffscreenFrame (const GpuFrameDescriptor& frameDesc)
+{
+    if (offscreenTarget == nullptr)
+        return;
+
+    auto desc = frameDesc;
+    desc.renderTargetWidth = static_cast<uint32_t> (offscreenTarget->getWidth());
+    desc.renderTargetHeight = static_cast<uint32_t> (offscreenTarget->getHeight());
+
+    context.getGpuDevice()->beginOffscreen (*offscreenTarget, desc);
 
     currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
 }

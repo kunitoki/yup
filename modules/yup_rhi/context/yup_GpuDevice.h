@@ -116,9 +116,11 @@ public:
     ~GpuDevice() override;
 
     //==============================================================================
-    /** Move constructors and assignment operators. */
-    GpuDevice (GpuDevice&& other) noexcept = default;
-    GpuDevice& operator= (GpuDevice&& other) noexcept = default;
+    /** Not movable: GpuDevice is reference-counted, and moving one out from under
+        live GpuDevice::Ptr holders would leave them pointing at a husk while the
+        refcount kept the moved-from object alive. */
+    GpuDevice (GpuDevice&&) = delete;
+    GpuDevice& operator= (GpuDevice&&) = delete;
 
     //==============================================================================
     /** Returns the GPU API used by this context.
@@ -296,7 +298,7 @@ public:
         @param target The OffscreenTarget to render into.
         @param frameDesc The frame descriptor that contains frame-specific data.
     */
-    virtual void beginOffscreen (OffscreenTarget& target, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) = 0;
+    virtual void beginOffscreen (OffscreenTarget& target, const GpuFrameDescriptor& frameDesc) = 0;
 
     /** Flushes GPU commands into the offscreen target.
     
@@ -368,14 +370,15 @@ public:
           once a snapshot has finished mapping, which trails the GPU by a frame or
           two.
 
-        Callers must therefore treat @p dst as persistent storage that they own
-        across calls, and a false return as "no new data yet" rather than as an
-        error — the previous contents remain valid and usable. A per-frame reader
-        that redraws its last snapshot works on every backend; one that demands
-        fresh data on every single call does not.
+        Callers must therefore keep @p dst around between calls and treat a false
+        return as "no new data yet" rather than as an error — the previous contents
+        remain valid and usable. Nothing here retains the pointer; @p dst is written
+        within the call or not at all. A per-frame reader that redraws its last
+        snapshot works on every backend; one that demands fresh data on every single
+        call does not.
 
         @param buffer   A storage buffer to read from.
-        @param dst      Destination buffer in CPU memory, persistent across calls.
+        @param dst      Destination buffer in CPU memory, reused across calls.
         @param dstSize  Size in bytes (must be at least the buffer's byte size).
 
         @returns true if @p dst was filled with buffer contents.

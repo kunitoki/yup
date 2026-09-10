@@ -118,18 +118,41 @@ public:
     /** The pixel format of the decoded image. */
     PixelFormat pixelFormat = PixelFormat::RGBA;
 
-    /** The input stream, for use by subclasses. */
+    /** The input stream, for use by subclasses.
+
+        Null when this reader was created with deleteSourceWhenDestroyed set to false,
+        because it then keeps no stream of its own.
+    */
     std::unique_ptr<InputStream> input;
 
     /** Metadata extracted from the image file (nullptr if no metadata was requested or found). */
     ImageMetadata::Ptr metadata;
 
+    /** Whether this reader owns the source stream and deletes it when destroyed. */
+    bool deleteSourceWhenDestroyed = true;
+
 protected:
-    /** Creates an ImageFormatReader and takes ownership of the source stream. */
-    ImageFormatReader (InputStream* sourceStream, const String& formatName);
+    /** Creates an ImageFormatReader.
+
+        @param sourceStream                 The stream to read from
+        @param formatName                   The name reported by getFormatName()
+        @param deleteSourceWhenDestroyed    Whether to delete @p sourceStream when this
+                                            reader is destroyed. Pass true to take ownership,
+                                            which is what every built-in format and every
+                                            reader created through ImageFormatManager wants.
+                                            Pass false when the caller keeps ownership; the
+                                            reader then holds no stream at all and must not
+                                            need one after construction.
+    */
+    ImageFormatReader (InputStream* sourceStream,
+                       const String& formatName,
+                       bool deleteSourceWhenDestroyed = true);
 
     /** Creates an ImageFormatReader with options. */
-    ImageFormatReader (InputStream* sourceStream, const String& formatName, const ImageFormat::Options& opts);
+    ImageFormatReader (InputStream* sourceStream,
+                       const String& formatName,
+                       const ImageFormat::Options& opts,
+                       bool deleteSourceWhenDestroyed = true);
 
 private:
     String formatName;

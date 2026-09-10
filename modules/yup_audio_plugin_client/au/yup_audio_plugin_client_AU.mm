@@ -602,6 +602,8 @@ public:
             const int numCh = bus.getNumChannels();
             auto* chPtrs = renderViews.inputChannelPtrStorage.data() + chOffset;
 
+            std::fill (chPtrs, chPtrs + numCh, nullptr);
+
             if (audioIdx == 0)
             {
                 const UInt32 copyCount = std::min (mainInBuffer.mNumberBuffers, static_cast<UInt32> (numCh));

@@ -77,7 +77,7 @@ GpuTexture::Ptr GpuTexture::create (ReferenceCountedObjectPtr<GpuDevice> device,
     oreDesc.renderTarget = desc.renderTarget;
     oreDesc.numMipmaps = desc.mipLevels;
     oreDesc.sampleCount = desc.sampleCount;
-    oreDesc.label = desc.label;
+    oreDesc.label = desc.label.isNotEmpty() ? desc.label.toRawUTF8() : nullptr;
 
     rive::rcp<rive::ore::Texture> oreTexture;
     device->runOnGraphicsContext ([&]
@@ -288,14 +288,6 @@ rive::rcp<rive::gpu::Texture> GpuTexture::getOrAdoptGpuTexture() const
 rive::rcp<rive::gpu::RenderCanvas> GpuTexture::getInternalRenderCanvas() const
 {
     return renderCanvas;
-}
-
-rive::RenderImage* GpuTexture::getRenderImage() const
-{
-    if (renderCanvas != nullptr)
-        return renderCanvas->renderImage();
-
-    return nullptr;
 }
 
 //==============================================================================

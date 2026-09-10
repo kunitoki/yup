@@ -32,6 +32,7 @@ AnimationFrameExporter::AnimationFrameExporter (GraphicsContext& ctx)
 
 AnimationFrameExporter::~AnimationFrameExporter() = default;
 
+//==============================================================================
 Size<int> AnimationFrameExporter::resolveTargetSize (const Animation& anim, Size<int> requested)
 {
     if (requested.getWidth() > 0 && requested.getHeight() > 0)
@@ -41,6 +42,7 @@ Size<int> AnimationFrameExporter::resolveTargetSize (const Animation& anim, Size
     return { (int) native.getWidth(), (int) native.getHeight() };
 }
 
+//==============================================================================
 Image AnimationFrameExporter::renderFrame (const Animation& anim,
                                            float frameNo,
                                            Size<int> targetSize)
@@ -63,6 +65,7 @@ Image AnimationFrameExporter::renderFrame (const Animation& anim,
     return img;
 }
 
+//==============================================================================
 ResultValue<std::vector<Image>> AnimationFrameExporter::renderAllFrames (const Animation& anim, Size<int> targetSize)
 {
     if (! anim.isValid())
@@ -85,6 +88,8 @@ ResultValue<std::vector<Image>> AnimationFrameExporter::renderAllFrames (const A
     return makeResultValueOk (std::move (frames));
 }
 
+//==============================================================================
+#if YUP_IMAGE_FORMAT_GIF
 Result AnimationFrameExporter::exportToGif (const Animation& anim,
                                             const File& destination,
                                             Size<int> targetSize,
@@ -165,5 +170,6 @@ Result AnimationFrameExporter::exportToGif (const std::vector<Image>& frames,
 
     return Result::ok();
 }
+#endif
 
 } // namespace yup

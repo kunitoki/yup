@@ -138,6 +138,10 @@ public:
     bool finish();
 
     //==============================================================================
+    /** @internal The backend seam: each platform derives its encoder from this and
+        hands it back through yup_createComputePassImpl*(). Declared here rather than
+        privately because those factories name it in their signatures; the instance
+        itself is private and unreachable from outside. */
     struct Impl;
 
 private:

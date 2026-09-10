@@ -30,6 +30,7 @@
 #include "yup_YupCore_bindings.h"
 
 #include "../utilities/yup_PyBind11Includes.h"
+#include "../pybind11/trampoline_self_life_support.h"
 
 #include <variant>
 
@@ -127,7 +128,7 @@ struct PyMessageManagerLock
 
 // =================================================================================================
 
-struct PyTimer : public yup::Timer
+struct PyTimer : public yup::Timer, pybind11::trampoline_self_life_support
 {
     using yup::Timer::Timer;
 
@@ -139,7 +140,7 @@ struct PyTimer : public yup::Timer
 
 // =================================================================================================
 
-struct PyMultiTimer : public yup::MultiTimer
+struct PyMultiTimer : public yup::MultiTimer, pybind11::trampoline_self_life_support
 {
     using yup::MultiTimer::MultiTimer;
 
