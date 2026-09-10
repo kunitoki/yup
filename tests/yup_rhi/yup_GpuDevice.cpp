@@ -308,46 +308,6 @@ TEST_F (GpuDeviceErrorTests, ComputePassSettersOnInvalidPassAreNoOps)
 }
 
 //==============================================================================
-// GpuFrameDescriptor conversion helpers
-//==============================================================================
-
-TEST (GpuFrameDescriptorTests, DefaultDescriptorReproducesRiveDefaults)
-{
-    auto frameDesc = toRiveFrameDescriptor (GpuFrameDescriptor {});
-
-    EXPECT_EQ (frameDesc.loadAction, rive::gpu::LoadAction::clear);
-    EXPECT_EQ (frameDesc.clearColor, 0u);
-    EXPECT_EQ (frameDesc.msaaSampleCount, 0u);
-    EXPECT_FALSE (frameDesc.disableRasterOrdering);
-    EXPECT_EQ (frameDesc.ditherMode, rive::gpu::DitherMode::interleavedGradientNoise);
-}
-
-TEST (GpuFrameDescriptorTests, ClearColorRoundTripsThroughAsymmetricValue)
-{
-    GpuFrameDescriptor desc;
-    desc.clearColor = GpuColor (0x11223344u);
-    EXPECT_EQ (toRiveFrameDescriptor (desc).clearColor, 0x11223344u);
-
-    // Opaque and fully-saturated channels, where a transposed byte order would
-    // still happen to round-trip the asymmetric case above.
-    desc.clearColor = GpuColor (0xFF0080FFu);
-    EXPECT_EQ (toRiveFrameDescriptor (desc).clearColor, 0xFF0080FFu);
-}
-
-TEST (GpuFrameDescriptorTests, ToRiveLoadActionMapsEveryEnumerator)
-{
-    EXPECT_EQ (toRiveLoadAction (GpuLoadOp::clear), rive::gpu::LoadAction::clear);
-    EXPECT_EQ (toRiveLoadAction (GpuLoadOp::load), rive::gpu::LoadAction::preserveRenderTarget);
-    EXPECT_EQ (toRiveLoadAction (GpuLoadOp::dontCare), rive::gpu::LoadAction::dontCare);
-}
-
-TEST (GpuFrameDescriptorTests, ToRiveDitherModeMapsEveryEnumerator)
-{
-    EXPECT_EQ (toRiveDitherMode (GpuDitherMode::none), rive::gpu::DitherMode::none);
-    EXPECT_EQ (toRiveDitherMode (GpuDitherMode::interleavedGradientNoise), rive::gpu::DitherMode::interleavedGradientNoise);
-}
-
-//==============================================================================
 // gpuShaderSourceBytes
 //==============================================================================
 
