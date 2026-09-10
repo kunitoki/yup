@@ -58,8 +58,11 @@ void registerYupGraphicsBindings (pybind11::module_& m);
 */
 struct PyImageFormatReader : yup::ImageFormatReader, pybind11::trampoline_self_life_support
 {
+    // A Python reader always adopts the stream it is built around: either the caller's
+    // own stream, which the manager then gives up, or a private copy of some bytes. So
+    // the ownership flag stays off the Python-facing surface and is fixed to true here.
     PyImageFormatReader (yup::InputStream* sourceStream, const yup::String& formatName)
-        : yup::ImageFormatReader (sourceStream, formatName)
+        : yup::ImageFormatReader (sourceStream, formatName, true)
     {
     }
 

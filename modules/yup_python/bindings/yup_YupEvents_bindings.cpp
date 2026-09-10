@@ -125,17 +125,14 @@ void registerYupEventsBindings (py::module_& m)
 
     py::class_<MessageManager> classMessageManager (m, "MessageManager");
 
-    py::class_<MessageManager::MessageBase, PyMessageBase<>> classMessageManagerMessageBase (classMessageManager, "MessageBase");
+    py::class_<MessageManager::MessageBase, PyMessageBase<>, ReferenceCountedObjectPtr<MessageManager::MessageBase>> classMessageManagerMessageBase (classMessageManager, "MessageBase");
 
     py::class_<MessageManager::Lock> classMessageManagerInnerLock (classMessageManager, "Lock");
 
     classMessageManagerMessageBase
         .def (py::init<>())
         .def ("messageCallback", &MessageManager::MessageBase::messageCallback)
-        .def ("post", [] (py::object self)
-        {
-            return self.release().cast<MessageManager::MessageBase*>()->post();
-        });
+        .def ("post", &MessageManager::MessageBase::post);
 
     classMessageManagerInnerLock
         .def (py::init<>())
@@ -194,12 +191,12 @@ void registerYupEventsBindings (py::module_& m)
 
     // ============================================================================================ yup::Message
 
-    py::class_<Message, MessageManager::MessageBase, PyMessageBase<Message>> classMessage (m, "Message");
+    py::class_<Message, MessageManager::MessageBase, PyMessageBase<Message>, ReferenceCountedObjectPtr<Message>> classMessage (m, "Message");
 
     classMessage
         .def (py::init<>());
 
-    py::class_<CallbackMessage, MessageManager::MessageBase, PyCallbackMessage<>> classCallbackMessage (classMessageManager, "CallbackMessage");
+    py::class_<CallbackMessage, MessageManager::MessageBase, PyCallbackMessage<>, ReferenceCountedObjectPtr<CallbackMessage>> classCallbackMessage (classMessageManager, "CallbackMessage");
 
     classCallbackMessage
         .def (py::init<>())
@@ -212,13 +209,7 @@ void registerYupEventsBindings (py::module_& m)
     classMessageListener
         .def (py::init<>())
         .def ("handleMessage", &MessageListener::handleMessage)
-        .def ("postMessage", [] (MessageListener& self, py::object message)
-        {
-            if (message.is_none() || ! py::isinstance<Message> (message))
-                py::pybind11_fail ("Invalid specified message type in \"MessageListener::postMessage\"");
-
-            return self.postMessage (message.release().cast<Message*>());
-        }, "message"_a);
+        .def ("postMessage", &MessageListener::postMessage, "message"_a);
 
     // ============================================================================================ yup::MessageManagerLock
 

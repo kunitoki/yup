@@ -51,16 +51,16 @@ class DynamicComponent(yup.Component):
 
         # Title
         g.setFillColor(yup.Colors.white)
-        g.drawText(
-            "Hot Reload Component - Edit me! 🔄",
-            yup.Rectangle[float](0, 20, w, 40),
-            yup.Justification.centred,
-        )
+        #g.drawText(
+        #    "Hot Reload Component - Edit me! 🔄",
+        #    yup.Rectangle[float](0, 20, w, 40),
+        #    yup.Justification.centred,
+       # )
 
         # Timestamp
-        t = time.strftime("%H:%M:%S")
-        g.drawText(
-            f"Last loaded: {t}",
-            yup.Rectangle[float](0, h - 40, w, 30),
-            yup.Justification.centred,
-        )
+        #t = time.strftime("%H:%M:%S")
+        #g.drawText(
+        #    f"Last loaded: {t}",
+        #    yup.Rectangle[float](0, h - 40, w, 30),
+        #    yup.Justification.centred,
+        #)

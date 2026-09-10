@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 class HotReloadWindow(yup.DocumentWindow, yup.Timer):
     def __init__(self):
-        yup.DocumentWindow.__init__()
+        yup.DocumentWindow.__init__(self)
         yup.Timer.__init__(self)
         self.setTitle("Hot Reload Demo")
         self.component = None
@@ -103,4 +103,4 @@ class Application(yup.YUPApplication):
 
 
 if __name__ == "__main__":
-    yup.START_YUP_APPLICATION(Application)
+    yup.START_YUP_APPLICATION(Application, catchExceptionsAndContinue=True)

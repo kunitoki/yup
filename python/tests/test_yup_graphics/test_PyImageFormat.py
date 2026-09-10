@@ -74,7 +74,11 @@ class YupRawFormat(yup.ImageFormat):
         if not data.startswith(_MAGIC):
             return None
 
-        return YupRawReader(data, self.getFormatName())
+        # Hand the caller's own stream to the reader rather than a copy of the bytes:
+        # the reader adopts the stream and deletes it, so ImageFormatManager can give
+        # up ownership on success instead of leaking it. That is why this is the same
+        # stream the manager passed in, not a fresh one.
+        return YupRawReader(stream, self.getFormatName())
 
     def createWriterFor(self, stream, pixelFormat, metadataValues=None, qualityOptionIndex=0):
         return YupRawWriter(stream, self.getFormatName(), pixelFormat)
@@ -177,3 +181,31 @@ def test_format_dispatch_through_manager(tmp_path):
 
     decoded = reader.readImage()
     _assert_same_pixels(source, decoded)
+
+#==================================================================================================
+
+def test_manager_gives_the_reader_the_stream_it_opened(tmp_path):
+    manager = yup.ImageFormatManager()
+    manager.registerFormat(YupRawFormat())
+
+    source = _make_test_image()
+    outputFile = yup.File(str(tmp_path / "owned.yupr"))
+
+    writer = manager.createWriterFor(outputFile)
+    assert writer.writeImage(source)
+    writer.flush()
+    del writer
+
+    reader = manager.createReaderFor(outputFile)
+    assert reader is not None
+
+    # createReaderFor() takes ownership of the file stream it opens and hands it to the
+    # reader, which adopts it. If that hand-off ever regressed - the manager releasing
+    # the stream without anyone taking it over - the reader would be reading through a
+    # freed stream and the FileInputStream would be reported as leaked at shutdown.
+    # Reading the source twice proves the stream is still ours and still rewindable.
+    first = reader.getSourceBytes()
+    second = reader.getSourceBytes()
+
+    assert first == second
+    assert first[:4] == _MAGIC

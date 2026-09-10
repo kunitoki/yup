@@ -1315,15 +1315,27 @@ void registerYupGraphicsBindings (py::module_& m)
     py::class_<ImageFormatReader, PyImageFormatReader, py::smart_holder> classImageFormatReader (m, "ImageFormatReader");
 
     classImageFormatReader
-        // Python-implemented readers are constructed from raw data bytes. The
-        // bytes are copied into an internal stream, so ownership never moves
-        // between Python and C++.
+        // Two ways to build a reader, and the difference is who ends up owning the
+        // stream. Taking the caller's stream keeps ownership moving in one direction
+        // only - the reader adopts it and deletes it, so ImageFormatManager can hand
+        // the stream over instead of leaking it. The bytes overload is for readers
+        // built from a payload the Python side already has, and owns a private copy.
+        //
+        // Both always adopt: whether a reader absorbs its stream is a C++ ownership
+        // detail that Python has no way to influence, so it is not part of the Python
+        // signature.
+        .def (py::init ([] (InputStream* sourceStream, const String& formatName)
+        {
+            return std::unique_ptr<ImageFormatReader> (new PyImageFormatReader (sourceStream, formatName));
+        }), "sourceStream"_a, "formatName"_a,
+             "Builds a reader around the given stream, taking ownership of it.")
         .def (py::init ([] (py::buffer data, const String& formatName)
         {
             auto info = data.request();
             auto* stream = new MemoryInputStream (info.ptr, info.size, true);
             return std::unique_ptr<ImageFormatReader> (new PyImageFormatReader (stream, formatName));
-        }), "data"_a, "formatName"_a)
+        }), "data"_a, "formatName"_a,
+             "Builds a reader over a private copy of the given bytes.")
         .def_static ("readAllBytes", [] (InputStream& stream) -> py::bytes
         {
             MemoryBlock block;
@@ -2227,6 +2239,80 @@ void registerYupGraphicsBindings (py::module_& m)
     submoduleColors.attr ("whitesmoke") = Colors::whitesmoke;
     submoduleColors.attr ("yellow") = Colors::yellow;
     submoduleColors.attr ("yellowgreen") = Colors::yellowgreen;
+
+    // ============================================================================================ yup::Fitting
+
+    py::enum_<Fitting> (m, "Fitting")
+        .value ("none", Fitting::none)
+        .value ("scaleToFit", Fitting::scaleToFit)
+        .value ("fitWidth", Fitting::fitWidth)
+        .value ("fitHeight", Fitting::fitHeight)
+        .value ("scaleToFill", Fitting::scaleToFill)
+        .value ("fill", Fitting::fill)
+        .value ("tile", Fitting::tile)
+        .value ("centerCrop", Fitting::centerCrop)
+        .value ("centerInside", Fitting::centerInside)
+        .value ("stretchWidth", Fitting::stretchWidth)
+        .value ("stretchHeight", Fitting::stretchHeight);
+
+    // ============================================================================================ yup::CubicBezier
+
+    py::class_<CubicBezier> classCubicBezier (m, "CubicBezier");
+
+    classCubicBezier
+        .def (py::init<>())
+        .def (py::init<Point<float>, Point<float>, Point<float>, Point<float>>(), "p0"_a, "p1"_a, "p2"_a, "p3"_a)
+        .def_static ("fromPoints", &CubicBezier::fromPoints, "p0"_a, "p1"_a, "p2"_a, "p3"_a)
+        .def ("p0", &CubicBezier::p0)
+        .def ("p1", &CubicBezier::p1)
+        .def ("p2", &CubicBezier::p2)
+        .def ("p3", &CubicBezier::p3)
+        .def ("pointAt", &CubicBezier::pointAt, "t"_a)
+        .def ("angleAt", &CubicBezier::angleAt, "t"_a)
+        .def ("derivative", &CubicBezier::derivative, "t"_a)
+        .def ("length", &CubicBezier::length)
+        .def ("tAtLength", py::overload_cast<float, float> (&CubicBezier::tAtLength, py::const_), "len"_a, "totalLen"_a)
+        .def ("tAtLength", py::overload_cast<float> (&CubicBezier::tAtLength, py::const_), "len"_a)
+        .def ("onInterval", &CubicBezier::onInterval, "t0"_a, "t1"_a)
+        .def ("split", [] (const CubicBezier& self)
+        {
+            CubicBezier firstHalf, secondHalf;
+
+            self.split (firstHalf, secondHalf);
+
+            return py::make_tuple (firstHalf, secondHalf);
+        })
+        .def ("splitAtLength", [] (const CubicBezier& self, float len)
+        {
+            CubicBezier left, right;
+
+            self.splitAtLength (len, left, right);
+
+            return py::make_tuple (left, right);
+        }, "len"_a)
+        .def ("parameterSplitLeft", [] (CubicBezier& self, float t)
+        {
+            CubicBezier left;
+
+            self.parameterSplitLeft (t, left);
+
+            return left;
+        }, "t"_a, "Subdivides in place: this curve becomes the [t, 1] portion and the returned\n"
+                   "CubicBezier is the [0, t] portion.");
+
+    // ============================================================================================ yup::Drawable
+
+    py::class_<Drawable> classDrawable (m, "Drawable");
+
+    classDrawable
+        .def (py::init<>())
+        .def ("parseSVG", py::overload_cast<const File&> (&Drawable::parseSVG), "svgFile"_a)
+        .def ("parseSVG", py::overload_cast<StringRef> (&Drawable::parseSVG), "svgText"_a)
+        .def ("clear", &Drawable::clear)
+        .def ("getBounds", &Drawable::getBounds)
+        .def ("paint", py::overload_cast<Graphics&> (&Drawable::paint), "g"_a)
+        .def ("paint", py::overload_cast<Graphics&, const Rectangle<float>&, Fitting, Justification> (&Drawable::paint),
+              "g"_a, "targetArea"_a, "fitting"_a = Fitting::scaleToFit, "justification"_a = Justification::center);
 }
 
 // clang-format on

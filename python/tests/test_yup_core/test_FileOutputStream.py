@@ -17,7 +17,14 @@ def test_file_output_stream_write_from_input_all():
     a = yup.FileInputStream(data_folder.getChildFile("somefile.txt"))
     assert a.openedOk()
 
-    b = yup.FileOutputStream(get_runtime_data_file("test_file_output_stream_write_from_input_all.txt"))
+    # FileOutputStream appends to a file that already exists (see yup_FileOutputStream.h), so
+    # the target has to be removed first. The runtime data folder is only cleared when pytest
+    # exits normally, which means a run under a debugger - or one that is interrupted - leaves
+    # its files behind for the next run to append to.
+    outputFile = get_runtime_data_file("test_file_output_stream_write_from_input_all.txt")
+    outputFile.deleteFile()
+
+    b = yup.FileOutputStream(outputFile)
     assert b.openedOk()
 
     assert b.writeFromInputStream(a, -1) == 886
@@ -32,7 +39,10 @@ def test_file_output_stream_write_from_input_some():
     a = yup.FileInputStream(data_folder.getChildFile("somefile.txt"))
     assert a.openedOk()
 
-    b = yup.FileOutputStream(get_runtime_data_file("test_file_input_stream_nonexisting.txt"))
+    outputFile = get_runtime_data_file("test_file_input_stream_nonexisting.txt")
+    outputFile.deleteFile()
+
+    b = yup.FileOutputStream(outputFile)
     assert b.openedOk()
 
     assert b.writeFromInputStream(a, 100) == 100
@@ -44,7 +54,10 @@ def test_file_output_stream_write_from_input_some():
 #==================================================================================================
 
 def test_file_output_stream_write():
-    b = yup.FileOutputStream(get_runtime_data_file("test_file_output_stream_write.txt"))
+    outputFile = get_runtime_data_file("test_file_output_stream_write.txt")
+    outputFile.deleteFile()
+
+    b = yup.FileOutputStream(outputFile)
     assert b.writeBool(True)
     assert b.writeByte('-')
     assert b.writeShort(11565)

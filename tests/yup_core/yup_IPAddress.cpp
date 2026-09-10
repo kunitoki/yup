@@ -541,9 +541,21 @@ TEST (IPAddressTests, ComparisonIPv4MappedAndIPv4)
     EXPECT_TRUE (mapped.isIPv6);
     EXPECT_FALSE (ipv4.isIPv6);
 
-    // Note: The comparison may not work as expected due to endianness issues
-    // in the uint16 constructor used by convertIPv4AddressToIPv4Mapped.
-    // Just verify both addresses are valid
     EXPECT_FALSE (ipv4.isNull());
     EXPECT_FALSE (mapped.isNull());
+
+    EXPECT_EQ (IPAddress::convertIPv4MappedAddressToIPv4 (mapped), ipv4);
+}
+
+TEST (IPAddressTests, ParseIPv4MappedIPv6Address)
+{
+    IPAddress mapped ("::ffff:192.0.2.33");
+
+    EXPECT_TRUE (mapped.isIPv6);
+    EXPECT_TRUE (IPAddress::isIPv4MappedAddress (mapped));
+
+    EXPECT_TRUE (mapped.toString().contains ("c000"));
+    EXPECT_TRUE (mapped.toString().contains ("221"));
+
+    EXPECT_EQ (IPAddress::convertIPv4MappedAddressToIPv4 (mapped), IPAddress ("192.0.2.33"));
 }

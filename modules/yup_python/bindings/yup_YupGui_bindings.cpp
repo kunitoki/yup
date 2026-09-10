@@ -325,6 +325,95 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<>())
         .def (py::init<MouseCursor::Type>(), "type"_a);
 
+    // ============================================================================================ yup::MouseEvent
+
+    py::class_<MouseEvent> classMouseEvent (m, "MouseEvent");
+
+    py::enum_<MouseEvent::Buttons> (classMouseEvent, "Buttons")
+        .value ("noButtons", MouseEvent::noButtons)
+        .value ("leftButton", MouseEvent::leftButton)
+        .value ("middleButton", MouseEvent::middleButton)
+        .value ("rightButton", MouseEvent::rightButton)
+        .value ("allButtons", MouseEvent::allButtons)
+        .export_values();
+
+    classMouseEvent
+        .def (py::init<>())
+        .def (py::init<MouseEvent::Buttons, KeyModifiers, const Point<float>&>(),
+              "buttons"_a, "modifiers"_a, "position"_a)
+        .def (py::init<MouseEvent::Buttons, KeyModifiers, const Point<float>&, Component*>(),
+              "buttons"_a, "modifiers"_a, "position"_a, "sourceComponent"_a)
+
+        .def ("getButtons", &MouseEvent::getButtons)
+        .def ("isLeftButtonDown", &MouseEvent::isLeftButtonDown)
+        .def ("isMiddleButtonDown", &MouseEvent::isMiddleButtonDown)
+        .def ("isRightButtonDown", &MouseEvent::isRightButtonDown)
+        .def ("isAnyButtonDown", &MouseEvent::isAnyButtonDown)
+        .def ("withButtons", &MouseEvent::withButtons, "buttonsToAdd"_a)
+        .def ("withoutButtons", &MouseEvent::withoutButtons, "buttonsToRemove"_a)
+
+        .def ("getModifiers", &MouseEvent::getModifiers)
+        .def ("withModifiers", &MouseEvent::withModifiers, "newModifiers"_a)
+
+        .def ("getPosition", &MouseEvent::getPosition)
+        .def ("getScreenPosition", &MouseEvent::getScreenPosition)
+        .def ("withPosition", &MouseEvent::withPosition, "newPosition"_a)
+        .def ("withTranslatedPosition", &MouseEvent::withTranslatedPosition, "translation"_a)
+        .def ("withRelativePositionTo", &MouseEvent::withRelativePositionTo, "targetComponent"_a)
+
+        .def ("getLastMouseDownPosition", &MouseEvent::getLastMouseDownPosition)
+        .def ("withLastMouseDownPosition", &MouseEvent::withLastMouseDownPosition, "newPosition"_a)
+        .def ("getLastMouseDownTime", &MouseEvent::getLastMouseDownTime)
+        .def ("withLastMouseDownTime", &MouseEvent::withLastMouseDownTime, "newTime"_a)
+
+        // The event only borrows the component it refers to: the platform builds it around the
+        // component being clicked, and only hands it out while the callback it was built for runs.
+        .def ("getSourceComponent", &MouseEvent::getSourceComponent, py::return_value_policy::reference)
+        .def ("withSourceComponent", &MouseEvent::withSourceComponent, "newComponent"_a)
+
+        .def ("isTouch", &MouseEvent::isTouch)
+        .def ("getTouchIndex", &MouseEvent::getTouchIndex)
+        .def ("getPressure", &MouseEvent::getPressure)
+        .def ("withTouchIndex", &MouseEvent::withTouchIndex, "newTouchIndex"_a)
+        .def ("withPressure", &MouseEvent::withPressure, "newPressure"_a)
+
+        .def (py::self == py::self)
+        .def (py::self != py::self);
+
+    // ============================================================================================ yup::MouseListener
+
+    // Registered before Component, which derives from it in C++. The MouseListener overrides a
+    // Python subclass writes are dispatched through PyMouseListener, which Component shares.
+    py::class_<MouseListener, PyMouseListener<>> classMouseListener (m, "MouseListener");
+
+    classMouseListener
+        .def (py::init<>())
+        .def ("mouseEnter", &MouseListener::mouseEnter, "event"_a)
+        .def ("mouseExit", &MouseListener::mouseExit, "event"_a)
+        .def ("mouseDown", &MouseListener::mouseDown, "event"_a)
+        .def ("mouseMove", &MouseListener::mouseMove, "event"_a)
+        .def ("mouseDrag", &MouseListener::mouseDrag, "event"_a)
+        .def ("mouseUp", &MouseListener::mouseUp, "event"_a)
+        .def ("mouseDoubleClick", &MouseListener::mouseDoubleClick, "event"_a)
+        .def ("mouseWheel", &MouseListener::mouseWheel, "event"_a, "wheelData"_a);
+
+    // ============================================================================================ yup::TextInputTarget
+
+    py::class_<TextInputTarget, PyTextInputTarget<>> classTextInputTarget (m, "TextInputTarget");
+
+    classTextInputTarget
+        .def (py::init<>())
+        .def ("getTextInputRect", &TextInputTarget::getTextInputRect,
+              "Returns the screen rectangle being edited, so on-screen keyboards and IME windows\n"
+              "can be moved out of the way. Subclasses must override it.")
+        .def ("requestTextInput", &TextInputTarget::requestTextInput,
+              "Asks the system to start accepting text input, typically from focusGained().")
+        .def ("relinquishTextInput", &TextInputTarget::relinquishTextInput,
+              "Tells the system this target no longer needs text input, typically from focusLost().")
+        .def ("updateTextInputRect", &TextInputTarget::updateTextInputRect,
+              "Pushes a moved caret or edited area to the system while text input is active.")
+        .def ("isTextInputActive", &TextInputTarget::isTextInputActive);
+
     // ============================================================================================ yup::ComponentNative
 
     py::class_<ComponentNative> classComponentNative (m, "ComponentNative");
@@ -382,9 +471,89 @@ void registerYupGuiBindings (py::module_& m)
         .def_static ("createFor", &ComponentNative::createFor, "component"_a, "options"_a, "parent"_a = nullptr)
     ;
 
+    // ============================================================================================ yup::DragAndDropData
+
+    py::class_<DragAndDropData> classDragAndDropData (m, "DragAndDropData");
+
+    classDragAndDropData
+        .def (py::init<>())
+        .def ("withFiles", [] (const DragAndDropData& self, py::iterable files)
+        {
+            Array<File> fileList;
+
+            for (auto item : files)
+            {
+                py::detail::make_caster<File> conv;
+
+                if (! conv.load (item, true))
+                    throw py::type_error ("DragAndDropData.withFiles expects an iterable of File");
+
+                fileList.add (py::detail::cast_op<File&&> (std::move (conv)));
+            }
+
+            return self.withFiles (fileList);
+        }, "files"_a, "Returns a copy of this payload with the given files set.")
+        .def ("withText", &DragAndDropData::withText, "text"_a, "Returns a copy of this payload with the given text set.")
+        .def ("withUris", &DragAndDropData::withUris, "uris"_a, "Returns a copy of this payload with the given URIs set.")
+        .def ("getFiles", &DragAndDropData::getFiles, "Returns the dropped files.")
+        .def ("getText", &DragAndDropData::getText, "Returns the dropped text.")
+        .def ("getUris", &DragAndDropData::getUris, "Returns the dropped URIs.")
+        .def ("hasFiles", &DragAndDropData::hasFiles)
+        .def ("hasText", &DragAndDropData::hasText)
+        .def ("hasUris", &DragAndDropData::hasUris)
+        .def ("isEmpty", &DragAndDropData::isEmpty)
+        .def ("__repr__", [] (const DragAndDropData& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " files=" << self.getFiles().size()
+                << " uris=" << self.getUris().size()
+                << " text=\"" << self.getText() << "\">";
+            return result;
+        });
+
+    // ============================================================================================ yup::ComponentPaintMetrics
+
+    py::class_<ComponentPaintMetrics> classComponentPaintMetrics (m, "ComponentPaintMetrics");
+
+    classComponentPaintMetrics
+        .def (py::init<>())
+        .def_readwrite ("selfTicks", &ComponentPaintMetrics::selfTicks)
+        .def_readwrite ("childrenTicks", &ComponentPaintMetrics::childrenTicks)
+        .def_readwrite ("frameworkTicks", &ComponentPaintMetrics::frameworkTicks)
+        .def_readwrite ("totalTicks", &ComponentPaintMetrics::totalTicks)
+        .def_readwrite ("componentBounds", &ComponentPaintMetrics::componentBounds)
+        .def_readwrite ("repaintArea", &ComponentPaintMetrics::repaintArea)
+        .def_readwrite ("renderContinuous", &ComponentPaintMetrics::renderContinuous)
+        .def_readwrite ("selfPaintSkipped", &ComponentPaintMetrics::selfPaintSkipped);
+
+    // ============================================================================================ yup::ComponentListener
+
+    py::class_<ComponentListener, PyComponentListener<>> classComponentListener (m, "ComponentListener");
+
+    classComponentListener
+        .def (py::init<>())
+        .def ("componentMoved", &ComponentListener::componentMoved, "component"_a)
+        .def ("componentResized", &ComponentListener::componentResized, "component"_a)
+        .def ("componentBeingDeleted", &ComponentListener::componentBeingDeleted, "component"_a)
+        .def ("componentPaintCompleted", &ComponentListener::componentPaintCompleted, "component"_a, "metrics"_a);
+
+    // ============================================================================================ yup::ComponentEffect
+
+    py::class_<ComponentEffect, PyComponentEffect<>, ReferenceCountedObjectPtr<ComponentEffect>> classComponentEffect (m, "ComponentEffect");
+
+    classComponentEffect
+        .def (py::init<>())
+        .def ("apply", &ComponentEffect::apply, "g"_a, "inputTexture"_a, "bounds"_a,
+              "Composites the effect. The component subtree has already been rendered into\n"
+              "inputTexture, and the result must be drawn into g at bounds.");
+
     // ============================================================================================ yup::Component
 
-    py::class_<Component, PyComponent<>> classComponent (m, "Component");
+    // Component derives from MouseListener in C++, so declaring the base here gives Python
+    // issubclass (Component, MouseListener) and lets a component be used as a mouse listener.
+    py::class_<Component, MouseListener, PyComponent<>> classComponent (m, "Component");
 
     classComponent
         // Construction and identification
@@ -440,6 +609,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getLocalBounds", &Component::getLocalBounds)
         .def ("getBoundsRelativeToTopLevelComponent", &Component::getBoundsRelativeToTopLevelComponent)
         .def ("getScreenBounds", &Component::getScreenBounds)
+        .def ("getSafeAreaBounds", &Component::getSafeAreaBounds)
 
         // Coordinate conversion
         .def ("localToScreen", py::overload_cast<const Point<float>&>(&Component::localToScreen, py::const_))
@@ -473,6 +643,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setOpaque", &Component::setOpaque)
         .def ("enableRenderingUnclipped", &Component::enableRenderingUnclipped)
         .def ("isRenderingUnclipped", &Component::isRenderingUnclipped)
+        .def ("setPaintProfilingDisabled", &Component::setPaintProfilingDisabled, "shouldBeDisabled"_a)
+        .def ("isPaintProfilingDisabled", &Component::isPaintProfilingDisabled)
         .def ("refreshDisplay", &Component::refreshDisplay, "lastFrameTimeSeconds"_a)
         .def ("repaint", py::overload_cast<>(&Component::repaint))
         .def ("repaint", py::overload_cast<const Rectangle<float>&>(&Component::repaint))
@@ -527,12 +699,26 @@ void registerYupGuiBindings (py::module_& m)
         // Properties
         .def ("getProperties", py::overload_cast<>(&Component::getProperties), py::return_value_policy::reference_internal)
 
-        // Mouse events
+        // Mouse events. The listener list only holds weak references, so the component keeps the
+        // Python listener alive for as long as it is registered.
         .def ("setWantsMouseEvents", &Component::setWantsMouseEvents)
         .def ("doesWantSelfMouseEvents", &Component::doesWantSelfMouseEvents)
         .def ("doesWantChildrenMouseEvents", &Component::doesWantChildrenMouseEvents)
-        .def ("addMouseListener", &Component::addMouseListener, py::return_value_policy::reference_internal)
-        .def ("removeMouseListener", &Component::removeMouseListener)
+        .def ("addMouseListener", &Component::addMouseListener, "listener"_a, py::keep_alive<1, 2>())
+        .def ("removeMouseListener", &Component::removeMouseListener, "listener"_a)
+
+        // Drag and drop. The platform delivers the payload through these virtuals, so a Python
+        // subclass overrides them; binding them keeps the entry points callable from Python too.
+        .def ("isInterestedInDrag", &Component::isInterestedInDrag, "data"_a)
+        .def ("itemsDropped", &Component::itemsDropped, "position"_a, "data"_a)
+        .def ("itemDragEnter", &Component::itemDragEnter, "data"_a, "position"_a)
+        .def ("itemDragMove", &Component::itemDragMove, "data"_a, "position"_a)
+        .def ("itemDragExit", &Component::itemDragExit, "data"_a)
+
+        // Component listeners. The listener list only holds weak references, so the component
+        // keeps the Python listener alive for as long as it is registered.
+        .def ("addComponentListener", &Component::addComponentListener, "listener"_a, py::keep_alive<1, 2>())
+        .def ("removeComponentListener", &Component::removeComponentListener, "listener"_a)
 
         // Style system
         .def ("setStyle", &Component::setStyle)
@@ -540,6 +726,28 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setColor", &Component::setColor)
         .def ("getColor", &Component::getColor)
         .def ("findColor", &Component::findColor)
+
+        // Style metrics
+        .def ("setMetric", &Component::setMetric, "metricId"_a, "metric"_a,
+              "Overrides a themed metric on this component; pass None to remove the override.")
+        .def ("getMetric", &Component::getMetric, "metricId"_a)
+        .def ("findMetric", &Component::findMetric, "metricId"_a)
+
+        // Cached to texture
+        .def ("setCachedToTexture", &Component::setCachedToTexture, "shouldCache"_a)
+        .def ("isCachedToTexture", &Component::isCachedToTexture)
+
+        // Component effects
+        .def ("setComponentEffect", &Component::setComponentEffect, "effect"_a,
+              "Sets the effect applied after the component and its children are rendered; pass None to remove it.")
+        .def ("getComponentEffect", &Component::getComponentEffect)
+
+        // Snapshots
+        .def ("snapshotToImage", &Component::snapshotToImage, "ctx"_a, "includeEffects"_a = true,
+              "Renders the subtree offscreen and reads the pixels back. Returns an invalid Image\n"
+              "when the context has no GPU or the component has no size.")
+        .def ("snapshotToTexture", &Component::snapshotToTexture, "ctx"_a, "includeEffects"_a = true,
+              "Like snapshotToImage, but returns the GPU texture without reading pixels back.")
     ;
 
     // ============================================================================================ yup::DocumentWindow
@@ -902,14 +1110,14 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::TextButton
 
-    py::class_<TextButton, Button> (m, "TextButton")
+    py::class_<TextButton, Button, PyButton<TextButton>> (m, "TextButton")
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("getButtonText", &TextButton::getButtonText)
         .def ("setButtonText", &TextButton::setButtonText);
 
     // ============================================================================================ yup::ToggleButton
 
-    py::class_<ToggleButton, Button> (m, "ToggleButton")
+    py::class_<ToggleButton, Button, PyButton<ToggleButton>> (m, "ToggleButton")
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
         .def ("getToggleState", &ToggleButton::getToggleState)
         .def ("setToggleState", &ToggleButton::setToggleState,
@@ -983,7 +1191,7 @@ void registerYupGuiBindings (py::module_& m)
 
     // ============================================================================================ yup::Label
 
-    py::class_<Label, Component> labelClass (m, "Label");
+    py::class_<Label, Component, PyComponent<Label>> labelClass (m, "Label");
 
     labelClass
         .def (py::init<StringRef>(), "componentID"_a = StringRef())
@@ -1203,6 +1411,396 @@ void registerYupGuiBindings (py::module_& m)
             return std::addressof (self);
         }, py::return_value_policy::reference);
 #endif
+
+    // ============================================================================================ yup::KeyModifiers
+
+    py::class_<KeyModifiers> classKeyModifiers (m, "KeyModifiers");
+
+    classKeyModifiers
+        .def (py::init<>())
+        .def (py::init<int>(), "modifiers"_a)
+        .def ("isShiftDown", &KeyModifiers::isShiftDown)
+        .def ("isControlDown", &KeyModifiers::isControlDown)
+        .def ("isCommandDown", &KeyModifiers::isCommandDown)
+        .def ("isAltDown", &KeyModifiers::isAltDown);
+
+    // ============================================================================================ yup::KeyPress
+
+    py::class_<KeyPress> classKeyPress (m, "KeyPress");
+
+    classKeyPress
+        .def (py::init<>())
+        .def (py::init<int>(), "key"_a)
+        .def (py::init<int, KeyModifiers>(), "key"_a, "modifiers"_a)
+        .def (py::init ([] (int key, KeyModifiers modifiers, uint32 scancode)
+        {
+            return KeyPress (key, modifiers, static_cast<char32_t> (scancode));
+        }), "key"_a, "modifiers"_a, "scancode"_a)
+        .def ("getKey", &KeyPress::getKey)
+        .def ("getModifiers", &KeyPress::getModifiers)
+        .def ("getTextCharacter", [] (const KeyPress& self)
+        {
+            return static_cast<uint32> (self.getTextCharacter());
+        })
+        .def (py::self == py::self)
+        .def (py::self != py::self);
+
+    // ============================================================================================ yup::MouseWheelData
+
+    py::class_<MouseWheelData> classMouseWheelData (m, "MouseWheelData");
+
+    classMouseWheelData
+        .def (py::init<>())
+        .def (py::init<float, float>(), "deltaX"_a, "deltaY"_a)
+        .def ("getDeltaX", &MouseWheelData::getDeltaX)
+        .def ("getDeltaY", &MouseWheelData::getDeltaY)
+        .def ("setDeltaX", &MouseWheelData::setDeltaX, "deltaX"_a, py::return_value_policy::reference_internal)
+        .def ("setDeltaY", &MouseWheelData::setDeltaY, "deltaY"_a, py::return_value_policy::reference_internal)
+        .def ("withDeltaX", &MouseWheelData::withDeltaX, "deltaX"_a)
+        .def ("withDeltaY", &MouseWheelData::withDeltaY, "deltaY"_a)
+        .def (py::self == py::self)
+        .def (py::self != py::self);
+
+    // ============================================================================================ yup::ProgressBar
+
+    py::class_<ProgressBar, Component, PyProgressBar<>> classProgressBar (m, "ProgressBar");
+
+    classProgressBar
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+        .def ("setProgress", &ProgressBar::setProgress,
+              "newProgress"_a, "notification"_a = NotificationType::sendNotificationAsync)
+        .def ("getProgress", &ProgressBar::getProgress)
+        .def ("isIndeterminate", &ProgressBar::isIndeterminate)
+        .def ("progressChanged", &ProgressBar::progressChanged)
+        .def_readwrite ("onProgressChanged", &ProgressBar::onProgressChanged);
+
+    // ============================================================================================ yup::SwitchButton
+
+    py::class_<SwitchButton, Button, PySwitchButton<>> classSwitchButton (m, "SwitchButton");
+
+    classSwitchButton
+        .def (py::init<StringRef, bool>(), "componentID"_a = StringRef(), "isVertical"_a = false)
+        .def ("getToggleState", &SwitchButton::getToggleState)
+        .def ("setToggleState", &SwitchButton::setToggleState,
+              "shouldBeToggled"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("setVertical", &SwitchButton::setVertical, "shouldBeVertical"_a)
+        .def ("isVertical", &SwitchButton::isVertical)
+        .def ("setMillisecondsToSpendMoving", &SwitchButton::setMillisecondsToSpendMoving, "newValue"_a)
+        .def ("toggleStateChanged", &SwitchButton::toggleStateChanged);
+
+    // ============================================================================================ yup::ScrollBar
+
+    py::class_<ScrollBar, Component, PyComponent<ScrollBar>> classScrollBar (m, "ScrollBar");
+
+    py::enum_<ScrollBar::Orientation> (classScrollBar, "Orientation")
+        .value ("vertical", ScrollBar::Orientation::vertical)
+        .value ("horizontal", ScrollBar::Orientation::horizontal)
+        .export_values();
+
+    py::enum_<ScrollBar::VisibilityMode> (classScrollBar, "VisibilityMode")
+        .value ("alwaysVisible", ScrollBar::VisibilityMode::alwaysVisible)
+        .value ("autoHide", ScrollBar::VisibilityMode::autoHide)
+        .value ("alwaysHidden", ScrollBar::VisibilityMode::alwaysHidden)
+        .export_values();
+
+    classScrollBar
+        .def (py::init<ScrollBar::Orientation>(), "orientation"_a = ScrollBar::Orientation::vertical)
+
+        .def ("setOrientation", &ScrollBar::setOrientation, "newOrientation"_a)
+        .def ("getOrientation", &ScrollBar::getOrientation)
+        .def ("setVisibilityMode", &ScrollBar::setVisibilityMode, "mode"_a)
+        .def ("getVisibilityMode", &ScrollBar::getVisibilityMode)
+
+        .def ("setRangeLimits", &ScrollBar::setRangeLimits, "minimum"_a, "maximum"_a)
+        .def ("getRangeMinimum", &ScrollBar::getRangeMinimum)
+        .def ("getRangeMaximum", &ScrollBar::getRangeMaximum)
+
+        .def ("setCurrentRange", &ScrollBar::setCurrentRange, "start"_a, "end"_a)
+        .def ("getCurrentRangeStart", &ScrollBar::getCurrentRangeStart)
+        .def ("getCurrentRangeEnd", &ScrollBar::getCurrentRangeEnd)
+        .def ("getCurrentRangeSize", &ScrollBar::getCurrentRangeSize)
+        .def ("setCurrentRangeStart", &ScrollBar::setCurrentRangeStart,
+              "newPosition"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("scrollBy", &ScrollBar::scrollBy, "delta"_a, "notification"_a = NotificationType::sendNotification)
+
+        .def ("setAutoHide", &ScrollBar::setAutoHide, "shouldAutoHide"_a)
+        .def ("isAutoHide", &ScrollBar::isAutoHide)
+        .def ("isScrollingNeeded", &ScrollBar::isScrollingNeeded)
+
+        .def ("setScrollBarWidth", &ScrollBar::setScrollBarWidth, "newSize"_a)
+        .def ("getScrollBarWidth", &ScrollBar::getScrollBarWidth)
+
+        .def ("isDragging", &ScrollBar::isDragging)
+        // ScrollBar also declares a private isThumbHovered (Point<float>) helper, so the
+        // no-argument getter has to be selected explicitly - and being const, with py::const_.
+        .def ("isThumbHovered", py::overload_cast<> (&ScrollBar::isThumbHovered, py::const_))
+        .def ("getThumbBoundsForRendering", &ScrollBar::getThumbBoundsForRendering)
+        .def ("getTrackBoundsForRendering", &ScrollBar::getTrackBoundsForRendering)
+
+        .def_readwrite ("onScrollPositionChanged", &ScrollBar::onScrollPositionChanged,
+                        "Called with the new scroll position when it changes.");
+
+    // The nested Style struct only holds static members, so it is exposed for its ids only -
+    // the same shape as Label.Style, so Python can name what the theme looks up.
+    py::class_<ScrollBar::Style> scrollBarStyle (classScrollBar, "Style");
+    scrollBarStyle.attr ("trackColorId") = ScrollBar::Style::trackColorId;
+    scrollBarStyle.attr ("thumbColorId") = ScrollBar::Style::thumbColorId;
+    scrollBarStyle.attr ("thumbHoverColorId") = ScrollBar::Style::thumbHoverColorId;
+    scrollBarStyle.attr ("thumbDraggingColorId") = ScrollBar::Style::thumbDraggingColorId;
+
+    // ============================================================================================ yup::ListBoxModel
+
+    py::class_<ListBoxModel, PyListBoxModel<>> classListBoxModel (m, "ListBoxModel");
+
+    classListBoxModel
+        .def (py::init<>())
+        .def ("getNumRows", &ListBoxModel::getNumRows,
+              "Returns the number of rows in the list; a Python subclass must override it.")
+        .def ("getRowHeight", &ListBoxModel::getRowHeight, "rowIndex"_a,
+              "Returns 0 to use the ListBox's fixed row height.")
+        .def ("getRowWidth", &ListBoxModel::getRowWidth, "rowIndex"_a,
+              "Returns 0 to use the ListBox's fixed row width.")
+        .def ("paintListBoxItem", &ListBoxModel::paintListBoxItem, "rowIndex"_a, "g"_a, "area"_a, "isSelected"_a)
+        .def ("getRowText", &ListBoxModel::getRowText, "rowIndex"_a)
+        .def ("getRowIcon", &ListBoxModel::getRowIcon, "rowIndex"_a)
+        .def ("selectedRowsChanged", &ListBoxModel::selectedRowsChanged, "selectedRows"_a)
+        .def ("rowClicked", &ListBoxModel::rowClicked, "rowIndex"_a, "event"_a)
+        .def ("rowDoubleClicked", &ListBoxModel::rowDoubleClicked, "rowIndex"_a, "event"_a)
+        .def ("returnKeyPressed", &ListBoxModel::returnKeyPressed, "lastSelectedRow"_a)
+        .def ("deleteKeyPressed", &ListBoxModel::deleteKeyPressed, "selectedRows"_a)
+        .def ("getDragSourceDescription", &ListBoxModel::getDragSourceDescription, "selectedRows"_a);
+
+    // ============================================================================================ yup::ListBoxItem
+
+    py::class_<ListBoxItem, Component, PyComponent<ListBoxItem>> classListBoxItem (m, "ListBoxItem");
+
+    py::enum_<ListBoxItem::IconPosition> (classListBoxItem, "IconPosition")
+        .value ("left", ListBoxItem::IconPosition::left)
+        .value ("right", ListBoxItem::IconPosition::right)
+        .value ("above", ListBoxItem::IconPosition::above)
+        .value ("below", ListBoxItem::IconPosition::below)
+        .export_values();
+
+    // setIconDrawable/getIconDrawable are not bound: they traffic in std::shared_ptr<Drawable>,
+    // while Drawable is registered with the default unique_ptr holder, so pybind11 cannot
+    // convert either way. setIcon takes an Image and covers the same ground.
+    classListBoxItem
+        .def (py::init<>())
+        .def ("setText", &ListBoxItem::setText, "newText"_a)
+        .def ("getText", &ListBoxItem::getText)
+        .def ("setIcon", &ListBoxItem::setIcon, "newIcon"_a)
+        .def ("setIconPosition", &ListBoxItem::setIconPosition, "position"_a)
+        .def ("getIconPosition", &ListBoxItem::getIconPosition)
+        .def ("setSelected", &ListBoxItem::setSelected, "shouldBeSelected"_a)
+        .def ("isSelected", &ListBoxItem::isSelected)
+        .def ("setHovered", &ListBoxItem::setHovered, "shouldBeHovered"_a)
+        .def ("isHovered", &ListBoxItem::isHovered)
+        .def ("getTextBoundsForRendering", &ListBoxItem::getTextBoundsForRendering)
+        .def ("getIconBoundsForRendering", &ListBoxItem::getIconBoundsForRendering);
+
+    py::class_<ListBoxItem::Style> listBoxItemStyle (classListBoxItem, "Style");
+    listBoxItemStyle.attr ("textColorId") = ListBoxItem::Style::textColorId;
+    listBoxItemStyle.attr ("textColorSelectedId") = ListBoxItem::Style::textColorSelectedId;
+    listBoxItemStyle.attr ("backgroundColorId") = ListBoxItem::Style::backgroundColorId;
+    listBoxItemStyle.attr ("backgroundColorSelectedId") = ListBoxItem::Style::backgroundColorSelectedId;
+    listBoxItemStyle.attr ("backgroundColorHoveredId") = ListBoxItem::Style::backgroundColorHoveredId;
+
+    // ============================================================================================ yup::ListBox
+
+    py::class_<ListBox, Component, PyComponent<ListBox>> classListBox (m, "ListBox");
+
+    py::enum_<ListBox::Orientation> (classListBox, "Orientation")
+        .value ("vertical", ListBox::Orientation::vertical)
+        .value ("horizontal", ListBox::Orientation::horizontal)
+        .export_values();
+
+    py::enum_<ListBox::SelectionMode> (classListBox, "SelectionMode")
+        .value ("none", ListBox::SelectionMode::none)
+        .value ("single", ListBox::SelectionMode::single)
+        .value ("multiple", ListBox::SelectionMode::multiple)
+        .export_values();
+
+    classListBox
+        .def (py::init<StringRef, ListBox::Orientation>(),
+              "componentID"_a = StringRef(), "orientation"_a = ListBox::Orientation::vertical)
+
+        // The ListBox never owns its model and only holds it while it is set, so the model has to
+        // outlive the ListBox - which is what keep_alive pins down for a Python model.
+        .def ("setModel", &ListBox::setModel, "newModel"_a, py::keep_alive<1, 2>())
+        .def ("getModel", &ListBox::getModel, py::return_value_policy::reference)
+
+        .def ("setSelectionMode", &ListBox::setSelectionMode, "mode"_a)
+        .def ("getSelectionMode", &ListBox::getSelectionMode)
+
+        .def ("getSelectedRow", &ListBox::getSelectedRow)
+        .def ("selectRow", &ListBox::selectRow,
+              "rowIndex"_a, "scrollToShowRow"_a = true, "notification"_a = NotificationType::sendNotification)
+        .def ("deselectRow", &ListBox::deselectRow, "rowIndex"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("deselectAllRows", &ListBox::deselectAllRows, "notification"_a = NotificationType::sendNotification)
+        .def ("getSelectedRows", &ListBox::getSelectedRows)
+        .def ("setSelectedRows", &ListBox::setSelectedRows,
+              "rows"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("isRowSelected", &ListBox::isRowSelected, "rowIndex"_a)
+        .def ("getNumSelectedRows", &ListBox::getNumSelectedRows)
+
+        .def ("updateContent", &ListBox::updateContent)
+        .def ("repaintRow", &ListBox::repaintRow, "rowIndex"_a)
+        .def ("scrollToEnsureRowIsVisible", &ListBox::scrollToEnsureRowIsVisible, "rowIndex"_a)
+
+        .def ("setOrientation", &ListBox::setOrientation, "newOrientation"_a)
+        .def ("getOrientation", &ListBox::getOrientation)
+        .def ("setRowHeight", &ListBox::setRowHeight, "newHeight"_a)
+        .def ("setRowWidth", &ListBox::setRowWidth, "newWidth"_a)
+        .def ("getRowHeight", &ListBox::getRowHeight)
+        .def ("getRowWidth", &ListBox::getRowWidth)
+        .def ("setVariableHeightEnabled", &ListBox::setVariableHeightEnabled, "enabled"_a)
+        .def ("setVariableWidthEnabled", &ListBox::setVariableWidthEnabled, "enabled"_a)
+        .def ("isVariableHeightEnabled", &ListBox::isVariableHeightEnabled)
+        .def ("isVariableWidthEnabled", &ListBox::isVariableWidthEnabled)
+        .def ("setMinimumContentSize", &ListBox::setMinimumContentSize, "minSize"_a)
+        .def ("getMinimumContentSize", &ListBox::getMinimumContentSize)
+
+        .def ("setVerticalScrollBarVisibility", &ListBox::setVerticalScrollBarVisibility, "mode"_a)
+        .def ("setHorizontalScrollBarVisibility", &ListBox::setHorizontalScrollBarVisibility, "mode"_a)
+        .def ("getVerticalScrollBar", &ListBox::getVerticalScrollBar, py::return_value_policy::reference_internal)
+        .def ("getHorizontalScrollBar", &ListBox::getHorizontalScrollBar, py::return_value_policy::reference_internal)
+
+        .def ("getVisibleRowsCount", &ListBox::getVisibleRowsCount)
+        .def ("getVisibleRowRange", &ListBox::getVisibleRowRange)
+        .def ("getRowAt", &ListBox::getRowAt, "position"_a)
+        .def ("getComponentForRow", &ListBox::getComponentForRow, "rowIndex"_a, py::return_value_policy::reference_internal)
+        .def ("getRowBounds", &ListBox::getRowBounds, "rowIndex"_a)
+
+        .def_readwrite ("onRowClicked", &ListBox::onRowClicked, "Called with the row the user clicked.")
+        .def_readwrite ("onRowDoubleClicked", &ListBox::onRowDoubleClicked, "Called with the row the user double-clicked.")
+        .def_readwrite ("onSelectionChanged", &ListBox::onSelectionChanged, "Called when the selected rows change.");
+
+    py::class_<ListBox::Style> listBoxStyle (classListBox, "Style");
+    listBoxStyle.attr ("backgroundColorId") = ListBox::Style::backgroundColorId;
+    listBoxStyle.attr ("outlineColorId") = ListBox::Style::outlineColorId;
+    listBoxStyle.attr ("rowBackgroundColorId") = ListBox::Style::rowBackgroundColorId;
+    listBoxStyle.attr ("selectedRowBackgroundColorId") = ListBox::Style::selectedRowBackgroundColorId;
+    listBoxStyle.attr ("hoveredRowBackgroundColorId") = ListBox::Style::hoveredRowBackgroundColorId;
+
+    // ============================================================================================ yup::ComboBox
+
+    py::class_<ComboBox, Component, PyComboBox<>> classComboBox (m, "ComboBox");
+
+    classComboBox
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        .def ("addItem", &ComboBox::addItem, "newItemText"_a, "newItemId"_a)
+        .def ("addItemList", &ComboBox::addItemList, "itemsToAdd"_a, "firstItemId"_a)
+        .def ("addSeparator", &ComboBox::addSeparator)
+        .def ("clear", &ComboBox::clear)
+
+        .def ("getNumItems", &ComboBox::getNumItems)
+        .def ("getItemText", &ComboBox::getItemText, "index"_a)
+        .def ("getItemId", &ComboBox::getItemId, "index"_a)
+        .def ("changeItemText", &ComboBox::changeItemText, "index"_a, "newText"_a)
+
+        .def ("getSelectedItemIndex", &ComboBox::getSelectedItemIndex)
+        .def ("getSelectedId", &ComboBox::getSelectedId)
+        .def ("getText", &ComboBox::getText)
+        .def ("setSelectedItemIndex", &ComboBox::setSelectedItemIndex,
+              "newItemIndex"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("setSelectedId", &ComboBox::setSelectedId,
+              "newItemId"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("setTextWhenNothingSelected", &ComboBox::setTextWhenNothingSelected, "newPlaceholderText"_a)
+        .def ("getTextWhenNothingSelected", &ComboBox::getTextWhenNothingSelected)
+
+        .def ("setEditableText", &ComboBox::setEditableText, "isEditable"_a)
+        .def ("isTextEditable", &ComboBox::isTextEditable)
+        .def ("isPopupShown", &ComboBox::isPopupShown)
+
+        .def ("selectedItemChanged", &ComboBox::selectedItemChanged,
+              "Called when the selected item changes; a Python subclass overrides it.")
+        .def_readwrite ("onSelectedItemChanged", &ComboBox::onSelectedItemChanged);
+
+    py::class_<ComboBox::Style> comboBoxStyle (classComboBox, "Style");
+    comboBoxStyle.attr ("backgroundColorId") = ComboBox::Style::backgroundColorId;
+    comboBoxStyle.attr ("textColorId") = ComboBox::Style::textColorId;
+    comboBoxStyle.attr ("borderColorId") = ComboBox::Style::borderColorId;
+    comboBoxStyle.attr ("arrowColorId") = ComboBox::Style::arrowColorId;
+    comboBoxStyle.attr ("focusedBorderColorId") = ComboBox::Style::focusedBorderColorId;
+
+    // ============================================================================================ yup::TextEditor
+
+    py::class_<TextEditor, Component, PyTextEditor<>> classTextEditor (m, "TextEditor");
+
+    classTextEditor
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        .def ("getText", &TextEditor::getText)
+        .def ("setText", &TextEditor::setText, "newText"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("insertText", &TextEditor::insertText,
+              "textToInsert"_a, "notification"_a = NotificationType::sendNotification)
+
+        .def ("isMultiLine", &TextEditor::isMultiLine)
+        .def ("setMultiLine", &TextEditor::setMultiLine, "shouldBeMultiLine"_a)
+        .def ("isReadOnly", &TextEditor::isReadOnly)
+        .def ("setReadOnly", &TextEditor::setReadOnly, "shouldBeReadOnly"_a)
+
+        .def ("getCaretPosition", &TextEditor::getCaretPosition)
+        .def ("setCaretPosition", &TextEditor::setCaretPosition, "newPosition"_a)
+        .def ("isCaretVisible", &TextEditor::isCaretVisible)
+        .def ("moveCaretUp", &TextEditor::moveCaretUp, "extendSelection"_a = false)
+        .def ("moveCaretDown", &TextEditor::moveCaretDown, "extendSelection"_a = false)
+        .def ("moveCaretLeft", &TextEditor::moveCaretLeft, "extendSelection"_a = false)
+        .def ("moveCaretRight", &TextEditor::moveCaretRight, "extendSelection"_a = false)
+        .def ("moveCaretToStartOfLine", &TextEditor::moveCaretToStartOfLine, "extendSelection"_a = false)
+        .def ("moveCaretToEndOfLine", &TextEditor::moveCaretToEndOfLine, "extendSelection"_a = false)
+        .def ("moveCaretToStart", &TextEditor::moveCaretToStart, "extendSelection"_a = false)
+        .def ("moveCaretToEnd", &TextEditor::moveCaretToEnd, "extendSelection"_a = false)
+
+        .def ("getSelection", &TextEditor::getSelection)
+        .def ("setSelection", &TextEditor::setSelection, "newSelection"_a)
+        .def ("selectAll", &TextEditor::selectAll)
+        .def ("hasSelection", &TextEditor::hasSelection)
+        .def ("getSelectedText", &TextEditor::getSelectedText)
+        .def ("getSelectedTextAreas", &TextEditor::getSelectedTextAreas)
+        .def ("deleteSelectedText", &TextEditor::deleteSelectedText, "notification"_a = NotificationType::sendNotification)
+
+        .def ("copy", &TextEditor::copy)
+        .def ("cut", &TextEditor::cut)
+        .def ("paste", &TextEditor::paste)
+
+        .def ("getFont", &TextEditor::getFont, "Returns None while the editor uses the theme font.")
+        .def ("setFont", &TextEditor::setFont, "newFont"_a)
+        .def ("resetFont", &TextEditor::resetFont)
+        .def ("getFontSize", &TextEditor::getFontSize, "Returns None while the editor uses the theme font size.")
+        .def ("setFontSize", &TextEditor::setFontSize, "newFontSize"_a)
+        .def ("resetFontSize", &TextEditor::resetFontSize)
+
+        .def ("getTextBounds", &TextEditor::getTextBounds)
+        .def ("getCaretBounds", &TextEditor::getCaretBounds)
+        .def ("getScrollOffset", &TextEditor::getScrollOffset)
+
+        .def_readwrite ("onTextChange", &TextEditor::onTextChange);
+
+    // TextEditor implements TextInputTarget, but pybind11 allows only one Python base per class,
+    // so the interface's methods are re-exposed here with an explicit TextEditor receiver. Taking
+    // the member functions directly would not do: the four that TextInputTarget only declares
+    // (everything but the getTextInputRect override) would be registered as TextInputTarget
+    // methods, and pybind11 cannot convert a TextEditor instance to TextInputTarget.
+    classTextEditor
+        .def ("getTextInputRect", [] (const TextEditor& self) { return self.getTextInputRect(); },
+              "The screen rectangle being edited, so on-screen keyboards avoid covering it.")
+        .def ("requestTextInput", [] (TextEditor& self) { self.requestTextInput(); },
+              "Asks the system to start accepting text input, typically from focusGained().")
+        .def ("relinquishTextInput", [] (TextEditor& self) { self.relinquishTextInput(); },
+              "Tells the system this editor no longer needs text input, typically from focusLost().")
+        .def ("updateTextInputRect", [] (TextEditor& self) { self.updateTextInputRect(); },
+              "Pushes a moved caret or edited area to the system while text input is active.")
+        .def ("isTextInputActive", [] (const TextEditor& self) { return self.isTextInputActive(); });
+
+    py::class_<TextEditor::Style> textEditorStyle (classTextEditor, "Style");
+    textEditorStyle.attr ("backgroundColorId") = TextEditor::Style::backgroundColorId;
+    textEditorStyle.attr ("textColorId") = TextEditor::Style::textColorId;
+    textEditorStyle.attr ("caretColorId") = TextEditor::Style::caretColorId;
+    textEditorStyle.attr ("selectionColorId") = TextEditor::Style::selectionColorId;
+    textEditorStyle.attr ("outlineColorId") = TextEditor::Style::outlineColorId;
+    textEditorStyle.attr ("focusedOutlineColorId") = TextEditor::Style::focusedOutlineColorId;
 }
 
 } // namespace Bindings

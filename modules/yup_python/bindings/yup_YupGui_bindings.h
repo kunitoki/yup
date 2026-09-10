@@ -233,7 +233,7 @@ struct PyMouseListener : Base
         {
             pybind11::gil_scoped_acquire gil;
 
-            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseWheelMove"))
+            if (pybind11::function override_ = pybind11::get_override (static_cast<Base*> (this), "mouseWheel"))
             {
                 override_ (event, wheel);
                 return;
@@ -241,13 +241,70 @@ struct PyMouseListener : Base
         }
 
         //if constexpr (! std::is_same_v<Base, yup::TooltipWindow>)
-        //    Base::mouseWheelMove (event, wheel);
+        //    Base::mouseWheel (event, wheel);
     }
 
     //void mouseMagnify (const yup::MouseEvent& event, float scaleFactor) override
     //{
     //    PYBIND11_OVERRIDE (void, Base, mouseMagnify, event, scaleFactor);
     //}
+};
+
+// =================================================================================================
+
+/** Trampoline for TextInputTarget, whose getTextInputRect() is pure virtual. */
+template <class Base = yup::TextInputTarget>
+struct PyTextInputTarget : Base
+{
+    using Base::Base;
+
+    yup::Rectangle<float> getTextInputRect() const override
+    {
+        PYBIND11_OVERRIDE_PURE (yup::Rectangle<float>, Base, getTextInputRect);
+    }
+};
+
+// =================================================================================================
+
+/** Trampoline for ComponentListener, so a Python subclass receives component lifecycle events. */
+template <class Base = yup::ComponentListener>
+struct PyComponentListener : Base
+{
+    using Base::Base;
+
+    void componentMoved (yup::Component& component) override
+    {
+        PYBIND11_OVERRIDE (void, Base, componentMoved, component);
+    }
+
+    void componentResized (yup::Component& component) override
+    {
+        PYBIND11_OVERRIDE (void, Base, componentResized, component);
+    }
+
+    void componentBeingDeleted (yup::Component& component) override
+    {
+        PYBIND11_OVERRIDE (void, Base, componentBeingDeleted, component);
+    }
+
+    void componentPaintCompleted (yup::Component& component, const yup::ComponentPaintMetrics& metrics) override
+    {
+        PYBIND11_OVERRIDE (void, Base, componentPaintCompleted, component, metrics);
+    }
+};
+
+// =================================================================================================
+
+/** Trampoline for ComponentEffect, whose apply() is pure virtual. */
+template <class Base = yup::ComponentEffect>
+struct PyComponentEffect : Base
+{
+    using Base::Base;
+
+    void apply (yup::Graphics& g, yup::GpuTexture::Ptr inputTexture, yup::Rectangle<float> bounds) override
+    {
+        PYBIND11_OVERRIDE_PURE (void, Base, apply, g, inputTexture, bounds);
+    }
 };
 
 // =================================================================================================
@@ -295,6 +352,11 @@ struct PyComponent : PyMouseListener<Base>
     void contentScaleChanged (float dpiScale) override
     {
         PYBIND11_OVERRIDE (void, Base, contentScaleChanged, dpiScale);
+    }
+
+    void opacityChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, opacityChanged);
     }
 
     void transformChanged() override
@@ -555,6 +617,139 @@ struct PySlider : PyComponent<Base>
     void maxValueChanged() override
     {
         PYBIND11_OVERRIDE (void, Base, maxValueChanged);
+    }
+};
+
+// ============================================================================================
+
+template <class Base = yup::ProgressBar>
+struct PyProgressBar : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    void progressChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, progressChanged);
+    }
+};
+
+// ============================================================================================
+
+template <class Base = yup::SwitchButton>
+struct PySwitchButton : PyButton<Base>
+{
+    using PyButton<Base>::PyButton;
+
+    void toggleStateChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, toggleStateChanged);
+    }
+};
+
+// ============================================================================================
+
+template <class Base = yup::ComboBox>
+struct PyComboBox : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    void selectedItemChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, selectedItemChanged);
+    }
+};
+
+// ============================================================================================
+
+/** Trampoline for ListBoxModel, which is entirely virtual and is never owned by a ListBox.
+
+    refreshComponentForRow is deliberately absent: it hands the ListBox ownership of a raw
+    Component*, which pybind11 cannot take away from a Python-owned instance without risking a
+    double free. A Python model paints its rows through paintListBoxItem/getRowText/getRowIcon.
+*/
+template <class Base = yup::ListBoxModel>
+struct PyListBoxModel : Base
+{
+    // ListBoxModel keeps its own constructor protected, so the trampoline exposes one.
+    PyListBoxModel() = default;
+
+    int getNumRows() override
+    {
+        PYBIND11_OVERRIDE_PURE (int, Base, getNumRows);
+    }
+
+    int getRowHeight (int rowIndex) override
+    {
+        PYBIND11_OVERRIDE (int, Base, getRowHeight, rowIndex);
+    }
+
+    int getRowWidth (int rowIndex) override
+    {
+        PYBIND11_OVERRIDE (int, Base, getRowWidth, rowIndex);
+    }
+
+    void paintListBoxItem (int rowIndex, yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) override
+    {
+        PYBIND11_OVERRIDE (void, Base, paintListBoxItem, rowIndex, g, area, isSelected);
+    }
+
+    yup::String getRowText (int rowIndex) override
+    {
+        PYBIND11_OVERRIDE (yup::String, Base, getRowText, rowIndex);
+    }
+
+    yup::Image getRowIcon (int rowIndex) override
+    {
+        PYBIND11_OVERRIDE (yup::Image, Base, getRowIcon, rowIndex);
+    }
+
+    void selectedRowsChanged (const yup::Array<int>& selectedRows) override
+    {
+        PYBIND11_OVERRIDE (void, Base, selectedRowsChanged, selectedRows);
+    }
+
+    void rowClicked (int rowIndex, const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, rowClicked, rowIndex, event);
+    }
+
+    void rowDoubleClicked (int rowIndex, const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, rowDoubleClicked, rowIndex, event);
+    }
+
+    void returnKeyPressed (int lastSelectedRow) override
+    {
+        PYBIND11_OVERRIDE (void, Base, returnKeyPressed, lastSelectedRow);
+    }
+
+    void deleteKeyPressed (const yup::Array<int>& selectedRows) override
+    {
+        PYBIND11_OVERRIDE (void, Base, deleteKeyPressed, selectedRows);
+    }
+
+    yup::var getDragSourceDescription (const yup::Array<int>& selectedRows) override
+    {
+        PYBIND11_OVERRIDE (yup::var, Base, getDragSourceDescription, selectedRows);
+    }
+};
+
+// ============================================================================================
+
+/** Trampoline for TextEditor, which implements TextInputTarget's pure virtual.
+
+    The bindings can only declare Component as TextEditor's Python base, so the TextInputTarget
+    half is exposed as plain methods on TextEditor, and this override is what routes a Python
+    subclass's getTextInputRect back into the text input system.
+*/
+template <class Base = yup::TextEditor>
+struct PyTextEditor : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    yup::Rectangle<float> getTextInputRect() const override
+    {
+        PYBIND11_OVERRIDE (yup::Rectangle<float>, Base, getTextInputRect);
     }
 };
 

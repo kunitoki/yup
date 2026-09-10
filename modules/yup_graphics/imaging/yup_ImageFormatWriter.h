@@ -103,12 +103,33 @@ public:
     */
     virtual bool endAnimation();
 
-    /** The output stream, for use by subclasses. */
+    /** The output stream, for use by subclasses.
+
+        Null when this writer was created with deleteSourceWhenDestroyed set to false,
+        because it then keeps no stream of its own.
+    */
     std::unique_ptr<OutputStream> output;
 
+    /** Whether this writer owns the destination stream and deletes it when destroyed. */
+    bool deleteSourceWhenDestroyed = true;
+
 protected:
-    /** Creates an ImageFormatWriter and takes ownership of the destination stream. */
-    ImageFormatWriter (OutputStream* destStream, const String& formatName, PixelFormat pixelFormat);
+    /** Creates an ImageFormatWriter.
+
+        @param destStream                   The stream to write to
+        @param formatName                   The name reported by getFormatName()
+        @param pixelFormat                  The pixel format of the data being written
+        @param deleteSourceWhenDestroyed    Whether to delete @p destStream when this writer
+                                            is destroyed. Pass true to take ownership, which is
+                                            what every built-in format and every writer created
+                                            through ImageFormatManager wants. Pass false when the
+                                            caller keeps ownership; the writer then holds no
+                                            stream at all and must not need one after construction.
+    */
+    ImageFormatWriter (OutputStream* destStream,
+                       const String& formatName,
+                       PixelFormat pixelFormat,
+                       bool deleteSourceWhenDestroyed = true);
 
 private:
     String formatName;

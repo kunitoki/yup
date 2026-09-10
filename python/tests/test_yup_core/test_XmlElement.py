@@ -190,7 +190,9 @@ def test_child_elements_manipulation():
     assert parent.getNumChildElements() == 2
     assert parent.getFirstChildElement().getTagName() == "CHILD2"
 
-    parent.removeChildElement(child1, True)
+    assert parent.getChildElement(1).getTagName() == "CHILD1"
+
+    parent.removeChildElement(parent.getChildElement(1), True)
     assert parent.getNumChildElements() == 1
     parent.deleteAllChildElements()
     assert parent.getNumChildElements() == 0

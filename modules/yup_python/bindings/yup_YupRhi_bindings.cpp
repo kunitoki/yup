@@ -361,8 +361,6 @@ void registerYupRhiBindings (py::module_& m)
         .def_readwrite ("wrapU", &GpuSamplerDesc::wrapU)
         .def_readwrite ("wrapV", &GpuSamplerDesc::wrapV)
         .def_readwrite ("wrapW", &GpuSamplerDesc::wrapW)
-        // None (the default) means normal filtering; set a GpuCompareFunction to
-        // make this a comparison (shadow) sampler.
         .def_readwrite ("compare", &GpuSamplerDesc::compare)
         .def_readwrite ("minLod", &GpuSamplerDesc::minLod)
         .def_readwrite ("maxLod", &GpuSamplerDesc::maxLod)
@@ -418,9 +416,6 @@ void registerYupRhiBindings (py::module_& m)
 
     py::class_<GpuPipelineOptions> (m, "GpuPipelineOptions")
         .def (py::init<>())
-        // vertexBuffers and colorTargets are converted by value: assign a whole
-        // list (options.vertexBuffers = [...]). Mutating the returned list in
-        // place does not write back.
         .def_readwrite ("vertexBuffers", &GpuPipelineOptions::vertexBuffers)
         .def_readwrite ("topology", &GpuPipelineOptions::topology)
         .def_readwrite ("indexFormat", &GpuPipelineOptions::indexFormat)
@@ -458,8 +453,6 @@ void registerYupRhiBindings (py::module_& m)
         .def (py::init<GpuLoadOp, GpuStoreOp, GpuColor>(), "loadOp"_a, "storeOp"_a, "clearColor"_a = GpuColor::transparentBlack())
         .def_readwrite ("loadOp", &GpuRenderOptions::loadOp)
         .def_readwrite ("storeOp", &GpuRenderOptions::storeOp)
-        // The two-state view of loadOp, kept because it reads better from Python than
-        // comparing against GpuLoadOp.clear and because it matches the bool constructor.
         .def_property ("clear",
                        [] (const GpuRenderOptions& self)
                        {

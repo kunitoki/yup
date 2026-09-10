@@ -1473,7 +1473,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::InputStream
 
-    py::class_<InputStream, PyInputStream<>> classInputStream (m, "InputStream");
+    py::class_<InputStream, PyInputStream<>, py::smart_holder> classInputStream (m, "InputStream");
 
     classInputStream
         .def (py::init<>())
@@ -1506,13 +1506,13 @@ void registerYupCoreBindings (py::module_& m)
         .def ("setPosition", &InputStream::setPosition, "pos"_a)
         .def ("skipNextBytes", &InputStream::skipNextBytes, "numBytesToSkip"_a);
 
-    py::class_<BufferedInputStream, InputStream, PyInputStream<BufferedInputStream>> classBufferedInputStream (m, "BufferedInputStream");
+    py::class_<BufferedInputStream, InputStream, PyInputStream<BufferedInputStream>, py::smart_holder> classBufferedInputStream (m, "BufferedInputStream");
 
     classBufferedInputStream
         .def (py::init<InputStream&, int>(), "sourceStream"_a, "bufferSize"_a)
         .def ("peekByte", &BufferedInputStream::peekByte);
 
-    py::class_<MemoryInputStream, InputStream, PyInputStream<MemoryInputStream>> classMemoryInputStream (m, "MemoryInputStream");
+    py::class_<MemoryInputStream, InputStream, PyInputStream<MemoryInputStream>, py::smart_holder> classMemoryInputStream (m, "MemoryInputStream");
 
     classMemoryInputStream
         .def (py::init<const MemoryBlock&, bool>(), "data"_a, "keepInternalCopyOfData"_a)
@@ -1527,7 +1527,7 @@ void registerYupCoreBindings (py::module_& m)
         }, py::return_value_policy::reference_internal)
         .def ("getDataSize", &MemoryInputStream::getDataSize);
 
-    py::class_<SubregionStream, InputStream, PyInputStream<SubregionStream>> classSubregionStream (m, "SubregionStream");
+    py::class_<SubregionStream, InputStream, PyInputStream<SubregionStream>, py::smart_holder> classSubregionStream (m, "SubregionStream");
 
     classSubregionStream
         .def (py::init<InputStream*, int64, int64, bool>(),
@@ -1536,7 +1536,7 @@ void registerYupCoreBindings (py::module_& m)
               "lengthOfSourceStream"_a,
               "deleteSourceWhenDestroyed"_a);
 
-    py::class_<GZIPDecompressorInputStream, InputStream, PyInputStream<GZIPDecompressorInputStream>> classGZIPDecompressorInputStream (m, "GZIPDecompressorInputStream");
+    py::class_<GZIPDecompressorInputStream, InputStream, PyInputStream<GZIPDecompressorInputStream>, py::smart_holder> classGZIPDecompressorInputStream (m, "GZIPDecompressorInputStream");
 
     py::enum_<GZIPDecompressorInputStream::Format> (classGZIPDecompressorInputStream, "Format")
         .value ("zlibFormat", GZIPDecompressorInputStream::Format::zlibFormat)
@@ -1554,7 +1554,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::InputSource
 
-    py::class_<InputSource, PyInputSource<>> classInputSource (m, "InputSource");
+    py::class_<InputSource, PyInputSource<>, py::smart_holder> classInputSource (m, "InputSource");
 
     classInputSource
         .def (py::init<>())
@@ -1812,7 +1812,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::File*Stream
 
-    py::class_<FileInputStream, InputStream, PyInputStream<FileInputStream>> classFileInputStream (m, "FileInputStream");
+    py::class_<FileInputStream, InputStream, PyInputStream<FileInputStream>, py::smart_holder> classFileInputStream (m, "FileInputStream");
 
     classFileInputStream
         .def (py::init<const File&>(), "fileToRead"_a)
@@ -1821,7 +1821,7 @@ void registerYupCoreBindings (py::module_& m)
         .def ("failedToOpen", &FileInputStream::failedToOpen)
         .def ("openedOk", &FileInputStream::openedOk);
 
-    py::class_<FileInputSource, InputSource> classFileInputSource (m, "FileInputSource");
+    py::class_<FileInputSource, InputSource, py::smart_holder> classFileInputSource (m, "FileInputSource");
 
     classFileInputSource
         .def (py::init<const File&, bool>(), "file"_a, "useFileTimeInHashGeneration"_a = false);
@@ -2105,7 +2105,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::URLInputSource
 
-    py::class_<URLInputSource, InputSource, PyInputSource<URLInputSource>> classURLInputSource (m, "URLInputSource");
+    py::class_<URLInputSource, InputSource, PyInputSource<URLInputSource>, py::smart_holder> classURLInputSource (m, "URLInputSource");
 
     classURLInputSource
         .def (py::init<const URL&>());
@@ -2484,7 +2484,7 @@ void registerYupCoreBindings (py::module_& m)
 
     // ============================================================================================ yup::XmlElement
 
-    py::class_<XmlElement, std::unique_ptr<XmlElement>> classXmlElement (m, "XmlElement");
+    py::class_<XmlElement, py::smart_holder> classXmlElement (m, "XmlElement");
     py::class_<XmlElement::TextFormat> classXmlElementTextFormat (classXmlElement, "TextFormat");
     py::class_<PyXmlElementComparator> classXmlElementComparator (classXmlElement, "Comparator");
 
@@ -2556,22 +2556,22 @@ void registerYupCoreBindings (py::module_& m)
         .def ("getChildElement", &XmlElement::getChildElement, py::return_value_policy::reference_internal)
         .def ("getChildByName", &XmlElement::getChildByName, py::return_value_policy::reference_internal)
         .def ("getChildByAttribute", &XmlElement::getChildByAttribute, py::return_value_policy::reference_internal)
-        .def ("addChildElement", [] (XmlElement& self, py::object newChildElement)
+        .def ("addChildElement", [] (XmlElement& self, std::unique_ptr<XmlElement> newChildElement)
         {
-            self.addChildElement (newChildElement.release().cast<XmlElement*>());
+            self.addChildElement (newChildElement.release());
         })
-        .def ("insertChildElement", [] (XmlElement& self, py::object newChildElement, int index)
+        .def ("insertChildElement", [] (XmlElement& self, std::unique_ptr<XmlElement> newChildElement, int index)
         {
-            self.insertChildElement (newChildElement.release().cast<XmlElement*>(), index);
+            self.insertChildElement (newChildElement.release(), index);
         })
-        .def ("prependChildElement", [] (XmlElement& self, py::object newChildElement)
+        .def ("prependChildElement", [] (XmlElement& self, std::unique_ptr<XmlElement> newChildElement)
         {
-            self.prependChildElement (newChildElement.release().cast<XmlElement*>());
+            self.prependChildElement (newChildElement.release());
         })
         .def ("createNewChildElement", &XmlElement::createNewChildElement, py::return_value_policy::reference_internal)
-        .def ("replaceChildElement", [] (XmlElement& self, XmlElement* currentChildElement, py::object newChildElement)
+        .def ("replaceChildElement", [] (XmlElement& self, XmlElement* currentChildElement, std::unique_ptr<XmlElement> newChildElement)
         {
-            self.replaceChildElement (currentChildElement, newChildElement.release().cast<XmlElement*>());
+            self.replaceChildElement (currentChildElement, newChildElement.release());
         })
         .def ("removeChildElement", &XmlElement::removeChildElement)
         .def ("deleteAllChildElements", &XmlElement::deleteAllChildElements)
@@ -2614,9 +2614,9 @@ void registerYupCoreBindings (py::module_& m)
         .def ("getDocumentElement", &XmlDocument::getDocumentElement, "onlyReadOuterDocumentElement"_a = false)
         .def ("getDocumentElementIfTagMatches", &XmlDocument::getDocumentElementIfTagMatches, "requiredTag"_a)
         .def ("getLastParseError", &XmlDocument::getLastParseError)
-        .def ("setInputSource", [] (XmlDocument& self, py::object source)
+        .def ("setInputSource", [] (XmlDocument& self, std::unique_ptr<InputSource> source)
         {
-            self.setInputSource (source.release().cast<InputSource*>());
+            self.setInputSource (source.release());
         })
         .def ("setEmptyTextElementsIgnored", &XmlDocument::setEmptyTextElementsIgnored, "shouldBeIgnored"_a)
         .def_static ("parse", static_cast<std::unique_ptr<XmlElement> (*) (const File&)> (&XmlDocument::parse), "file"_a)
@@ -2672,9 +2672,9 @@ void registerYupCoreBindings (py::module_& m)
     classZipFileBuilder
         .def (py::init<>())
         .def ("addFile", &ZipFile::Builder::addFile, "fileToAdd"_a, "compressionLevel"_a, "storedPathName"_a = String())
-        .def ("addEntry", [] (ZipFile::Builder& self, py::object stream, int compression, const String& path, Time time)
+        .def ("addEntry", [] (ZipFile::Builder& self, std::unique_ptr<InputStream> stream, int compression, const String& path, Time time)
         {
-            self.addEntry (stream.release().cast<InputStream*>(), compression, path, time);
+            self.addEntry (stream.release(), compression, path, time);
         }, "streamToRead"_a, "compressionLevel"_a, "storedPathName"_a, "fileModificationTime"_a)
         .def ("writeToStream", [] (const ZipFile::Builder& self, OutputStream& target)
         {
@@ -2684,9 +2684,9 @@ void registerYupCoreBindings (py::module_& m)
     classZipFile
         .def (py::init<const File&>(), "file"_a)
         .def (py::init<InputStream&>(), "inputStream"_a)
-        .def (py::init ([] (py::object inputSource)
+        .def (py::init ([] (std::unique_ptr<InputSource> inputSource)
         {
-            return new ZipFile (inputSource.release().cast<InputSource*>());
+            return new ZipFile (inputSource.release());
         }), "inputSource"_a)
         .def ("getNumEntries", &ZipFile::getNumEntries)
         .def ("getIndexOfFileName", &ZipFile::getIndexOfFileName, "fileName"_a, "ignoreCase"_a = false)
@@ -2797,6 +2797,475 @@ void registerYupCoreBindings (py::module_& m)
     // ============================================================================================ yup::SparseSet<>
 
     registerSparseSet<SparseSet, int> (m);
+
+    // ============================================================================================ yup::Logger
+
+    py::class_<Logger, PyLogger> classLogger (m, "Logger");
+
+    classLogger
+        .def (py::init<>())
+        .def_static ("setCurrentLogger", [] (py::object newLogger)
+        {
+            Logger::setCurrentLogger (newLogger.is_none() ? nullptr : &newLogger.cast<Logger&>());
+        }, "newLogger"_a)
+        .def_static ("getCurrentLogger", []() -> py::object
+        {
+            if (auto* logger = Logger::getCurrentLogger())
+                return py::cast (logger, py::return_value_policy::reference);
+
+            return py::none();
+        })
+        .def_static ("writeToLog", &Logger::writeToLog, "message"_a)
+        .def_static ("outputDebugString", &Logger::outputDebugString, "text"_a);
+
+    // ============================================================================================ yup::FileLogger
+
+    py::class_<FileLogger, Logger> classFileLogger (m, "FileLogger");
+
+    classFileLogger
+        .def (py::init ([] (const File& fileToWriteTo, const String& welcomeMessage, int64 maxInitialFileSizeBytes)
+        {
+            return std::make_unique<FileLogger> (fileToWriteTo, welcomeMessage, maxInitialFileSizeBytes);
+        }), "fileToWriteTo"_a, "welcomeMessage"_a, "maxInitialFileSizeBytes"_a = 128 * 1024)
+        .def ("getLogFile", &FileLogger::getLogFile, py::return_value_policy::reference_internal)
+        .def ("logMessage", &FileLogger::logMessage, "message"_a)
+        .def_static ("createDefaultAppLogger", [] (const String& logFileSubDirectoryName, const String& logFileName, const String& welcomeMessage, int64 maxInitialFileSizeBytes)
+        {
+            return std::unique_ptr<FileLogger> (FileLogger::createDefaultAppLogger (logFileSubDirectoryName, logFileName, welcomeMessage, maxInitialFileSizeBytes));
+        }, "logFileSubDirectoryName"_a, "logFileName"_a, "welcomeMessage"_a, "maxInitialFileSizeBytes"_a = 128 * 1024)
+        .def_static ("createDateStampedLogger", [] (const String& logFileSubDirectoryName, const String& logFileNameRoot, const String& logFileNameSuffix, const String& welcomeMessage)
+        {
+            return std::unique_ptr<FileLogger> (FileLogger::createDateStampedLogger (logFileSubDirectoryName, logFileNameRoot, logFileNameSuffix, welcomeMessage));
+        }, "logFileSubDirectoryName"_a, "logFileNameRoot"_a, "logFileNameSuffix"_a, "welcomeMessage"_a)
+        .def_static ("getSystemLogFileFolder", &FileLogger::getSystemLogFileFolder)
+        .def_static ("trimFileSize", &FileLogger::trimFileSize, "file"_a, "maxFileSize"_a);
+
+    // ============================================================================================ yup::DynamicLibrary
+
+    py::class_<DynamicLibrary> classDynamicLibrary (m, "DynamicLibrary");
+
+    classDynamicLibrary
+        .def (py::init<>())
+        .def (py::init<const String&>(), "name"_a)
+        .def ("open", &DynamicLibrary::open, "name"_a)
+        .def ("close", &DynamicLibrary::close)
+        .def ("getFunction", [] (DynamicLibrary& self, const String& functionName) -> py::object
+        {
+            if (auto* function = self.getFunction (functionName))
+                return py::capsule (function, "yup.dynamic_library_function");
+
+            return py::none();
+        }, "functionName"_a)
+        .def ("getNativeHandle", [] (DynamicLibrary& self) -> py::object
+        {
+            if (auto* handle = self.getNativeHandle())
+                return py::capsule (handle, "yup.dynamic_library_handle");
+
+            return py::none();
+        });
+
+    // ============================================================================================ yup::SHA1
+
+    py::class_<SHA1> classSHA1 (m, "SHA1");
+
+    classSHA1
+        .def (py::init<>())
+        .def (py::init<const MemoryBlock&>(), "data"_a)
+        .def (py::init<const File&>(), "file"_a)
+        .def (py::init ([] (py::buffer data)
+        {
+            const auto info = data.request();
+
+            return SHA1 (info.ptr, static_cast<size_t> (info.size));
+        }), "data"_a)
+        .def (py::init ([] (const String& text)
+        {
+            return SHA1 (text.toUTF8());
+        }), "text"_a)
+        .def ("getRawData", [] (const SHA1& self)
+        {
+            const auto raw = self.getRawData();
+
+            return py::bytes (reinterpret_cast<const char*> (raw.data()), raw.size());
+        })
+        .def ("toHexString", &SHA1::toHexString)
+        .def (py::self == py::self)
+        .def (py::self != py::self);
+
+    // ============================================================================================ yup::CancelTokenSource
+
+    py::class_<CancelTokenSource> classCancelTokenSource (m, "CancelTokenSource");
+
+    classCancelTokenSource
+        .def (py::init<>())
+        .def ("cancel", &CancelTokenSource::cancel)
+        .def ("getToken", &CancelTokenSource::getToken)
+        .def ("wasCancelled", &CancelTokenSource::wasCancelled)
+        .def ("isCancellable", &CancelTokenSource::isCancellable);
+
+    // ============================================================================================ yup::CancelToken
+
+    py::class_<CancelToken> classCancelToken (m, "CancelToken");
+
+    classCancelToken
+        .def (py::init<>())
+        .def_static ("none", &CancelToken::none)
+        .def ("wasCancelled", &CancelToken::wasCancelled)
+        .def ("isCancellable", &CancelToken::isCancellable)
+        .def ("waitForCancellation", &CancelToken::waitForCancellation, "timeOutMilliseconds"_a = -1);
+
+    // ============================================================================================ yup::WaitableTimer
+
+    py::class_<WaitableTimer> classWaitableTimer (m, "WaitableTimer");
+
+    classWaitableTimer
+        .def (py::init<>())
+        .def ("waitUntil", &WaitableTimer::waitUntil, "milliseconds"_a);
+
+    // ============================================================================================ yup::StringPool
+
+    py::class_<StringPool> classStringPool (m, "StringPool");
+
+    classStringPool
+        .def (py::init<>())
+        .def ("getPooledString", py::overload_cast<const String&> (&StringPool::getPooledString), "original"_a)
+        .def ("getPooledString", py::overload_cast<const char*> (&StringPool::getPooledString), "original"_a)
+        .def ("garbageCollect", &StringPool::garbageCollect)
+        .def_static ("getGlobalPool", &StringPool::getGlobalPool, py::return_value_policy::reference);
+
+    // ============================================================================================ yup::TextDiff
+
+    py::class_<TextDiff> classTextDiff (m, "TextDiff");
+    py::class_<TextDiff::Change> classTextDiffChange (classTextDiff, "Change");
+
+    classTextDiffChange
+        .def_readonly ("insertedText", &TextDiff::Change::insertedText)
+        .def_readonly ("start", &TextDiff::Change::start)
+        .def_readonly ("length", &TextDiff::Change::length)
+        .def ("isDeletion", &TextDiff::Change::isDeletion)
+        .def ("appliedTo", &TextDiff::Change::appliedTo, "original"_a);
+
+    classTextDiff
+        .def (py::init<const String&, const String&>(), "original"_a, "target"_a)
+        .def ("appliedTo", &TextDiff::appliedTo, "text"_a)
+        .def ("getChanges", [] (const TextDiff& self)
+        {
+            py::list result;
+
+            for (const auto& change : self.changes)
+                result.append (change);
+
+            return result;
+        });
+
+    // ============================================================================================ yup::DynamicObject
+
+    py::class_<DynamicObject, ReferenceCountedObjectPtr<DynamicObject>> classDynamicObject (m, "DynamicObject");
+
+    classDynamicObject
+        .def (py::init<>())
+        .def ("hasProperty", &DynamicObject::hasProperty, "propertyName"_a)
+        .def ("getProperty", py::overload_cast<const Identifier&> (&DynamicObject::getProperty, py::const_), "propertyName"_a)
+        .def ("getProperty", py::overload_cast<const Identifier&, const var&> (&DynamicObject::getProperty, py::const_), "propertyName"_a, "defaultValue"_a)
+        .def ("setProperty", &DynamicObject::setProperty, "propertyName"_a, "newValue"_a)
+        .def ("removeProperty", &DynamicObject::removeProperty, "propertyName"_a)
+        .def ("hasMethod", &DynamicObject::hasMethod, "methodName"_a)
+        .def ("clear", &DynamicObject::clear)
+        .def ("cloneAllProperties", &DynamicObject::cloneAllProperties)
+        .def ("getProperties", [] (DynamicObject& self) -> NamedValueSet&
+        {
+            return self.getProperties();
+        }, py::return_value_policy::reference_internal);
+
+    // ============================================================================================ yup::AbstractFifo
+
+    py::class_<AbstractFifo> classAbstractFifo (m, "AbstractFifo");
+
+    classAbstractFifo
+        .def (py::init<int>(), "capacity"_a)
+        .def ("getTotalSize", &AbstractFifo::getTotalSize)
+        .def ("getFreeSpace", &AbstractFifo::getFreeSpace)
+        .def ("getNumReady", &AbstractFifo::getNumReady)
+        .def ("reset", &AbstractFifo::reset)
+        .def ("setTotalSize", &AbstractFifo::setTotalSize, "newSize"_a)
+        .def ("prepareToWrite", [] (const AbstractFifo& self, int numToWrite)
+        {
+            int startIndex1 = 0, blockSize1 = 0, startIndex2 = 0, blockSize2 = 0;
+
+            self.prepareToWrite (numToWrite, startIndex1, blockSize1, startIndex2, blockSize2);
+
+            return py::make_tuple (startIndex1, blockSize1, startIndex2, blockSize2);
+        }, "numToWrite"_a)
+        .def ("finishedWrite", &AbstractFifo::finishedWrite, "numWritten"_a)
+        .def ("prepareToRead", [] (const AbstractFifo& self, int numWanted)
+        {
+            int startIndex1 = 0, blockSize1 = 0, startIndex2 = 0, blockSize2 = 0;
+
+            self.prepareToRead (numWanted, startIndex1, blockSize1, startIndex2, blockSize2);
+
+            return py::make_tuple (startIndex1, blockSize1, startIndex2, blockSize2);
+        }, "numWanted"_a)
+        .def ("finishedRead", &AbstractFifo::finishedRead, "numRead"_a);
+
+    // ============================================================================================ yup::SingleThreadedAbstractFifo
+
+    py::class_<SingleThreadedAbstractFifo> classSingleThreadedAbstractFifo (m, "SingleThreadedAbstractFifo");
+
+    classSingleThreadedAbstractFifo
+        .def (py::init<>())
+        .def (py::init<int>(), "size"_a)
+        .def ("getRemainingSpace", &SingleThreadedAbstractFifo::getRemainingSpace)
+        .def ("getNumReadable", &SingleThreadedAbstractFifo::getNumReadable)
+        .def ("getSize", &SingleThreadedAbstractFifo::getSize)
+        .def ("write", [] (SingleThreadedAbstractFifo& self, int num)
+        {
+            return self.write (num);
+        }, "num"_a)
+        .def ("read", [] (SingleThreadedAbstractFifo& self, int num)
+        {
+            return self.read (num);
+        }, "num"_a);
+
+    // ============================================================================================ yup::StatisticsAccumulator<>
+
+    registerStatisticsAccumulator<StatisticsAccumulator, float> (m);
+
+    // ============================================================================================ yup::Expression
+
+    py::class_<Expression> classExpression (m, "Expression");
+    py::class_<Expression::Scope, PyExpressionScope> classExpressionScope (classExpression, "Scope");
+
+    classExpressionScope
+        .def (py::init<>())
+        .def ("getScopeUID", &Expression::Scope::getScopeUID)
+        .def ("getSymbolValue", &Expression::Scope::getSymbolValue, "symbol"_a);
+
+    classExpression
+        .def (py::init<>())
+        .def (py::init<double>(), "constant"_a)
+        .def (py::init ([] (const String& stringToParse)
+        {
+            String parseError;
+            auto result = Expression (stringToParse, parseError);
+
+            if (parseError.isNotEmpty())
+                throw py::value_error (parseError.toStdString());
+
+            return result;
+        }), "stringToParse"_a)
+        .def ("toString", &Expression::toString)
+        .def (py::self + py::self)
+        .def (py::self - py::self)
+        .def (py::self * py::self)
+        .def (py::self / py::self)
+        .def (- py::self)
+        .def_static ("symbol", &Expression::symbol, "symbol"_a)
+        .def_static ("function", [] (const String& functionName, py::list parameters)
+        {
+            Array<Expression> parameterList;
+
+            for (auto item : parameters)
+                parameterList.add (item.cast<Expression>());
+
+            return Expression::function (functionName, parameterList);
+        }, "functionName"_a, "parameters"_a)
+        .def ("evaluate", py::overload_cast<> (&Expression::evaluate, py::const_))
+        .def ("evaluate", py::overload_cast<const Expression::Scope&> (&Expression::evaluate, py::const_), "scope"_a)
+        .def ("adjustedToGiveNewResult", &Expression::adjustedToGiveNewResult, "targetValue"_a, "scope"_a)
+        .def ("usesAnySymbols", &Expression::usesAnySymbols);
+
+    // ============================================================================================ yup::LocalisedStrings
+
+    py::class_<LocalisedStrings> classLocalisedStrings (m, "LocalisedStrings");
+
+    classLocalisedStrings
+        .def (py::init ([] (const String& fileContents, bool ignoreCaseOfKeys)
+        {
+            return std::make_unique<LocalisedStrings> (fileContents, ignoreCaseOfKeys);
+        }), "fileContents"_a, "ignoreCaseOfKeys"_a)
+        .def (py::init ([] (const File& fileToLoad, bool ignoreCaseOfKeys)
+        {
+            return std::make_unique<LocalisedStrings> (fileToLoad, ignoreCaseOfKeys);
+        }), "fileToLoad"_a, "ignoreCaseOfKeys"_a)
+        .def ("translate", py::overload_cast<const String&> (&LocalisedStrings::translate, py::const_), "text"_a)
+        .def ("translate", py::overload_cast<const String&, const String&> (&LocalisedStrings::translate, py::const_), "text"_a, "resultIfNotFound"_a)
+        .def ("getLanguageName", &LocalisedStrings::getLanguageName)
+        .def ("getCountryCodes", &LocalisedStrings::getCountryCodes, py::return_value_policy::reference_internal)
+        .def ("getMappings", &LocalisedStrings::getMappings, py::return_value_policy::reference_internal)
+        .def ("addStrings", &LocalisedStrings::addStrings, "other"_a)
+        .def_static ("translateWithCurrentMappings", py::overload_cast<const String&> (&LocalisedStrings::translateWithCurrentMappings), "text"_a)
+        .def_static ("translateWithCurrentMappings", py::overload_cast<const char*> (&LocalisedStrings::translateWithCurrentMappings), "text"_a);
+
+    // ============================================================================================ yup::YAML
+
+    py::class_<YAML> classYAML (m, "YAML");
+    py::class_<YAML::FormatOptions> classYAMLFormatOptions (classYAML, "FormatOptions");
+
+    Helpers::makeArithmeticEnum<YAML::Spacing> (classYAML, "Spacing")
+        .value ("none", YAML::Spacing::none)
+        .value ("singleLine", YAML::Spacing::singleLine)
+        .value ("multiLine", YAML::Spacing::multiLine)
+        .export_values();
+
+    classYAMLFormatOptions
+        .def (py::init<>())
+        .def ("withSpacing", &YAML::FormatOptions::withSpacing, "spacing"_a)
+        .def ("withMaxDecimalPlaces", &YAML::FormatOptions::withMaxDecimalPlaces, "maxDecimalPlaces"_a)
+        .def ("withIndentLevel", &YAML::FormatOptions::withIndentLevel, "indentLevel"_a)
+        .def ("getSpacing", &YAML::FormatOptions::getSpacing)
+        .def ("getMaxDecimalPlaces", &YAML::FormatOptions::getMaxDecimalPlaces)
+        .def ("getIndentLevel", &YAML::FormatOptions::getIndentLevel);
+
+    classYAML
+        .def_static ("parse", py::overload_cast<const String&> (&YAML::parse), "text"_a)
+        .def_static ("parse", py::overload_cast<const File&> (&YAML::parse), "file"_a)
+        .def_static ("parseWithResult", [] (const String& text)
+        {
+            var parsedResult;
+            auto result = YAML::parse (text, parsedResult);
+
+            return py::make_tuple (result, parsedResult);
+        }, "text"_a)
+        .def_static ("fromString", &YAML::fromString, "text"_a)
+        .def_static ("toString", py::overload_cast<const var&, bool, int> (&YAML::toString), "objectToFormat"_a, "allOnOneLine"_a = false, "maximumDecimalPlaces"_a = 15)
+        .def_static ("toString", py::overload_cast<const var&, const YAML::FormatOptions&> (&YAML::toString), "objectToFormat"_a, "formatOptions"_a)
+        .def_static ("escapeString", &YAML::escapeString, "text"_a);
+
+    // ============================================================================================ yup::IPAddress
+
+    py::class_<IPAddress> classIPAddress (m, "IPAddress");
+
+    classIPAddress
+        .def (py::init<>())
+        .def (py::init<uint8, uint8, uint8, uint8>(), "address1"_a, "address2"_a, "address3"_a, "address4"_a)
+        .def (py::init ([] (uint32 asNativeEndian32Bit)
+        {
+            return IPAddress (asNativeEndian32Bit);
+        }), "asNativeEndian32Bit"_a)
+        .def (py::init<const String&>(), "address"_a)
+        .def_readonly ("isIPv6", &IPAddress::isIPv6)
+        .def ("isNull", &IPAddress::isNull)
+        .def ("toString", &IPAddress::toString)
+        .def ("compare", &IPAddress::compare, "other"_a)
+        .def ("getAddressBytes", [] (const IPAddress& self)
+        {
+            const auto numBytes = self.isIPv6 ? 16 : 4;
+
+            return py::bytes (reinterpret_cast<const char*> (self.address), static_cast<size_t> (numBytes));
+        })
+        .def (py::self == py::self)
+        .def (py::self != py::self)
+        .def (py::self < py::self)
+        .def (py::self > py::self)
+        .def (py::self <= py::self)
+        .def (py::self >= py::self)
+        .def_static ("any", &IPAddress::any)
+        .def_static ("broadcast", &IPAddress::broadcast)
+        .def_static ("local", &IPAddress::local, "IPv6"_a = false)
+        .def_static ("getLocalAddress", &IPAddress::getLocalAddress, "includeIPv6"_a = false)
+        .def_static ("getAllAddresses", [] (bool includeIPv6)
+        {
+            py::list result;
+
+            for (const auto& address : IPAddress::getAllAddresses (includeIPv6))
+                result.append (address);
+
+            return result;
+        }, "includeIPv6"_a = false)
+        .def_static ("getFormattedAddress", &IPAddress::getFormattedAddress, "unformattedAddress"_a)
+        .def_static ("isIPv4MappedAddress", &IPAddress::isIPv4MappedAddress, "mappedAddress"_a)
+        .def_static ("convertIPv4MappedAddressToIPv4", &IPAddress::convertIPv4MappedAddressToIPv4, "mappedAddress"_a)
+        .def_static ("convertIPv4AddressToIPv4Mapped", &IPAddress::convertIPv4AddressToIPv4Mapped, "addressToMap"_a)
+        .def_static ("getInterfaceBroadcastAddress", &IPAddress::getInterfaceBroadcastAddress, "interfaceAddress"_a);
+
+    // ============================================================================================ yup::MACAddress
+
+    py::class_<MACAddress> classMACAddress (m, "MACAddress");
+
+    classMACAddress
+        .def (py::init<>())
+        .def (py::init ([] (py::buffer bytes)
+        {
+            const auto info = bytes.request();
+
+            if (info.size < 6)
+                throw py::value_error ("A MACAddress needs at least 6 bytes");
+
+            return MACAddress (static_cast<const uint8*> (info.ptr));
+        }), "bytes"_a)
+        .def (py::init<StringRef>(), "address"_a)
+        .def ("toString", py::overload_cast<> (&MACAddress::toString, py::const_))
+        .def ("toString", py::overload_cast<StringRef> (&MACAddress::toString, py::const_), "separator"_a)
+        .def ("toInt64", &MACAddress::toInt64)
+        .def ("isNull", &MACAddress::isNull)
+        .def ("getBytes", [] (const MACAddress& self)
+        {
+            return py::bytes (reinterpret_cast<const char*> (self.getBytes()), 6);
+        })
+        .def (py::self == py::self)
+        .def (py::self != py::self)
+        .def_static ("getAllAddresses", []()
+        {
+            py::list result;
+
+            for (const auto& address : MACAddress::getAllAddresses())
+                result.append (address);
+
+            return result;
+        });
+
+    // ============================================================================================ yup::NamedPipe
+
+    py::class_<NamedPipe> classNamedPipe (m, "NamedPipe");
+
+    classNamedPipe
+        .def (py::init<>())
+        .def ("openExisting", &NamedPipe::openExisting, "pipeName"_a)
+        .def ("createNewPipe", &NamedPipe::createNewPipe, "pipeName"_a, "mustNotExist"_a = false)
+        .def ("close", &NamedPipe::close)
+        .def ("isOpen", &NamedPipe::isOpen)
+        .def ("getName", &NamedPipe::getName)
+        .def ("read", [] (NamedPipe& self, py::buffer destBuffer, int timeOutMilliseconds)
+        {
+            auto info = destBuffer.request (true);
+
+            return self.read (info.ptr, static_cast<int> (info.size), timeOutMilliseconds);
+        }, "destBuffer"_a, "timeOutMilliseconds"_a)
+        .def ("write", [] (NamedPipe& self, py::buffer sourceBuffer, int timeOutMilliseconds)
+        {
+            const auto info = sourceBuffer.request();
+
+            return self.write (info.ptr, static_cast<int> (info.size), timeOutMilliseconds);
+        }, "sourceBuffer"_a, "timeOutMilliseconds"_a);
+
+    // ============================================================================================ yup::WebInputStream
+
+    py::class_<WebInputStream, InputStream, PyInputStream<WebInputStream>, py::smart_holder> classWebInputStream (m, "WebInputStream");
+    py::class_<WebInputStream::Listener, PyWebInputStreamListener> classWebInputStreamListener (classWebInputStream, "Listener");
+
+    classWebInputStreamListener
+        .def (py::init<>())
+        .def ("postDataSendProgress", &WebInputStream::Listener::postDataSendProgress, "request"_a, "bytesSent"_a, "totalBytes"_a);
+
+    classWebInputStream
+        .def (py::init<const URL&, bool>(), "url"_a, "addParametersToRequestBody"_a)
+        .def ("withExtraHeaders", &WebInputStream::withExtraHeaders, "extraHeaders"_a, py::return_value_policy::reference_internal)
+        .def ("withCustomRequestCommand", &WebInputStream::withCustomRequestCommand, "customRequestCommand"_a, py::return_value_policy::reference_internal)
+        .def ("withConnectionTimeout", &WebInputStream::withConnectionTimeout, "timeoutInMs"_a, py::return_value_policy::reference_internal)
+        .def ("withNumRedirectsToFollow", &WebInputStream::withNumRedirectsToFollow, "numRedirects"_a, py::return_value_policy::reference_internal)
+        .def ("connect", [] (WebInputStream& self)
+        {
+            return self.connect (nullptr);
+        })
+        .def ("connect", [] (WebInputStream& self, WebInputStream::Listener& listener)
+        {
+            return self.connect (&listener);
+        }, "listener"_a)
+        .def ("isError", &WebInputStream::isError)
+        .def ("cancel", &WebInputStream::cancel)
+        .def ("getRequestHeaders", &WebInputStream::getRequestHeaders)
+        .def ("getResponseHeaders", &WebInputStream::getResponseHeaders)
+        .def ("getStatusCode", &WebInputStream::getStatusCode);
 
     // ============================================================================================ testing
 
