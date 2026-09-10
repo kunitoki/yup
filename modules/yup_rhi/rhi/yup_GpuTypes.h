@@ -45,13 +45,37 @@ enum class GpuShaderLanguage : uint8_t
 };
 
 //==============================================================================
+/** Copies a NUL-terminated shader source string into the byte blob GpuShaderSource
+    expects, excluding the terminating NUL.
+*/
+inline std::vector<uint8> gpuShaderSourceBytes (const char* text)
+{
+    if (text == nullptr)
+        return {};
+
+    auto* bytes = reinterpret_cast<const uint8*> (text);
+    return std::vector<uint8> (bytes, bytes + std::strlen (text));
+}
+
+/** Copies a String's UTF-8 bytes into the byte blob GpuShaderSource expects. */
+inline std::vector<uint8> gpuShaderSourceBytes (const String& text)
+{
+    auto* bytes = reinterpret_cast<const uint8*> (text.toRawUTF8());
+    return std::vector<uint8> (bytes, bytes + text.getNumBytesAsUTF8());
+}
+
+//==============================================================================
 /** Compiled shader source for one pipeline stage (vertex, fragment, or compute).
 
-    The binding-map sidecar (@c bindingMap / @c bindingMapSize) is mandatory for
-    vertex/fragment stages. Compute shaders may omit it when using the native
-    compute path (GpuComputePipeline).
+    The binding-map sidecar (@c bindingMap) is mandatory for vertex/fragment
+    stages. Compute shaders may omit it when using the native compute path
+    (GpuComputePipeline).
 
-    @see GpuPipeline, GpuComputePipeline
+    Each blob field owns its data, so a descriptor built from temporaries stays
+    valid for as long as the descriptor does. Use gpuShaderSourceBytes() to
+    build them from source text.
+
+    @see GpuPipeline, GpuComputePipeline, gpuShaderSourceBytes
 */
 struct GpuShaderSource
 {
@@ -61,16 +85,10 @@ struct GpuShaderSource
     GpuShaderLanguage language = GpuShaderLanguage::wgsl;
 
     /** Shader source code bytes. */
-    const void* code = nullptr;
-
-    /** Number of bytes in @c code. */
-    uint32_t codeSize = 0;
+    std::vector<uint8> code;
 
     /** Mandatory pre-compiled RSTB binding-map sidecar blob (render pipelines). */
-    const uint8_t* bindingMap = nullptr;
-
-    /** Number of bytes in @c bindingMap. */
-    uint32_t bindingMapSize = 0;
+    std::vector<uint8> bindingMap;
 
     /** Optional GL program-link fixup blob (GLSL/ESSL only).
 
@@ -79,13 +97,10 @@ struct GpuShaderSource
         @c layout(binding=) qualifiers (which GLES 3.00 / WebGL2 cannot use).
         This blob carries the name→slot table; it is ignored by every non-GL
         backend. Produced by makeGLFixupBlob(). */
-    const uint8_t* glFixup = nullptr;
+    std::vector<uint8> glFixup;
 
-    /** Number of bytes in @c glFixup. */
-    uint32_t glFixupSize = 0;
-
-    /** Override the stage entry-point name. nullptr → "vs_main" / "fs_main". */
-    const char* entryPoint = nullptr;
+    /** Override the stage entry-point name. Empty → "vs_main" / "fs_main". */
+    String entryPoint;
 };
 
 //==============================================================================
@@ -338,6 +353,13 @@ enum class GpuStoreOp : uint8_t
     discard, ///< Throw the results away (e.g. a transient depth buffer).
 };
 
+/** Dithering applied to reduce banding in gradients. Mirrors rive::gpu::DitherMode. */
+enum class GpuDitherMode : uint8_t
+{
+    none,                     ///< No dithering.
+    interleavedGradientNoise, ///< Interleaved gradient noise dithering.
+};
+
 /** Texture minification / magnification / mipmap filter. */
 enum class GpuFilter : uint8_t
 {
@@ -360,10 +382,10 @@ enum class GpuWrapMode : uint8_t
 */
 struct GpuTextureDesc
 {
-    constexpr GpuTextureDesc() = default;
+    GpuTextureDesc() = default;
 
     /** Convenience constructor for the common 2D case. */
-    constexpr GpuTextureDesc (uint32_t width, uint32_t height, GpuTextureFormat format, bool renderTarget = false)
+    GpuTextureDesc (uint32_t width, uint32_t height, GpuTextureFormat format, bool renderTarget = false)
         : width (width)
         , height (height)
         , format (format)
@@ -396,7 +418,7 @@ struct GpuTextureDesc
     uint32_t sampleCount = 1;
 
     /** Optional debug label passed through to the native API. */
-    const char* label = nullptr;
+    String label;
 };
 
 //==============================================================================
@@ -505,7 +527,7 @@ struct GpuSamplerDesc
     uint32_t maxAnisotropy = 1;
 
     /** Optional debug label passed through to the native API. */
-    const char* label = nullptr;
+    String label;
 };
 
 //==============================================================================
@@ -526,23 +548,25 @@ struct GpuVertexAttribute
     uint32_t shaderLocation = 0;                      ///< Shader @location index.
 };
 
-/** Describes the layout of one vertex buffer bound to a pipeline. */
+/** Describes the layout of one vertex buffer bound to a pipeline.
+
+    The layout owns its attribute list, so a descriptor built from temporaries
+    stays valid for as long as the descriptor does.
+*/
 struct GpuVertexBufferLayout
 {
-    constexpr GpuVertexBufferLayout() = default;
+    GpuVertexBufferLayout() = default;
 
-    constexpr GpuVertexBufferLayout (uint32_t stride, GpuVertexStepMode stepMode, const GpuVertexAttribute* attributes, uint32_t attributeCount)
+    GpuVertexBufferLayout (uint32_t stride, GpuVertexStepMode stepMode, std::vector<GpuVertexAttribute> attributes)
         : stride (stride)
         , stepMode (stepMode)
-        , attributes (attributes)
-        , attributeCount (attributeCount)
+        , attributes (std::move (attributes))
     {
     }
 
     uint32_t stride = 0;                                    ///< Byte stride between vertices.
     GpuVertexStepMode stepMode = GpuVertexStepMode::vertex; ///< Per-vertex or per-instance.
-    const GpuVertexAttribute* attributes = nullptr;         ///< Attribute array.
-    uint32_t attributeCount = 0;                            ///< Number of attributes.
+    std::vector<GpuVertexAttribute> attributes;             ///< The attributes packed into each vertex.
 };
 
 /** Blend state for a single color target. */
@@ -612,20 +636,18 @@ struct GpuPipelineOptions
 {
     GpuPipelineOptions() = default;
 
-    /** Vertex buffer layouts. Leave null/zero for fullscreen passes that
-        generate vertices from the vertex index. */
-    const GpuVertexBufferLayout* vertexBuffers = nullptr;
-    uint32_t vertexBufferCount = 0;
+    /** Vertex buffer layouts. Leave empty for fullscreen passes that generate
+        vertices from the vertex index. */
+    std::vector<GpuVertexBufferLayout> vertexBuffers;
 
     GpuPrimitiveTopology topology = GpuPrimitiveTopology::triangleList;
     GpuIndexFormat indexFormat = GpuIndexFormat::none;
     GpuCullMode cullMode = GpuCullMode::none;
     GpuFaceWinding winding = GpuFaceWinding::counterClockwise;
 
-    /** Color targets. When @c colorTargetCount is zero a single default
-        alpha-blended rgba8unorm target is used. Up to four are supported. */
-    GpuColorTarget colorTargets[4] = {};
-    uint32_t colorTargetCount = 0;
+    /** Color targets. When empty, a single default alpha-blended rgba8unorm
+        target is used. At most four are supported; extra entries are ignored. */
+    std::vector<GpuColorTarget> colorTargets;
 
     GpuDepthStencilState depthStencil;
     GpuStencilFaceState stencilFront;
@@ -695,6 +717,40 @@ struct GpuColor
 
     /** Opaque white (1, 1, 1, 1). */
     static constexpr GpuColor white() { return { 1.0f, 1.0f, 1.0f, 1.0f }; }
+};
+
+//==============================================================================
+/** Describes the GPU frame to open for offscreen 2D rendering.
+
+    Mirrors rive::gpu::RenderContext::FrameDescriptor field-for-field, so it can
+    reach GpuDevice::beginOffscreen() and GpuCanvas::beginDraw() without a Python
+    or public-API dependency on the Rive renderer's own type.
+
+    @c synthesizedFailureType is deliberately omitted: it is gated behind
+    @c WITH_RIVE_TOOLS in Rive's header, and that macro is never defined
+    anywhere in this repo's CMake, so there is nothing to mirror.
+*/
+struct GpuFrameDescriptor
+{
+    uint32_t renderTargetWidth = 0;  ///< Ignored by GpuCanvas::beginDraw(), which fills it from the canvas.
+    uint32_t renderTargetHeight = 0; ///< Ignored by GpuCanvas::beginDraw(), which fills it from the canvas.
+
+    GpuLoadOp loadOp = GpuLoadOp::clear; ///< Attachment load behaviour at the start of the frame.
+    GpuColor clearColor = GpuColor::transparentBlack(); ///< Clear color used when loadOp is clear.
+
+    uint32_t msaaSampleCount = 0; ///< If nonzero, the number of MSAA samples to use; forces msaa mode.
+    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or msaa instead of rasterOrdering.
+    GpuDitherMode ditherMode = GpuDitherMode::interleavedGradientNoise; ///< Dithering applied to gradients.
+
+    // Vulkan-only virtual tiling; inert on every current YUP backend.
+    uint32_t virtualTileWidth = 0;
+    uint32_t virtualTileHeight = 0;
+
+    // Testing flags.
+    bool wireframe = false;
+    bool fillsDisabled = false;
+    bool strokesDisabled = false;
+    bool clockwiseFillOverride = false; ///< Override all paths' fill rules to emulate clockwiseAtomic mode.
 };
 
 //==============================================================================

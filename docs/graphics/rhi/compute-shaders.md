@@ -67,8 +67,7 @@ if (bundle.wasOk())
 ```cpp
 GpuShaderSource source;
 source.language = GpuShaderLanguage::msl; // or hlsl, wgsl, glsl
-source.code = mslSource;
-source.codeSize = mslLength;
+source.code = gpuShaderSourceBytes (mslSource); // must outlive the compile call
 
 auto result = GpuComputePipeline::compile (device, source, { 256, 1, 1 });
 ```

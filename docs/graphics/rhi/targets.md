@@ -88,8 +88,13 @@ lower-level `GpuDevice::createOffscreenTarget` / `beginOffscreen` /
 `endOffscreen` API.
 
 ```cpp
-static GpuCanvas::Ptr GpuCanvas::create (GpuDevice::Ptr ctx, int width, int height);
+static GpuCanvas::Ptr GpuCanvas::create (GraphicsContext& ctx, int width, int height,
+                                         std::optional<Color> clearColor = Colors::transparentBlack);
 ```
+
+Unlike `GpuTarget::create()`, which takes a `GpuDevice::Ptr`, the canvas takes the
+`GraphicsContext`: its 2D drawing path constructs a `Graphics`, and every
+`Graphics` constructor requires a graphics context.
 
 ### 2D drawing path
 
@@ -106,10 +111,15 @@ if (canvas != nullptr)
 }
 ```
 
-`beginDraw()` opens (or reopens) a 2D frame and returns the `Graphics` to draw
-into. On the first call it opens a fresh offscreen 2D GPU frame; subsequent calls
-discard the previous frame's `Graphics` and reopen a new one on the same
-already-allocated target, avoiding per-frame GPU resource reallocation.
+`beginDraw (const GpuFrameDescriptor& frameDesc = {})` opens (or reopens) a 2D
+frame and returns the `Graphics` to draw into. On the first call it opens a
+fresh offscreen 2D GPU frame; subsequent calls discard the previous frame's
+`Graphics` and reopen a new one on the same already-allocated target, avoiding
+per-frame GPU resource reallocation. `frameDesc` gives control over
+`msaaSampleCount`, `ditherMode`, `loadOp` and `clearColor`; its
+`renderTargetWidth`/`renderTargetHeight` are ignored and auto-filled from the
+canvas. The default `{}` reproduces the previous behaviour (clear to
+transparent black, no msaa).
 
 ### Custom-pass path
 
@@ -127,7 +137,7 @@ pass.finish();
 | `getTarget()`                       | The underlying `GpuTarget` backing this canvas.                   |
 | `getWidth()` / `getHeight()`        | Canvas dimensions in pixels.                                      |
 | `beginRenderPass (frame, options)`  | Begins a render pass targeting the backing texture.               |
-| `beginDraw()`                       | Opens/reopens a 2D frame; returns the `Graphics` to draw into.    |
+| `beginDraw (frameDesc = {})`        | Opens/reopens a 2D frame; returns the `Graphics` to draw into.    |
 | `commit()`                          | Finalizes an open 2D command. Usually unnecessary (auto-commits). |
 | `asTexture()`                       | GPU-texture view; auto-commits an open 2D frame.                  |
 | `asImage()`                         | `Image` with GPU texture + CPU pixels; auto-commits.              |

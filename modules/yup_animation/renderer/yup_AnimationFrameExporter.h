@@ -88,6 +88,7 @@ public:
     [[nodiscard]] ResultValue<std::vector<Image>> renderAllFrames (const Animation& anim,
                                                                    Size<int> targetSize = {});
 
+#if YUP_IMAGE_FORMAT_GIF
     //==============================================================================
     /** Exports the animation to an animated GIF file.
 
@@ -119,6 +120,7 @@ public:
                                float frameRate,
                                const File& destination,
                                int qualityLevel = 80);
+#endif
 
 private:
     static Size<int> resolveTargetSize (const Animation& anim, Size<int> requested);

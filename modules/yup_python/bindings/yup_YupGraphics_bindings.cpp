@@ -778,7 +778,11 @@ void registerYupGraphicsBindings (py::module_& m)
         //.def ("appliedToRectangle", &Justification::template appliedToRectangle<float>)
     ;
 
-    // py::implicitly_convertible<Justification::Flags, Justification>();
+    py::implicitly_convertible<Justification::Flags, Justification>();
+
+    // Combining flags yields the underlying integer (see Helpers::makeArithmeticEnum's __or__), so
+    // an int has to convert too, or `Justification.left | Justification.top` would not be accepted.
+    py::implicitly_convertible<int, Justification>();
 
     // ============================================================================================ yup::AffineTransform
 
@@ -1175,527 +1179,715 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("__str__", &Color::toString)
     ;
 
-    /*
-    // ============================================================================================ yup::Color
+    // ============================================================================================ yup::ColorGradient
 
-    py::class_<ColorGradient> (m, "ColorGradient")
+    py::class_<ColorGradient> classColorGradient (m, "ColorGradient");
+
+    py::enum_<ColorGradient::Type> (classColorGradient, "Type")
+        .value ("Linear", ColorGradient::Type::Linear)
+        .value ("Radial", ColorGradient::Type::Radial)
+        .export_values();
+
+    py::enum_<ColorGradient::Spread> (classColorGradient, "Spread")
+        .value ("Pad", ColorGradient::Spread::Pad)
+        .value ("Repeat", ColorGradient::Spread::Repeat)
+        .value ("Reflect", ColorGradient::Spread::Reflect);
+
+    py::class_<ColorGradient::ColorStop> (classColorGradient, "ColorStop")
         .def (py::init<>())
-        .def (py::init<Color, float, float, Color, float, float, bool>(),
-            "colour1"_a, "x1"_a, "y1"_a, "colour2"_a, "x2"_a, "y2"_a, "isRadial"_a)
-        .def (py::init<Color, Point<float>, Color, Point<float>, bool>(),
-            "colour1"_a, "point1"_a, "colour2"_a, "point2"_a, "isRadial"_a)
+        .def (py::init<Color, float, float, float>(), "color"_a, "x"_a, "y"_a, "delta"_a)
+        .def (py::init<Color, const Point<float>&, float>(), "color"_a, "point"_a, "delta"_a)
+        .def_readwrite ("color", &ColorGradient::ColorStop::color)
+        .def_readwrite ("x", &ColorGradient::ColorStop::x)
+        .def_readwrite ("y", &ColorGradient::ColorStop::y)
+        .def_readwrite ("delta", &ColorGradient::ColorStop::delta);
+
+    classColorGradient
+        .def (py::init<>())
+        .def (py::init<Color, float, float, Color, float, float, ColorGradient::Type>(),
+              "color1"_a, "x1"_a, "y1"_a, "color2"_a, "x2"_a, "y2"_a, "type"_a = ColorGradient::Type::Linear)
+        .def (py::init<Color, const Point<float>&, Color, const Point<float>&, ColorGradient::Type>(),
+              "color1"_a, "point1"_a, "color2"_a, "point2"_a, "type"_a = ColorGradient::Type::Linear)
+        // Converted by value: build the whole stop list up front, since mutating the
+        // list handed back by getStops() does not write through.
+        .def (py::init<ColorGradient::Type, std::vector<ColorGradient::ColorStop>>(), "type"_a, "colorStops"_a)
         .def (py::init<const ColorGradient&>())
-        .def_static ("vertical", [](Color c1, float y1, Color c2, float y2) { return ColorGradient::vertical (c1, y1, c2, y2); },
-            "colour1"_a, "y1"_a, "colour2"_a, "y2"_a)
-        .def_static ("vertical", [](Color top, Color bottom, Rectangle<int> area) { return ColorGradient::vertical (top, bottom, area); },
-            "colourTop"_a, "colourBottom"_a, "area"_a)
-        .def_static ("vertical", [](Color top, Color bottom, Rectangle<float> area) { return ColorGradient::vertical (top, bottom, area); },
-            "colourTop"_a, "colourBottom"_a, "area"_a)
-        .def_static ("horizontal", [](Color c1, float x1, Color c2, float x2) { return ColorGradient::horizontal (c1, x1, c2, x2); },
-            "colour1"_a, "x1"_a, "colour2"_a, "x2"_a)
-        .def_static ("horizontal", [](Color left, Color right, Rectangle<int> area) { return ColorGradient::horizontal (left, right, area); },
-            "colourLeft"_a, "colourRight"_a, "area"_a)
-        .def_static ("horizontal", [](Color left, Color right, Rectangle<float> area) { return ColorGradient::horizontal (left, right, area); },
-            "colourLeft"_a, "colourRight"_a, "area"_a)
-        .def ("clearColors", &ColorGradient::clearColors)
-        .def ("addColor", &ColorGradient::addColor, "proportionAlongGradient"_a, "colour"_a)
-        .def ("removeColor", &ColorGradient::removeColor, "index"_a)
-        .def ("multiplyOpacity", &ColorGradient::multiplyOpacity, "multiplier"_a)
-        .def ("getNumColors", &ColorGradient::getNumColors)
-        .def ("getColorPosition", &ColorGradient::getColorPosition, "index"_a)
-        .def ("getColor", &ColorGradient::getColor, "index"_a)
-        .def ("setColor", &ColorGradient::setColor, "index"_a, "colour"_a)
-        .def ("getColorAtPosition", &ColorGradient::getColorAtPosition, "position"_a)
-    //.def ("createLookupTable", &ColorGradient::createLookupTable)
-    //.def ("createLookupTable", &ColorGradient::createLookupTable)
-        .def ("isOpaque", &ColorGradient::isOpaque)
-        .def ("isInvisible", &ColorGradient::isInvisible)
-        .def_readwrite ("point1", &ColorGradient::point1)
-        .def_readwrite ("point2", &ColorGradient::point2)
-        .def_readwrite ("isRadial", &ColorGradient::isRadial)
-        .def (py::self == py::self)
-        .def (py::self != py::self)
+        .def ("getType", &ColorGradient::getType)
+        .def ("getSpread", &ColorGradient::getSpread)
+        .def ("withSpread", &ColorGradient::withSpread, "newSpread"_a)
+        .def ("getStartColor", &ColorGradient::getStartColor)
+        .def ("getStartX", &ColorGradient::getStartX)
+        .def ("getStartY", &ColorGradient::getStartY)
+        .def ("getStartDelta", &ColorGradient::getStartDelta)
+        .def ("getFinishColor", &ColorGradient::getFinishColor)
+        .def ("getFinishX", &ColorGradient::getFinishX)
+        .def ("getFinishY", &ColorGradient::getFinishY)
+        .def ("getFinishDelta", &ColorGradient::getFinishDelta)
+        .def ("getNumStops", &ColorGradient::getNumStops)
+        .def ("getStop", &ColorGradient::getStop, "index"_a)
+        .def ("getStops", [] (const ColorGradient& self)
+        {
+            const auto stops = self.getStops();
+            return std::vector<ColorGradient::ColorStop> (stops.begin(), stops.end());
+        })
+        .def ("getColorAt", py::overload_cast<float> (&ColorGradient::getColorAt, py::const_), "t"_a)
+        .def ("getColorAt", py::overload_cast<float, float> (&ColorGradient::getColorAt, py::const_), "x"_a, "y"_a)
+        .def ("getColorAt", py::overload_cast<const Point<float>&> (&ColorGradient::getColorAt, py::const_), "point"_a)
+        .def ("addColorStop", py::overload_cast<Color, float, float, float> (&ColorGradient::addColorStop),
+              "color"_a, "x"_a, "y"_a, "delta"_a)
+        .def ("addColorStop", py::overload_cast<Color, const Point<float>&, float> (&ColorGradient::addColorStop),
+              "color"_a, "point"_a, "delta"_a)
+        .def ("addColorStop", py::overload_cast<Color, float> (&ColorGradient::addColorStop), "color"_a, "delta"_a)
+        .def ("clearStops", &ColorGradient::clearStops)
+        .def ("getRadius", &ColorGradient::getRadius)
+        .def ("setAlpha", py::overload_cast<uint8> (&ColorGradient::setAlpha), "alpha"_a)
+        .def ("setAlpha", py::overload_cast<float> (&ColorGradient::setAlpha), "alpha"_a)
+        .def ("withAlpha", py::overload_cast<uint8> (&ColorGradient::withAlpha, py::const_), "alpha"_a)
+        .def ("withAlpha", py::overload_cast<float> (&ColorGradient::withAlpha, py::const_), "alpha"_a)
+        .def ("withMultipliedAlpha", py::overload_cast<uint8> (&ColorGradient::withMultipliedAlpha, py::const_), "alpha"_a)
+        .def ("withMultipliedAlpha", py::overload_cast<float> (&ColorGradient::withMultipliedAlpha, py::const_), "alpha"_a)
+        .def ("__repr__", [] (const ColorGradient& self)
+        {
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << (self.getType() == ColorGradient::Type::Radial ? "Radial" : "Linear")
+                << ", " << (int) self.getNumStops() << " stops)";
+            return result;
+        });
+
+    // ============================================================================================ yup::PixelFormat
+
+    py::enum_<PixelFormat> (m, "PixelFormat")
+        .value ("Grayscale", PixelFormat::Grayscale)
+        .value ("RGB", PixelFormat::RGB)
+        .value ("RGBA", PixelFormat::RGBA)
+        .export_values();
+
+    // ============================================================================================ yup::ImageFormat
+
+    py::class_<ImageFormat, PyImageFormat, py::smart_holder> classImageFormat (m, "ImageFormat");
+
+    py::enum_<ImageFormat::Mode> (classImageFormat, "Mode")
+        .value ("forReading", ImageFormat::Mode::forReading)
+        .value ("forWriting", ImageFormat::Mode::forWriting)
+        .export_values();
+
+    py::class_<ImageFormat::Options> (classImageFormat, "Options")
+        .def (py::init<>())
+        .def ("withMetadata", &ImageFormat::Options::withMetadata, "parseMetadata"_a)
+        .def ("withRawChunks", &ImageFormat::Options::withRawChunks, "parseRawChunks"_a)
+        .def_readwrite ("parseMetadata", &ImageFormat::Options::parseMetadata)
+        .def_readwrite ("parseRawChunks", &ImageFormat::Options::parseRawChunks)
+        .def ("__repr__", [] (const ImageFormat::Options& self)
+        {
+            String result;
+            result << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                   << "(" << (self.parseMetadata ? "metadata" : "no-metadata")
+                   << ", " << (self.parseRawChunks ? "raw-chunks" : "no-raw-chunks") << ")";
+            return result;
+        });
+
+    classImageFormat
+        // Constructing a Python-visible ImageFormat creates the PyImageFormat
+        // trampoline, so Python subclasses can be instantiated and registered.
+        .def (py::init ([] ()
+        {
+            return std::unique_ptr<ImageFormat> (new PyImageFormat());
+        }))
+        .def ("getFormatName", &ImageFormat::getFormatName)
+        .def ("getFileExtensions", &ImageFormat::getFileExtensions, "mode"_a)
+        .def ("canHandleFile", &ImageFormat::canHandleFile, "file"_a, "mode"_a)
+        .def ("canHandleStream", &ImageFormat::canHandleStream, "stream"_a, "mode"_a)
+        .def ("getPossiblePixelFormats", [] (const ImageFormat& self)
+        {
+            py::list result;
+            for (const auto format : self.getPossiblePixelFormats())
+                result.append (py::cast (format));
+            return result;
+        })
+        .def ("isCompressed", &ImageFormat::isCompressed)
+        .def ("getQualityOptions", &ImageFormat::getQualityOptions)
+    ;
+
+    // ============================================================================================ yup::ImageFormatReader
+
+    py::class_<ImageFormatReader, PyImageFormatReader, py::smart_holder> classImageFormatReader (m, "ImageFormatReader");
+
+    classImageFormatReader
+        // Two ways to build a reader, and the difference is who ends up owning the
+        // stream. Taking the caller's stream keeps ownership moving in one direction
+        // only - the reader adopts it and deletes it, so ImageFormatManager can hand
+        // the stream over instead of leaking it. The bytes overload is for readers
+        // built from a payload the Python side already has, and owns a private copy.
+        //
+        // Both always adopt: whether a reader absorbs its stream is a C++ ownership
+        // detail that Python has no way to influence, so it is not part of the Python
+        // signature.
+        .def (py::init ([] (InputStream* sourceStream, const String& formatName)
+        {
+            return std::unique_ptr<ImageFormatReader> (new PyImageFormatReader (sourceStream, formatName));
+        }), "sourceStream"_a, "formatName"_a,
+             "Builds a reader around the given stream, taking ownership of it.")
+        .def (py::init ([] (py::buffer data, const String& formatName)
+        {
+            auto info = data.request();
+            auto* stream = new MemoryInputStream (info.ptr, info.size, true);
+            return std::unique_ptr<ImageFormatReader> (new PyImageFormatReader (stream, formatName));
+        }), "data"_a, "formatName"_a,
+             "Builds a reader over a private copy of the given bytes.")
+        .def_static ("readAllBytes", [] (InputStream& stream) -> py::bytes
+        {
+            MemoryBlock block;
+            stream.readIntoMemoryBlock (block);
+            return py::bytes (static_cast<const char*> (block.getData()), block.getSize());
+        }, "stream"_a)
+        .def ("getSourceBytes", [] (PyImageFormatReader& self) -> py::bytes
+        {
+            const auto bytes = self.readSourceBytes();
+            return py::bytes (bytes.data(), bytes.size());
+        })
+        .def ("getFormatName", &ImageFormatReader::getFormatName)
+        .def ("getOptions", &ImageFormatReader::getOptions, py::return_value_policy::reference_internal)
+        .def ("readImage", &ImageFormatReader::readImage)
+        .def ("readFrame", py::overload_cast<int> (&ImageFormatReader::readFrame), "frameIndex"_a)
+        .def ("isAnimated", &ImageFormatReader::isAnimated)
+        .def ("getFrameCount", &ImageFormatReader::getFrameCount)
+        .def ("getLoopCount", &ImageFormatReader::getLoopCount)
+        .def ("getFrameDelayMs", &ImageFormatReader::getFrameDelayMs, "frameIndex"_a)
+    ;
+
+    // ============================================================================================ yup::ImageFormatWriter
+
+    py::class_<ImageFormatWriter, PyImageFormatWriter, py::smart_holder> classImageFormatWriter (m, "ImageFormatWriter");
+
+    classImageFormatWriter
+        // Python-implemented writers take ownership of the destination stream.
+        // The stream is usually the one handed to createWriterFor(); writers
+        // constructed with the (formatName, pixelFormat) overload own an
+        // internal buffer retrievable through getOutputBytes().
+        .def (py::init ([] (OutputStream& stream, const String& formatName, PixelFormat pixelFormat)
+        {
+            return std::unique_ptr<ImageFormatWriter> (new PyImageFormatWriter (std::addressof (stream), formatName, pixelFormat));
+        }), "stream"_a, "formatName"_a, "pixelFormat"_a)
+        .def (py::init ([] (const String& formatName, PixelFormat pixelFormat)
+        {
+            return std::unique_ptr<ImageFormatWriter> (new PyImageFormatWriter (new MemoryOutputStream (256), formatName, pixelFormat));
+        }), "formatName"_a, "pixelFormat"_a = PixelFormat::RGBA)
+        .def ("writeRawData", [] (PyImageFormatWriter& self, py::buffer data) -> bool
+        {
+            auto info = data.request();
+            return self.writeRawData (std::string (static_cast<const char*> (info.ptr), info.size));
+        }, "data"_a)
+        .def ("flushStream", [] (PyImageFormatWriter& self) { return self.flushStream(); })
+        .def ("getOutputBytes", [] (PyImageFormatWriter& self) -> py::bytes
+        {
+            auto* stream = self.getMemoryOutputStream();
+            if (stream == nullptr)
+                throw py::value_error ("getOutputBytes() requires an in-memory writer (constructed without a stream)");
+
+            return py::bytes (static_cast<const char*> (stream->getData()), stream->getDataSize());
+        })
+        .def ("getFormatName", &ImageFormatWriter::getFormatName)
+        .def ("getPixelFormat", &ImageFormatWriter::getPixelFormat)
+        .def ("writeImage", &ImageFormatWriter::writeImage, "image"_a)
+        .def ("flush", &ImageFormatWriter::flush)
+        .def ("supportsAnimation", &ImageFormatWriter::supportsAnimation)
+        .def ("beginAnimation", &ImageFormatWriter::beginAnimation, "loopCount"_a = 0)
+        .def ("writeFrame", &ImageFormatWriter::writeFrame, "frame"_a, "delayMs"_a)
+        .def ("endAnimation", &ImageFormatWriter::endAnimation)
+    ;
+
+#if YUP_IMAGE_FORMAT_BMP
+    // ============================================================================================ yup::BmpImageFormat
+
+    py::class_<BmpImageFormat, ImageFormat, py::smart_holder> (m, "BmpImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_PPM
+    // ============================================================================================ yup::PpmImageFormat
+
+    py::class_<PpmImageFormat, ImageFormat, py::smart_holder> (m, "PpmImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_TGA
+    // ============================================================================================ yup::TgaImageFormat
+
+    py::class_<TgaImageFormat, ImageFormat, py::smart_holder> (m, "TgaImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_PNG
+    // ============================================================================================ yup::PngImageFormat
+
+    py::class_<PngImageFormat, ImageFormat, py::smart_holder> (m, "PngImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_JPEG
+    // ============================================================================================ yup::JpegImageFormat
+
+    py::class_<JpegImageFormat, ImageFormat, py::smart_holder> (m, "JpegImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_WEBP
+    // ============================================================================================ yup::WebPImageFormat
+
+    py::class_<WebPImageFormat, ImageFormat, py::smart_holder> (m, "WebPImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_GIF
+    // ============================================================================================ yup::GifImageFormat
+
+    py::class_<GifImageFormat, ImageFormat, py::smart_holder> (m, "GifImageFormat")
+        .def (py::init<>());
+#endif
+
+#if YUP_IMAGE_FORMAT_TIFF
+    // ============================================================================================ yup::TiffImageFormat
+
+    py::class_<TiffImageFormat, ImageFormat, py::smart_holder> (m, "TiffImageFormat")
+        .def (py::init<>());
+#endif
+
+    // ============================================================================================ yup::ImageFormatManager
+
+    py::enum_<ImageFormatType> (m, "ImageFormatType")
+        .value ("bmp", ImageFormatType::bmp)
+        .value ("ppm", ImageFormatType::ppm)
+        .value ("png", ImageFormatType::png)
+        .value ("jpeg", ImageFormatType::jpeg)
+        .value ("webp", ImageFormatType::webp)
+        .value ("gif", ImageFormatType::gif)
+        .value ("tga", ImageFormatType::tga)
+        .value ("tiff", ImageFormatType::tiff)
+        .value ("all", ImageFormatType::all)
+        .export_values();
+
+    py::class_<ImageFormatManager> (m, "ImageFormatManager")
+        .def (py::init<>())
+        .def ("registerDefaultFormats", &ImageFormatManager::registerDefaultFormats, "types"_a = ImageFormatType::all)
+        .def ("registerFormat", [] (ImageFormatManager& self, std::unique_ptr<ImageFormat> format)
+        {
+            // smart_holder moves ownership out of the Python wrapper; the
+            // trampoline self-life-support keeps the wrapper alive so virtual
+            // dispatch keeps reaching the Python overrides.
+            self.registerFormat (std::move (format));
+        }, "format"_a)
+        .def ("getFormatFileExtensions", &ImageFormatManager::getFormatFileExtensions)
+        .def ("createReaderFor", [] (ImageFormatManager& self, const File& file)
+        {
+            return self.createReaderFor (file);
+        }, "file"_a)
+        .def ("createReaderFor", [] (ImageFormatManager& self, const File& file, const ImageFormat::Options& options)
+        {
+            return self.createReaderFor (file, options);
+        }, "file"_a, "options"_a)
+        .def ("createWriterFor", [] (ImageFormatManager& self, const File& file)
+        {
+            return self.createWriterFor (file);
+        }, "file"_a)
+        .def ("createWriterFor", [] (ImageFormatManager& self, const File& file, PixelFormat pixelFormat, const StringPairArray& metadataValues, int qualityOptionIndex)
+        {
+            return self.createWriterFor (file, pixelFormat, metadataValues, qualityOptionIndex);
+        }, "file"_a, "pixelFormat"_a, "metadataValues"_a, "qualityOptionIndex"_a)
+    ;
+
+    // ============================================================================================ yup::ImageMetadata
+
+    py::class_<ImageMetadata, ReferenceCountedObjectPtr<ImageMetadata>> (m, "ImageMetadata")
+        .def_static ("create", &ImageMetadata::create)
+        .def_readwrite ("dpiX", &ImageMetadata::dpiX)
+        .def_readwrite ("dpiY", &ImageMetadata::dpiY)
+        .def_readwrite ("textEntries", &ImageMetadata::textEntries)
+        .def ("hasRawChunk", &ImageMetadata::hasRawChunk, "key"_a)
+        .def ("getRawChunk", &ImageMetadata::getRawChunk, "key"_a, py::return_value_policy::reference_internal)
+        .def ("setRawChunk", &ImageMetadata::setRawChunk, "key"_a, "data"_a)
+        .def ("getOrientation", &ImageMetadata::getOrientation)
+        .def ("getCreationDate", &ImageMetadata::getCreationDate)
+        .def ("getCameraMake", &ImageMetadata::getCameraMake)
+        .def ("getCameraModel", &ImageMetadata::getCameraModel)
+        .def ("getGpsCoordinates", [] (const ImageMetadata& self)
+        {
+            const auto coordinates = self.getGpsCoordinates();
+            return py::make_tuple (coordinates.first, coordinates.second);
+        })
+        .def ("getImageDescription", &ImageMetadata::getImageDescription)
+        .def ("getCopyright", &ImageMetadata::getCopyright)
+        .def ("getSoftware", &ImageMetadata::getSoftware)
+        .def ("__repr__", [] (const ImageMetadata& self)
+        {
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << (int) self.textEntries.size() << " text entries, "
+                << (int) self.rawChunks.size() << " raw chunks)";
+            return result;
+        })
+    ;
+
+    // ============================================================================================ yup::ImagePixelData
+
+    py::class_<ImagePixelData, ReferenceCountedObjectPtr<ImagePixelData>> (m, "ImagePixelData")
+        .def ("getWidth", &ImagePixelData::getWidth)
+        .def ("getHeight", &ImagePixelData::getHeight)
+        .def ("getPixelFormat", &ImagePixelData::getPixelFormat)
+        .def ("getPixelStride", &ImagePixelData::getPixelStride)
+        .def ("getPixel", &ImagePixelData::getPixel, "x"_a, "y"_a)
+        .def ("getPixelColor", &ImagePixelData::getPixelColor, "x"_a, "y"_a)
+        .def ("setPixel", py::overload_cast<int, int, uint32> (&ImagePixelData::setPixel), "x"_a, "y"_a, "color"_a)
+        .def ("setPixelColor", &ImagePixelData::setPixelColor, "x"_a, "y"_a, "color"_a)
+        .def ("fill", &ImagePixelData::fill, "color"_a)
+        .def ("fillColor", &ImagePixelData::fillColor, "color"_a)
+        .def ("clear", &ImagePixelData::clear)
+        .def ("getRawData", [] (const ImagePixelData& self)
+        {
+            const auto data = self.getRawData();
+            return py::bytes (reinterpret_cast<const char*> (data.data()), data.size());
+        })
+        .def ("toRGBA", [] (const ImagePixelData& self, bool premultiplyAlpha)
+        {
+            const auto data = self.toRGBA (premultiplyAlpha);
+            return py::bytes (reinterpret_cast<const char*> (data.data()), data.size());
+        }, "premultiplyAlpha"_a = true)
     ;
 
     // ============================================================================================ yup::Image
 
     py::class_<Image> classImage (m, "Image");
 
-    py::enum_<Image::PixelFormat> (classImage, "PixelFormat")
-        .value ("UnknownFormat", Image::PixelFormat::UnknownFormat)
-        .value ("RGB", Image::PixelFormat::RGB)
-        .value ("ARGB", Image::PixelFormat::ARGB)
-        .value ("SingleChannel", Image::PixelFormat::SingleChannel)
-        .export_values();
-
-#if 0
-    // Image::BitmapData was renamed to ImagePixelData and moved out of Image to namespace level.
-    // The new standalone ImagePixelData binding is below (classImagePixelData).
-    // This legacy buffer-protocol binding needs updating for the new ImagePixelData member layout.
-
-    py::class_<ImagePixelData> classImagePixelDataBuf (classImage, "ImagePixelData", py::buffer_protocol());
-
-    classImagePixelDataBuf
-        .def ("getPixelColor", &ImagePixelData::getPixelColor)
-        .def ("setPixelColor", &ImagePixelData::setPixelColor)
-        .def_property ("data",
-            [](const ImagePixelData& self)
-                { return py::memoryview::from_memory (self.pixelBuffer.get(), static_cast<Py_ssize_t> (self.totalSizeBytes)); },
-            [](ImagePixelData& self, py::buffer data)
-                { auto info = data.request(); std::memcpy (self.pixelBuffer.get(), info.ptr, static_cast<size_t> (std::min (info.size, static_cast<Py_ssize_t> (self.totalSizeBytes)))); })
-        .def_readwrite ("width", &ImagePixelData::width)
-        .def_readwrite ("height", &ImagePixelData::height)
-        .def_buffer ([](ImagePixelData& self)
-        {
-            return py::buffer_info
-            (
-                self.pixelBuffer.get(),
-                sizeof (unsigned char),
-                py::format_descriptor<unsigned char>::format(),
-                self.pixelStride,
-                {
-                    self.height,
-                    self.width,
-                    self.pixelStride
-                },
-                {
-                    sizeof (unsigned char) * static_cast<size_t> (self.pixelStride) * static_cast<size_t> (self.width),
-                    sizeof (unsigned char) * static_cast<size_t> (self.pixelStride),
-                    sizeof (unsigned char)
-                }
-            );
-        });
-    ;
-#endif
-
     classImage
         .def (py::init<>())
-        .def (py::init<Image::PixelFormat, int, int, bool>())
-        .def (py::init<Image::PixelFormat, int, int, bool, const ImageType&>())
+        .def (py::init<int, int, PixelFormat>(), "width"_a, "height"_a, "format"_a = PixelFormat::RGBA)
         .def (py::init<const Image&>())
-        .def (py::self == py::self)
-        .def (py::self != py::self)
         .def ("isValid", &Image::isValid)
-        .def ("isNull", &Image::isNull)
         .def ("getWidth", &Image::getWidth)
         .def ("getHeight", &Image::getHeight)
-        .def ("getBounds", &Image::getBounds)
-        .def ("getFormat", &Image::getFormat)
-        .def ("isARGB", &Image::isARGB)
-        .def ("isRGB", &Image::isRGB)
-        .def ("isSingleChannel", &Image::isSingleChannel)
-        .def ("hasAlphaChannel", &Image::hasAlphaChannel)
+        .def ("getPixelFormat", &Image::getPixelFormat)
+        .def ("getPixelStride", &Image::getPixelStride)
+
+        // Pixel access
+        .def ("getPixel", &Image::getPixel, "x"_a, "y"_a)
+        .def ("getPixelColor", &Image::getPixelColor, "x"_a, "y"_a)
+        .def ("setPixel", &Image::setPixel, "x"_a, "y"_a, "color"_a)
+        .def ("setPixelColor", &Image::setPixelColor, "x"_a, "y"_a, "color"_a)
+        .def ("fill", &Image::fill, "color"_a)
+        .def ("fillColor", &Image::fillColor, "color"_a)
         .def ("clear", &Image::clear)
-        .def ("rescaled", &Image::rescaled)
-        .def ("createCopy", &Image::createCopy)
-        .def ("convertedToFormat", &Image::convertedToFormat)
-        .def ("duplicateIfShared", &Image::duplicateIfShared)
-        .def ("getClippedImage", &Image::getClippedImage)
-        .def ("getPixelAt", &Image::getPixelAt)
-        .def ("setPixelAt", &Image::setPixelAt)
-        .def ("multiplyAlphaAt", &Image::multiplyAlphaAt)
-        .def ("multiplyAllAlphas", &Image::multiplyAllAlphas)
-        .def ("desaturate", &Image::desaturate)
-        .def ("moveImageSection", &Image::moveImageSection)
-        .def ("createSolidAreaMask", &Image::createSolidAreaMask)
-        .def ("getProperties", &Image::getProperties, py::return_value_policy::reference_internal)
-    //.def ("createLowLevelContext", &Image::createLowLevelContext)
-        .def ("getReferenceCount", &Image::getReferenceCount)
-        .def ("getPixelData", &Image::getPixelData, py::return_value_policy::reference_internal)
-    ;
 
-    // ============================================================================================ yup::ImagePixelData
+        // Raw access
+        .def ("getPixelData", [] (Image& self) -> ImagePixelData& { return self.getPixelData(); },
+              py::return_value_policy::reference_internal)
+        .def ("getRawData", [] (const Image& self)
+        {
+            const auto data = self.getRawData();
+            return py::bytes (reinterpret_cast<const char*> (data.data()), data.size());
+        })
 
-    py::class_<ImagePixelData> classImagePixelData (m, "ImagePixelData");
+        // Copying and metadata
+        .def ("duplicate", &Image::duplicate)
+        .def ("hasMetadata", &Image::hasMetadata)
+        .def ("getMetadata", &Image::getMetadata, py::return_value_policy::reference_internal)
+        .def ("setMetadata", &Image::setMetadata, "metadata"_a)
 
-    classImagePixelData
-    //.def (py::init<Image::PixelFormat, int, int>())
-    //.def ("createLowLevelContext", &ImagePixelData::createLowLevelContext)
-    //.def ("clone", &ImagePixelData::clone)
-    //.def ("createType", &ImagePixelData::createType)
-    //.def ("initialisePixelData", &ImagePixelData::initialisePixelData)
-        .def ("getSharedCount", &ImagePixelData::getSharedCount)
-        .def_readonly ("pixelFormat", &ImagePixelData::pixelFormat)
-        .def_readonly ("width", &ImagePixelData::width)
-        .def_readonly ("height", &ImagePixelData::height)
-        .def_readwrite ("userData", &ImagePixelData::userData)
-    //.def_readwrite ("listeners", &ImagePixelData::listeners)
-        .def ("sendDataChangeMessage", &ImagePixelData::sendDataChangeMessage)
-    ;
-
-    // ============================================================================================ yup::ImageType
-
-    py::class_<ImageType, PyImageType> classImageType (m, "ImageType");
-
-    classImageType
-        .def (py::init<>())
-        .def ("create", &ImageType::create)
-        .def ("getTypeID", &ImageType::getTypeID)
-        .def ("convert", &ImageType::convert)
-    ;
-
-    py::class_<SoftwareImageType, ImageType> classSoftwareImageType (m, "SoftwareImageType");
-
-    classSoftwareImageType
-        .def (py::init<>())
-    ;
-
-    py::class_<NativeImageType, ImageType> classNativeImageType (m, "NativeImageType");
-
-    classNativeImageType
-        .def (py::init<>())
-    ;
-
-    // ============================================================================================ yup::ImageCache
-
-    py::class_<ImageCache, std::unique_ptr<ImageCache, py::nodelete>> classImageCache (m, "ImageCache");
-
-    classImageCache
-        .def_static ("getFromFile", &ImageCache::getFromFile)
-        .def_static ("getFromMemory", [](py::buffer data)
+        // Loading
+        .def_static ("loadFromData", [] (py::buffer data) -> Image
         {
             auto info = data.request();
-            return ImageCache::getFromMemory (info.ptr, static_cast<int> (info.size));
-        })
-        .def_static ("getFromHashCode", &ImageCache::getFromHashCode)
-        .def_static ("addImageToCache", &ImageCache::addImageToCache)
-        .def_static ("setCacheTimeout", &ImageCache::setCacheTimeout)
-        .def_static ("releaseUnusedImages", &ImageCache::releaseUnusedImages)
-    ;
+            auto result = Image::loadFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size));
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
 
-    // ============================================================================================ yup::ImageCache
-
-    py::class_<ImageFileFormat, PyImageFileFormat> classImageFileFormat (m, "ImageFileFormat");
-
-    classImageFileFormat
-        .def (py::init<>())
-        .def ("getFormatName", &ImageFileFormat::getFormatName)
-        .def ("canUnderstand", &ImageFileFormat::canUnderstand)
-        .def ("usesFileExtension", &ImageFileFormat::usesFileExtension)
-        .def ("decodeImage", &ImageFileFormat::decodeImage)
-        .def ("writeImageToStream", &ImageFileFormat::writeImageToStream)
-        .def_static ("findImageFormatForStream", &ImageFileFormat::findImageFormatForStream, py::return_value_policy::reference_internal)
-        .def_static ("findImageFormatForFileExtension", &ImageFileFormat::findImageFormatForFileExtension, py::return_value_policy::reference_internal)
-        .def_static ("loadFrom", static_cast<Image (*)(InputStream&)> (&ImageFileFormat::loadFrom))
-        .def_static ("loadFrom", static_cast<Image (*)(const File&)> (&ImageFileFormat::loadFrom))
-        .def_static ("loadFrom", [](py::buffer data)
+            return result.getValue();
+        }, "data"_a)
+        .def_static ("loadFromData", [] (py::buffer data, const ImageFormat::Options& options) -> Image
         {
             auto info = data.request();
-            return ImageFileFormat::loadFrom (info.ptr, static_cast<size_t> (info.size));
+            auto result = Image::loadFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size), options);
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        }, "data"_a, "options"_a)
+
+        // GPU integration
+        .def_static ("fromTexture", &Image::fromTexture, "texture"_a)
+        .def_static ("fromTarget", &Image::fromTarget, "target"_a)
+        .def ("getGpuTexture", &Image::getGpuTexture)
+        .def ("setGpuTexture", &Image::setGpuTexture, "texture"_a)
+
+        // Representation
+        .def ("__repr__", [] (const Image& self)
+        {
+            String formatName;
+            if (self.isValid())
+            {
+                switch (self.getPixelFormat())
+                {
+                    case PixelFormat::Grayscale: formatName = "Grayscale"; break;
+                    case PixelFormat::RGB: formatName = "RGB"; break;
+                    case PixelFormat::RGBA: formatName = "RGBA"; break;
+                }
+            }
+
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << (self.isValid() ? "valid" : "null") << ", "
+                << self.getWidth() << "x" << self.getHeight() << ", "
+                << formatName << ")";
+            return result;
         })
-    ;
-
-    py::class_<PNGImageFormat, ImageFileFormat> classPNGImageFormat (m, "PNGImageFormat");
-    classPNGImageFormat
-        .def (py::init<>());
-
-    py::class_<JPEGImageFormat, ImageFileFormat> classJPEGImageFormat (m, "JPEGImageFormat");
-    classJPEGImageFormat
-        .def (py::init<>());
-
-    py::class_<GIFImageFormat, ImageFileFormat> classGIFImageFormat (m, "GIFImageFormat");
-    classGIFImageFormat
-        .def (py::init<>());
-
-    // ============================================================================================ yup::ScaledImage
-
-    py::class_<ScaledImage> classScaledImage (m, "ScaledImage");
-
-    classScaledImage
-        .def (py::init<>())
-        .def (py::init<const Image&>())
-        .def (py::init<const Image&, double>())
-        .def (py::init<const ScaledImage&>())
-        .def ("getImage", &ScaledImage::getImage)
-        .def ("getScale", &ScaledImage::getScale)
-        .def ("getScaledBounds", &ScaledImage::getScaledBounds)
-    ;
-
-    // ============================================================================================ yup::ScaledImage
-
-    py::class_<ImageConvolutionKernel> classImageConvolutionKernel (m, "ImageConvolutionKernel");
-
-    classImageConvolutionKernel
-        .def (py::init<int>(), "size"_a)
-        .def ("clear", &ImageConvolutionKernel::clear)
-        .def ("getKernelValue", &ImageConvolutionKernel::getKernelValue)
-        .def ("setKernelValue", &ImageConvolutionKernel::setKernelValue)
-        .def ("setOverallSum", &ImageConvolutionKernel::setOverallSum)
-        .def ("rescaleAllValues", &ImageConvolutionKernel::rescaleAllValues)
-        .def ("createGaussianBlur", &ImageConvolutionKernel::createGaussianBlur)
-        .def ("getKernelSize", &ImageConvolutionKernel::getKernelSize)
-        .def ("applyToImage", &ImageConvolutionKernel::applyToImage)
     ;
 
     // ============================================================================================ yup::Font
 
     py::class_<Font> classFont (m, "Font");
-    py::class_<FontOptions> classFontOptions (m, "FontOptions");
 
-    Helpers::makeArithmeticEnum<Font::FontStyleFlags> (classFont, "FontStyleFlags")
-        .value ("plain", Font::FontStyleFlags::plain)
-        .value ("bold", Font::FontStyleFlags::bold)
-        .value ("italic", Font::FontStyleFlags::italic)
-        .value ("underlined", Font::FontStyleFlags::underlined)
-        .export_values();
-
-    classFontOptions
+    py::class_<Font::Axis> (classFont, "Axis")
         .def (py::init<>())
-        .def (py::init<float>(), "fontHeight"_a)
-        .def (py::init<float, int>(), "fontHeight"_a, "styleFlags"_a = Font::plain)
-        .def (py::init<float, Font::FontStyleFlags>(), "fontHeight"_a, "styleFlags"_a)
-        .def (py::init<const String&, float, Font::FontStyleFlags>(), "typefaceName"_a, "fontHeight"_a, "styleFlags"_a)
-        .def (py::init<const String&, const String&, float>(), "typefaceName"_a, "typefaceStyle"_a, "styleFlags"_a)
-    //.def (py::init<const Typeface::Ptr&>())
-        .def (py::init<const FontOptions&>())
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-        .def (py::self < py::self)
-        .def (py::self <= py::self)
-        .def (py::self > py::self)
-        .def (py::self >= py::self)
-        .def ("withName", &FontOptions::withName)
-        .def ("withStyle", &FontOptions::withStyle)
-        .def ("withTypeface", &FontOptions::withTypeface)
-        .def ("withFallbacks", &FontOptions::withFallbacks)
-        .def ("withFallbackEnabled", &FontOptions::withFallbackEnabled, "x"_a = true)
-        .def ("withHeight", &FontOptions::withHeight, "x"_a)
-        .def ("withPointHeight", &FontOptions::withPointHeight, "x"_a)
-        .def ("withKerningFactor", &FontOptions::withKerningFactor, "x"_a)
-        .def ("withHorizontalScale", &FontOptions::withHorizontalScale, "x"_a)
-        .def ("withUnderline", &FontOptions::withUnderline, "x"_a = true)
-    //.def ("withMetricsKind", &FontOptions::withMetricsKind)
-        .def ("getName", &FontOptions::getName)
-        .def ("getStyle", &FontOptions::getStyle)
-        .def ("getTypeface", &FontOptions::getTypeface)
-        .def ("getFallbacks", &FontOptions::getFallbacks)
-        .def ("getHeight", &FontOptions::getHeight)
-        .def ("getPointHeight", &FontOptions::getPointHeight)
-        .def ("getKerningFactor", &FontOptions::getKerningFactor)
-        .def ("getHorizontalScale", &FontOptions::getHorizontalScale)
-        .def ("getFallbackEnabled", &FontOptions::getFallbackEnabled)
-        .def ("getUnderline", &FontOptions::getUnderline)
-    //.def ("getMetricsKind", &FontOptions::getMetricsKind)
-    ;
+        .def_readwrite ("tagName", &Font::Axis::tagName)
+        .def_readwrite ("minimumValue", &Font::Axis::minimumValue)
+        .def_readwrite ("maximumValue", &Font::Axis::maximumValue)
+        .def_readwrite ("defaultValue", &Font::Axis::defaultValue)
+        .def ("__repr__", [] (const Font::Axis& self)
+        {
+            String result;
+            result << "Font.Axis('" << self.tagName << "', " << self.minimumValue << ", " << self.maximumValue << ")";
+            return result;
+        });
+
+    py::class_<Font::AxisOption> (classFont, "AxisOption")
+        .def (py::init<const String&, float>(), "tagName"_a, "value"_a)
+        .def_readwrite ("tagName", &Font::AxisOption::tagName)
+        .def_readwrite ("value", &Font::AxisOption::value);
+
+    py::class_<Font::Feature> (classFont, "Feature")
+        .def (py::init<uint32, uint32>(), "tag"_a, "value"_a)
+        .def (py::init ([] (const String& stringTag, uint32 value) -> Font::Feature
+        {
+            if (stringTag.length() != 4)
+                throw py::value_error ("Feature tag must be exactly 4 characters long");
+
+            const uint32 tag = (uint32 (stringTag[0]) << 24) | (uint32 (stringTag[1]) << 16)
+                             | (uint32 (stringTag[2]) << 8) | uint32 (stringTag[3]);
+            return { tag, value };
+        }), "tag"_a, "value"_a)
+        .def_readwrite ("tag", &Font::Feature::tag)
+        .def_readwrite ("value", &Font::Feature::value);
 
     classFont
-        .def (py::init<FontOptions>(), "fontOptions"_a)
+        // Constructors
+        .def (py::init<>())
         .def (py::init<const Font&>())
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-        .def ("setTypefaceName", &Font::setTypefaceName)
-        .def ("getTypefaceName", &Font::getTypefaceName)
-        .def ("getTypefaceStyle", &Font::getTypefaceStyle)
-        .def ("setTypefaceStyle", &Font::setTypefaceStyle)
-        .def ("withTypefaceStyle", &Font::withTypefaceStyle)
-        .def_static ("getDefaultSansSerifFontName", &Font::getDefaultSansSerifFontName)
-        .def_static ("getDefaultSerifFontName", &Font::getDefaultSerifFontName)
-        .def_static ("getDefaultMonospacedFontName", &Font::getDefaultMonospacedFontName)
-        .def_static ("getDefaultStyle", &Font::getDefaultStyle)
-        .def ("withHeight", &Font::withHeight)
-        .def ("withPointHeight", &Font::withPointHeight)
-        .def ("setHeight", &Font::setHeight)
-        .def ("setHeightWithoutChangingWidth", &Font::setHeightWithoutChangingWidth)
-        .def ("getHeight", &Font::getHeight)
-        .def ("getHeightInPoints", &Font::getHeightInPoints)
+
+        // Loading fonts
+        .def_static ("loadFontFromData", [] (py::buffer data) -> Font
+        {
+            auto info = data.request();
+            auto result = Font::loadFontFromData (Span<const uint8> (static_cast<const uint8*> (info.ptr), info.size));
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        }, "data"_a)
+        .def_static ("loadFontFromFile", [] (const File& file) -> Font
+        {
+            auto result = Font::loadFontFromFile (file);
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        }, "file"_a)
+        .def_static ("loadFontFromFirstAvailableFile", [] (const std::vector<std::string>& fontPaths) -> Font
+        {
+            for (const auto& path : fontPaths)
+            {
+                auto result = Font::loadFontFromFile (File (path.c_str()));
+                if (result.wasOk())
+                    return result.getValue();
+            }
+
+            throw py::value_error ("None of the provided font files could be loaded");
+        }, "fontPaths"_a)
+        .def_static ("loadSerifSystemTextFont", [] () -> Font
+        {
+            auto result = Font::loadSerifSystemTextFont();
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        })
+        .def_static ("loadMonospaceSystemTextFont", [] () -> Font
+        {
+            auto result = Font::loadMonospaceSystemTextFont();
+            if (! result.wasOk())
+                throw py::value_error (std::string (result.getErrorMessage().toRawUTF8()));
+
+            return result.getValue();
+        })
+
+        // Metrics
+        .def ("isEmpty", &Font::isEmpty)
         .def ("getAscent", &Font::getAscent)
-        .def ("getAscentInPoints", &Font::getAscentInPoints)
         .def ("getDescent", &Font::getDescent)
-        .def ("getDescentInPoints", &Font::getDescentInPoints)
-        .def ("getStyleFlags", &Font::getStyleFlags)
-        .def ("withStyle", &Font::withStyle)
-        .def ("withStyle", [](const Font& self, Font::FontStyleFlags flags) { return self.withStyle (static_cast<int> (flags)); })
-        .def ("setStyleFlags", &Font::setStyleFlags)
-        .def ("setStyleFlags", [](Font& self, Font::FontStyleFlags flags) { self.setStyleFlags (static_cast<int> (flags)); })
-        .def ("setBold", &Font::setBold)
-        .def ("boldened", &Font::boldened)
-        .def ("isBold", &Font::isBold)
-        .def ("setItalic", &Font::setItalic)
-        .def ("italicised", &Font::italicised)
+        .def ("getWeight", &Font::getWeight)
         .def ("isItalic", &Font::isItalic)
-        .def ("setUnderline", &Font::setUnderline)
-        .def ("isUnderlined", &Font::isUnderlined)
-        .def ("getHorizontalScale", &Font::getHorizontalScale)
-        .def ("withHorizontalScale", &Font::withHorizontalScale)
-        .def ("setHorizontalScale", &Font::setHorizontalScale)
-        .def_static ("getDefaultMinimumHorizontalScaleFactor", &Font::getDefaultMinimumHorizontalScaleFactor)
-        .def_static ("setDefaultMinimumHorizontalScaleFactor", &Font::setDefaultMinimumHorizontalScaleFactor)
-        .def ("getExtraKerningFactor", &Font::getExtraKerningFactor)
-        .def ("withExtraKerningFactor", &Font::withExtraKerningFactor)
-        .def ("setExtraKerningFactor", &Font::setExtraKerningFactor)
-        .def ("setSizeAndStyle", py::overload_cast<float, int, float, float> (&Font::setSizeAndStyle))
-        .def ("setSizeAndStyle", [](Font& self, float newHeight, Font::FontStyleFlags newStyleFlags, float newHorizontalScale, float newKerningAmount)
+        .def ("getHeight", &Font::getHeight)
+        .def ("setHeight", &Font::setHeight, "newHeight"_a)
+        .def ("withHeight", &Font::withHeight, "height"_a)
+
+        // Variable font axis
+        .def ("getNumAxis", &Font::getNumAxis)
+        .def ("getAxisDescription", [] (const Font& self, int index) -> py::object
         {
-            self.setSizeAndStyle (newHeight, static_cast<int> (newStyleFlags), newHorizontalScale, newKerningAmount);
-        })
-        .def ("setSizeAndStyle", py::overload_cast<float, const String&, float, float> (&Font::setSizeAndStyle))
-        .def ("getStringWidth", &Font::getStringWidth)
-        .def ("getStringWidthFloat", &Font::getStringWidthFloat)
-    //.def ("getGlyphPositions", &Font::getGlyphPositions)
-    //.def ("getTypefacePtr", &Font::getTypefacePtr)
-    //.def_static ("findFonts", &Font::findFonts)
-        .def_static ("findAllTypefaceNames", &Font::findAllTypefaceNames)
-        .def_static ("findAllTypefaceStyles", &Font::findAllTypefaceStyles)
-    //.def_static ("getFallbackFontName", &Font::getFallbackFontName)
-    //.def_static ("setFallbackFontName", &Font::setFallbackFontName)
-    //.def_static ("getFallbackFontStyle", &Font::getFallbackFontStyle)
-    //.def_static ("setFallbackFontStyle", &Font::setFallbackFontStyle)
-        .def ("toString", &Font::toString)
-        .def_static ("fromString", &Font::fromString)
-        .def ("__repr__", [](const Font& self)
+            const auto description = self.getAxisDescription (index);
+            if (! description.has_value())
+                return py::none();
+
+            return py::cast (*description);
+        }, "index"_a)
+        .def ("getAxisValue", py::overload_cast<int> (&Font::getAxisValue, py::const_), "index"_a)
+        .def ("setAxisValue", py::overload_cast<int, float> (&Font::setAxisValue), "index"_a, "value"_a)
+        .def ("withAxisValue", py::overload_cast<int, float> (&Font::withAxisValue, py::const_), "index"_a, "value"_a)
+        .def ("resetAxisValue", py::overload_cast<int> (&Font::resetAxisValue), "index"_a)
+        .def ("getAxisValue", [] (const Font& self, const String& tagName) { return self.getAxisValue (StringRef (tagName)); }, "tagName"_a)
+        .def ("setAxisValue", [] (Font& self, const String& tagName, float value) { self.setAxisValue (StringRef (tagName), value); }, "tagName"_a, "value"_a)
+        .def ("withAxisValue", [] (const Font& self, const String& tagName, float value) { return self.withAxisValue (StringRef (tagName), value); }, "tagName"_a, "value"_a)
+        .def ("resetAxisValue", [] (Font& self, const String& tagName) { self.resetAxisValue (StringRef (tagName)); }, "tagName"_a)
+        .def ("resetAllAxisValues", &Font::resetAllAxisValues)
+        .def ("setAxisValues", [] (Font& self, const std::vector<Font::AxisOption>& axisOptions)
         {
-            String repr;
-            repr << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name()) << "('" << self.toString() << ")";
-            return repr;
-        })
-        .def ("__str__", &Font::toString)
-    ;
+            for (const auto& option : axisOptions)
+                self.setAxisValue (StringRef (option.tagName), option.value);
+        }, "axisOptions"_a)
+        .def ("withAxisValues", [] (const Font& self, const std::vector<Font::AxisOption>& axisOptions)
+        {
+            Font result = self;
+            for (const auto& option : axisOptions)
+                result.setAxisValue (StringRef (option.tagName), option.value);
 
-    // ============================================================================================ yup::AttributedString
+            return result;
+        }, "axisOptions"_a)
 
-    py::class_<AttributedString> classAttributedString (m, "AttributedString");
+        // OpenType features
+        .def ("withFeature", &Font::withFeature, "feature"_a)
+        .def ("withFeatures", [] (const Font& self, const std::vector<Font::Feature>& features)
+        {
+            Font result = self;
+            for (const auto& feature : features)
+                result = result.withFeature (feature);
 
-    py::enum_<AttributedString::WordWrap> (classAttributedString, "WordWrap")
-        .value("none", AttributedString::WordWrap::none)
-        .value("byWord", AttributedString::WordWrap::byWord)
-        .value("byChar", AttributedString::WordWrap::byChar)
-        .export_values();
+            return result;
+        }, "features"_a)
 
-    py::enum_<AttributedString::ReadingDirection> (classAttributedString, "ReadingDirection")
-        .value("natural", AttributedString::ReadingDirection::natural)
-        .value("leftToRight", AttributedString::ReadingDirection::leftToRight)
-        .value("rightToLeft", AttributedString::ReadingDirection::rightToLeft)
-        .export_values();
-
-    py::class_<AttributedString::Attribute> (classAttributedString, "Attribute")
-        .def (py::init<>())
-        .def (py::init<Range<int>, const Font&, Color>())
-        .def (py::init<const AttributedString::Attribute&>())
-        .def_readwrite ("range", &AttributedString::Attribute::range)
-        .def_readwrite ("font", &AttributedString::Attribute::font)
-        .def_readwrite ("colour", &AttributedString::Attribute::colour)
-    ;
-
-    classAttributedString
-        .def (py::init<>())
-        .def (py::init<const String&>())
-        .def (py::init<const AttributedString&>())
-        .def ("getText", &AttributedString::getText)
-        .def ("setText", &AttributedString::setText)
-        .def ("append", py::overload_cast<const String&> (&AttributedString::append))
-        .def ("append", py::overload_cast<const String&, const Font&> (&AttributedString::append))
-        .def ("append", py::overload_cast<const String&, Color> (&AttributedString::append))
-        .def ("append", py::overload_cast<const String&, const Font&, Color> (&AttributedString::append))
-        .def ("append", py::overload_cast<const AttributedString&> (&AttributedString::append))
-        .def ("clear", &AttributedString::clear)
-        .def ("draw", &AttributedString::draw)
-        .def ("getJustification", &AttributedString::getJustification)
-        .def ("getWordWrap", &AttributedString::getWordWrap)
-        .def ("setWordWrap", &AttributedString::setWordWrap)
-        .def ("getReadingDirection", &AttributedString::getReadingDirection)
-        .def ("setReadingDirection", &AttributedString::setReadingDirection)
-        .def ("getLineSpacing", &AttributedString::getLineSpacing)
-        .def ("setLineSpacing", &AttributedString::setLineSpacing)
-        .def ("getNumAttributes", &AttributedString::getNumAttributes)
-        .def ("getAttribute", &AttributedString::getAttribute, py::return_value_policy::reference)
-        .def ("setColor", py::overload_cast<Range<int>, Color> (&AttributedString::setColor))
-        .def ("setColor", py::overload_cast<Color> (&AttributedString::setColor))
-        .def ("setFont", py::overload_cast<Range<int>, const Font&> (&AttributedString::setFont))
-        .def ("setFont", py::overload_cast<const Font&> (&AttributedString::setFont))
-    ;
-
-    // ============================================================================================ yup::FillType
-
-    py::class_<FillType> classFillType (m, "FillType");
-
-    classFillType
-        .def (py::init<>())
-        .def (py::init<Color>())
-        .def (py::init<const ColorGradient&>())
-        .def (py::init<const Image&, const AffineTransform&>())
-        .def (py::init<const FillType&>())
+        // Comparison
         .def (py::self == py::self)
         .def (py::self != py::self)
-        .def ("isColor", &FillType::isColor)
-        .def ("isGradient", &FillType::isGradient)
-        .def ("isTiledImage", &FillType::isTiledImage)
-        .def ("setColor", &FillType::setColor)
-        .def ("setGradient", &FillType::setGradient)
-        .def ("setTiledImage", &FillType::setTiledImage)
-        .def ("setOpacity", &FillType::setOpacity)
-        .def ("getOpacity", &FillType::getOpacity)
-        .def ("isInvisible", &FillType::isInvisible)
-        .def ("transformed", &FillType::transformed)
-        .def_readwrite("colour", &FillType::colour)
-        .def_property("gradient",
-                      [](const FillType& self) { return self.gradient.get(); },
-                      [](FillType& self, ColorGradient* v) { self.gradient.reset(); if (v != nullptr) self.gradient = std::make_unique<ColorGradient>(*v); },
-                      py::return_value_policy::reference_internal)
-        .def_readwrite("image", &FillType::image)
-        .def_readwrite("transform", &FillType::transform)
-    ;
 
-    // ============================================================================================ yup::RectanglePlacement
-
-    py::class_<RectanglePlacement> classRectanglePlacement (m, "RectanglePlacement");
-
-    Helpers::makeArithmeticEnum<RectanglePlacement::Flags> (classRectanglePlacement, "Flags")
-        .value ("xLeft", RectanglePlacement::Flags::xLeft)
-        .value ("xRight", RectanglePlacement::Flags::xRight)
-        .value ("xMid", RectanglePlacement::Flags::xMid)
-        .value ("yTop", RectanglePlacement::Flags::yTop)
-        .value ("yBottom", RectanglePlacement::Flags::yBottom)
-        .value ("yMid", RectanglePlacement::Flags::yMid)
-        .value ("stretchToFit", RectanglePlacement::Flags::stretchToFit)
-        .value ("fillDestination", RectanglePlacement::Flags::fillDestination)
-        .value ("onlyReduceInSize", RectanglePlacement::Flags::onlyReduceInSize)
-        .value ("onlyIncreaseInSize", RectanglePlacement::Flags::onlyIncreaseInSize)
-        .value ("doNotResize", RectanglePlacement::Flags::doNotResize)
-        .value ("centred", RectanglePlacement::Flags::centred)
-        .export_values();
-
-    classRectanglePlacement
-        .def (py::init<>())
-        .def (py::init<int>())
-        .def (py::init<RectanglePlacement::Flags>())
-        .def (py::init<const RectanglePlacement&>())
-        .def (py::self == py::self)
-        .def (py::self != py::self)
-        .def ("getFlags", &RectanglePlacement::getFlags)
-        .def ("testFlags", &RectanglePlacement::testFlags)
-        .def ("testFlags", [](const RectanglePlacement& self, RectanglePlacement::Flags flags) { return self.testFlags (static_cast<int> (flags)); })
-        .def ("applyTo", [](const RectanglePlacement& self, double& sourceX, double& sourceY, double& sourceW, double& sourceH, double destinationX, double destinationY, double destinationW, double destinationH)
+        // Representation
+        .def ("__repr__", [] (const Font& self)
         {
-            self.applyTo (sourceX, sourceY, sourceW, sourceH, destinationX, destinationY, destinationW, destinationH);
-            return py::make_tuple (sourceX, sourceY, sourceW, sourceH);
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << self.getHeight() << ", weight " << self.getWeight() << ")";
+            return result;
         })
-        .def ("appliedTo", &RectanglePlacement::template appliedTo<int>)
-        .def ("appliedTo", &RectanglePlacement::template appliedTo<float>)
-        .def ("getTransformToFit", &RectanglePlacement::getTransformToFit)
     ;
 
-    py::implicitly_convertible<RectanglePlacement::Flags, RectanglePlacement>();
+    // ============================================================================================ yup::StyledText
 
-    // ============================================================================================ yup::LowLevelGraphicsContext
+    py::class_<StyledText> classStyledText (m, "StyledText");
 
-    py::class_<LowLevelGraphicsContext, PyLowLevelGraphicsContext<>> classLowLevelGraphicsContext (m, "LowLevelGraphicsContext");
+    py::enum_<StyledText::HorizontalAlign> (classStyledText, "HorizontalAlign")
+        .value ("left", StyledText::HorizontalAlign::left)
+        .value ("center", StyledText::HorizontalAlign::center)
+        .value ("right", StyledText::HorizontalAlign::right)
+        .value ("justified", StyledText::HorizontalAlign::justified);
 
-    classLowLevelGraphicsContext
+    py::enum_<StyledText::VerticalAlign> (classStyledText, "VerticalAlign")
+        .value ("top", StyledText::VerticalAlign::top)
+        .value ("middle", StyledText::VerticalAlign::middle)
+        .value ("bottom", StyledText::VerticalAlign::bottom);
+
+    py::enum_<StyledText::TextOverflow> (classStyledText, "TextOverflow")
+        .value ("visible", StyledText::TextOverflow::visible)
+        .value ("ellipsis", StyledText::TextOverflow::ellipsis);
+
+    py::enum_<StyledText::TextOrigin> (classStyledText, "TextOrigin")
+        .value ("topOrigin", StyledText::TextOrigin::topOrigin)
+        .value ("baseline", StyledText::TextOrigin::baseline);
+
+    py::enum_<StyledText::TextWrap> (classStyledText, "TextWrap")
+        .value ("wrap", StyledText::TextWrap::wrap)
+        .value ("noWrap", StyledText::TextWrap::noWrap);
+
+    py::class_<StyledText::TextModifier> (classStyledText, "TextModifier")
+        .def (py::init<StyledText&>(), "styledText"_a, py::keep_alive<1, 2>())
+        .def ("clear", &StyledText::TextModifier::clear)
+        .def ("appendText", [] (StyledText::TextModifier& self, const String& text, const Font& font, float lineHeight, float letterSpacing)
+        {
+            self.appendText (text, font, lineHeight, letterSpacing);
+        }, "text"_a, "font"_a, "lineHeight"_a = -1.0f, "letterSpacing"_a = 0.0f)
+        .def ("appendText", [] (StyledText::TextModifier& self, const String& text, Color color, const Font& font, float lineHeight, float letterSpacing)
+        {
+            self.appendText (text, color, font, lineHeight, letterSpacing);
+        }, "text"_a, "color"_a, "font"_a, "lineHeight"_a = -1.0f, "letterSpacing"_a = 0.0f)
+        .def ("setOverflow", &StyledText::TextModifier::setOverflow, "value"_a)
+        .def ("setHorizontalAlign", &StyledText::TextModifier::setHorizontalAlign, "value"_a)
+        .def ("setVerticalAlign", &StyledText::TextModifier::setVerticalAlign, "value"_a)
+        .def ("setMaxSize", &StyledText::TextModifier::setMaxSize, "value"_a)
+        .def ("setParagraphSpacing", &StyledText::TextModifier::setParagraphSpacing, "value"_a)
+        .def ("setWrap", &StyledText::TextModifier::setWrap, "value"_a)
+    ;
+
+    classStyledText
         .def (py::init<>())
-        // TODO
+        .def ("isEmpty", &StyledText::isEmpty)
+        .def ("needsUpdate", &StyledText::needsUpdate)
+        .def ("startUpdate", &StyledText::startUpdate)
+
+        .def ("getOverflow", &StyledText::getOverflow)
+        .def ("getHorizontalAlign", &StyledText::getHorizontalAlign)
+        .def ("getVerticalAlign", &StyledText::getVerticalAlign)
+        .def ("getMaxSize", &StyledText::getMaxSize)
+        .def ("getParagraphSpacing", &StyledText::getParagraphSpacing)
+        .def ("getWrap", &StyledText::getWrap)
+        .def ("getComputedTextBounds", &StyledText::getComputedTextBounds)
+        .def ("getOffset", &StyledText::getOffset, "area"_a)
+
+        .def ("getGlyphIndexAtPosition", &StyledText::getGlyphIndexAtPosition, "position"_a)
+        .def ("getCaretBounds", &StyledText::getCaretBounds, "characterIndex"_a)
+        .def ("getGlyphIndexOnAdjacentLine", &StyledText::getGlyphIndexOnAdjacentLine, "characterIndex"_a, "moveDown"_a)
+        .def ("getSelectionRectangles", &StyledText::getSelectionRectangles, "startIndex"_a, "endIndex"_a)
+        .def ("isValidCharacterIndex", &StyledText::isValidCharacterIndex, "characterIndex"_a)
+
+        .def_static ("horizontalAlignFromJustification", &StyledText::horizontalAlignFromJustification)
+        .def_static ("verticalAlignFromJustification", &StyledText::verticalAlignFromJustification)
+
+        .def ("__repr__", [] (const StyledText& self)
+        {
+            String result;
+            result
+                << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name())
+                << "(" << (self.isEmpty() ? "empty" : "not-empty") << ")";
+            return result;
+        })
     ;
 
-    // ============================================================================================ yup::LowLevelGraphicsSoftwareRenderer
+    // ============================================================================================ yup::GraphicsContext
 
-    py::class_<LowLevelGraphicsSoftwareRenderer, LowLevelGraphicsContext, PyLowLevelGraphicsContext<LowLevelGraphicsSoftwareRenderer>>
-        classLowLevelGraphicsSoftwareRenderer (m, "LowLevelGraphicsSoftwareRenderer");
-
-    classLowLevelGraphicsSoftwareRenderer
-        .def (py::init<const Image&>(), "imageToRenderOnto"_a)
-        .def (py::init<const Image&, Point<int>, const RectangleList<int>&>(), "imageToRenderOnto"_a, "origin"_a, "initialClip"_a)
+    py::class_<GraphicsContext, std::unique_ptr<GraphicsContext, py::nodelete>> (m, "GraphicsContext")
+        .def ("isGpuAvailable", &GraphicsContext::isGpuAvailable)
+        .def ("getPlatform", &GraphicsContext::getPlatform)
+        .def ("getGpuDevice", &GraphicsContext::getGpuDevice)
+        .def ("tick", &GraphicsContext::tick)
     ;
-
-    */
 
     // ============================================================================================ yup::BlendMode
 
@@ -1859,6 +2051,8 @@ void registerYupGraphicsBindings (py::module_& m)
 
         // Image operations
         .def ("drawImageAt", &Graphics::drawImageAt)
+        .def ("drawImage", &Graphics::drawImage)
+        .def ("drawTexture", &Graphics::drawTexture)
 
         // Text operations
         .def ("fillFittedText", py::overload_cast<const String&, const Font&, const Rectangle<float>&, Justification> (&Graphics::fillFittedText))
@@ -1871,7 +2065,37 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getContextScale", &Graphics::getContextScale)
         .def ("getFactory", &Graphics::getFactory, py::return_value_policy::reference_internal)
         .def ("getRenderer", &Graphics::getRenderer, py::return_value_policy::reference_internal)
+        .def ("getGraphicsContext", &Graphics::getGraphicsContext, py::return_value_policy::reference)
     ;
+
+    // ============================================================================================ yup::GpuCanvas
+
+    py::class_<GpuCanvas, ReferenceCountedObjectPtr<GpuCanvas>> (m, "GpuCanvas")
+        .def_static ("create",
+                     &GpuCanvas::create,
+                     py::arg ("ctx"),
+                     py::arg ("width"),
+                     py::arg ("height"),
+                     py::arg ("clearColor") = Colors::transparentBlack)
+        .def ("getWidth", &GpuCanvas::getWidth)
+        .def ("getHeight", &GpuCanvas::getHeight)
+        .def ("asTexture", &GpuCanvas::asTexture)
+        .def ("asImage", &GpuCanvas::asImage)
+        .def ("beginDraw", [] (GpuCanvas& self) -> Graphics& { return self.beginDraw(); },
+              py::return_value_policy::reference_internal)
+        .def ("beginDraw", [] (GpuCanvas& self, const GpuFrameDescriptor& frameDesc) -> Graphics&
+              { return self.beginDraw (frameDesc); },
+              py::return_value_policy::reference_internal, "frameDesc"_a)
+        .def ("commit", &GpuCanvas::commit)
+        .def ("getTarget", &GpuCanvas::getTarget)
+        .def ("__repr__", [] (const GpuCanvas& self)
+        {
+            String result;
+            result
+                << "<" << Helpers::pythonizeModuleClassName (PythonModuleName, typeid (self).name(), 1)
+                << " " << self.getWidth() << "x" << self.getHeight() << ">";
+            return result;
+        });
 
     // ============================================================================================ yup::Colors
 
@@ -2019,6 +2243,80 @@ void registerYupGraphicsBindings (py::module_& m)
     submoduleColors.attr ("whitesmoke") = Colors::whitesmoke;
     submoduleColors.attr ("yellow") = Colors::yellow;
     submoduleColors.attr ("yellowgreen") = Colors::yellowgreen;
+
+    // ============================================================================================ yup::Fitting
+
+    py::enum_<Fitting> (m, "Fitting")
+        .value ("none", Fitting::none)
+        .value ("scaleToFit", Fitting::scaleToFit)
+        .value ("fitWidth", Fitting::fitWidth)
+        .value ("fitHeight", Fitting::fitHeight)
+        .value ("scaleToFill", Fitting::scaleToFill)
+        .value ("fill", Fitting::fill)
+        .value ("tile", Fitting::tile)
+        .value ("centerCrop", Fitting::centerCrop)
+        .value ("centerInside", Fitting::centerInside)
+        .value ("stretchWidth", Fitting::stretchWidth)
+        .value ("stretchHeight", Fitting::stretchHeight);
+
+    // ============================================================================================ yup::CubicBezier
+
+    py::class_<CubicBezier> classCubicBezier (m, "CubicBezier");
+
+    classCubicBezier
+        .def (py::init<>())
+        .def (py::init<Point<float>, Point<float>, Point<float>, Point<float>>(), "p0"_a, "p1"_a, "p2"_a, "p3"_a)
+        .def_static ("fromPoints", &CubicBezier::fromPoints, "p0"_a, "p1"_a, "p2"_a, "p3"_a)
+        .def ("p0", &CubicBezier::p0)
+        .def ("p1", &CubicBezier::p1)
+        .def ("p2", &CubicBezier::p2)
+        .def ("p3", &CubicBezier::p3)
+        .def ("pointAt", &CubicBezier::pointAt, "t"_a)
+        .def ("angleAt", &CubicBezier::angleAt, "t"_a)
+        .def ("derivative", &CubicBezier::derivative, "t"_a)
+        .def ("length", &CubicBezier::length)
+        .def ("tAtLength", py::overload_cast<float, float> (&CubicBezier::tAtLength, py::const_), "len"_a, "totalLen"_a)
+        .def ("tAtLength", py::overload_cast<float> (&CubicBezier::tAtLength, py::const_), "len"_a)
+        .def ("onInterval", &CubicBezier::onInterval, "t0"_a, "t1"_a)
+        .def ("split", [] (const CubicBezier& self)
+        {
+            CubicBezier firstHalf, secondHalf;
+
+            self.split (firstHalf, secondHalf);
+
+            return py::make_tuple (firstHalf, secondHalf);
+        })
+        .def ("splitAtLength", [] (const CubicBezier& self, float len)
+        {
+            CubicBezier left, right;
+
+            self.splitAtLength (len, left, right);
+
+            return py::make_tuple (left, right);
+        }, "len"_a)
+        .def ("parameterSplitLeft", [] (CubicBezier& self, float t)
+        {
+            CubicBezier left;
+
+            self.parameterSplitLeft (t, left);
+
+            return left;
+        }, "t"_a, "Subdivides in place: this curve becomes the [t, 1] portion and the returned\n"
+                   "CubicBezier is the [0, t] portion.");
+
+    // ============================================================================================ yup::Drawable
+
+    py::class_<Drawable> classDrawable (m, "Drawable");
+
+    classDrawable
+        .def (py::init<>())
+        .def ("parseSVG", py::overload_cast<const File&> (&Drawable::parseSVG), "svgFile"_a)
+        .def ("parseSVG", py::overload_cast<StringRef> (&Drawable::parseSVG), "svgText"_a)
+        .def ("clear", &Drawable::clear)
+        .def ("getBounds", &Drawable::getBounds)
+        .def ("paint", py::overload_cast<Graphics&> (&Drawable::paint), "g"_a)
+        .def ("paint", py::overload_cast<Graphics&, const Rectangle<float>&, Fitting, Justification> (&Drawable::paint),
+              "g"_a, "targetArea"_a, "fitting"_a = Fitting::scaleToFit, "justification"_a = Justification::center);
 }
 
 // clang-format on

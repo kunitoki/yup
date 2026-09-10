@@ -423,11 +423,15 @@ void MessageManager::runDispatchLoop()
 
     while (quitMessagePosted.get() == 0)
     {
-        if (runNSApplication(millisecondsToRunFor, quitMessagePosted))
+        YUP_TRY
         {
-            if (loopCallback)
-                loopCallback();
+            if (runNSApplication(millisecondsToRunFor, quitMessagePosted))
+            {
+                if (loopCallback)
+                    loopCallback();
+            }
         }
+        YUP_CATCH_EXCEPTION
     }
 }
 
@@ -465,7 +469,13 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     jassert(millisecondsToRunFor >= 0);
     jassert(isThisTheMessageThread()); // must only be called by the message thread
 
-    return runNSApplication(millisecondsToRunFor, quitMessagePosted);
+    YUP_TRY
+    {
+        return runNSApplication(millisecondsToRunFor, quitMessagePosted);
+    }
+    YUP_CATCH_EXCEPTION
+
+    return quitMessagePosted.get() == 0;
 }
 #endif
 

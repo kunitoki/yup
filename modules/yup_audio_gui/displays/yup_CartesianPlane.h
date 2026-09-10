@@ -150,7 +150,7 @@ public:
     // Title configuration
 
     /** Set the plot title */
-    void setTitle (const String& title);
+    void setTitle (const String& title) override;
 
     /** Get the current title */
     const String& getTitle() const { return titleText; }

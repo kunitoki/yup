@@ -369,6 +369,47 @@ void registerArray (pybind11::module_& m)
 
 //==============================================================================
 
+template <template <class> class Class, class... Types>
+void registerStatisticsAccumulator (pybind11::module_& m)
+{
+    // clang-format off
+
+    namespace py = pybind11;
+    using namespace py::literals;
+
+    py::dict type;
+
+    ([&]
+    {
+        using ValueType = Types;
+        using T = Class<ValueType>;
+
+        const auto className = yup::Helpers::pythonizeCompoundClassName ("StatisticsAccumulator", typeid (ValueType).name());
+
+        auto class_ = py::class_<T> (m, className.toRawUTF8())
+                          .def (py::init<>())
+                          .def ("addValue", &T::addValue, "value"_a)
+                          .def ("reset", &T::reset)
+                          .def ("getAverage", &T::getAverage)
+                          .def ("getEnergy", &T::getEnergy)
+                          .def ("getVariance", &T::getVariance)
+                          .def ("getStandardDeviation", &T::getStandardDeviation)
+                          .def ("getMinValue", &T::getMinValue)
+                          .def ("getMaxValue", &T::getMaxValue)
+                          .def ("getCount", &T::getCount);
+
+        type[py::type::of (py::cast (Types {}))] = class_;
+
+        return true;
+    }() && ...);
+
+    m.add_object ("StatisticsAccumulator", type);
+
+    // clang-format on
+}
+
+//==============================================================================
+
 struct PyThreadID
 {
     explicit PyThreadID (Thread::ThreadID value) noexcept
@@ -398,7 +439,7 @@ private:
 //==============================================================================
 
 template <class Base = InputStream>
-struct PyInputStream : Base
+struct PyInputStream : Base, pybind11::trampoline_self_life_support
 {
 private:
 #if YUP_WINDOWS
@@ -531,7 +572,7 @@ public:
 //==============================================================================
 
 template <class Base = InputSource>
-struct PyInputSource : Base
+struct PyInputSource : Base, pybind11::trampoline_self_life_support
 {
     using Base::Base;
 
@@ -961,6 +1002,45 @@ struct PyTimeSliceClient : TimeSliceClient
     int useTimeSlice() override
     {
         PYBIND11_OVERRIDE_PURE (int, TimeSliceClient, useTimeSlice);
+    }
+};
+
+//==============================================================================
+
+struct PyLogger : Logger
+{
+    PyLogger() = default;
+
+    void logMessage (const String& message) override
+    {
+        PYBIND11_OVERRIDE_PURE (void, Logger, logMessage, message);
+    }
+};
+
+//==============================================================================
+
+struct PyExpressionScope : Expression::Scope
+{
+    using Expression::Scope::Scope;
+
+    String getScopeUID() const override
+    {
+        PYBIND11_OVERRIDE (String, Expression::Scope, getScopeUID);
+    }
+
+    Expression getSymbolValue (const String& symbol) const override
+    {
+        PYBIND11_OVERRIDE (Expression, Expression::Scope, getSymbolValue, symbol);
+    }
+};
+
+//==============================================================================
+
+struct PyWebInputStreamListener : WebInputStream::Listener
+{
+    bool postDataSendProgress (WebInputStream& request, int bytesSent, int totalBytes) override
+    {
+        PYBIND11_OVERRIDE (bool, WebInputStream::Listener, postDataSendProgress, request, bytesSent, totalBytes);
     }
 };
 

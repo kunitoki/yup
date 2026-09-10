@@ -353,13 +353,10 @@ TEST_F (GpuDeviceOpenGLTests, CompilePipelineFailsWithEmptyVertexCode)
 {
     GpuShaderSource vs;
     vs.language = GpuShaderLanguage::glsl;
-    vs.code = nullptr;
-    vs.codeSize = 0;
 
     GpuShaderSource fs;
     fs.language = GpuShaderLanguage::glsl;
-    fs.code = "void main() {}";
-    fs.codeSize = (uint32_t) strlen ("void main() {}");
+    fs.code = gpuShaderSourceBytes ("void main() {}");
 
     auto result = GpuPipeline::compile (device, vs, fs);
     EXPECT_TRUE (result.failed());
@@ -618,8 +615,7 @@ TEST_F (GpuDeviceOpenGLTests, ComputePipelineCompileFailsWithNullDevice)
 {
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
-    src.code = "void main() {}";
-    src.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (src.code)));
+    src.code = gpuShaderSourceBytes ("void main() {}");
 
     auto result = GpuComputePipeline::compile (nullptr, src, GpuWorkgroupSize { 16, 1, 1 });
     EXPECT_TRUE (result.failed());
@@ -986,12 +982,9 @@ TEST_F (GpuDeviceOpenGLTests, RenderPassDrawWithVertexAndIndexBuffers)
         void main() { fragColor = vec4(1.0, 0.0, 0.0, 1.0); }
     )";
 
-    GpuVertexAttribute attr (GpuVertexFormat::float3, 0, 0);
-    GpuVertexBufferLayout vbLayout (sizeof (float) * 3, GpuVertexStepMode::vertex, &attr, 1);
-
     GpuPipelineOptions pipelineOptions;
-    pipelineOptions.vertexBuffers = &vbLayout;
-    pipelineOptions.vertexBufferCount = 1;
+    pipelineOptions.vertexBuffers.emplace_back (sizeof (float) * 3, GpuVertexStepMode::vertex,
+                                                std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, 0, 0 } });
     pipelineOptions.indexFormat = GpuIndexFormat::uint16;
 
     auto compileResult = GpuPipeline::compileFromGlsl (device, vsSrc, fsSrc, pipelineOptions);

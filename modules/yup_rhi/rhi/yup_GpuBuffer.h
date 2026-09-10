@@ -73,20 +73,30 @@ public:
     /** Returns true if this buffer holds a valid GPU resource. */
     bool isValid() const noexcept;
 
+private:
     //==============================================================================
-    /** @internal */
+    // The backend seam. Every GpuDevice and GpuComputePass backend reaches into the
+    // native handles a buffer holds; nothing outside yup_rhi has any business doing so.
+    friend class GpuDevice;
+    friend class GpuDeviceMetal;
+    friend class GpuDeviceD3D;
+    friend class GpuDeviceGL;
+    friend class GpuDeviceWebGPU;
+    friend class GpuDeviceDawn;
+    friend class GpuRenderPass;
+    friend class GpuComputePass;
+    friend class GpuComputePassImplMetal;
+    friend class GpuComputePassImplD3D11;
+    friend class GpuComputePassImplGL;
+    friend class GpuComputePassImplWebGPU;
+
     struct Impl;
 
-    /** @internal */
     Impl* getImpl() noexcept;
     const Impl* getImpl() const noexcept;
 
-    /** @internal Creates a GpuBuffer from a pre-built Impl. Used by GpuDevice backends. */
+    /** Creates a GpuBuffer from a pre-built Impl. */
     static Ptr createWithImpl (Impl&& impl);
-
-private:
-    friend class GpuDevice;
-    friend class GpuRenderPass;
 
     GpuBuffer() = default;
 

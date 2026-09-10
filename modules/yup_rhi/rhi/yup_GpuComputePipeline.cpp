@@ -114,9 +114,8 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromBundle (GpuD
 
     GpuShaderSource source;
     source.language = targetLang;
-    source.code = static_cast<const char*> (shader->source.toRawUTF8());
-    source.codeSize = static_cast<uint32_t> (shader->source.getNumBytesAsUTF8());
-    source.entryPoint = shader->entryPoint.toRawUTF8();
+    source.code = gpuShaderSourceBytes (shader->source);
+    source.entryPoint = shader->entryPoint;
 
     GpuWorkgroupSize wgs = workgroupSize;
     if (wgs.x == 1 && wgs.y == 1 && wgs.z == 1)
@@ -179,8 +178,7 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromGlsl (GpuDev
 
     GpuShaderSource source;
     source.language = targetLang;
-    source.code = static_cast<const char*> (nativeSource.toRawUTF8());
-    source.codeSize = static_cast<uint32_t> (nativeSource.getNumBytesAsUTF8());
+    source.code = gpuShaderSourceBytes (nativeSource);
 
     return compile (ctx, source, wgs);
 }

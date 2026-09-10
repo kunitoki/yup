@@ -43,7 +43,7 @@ public:
         return nullptr;
     }
 
-    void beginOffscreen (OffscreenTarget&, const rive::gpu::RenderContext::FrameDescriptor&) override
+    void beginOffscreen (OffscreenTarget&, const GpuFrameDescriptor&) override
     {
     }
 

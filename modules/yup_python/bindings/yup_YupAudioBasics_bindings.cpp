@@ -101,8 +101,19 @@ void registerYupAudioBasicsBindings (py::module_& m)
     registerAudioBuffer.operator()<float> (m, "AudioBufferFloat");
     registerAudioBuffer.operator()<double> (m, "AudioBufferDouble");
 
-    // Alias for the most common type
+    // Alias for the most common type, subscriptable the way the other templated
+    // types are, so `yup.AudioBuffer[float]` works as well as `yup.AudioBuffer`.
+    // Python has a single floating-point type, so float is the only key this alias
+    // can carry and the double specialization stays reachable as AudioBufferDouble.
     m.attr ("AudioBuffer") = m.attr ("AudioBufferFloat");
+
+    m.attr ("AudioBuffer").attr ("__class_getitem__") = py::cpp_function ([] (const py::object& keyType) -> py::object
+    {
+        if (! py::isinstance<py::type> (keyType) || ! py::type::of (py::float_ (0.0)).is (keyType))
+            throw py::type_error ("AudioBuffer[] takes float, the only floating-point type in Python");
+
+        return py::module_::import (PythonModuleName).attr ("AudioBufferFloat");
+    });
 
     // ============================================================================================ yup::AudioChannelSet (forward declare for Array)
 
@@ -473,7 +484,7 @@ void registerYupAudioBasicsBindings (py::module_& m)
 
     // ============================================================================================ yup::PositionableAudioSource
 
-    py::class_<PositionableAudioSource, PyPositionableAudioSource<>> classPositionableAudioSource (m, "PositionableAudioSource");
+    py::class_<PositionableAudioSource, AudioSource, PyPositionableAudioSource<>> classPositionableAudioSource (m, "PositionableAudioSource");
 
     classPositionableAudioSource
         .def (py::init<>())

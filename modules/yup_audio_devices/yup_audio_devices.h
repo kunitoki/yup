@@ -51,7 +51,7 @@
     license:            ISC
 
     dependencies:       yup_audio_basics yup_events
-    optionalDeps:       yup_graphics
+    optionalDeps:       yup_graphics yup_audio_formats
     appleFrameworks:    CoreAudio CoreMIDI AudioToolbox
     iosFrameworks:      AVFoundation
     iosSimFrameworks:   AVFoundation
