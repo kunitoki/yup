@@ -39,8 +39,7 @@ The cube uses a vertex + fragment shader pair. With the transpiler enabled, GLSL
 
 ```cpp
 GpuPipelineOptions options;
-options.vertexBuffers        = &cubeLayout;   // position/color/normal
-options.vertexBufferCount    = 1;
+options.vertexBuffers.push_back (cubeLayout);  // position/color/normal
 options.indexFormat          = GpuIndexFormat::uint16;
 options.cullMode             = GpuCullMode::back;
 options.winding              = GpuFaceWinding::counterClockwise;

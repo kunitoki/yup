@@ -205,7 +205,7 @@ public:
         return target;
     }
 
-    void beginOffscreen (OffscreenTarget& baseTarget, const rive::gpu::RenderContext::FrameDescriptor& frameDesc) override
+    void beginOffscreen (OffscreenTarget& baseTarget, const GpuFrameDescriptor& frameDesc) override
     {
         auto& target = static_cast<OffscreenTargetMetal&> (baseTarget);
         auto* rc = target.getRenderContext();
@@ -213,7 +213,7 @@ public:
         if (rc == nullptr || target.contextSlot == nullptr || target.contextSlot->frameActive)
             return;
 
-        rc->beginFrame (frameDesc);
+        rc->beginFrame (toRiveFrameDescriptor (frameDesc));
         target.contextSlot->frameActive = true;
     }
 

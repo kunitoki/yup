@@ -142,8 +142,6 @@ private:
 
     rive::rcp<rive::gpu::Texture> getOrAdoptGpuTexture() const;
     rive::rcp<rive::gpu::RenderCanvas> getInternalRenderCanvas() const;
-    rive::RenderImage* getRenderImage() const;
-    rive::ore::Texture* getOreTexture() const noexcept { return oreTexture.get(); }
 
     rive::rcp<rive::ore::TextureView> getOrCreateAttachmentView (rive::ore::Context& oreCtx,
                                                                  const GpuTextureViewDesc& viewDesc) const;

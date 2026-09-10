@@ -894,10 +894,14 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        YUP_AUTORELEASEPOOL
+        YUP_TRY
         {
-            renderFrame();
+            YUP_AUTORELEASEPOOL
+            {
+                renderFrame();
+            }
         }
+        YUP_CATCH_EXCEPTION
 
         if (threadShouldExit())
             break;
@@ -1010,6 +1014,7 @@ bool SDLComponentNative::renderFrame()
 
     const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
     bool glContextLocked = false;
+    bool frameBegun = false;
 
     auto renderInternal = [&]() -> bool
     {
@@ -1122,6 +1127,7 @@ bool SDLComponentNative::renderFrame()
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
 
             context->begin (frameDescriptor);
+            frameBegun = true;
         }
 
         // Repaint the component hierarchy (runs user paint() under the lock).
@@ -1157,8 +1163,25 @@ bool SDLComponentNative::renderFrame()
         return true;
     };
 
-    auto unlockGLContextAtExit = ErasedScopeGuard ([&]
+    auto endFrameAtExit = ErasedScopeGuard ([&]
     {
+        if (frameBegun)
+        {
+            {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
+
+                context->end (getNativeHandle());
+                context->tick();
+            }
+
+            if (isGL && window != nullptr)
+            {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (SwapWindow);
+
+                SDL_GL_SwapWindow (window);
+            }
+        }
+
         if constexpr (! renderDrivenByTimer)
         {
             if (glContextLocked)
@@ -1188,20 +1211,6 @@ bool SDLComponentNative::renderFrame()
             if (! renderInternal())
                 return false;
         }
-    }
-
-    {
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
-
-        context->end (getNativeHandle());
-        context->tick();
-    }
-
-    if (isGL && window != nullptr)
-    {
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (SwapWindow);
-
-        SDL_GL_SwapWindow (window);
     }
 
     return true;
@@ -1251,8 +1260,8 @@ void SDLComponentNative::stopRendering()
         if (isThreadRunning())
         {
             signalThreadShouldExit();
-            notify();
             renderEvent.signal();
+            notify();
             stopThread (-1);
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render thread");
         }
@@ -2545,10 +2554,14 @@ bool SDLComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
     if (auto component = Desktop::getInstance()->getNativeComponent (userdata))
     {
-        if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
-            nativeComponent->handleEvent (event);
-        else
-            YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+        YUP_TRY
+        {
+            if (auto nativeComponent = dynamic_cast<SDLComponentNative*> (component.get()))
+                nativeComponent->handleEvent (event);
+            else
+                YUP_MODULE_DBG (GUI_WINDOWING, "Received event for unknown native component");
+        }
+        YUP_CATCH_EXCEPTION
     }
 
     return true;

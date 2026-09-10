@@ -23,6 +23,8 @@
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
+#include <vector>
+
 //==============================================================================
 /** Shared test processor used by all plugin wrapper test TUs.
 
@@ -83,9 +85,39 @@ public:
 
     void releaseResources() override { prepared = false; }
 
-    void processBlock (yup::AudioProcessContext<float>&) override { ++processCallCount; }
+    void processBlock (yup::AudioProcessContext<float>& context) override
+    {
+        ++processCallCount;
+        captureInputBusChannels (context);
+    }
 
-    void processBlockBypassed (yup::AudioProcessContext<float>&) override { ++bypassCallCount; }
+    void processBlockBypassed (yup::AudioProcessContext<float>& context) override
+    {
+        ++bypassCallCount;
+        captureInputBusChannels (context);
+    }
+
+    /** Records the channel pointers of every input bus view for the last block.
+
+        A bus the host did not feed this cycle (an inactive or failed auxiliary
+        input, for instance) is expected to show up as a view whose channels are
+        all null rather than one pointing at stale audio.
+    */
+    void captureInputBusChannels (const yup::AudioProcessContext<float>& context)
+    {
+        lastInputBusChannels.clear();
+
+        for (const auto& input : context.inputs)
+        {
+            std::vector<const float*> channels;
+            channels.reserve (static_cast<size_t> (input.getNumChannels()));
+
+            for (int ch = 0; ch < input.getNumChannels(); ++ch)
+                channels.push_back (input.getReadPointer (ch));
+
+            lastInputBusChannels.push_back (std::move (channels));
+        }
+    }
 
     int getCurrentPreset() const noexcept override { return 0; }
 
@@ -119,6 +151,9 @@ public:
     int bypassCallCount = 0;
     yup::MemoryBlock lastLoadedState;
     yup::MemoryBlock lastSavedState;
+
+    /** Per input bus, the channel pointers seen by the last processed block. */
+    std::vector<std::vector<const float*>> lastInputBusChannels;
 };
 
 //==============================================================================

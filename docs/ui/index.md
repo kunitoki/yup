@@ -7,7 +7,7 @@ paint through the [graphics](../graphics/index.md) stack.
 
 ```{warning}
 **Work in progress.** This area is still being written. Concept guides for
-windowing, layout, widgets, and theming are still to come.
+windowing, widgets, and theming are still to come.
 ```
 
 ## Topics
@@ -18,6 +18,7 @@ windowing, layout, widgets, and theming are still to come.
 - **Effects** — GPU shader effects applied to a component subtree.
 - **Caching** — cache a component's paint output to a GPU texture.
 - **Snapshots** — capture a component subtree to a CPU-side `Image`.
+- **Layout** — `FlexBox` and `Grid`, the CSS-modelled layout containers.
 - **Windowing** — native and web windows that host the graphics context.
 - **Events** — the message loop, timers, and event dispatch (`yup_events`).
 - **Widgets** — buttons, sliders, labels, text editors, and audio displays
@@ -39,6 +40,8 @@ windowing, layout, widgets, and theming are still to come.
   for GPU texture caching.
 - [Component snapshots](component-snapshots.md) — `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
+- [Component Layout](component-layout.md) — `FlexBox` and `Grid`, flexible and track-based
+  layout modelled on CSS.
 - [Component paint profiling](component-profiling.md) — measure and
   reduce the cost of `Component::paint`.
 - [Toast notifications](toast-notifications.md) - the cross-platform `ToastNotification` utility and
@@ -56,6 +59,7 @@ windowing, layout, widgets, and theming are still to come.
 :maxdepth: 1
 
 component-basics
+layout
 component-drag-and-drop
 component-styling
 component-effects

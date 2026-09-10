@@ -504,6 +504,6 @@ def test_to_int():
 def test_to_string():
     a = yup.Point[float](1.1, 2.8)
     assert a.toString() == "1.1, 2.8"
-    assert repr(a) == "popsicle.Point[float](1.1, 2.8)"
+    assert repr(a) == "yup.Point[float](1.1, 2.8)"
     assert str(a) == "1.1, 2.8"
 """

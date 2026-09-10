@@ -555,23 +555,16 @@ void main() {
     /** Builds the pipeline options describing the cube's vertex layout and state. */
     static yup::GpuPipelineOptions cubePipelineOptions()
     {
-        static constexpr yup::GpuVertexAttribute attrs[4] = {
-            { yup::GpuVertexFormat::float3, 0, 0 },
-            { yup::GpuVertexFormat::float3, 12, 1 },
-            { yup::GpuVertexFormat::float3, 24, 2 },
-            { yup::GpuVertexFormat::float2, 36, 3 },
-        };
-
-        static constexpr yup::GpuVertexBufferLayout vbLayout {
+        yup::GpuPipelineOptions options;
+        options.vertexBuffers.emplace_back (
             (uint32_t) sizeof (CubeVertex),
             yup::GpuVertexStepMode::vertex,
-            attrs,
-            4
-        };
-
-        yup::GpuPipelineOptions options;
-        options.vertexBuffers = &vbLayout;
-        options.vertexBufferCount = 1;
+            std::vector<yup::GpuVertexAttribute> {
+                { yup::GpuVertexFormat::float3, 0, 0 },
+                { yup::GpuVertexFormat::float3, 12, 1 },
+                { yup::GpuVertexFormat::float3, 24, 2 },
+                { yup::GpuVertexFormat::float2, 36, 3 },
+            });
         options.topology = yup::GpuPrimitiveTopology::triangleList;
         options.indexFormat = yup::GpuIndexFormat::uint16;
         options.cullMode = yup::GpuCullMode::back;

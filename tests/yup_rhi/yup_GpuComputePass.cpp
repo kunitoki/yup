@@ -210,8 +210,7 @@ TEST_F (GpuComputePipelineHeadlessTests, CompileWithNullDeviceReturnsFailure)
 {
     GpuShaderSource source;
     source.language = GpuShaderLanguage::glsl;
-    source.code = "void main() {}";
-    source.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (source.code)));
+    source.code = gpuShaderSourceBytes ("void main() {}");
 
     GpuWorkgroupSize wgs { 16, 1, 1 };
     auto result = GpuComputePipeline::compile (nullptr, source, wgs);
@@ -223,8 +222,7 @@ TEST_F (GpuComputePipelineHeadlessTests, CompileWithHeadlessDeviceReturnsFailure
 {
     GpuShaderSource source;
     source.language = GpuShaderLanguage::glsl;
-    source.code = "void main() {}";
-    source.codeSize = static_cast<uint32_t> (strlen (static_cast<const char*> (source.code)));
+    source.code = gpuShaderSourceBytes ("void main() {}");
 
     GpuWorkgroupSize wgs { 16, 1, 1 };
     auto result = GpuComputePipeline::compile (device, source, wgs);

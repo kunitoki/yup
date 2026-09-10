@@ -338,6 +338,8 @@ TEST (ImageTests, DefaultConstructorCreatesInvalidImage)
     const Image image;
 
     EXPECT_FALSE (image.isValid());
+    EXPECT_EQ (image.getWidth(), 0);
+    EXPECT_EQ (image.getHeight(), 0);
 }
 
 TEST (ImageTests, ConstructorExposesPixelDataMetadata)

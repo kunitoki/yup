@@ -412,7 +412,7 @@ rive::ore::SamplerDesc toOreSamplerDesc (const GpuSamplerDesc& src)
     sd.minLod = src.minLod;
     sd.maxLod = src.maxLod;
     sd.maxAnisotropy = src.maxAnisotropy;
-    sd.label = src.label;
+    sd.label = src.label.isNotEmpty() ? src.label.toRawUTF8() : nullptr;
     return sd;
 }
 
@@ -436,6 +436,11 @@ struct GpuPipeline::Impl
     std::vector<std::vector<SamplerBinding>> samplersPerGroup;
     std::vector<std::vector<rive::ore::VertexAttribute>> vertexAttrStorage;
     std::vector<rive::ore::VertexBufferLayout> vertexLayoutStorage;
+
+    // ore::Pipeline keeps a shallow copy of the PipelineDesc and dereferences its
+    // entry-point names long after compile() returns, so the pipeline has to own them.
+    std::string vertexEntryPointStorage;
+    std::string fragmentEntryPointStorage;
 };
 
 //==============================================================================
@@ -465,16 +470,16 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     if (oreCtx == nullptr)
         return makeResultValueFail ("GpuDevice was not created with Options::enableOreContext = true");
 
-    if (vs.code == nullptr || vs.codeSize == 0)
+    if (vs.code.empty())
         return makeResultValueFail ("Vertex shader code is empty");
 
-    if (vs.bindingMap == nullptr || vs.bindingMapSize == 0)
+    if (vs.bindingMap.empty())
         return makeResultValueFail ("Vertex shader binding-map sidecar is required but not provided");
 
-    if (fs.code == nullptr || fs.codeSize == 0)
+    if (fs.code.empty())
         return makeResultValueFail ("Fragment shader code is empty");
 
-    if (fs.bindingMap == nullptr || fs.bindingMapSize == 0)
+    if (fs.bindingMap.empty())
         return makeResultValueFail ("Fragment shader binding-map sidecar is required but not provided");
 
     auto fillModuleDesc = [] (rive::ore::ShaderModuleDesc& desc,
@@ -483,14 +488,14 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
                               const char* label)
     {
         desc.language = rive::ore::ShaderLanguage::glsl;
-        desc.code = src.code;
-        desc.codeSize = src.codeSize;
+        desc.code = src.code.data();
+        desc.codeSize = (uint32_t) src.code.size();
         desc.stage = stage;
         desc.label = label;
-        desc.bindingMapBytes = src.bindingMap;
-        desc.bindingMapSize = src.bindingMapSize;
-        desc.glFixupBytes = src.glFixup;
-        desc.glFixupSize = src.glFixupSize;
+        desc.bindingMapBytes = src.bindingMap.data();
+        desc.bindingMapSize = (uint32_t) src.bindingMap.size();
+        desc.glFixupBytes = src.glFixup.empty() ? nullptr : src.glFixup.data();
+        desc.glFixupSize = (uint32_t) src.glFixup.size();
 
         switch (src.language)
         {
@@ -499,9 +504,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
                 break;
 
             case GpuShaderLanguage::hlsl:
-                desc.hlslSource = static_cast<const char*> (src.code);
-                desc.hlslSourceSize = src.codeSize;
-                desc.hlslEntryPoint = src.entryPoint;
+                desc.hlslSource = reinterpret_cast<const char*> (src.code.data());
+                desc.hlslSourceSize = (uint32_t) src.code.size();
+                desc.hlslEntryPoint = src.entryPoint.isNotEmpty() ? src.entryPoint.toRawUTF8() : nullptr;
                 break;
 
             default:
@@ -705,16 +710,18 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     pipe->impl = TypeErasedObject (GpuPipeline::Impl {});
 
     auto* implRef = pipe->getImpl();
-    implRef->vertexAttrStorage.resize (pipelineOptions.vertexBufferCount);
-    implRef->vertexLayoutStorage.resize (pipelineOptions.vertexBufferCount);
 
-    for (uint32_t i = 0; i < pipelineOptions.vertexBufferCount; ++i)
+    const auto numVertexBuffers = pipelineOptions.vertexBuffers.size();
+    implRef->vertexAttrStorage.resize (numVertexBuffers);
+    implRef->vertexLayoutStorage.resize (numVertexBuffers);
+
+    for (size_t i = 0; i < numVertexBuffers; ++i)
     {
         const auto& src = pipelineOptions.vertexBuffers[i];
         auto& attrs = implRef->vertexAttrStorage[i];
-        attrs.resize (src.attributeCount);
+        attrs.resize (src.attributes.size());
 
-        for (uint32_t a = 0; a < src.attributeCount; ++a)
+        for (size_t a = 0; a < src.attributes.size(); ++a)
         {
             attrs[a].format = toOreVertexFormat (src.attributes[a].format);
             attrs[a].offset = src.attributes[a].offset;
@@ -724,14 +731,17 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
         implRef->vertexLayoutStorage[i].stride = src.stride;
         implRef->vertexLayoutStorage[i].stepMode = toOreStepMode (src.stepMode);
         implRef->vertexLayoutStorage[i].attributes = attrs.empty() ? nullptr : attrs.data();
-        implRef->vertexLayoutStorage[i].attributeCount = src.attributeCount;
+        implRef->vertexLayoutStorage[i].attributeCount = (uint32_t) attrs.size();
     }
+
+    implRef->vertexEntryPointStorage = vs.entryPoint.isNotEmpty() ? vs.entryPoint.toStdString() : "vs_main";
+    implRef->fragmentEntryPointStorage = fs.entryPoint.isNotEmpty() ? fs.entryPoint.toStdString() : "fs_main";
 
     rive::ore::PipelineDesc pipeDesc;
     pipeDesc.vertexModule = vertModule.get();
-    pipeDesc.vertexEntryPoint = (vs.entryPoint != nullptr) ? vs.entryPoint : "vs_main";
+    pipeDesc.vertexEntryPoint = implRef->vertexEntryPointStorage.c_str();
     pipeDesc.fragmentModule = fragModule.get();
-    pipeDesc.fragmentEntryPoint = (fs.entryPoint != nullptr) ? fs.entryPoint : "fs_main";
+    pipeDesc.fragmentEntryPoint = implRef->fragmentEntryPointStorage.c_str();
     pipeDesc.vertexBuffers = implRef->vertexLayoutStorage.empty() ? nullptr : implRef->vertexLayoutStorage.data();
     pipeDesc.vertexBufferCount = (uint32_t) implRef->vertexLayoutStorage.size();
     pipeDesc.topology = toOreTopology (pipelineOptions.topology);
@@ -740,7 +750,9 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     pipeDesc.winding = toOreWinding (pipelineOptions.winding);
 
     // Color targets.
-    if (pipelineOptions.colorTargetCount == 0)
+    jassert (pipelineOptions.colorTargets.size() <= 4);
+
+    if (pipelineOptions.colorTargets.empty())
     {
         pipeDesc.colorCount = 1;
         pipeDesc.colorTargets[0].format = rive::ore::TextureFormat::rgba8unorm;
@@ -754,10 +766,10 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compile (GpuDevice::Ptr ctx,
     }
     else
     {
-        const uint32_t count = jmin<uint32_t> (pipelineOptions.colorTargetCount, 4);
-        pipeDesc.colorCount = count;
+        const auto count = jmin<size_t> (pipelineOptions.colorTargets.size(), 4);
+        pipeDesc.colorCount = (uint32_t) count;
 
-        for (uint32_t i = 0; i < count; ++i)
+        for (size_t i = 0; i < count; ++i)
         {
             const auto& src = pipelineOptions.colorTargets[i];
             pipeDesc.colorTargets[i].format = toOreTextureFormat (src.format);
@@ -907,9 +919,6 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
     auto vsMap = makeShaderBindingMapBlob (vsInfo->reflection, ShaderStage::vertex);
     auto fsMap = makeShaderBindingMapBlob (fsInfo->reflection, ShaderStage::fragment);
 
-    auto vsSource = vsInfo->source.toRawUTF8();
-    auto fsSource = fsInfo->source.toRawUTF8();
-
     // GL / GLES bind UBO blocks and sampler units by name after linking, so
     // build the name→slot fixup table for the GLSL/ESSL targets.
     std::vector<uint8_t> vsFixup, fsFixup;
@@ -928,30 +937,19 @@ ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (GpuDevice::Ptr ctx
         return info.entryPoint;
     };
 
-    const auto vsEntryStr = resolveEntry (*vsInfo);
-    const auto fsEntryStr = resolveEntry (*fsInfo);
-    auto vsEntry = vsEntryStr.toRawUTF8();
-    auto fsEntry = fsEntryStr.toRawUTF8();
-
     GpuShaderSource vs;
     vs.language = gpuLang;
-    vs.code = vsSource;
-    vs.codeSize = (uint32_t) strlen (vsSource);
-    vs.bindingMap = vsMap.data();
-    vs.bindingMapSize = (uint32_t) vsMap.size();
-    vs.glFixup = vsFixup.empty() ? nullptr : vsFixup.data();
-    vs.glFixupSize = (uint32_t) vsFixup.size();
-    vs.entryPoint = vsEntry;
+    vs.code = gpuShaderSourceBytes (vsInfo->source);
+    vs.bindingMap = vsMap;
+    vs.glFixup = vsFixup;
+    vs.entryPoint = resolveEntry (*vsInfo);
 
     GpuShaderSource fs;
     fs.language = gpuLang;
-    fs.code = fsSource;
-    fs.codeSize = (uint32_t) strlen (fsSource);
-    fs.bindingMap = fsMap.data();
-    fs.bindingMapSize = (uint32_t) fsMap.size();
-    fs.glFixup = fsFixup.empty() ? nullptr : fsFixup.data();
-    fs.glFixupSize = (uint32_t) fsFixup.size();
-    fs.entryPoint = fsEntry;
+    fs.code = gpuShaderSourceBytes (fsInfo->source);
+    fs.bindingMap = fsMap;
+    fs.glFixup = fsFixup;
+    fs.entryPoint = resolveEntry (*fsInfo);
 
     return compile (ctx, vs, fs, pipelineOptions);
 }

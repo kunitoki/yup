@@ -91,6 +91,7 @@
 #include "midi/yup_MidiKeyboardState.h"
 #include "midi/yup_MidiRPN.h"
 #include "midi/yup_MidiDataConcatenator.h"
+#include "midi/yup_TuningMap.h"
 #include "mpe/yup_MPEValue.h"
 #include "mpe/yup_MPENote.h"
 #include "mpe/yup_MPEZoneLayout.h"

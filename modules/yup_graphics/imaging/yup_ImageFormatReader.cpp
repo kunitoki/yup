@@ -22,17 +22,23 @@
 namespace yup
 {
 
-ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_)
+ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_, bool deleteSourceWhenDestroyed_)
     : input (sourceStream)
+    , deleteSourceWhenDestroyed (deleteSourceWhenDestroyed_)
     , formatName (formatName_)
 {
+    if (! deleteSourceWhenDestroyed)
+        input.release();
 }
 
-ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_, const ImageFormat::Options& opts)
+ImageFormatReader::ImageFormatReader (InputStream* sourceStream, const String& formatName_, const ImageFormat::Options& opts, bool deleteSourceWhenDestroyed_)
     : input (sourceStream)
+    , deleteSourceWhenDestroyed (deleteSourceWhenDestroyed_)
     , formatName (formatName_)
     , options (opts)
 {
+    if (! deleteSourceWhenDestroyed)
+        input.release();
 }
 
 Image ImageFormatReader::readFrame (int frameIndex)

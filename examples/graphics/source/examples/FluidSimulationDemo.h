@@ -968,11 +968,9 @@ void main() {
             fragmentSource += yup::String::fromUTF8 (part);
 
         yup::GpuPipelineOptions options;
-        options.vertexBufferCount = 0;
         options.topology = yup::GpuPrimitiveTopology::triangleList;
         options.cullMode = yup::GpuCullMode::none;
-        options.colorTargetCount = 1;
-        options.colorTargets[0].blendEnabled = false; // passes overwrite every pixel
+        options.colorTargets.emplace_back().blendEnabled = false; // passes overwrite every pixel
 
         auto result = yup::GpuPipeline::compileFromGlsl (
             device,

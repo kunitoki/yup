@@ -32,10 +32,8 @@ GpuShaderSource makeStubShader (const char* code, const uint8_t* map, size_t map
 {
     GpuShaderSource src;
     src.language = GpuShaderLanguage::glsl;
-    src.code = code;
-    src.codeSize = (uint32_t) strlen (code);
-    src.bindingMap = map;
-    src.bindingMapSize = (uint32_t) mapSize;
+    src.code = gpuShaderSourceBytes (code);
+    src.bindingMap = std::vector<uint8> (map, map + mapSize);
     return src;
 }
 
@@ -280,8 +278,7 @@ TEST_F (GpuPipelineTests, CompileWithEmptyVertexCodeFailsFastWhenOreAvailable)
     const uint8_t map[] = { 2, 1 };
     GpuShaderSource vs;
     vs.language = GpuShaderLanguage::glsl;
-    vs.bindingMap = map;
-    vs.bindingMapSize = sizeof (map);
+    vs.bindingMap = std::vector<uint8> (map, map + sizeof (map));
 
     auto fs = makeStubShader ("void main() {}", map, sizeof (map));
 
@@ -296,12 +293,9 @@ TEST_F (GpuPipelineTests, CompileWithPipelineOptionsHeadlessReturnsNull)
     auto vs = makeStubShader ("void main() {}", map, sizeof (map));
     auto fs = makeStubShader ("void main() {}", map, sizeof (map));
 
-    GpuVertexAttribute attr { GpuVertexFormat::float3, 0, 0 };
-    GpuVertexBufferLayout layout { 12, GpuVertexStepMode::vertex, &attr, 1 };
-
     GpuPipelineOptions options;
-    options.vertexBuffers = &layout;
-    options.vertexBufferCount = 1;
+    options.vertexBuffers.emplace_back (12, GpuVertexStepMode::vertex,
+                                        std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, 0, 0 } });
     options.indexFormat = GpuIndexFormat::uint16;
     options.cullMode = GpuCullMode::back;
 

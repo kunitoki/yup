@@ -2,6 +2,8 @@ import pytest
 
 import yup
 
+from utilities import pump_until
+
 #==================================================================================================
 
 class ChangeListener(yup.ChangeListener):
@@ -24,7 +26,7 @@ def test_single_send(juce_app):
     b.sendChangeMessage()
     assert l.timesCalled == 0
     assert l.lastBroadcaster is None
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastBroadcaster == b))
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b
 
@@ -42,7 +44,7 @@ def test_multi_send(juce_app):
     b.sendChangeMessage()
     assert l.timesCalled == 0
     assert l.lastBroadcaster is None
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastBroadcaster == b))
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b
 
@@ -64,7 +66,7 @@ def test_multi_send_separate_broadcasters(juce_app):
     c.sendChangeMessage()
     assert l.timesCalled == 0
     assert l.lastBroadcaster is None
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 3) and (l.lastBroadcaster == c))
     assert l.timesCalled == 3
     assert l.lastBroadcaster == c
 
@@ -83,7 +85,7 @@ def test_remove_listener(juce_app):
     b.addChangeListener(l2)
 
     b.sendChangeMessage()
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 1) and (l1.lastBroadcaster == b) and (l2.timesCalled == 1) and (l2.lastBroadcaster == b))
     assert l1.timesCalled == 1
     assert l1.lastBroadcaster == b
     assert l2.timesCalled == 1
@@ -91,7 +93,7 @@ def test_remove_listener(juce_app):
 
     a.removeChangeListener(l2)
     a.sendChangeMessage()
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 2) and (l1.lastBroadcaster == a) and (l2.timesCalled == 1) and (l2.lastBroadcaster == b))
     assert l1.timesCalled == 2
     assert l1.lastBroadcaster == a
     assert l2.timesCalled == 1
@@ -111,14 +113,14 @@ def test_remove_all_listeners(juce_app):
     b.addChangeListener(l3)
 
     b.sendChangeMessage()
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 1) and (l2.timesCalled == 1) and (l3.timesCalled == 1))
     assert l1.timesCalled == 1
     assert l2.timesCalled == 1
     assert l3.timesCalled == 1
 
     b.removeAllChangeListeners()
     b.sendChangeMessage()
-    next(juce_app)
+    pump_until(juce_app, lambda: (l1.timesCalled == 1) and (l2.timesCalled == 1) and (l3.timesCalled == 1))
     assert l1.timesCalled == 1
     assert l2.timesCalled == 1
     assert l3.timesCalled == 1
@@ -135,7 +137,7 @@ def test_synchronous_send(juce_app):
     b.sendSynchronousChangeMessage()
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastBroadcaster == b))
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b
 
@@ -143,7 +145,7 @@ def test_synchronous_send(juce_app):
     b.sendSynchronousChangeMessage()
     assert l.timesCalled == 2
     assert l.lastBroadcaster == b
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 2) and (l.lastBroadcaster == b))
     assert l.timesCalled == 2
     assert l.lastBroadcaster == b
 
@@ -170,6 +172,6 @@ def test_dispatch_pending_messages(juce_app):
     b.dispatchPendingMessages()
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b
-    next(juce_app)
+    pump_until(juce_app, lambda: (l.timesCalled == 1) and (l.lastBroadcaster == b))
     assert l.timesCalled == 1
     assert l.lastBroadcaster == b

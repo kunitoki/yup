@@ -36,6 +36,9 @@ def yield_test():
 
 @pytest.fixture
 def juce_app():
+    if not hasattr(yup, "TestApplication"):
+        pytest.skip("yup.TestApplication requires a non-embedded build of the bindings")
+
     class Application(yup.YUPApplication):
         def __init__(self):
             super().__init__()

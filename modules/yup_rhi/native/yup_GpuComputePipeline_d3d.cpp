@@ -50,7 +50,7 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineD3D11 (GpuDevic
                                                                         const GpuShaderSource& source,
                                                                         const GpuWorkgroupSize& workgroupSize)
 {
-    if (source.code == nullptr || source.codeSize == 0)
+    if (source.code.empty())
         return makeResultValueFail ("Compute shader source is empty");
 
     if (source.language != GpuShaderLanguage::hlsl)
@@ -58,10 +58,10 @@ ResultValue<GpuComputePipeline::Ptr> yup_constructComputePipelineD3D11 (GpuDevic
 
     auto& d3dCtx = static_cast<GpuDeviceD3D&> (ctx);
 
-    std::string hlsl (static_cast<const char*> (source.code), source.codeSize);
+    std::string hlsl (reinterpret_cast<const char*> (source.code.data()), source.code.size());
     hlsl.erase (std::remove (hlsl.begin(), hlsl.end(), '\r'), hlsl.end());
 
-    const char* entryPoint = source.entryPoint != nullptr ? source.entryPoint : "main";
+    const char* entryPoint = source.entryPoint.isNotEmpty() ? source.entryPoint.toRawUTF8() : "main";
 
     ComPtr<ID3DBlob> compiledBlob;
     ComPtr<ID3DBlob> errorBlob;

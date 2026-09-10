@@ -32,14 +32,45 @@
 
 // =============================================================================
 #include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
+#include "yup_audio_plugin_client/yup_TestAudioBufferList.h"
+
+#include <utility>
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorAU
 #include "yup_audio_plugin_client/au/yup_audio_plugin_client_AU.mm"
 
+// =============================================================================
+// Layout switching for testing different bus configurations, mirroring the AUv3 suite.
+static yup::AudioBusLayout gCustomLayout = testPluginBusLayoutStereo();
+static bool gUseCustomLayout = false;
+
 extern "C" yup::AudioProcessor* createPluginProcessorAU()
 {
+    if (gUseCustomLayout)
+        return new TestPluginProcessor (gCustomLayout);
+
     return new TestPluginProcessor (testPluginBusLayoutStereo());
 }
+
+// =============================================================================
+/** Scoped helper that switches the processor layout for a test scope. */
+struct ScopedProcessorLayout
+{
+    explicit ScopedProcessorLayout (yup::AudioBusLayout layout)
+    {
+        gCustomLayout = std::move (layout);
+        gUseCustomLayout = true;
+    }
+
+    ~ScopedProcessorLayout()
+    {
+        gUseCustomLayout = false;
+        gCustomLayout = testPluginBusLayoutStereo();
+    }
+
+    ScopedProcessorLayout (const ScopedProcessorLayout&) = delete;
+    ScopedProcessorLayout& operator= (const ScopedProcessorLayout&) = delete;
+};
 
 // =============================================================================
 #include <yup_audio_processors/yup_audio_processors.h>
@@ -312,15 +343,14 @@ TEST_F (AUStateTests, RenderProducesOutput)
     constexpr UInt32 numFrames = 64;
     constexpr UInt32 numChannels = 2;
 
-    AudioBufferList bufferList {};
-    bufferList.mNumberBuffers = numChannels;
+    TestAudioBufferList bufferList (numChannels);
 
     std::vector<float> bufferData (numFrames * numChannels, 0.0f);
     for (UInt32 i = 0; i < numChannels; ++i)
     {
-        bufferList.mBuffers[i].mNumberChannels = 1;
-        bufferList.mBuffers[i].mDataByteSize = numFrames * sizeof (float);
-        bufferList.mBuffers[i].mData = bufferData.data() + (i * numFrames);
+        bufferList->mBuffers[i].mNumberChannels = 1;
+        bufferList->mBuffers[i].mDataByteSize = numFrames * sizeof (float);
+        bufferList->mBuffers[i].mData = bufferData.data() + (i * numFrames);
     }
 
     AudioTimeStamp timeStamp {};
@@ -354,9 +384,183 @@ TEST_F (AUStateTests, RenderProducesOutput)
         &timeStamp,
         0,
         numFrames,
-        &bufferList);
+        bufferList.get());
 
     EXPECT_EQ (noErr, status);
+}
+
+//------------------------------------------------------------------------------
+// Sidechain input view tests
+//------------------------------------------------------------------------------
+
+class AUSidechainViewTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        audioUnit = instantiateTestAU();
+        ASSERT_NE (nullptr, audioUnit);
+        ASSERT_EQ (noErr, AudioUnitInitialize (audioUnit));
+
+        wrapper = yup::AudioPluginProcessorAU::findInstance (audioUnit);
+        ASSERT_NE (nullptr, wrapper);
+        processor = static_cast<TestPluginProcessor*> (wrapper->getProcessor());
+        ASSERT_NE (nullptr, processor);
+
+        // Element 0 has to be connected, otherwise AUEffectBase::Render bails out
+        // with kAudioUnitErr_NoConnection before rendering anything
+        ASSERT_EQ (noErr, setInputCallback (0, silenceCallback, nullptr));
+    }
+
+    void TearDown() override
+    {
+        if (audioUnit != nullptr)
+        {
+            AudioUnitUninitialize (audioUnit);
+            AudioComponentInstanceDispose (audioUnit);
+        }
+    }
+
+    OSStatus setInputCallback (UInt32 element, AURenderCallback proc, void* refCon)
+    {
+        AURenderCallbackStruct callback {};
+        callback.inputProc = proc;
+        callback.inputProcRefCon = refCon;
+
+        return AudioUnitSetProperty (audioUnit,
+                                     kAudioUnitProperty_SetRenderCallback,
+                                     kAudioUnitScope_Input,
+                                     element,
+                                     &callback,
+                                     sizeof (callback));
+    }
+
+    OSStatus render()
+    {
+        TestAudioBufferList output (numChannels);
+
+        std::vector<float> data (numFrames * numChannels, 0.0f);
+        for (UInt32 ch = 0; ch < numChannels; ++ch)
+        {
+            output->mBuffers[ch].mNumberChannels = 1;
+            output->mBuffers[ch].mDataByteSize = numFrames * sizeof (float);
+            output->mBuffers[ch].mData = data.data() + (ch * numFrames);
+        }
+
+        AudioTimeStamp timeStamp {};
+        timeStamp.mSampleTime = currentSampleTime;
+        timeStamp.mFlags = kAudioTimeStampSampleTimeValid;
+
+        AudioUnitRenderActionFlags actionFlags = 0;
+
+        const auto status = AudioUnitRender (audioUnit, &actionFlags, &timeStamp, 0, numFrames, output.get());
+
+        currentSampleTime += static_cast<Float64> (numFrames);
+
+        return status;
+    }
+
+    static OSStatus silenceCallback (void*, AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32, UInt32 inNumberFrames, AudioBufferList* ioData)
+    {
+        for (UInt32 i = 0; i < ioData->mNumberBuffers; ++i)
+            if (ioData->mBuffers[i].mData != nullptr)
+                std::memset (ioData->mBuffers[i].mData, 0, inNumberFrames * sizeof (float));
+
+        return noErr;
+    }
+
+    // Sidechain callback whose pull can be made to fail, and that records how
+    // often it was asked for audio
+    struct SidechainState
+    {
+        bool failPull = false;
+        int callCount = 0;
+        int failCount = 0;
+
+        static OSStatus callback (void* refCon, AudioUnitRenderActionFlags* flags, const AudioTimeStamp* timeStamp, UInt32 busNumber, UInt32 inNumberFrames, AudioBufferList* ioData)
+        {
+            auto* state = static_cast<SidechainState*> (refCon);
+            ++state->callCount;
+
+            if (state->failPull)
+            {
+                ++state->failCount;
+                return kAudioUnitErr_InvalidParameter;
+            }
+
+            return silenceCallback (refCon, flags, timeStamp, busNumber, inNumberFrames, ioData);
+        }
+    };
+
+    static constexpr UInt32 numFrames = 64;
+    static constexpr UInt32 numChannels = 2;
+
+    ScopedProcessorLayout layoutScope { testPluginBusLayoutWithSidechain() };
+
+    AudioUnit audioUnit = nullptr;
+    yup::AudioPluginProcessorAU* wrapper = nullptr;
+    TestPluginProcessor* processor = nullptr;
+    Float64 currentSampleTime = 0.0;
+};
+
+TEST_F (AUSidechainViewTests, BusCountsIncludeSidechain)
+{
+    EXPECT_EQ (2, static_cast<int> (processor->getNumAudioInputs()));
+    EXPECT_EQ (1, static_cast<int> (processor->getNumAudioOutputs()));
+}
+
+TEST_F (AUSidechainViewTests, UnfedSidechainIsExposedAsNullChannelView)
+{
+    SidechainState sidechain;
+
+    // A fed sidechain shows up with real channel pointers
+    ASSERT_EQ (noErr, setInputCallback (1, SidechainState::callback, &sidechain));
+    ASSERT_EQ (noErr, render());
+
+    ASSERT_EQ (1, processor->processCallCount);
+    ASSERT_EQ (1, sidechain.callCount);
+    ASSERT_EQ (2u, processor->lastInputBusChannels.size());
+    ASSERT_EQ (2u, processor->lastInputBusChannels[0].size());
+    ASSERT_EQ (1u, processor->lastInputBusChannels[1].size());
+    EXPECT_NE (nullptr, processor->lastInputBusChannels[0][0]);
+    EXPECT_NE (nullptr, processor->lastInputBusChannels[0][1]);
+    EXPECT_NE (nullptr, processor->lastInputBusChannels[1][0]);
+
+    // Disconnecting the sidechain (a null render callback) must leave the bus
+    // reading as a null channel view, not as the pointers the previous render
+    // stored there
+    ASSERT_EQ (noErr, setInputCallback (1, nullptr, nullptr));
+    ASSERT_EQ (noErr, render());
+
+    ASSERT_EQ (2, processor->processCallCount) << "second render never reached processBlock";
+    ASSERT_EQ (2u, processor->lastInputBusChannels.size());
+    EXPECT_NE (nullptr, processor->lastInputBusChannels[0][0]);
+    EXPECT_NE (nullptr, processor->lastInputBusChannels[0][1]);
+    EXPECT_EQ (nullptr, processor->lastInputBusChannels[1][0]);
+}
+
+TEST_F (AUSidechainViewTests, FailedSidechainPullIsExposedAsNullChannelView)
+{
+    SidechainState sidechain;
+
+    ASSERT_EQ (noErr, setInputCallback (1, SidechainState::callback, &sidechain));
+    ASSERT_EQ (noErr, render());
+
+    ASSERT_EQ (1, processor->processCallCount);
+    ASSERT_EQ (1, sidechain.callCount);
+    ASSERT_EQ (2u, processor->lastInputBusChannels.size());
+    ASSERT_EQ (1u, processor->lastInputBusChannels[1].size());
+    ASSERT_NE (nullptr, processor->lastInputBusChannels[1][0]);
+
+    // A pull that errors leaves the bus unfed for this cycle
+    sidechain.failPull = true;
+    ASSERT_EQ (noErr, render());
+
+    ASSERT_EQ (2, sidechain.callCount) << "sidechain was not pulled on the second render";
+    ASSERT_EQ (1, sidechain.failCount);
+    ASSERT_EQ (2, processor->processCallCount) << "second render never reached processBlock";
+    ASSERT_EQ (2u, processor->lastInputBusChannels.size());
+    EXPECT_EQ (nullptr, processor->lastInputBusChannels[1][0]);
 }
 
 //------------------------------------------------------------------------------
