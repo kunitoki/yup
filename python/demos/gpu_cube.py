@@ -97,17 +97,24 @@ FACES = [
     ((0.0, -1.0, 0.0), (0.25, 0.9, 0.95)),
 ]
 
-# The four corners of each face, counter-clockwise seen from outside.
+# The four corners of each face, in the winding order the RHI expects for a
+# front face. The backends bake a clip-space Y-flip into the vertex stage, which
+# mirrors screen-space winding (the GL backend inverts glFrontFace to compensate,
+# and Vulkan relies on naga's ADJUST_COORDINATE_SPACE), so a front face is wound
+# clockwise as seen from outside. Same faces and same order as SpinningCubeDemo's
+# kCubeVerts: winding them counter-clockwise makes GpuCullMode.back cull the side
+# facing the camera.
 FACE_CORNERS = [
-    [(-1, -1, -1), (-1, 1, -1), (1, 1, -1), (1, -1, -1)],   # -Z
-    [(-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)],       # +Z
-    [(-1, -1, -1), (-1, -1, 1), (-1, 1, 1), (-1, 1, -1)],   # -X
-    [(1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)],       # +X
-    [(-1, 1, -1), (-1, 1, 1), (1, 1, 1), (1, 1, -1)],       # +Y
-    [(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1)],   # -Y
+    [(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1)],   # -Z
+    [(1, -1, 1), (-1, -1, 1), (-1, 1, 1), (1, 1, 1)],       # +Z
+    [(-1, -1, 1), (-1, -1, -1), (-1, 1, -1), (-1, 1, 1)],   # -X
+    [(1, -1, -1), (1, -1, 1), (1, 1, 1), (1, 1, -1)],       # +X
+    [(-1, 1, -1), (1, 1, -1), (1, 1, 1), (-1, 1, 1)],       # +Y
+    [(-1, -1, 1), (1, -1, 1), (1, -1, -1), (-1, -1, -1)],   # -Y
 ]
 
-FACE_UVS = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]
+# One UV per corner, paired with FACE_CORNERS in the same order.
+FACE_UVS = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
 
 
 def build_cube_vertices() -> bytes:
