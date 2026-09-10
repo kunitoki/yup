@@ -678,16 +678,18 @@ TEST_F (GpuAttachmentMockTests, AllDrawsOfAPassShareOneBackendRenderPass)
     auto target = GpuTarget::createFromTexture (ctx, color);
     ASSERT_NE (target, nullptr);
 
-    auto frame = beginFrame();
-    auto pass = target->beginRenderPass (frame, { true, GpuColor::black() });
-    pass.setDepthStencilAttachment (depth);
-    pass.setPipeline (pipeline);
+    {
+        auto frame = beginFrame();
+        auto pass = target->beginRenderPass (frame, { true, GpuColor::black() });
+        pass.setDepthStencilAttachment (depth);
+        pass.setPipeline (pipeline);
 
-    EXPECT_TRUE (pass.draw (3));
-    EXPECT_TRUE (pass.draw (3));
+        EXPECT_TRUE (pass.draw (3));
+        EXPECT_TRUE (pass.draw (3));
 
-    pass.finish();
-    frame.submit();
+        pass.finish();
+        frame.submit();
+    }
 
     // Two draws, one encoder. Both attachments are cleared exactly once, when it
     // opens, so the second draw cannot wipe what the first one wrote.

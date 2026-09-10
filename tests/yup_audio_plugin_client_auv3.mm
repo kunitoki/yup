@@ -35,6 +35,7 @@
 
 // =============================================================================
 #include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
+#include "yup_audio_plugin_client/yup_TestAudioBufferList.h"
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorAUv3
 #include "yup_audio_plugin_client/auv3/yup_audio_plugin_client_AUv3.mm"
@@ -1086,16 +1087,15 @@ TEST_F (AUv3BypassRenderTests, RenderRoutesToBypassedPathWhenBypassed)
     float ch0[64] = {};
     float ch1[64] = {};
 
-    AudioBufferList outputBufferList {};
-    outputBufferList.mNumberBuffers = 2;
-    outputBufferList.mBuffers[0].mNumberChannels = 1;
-    outputBufferList.mBuffers[0].mData = ch0;
-    outputBufferList.mBuffers[0].mDataByteSize = sizeof (ch0);
-    outputBufferList.mBuffers[1].mNumberChannels = 1;
-    outputBufferList.mBuffers[1].mData = ch1;
-    outputBufferList.mBuffers[1].mDataByteSize = sizeof (ch1);
+    TestAudioBufferList outputBufferList (2);
+    outputBufferList->mBuffers[0].mNumberChannels = 1;
+    outputBufferList->mBuffers[0].mData = ch0;
+    outputBufferList->mBuffers[0].mDataByteSize = sizeof (ch0);
+    outputBufferList->mBuffers[1].mNumberChannels = 1;
+    outputBufferList->mBuffers[1].mData = ch1;
+    outputBufferList->mBuffers[1].mDataByteSize = sizeof (ch1);
 
-    const AUAudioUnitStatus status = block (&flags, &timestamp, frameCount, 0, &outputBufferList, nullptr, nullptr);
+    const AUAudioUnitStatus status = block (&flags, &timestamp, frameCount, 0, outputBufferList.get(), nullptr, nullptr);
     EXPECT_EQ (noErr, status);
 
     EXPECT_EQ (1, proc->bypassCallCount);
@@ -1118,16 +1118,15 @@ TEST_F (AUv3BypassRenderTests, RenderRoutesToProcessPathWhenNotBypassed)
     float ch0[64] = {};
     float ch1[64] = {};
 
-    AudioBufferList outputBufferList {};
-    outputBufferList.mNumberBuffers = 2;
-    outputBufferList.mBuffers[0].mNumberChannels = 1;
-    outputBufferList.mBuffers[0].mData = ch0;
-    outputBufferList.mBuffers[0].mDataByteSize = sizeof (ch0);
-    outputBufferList.mBuffers[1].mNumberChannels = 1;
-    outputBufferList.mBuffers[1].mData = ch1;
-    outputBufferList.mBuffers[1].mDataByteSize = sizeof (ch1);
+    TestAudioBufferList outputBufferList (2);
+    outputBufferList->mBuffers[0].mNumberChannels = 1;
+    outputBufferList->mBuffers[0].mData = ch0;
+    outputBufferList->mBuffers[0].mDataByteSize = sizeof (ch0);
+    outputBufferList->mBuffers[1].mNumberChannels = 1;
+    outputBufferList->mBuffers[1].mData = ch1;
+    outputBufferList->mBuffers[1].mDataByteSize = sizeof (ch1);
 
-    const AUAudioUnitStatus status = block (&flags, &timestamp, frameCount, 0, &outputBufferList, nullptr, nullptr);
+    const AUAudioUnitStatus status = block (&flags, &timestamp, frameCount, 0, outputBufferList.get(), nullptr, nullptr);
     EXPECT_EQ (noErr, status);
 
     EXPECT_EQ (0, proc->bypassCallCount);
