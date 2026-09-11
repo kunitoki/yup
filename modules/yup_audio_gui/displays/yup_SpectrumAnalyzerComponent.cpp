@@ -44,7 +44,7 @@ SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 //==============================================================================
 void SpectrumAnalyzerComponent::initializeFFTBuffers()
 {
-    fftProcessor = std::make_unique<FFTProcessor> (fftSize);
+    fftProcessor = std::make_unique<FFTProcessor<float>> (fftSize);
     fftInputBuffer.resize (fftSize, 0.0f);
     fftOutputBuffer.resize (fftSize * 2, 0.0f); // Complex output needs 2x space
     windowBuffer.resize (fftSize, 0.0f);

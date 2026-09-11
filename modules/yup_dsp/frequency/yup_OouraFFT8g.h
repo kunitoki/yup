@@ -39,4 +39,11 @@ void ddst (int n, int isgn, float* a, int* ip, float* w);
 void dfct (int n, float* a, float* t, int* ip, float* w);
 void dfst (int n, float* a, float* t, int* ip, float* w);
 
+void cdft (int n, int isgn, double* a, int* ip, double* w);
+void rdft (int n, int isgn, double* a, int* ip, double* w);
+void ddct (int n, int isgn, double* a, int* ip, double* w);
+void ddst (int n, int isgn, double* a, int* ip, double* w);
+void dfct (int n, double* a, double* t, int* ip, double* w);
+void dfst (int n, double* a, double* t, int* ip, double* w);
+
 } // namespace yup

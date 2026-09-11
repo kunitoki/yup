@@ -293,7 +293,7 @@ private:
     //==============================================================================
     SpectrumAnalyzerState& analyzerState;
 
-    std::unique_ptr<FFTProcessor> fftProcessor;
+    std::unique_ptr<FFTProcessor<float>> fftProcessor;
     std::vector<float> fftInputBuffer;
     std::vector<float> fftOutputBuffer;
     std::vector<float> windowBuffer;

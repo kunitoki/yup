@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse). `isNoteActive()` reports the notes a key map asks to retune, taken from the range in its header unless the file carries `< first last` lines, which declare it instead
 
+- `FFTProcessor` is now templated on the sample type - `FFTProcessor<float>` (the default) or `FFTProcessor<double>` - and every backend (PFFFT, Apple vDSP, Intel IPP, FFTW3 and the Ooura fallback, which now ships both a `float` and a `double` implementation) gained a native double-precision path. References to the nested scaling enum need qualifying, e.g. `FFTProcessor<float>::FFTScaling::asymmetric`
+
 ### Graphics
 
 - `Image::getWidth()` and `Image::getHeight()` now return 0 on an invalid image instead of asserting and dereferencing null. Other accessors and pixel access still assert, as documented

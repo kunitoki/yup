@@ -194,7 +194,7 @@ private:
     void processAvailableFrames (AudioProcessContext<float>& context);
 
     //==============================================================================
-    FFTProcessor fft;
+    FFTProcessor<float> fft;
     std::shared_ptr<SpectralProcessor> spectralProcessor;
     SpectralBuffer<float> spectralBuffer;
 

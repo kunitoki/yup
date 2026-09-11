@@ -37,7 +37,7 @@ public:
         fftSize = hopSize * 2;
 
         fftProcessor.setSize (fftSize);
-        fftProcessor.setScaling (FFTProcessor::FFTScaling::asymmetric);
+        fftProcessor.setScaling (FFTProcessor<float>::FFTScaling::asymmetric);
 
         overlapBuffer.assign (static_cast<std::size_t> (hopSize), 0.0f);
         timeBuffer.assign (static_cast<std::size_t> (fftSize), 0.0f);
@@ -176,7 +176,7 @@ private:
     int hopSize = 0;
     int fftSize = 0;
 
-    FFTProcessor fftProcessor;
+    FFTProcessor<float> fftProcessor;
 
     // IR partitions in frequency domain
     std::vector<std::vector<float>> frequencyPartitions;

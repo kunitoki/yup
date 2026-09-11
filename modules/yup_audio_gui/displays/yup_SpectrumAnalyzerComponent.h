@@ -260,7 +260,7 @@ private:
     SpectrumAnalyzerState& analyzerState;
 
     // FFT processing (performed on UI thread)
-    std::unique_ptr<FFTProcessor> fftProcessor;
+    std::unique_ptr<FFTProcessor<float>> fftProcessor;
     std::vector<float> fftInputBuffer;  // Real input samples
     std::vector<float> fftOutputBuffer; // Complex FFT output
     std::vector<float> windowBuffer;    // Window function

@@ -218,7 +218,7 @@ SpectrogramComponent::~SpectrogramComponent()
 //==============================================================================
 void SpectrogramComponent::initializeFFTBuffers()
 {
-    fftProcessor = std::make_unique<FFTProcessor> (fftSize);
+    fftProcessor = std::make_unique<FFTProcessor<float>> (fftSize);
     fftInputBuffer.resize (static_cast<size_t> (fftSize), 0.0f);
     fftOutputBuffer.resize (static_cast<size_t> (fftSize * 2), 0.0f);
     windowBuffer.resize (static_cast<size_t> (fftSize), 0.0f);
@@ -553,9 +553,9 @@ void SpectrogramComponent::ensureWaterfallPipeline()
     }
 
     GpuPipelineOptions options;
-    options.colorTargetCount = 1;
-    options.colorTargets[0].format = GpuTextureFormat::rgba8unorm;
-    options.colorTargets[0].blendEnabled = false;
+    auto& colorTarget = options.colorTargets.emplace_back();
+    colorTarget.format = GpuTextureFormat::rgba8unorm;
+    colorTarget.blendEnabled = false;
 
     auto result = GpuPipeline::compileFromBundle (gpuDevice, loaded.getReference(), options);
 

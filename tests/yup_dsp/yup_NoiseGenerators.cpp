@@ -78,7 +78,7 @@ protected:
         std::vector<float> avgMagnitude (numBins, 0.0f);
         int numChunks = static_cast<int> (samples.size()) / fftSize;
 
-        FFTProcessor fft (fftSize);
+        FFTProcessor<float> fft (fftSize);
         std::vector<float> fftInputData (fftSize);
         std::vector<float> fftOutputData (fftSize * 2);
         std::vector<float> window (fftSize);
