@@ -233,6 +233,14 @@ void SpectrogramComponent::applyPendingRows()
     if (pendingRows.empty())
         return;
 
+    // A paused waterfall holds its last frame: new rows are discarded rather than written, otherwise
+    // the content would keep sliding down even though the scroll is stopped.
+    if (scrollSpeedMultiplier <= 0.0f)
+    {
+        pendingRows.clear();
+        return;
+    }
+
     if (waterfallPipeline == nullptr || gpuTargets[0] == nullptr || gpuTargets[1] == nullptr)
     {
         Logger::outputDebugString ("SpectrogramComponent: dropping " + String (static_cast<int> (pendingRows.size()))
@@ -241,74 +249,96 @@ void SpectrogramComponent::applyPendingRows()
         return;
     }
 
-    const int numRows = static_cast<int> (pendingRows.size());
     const int maxShaderRows = jmax (1, static_cast<int> (rowDataCache.size()) / spectrogramWidth);
-    const int appliedRows = jmin (numRows, maxShaderRows);
 
-    auto& previous = gpuTargets[pingPongIndex];
-    auto& current = gpuTargets[pingPongIndex ^ 1];
+    // A single pass can only shift and write maxShaderRows rows, so a frame that produced more FFT rows
+    // than that - which is what happens whenever the display runs below the FFT row rate - needs several
+    // passes. Without them the surplus rows would be dropped and the history would silently lose data, so
+    // how much of the waterfall survives would depend on the frame rate. The pass count stays bounded so
+    // that a large backlog cannot stall the frame.
+    constexpr int maxPassesPerFrame = 4;
 
-    const WaterfallParams params { static_cast<float> (appliedRows),
-                                   static_cast<float> (defaultSpectrogramRenderWidth), // render width
-                                   static_cast<float> (numHistoryFrames),
-                                   static_cast<float> (spectrogramWidth), // bins
-                                   0.0f,
-                                   0.0f,
-                                   0.0f,
-                                   0.0f };
-
-    for (int row = 0; row < appliedRows; ++row)
+    for (int pass = 0; pass < maxPassesPerFrame && ! pendingRows.empty(); ++pass)
     {
-        const auto& magnitudes = pendingRows[static_cast<size_t> (row)];
-        std::copy (magnitudes.begin(),
-                   magnitudes.begin() + spectrogramWidth,
-                   rowDataCache.begin() + static_cast<std::ptrdiff_t> (row) * spectrogramWidth);
-    }
+        const int numRows = static_cast<int> (pendingRows.size());
+        const int appliedRows = jmin (numRows, maxShaderRows);
 
-    if (lutNeedsRefresh)
-    {
-        const auto colorTable = colorMap.getColorTable();
-        std::copy (colorTable.begin(),
-                   colorTable.begin() + static_cast<std::ptrdiff_t> (jmin (colorTable.size(), lutDataCache.size())),
-                   lutDataCache.begin());
-        lutNeedsRefresh = false;
-    }
+        auto& previous = gpuTargets[pingPongIndex];
+        auto& current = gpuTargets[pingPongIndex ^ 1];
 
-    auto frame = GpuFrame::begin (gpuDevice);
-    if (frame.isValid())
-    {
-        auto pass = current->beginRenderPass (frame, { false, GpuColor::transparentBlack() });
-        if (pass.isValid())
+        const WaterfallParams params { static_cast<float> (appliedRows),
+                                       static_cast<float> (defaultSpectrogramRenderWidth), // render width
+                                       static_cast<float> (numHistoryFrames),
+                                       static_cast<float> (spectrogramWidth), // bins
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f };
+
+        for (int row = 0; row < appliedRows; ++row)
         {
-            pass.setPipeline (waterfallPipeline);
-            pass.setTexture (0, 0, previous->asTexture());
-            pass.setUniformBuffer (0, 2, &params, sizeof (params));
-            pass.setUniformBuffer (0, 3, rowDataCache.data(), rowDataCache.size() * sizeof (float));
-            pass.setUniformBuffer (0, 4, lutDataCache.data(), lutDataCache.size() * sizeof (uint32));
+            const auto& magnitudes = pendingRows[static_cast<size_t> (row)];
+            std::copy (magnitudes.begin(),
+                       magnitudes.begin() + spectrogramWidth,
+                       rowDataCache.begin() + static_cast<std::ptrdiff_t> (row) * spectrogramWidth);
+        }
 
-            if (pass.draw (3) && pass.finish() && frame.submit())
+        if (lutNeedsRefresh)
+        {
+            const auto colorTable = colorMap.getColorTable();
+            std::copy (colorTable.begin(),
+                       colorTable.begin() + static_cast<std::ptrdiff_t> (jmin (colorTable.size(), lutDataCache.size())),
+                       lutDataCache.begin());
+            lutNeedsRefresh = false;
+        }
+
+        bool rendered = false;
+
+        auto frame = GpuFrame::begin (gpuDevice);
+        if (frame.isValid())
+        {
+            auto pass = current->beginRenderPass (frame, { false, GpuColor::transparentBlack() });
+            if (pass.isValid())
             {
-                displayTexture = current->asTexture();
+                pass.setPipeline (waterfallPipeline);
+                pass.setTexture (0, 0, previous->asTexture());
+                pass.setUniformBuffer (0, 2, &params, sizeof (params));
+                pass.setUniformBuffer (0, 3, rowDataCache.data(), rowDataCache.size() * sizeof (float));
+                pass.setUniformBuffer (0, 4, lutDataCache.data(), lutDataCache.size() * sizeof (uint32));
 
-                pingPongIndex ^= 1;
-                scrollOffset -= static_cast<float> (appliedRows);
+                if (pass.draw (3) && pass.finish() && frame.submit())
+                {
+                    displayTexture = current->asTexture();
+
+                    pingPongIndex ^= 1;
+                    rendered = true;
+
+                    lastRowTimeMs = Time::getMillisecondCounter();
+                }
+                else
+                {
+                    Logger::outputDebugString ("SpectrogramComponent: waterfall draw/finish/submit failed - rows not applied");
+                }
             }
             else
             {
-                Logger::outputDebugString ("SpectrogramComponent: waterfall draw/finish/submit failed - rows not applied");
+                Logger::outputDebugString ("SpectrogramComponent: beginRenderPass failed - rows not applied");
             }
         }
         else
         {
-            Logger::outputDebugString ("SpectrogramComponent: beginRenderPass failed - rows not applied");
+            Logger::outputDebugString ("SpectrogramComponent: GpuFrame::begin failed - rows not applied");
         }
-    }
-    else
-    {
-        Logger::outputDebugString ("SpectrogramComponent: GpuFrame::begin failed - rows not applied");
-    }
 
-    pendingRows.erase (pendingRows.begin(), pendingRows.begin() + appliedRows);
+        // The rows are always consumed, rendered or not, so the update queue can never accumulate. The
+        // scroll offset moves down with them, which keeps the history below them aligned with the audio
+        // timeline even when rows had to be skipped.
+        pendingRows.erase (pendingRows.begin(), pendingRows.begin() + appliedRows);
+        scrollOffset -= static_cast<float> (appliedRows);
+
+        if (! rendered)
+            break;
+    }
 }
 
 void SpectrogramComponent::advanceScroll()
@@ -318,13 +348,58 @@ void SpectrogramComponent::advanceScroll()
     lastPaintTimeMs = now;
 
     const float rowRate = getRowRate();
-    const float advance = rowRate > 0.0f ? rowRate * scrollSpeedMultiplier * jlimit (0.0f, 0.25f, elapsedSeconds) : 0.0f;
-    scrollOffset = jlimit (-1.0f, 0.0f, scrollOffset + advance);
+
+    if (rowRate <= 0.0f || scrollSpeedMultiplier <= 0.0f)
+        return; // Paused: the offset is held where it is.
+
+    scrollOffset += rowRate * scrollSpeedMultiplier * jlimit (0.0f, 0.25f, elapsedSeconds);
+
+    // The offset is anchored to the newest row written into the history: it starts one row above the top
+    // edge when that row is written and slides into place over one row period. Clamping it at the ends of
+    // that window would stop the motion dead until the next row arrived - which is what used to make the
+    // waterfall advance exactly one row per repaint - so the excess is pulled back with a fixed time
+    // constant instead. The scroll therefore stays continuous and independent of the frame rate and of
+    // the jitter of the row arrivals; the absolute bound below only matters when the analysis stalls.
+    constexpr float pullBackTimeConstantSeconds = 0.1f;
+    const float pullBackGain = elapsedSeconds > 0.0f
+                                 ? 1.0f - std::exp (-elapsedSeconds / pullBackTimeConstantSeconds)
+                                 : 0.0f;
+
+    if (scrollOffset > 0.0f)
+        scrollOffset -= pullBackGain * scrollOffset;
+    else if (scrollOffset < -1.0f)
+        scrollOffset += pullBackGain * (-1.0f - scrollOffset);
+
+    scrollOffset = jlimit (-1.5f, 0.5f, scrollOffset);
 }
 
 void SpectrogramComponent::setScrollSpeed (float scrollSpeedMultiplier)
 {
     this->scrollSpeedMultiplier = jmax (0.0f, scrollSpeedMultiplier);
+
+    // Start animating immediately when the scroll is (re)enabled.
+    if (this->scrollSpeedMultiplier > 0.0f)
+        repaint();
+}
+
+bool SpectrogramComponent::isAnimationRunning() const noexcept
+{
+    const float rowRate = getRowRate();
+
+    if (scrollSpeedMultiplier <= 0.0f || rowRate <= 0.0f)
+        return false;
+
+    if (! pendingRows.empty())
+        return true;
+
+    // Once the analysis stalls the offset settles at the end of its window, so only a recent row needs
+    // further repaints.
+    if (lastRowTimeMs == 0)
+        return false;
+
+    const float secondsSinceLastRow = static_cast<float> (Time::getMillisecondCounter() - lastRowTimeMs) / 1000.0f;
+
+    return secondsSinceLastRow * rowRate < 2.0f;
 }
 
 void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
@@ -367,7 +442,10 @@ void SpectrogramComponent::refreshDisplay (double lastFrameTimeSeconds)
     if (pendingRows.size() > 16)
         pendingRows.erase (pendingRows.begin(), pendingRows.begin() + static_cast<std::ptrdiff_t> (pendingRows.size() - 16));
 
-    if (hasNewData)
+    // Repaint on every frame while the waterfall is live rather than only when a row arrives: the
+    // sub-row scroll offset has to be rendered at the display refresh rate, otherwise the waterfall
+    // only ever moves the whole rows written since the previous repaint.
+    if (hasNewData || isAnimationRunning())
         repaint();
 }
 
@@ -479,6 +557,7 @@ bool SpectrogramComponent::ensureGpuTargets (GraphicsContext& context)
 
     scrollOffset = 0.0f;
     lastPaintTimeMs = 0;
+    lastRowTimeMs = 0;
 
     return true;
 }
@@ -754,6 +833,7 @@ void SpectrogramComponent::setNumHistoryFrames (int numFrames)
     pendingRows.clear();
     scrollOffset = 0.0f;
     lastPaintTimeMs = 0;
+    lastRowTimeMs = 0;
 
     gpuTargets[0] = nullptr;
     gpuTargets[1] = nullptr;
@@ -777,6 +857,7 @@ void SpectrogramComponent::clearHistory()
     pendingRows.clear();
     scrollOffset = 0.0f;
     lastPaintTimeMs = 0;
+    lastRowTimeMs = 0;
 
     gpuTargets[0] = nullptr;
     gpuTargets[1] = nullptr;

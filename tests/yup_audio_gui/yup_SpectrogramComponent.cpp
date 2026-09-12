@@ -388,6 +388,47 @@ TEST_F (SpectrogramComponentTests, PaintAfterRefreshDisplayDoesNotCrash)
     EXPECT_TRUE (true);
 }
 
+TEST_F (SpectrogramComponentTests, FrameProducingMoreRowsThanOnePassKeepsEveryRow)
+{
+    // refreshDisplay() only processes FFTs while the component is showing.
+    auto parent = std::make_unique<Component> ("parent");
+    parent->setVisible (true);
+    parent->addAndMakeVisible (*spectrogram);
+
+    spectrogram->setNumHistoryFrames (32);
+    spectrogram->setFFTSize (512);
+    spectrogram->setOverlapFactor (0.75f); // hop = fftSize / 4
+
+    // Enough audio for more analysis windows than a single GPU pass can write.
+    const auto testData = createSineBuffer (spectrogram->getFFTSize() * 5, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (1.0 / 60.0);
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    spectrogram->paint (g);
+
+    const auto image = spectrogram->getSpectrogramImage();
+
+    if (! image.isValid())
+        GTEST_SKIP() << "No GPU context available for the waterfall texture";
+
+    // The rows written by this frame sit at the top of the history, above the cleared rows. A single
+    // pass only writes defaultSpectrogramMagnitudes / defaultSpectrogramWidth of them, so the frame has
+    // to drain its rows over several passes instead of dropping the surplus, which is what made how
+    // much of the waterfall survived depend on the frame rate.
+    int writtenRows = 0;
+
+    while (writtenRows < image.getHeight()
+           && ! spectrogramRowIsColor (image, writtenRows, 0xff0a0a0au))
+        ++writtenRows;
+
+    EXPECT_GE (writtenRows, 3);
+}
+
 TEST_F (SpectrogramComponentTests, ResizedDoesNotCrash)
 {
     spectrogram->setBounds (0.0f, 0.0f, 1000.0f, 600.0f);

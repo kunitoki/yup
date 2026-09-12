@@ -282,6 +282,7 @@ private:
     void ensureWaterfallPipeline();
     void applyPendingRows();
     void advanceScroll();
+    bool isAnimationRunning() const noexcept;
     float getRowRate() const noexcept;
     void initializeFFTBuffers();
     void generateWindow();
@@ -318,6 +319,7 @@ private:
     int pingPongIndex = 0;
     float scrollOffset = 0.0f;
     uint32 lastPaintTimeMs = 0;
+    uint32 lastRowTimeMs = 0;
 
     // Cached frequency grid (frequency lines + labels).
     GpuCanvas::Ptr gridCanvas;
