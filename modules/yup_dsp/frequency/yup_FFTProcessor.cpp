@@ -21,21 +21,24 @@
 
 namespace yup
 {
+namespace detail
+{
 
 //==============================================================================
 // Base implementation class
-class FFTProcessor::Engine
+template <typename SampleType>
+class FFTEngine
 {
 public:
-    virtual ~Engine() = default;
+    virtual ~FFTEngine() = default;
 
     virtual void initialize (int fftSize) = 0;
     virtual void cleanup() = 0;
 
-    virtual void performRealFFTForward (const float* realInput, float* complexOutput) = 0;
-    virtual void performRealFFTInverse (const float* complexInput, float* realOutput) = 0;
-    virtual void performComplexFFTForward (const float* complexInput, float* complexOutput) = 0;
-    virtual void performComplexFFTInverse (const float* complexInput, float* complexOutput) = 0;
+    virtual void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) = 0;
+    virtual void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) = 0;
+    virtual void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) = 0;
+    virtual void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) = 0;
 
     virtual String getBackendName() const = 0;
 
@@ -43,29 +46,40 @@ protected:
     int fftSize = 0;
 };
 
+} // namespace detail
+
 //==============================================================================
 // PFFFT implementation
 #if YUP_FFT_USING_PFFFT
 
-class PFFTEngine : public FFTProcessor::Engine
+template <typename SampleType>
+class PFFTEngine : public detail::FFTEngine<SampleType>
 {
 public:
-    ~PFFTEngine() override { cleanup(); }
+    ~PFFTEngine() override { this->cleanup(); }
 
     void initialize (int newFftSize) override
     {
-        cleanup();
+        this->cleanup();
 
-        fftSize = newFftSize;
+        this->fftSize = newFftSize;
 
-        realSetup = pffft_new_setup (fftSize, PFFFT_REAL);
-        complexSetup = pffft_new_setup (fftSize, PFFFT_COMPLEX);
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            realSetupD = pffftd_new_setup (this->fftSize, PFFFT_REAL);
+            complexSetupD = pffftd_new_setup (this->fftSize, PFFFT_COMPLEX);
+        }
+        else
+        {
+            realSetup = pffft_new_setup (this->fftSize, PFFFT_REAL);
+            complexSetup = pffft_new_setup (this->fftSize, PFFFT_COMPLEX);
+        }
 
-        tempBuffer.resize (static_cast<size_t> (fftSize * 2));
+        tempBuffer.resize (static_cast<size_t> (this->fftSize * 2));
 
         // Allocate work buffers - PFFFT uses stack for small sizes, heap for larger
-        if (fftSize >= 16384)
-            workBuffer.resize (static_cast<size_t> (fftSize));
+        if (this->fftSize >= 16384)
+            workBuffer.resize (static_cast<size_t> (this->fftSize));
     }
 
     void cleanup() override
@@ -82,68 +96,96 @@ public:
             complexSetup = nullptr;
         }
 
+        if (realSetupD != nullptr)
+        {
+            pffftd_destroy_setup (realSetupD);
+            realSetupD = nullptr;
+        }
+
+        if (complexSetupD != nullptr)
+        {
+            pffftd_destroy_setup (complexSetupD);
+            complexSetupD = nullptr;
+        }
+
         workBuffer.clear();
         tempBuffer.clear();
     }
 
-    void performRealFFTForward (const float* realInput, float* complexOutput) override
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
-        float* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
 
-        pffft_transform_ordered (realSetup, realInput, complexOutput, workPtr, PFFFT_FORWARD);
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_transform_ordered (realSetupD, realInput, complexOutput, workPtr, PFFFT_FORWARD);
+        else
+            pffft_transform_ordered (realSetup, realInput, complexOutput, workPtr, PFFFT_FORWARD);
 
-        convertFromPFFTPacked (complexOutput, fftSize);
+        convertFromPFFTPacked (complexOutput, this->fftSize);
     }
 
-    void performRealFFTInverse (const float* complexInput, float* realOutput) override
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
-        float* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
 
-        convertToPFFTPacked (complexInput, tempBuffer.data(), fftSize);
+        convertToPFFTPacked (complexInput, tempBuffer.data(), this->fftSize);
 
-        pffft_transform_ordered (realSetup, tempBuffer.data(), realOutput, workPtr, PFFFT_BACKWARD);
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_transform_ordered (realSetupD, tempBuffer.data(), realOutput, workPtr, PFFFT_BACKWARD);
+        else
+            pffft_transform_ordered (realSetup, tempBuffer.data(), realOutput, workPtr, PFFFT_BACKWARD);
     }
 
-    void performComplexFFTForward (const float* complexInput, float* complexOutput) override
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        float* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
-        pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_FORWARD);
+        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_transform_ordered (complexSetupD, complexInput, complexOutput, workPtr, PFFFT_FORWARD);
+        else
+            pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_FORWARD);
     }
 
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        float* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
-        pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_BACKWARD);
+        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_transform_ordered (complexSetupD, complexInput, complexOutput, workPtr, PFFFT_BACKWARD);
+        else
+            pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_BACKWARD);
     }
 
     String getBackendName() const override { return "PFFFT"; }
 
 private:
     // Convert from PFFFT packed format to standard interleaved format
-    void convertFromPFFTPacked (float* interleaved, int size)
+    void convertFromPFFTPacked (SampleType* interleaved, int size)
     {
         // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
         // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
 
-        interleaved[size] = std::exchange (interleaved[1], 0.0f); // Nyquist real (from packed[1])
-        interleaved[size + 1] = 0.0f;                             // Nyquist imaginary (always 0)
+        interleaved[size] = std::exchange (interleaved[1], SampleType (0)); // Nyquist real (from packed[1])
+        interleaved[size + 1] = SampleType (0);                             // Nyquist imaginary (always 0)
     }
 
     // Convert from standard interleaved format to PFFFT packed format
-    void convertToPFFTPacked (const float* interleaved, float* packed, int size)
+    void convertToPFFTPacked (const SampleType* interleaved, SampleType* packed, int size)
     {
         // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
         // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
 
         packed[0] = interleaved[0];    // DC real
         packed[1] = interleaved[size]; // Nyquist real (to packed[1])
-        std::memcpy (&packed[2], &interleaved[2], (size - 2) * sizeof (float));
+        std::memcpy (&packed[2], &interleaved[2], static_cast<size_t> (size - 2) * sizeof (SampleType));
     }
 
     PFFFT_Setup* realSetup = nullptr;
     PFFFT_Setup* complexSetup = nullptr;
-    std::vector<float> workBuffer;
-    std::vector<float> tempBuffer;
+    PFFFTD_Setup* realSetupD = nullptr;
+    PFFFTD_Setup* complexSetupD = nullptr;
+    std::vector<SampleType> workBuffer;
+    std::vector<SampleType> tempBuffer;
 };
 
 #endif
@@ -152,20 +194,23 @@ private:
 // Ooura FFT implementation
 #if YUP_FFT_USING_OOURA
 
-class OouraEngine : public FFTProcessor::Engine
+template <typename SampleType>
+class OouraEngine : public detail::FFTEngine<SampleType>
 {
 public:
-    ~OouraEngine() override { cleanup(); }
+    ~OouraEngine() override { this->cleanup(); }
 
     void initialize (int newFftSize) override
     {
-        cleanup();
+        this->cleanup();
 
-        fftSize = newFftSize;
+        this->fftSize = newFftSize;
 
-        const int workSize = 2 + static_cast<int> (std::sqrt (fftSize / 2));
-        workBuffer.resize (static_cast<size_t> (fftSize * 2)); // Need space for complex data
-        tempBuffer.resize (static_cast<size_t> (fftSize));
+        // The complex transforms operate on 2 * fftSize values, which needs a larger
+        // bit-reversal table than the real transform (Ooura requires 2 + sqrt (n / 2)).
+        const int workSize = 2 + static_cast<int> (std::sqrt (static_cast<double> (this->fftSize)));
+        workBuffer.resize (static_cast<size_t> (this->fftSize * 2)); // Need space for complex data
+        tempBuffer.resize (static_cast<size_t> (this->fftSize));
         intBuffer.resize (static_cast<size_t> (workSize));
         intBuffer[0] = 0; // Initialization flag
     }
@@ -177,84 +222,84 @@ public:
         intBuffer.clear();
     }
 
-    void performRealFFTForward (const float* realInput, float* complexOutput) override
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
         // Copy real input to work buffer
-        std::copy (realInput, realInput + fftSize, workBuffer.begin());
+        std::copy (realInput, realInput + this->fftSize, workBuffer.begin());
 
         // Real-to-complex forward transform
-        rdft (fftSize, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+        rdft (this->fftSize, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
         // Convert Ooura format to standard interleaved complex format
         // Ooura rdft output: a[0]=DC, a[1]=Nyquist, a[2k]=Re[k], a[2k+1]=Im[k] for k=1..n/2-1
-        complexOutput[0] = workBuffer[0]; // DC real
-        complexOutput[1] = 0.0f;          // DC imaginary
+        complexOutput[0] = workBuffer[0];  // DC real
+        complexOutput[1] = SampleType (0); // DC imaginary
 
         // Nyquist frequency - Ooura stores it at position 1
-        complexOutput[fftSize] = workBuffer[1]; // Nyquist real
-        complexOutput[fftSize + 1] = 0.0f;      // Nyquist imaginary
+        complexOutput[this->fftSize] = workBuffer[1];      // Nyquist real
+        complexOutput[this->fftSize + 1] = SampleType (0); // Nyquist imaginary
 
         // Handle frequencies 1 to n/2-1
         // Ooura stores them as alternating real/imag starting at index 2
-        for (int i = 1; i < fftSize / 2; ++i)
+        for (int i = 1; i < this->fftSize / 2; ++i)
         {
             complexOutput[i * 2] = workBuffer[i * 2];          // real part
             complexOutput[i * 2 + 1] = -workBuffer[i * 2 + 1]; // imaginary part (negate)
         }
     }
 
-    void performRealFFTInverse (const float* complexInput, float* realOutput) override
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
         // Convert standard interleaved format to Ooura format
-        workBuffer[0] = complexInput[0];       // DC real
-        workBuffer[1] = complexInput[fftSize]; // Nyquist real
+        workBuffer[0] = complexInput[0];             // DC real
+        workBuffer[1] = complexInput[this->fftSize]; // Nyquist real
 
-        for (int i = 1; i < fftSize / 2; ++i)
+        for (int i = 1; i < this->fftSize / 2; ++i)
         {
             workBuffer[i * 2] = complexInput[i * 2];          // real part
             workBuffer[i * 2 + 1] = -complexInput[i * 2 + 1]; // imaginary part (negate back)
         }
 
         // Complex-to-real inverse transform
-        rdft (fftSize, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+        rdft (this->fftSize, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
         // Apply Ooura-specific scaling for real inverse: needs 2x factor
-        for (int i = 0; i < fftSize; ++i)
+        for (int i = 0; i < this->fftSize; ++i)
         {
-            realOutput[i] = workBuffer[i] * 2.0f;
+            realOutput[i] = workBuffer[i] * SampleType (2);
         }
     }
 
-    void performComplexFFTForward (const float* complexInput, float* complexOutput) override
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
         // Copy interleaved complex input to work buffer
-        std::copy (complexInput, complexInput + fftSize * 2, workBuffer.begin());
+        std::copy (complexInput, complexInput + this->fftSize * 2, workBuffer.begin());
 
         // Complex forward transform
-        cdft (fftSize * 2, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+        cdft (this->fftSize * 2, 1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
         // Copy result
-        std::copy (workBuffer.begin(), workBuffer.begin() + fftSize * 2, complexOutput);
+        std::copy (workBuffer.begin(), workBuffer.begin() + this->fftSize * 2, complexOutput);
     }
 
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
         // Copy interleaved complex input to work buffer
-        std::copy (complexInput, complexInput + fftSize * 2, workBuffer.begin());
+        std::copy (complexInput, complexInput + this->fftSize * 2, workBuffer.begin());
 
         // Complex inverse transform
-        cdft (fftSize * 2, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
+        cdft (this->fftSize * 2, -1, workBuffer.data(), intBuffer.data(), tempBuffer.data());
 
         // Copy result - let framework handle scaling
-        std::copy (workBuffer.begin(), workBuffer.begin() + fftSize * 2, complexOutput);
+        std::copy (workBuffer.begin(), workBuffer.begin() + this->fftSize * 2, complexOutput);
     }
 
     String getBackendName() const override { return "Ooura FFT"; }
 
 private:
-    std::vector<float> workBuffer;
+    std::vector<SampleType> workBuffer;
     std::vector<int> intBuffer;
-    std::vector<float> tempBuffer;
+    std::vector<SampleType> tempBuffer;
 };
 
 #endif
@@ -263,111 +308,145 @@ private:
 // Apple vDSP implementation
 #if YUP_FFT_USING_VDSP
 
-class VDSPEngine : public FFTProcessor::Engine
+template <typename SampleType>
+class VDSPEngine : public detail::FFTEngine<SampleType>
 {
 public:
-    ~VDSPEngine() override { cleanup(); }
+    ~VDSPEngine() override { this->cleanup(); }
 
     void initialize (int newFftSize) override
     {
-        cleanup();
+        this->cleanup();
 
-        fftSize = newFftSize;
-        order = static_cast<vDSP_Length> (std::log2 (fftSize));
+        this->fftSize = newFftSize;
+        order = static_cast<vDSP_Length> (std::log2 (this->fftSize));
 
-        fftSetup = vDSP_create_fftsetup (order, FFT_RADIX2);
+        if constexpr (std::is_same_v<SampleType, double>)
+            fftSetup = vDSP_create_fftsetupD (order, FFT_RADIX2);
+        else
+            fftSetup = vDSP_create_fftsetup (order, FFT_RADIX2);
 
-        forwardNormalisation = 0.5f;
-        inverseNormalisation = 1.0f / static_cast<float> (fftSize);
+        forwardNormalisation = SampleType (0.5);
+        inverseNormalisation = SampleType (1) / static_cast<SampleType> (this->fftSize);
 
-        tempBuffer.resize (fftSize * 2);
+        tempBuffer.resize (static_cast<size_t> (this->fftSize * 2));
     }
 
     void cleanup() override
     {
         if (fftSetup != nullptr)
         {
-            vDSP_destroy_fftsetup (fftSetup);
+            if constexpr (std::is_same_v<SampleType, double>)
+                vDSP_destroy_fftsetupD (fftSetup);
+            else
+                vDSP_destroy_fftsetup (fftSetup);
+
             fftSetup = nullptr;
         }
 
         tempBuffer.clear();
     }
 
-    void performRealFFTForward (const float* realInput, float* complexOutput) override
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
         // Copy input to output buffer to work in-place
-        std::copy_n (realInput, fftSize, complexOutput);
-        complexOutput[fftSize] = 0.0f;
+        std::copy_n (realInput, this->fftSize, complexOutput);
+        complexOutput[this->fftSize] = SampleType (0);
 
         // Perform vDSP real FFT
-        DSPSplitComplex splitInOut = { complexOutput, complexOutput + 1 };
-        vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
+        SplitComplex splitInOut = { complexOutput, complexOutput + 1 };
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_fft_zripD (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
+        else
+            vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Forward);
 
         // Normalize vDSP output to match other engines (vDSP outputs 2x expected)
-        vDSP_vsmul (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<size_t> (fftSize << 1));
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_vsmulD (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
+        else
+            vDSP_vsmul (complexOutput, 1, &forwardNormalisation, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
 
         // Set Nyquist bin (real only, imaginary = 0), set DC bin (real only, imaginary = 0)
-        auto* complexData = reinterpret_cast<ComplexFloat*> (complexOutput);
-        complexData[fftSize >> 1] = ComplexFloat (complexData[0].imag(), 0.0f);
-        complexData[0] = ComplexFloat (complexData[0].real(), 0.0f);
+        auto* complexData = reinterpret_cast<Complex*> (complexOutput);
+        complexData[this->fftSize >> 1] = Complex (complexData[0].imag(), SampleType (0));
+        complexData[0] = Complex (complexData[0].real(), SampleType (0));
     }
 
-    void performRealFFTInverse (const float* complexInput, float* realOutput) override
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
         // Copy input to temp buffer for processing
-        std::copy_n (complexInput, fftSize * 2, tempBuffer.data());
+        std::copy_n (complexInput, this->fftSize * 2, tempBuffer.data());
 
         // Pack Nyquist real into DC imaginary for vDSP
-        auto* complexData = reinterpret_cast<ComplexFloat*> (tempBuffer.data());
-        complexData[0] = ComplexFloat (complexData[0].real(), complexData[fftSize >> 1].real());
+        auto* complexData = reinterpret_cast<Complex*> (tempBuffer.data());
+        complexData[0] = Complex (complexData[0].real(), complexData[this->fftSize >> 1].real());
 
         // Perform vDSP real inverse FFT
-        DSPSplitComplex splitInOut = { tempBuffer.data(), tempBuffer.data() + 1 };
-        vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
+        SplitComplex splitInOut = { tempBuffer.data(), tempBuffer.data() + 1 };
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_fft_zripD (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
+        else
+            vDSP_fft_zrip (fftSetup, &splitInOut, 2, order, kFFTDirection_Inverse);
 
         // Clear upper half and extract real parts
-        vDSP_vclr (tempBuffer.data() + fftSize, 1, static_cast<size_t> (fftSize));
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_vclrD (tempBuffer.data() + this->fftSize, 1, static_cast<vDSP_Length> (this->fftSize));
+        else
+            vDSP_vclr (tempBuffer.data() + this->fftSize, 1, static_cast<vDSP_Length> (this->fftSize));
 
-        std::copy_n (tempBuffer.data(), fftSize, realOutput);
+        std::copy_n (tempBuffer.data(), this->fftSize, realOutput);
     }
 
-    void performComplexFFTForward (const float* complexInput, float* complexOutput) override
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        std::copy_n (complexInput, fftSize * 2, tempBuffer.data());
+        std::copy_n (complexInput, this->fftSize * 2, tempBuffer.data());
 
-        DSPSplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
-        DSPSplitComplex splitOutput = { complexOutput, complexOutput + 1 };
+        SplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
+        SplitComplex splitOutput = { complexOutput, complexOutput + 1 };
 
         // Perform complex FFT
-        vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Forward);
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_fft_zopD (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Forward);
+        else
+            vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Forward);
 
         // Normalization
-        float scale = forwardNormalisation * 2.0f;
-        vDSP_vsmul (complexOutput, 1, &scale, complexOutput, 1, static_cast<size_t> (fftSize << 1));
+        SampleType scale = forwardNormalisation * SampleType (2);
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_vsmulD (complexOutput, 1, &scale, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
+        else
+            vDSP_vsmul (complexOutput, 1, &scale, complexOutput, 1, static_cast<vDSP_Length> (this->fftSize << 1));
     }
 
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        std::memcpy (tempBuffer.data(), complexInput, fftSize * 2 * sizeof (float));
+        std::memcpy (tempBuffer.data(), complexInput, static_cast<size_t> (this->fftSize * 2) * sizeof (SampleType));
 
-        DSPSplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
-        DSPSplitComplex splitOutput = { complexOutput, complexOutput + 1 };
+        SplitComplex splitInput = { tempBuffer.data(), tempBuffer.data() + 1 };
+        SplitComplex splitOutput = { complexOutput, complexOutput + 1 };
 
         // Perform complex FFT
-        vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Inverse);
+        if constexpr (std::is_same_v<SampleType, double>)
+            vDSP_fft_zopD (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Inverse);
+        else
+            vDSP_fft_zop (fftSetup, &splitInput, 2, &splitOutput, 2, order, kFFTDirection_Inverse);
     }
 
     String getBackendName() const override { return "Apple vDSP"; }
 
 private:
-    using ComplexFloat = std::complex<float>;
+    using Complex = std::complex<SampleType>;
+    using SplitComplex = std::conditional_t<std::is_same_v<SampleType, double>, DSPDoubleSplitComplex, DSPSplitComplex>;
+    using SetupType = std::conditional_t<std::is_same_v<SampleType, double>, FFTSetupD, FFTSetup>;
 
-    FFTSetup fftSetup = nullptr;
+    SetupType fftSetup = nullptr;
     vDSP_Length order = 0;
-    float forwardNormalisation = 0.5f;
-    float inverseNormalisation = 1.0f;
-    std::vector<float> tempBuffer;
+    SampleType forwardNormalisation = SampleType (0.5);
+    SampleType inverseNormalisation = SampleType (1);
+    std::vector<SampleType> tempBuffer;
 };
 
 #endif
@@ -376,33 +455,51 @@ private:
 // Intel IPP implementation
 #if YUP_FFT_USING_IPP
 
-class IPPEngine : public FFTProcessor::Engine
+template <typename SampleType>
+class IPPEngine : public detail::FFTEngine<SampleType>
 {
 public:
-    ~IPPEngine() override { cleanup(); }
+    ~IPPEngine() override { this->cleanup(); }
 
     void initialize (int newFftSize) override
     {
-        cleanup();
-        fftSize = newFftSize;
+        this->cleanup();
+        this->fftSize = newFftSize;
 
+        const int order = static_cast<int> (std::log2 (this->fftSize));
         int specSizeComplex, specSizeReal, workSizeComplex, workSizeReal;
 
-        // Get buffer sizes
-        ippsFFTGetSize_C_32fc (static_cast<int> (std::log2 (fftSize)), IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeComplex, nullptr, &workSizeComplex);
-        ippsFFTGetSize_R_32f (static_cast<int> (std::log2 (fftSize)), IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeReal, nullptr, &workSizeReal);
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            // Get buffer sizes
+            ippsFFTGetSize_C_64fc (order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeComplex, nullptr, &workSizeComplex);
+            ippsFFTGetSize_R_64f (order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeReal, nullptr, &workSizeReal);
 
-        // Allocate specification structures
-        specComplex = reinterpret_cast<IppsFFTSpec_C_32fc*> (ippsMalloc_8u (specSizeComplex));
-        specReal = reinterpret_cast<IppsFFTSpec_R_32f*> (ippsMalloc_8u (specSizeReal));
+            // Allocate specification structures
+            specComplex = reinterpret_cast<SpecComplex*> (ippsMalloc_8u (specSizeComplex));
+            specReal = reinterpret_cast<SpecReal*> (ippsMalloc_8u (specSizeReal));
 
-        // Initialize specifications
-        ippsFFTInit_C_32fc (&specComplex, static_cast<int> (std::log2 (fftSize)), IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
-        ippsFFTInit_R_32f (&specReal, static_cast<int> (std::log2 (fftSize)), IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
+            // Initialize specifications
+            ippsFFTInit_C_64fc (&specComplex, order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
+            ippsFFTInit_R_64f (&specReal, order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
+        }
+        else
+        {
+            // Get buffer sizes
+            ippsFFTGetSize_C_32fc (order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeComplex, nullptr, &workSizeComplex);
+            ippsFFTGetSize_R_32f (order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast, &specSizeReal, nullptr, &workSizeReal);
+
+            // Allocate specification structures
+            specComplex = reinterpret_cast<SpecComplex*> (ippsMalloc_8u (specSizeComplex));
+            specReal = reinterpret_cast<SpecReal*> (ippsMalloc_8u (specSizeReal));
+
+            // Initialize specifications
+            ippsFFTInit_C_32fc (&specComplex, order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
+            ippsFFTInit_R_32f (&specReal, order, IPP_FFT_NODIV_BY_ANY, ippAlgHintFast);
+        }
 
         // Allocate work buffer
-        const int maxWorkSize = jmax (workSizeComplex, workSizeReal);
-        workBuffer = reinterpret_cast<Ipp32fc*> (ippsMalloc_8u (maxWorkSize));
+        workBuffer = reinterpret_cast<Ipp8u*> (ippsMalloc_8u (jmax (workSizeComplex, workSizeReal)));
     }
 
     void cleanup() override
@@ -412,50 +509,85 @@ public:
             ippsFree (workBuffer);
             workBuffer = nullptr;
         }
+
         if (specComplex != nullptr)
         {
-            ippsFFTFree_C_32fc (specComplex);
+            if constexpr (std::is_same_v<SampleType, double>)
+                ippsFFTFree_C_64fc (specComplex);
+            else
+                ippsFFTFree_C_32fc (specComplex);
+
             specComplex = nullptr;
         }
+
         if (specReal != nullptr)
         {
-            ippsFFTFree_R_32f (specReal);
+            if constexpr (std::is_same_v<SampleType, double>)
+                ippsFFTFree_R_64f (specReal);
+            else
+                ippsFFTFree_R_32f (specReal);
+
             specReal = nullptr;
         }
     }
 
-    void performRealFFTForward (const float* realInput, float* complexOutput) override
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
-        ippsFFTFwd_RToPack_32f (realInput, complexOutput, specReal, reinterpret_cast<Ipp8u*> (workBuffer));
+        if constexpr (std::is_same_v<SampleType, double>)
+            ippsFFTFwd_RToPack_64f (realInput, complexOutput, specReal, workBuffer);
+        else
+            ippsFFTFwd_RToPack_32f (realInput, complexOutput, specReal, workBuffer);
     }
 
-    void performRealFFTInverse (const float* complexInput, float* realOutput) override
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
-        ippsFFTInv_PackToR_32f (complexInput, realOutput, specReal, reinterpret_cast<Ipp8u*> (workBuffer));
+        if constexpr (std::is_same_v<SampleType, double>)
+            ippsFFTInv_PackToR_64f (complexInput, realOutput, specReal, workBuffer);
+        else
+            ippsFFTInv_PackToR_32f (complexInput, realOutput, specReal, workBuffer);
     }
 
-    void performComplexFFTForward (const float* complexInput, float* complexOutput) override
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        const auto* input = reinterpret_cast<const Ipp32fc*> (complexInput);
-        auto* output = reinterpret_cast<Ipp32fc*> (complexOutput);
-
-        ippsFFTFwd_CToC_32fc (input, output, specComplex, reinterpret_cast<Ipp8u*> (workBuffer));
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            const auto* input = reinterpret_cast<const Ipp64fc*> (complexInput);
+            auto* output = reinterpret_cast<Ipp64fc*> (complexOutput);
+            ippsFFTFwd_CToC_64fc (input, output, specComplex, workBuffer);
+        }
+        else
+        {
+            const auto* input = reinterpret_cast<const Ipp32fc*> (complexInput);
+            auto* output = reinterpret_cast<Ipp32fc*> (complexOutput);
+            ippsFFTFwd_CToC_32fc (input, output, specComplex, workBuffer);
+        }
     }
 
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        const auto* input = reinterpret_cast<const Ipp32fc*> (complexInput);
-        auto* output = reinterpret_cast<Ipp32fc*> (complexOutput);
-
-        ippsFFTInv_CToC_32fc (input, output, specComplex, reinterpret_cast<Ipp8u*> (workBuffer));
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            const auto* input = reinterpret_cast<const Ipp64fc*> (complexInput);
+            auto* output = reinterpret_cast<Ipp64fc*> (complexOutput);
+            ippsFFTInv_CToC_64fc (input, output, specComplex, workBuffer);
+        }
+        else
+        {
+            const auto* input = reinterpret_cast<const Ipp32fc*> (complexInput);
+            auto* output = reinterpret_cast<Ipp32fc*> (complexOutput);
+            ippsFFTInv_CToC_32fc (input, output, specComplex, workBuffer);
+        }
     }
 
     String getBackendName() const override { return "Intel IPP"; }
 
 private:
-    Ipp32fc* workBuffer = nullptr;
-    IppsFFTSpec_C_32fc* specComplex = nullptr;
-    IppsFFTSpec_R_32f* specReal = nullptr;
+    using SpecComplex = std::conditional_t<std::is_same_v<SampleType, double>, IppsFFTSpec_C_64fc, IppsFFTSpec_C_32fc>;
+    using SpecReal = std::conditional_t<std::is_same_v<SampleType, double>, IppsFFTSpec_R_64f, IppsFFTSpec_R_32f>;
+
+    Ipp8u* workBuffer = nullptr;
+    SpecComplex* specComplex = nullptr;
+    SpecReal* specReal = nullptr;
 };
 
 #endif
@@ -464,75 +596,73 @@ private:
 // FFTW3 implementation
 #if YUP_FFT_USING_FFTW3
 
-class FFTW3Engine : public FFTProcessor::Engine
+template <typename SampleType>
+class FFTW3Engine : public detail::FFTEngine<SampleType>
 {
 public:
-    ~FFTW3Engine() override { cleanup(); }
+    ~FFTW3Engine() override { this->cleanup(); }
 
     void initialize (int newFftSize) override
     {
-        cleanup();
+        this->cleanup();
 
-        fftSize = newFftSize;
+        this->fftSize = newFftSize;
 
-        tempComplexBuffer = static_cast<fftwf_complex*> (fftwf_malloc (sizeof (fftwf_complex) * fftSize));
-        tempRealBuffer = static_cast<float*> (fftwf_malloc (sizeof (float) * fftSize));
+        if constexpr (std::is_same_v<SampleType, double>)
+        {
+            tempComplexBuffer = static_cast<Complex*> (fftw_malloc (sizeof (Complex) * static_cast<size_t> (this->fftSize)));
+            tempRealBuffer = static_cast<SampleType*> (fftw_malloc (sizeof (SampleType) * static_cast<size_t> (this->fftSize)));
 
-        auto* complexData = tempComplexBuffer;
-        auto* realData = tempRealBuffer;
+            auto* complexData = tempComplexBuffer;
+            auto* realData = tempRealBuffer;
 
-        planComplexForward = fftwf_plan_dft_1d (fftSize, complexData, complexData, FFTW_FORWARD, FFTW_ESTIMATE);
-        planComplexInverse = fftwf_plan_dft_1d (fftSize, complexData, complexData, FFTW_BACKWARD, FFTW_ESTIMATE);
-        planRealForward = fftwf_plan_dft_r2c_1d (fftSize, realData, complexData, FFTW_ESTIMATE);
-        planRealInverse = fftwf_plan_dft_c2r_1d (fftSize, complexData, realData, FFTW_ESTIMATE);
+            planComplexForward = fftw_plan_dft_1d (this->fftSize, complexData, complexData, FFTW_FORWARD, FFTW_ESTIMATE);
+            planComplexInverse = fftw_plan_dft_1d (this->fftSize, complexData, complexData, FFTW_BACKWARD, FFTW_ESTIMATE);
+            planRealForward = fftw_plan_dft_r2c_1d (this->fftSize, realData, complexData, FFTW_ESTIMATE);
+            planRealInverse = fftw_plan_dft_c2r_1d (this->fftSize, complexData, realData, FFTW_ESTIMATE);
+        }
+        else
+        {
+            tempComplexBuffer = static_cast<Complex*> (fftwf_malloc (sizeof (Complex) * static_cast<size_t> (this->fftSize)));
+            tempRealBuffer = static_cast<SampleType*> (fftwf_malloc (sizeof (SampleType) * static_cast<size_t> (this->fftSize)));
+
+            auto* complexData = tempComplexBuffer;
+            auto* realData = tempRealBuffer;
+
+            planComplexForward = fftwf_plan_dft_1d (this->fftSize, complexData, complexData, FFTW_FORWARD, FFTW_ESTIMATE);
+            planComplexInverse = fftwf_plan_dft_1d (this->fftSize, complexData, complexData, FFTW_BACKWARD, FFTW_ESTIMATE);
+            planRealForward = fftwf_plan_dft_r2c_1d (this->fftSize, realData, complexData, FFTW_ESTIMATE);
+            planRealInverse = fftwf_plan_dft_c2r_1d (this->fftSize, complexData, realData, FFTW_ESTIMATE);
+        }
     }
 
     void cleanup() override
     {
-        if (planComplexForward != nullptr)
-        {
-            fftwf_destroy_plan (planComplexForward);
-            planComplexForward = nullptr;
-        }
-
-        if (planComplexInverse != nullptr)
-        {
-            fftwf_destroy_plan (planComplexInverse);
-            planComplexInverse = nullptr;
-        }
-
-        if (planRealForward != nullptr)
-        {
-            fftwf_destroy_plan (planRealForward);
-            planRealForward = nullptr;
-        }
-
-        if (planRealInverse != nullptr)
-        {
-            fftwf_destroy_plan (planRealInverse);
-            planRealInverse = nullptr;
-        }
+        destroyPlan (planComplexForward);
+        destroyPlan (planComplexInverse);
+        destroyPlan (planRealForward);
+        destroyPlan (planRealInverse);
 
         if (tempComplexBuffer != nullptr)
         {
-            fftwf_free (tempComplexBuffer);
+            freeBuffer (tempComplexBuffer);
             tempComplexBuffer = nullptr;
         }
 
         if (tempRealBuffer != nullptr)
         {
-            fftwf_free (tempRealBuffer);
+            freeBuffer (tempRealBuffer);
             tempRealBuffer = nullptr;
         }
     }
 
-    void performRealFFTForward (const float* realInput, float* complexOutput) override
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
-        std::copy_n (realInput, fftSize, tempRealBuffer);
+        std::copy_n (realInput, this->fftSize, tempRealBuffer);
 
-        fftwf_execute (planRealForward);
+        execute (planRealForward);
 
-        const auto halfSize = fftSize / 2 + 1;
+        const auto halfSize = this->fftSize / 2 + 1;
         for (int i = 0; i < halfSize; ++i)
         {
             complexOutput[i * 2] = tempComplexBuffer[i][0];     // real
@@ -540,49 +670,49 @@ public:
         }
     }
 
-    void performRealFFTInverse (const float* complexInput, float* realOutput) override
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
         // Convert interleaved to FFTW format
-        const auto halfSize = fftSize / 2 + 1;
+        const auto halfSize = this->fftSize / 2 + 1;
         for (int i = 0; i < halfSize; ++i)
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
             tempComplexBuffer[i][1] = complexInput[i * 2 + 1]; // imag
         }
 
-        fftwf_execute (planRealInverse);
+        execute (planRealInverse);
 
-        std::copy_n (tempRealBuffer, fftSize, realOutput);
+        std::copy_n (tempRealBuffer, this->fftSize, realOutput);
     }
 
-    void performComplexFFTForward (const float* complexInput, float* complexOutput) override
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        for (int i = 0; i < fftSize; ++i)
+        for (int i = 0; i < this->fftSize; ++i)
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
             tempComplexBuffer[i][1] = complexInput[i * 2 + 1]; // imag
         }
 
-        fftwf_execute (planComplexForward);
+        execute (planComplexForward);
 
-        for (int i = 0; i < fftSize; ++i)
+        for (int i = 0; i < this->fftSize; ++i)
         {
             complexOutput[i * 2] = tempComplexBuffer[i][0];     // real
             complexOutput[i * 2 + 1] = tempComplexBuffer[i][1]; // imag
         }
     }
 
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput) override
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        for (int i = 0; i < fftSize; ++i)
+        for (int i = 0; i < this->fftSize; ++i)
         {
             tempComplexBuffer[i][0] = complexInput[i * 2];     // real
             tempComplexBuffer[i][1] = complexInput[i * 2 + 1]; // imag
         }
 
-        fftwf_execute (planComplexInverse);
+        execute (planComplexInverse);
 
-        for (int i = 0; i < fftSize; ++i)
+        for (int i = 0; i < this->fftSize; ++i)
         {
             complexOutput[i * 2] = tempComplexBuffer[i][0];     // real
             complexOutput[i * 2 + 1] = tempComplexBuffer[i][1]; // imag
@@ -592,30 +722,64 @@ public:
     String getBackendName() const override { return "FFTW3"; }
 
 private:
-    fftwf_plan planComplexForward = nullptr;
-    fftwf_plan planComplexInverse = nullptr;
-    fftwf_plan planRealForward = nullptr;
-    fftwf_plan planRealInverse = nullptr;
-    fftwf_complex* tempComplexBuffer = nullptr;
-    float* tempRealBuffer = nullptr;
+    using Complex = std::conditional_t<std::is_same_v<SampleType, double>, fftw_complex, fftwf_complex>;
+    using Plan = std::conditional_t<std::is_same_v<SampleType, double>, fftw_plan, fftwf_plan>;
+
+    void execute (Plan plan)
+    {
+        if constexpr (std::is_same_v<SampleType, double>)
+            fftw_execute (plan);
+        else
+            fftwf_execute (plan);
+    }
+
+    void destroyPlan (Plan& plan)
+    {
+        if (plan == nullptr)
+            return;
+
+        if constexpr (std::is_same_v<SampleType, double>)
+            fftw_destroy_plan (plan);
+        else
+            fftwf_destroy_plan (plan);
+
+        plan = nullptr;
+    }
+
+    template <typename BufferType>
+    void freeBuffer (BufferType*& buffer)
+    {
+        if constexpr (std::is_same_v<SampleType, double>)
+            fftw_free (buffer);
+        else
+            fftwf_free (buffer);
+    }
+
+    Plan planComplexForward = nullptr;
+    Plan planComplexInverse = nullptr;
+    Plan planRealForward = nullptr;
+    Plan planRealInverse = nullptr;
+    Complex* tempComplexBuffer = nullptr;
+    SampleType* tempRealBuffer = nullptr;
 };
 
 #endif
 
 //==============================================================================
 // Factory function to create appropriate implementation
-std::unique_ptr<FFTProcessor::Engine> createFFTEngine()
+template <typename SampleType>
+std::unique_ptr<detail::FFTEngine<SampleType>> createFFTEngine()
 {
 #if YUP_FFT_USING_PFFFT
-    return std::make_unique<PFFTEngine>();
+    return std::make_unique<PFFTEngine<SampleType>>();
 #elif YUP_FFT_USING_VDSP
-    return std::make_unique<VDSPEngine>();
+    return std::make_unique<VDSPEngine<SampleType>>();
 #elif YUP_FFT_USING_IPP
-    return std::make_unique<IPPEngine>();
+    return std::make_unique<IPPEngine<SampleType>>();
 #elif YUP_FFT_USING_FFTW3
-    return std::make_unique<FFTW3Engine>();
+    return std::make_unique<FFTW3Engine<SampleType>>();
 #elif YUP_FFT_USING_OOURA
-    return std::make_unique<OouraEngine>();
+    return std::make_unique<OouraEngine<SampleType>>();
 #else
     jassertfalse; // No FFT backend available
     return nullptr;
@@ -624,32 +788,38 @@ std::unique_ptr<FFTProcessor::Engine> createFFTEngine()
 
 //==============================================================================
 // Constructor implementations
-FFTProcessor::FFTProcessor()
-    : engine (createFFTEngine())
+template <typename SampleType>
+FFTProcessor<SampleType>::FFTProcessor()
+    : engine (createFFTEngine<SampleType>())
 {
     setSize (512);
 }
 
-FFTProcessor::FFTProcessor (int fftSize)
-    : engine (createFFTEngine())
+template <typename SampleType>
+FFTProcessor<SampleType>::FFTProcessor (int fftSize)
+    : engine (createFFTEngine<SampleType>())
 {
     setSize (fftSize);
 }
 
-FFTProcessor::~FFTProcessor()
+template <typename SampleType>
+FFTProcessor<SampleType>::~FFTProcessor()
 {
     if (engine)
         engine->cleanup();
 }
 
-FFTProcessor::FFTProcessor (FFTProcessor&& other) noexcept
+template <typename SampleType>
+FFTProcessor<SampleType>::FFTProcessor (FFTProcessor&& other) noexcept
     : fftSize (std::exchange (other.fftSize, 0))
     , scaling (other.scaling)
+    , scalingFactor (other.scalingFactor)
     , engine (std::move (other.engine))
 {
 }
 
-FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
+template <typename SampleType>
+FFTProcessor<SampleType>& FFTProcessor<SampleType>::operator= (FFTProcessor&& other) noexcept
 {
     if (this != &other)
     {
@@ -658,6 +828,7 @@ FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
 
         fftSize = std::exchange (other.fftSize, 0);
         scaling = other.scaling;
+        scalingFactor = other.scalingFactor;
         engine = std::move (other.engine);
     }
 
@@ -666,7 +837,8 @@ FFTProcessor& FFTProcessor::operator= (FFTProcessor&& other) noexcept
 
 //==============================================================================
 
-void FFTProcessor::setScaling (FFTScaling newScaling) noexcept
+template <typename SampleType>
+void FFTProcessor<SampleType>::setScaling (FFTScaling newScaling) noexcept
 {
     if (scaling != newScaling)
     {
@@ -676,7 +848,8 @@ void FFTProcessor::setScaling (FFTScaling newScaling) noexcept
     }
 }
 
-void FFTProcessor::setSize (int newSize)
+template <typename SampleType>
+void FFTProcessor<SampleType>::setSize (int newSize)
 {
     jassert (isPowerOfTwo (newSize) && newSize >= 64 && newSize <= 65536);
 
@@ -691,7 +864,8 @@ void FFTProcessor::setSize (int newSize)
     }
 }
 
-void FFTProcessor::performRealFFTForward (const float* realInput, float* complexOutput)
+template <typename SampleType>
+void FFTProcessor<SampleType>::performRealFFTForward (const SampleType* realInput, SampleType* complexOutput)
 {
     jassert (realInput != nullptr && complexOutput != nullptr);
     jassert (engine != nullptr);
@@ -701,7 +875,8 @@ void FFTProcessor::performRealFFTForward (const float* realInput, float* complex
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
-void FFTProcessor::performRealFFTInverse (const float* complexInput, float* realOutput)
+template <typename SampleType>
+void FFTProcessor<SampleType>::performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput)
 {
     jassert (complexInput != nullptr && realOutput != nullptr);
     jassert (engine != nullptr);
@@ -711,7 +886,8 @@ void FFTProcessor::performRealFFTInverse (const float* complexInput, float* real
     applyScaling (realOutput, fftSize, false);
 }
 
-void FFTProcessor::performComplexFFTForward (const float* complexInput, float* complexOutput)
+template <typename SampleType>
+void FFTProcessor<SampleType>::performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput)
 {
     jassert (complexInput != nullptr && complexOutput != nullptr);
     jassert (engine != nullptr);
@@ -721,7 +897,8 @@ void FFTProcessor::performComplexFFTForward (const float* complexInput, float* c
     applyScaling (complexOutput, fftSize * 2, true);
 }
 
-void FFTProcessor::performComplexFFTInverse (const float* complexInput, float* complexOutput)
+template <typename SampleType>
+void FFTProcessor<SampleType>::performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput)
 {
     jassert (complexInput != nullptr && complexOutput != nullptr);
     jassert (engine != nullptr);
@@ -731,31 +908,39 @@ void FFTProcessor::performComplexFFTInverse (const float* complexInput, float* c
     applyScaling (complexOutput, fftSize * 2, false);
 }
 
-String FFTProcessor::getBackendName() const
+template <typename SampleType>
+String FFTProcessor<SampleType>::getBackendName() const
 {
     return engine != nullptr ? engine->getBackendName() : "Unknown";
 }
 
 //==============================================================================
 
-void FFTProcessor::updateScalingFactor()
+template <typename SampleType>
+void FFTProcessor<SampleType>::updateScalingFactor()
 {
     if (scaling == FFTScaling::unitary)
-        scalingFactor = 1.0f / std::sqrt (static_cast<float> (fftSize));
+        scalingFactor = SampleType (1) / std::sqrt (static_cast<SampleType> (fftSize));
 
     else if (scaling == FFTScaling::asymmetric)
-        scalingFactor = 1.0f / static_cast<float> (fftSize);
+        scalingFactor = SampleType (1) / static_cast<SampleType> (fftSize);
 
     else
-        scalingFactor = 1.0f;
+        scalingFactor = SampleType (1);
 }
 
-void FFTProcessor::applyScaling (float* data, int numElements, bool isForward) const
+template <typename SampleType>
+void FFTProcessor<SampleType>::applyScaling (SampleType* data, int numElements, bool isForward) const
 {
     if (scaling == FFTScaling::none || (scaling == FFTScaling::asymmetric && ! isForward))
         return;
 
-    FloatVectorOperations::multiply (data, scalingFactor, numElements);
+    FloatVectorOperationsBase<SampleType, int>::multiply (data, scalingFactor, numElements);
 }
+
+//==============================================================================
+
+template class FFTProcessor<float>;
+template class FFTProcessor<double>;
 
 } // namespace yup

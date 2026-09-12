@@ -24,6 +24,17 @@
 namespace yup
 {
 
+#ifndef DOXYGEN
+namespace detail
+{
+
+/** @internal Abstract interface implemented by every FFT backend. */
+template <typename SampleType>
+class FFTEngine;
+
+} // namespace detail
+#endif
+
 //==============================================================================
 /**
     Multi-backend FFT processor that provides a unified interface for different
@@ -39,11 +50,16 @@ namespace yup
     The class automatically selects the best available backend at compile time
     based on preprocessor definitions and platform availability.
 
-    @note This class only works with float buffers for optimal performance.
+    The processing precision is selected with the @c SampleType template
+    argument: use @c float for the fastest transforms or @c double for higher
+    precision. Backends offering native support for both precisions switch their
+    internal implementation accordingly.
+
+    @tparam SampleType  The sample type used by all transform buffers (float or double).
 
     Example usage:
     @code
-    FFTProcessor fft (512);  // 512-point FFT
+    FFTProcessor<float> fft (512);  // 512-point FFT
 
     std::vector<float> realInput (512);
     std::vector<float> complexOutput (1024);  // 512 complex pairs = 1024 floats
@@ -52,7 +68,10 @@ namespace yup
 
     fft.performRealFFTForward (realInput.data(), complexOutput.data());
     @endcode
+
+    @see SpectrumAnalyzerState, WindowFunctions
 */
+template <typename SampleType = float>
 class FFTProcessor
 {
 public:
@@ -101,7 +120,7 @@ public:
         @param realInput     Input buffer containing real samples (fftSize elements)
         @param complexOutput Output buffer for complex data (fftSize * 2 elements, interleaved real/imag)
     */
-    void performRealFFTForward (const float* realInput, float* complexOutput);
+    void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput);
 
     /**
         Performs an inverse complex-to-real FFT.
@@ -109,7 +128,7 @@ public:
         @param complexInput  Input buffer containing complex data (fftSize * 2 elements, interleaved real/imag)
         @param realOutput    Output buffer for real data (fftSize elements)
     */
-    void performRealFFTInverse (const float* complexInput, float* realOutput);
+    void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput);
 
     /**
         Performs a forward complex-to-complex FFT.
@@ -117,7 +136,7 @@ public:
         @param complexInput  Input buffer containing complex data (fftSize * 2 elements, interleaved real/imag)
         @param complexOutput Output buffer for complex data (fftSize * 2 elements, interleaved real/imag)
     */
-    void performComplexFFTForward (const float* complexInput, float* complexOutput);
+    void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput);
 
     /**
         Performs an inverse complex-to-complex FFT.
@@ -125,7 +144,7 @@ public:
         @param complexInput  Input buffer containing complex data (fftSize * 2 elements, interleaved real/imag)
         @param complexOutput Output buffer for complex data (fftSize * 2 elements, interleaved real/imag)
     */
-    void performComplexFFTInverse (const float* complexInput, float* complexOutput);
+    void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput);
 
     //==============================================================================
     /** Returns a string describing the active FFT backend */
@@ -134,18 +153,18 @@ public:
     //==============================================================================
 #ifndef DOXYGEN
     /** @internal */
-    class Engine;
+    using Engine = detail::FFTEngine<SampleType>;
 #endif
 
 private:
     //==============================================================================
     void updateScalingFactor();
-    void applyScaling (float* data, int numElements, bool isForward) const;
+    void applyScaling (SampleType* data, int numElements, bool isForward) const;
 
     //==============================================================================
     int fftSize = -1;
     FFTScaling scaling = FFTScaling::none;
-    float scalingFactor = 1.0f;
+    SampleType scalingFactor = SampleType (1);
 
     std::unique_ptr<Engine> engine;
 

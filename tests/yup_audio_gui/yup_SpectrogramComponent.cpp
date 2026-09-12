@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstring>
 #include <vector>
 
 using namespace yup;
@@ -49,6 +50,46 @@ std::vector<float> createSineBuffer (int numSamples, float period)
         buffer[static_cast<size_t> (i)] = std::sin (2.0f * MathConstants<float>::pi * static_cast<float> (i) / period);
 
     return buffer;
+}
+
+// Returns true when every pixel of the given row equals the expected RGBA color
+// (bytes are compared as R, G, B, A, matching the readback pixel layout).
+bool spectrogramRowIsColor (const Image& image, int row, uint32 expectedColor)
+{
+    const auto raw = image.getRawData();
+    const auto rowBytes = static_cast<size_t> (image.getWidth()) * 4u;
+    const auto rowData = raw.data() + static_cast<size_t> (row) * rowBytes;
+
+    const uint8 expectedBytes[4] = {
+        static_cast<uint8> ((expectedColor >> 16) & 0xff), // R
+        static_cast<uint8> ((expectedColor >> 8) & 0xff),  // G
+        static_cast<uint8> (expectedColor & 0xff),         // B
+        static_cast<uint8> ((expectedColor >> 24) & 0xff), // A
+    };
+
+    for (int x = 0; x < image.getWidth(); ++x)
+    {
+        if (std::memcmp (rowData + static_cast<size_t> (x) * 4u, expectedBytes, 4) != 0)
+            return false;
+    }
+
+    return true;
+}
+
+// Returns true when two rows of two images hold identical bytes.
+bool spectrogramRowsEqual (const Image& a, int rowA, const Image& b, int rowB)
+{
+    if (a.getWidth() != b.getWidth())
+        return false;
+
+    const auto rawA = a.getRawData();
+    const auto rawB = b.getRawData();
+    const auto rowBytes = static_cast<size_t> (a.getWidth()) * 4u;
+
+    return std::memcmp (rawA.data() + static_cast<size_t> (rowA) * rowBytes,
+                        rawB.data() + static_cast<size_t> (rowB) * rowBytes,
+                        rowBytes)
+        == 0;
 }
 
 } // namespace
@@ -129,7 +170,6 @@ TEST_F (SpectrogramComponentTests, ConstructorInitializesDefaults)
 {
     EXPECT_EQ (2048, spectrogram->getFFTSize());
     EXPECT_EQ (WindowType::hann, spectrogram->getWindowType());
-    EXPECT_EQ (25, spectrogram->getUpdateRate());
     EXPECT_FLOAT_EQ (20.0f, spectrogram->getMinFrequency());
     EXPECT_FLOAT_EQ (20000.0f, spectrogram->getMaxFrequency());
     EXPECT_FLOAT_EQ (-100.0f, spectrogram->getMinDecibels());
@@ -173,22 +213,6 @@ TEST_F (SpectrogramComponentTests, SetWindowTypeUpdatesCurrentWindow)
 
     spectrogram->setWindowType (WindowType::rectangular);
     EXPECT_EQ (WindowType::rectangular, spectrogram->getWindowType());
-}
-
-TEST_F (SpectrogramComponentTests, SetUpdateRateClampsToSupportedRange)
-{
-    spectrogram->setUpdateRate (30);
-    EXPECT_EQ (30, spectrogram->getUpdateRate());
-
-    spectrogram->setUpdateRate (0);
-    EXPECT_EQ (1, spectrogram->getUpdateRate());
-
-    spectrogram->setUpdateRate (-10);
-    EXPECT_EQ (1, spectrogram->getUpdateRate());
-
-    spectrogram->setUpdateRate (1000);
-    EXPECT_GE (spectrogram->getUpdateRate(), 60);
-    EXPECT_LE (spectrogram->getUpdateRate(), 63);
 }
 
 TEST_F (SpectrogramComponentTests, SetFrequencyRangeUpdatesAndClampsValues)
@@ -244,28 +268,10 @@ TEST_F (SpectrogramComponentTests, SetNumHistoryFramesUpdatesAndClampsToMinimum)
     spectrogram->setNumHistoryFrames (64);
 
     EXPECT_EQ (64, spectrogram->getNumHistoryFrames());
-    ASSERT_TRUE (spectrogram->getSpectrogramImage().isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, spectrogram->getSpectrogramImage().getWidth());
-    EXPECT_EQ (64, spectrogram->getSpectrogramImage().getHeight());
 
     spectrogram->setNumHistoryFrames (1);
 
     EXPECT_EQ (4, spectrogram->getNumHistoryFrames());
-    ASSERT_TRUE (spectrogram->getSpectrogramImage().isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, spectrogram->getSpectrogramImage().getWidth());
-    EXPECT_EQ (4, spectrogram->getSpectrogramImage().getHeight());
-}
-
-TEST_F (SpectrogramComponentTests, GetSpectrogramImageReturnsCurrentHistoryImage)
-{
-    spectrogram->setNumHistoryFrames (8);
-
-    const auto& image = spectrogram->getSpectrogramImage();
-
-    ASSERT_TRUE (image.isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, image.getWidth());
-    EXPECT_EQ (8, image.getHeight());
-    EXPECT_EQ (PixelFormat::RGBA, image.getPixelFormat());
 }
 
 TEST_F (SpectrogramComponentTests, SetOverlapFactorDelegatesToAnalyzerState)
@@ -282,25 +288,61 @@ TEST_F (SpectrogramComponentTests, SetOverlapFactorDelegatesToAnalyzerState)
     EXPECT_EQ (spectrogram->getFFTSize(), state->getHopSize());
 }
 
+TEST_F (SpectrogramComponentTests, SetScrollSpeedClampsToNonNegative)
+{
+    EXPECT_FLOAT_EQ (1.0f, spectrogram->getScrollSpeed());
+
+    spectrogram->setScrollSpeed (2.0f);
+    EXPECT_FLOAT_EQ (2.0f, spectrogram->getScrollSpeed());
+
+    spectrogram->setScrollSpeed (0.0f);
+    EXPECT_FLOAT_EQ (0.0f, spectrogram->getScrollSpeed());
+
+    spectrogram->setScrollSpeed (-1.0f);
+    EXPECT_FLOAT_EQ (0.0f, spectrogram->getScrollSpeed());
+}
+
 //==============================================================================
 // Runtime Tests
 //==============================================================================
 
-TEST_F (SpectrogramComponentTests, TimerCallbackWithoutAudioDataDoesNotCrash)
+TEST_F (SpectrogramComponentTests, RefreshDisplayWithoutAudioDataDoesNotCrash)
 {
-    spectrogram->timerCallback();
+    spectrogram->refreshDisplay (1.0 / 60.0);
 
     EXPECT_TRUE (true);
 }
 
-TEST_F (SpectrogramComponentTests, TimerCallbackWithAudioDataDoesNotCrash)
+TEST_F (SpectrogramComponentTests, RefreshDisplayWithAudioDataDoesNotCrash)
 {
     const auto testData = createSineBuffer (2048, 100.0f);
     state->pushSamples (testData.data(), static_cast<int> (testData.size()));
 
-    spectrogram->timerCallback();
+    spectrogram->refreshDisplay (1.0 / 60.0);
 
     EXPECT_TRUE (true);
+}
+
+TEST_F (SpectrogramComponentTests, RefreshDisplaySkipsStaleBacklog)
+{
+    // refreshDisplay() only processes FFTs while the component is showing.
+    auto parent = std::make_unique<Component> ("parent");
+    parent->setVisible (true);
+    parent->addAndMakeVisible (*spectrogram);
+
+    spectrogram->setFFTSize (512);
+    spectrogram->setOverlapFactor (0.75f); // hop = fftSize / 4
+
+    // Fill the FIFO with far more than one analysis window (a stale backlog).
+    const auto testData = createSineBuffer (spectrogram->getFFTSize() * 8, 100.0f);
+    state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+
+    spectrogram->refreshDisplay (1.0 / 60.0);
+
+    // The stale rows are skipped: after ingestion the FIFO holds less than a
+    // full window instead of accumulating the backlog (which would make the
+    // display lag progressively behind the audio).
+    EXPECT_LT (state->getNumAvailableSamples(), spectrogram->getFFTSize());
 }
 
 TEST_F (SpectrogramComponentTests, ClearHistoryDoesNotChangeConfiguration)
@@ -318,9 +360,6 @@ TEST_F (SpectrogramComponentTests, ClearHistoryDoesNotChangeConfiguration)
     EXPECT_FLOAT_EQ (-6.0f, spectrogram->getMaxDecibels());
     EXPECT_DOUBLE_EQ (48000.0, spectrogram->getSampleRate());
     EXPECT_EQ (32, spectrogram->getNumHistoryFrames());
-    ASSERT_TRUE (spectrogram->getSpectrogramImage().isValid());
-    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramWidth, spectrogram->getSpectrogramImage().getWidth());
-    EXPECT_EQ (32, spectrogram->getSpectrogramImage().getHeight());
 }
 
 TEST_F (SpectrogramComponentTests, PaintWithoutAudioDataDoesNotCrash)
@@ -334,11 +373,11 @@ TEST_F (SpectrogramComponentTests, PaintWithoutAudioDataDoesNotCrash)
     EXPECT_TRUE (true);
 }
 
-TEST_F (SpectrogramComponentTests, PaintAfterTimerCallbackDoesNotCrash)
+TEST_F (SpectrogramComponentTests, PaintAfterRefreshDisplayDoesNotCrash)
 {
     const auto testData = createSineBuffer (2048, 100.0f);
     state->pushSamples (testData.data(), static_cast<int> (testData.size()));
-    spectrogram->timerCallback();
+    spectrogram->refreshDisplay (1.0 / 60.0);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
@@ -368,7 +407,6 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
 {
     spectrogram->setFFTSize (4096);
     spectrogram->setWindowType (WindowType::hamming);
-    spectrogram->setUpdateRate (30);
     spectrogram->setFrequencyRange (20.0f, 20000.0f);
     spectrogram->setDecibelRange (-100.0f, 0.0f);
     spectrogram->setSampleRate (48000.0);
@@ -378,7 +416,7 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
 
     const auto testData = createSineBuffer (4096, 100.0f);
     state->pushSamples (testData.data(), static_cast<int> (testData.size()));
-    spectrogram->timerCallback();
+    spectrogram->refreshDisplay (1.0 / 60.0);
 
     auto context = yup_constructHeadlessGraphicsContext ({}, {});
     auto renderer = context->makeRenderer (800, 400);
@@ -388,7 +426,153 @@ TEST_F (SpectrogramComponentTests, CompleteWorkflow)
 
     EXPECT_EQ (4096, spectrogram->getFFTSize());
     EXPECT_EQ (WindowType::hamming, spectrogram->getWindowType());
-    EXPECT_EQ (30, spectrogram->getUpdateRate());
     EXPECT_EQ (128, spectrogram->getNumHistoryFrames());
     EXPECT_FLOAT_EQ (0.5f, spectrogram->getOverlapFactor());
+}
+
+//==============================================================================
+// GPU Path Tests (skipped when no GPU backend is available)
+//==============================================================================
+
+class SpectrogramComponentGpuTests : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        auto probe = GpuCanvas::create (*gpuContext, 64, 64);
+        if (probe == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+
+        paintCanvas = GpuCanvas::create (*gpuContext, 800, 400);
+        if (paintCanvas == nullptr)
+            GTEST_SKIP() << "Unable to create paint GpuCanvas";
+
+        mm = MessageManager::getInstance();
+        state = std::make_unique<SpectrumAnalyzerState> (2048);
+        spectrogram = std::make_unique<SpectrogramComponent> (*state);
+        spectrogram->setBounds (0.0f, 0.0f, 800.0f, 400.0f);
+
+        // refreshDisplay() only processes FFTs while the component is showing.
+        parent = std::make_unique<Component> ("parent");
+        parent->setVisible (true);
+        parent->addAndMakeVisible (*spectrogram);
+    }
+
+    void TearDown() override
+    {
+        spectrogram.reset();
+        state.reset();
+        paintCanvas.reset();
+        parent.reset();
+    }
+
+    void paintComponent()
+    {
+        auto& g = paintCanvas->beginDraw();
+        spectrogram->paint (g);
+        paintCanvas->commit();
+    }
+
+    void pushOneFftRow()
+    {
+        const auto testData = createSineBuffer (spectrogram->getFFTSize(), 100.0f);
+        state->pushSamples (testData.data(), static_cast<int> (testData.size()));
+        spectrogram->refreshDisplay (1.0 / 60.0);
+        paintComponent();
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+
+    MessageManager* mm = nullptr;
+    GpuCanvas::Ptr paintCanvas;
+    std::unique_ptr<Component> parent;
+    std::unique_ptr<SpectrumAnalyzerState> state;
+    std::unique_ptr<SpectrogramComponent> spectrogram;
+};
+
+std::unique_ptr<GraphicsContext> SpectrogramComponentGpuTests::gpuContext;
+
+TEST_F (SpectrogramComponentGpuTests, AppliesRowsAndScrollsHistoryOnGpu)
+{
+    spectrogram->setNumHistoryFrames (16);
+    spectrogram->setOverlapFactor (0.0f); // one FFT per fftSize samples
+
+    paintComponent(); // first paint creates the internal ping-pong canvases
+
+    // First row: only the top row is non-background.
+    pushOneFftRow();
+
+    auto snapshot1 = spectrogram->getSpectrogramImage();
+
+    ASSERT_TRUE (snapshot1.isValid());
+    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramRenderWidth, snapshot1.getWidth());
+    EXPECT_EQ (16, snapshot1.getHeight());
+    EXPECT_FALSE (spectrogramRowIsColor (snapshot1, 0, 0xFF0a0a0a));
+
+    for (int row = 1; row < 16; ++row)
+        EXPECT_TRUE (spectrogramRowIsColor (snapshot1, row, 0xFF0a0a0a));
+
+    // Second row: the previous top row must have scrolled down by exactly one
+    // row, and the new top row must be non-background.
+    pushOneFftRow();
+
+    auto snapshot2 = spectrogram->getSpectrogramImage();
+
+    ASSERT_TRUE (snapshot2.isValid());
+    EXPECT_TRUE (spectrogramRowsEqual (snapshot2, 1, snapshot1, 0));
+    EXPECT_FALSE (spectrogramRowIsColor (snapshot2, 0, 0xFF0a0a0a));
+
+    for (int row = 2; row < 16; ++row)
+        EXPECT_TRUE (spectrogramRowIsColor (snapshot2, row, 0xFF0a0a0a));
+}
+
+TEST_F (SpectrogramComponentGpuTests, ClearHistoryResetsGpuHistoryToBackground)
+{
+    spectrogram->setNumHistoryFrames (8);
+    spectrogram->setOverlapFactor (0.0f);
+
+    paintComponent();
+    pushOneFftRow();
+
+    auto before = spectrogram->getSpectrogramImage();
+    ASSERT_TRUE (before.isValid());
+    EXPECT_FALSE (spectrogramRowIsColor (before, 0, 0xFF0a0a0a));
+
+    spectrogram->clearHistory();
+    paintComponent(); // clearHistory() destroys the history canvases; repaint to recreate them
+
+    auto after = spectrogram->getSpectrogramImage();
+    ASSERT_TRUE (after.isValid());
+
+    for (int row = 0; row < 8; ++row)
+        EXPECT_TRUE (spectrogramRowIsColor (after, row, 0xFF0a0a0a));
+}
+
+TEST_F (SpectrogramComponentGpuTests, GetSpectrogramImageReturnsCurrentHistoryImage)
+{
+    spectrogram->setNumHistoryFrames (8);
+
+    paintComponent(); // first paint creates the internal ping-pong canvases
+
+    const auto image = spectrogram->getSpectrogramImage();
+
+    ASSERT_TRUE (image.isValid());
+    EXPECT_EQ (SpectrogramComponent::defaultSpectrogramRenderWidth, image.getWidth());
+    EXPECT_EQ (8, image.getHeight());
+    EXPECT_EQ (PixelFormat::RGBA, image.getPixelFormat());
 }
