@@ -404,32 +404,11 @@ void SpectrogramComponent::processFFT()
         magnitudeBuffer[static_cast<size_t> (binIndex)] = std::sqrt (real * real + imag * imag) * windowGain;
     }
 
-    // Map FFT bins to display bins using the precomputed logarithmic mapping.
+    // Map FFT bins to display bins using the precomputed logarithmic mapping. The bands are resolved
+    // across the fractional FFT bin domain, so neighbouring columns never snap to the same bin.
     for (int i = 0; i < spectrogramWidth; ++i)
     {
-        const auto& mapping = displayBinMapping[static_cast<size_t> (i)];
-        const float binSpan = mapping.endBin - mapping.startBin;
-
-        float magnitude = 0.0f;
-
-        if (binSpan <= 1.5f)
-        {
-            const int bin1 = jlimit (0, numBins - 1, static_cast<int> (mapping.exactBin));
-            const int bin2 = jlimit (0, numBins - 1, bin1 + 1);
-            const float fraction = mapping.exactBin - static_cast<float> (bin1);
-
-            const float mag1 = magnitudeBuffer[static_cast<size_t> (bin1)];
-            const float mag2 = magnitudeBuffer[static_cast<size_t> (bin2)];
-            magnitude = mag1 + fraction * (mag2 - mag1);
-        }
-        else
-        {
-            const int binStart = jlimit (0, numBins - 1, static_cast<int> (mapping.startBin));
-            const int binEnd = jlimit (0, numBins - 1, static_cast<int> (mapping.endBin + 0.5f));
-
-            for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-                magnitude = jmax (magnitude, magnitudeBuffer[static_cast<size_t> (binIndex)]);
-        }
+        const float magnitude = binMapping.getBandLevel (magnitudeBuffer, i, SpectrumBinMapping::BandAggregation::peak);
 
         // Convert to decibels and normalize to [0, 1]
         float magnitudeDb = magnitude > 0.0f
@@ -447,43 +426,9 @@ void SpectrogramComponent::processFFT()
 
 void SpectrogramComponent::updateFrequencyMapping()
 {
-    displayBinMapping.resize (static_cast<size_t> (spectrogramWidth));
-
-    const int numDisplayBins = spectrogramWidth;
-    const float invLastBin = 1.0f / static_cast<float> (numDisplayBins - 1);
-
-    for (int i = 0; i < numDisplayBins; ++i)
-    {
-        const float proportion = static_cast<float> (i) * invLastBin;
-        const float logFreq = logMinFrequency + proportion * (logMaxFrequency - logMinFrequency);
-        const float centerFreq = std::pow (10.0f, logFreq);
-
-        const float prevProportion = static_cast<float> (i - 1) * invLastBin;
-        const float nextProportion = static_cast<float> (i + 1) * invLastBin;
-
-        float freqRangeStart, freqRangeEnd;
-
-        if (i == 0)
-        {
-            freqRangeStart = minFrequency;
-            freqRangeEnd = (centerFreq + std::pow (10.0f, logMinFrequency + nextProportion * (logMaxFrequency - logMinFrequency))) * 0.5f;
-        }
-        else if (i == numDisplayBins - 1)
-        {
-            freqRangeStart = (std::pow (10.0f, logMinFrequency + prevProportion * (logMaxFrequency - logMinFrequency)) + centerFreq) * 0.5f;
-            freqRangeEnd = maxFrequency;
-        }
-        else
-        {
-            freqRangeStart = (std::pow (10.0f, logMinFrequency + prevProportion * (logMaxFrequency - logMinFrequency)) + centerFreq) * 0.5f;
-            freqRangeEnd = (centerFreq + std::pow (10.0f, logMinFrequency + nextProportion * (logMaxFrequency - logMinFrequency))) * 0.5f;
-        }
-
-        auto& mapping = displayBinMapping[static_cast<size_t> (i)];
-        mapping.startBin = (freqRangeStart * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-        mapping.endBin = (freqRangeEnd * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-        mapping.exactBin = (centerFreq * static_cast<float> (fftSize)) / static_cast<float> (sampleRate);
-    }
+    binMapping.setFftParameters (fftSize, sampleRate);
+    binMapping.setFrequencyRange (std::pow (10.0f, logMinFrequency), std::pow (10.0f, logMaxFrequency));
+    binMapping.setNumDisplayPoints (spectrogramWidth);
 }
 
 bool SpectrogramComponent::ensureGpuTargets (GraphicsContext& context)

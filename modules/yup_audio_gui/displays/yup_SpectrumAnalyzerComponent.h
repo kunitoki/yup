@@ -31,7 +31,9 @@ namespace yup
     following the pattern from the JUCE spectrum analyzer tutorial.
 
     The component can be configured with different window functions, display types, frequency ranges, and update
-    rates. It automatically handles logarithmic frequency scaling for natural spectrum visualization.
+    rates. It automatically handles logarithmic frequency scaling for natural spectrum visualization. Levels are
+    interpolated across the FFT bin domain and the outline is sampled once per pixel column, so the rendered curve
+    stays continuous at any component width.
 
     Example usage:
 
@@ -236,7 +238,8 @@ private:
     void updateDisplay (bool hasNewFFTData);
     void generateWindow();
     void initializeFFTBuffers();
-    void computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath);
+    void updateBinMapping();
+    Path createSpectrumPath (const Rectangle<float>& bounds, bool closePath) const;
     void drawLinesSpectrum (Graphics& g, const Rectangle<float>& bounds);
     void drawFilledSpectrum (Graphics& g, const Rectangle<float>& bounds);
     void drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds);
@@ -248,13 +251,13 @@ private:
     float getBinPowerSpectralDensity (int binIndex) const noexcept;
     float getBinLinearLevel (int binIndex) const noexcept;
     float linearLevelToDecibels (float level) const noexcept;
-    float getInterpolatedPeakDecibels (float exactBin) const noexcept;
-    float getDisplayDecibelsForBinRange (float startBin, float endBin, float centerBin) const noexcept;
+    SpectrumBinMapping::BandAggregation getBandAggregation() const noexcept;
     bool isPowerMode() const noexcept;
 
     float frequencyToX (float frequency, const Rectangle<float>& bounds) const noexcept;
     float decibelToY (float decibel, const Rectangle<float>& bounds) const noexcept;
-    float binToY (int binIndex, float height) const noexcept;
+    float levelToY (float level, const Rectangle<float>& bounds) const noexcept;
+    float getDisplayLevelForPosition (float displayPoint) const noexcept;
 
     //==============================================================================
     SpectrumAnalyzerState& analyzerState;
@@ -268,7 +271,8 @@ private:
 
     // Display data
     std::vector<float> scopeData;
-    Path spectrumPath;
+    std::vector<float> binLevelBuffer; // Calibrated linear level of every FFT bin
+    SpectrumBinMapping binMapping;     // Log-frequency > fractional FFT bin mapping
 
     // Configuration
     WindowType currentWindowType = WindowType::hann;

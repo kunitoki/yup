@@ -303,15 +303,8 @@ private:
     // Spectrogram color map
     SpectrogramColorMap colorMap;
 
-    // Precomputed log-frequency > FFT-bin mapping
-    struct DisplayBinMapping
-    {
-        float startBin = 0.0f;
-        float endBin = 0.0f;
-        float exactBin = 0.0f;
-    };
-
-    std::vector<DisplayBinMapping> displayBinMapping;
+    // Precomputed log-frequency > fractional FFT bin mapping
+    SpectrumBinMapping binMapping;
 
     // GPU waterfall state
     GpuDevice::Ptr gpuDevice;
