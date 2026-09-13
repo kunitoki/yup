@@ -1607,17 +1607,29 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-    g.setFillColor (debugColor);
-    g.setOpacity (0.2f);
-    g.fillAll();
+    paintDebugOverlay (g, bounds, boundsToRedraw);
+#endif
+}
+
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+void Component::paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const Rectangle<float>& boundsToRedraw)
+{
+    const auto saved = g.saveState();
+
+    g.setDrawingArea (bounds);
+    if (! options.unclippedRendering)
+        g.setClipPath (boundsToRedraw);
+    g.setTransform (transform);
+    g.setFillColor (debugColor.withMultipliedAlpha (0.2f));
+    g.fillRect (getLocalBounds());
 
     if (--counter == 0)
     {
         counter = 2;
         debugColor = Color::opaqueRandom();
     }
-#endif
 }
+#endif
 
 //==============================================================================
 

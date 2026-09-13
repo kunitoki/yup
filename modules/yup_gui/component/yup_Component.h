@@ -1482,6 +1482,10 @@ private:
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
 
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+    void paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const Rectangle<float>& boundsToRedraw);
+#endif
+
     friend class ComponentNative;
     friend class SDLComponentNative;
     friend class WeakReference<Component>;
