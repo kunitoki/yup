@@ -157,6 +157,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
 
+    SDL_SetWindowFocusable (window, true);
+    SDL_PumpEvents();
+
 #if ! YUP_WINDOWS
     if (parent != nullptr)
     {
