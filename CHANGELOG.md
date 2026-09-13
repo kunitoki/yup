@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Fixed the PFFFT-backed `FFTProcessor` requiring its input and output buffers to be SIMD aligned: the transforms are now staged through buffers owned by the PFFFT backend and allocated with PFFFT's own aligned allocator, so the public API accepts buffers with any alignment (the double-precision real transform previously hit PFFFT's `VALIGNED` assertion when handed a plain `std::vector<double>`)
 
+- Fixed the double-precision Ooura FFT translation unit only building on GCC/Clang: it declared every internal helper (`makewt`, `cftfsub`, `bitrv2`, ...) inside the body of the functions that call them, and a block-scope declaration inside `namespace yup` declares a *global* function, so `yup::cdft` referenced a `::makewt` that no one defined and the Windows link failed with 30 unresolved externals. The declarations now sit at namespace scope, matching `yup_OouraFFT8g_float.cpp`
+
 ### Graphics
 
 - `Image::getWidth()` and `Image::getHeight()` now return 0 on an invalid image instead of asserting and dereferencing null. Other accessors and pixel access still assert, as documented
