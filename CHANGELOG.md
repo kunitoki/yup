@@ -34,6 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `FFTProcessor` is now templated on the sample type - `FFTProcessor<float>` (the default) or `FFTProcessor<double>` - and every backend (PFFFT, Apple vDSP, Intel IPP, FFTW3 and the Ooura fallback, which now ships both a `float` and a `double` implementation) gained a native double-precision path. References to the nested scaling enum need qualifying, e.g. `FFTProcessor<float>::FFTScaling::asymmetric`
 
+- Fixed the PFFFT-backed `FFTProcessor` requiring its input and output buffers to be SIMD aligned: the transforms are now staged through buffers owned by the PFFFT backend and allocated with PFFFT's own aligned allocator, so the public API accepts buffers with any alignment (the double-precision real transform previously hit PFFFT's `VALIGNED` assertion when handed a plain `std::vector<double>`)
+
 ### Graphics
 
 - `Image::getWidth()` and `Image::getHeight()` now return 0 on an invalid image instead of asserting and dereferencing null. Other accessors and pixel access still assert, as documented

@@ -52,6 +52,40 @@ protected:
 // PFFFT implementation
 #if YUP_FFT_USING_PFFFT
 
+namespace detail
+{
+
+/** @internal Releases a buffer obtained from the PFFFT aligned allocator. */
+template <typename SampleType>
+struct PFFTAlignedDeleter
+{
+    void operator() (SampleType* ptr) const noexcept
+    {
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_aligned_free (ptr);
+        else
+            pffft_aligned_free (ptr);
+    }
+};
+
+/** @internal Buffer with the SIMD alignment that PFFFT requires for its operands. */
+template <typename SampleType>
+using PFFTAlignedBuffer = std::unique_ptr<SampleType[], PFFTAlignedDeleter<SampleType>>;
+
+/** @internal Allocates a buffer that PFFFT can operate on directly. */
+template <typename SampleType>
+PFFTAlignedBuffer<SampleType> makePFFTAlignedBuffer (size_t numElements)
+{
+    const auto numBytes = numElements * sizeof (SampleType);
+
+    if constexpr (std::is_same_v<SampleType, double>)
+        return PFFTAlignedBuffer<SampleType> (static_cast<SampleType*> (pffftd_aligned_malloc (numBytes)));
+
+    return PFFTAlignedBuffer<SampleType> (static_cast<SampleType*> (pffft_aligned_malloc (numBytes)));
+}
+
+} // namespace detail
+
 template <typename SampleType>
 class PFFTEngine : public detail::FFTEngine<SampleType>
 {
@@ -75,11 +109,13 @@ public:
             complexSetup = pffft_new_setup (this->fftSize, PFFFT_COMPLEX);
         }
 
-        tempBuffer.resize (static_cast<size_t> (this->fftSize * 2));
+        // PFFFT only accepts SIMD aligned buffers, so every transform is staged through
+        // buffers owned by this engine instead of touching the caller's memory directly.
+        const auto bufferSize = static_cast<size_t> (this->fftSize) * 2;
 
-        // Allocate work buffers - PFFFT uses stack for small sizes, heap for larger
-        if (this->fftSize >= 16384)
-            workBuffer.resize (static_cast<size_t> (this->fftSize));
+        inputBuffer = detail::makePFFTAlignedBuffer<SampleType> (bufferSize);
+        outputBuffer = detail::makePFFTAlignedBuffer<SampleType> (bufferSize);
+        workBuffer = detail::makePFFTAlignedBuffer<SampleType> (bufferSize);
     }
 
     void cleanup() override
@@ -108,84 +144,85 @@ public:
             complexSetupD = nullptr;
         }
 
-        workBuffer.clear();
-        tempBuffer.clear();
+        inputBuffer.reset();
+        outputBuffer.reset();
+        workBuffer.reset();
     }
 
     void performRealFFTForward (const SampleType* realInput, SampleType* complexOutput) override
     {
-        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        std::copy_n (realInput, this->fftSize, inputBuffer.get());
 
-        if constexpr (std::is_same_v<SampleType, double>)
-            pffftd_transform_ordered (realSetupD, realInput, complexOutput, workPtr, PFFFT_FORWARD);
-        else
-            pffft_transform_ordered (realSetup, realInput, complexOutput, workPtr, PFFFT_FORWARD);
+        performTransform<TransformKind::real> (PFFFT_FORWARD);
 
-        convertFromPFFTPacked (complexOutput, this->fftSize);
+        // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
+        // Standard:     [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
+        std::copy_n (outputBuffer.get(), this->fftSize, complexOutput);
+
+        complexOutput[this->fftSize] = outputBuffer[1];    // Nyquist real (from packed[1])
+        complexOutput[this->fftSize + 1] = SampleType (0); // Nyquist imaginary (always 0)
+        complexOutput[1] = SampleType (0);                 // DC imaginary (always 0)
     }
 
     void performRealFFTInverse (const SampleType* complexInput, SampleType* realOutput) override
     {
-        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        // Standard:     [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
+        // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
+        inputBuffer[0] = complexInput[0];             // DC real
+        inputBuffer[1] = complexInput[this->fftSize]; // Nyquist real (to packed[1])
+        std::memcpy (inputBuffer.get() + 2, complexInput + 2, static_cast<size_t> (this->fftSize - 2) * sizeof (SampleType));
 
-        convertToPFFTPacked (complexInput, tempBuffer.data(), this->fftSize);
+        performTransform<TransformKind::real> (PFFFT_BACKWARD);
 
-        if constexpr (std::is_same_v<SampleType, double>)
-            pffftd_transform_ordered (realSetupD, tempBuffer.data(), realOutput, workPtr, PFFFT_BACKWARD);
-        else
-            pffft_transform_ordered (realSetup, tempBuffer.data(), realOutput, workPtr, PFFFT_BACKWARD);
+        std::copy_n (outputBuffer.get(), this->fftSize, realOutput);
     }
 
     void performComplexFFTForward (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        std::copy_n (complexInput, this->fftSize * 2, inputBuffer.get());
 
-        if constexpr (std::is_same_v<SampleType, double>)
-            pffftd_transform_ordered (complexSetupD, complexInput, complexOutput, workPtr, PFFFT_FORWARD);
-        else
-            pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_FORWARD);
+        performTransform<TransformKind::complex> (PFFFT_FORWARD);
+
+        std::copy_n (outputBuffer.get(), this->fftSize * 2, complexOutput);
     }
 
     void performComplexFFTInverse (const SampleType* complexInput, SampleType* complexOutput) override
     {
-        SampleType* workPtr = workBuffer.empty() ? nullptr : workBuffer.data();
+        std::copy_n (complexInput, this->fftSize * 2, inputBuffer.get());
 
-        if constexpr (std::is_same_v<SampleType, double>)
-            pffftd_transform_ordered (complexSetupD, complexInput, complexOutput, workPtr, PFFFT_BACKWARD);
-        else
-            pffft_transform_ordered (complexSetup, complexInput, complexOutput, workPtr, PFFFT_BACKWARD);
+        performTransform<TransformKind::complex> (PFFFT_BACKWARD);
+
+        std::copy_n (outputBuffer.get(), this->fftSize * 2, complexOutput);
     }
 
     String getBackendName() const override { return "PFFFT"; }
 
 private:
-    // Convert from PFFFT packed format to standard interleaved format
-    void convertFromPFFTPacked (SampleType* interleaved, int size)
+    enum class TransformKind
     {
-        // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
-        // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
+        real,
+        complex
+    };
 
-        interleaved[size] = std::exchange (interleaved[1], SampleType (0)); // Nyquist real (from packed[1])
-        interleaved[size + 1] = SampleType (0);                             // Nyquist imaginary (always 0)
-    }
-
-    // Convert from standard interleaved format to PFFFT packed format
-    void convertToPFFTPacked (const SampleType* interleaved, SampleType* packed, int size)
+    // Runs a transform using the aligned buffers owned by this engine
+    template <TransformKind kind>
+    void performTransform (pffft_direction_t direction)
     {
-        // Standard: [DC_real, DC_imag, bin1_real, bin1_imag, ..., Nyquist_real, Nyquist_imag]
-        // PFFFT packed: [DC_real, Nyquist_real, bin1_real, bin1_imag, bin2_real, bin2_imag, ...]
-
-        packed[0] = interleaved[0];    // DC real
-        packed[1] = interleaved[size]; // Nyquist real (to packed[1])
-        std::memcpy (&packed[2], &interleaved[2], static_cast<size_t> (size - 2) * sizeof (SampleType));
+        if constexpr (std::is_same_v<SampleType, double>)
+            pffftd_transform_ordered (kind == TransformKind::real ? realSetupD : complexSetupD,
+                                      inputBuffer.get(), outputBuffer.get(), workBuffer.get(), direction);
+        else
+            pffft_transform_ordered (kind == TransformKind::real ? realSetup : complexSetup,
+                                     inputBuffer.get(), outputBuffer.get(), workBuffer.get(), direction);
     }
 
     PFFFT_Setup* realSetup = nullptr;
     PFFFT_Setup* complexSetup = nullptr;
     PFFFTD_Setup* realSetupD = nullptr;
     PFFFTD_Setup* complexSetupD = nullptr;
-    std::vector<SampleType> workBuffer;
-    std::vector<SampleType> tempBuffer;
+    detail::PFFTAlignedBuffer<SampleType> inputBuffer;
+    detail::PFFTAlignedBuffer<SampleType> outputBuffer;
+    detail::PFFTAlignedBuffer<SampleType> workBuffer;
 };
 
 #endif

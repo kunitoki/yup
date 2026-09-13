@@ -599,6 +599,38 @@ TEST_F (FFTProcessorDoubleValidation, BackendIdentification)
     EXPECT_NE (backendName, "Unknown") << "Backend should be identified";
 }
 
+TEST_F (FFTProcessorDoubleValidation, HandlesUnalignedBuffers)
+{
+    // The PFFFT backend needs SIMD aligned buffers internally, which must not leak into
+    // the public API: callers may pass buffers with any alignment.
+    for (int order = 6; order <= 9; ++order)
+    {
+        const int size = 1 << order;
+        ProcessorType processor (size);
+
+        std::vector<SampleType> inputStorage (size + 1);
+        std::vector<SampleType> outputStorage (size * 2 + 1);
+        std::vector<SampleType> referenceInput (size);
+        std::vector<SampleType> referenceOutput (size * 2);
+
+        // Offset by one sample so the pointers are not aligned for vectorized access
+        SampleType* input = inputStorage.data() + 1;
+        SampleType* output = outputStorage.data() + 1;
+
+        generateRandomReal (input, size);
+
+        for (int i = 0; i < size; ++i)
+            referenceInput[i] = input[i];
+
+        computeReferenceRealDFT (referenceInput.data(), referenceOutput.data(), size);
+        processor.performRealFFTForward (input, output);
+
+        const int numBins = size / 2 + 1;
+        EXPECT_TRUE (areArraysClose (output, referenceOutput.data(), numBins * 2, tightTolerance))
+            << "Unaligned double real forward FFT failed for size " << size;
+    }
+}
+
 TEST_F (FFTProcessorDoubleValidation, RealForwardTransformAccuracy)
 {
     for (int order = 6; order <= 9; ++order)
