@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_shading yup_simd rive_renderer
+    dependencies:       yup_core yup_shading yup_simd rive
     appleFrameworks:    Metal
 
   END_YUP_MODULE_DECLARATION
@@ -50,7 +50,7 @@
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/refcnt.hpp>
-#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/rive_renderer.hpp>
 #include <rive/renderer/render_canvas.hpp>
 #include <rive/renderer/ore/ore_context.hpp>
 #include <rive/renderer/ore/ore_binding_map.hpp>

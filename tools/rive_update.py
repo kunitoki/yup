@@ -934,7 +934,7 @@ def print_summary(results: list[DependencyResult]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh vendored Rive and Rive-adjacent dependencies.")
-    parser.add_argument("--rive-ref", help="Rive runtime ref used for rive, rive_renderer, and rive_decoders.")
+    parser.add_argument("--rive-ref", help="Rive runtime ref used for rive and rive_decoders.")
     parser.add_argument("--dep", action="append", default=[], type=parse_dep_override, help="Override dependency ref as name=ref.")
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST), help="Path to the Rive update manifest.")
     parser.add_argument("--work-dir", default="build/rive-update", help="Directory for checkouts and generated intermediates.")

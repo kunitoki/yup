@@ -32,10 +32,20 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       harfbuzz sheenbidi_library yoga_library libhydrogen luau
+    dependencies:       rive_decoders harfbuzz sheenbidi_library yoga_library libhydrogen luau glad
     defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_LUAU=1 RIVE_ORE=1
-    appleFrameworks:    CoreText
-    searchpaths:        include
+    searchpaths:        include source source/renderer source/renderer/generated/shaders
+    appleFrameworks:    CoreText Metal QuartzCore
+    appleDefines:       ORE_BACKEND_METAL=1 RIVE_OBJC_EXCEPTIONS=1
+    iosDefines:         RIVE_IOS=1
+    iosSimDefines:      RIVE_IOS_SIMULATOR=1
+    linuxDefines:       ORE_BACKEND_GL=1
+    wasmDefines:        RIVE_WEBGL=1 ORE_BACKEND_GL=1
+    wasmOptions:        -sUSE_SDL=2
+    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
+    windowsDefines:     ORE_BACKEND_D3D11=1 ORE_BACKEND_GL=1
+    androidDefines:     RIVE_ANDROID=1 ORE_BACKEND_GL=1
+    androidLibs:        EGL GLESv3
 
   END_YUP_MODULE_DECLARATION
 
@@ -44,6 +54,102 @@
 
 #pragma once
 
+//==============================================================================
+/** Config: YUP_RIVE_USE_METAL
+    Enables the use of the Metal renderer on macOS (the default is enabled).
+*/
+#ifndef YUP_RIVE_USE_METAL
+#define YUP_RIVE_USE_METAL 1
+#endif
+
+/** Config: YUP_RIVE_USE_D3D
+    Enables the use of the Direct3D renderer on Windows (the default is enabled).
+*/
+#ifndef YUP_RIVE_USE_D3D
+#define YUP_RIVE_USE_D3D 1
+#endif
+
+/** Config: YUP_RIVE_USE_OPENGL
+    Enables the use of the OpenGL renderer on platform that support it.
+*/
+#ifndef YUP_RIVE_USE_OPENGL
+#define YUP_RIVE_USE_OPENGL 1
+#endif
+
+/** Config: YUP_RIVE_USE_DAWN
+    Enables the use of the Dawn renderer on platform that support it.
+*/
+#ifndef YUP_RIVE_USE_DAWN
+#define YUP_RIVE_USE_DAWN 0
+#endif
+
+//==============================================================================
+/** Config: YUP_RIVE_OPENGL_MAJOR
+    Enables a specific OpenGL major version. Must be at least 4.
+*/
+#ifndef YUP_RIVE_OPENGL_MAJOR
+#define YUP_RIVE_OPENGL_MAJOR 4
+#endif
+
+/** Config: YUP_RIVE_OPENGL_MINOR
+    Enables a specific OpenGL minor version. Must be at least 5 (OpenGL 4.5+, required for compute shaders).
+*/
+#ifndef YUP_RIVE_OPENGL_MINOR
+#define YUP_RIVE_OPENGL_MINOR 5
+#endif
+
+/** Config: YUP_RIVE_OPENGLES_MAJOR
+    Enables a specific OpenGL ES major version. Must be at least 3.
+*/
+#ifndef YUP_RIVE_OPENGLES_MAJOR
+#define YUP_RIVE_OPENGLES_MAJOR 3
+#endif
+
+/** Config: YUP_RIVE_OPENGLES_MINOR
+    Enables a specific OpenGL ES minor version. Must be at least 1 (OpenGL ES 3.1+, required for compute shaders).
+*/
+#ifndef YUP_RIVE_OPENGLES_MINOR
+#define YUP_RIVE_OPENGLES_MINOR 1
+#endif
+
+//==============================================================================
+
+#if YUP_RIVE_USE_OPENGL && YUP_APPLE
+#undef YUP_RIVE_USE_OPENGL
+#endif 
+
+#if YUP_RIVE_USE_OPENGL
+#if !defined(RIVE_DESKTOP_GL) && !defined(RIVE_WEBGL)
+#define RIVE_DESKTOP_GL 1
+#endif
+#endif
+
+#if !YUP_RIVE_USE_OPENGL
+#undef ORE_BACKEND_GL
+#endif
+
+#if YUP_RIVE_USE_DAWN
+#if !defined(RIVE_DAWN)
+#define RIVE_DAWN 1
+#endif
+#endif
+
+//==============================================================================
+
+#if !defined (YUP_RIVE_NO_INCLUDES)
+
+#if __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+#elif _MSC_VER
+ __pragma (warning (push))
+ __pragma (warning (disable: 4244))
+#endif
+
+// Core API
 #include "include/rive/text/utf.hpp"
 #include "include/rive/artboard.hpp"
 #include "include/rive/file.hpp"
@@ -54,3 +160,23 @@
 #include "include/rive/custom_property_string.hpp"
 #include "include/rive/animation/state_machine_instance.hpp"
 #include "include/rive/animation/state_machine_input_instance.hpp"
+
+// Public API
+#include "include/rive/renderer/texture.hpp"
+#include "include/rive/renderer/rive_render_image.hpp"
+#include "include/rive/renderer/render_context.hpp"
+#include "include/rive/renderer/render_context_impl.hpp"
+
+// Internals
+#include "source/renderer/rive_render_path.hpp"
+#include "source/renderer/rive_render_paint.hpp"
+
+#if __GNUC__
+ #pragma GCC diagnostic pop
+#elif __clang__
+ #pragma clang diagnostic pop
+#elif _MSC_VER
+ __pragma (warning (pop))
+#endif
+
+#endif // YUP_RIVE_NO_INCLUDES
