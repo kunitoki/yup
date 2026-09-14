@@ -1242,3 +1242,462 @@ TEST (ArtboardViewModelInstanceFixtureCoverage, EveryFixturePropertyTypeRoundTri
         }
     }
 }
+
+//==============================================================================
+// ArtboardViewModelInstance handle against tests/data/rive/viewmodel-lab.riv
+//
+// viewmodel-lab.riv's "Lab" schema is the property-type showcase of the suite:
+// its authored "Default" and "Preset" instances carry one value per property
+// plus nested viewmodels and a populated list, so the accessors can be checked
+// against authored content instead of values the test wrote itself. The
+// expected values below are the ones tools/rive_inspect.py reports.
+//==============================================================================
+
+namespace
+{
+
+const File findViewModelLabInstanceTestFile()
+{
+    // Try source-relative path first (works on desktop builds)
+    auto dir = File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory()
+                   .getChildFile ("data")
+                   .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir.getChildFile ("viewmodel-lab.riv");
+
+    dir = File::getCurrentWorkingDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getChildFile ("tests")
+              .getChildFile ("data")
+              .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir.getChildFile ("viewmodel-lab.riv");
+
+    return File ("/data/rive/viewmodel-lab.riv");
+}
+
+constexpr const char* viewModelLabSchemaName = "Lab";
+constexpr const char* viewModelLabRowSchemaName = "Row";
+constexpr const char* viewModelLabDefaultInstanceName = "Default";
+constexpr const char* viewModelLabPresetInstanceName = "Preset";
+
+// viewmodel-lab.riv ships ScriptAssets, which the Rive runtime can only import when
+// it is compiled with WITH_RIVE_SCRIPTING (the rive module's `defines:`): without it
+// a script's in-band FileAssetContents is routed to the previous asset's importer and
+// trips the assert in FileAssetImporter::onFileAssetContents.
+constexpr bool isViewModelLabInstanceScriptingAvailable() noexcept
+{
+#ifdef WITH_RIVE_SCRIPTING
+    return true;
+#else
+    return false;
+#endif
+}
+
+} // namespace
+
+class ViewModelLabInstanceTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        if (! isViewModelLabInstanceScriptingAvailable())
+        {
+            GTEST_SKIP() << "tests/data/rive/viewmodel-lab.riv ships ScriptAssets, which needs Rive built with WITH_RIVE_SCRIPTING";
+            return;
+        }
+
+        const auto file = findViewModelLabInstanceTestFile();
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-lab.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+
+        defaultInstance = artboardFile->createArtboardViewModelInstance (viewModelLabSchemaName, viewModelLabDefaultInstanceName);
+        presetInstance = artboardFile->createArtboardViewModelInstance (viewModelLabSchemaName, viewModelLabPresetInstanceName);
+
+        if (defaultInstance == nullptr || presetInstance == nullptr)
+            GTEST_SKIP() << "Failed to create the ViewModel Lab instances from the test asset";
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    ArtboardViewModelInstance::Ptr defaultInstance;
+    ArtboardViewModelInstance::Ptr presetInstance;
+};
+
+//==============================================================================
+
+TEST_F (ViewModelLabInstanceTests, AuthoredDefaultInstanceExposesItsAuthoredValues)
+{
+    EXPECT_EQ (String ("Lab"), defaultInstance->getName());
+    EXPECT_EQ (artboardFile.get(), defaultInstance->getArtboardFile());
+
+    EXPECT_EQ (std::optional<String> ("ViewModel Lab"), defaultInstance->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<double> (3.0), defaultInstance->getNumberProperty ("count"));
+    EXPECT_NEAR (0.42, defaultInstance->getNumberProperty ("progress").value_or (-1.0), 1e-6);
+    EXPECT_EQ (std::optional<bool> (true), defaultInstance->getBoolProperty ("enabled"));
+    EXPECT_EQ (std::optional<String> ("Running"), defaultInstance->getEnumProperty ("status"));
+    EXPECT_EQ (std::optional<String> ("edit me from the host"), defaultInstance->getStringProperty ("note"));
+
+    const auto accent = defaultInstance->getColorProperty ("accent");
+    ASSERT_NE (std::nullopt, accent);
+    EXPECT_EQ (0xff57a5e0u, accent->getARGB());
+}
+
+TEST_F (ViewModelLabInstanceTests, AuthoredPresetInstanceExposesItsOwnValues)
+{
+    EXPECT_EQ (std::optional<String> ("Preset data"), presetInstance->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<double> (99.0), presetInstance->getNumberProperty ("count"));
+    EXPECT_EQ (std::optional<double> (1.0), presetInstance->getNumberProperty ("progress"));
+    EXPECT_EQ (std::optional<bool> (false), presetInstance->getBoolProperty ("enabled"));
+    EXPECT_EQ (std::optional<String> ("Failed"), presetInstance->getEnumProperty ("status"));
+    EXPECT_EQ (std::optional<String> ("preset note"), presetInstance->getStringProperty ("note"));
+
+    const auto accent = presetInstance->getColorProperty ("accent");
+    ASSERT_NE (std::nullopt, accent);
+    EXPECT_EQ (0xffe85656u, accent->getARGB());
+}
+
+TEST_F (ViewModelLabInstanceTests, NestedViewModelPropertiesResolveToTheirOwnSchema)
+{
+    auto details = defaultInstance->getNestedInstance ("details");
+    ASSERT_NE (nullptr, details.get());
+    EXPECT_EQ (String ("Details"), details->getName());
+    EXPECT_EQ (std::optional<String> ("nested view model"), details->getStringProperty ("note"));
+    EXPECT_EQ (std::optional<double> (62.5), details->getNumberProperty ("weight"));
+
+    const auto tint = details->getColorProperty ("tint");
+    ASSERT_NE (std::nullopt, tint);
+    EXPECT_EQ (0xfff5b02eu, tint->getARGB());
+
+    EXPECT_EQ (std::optional<String> ("nested view model"), defaultInstance->getStringProperty ("details.note"));
+
+    auto panelData = defaultInstance->getNestedInstance ("panelData");
+    ASSERT_NE (nullptr, panelData.get());
+    EXPECT_EQ (String ("Panel"), panelData->getName());
+    EXPECT_EQ (std::optional<String> ("Panel artboard"), panelData->getStringProperty ("caption"));
+
+    // Neither a value-carrying property nor a list resolves to a nested handle.
+    EXPECT_EQ (nullptr, defaultInstance->getNestedInstance ("title").get());
+    EXPECT_EQ (nullptr, defaultInstance->getNestedInstance ("rows").get());
+}
+
+TEST_F (ViewModelLabInstanceTests, AuthoredListItemsExposeTheirValues)
+{
+    ASSERT_EQ (3, defaultInstance->getListSize ("rows"));
+
+    const String expectedLabels[] = { "Alpha", "Beta", "Gamma" };
+    const double expectedAmounts[] = { 12.5, 240.0, -3.75 };
+    const bool expectedDone[] = { false, true, false };
+
+    for (int i = 0; i < 3; ++i)
+    {
+        auto item = defaultInstance->getListItem ("rows", i);
+        ASSERT_NE (nullptr, item.get()) << i;
+        EXPECT_EQ (String ("Row"), item->getName());
+        EXPECT_EQ (std::optional<String> (expectedLabels[i]), item->getStringProperty ("label"));
+        EXPECT_EQ (std::optional<double> (expectedAmounts[i]), item->getNumberProperty ("amount"));
+        EXPECT_EQ (std::optional<bool> (expectedDone[i]), item->getBoolProperty ("done"));
+
+        EXPECT_TRUE (defaultInstance->hasProperty ("rows." + String (i)));
+    }
+
+    EXPECT_EQ (nullptr, defaultInstance->getListItem ("rows", 3).get());
+    EXPECT_EQ (nullptr, defaultInstance->getListItem ("rows", -1).get());
+}
+
+TEST_F (ViewModelLabInstanceTests, AuthoredListContentDiffersPerInstance)
+{
+    EXPECT_EQ (3, defaultInstance->getListSize ("rows"));
+    EXPECT_EQ (1, presetInstance->getListSize ("rows"));
+
+    auto presetItem = presetInstance->getListItem ("rows", 0);
+    ASSERT_NE (nullptr, presetItem.get());
+    EXPECT_EQ (String ("Row"), presetItem->getName());
+    EXPECT_EQ (std::optional<String> ("Alpha"), presetItem->getStringProperty ("label"));
+}
+
+TEST_F (ViewModelLabInstanceTests, TriggerIsReportedButNotWritable)
+{
+    EXPECT_TRUE (defaultInstance->hasProperty ("ping"));
+    EXPECT_TRUE (defaultInstance->getProperty ("ping").isVoid());
+    EXPECT_EQ (std::nullopt, defaultInstance->getBoolProperty ("ping"));
+    EXPECT_EQ (std::nullopt, defaultInstance->getNumberProperty ("ping"));
+    EXPECT_EQ (std::nullopt, defaultInstance->getStringProperty ("ping"));
+
+    EXPECT_TRUE (defaultInstance->trigger ("ping"));
+    EXPECT_FALSE (defaultInstance->trigger ("title"));
+    EXPECT_FALSE (defaultInstance->trigger ("nonexistentProperty"));
+    EXPECT_FALSE (defaultInstance->setProperty ("ping", var (true)));
+}
+
+TEST_F (ViewModelLabInstanceTests, ContainerPropertiesExposeNoValue)
+{
+    // "details"/"panelData" are nested viewmodels, "panel" an artboard reference and
+    // "icon" an asset image: all four carry no readable value.
+    const String containerPaths[] = { "icon", "panel", "details", "panelData" };
+
+    for (const auto& path : containerPaths)
+    {
+        EXPECT_TRUE (defaultInstance->hasProperty (path)) << path;
+        EXPECT_TRUE (defaultInstance->getProperty (path).isVoid()) << path;
+        EXPECT_EQ (std::nullopt, defaultInstance->getBoolProperty (path)) << path;
+        EXPECT_EQ (std::nullopt, defaultInstance->getNumberProperty (path)) << path;
+        EXPECT_EQ (std::nullopt, defaultInstance->getStringProperty (path)) << path;
+        EXPECT_EQ (std::nullopt, defaultInstance->getColorProperty (path)) << path;
+        EXPECT_EQ (std::nullopt, defaultInstance->getEnumProperty (path)) << path;
+
+        EXPECT_EQ (-1, defaultInstance->getListSize (path)) << path;
+        EXPECT_FALSE (defaultInstance->setProperty (path, var (1))) << path;
+    }
+
+    // "rows" is the one list-typed container: it reports its size but still no value.
+    EXPECT_TRUE (defaultInstance->hasProperty ("rows"));
+    EXPECT_TRUE (defaultInstance->getProperty ("rows").isVoid());
+    EXPECT_EQ (std::nullopt, defaultInstance->getNumberProperty ("rows"));
+    EXPECT_EQ (3, defaultInstance->getListSize ("rows"));
+    EXPECT_FALSE (defaultInstance->setProperty ("rows", var (1)));
+
+    EXPECT_EQ (-1, defaultInstance->getListSize ("title"));
+    EXPECT_EQ (-1, defaultInstance->getListSize ("nonexistentProperty"));
+}
+
+TEST_F (ViewModelLabInstanceTests, EnumWritesAcceptDisplayValueAndKey)
+{
+    EXPECT_TRUE (defaultInstance->setEnumProperty ("status", "failed"));
+    EXPECT_EQ (std::optional<String> ("Failed"), defaultInstance->getEnumProperty ("status"));
+
+    // The display value and the authored key address the same option.
+    EXPECT_TRUE (defaultInstance->setEnumProperty ("status", "Idle"));
+    EXPECT_EQ (std::optional<String> ("Idle"), defaultInstance->getEnumProperty ("status"));
+
+    EXPECT_TRUE (defaultInstance->setProperty ("status", var (2)));
+    EXPECT_EQ (std::optional<String> ("Failed"), defaultInstance->getEnumProperty ("status"));
+
+    EXPECT_FALSE (defaultInstance->setEnumProperty ("status", "nonexistentOption"));
+    EXPECT_FALSE (defaultInstance->setProperty ("status", var (99)));
+    EXPECT_EQ (std::optional<String> ("Failed"), defaultInstance->getEnumProperty ("status"));
+}
+
+TEST_F (ViewModelLabInstanceTests, InstancesCreatedFromTheSameSchemaAreIndependent)
+{
+    auto fresh = artboardFile->createArtboardViewModelInstance (viewModelLabSchemaName);
+    ASSERT_NE (nullptr, fresh.get());
+    EXPECT_EQ (String ("Lab"), fresh->getName());
+
+    EXPECT_TRUE (fresh->setStringProperty ("title", "fresh"));
+    EXPECT_TRUE (fresh->setNumberProperty ("count", 11.0));
+
+    EXPECT_EQ (std::optional<String> ("fresh"), fresh->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<String> ("ViewModel Lab"), defaultInstance->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<double> (11.0), fresh->getNumberProperty ("count"));
+    EXPECT_EQ (std::optional<double> (3.0), defaultInstance->getNumberProperty ("count"));
+
+    // The authored list of the cloned instance is not shared with the fresh one.
+    const int authoredListSize = defaultInstance->getListSize ("rows");
+    const int freshListSize = fresh->getListSize ("rows");
+    ASSERT_EQ (3, authoredListSize);
+
+    EXPECT_TRUE (fresh->addListItem ("rows", viewModelLabRowSchemaName));
+    EXPECT_EQ (freshListSize + 1, fresh->getListSize ("rows"));
+    EXPECT_EQ (authoredListSize, defaultInstance->getListSize ("rows"));
+}
+
+TEST_F (ViewModelLabInstanceTests, PropertyChangedCallbackReportsNestedAndStructuralChanges)
+{
+    StringArray paths;
+    Array<var> values;
+
+    defaultInstance->setPropertyChangedCallback ([&] (ArtboardViewModelInstance&, const String& path, const var& value)
+                                                 {
+                                                     paths.add (path);
+                                                     values.add (value);
+                                                 });
+
+    EXPECT_TRUE (defaultInstance->setNumberProperty ("details.weight", 12.0));
+    EXPECT_TRUE (defaultInstance->addListItem ("rows", viewModelLabRowSchemaName));
+
+    ASSERT_TRUE (paths.contains ("details.weight"));
+    EXPECT_EQ (var (12.0), values[paths.indexOf ("details.weight")]);
+
+    // Structural changes report the list path and an empty value.
+    ASSERT_TRUE (paths.contains ("rows"));
+    EXPECT_TRUE (values[paths.indexOf ("rows")].isVoid());
+
+    EXPECT_EQ (4, defaultInstance->getListSize ("rows"));
+
+    defaultInstance->setPropertyChangedCallback ({});
+}
+
+//==============================================================================
+// Artboard binding against tests/data/rive/viewmodel-lab.riv
+//==============================================================================
+
+class ViewModelLabBindingTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        if (! isViewModelLabInstanceScriptingAvailable())
+        {
+            GTEST_SKIP() << "tests/data/rive/viewmodel-lab.riv ships ScriptAssets, which needs Rive built with WITH_RIVE_SCRIPTING";
+            return;
+        }
+
+        const auto file = findViewModelLabInstanceTestFile();
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-lab.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+
+        artboard = std::make_unique<Artboard> ("viewModelLabBind");
+        artboard->setFile (artboardFile, "ViewModel Lab");
+        artboard->setFitting (std::nullopt);
+        artboard->setBounds (0.0f, 0.0f, 920.0f, 960.0f);
+    }
+
+    ArtboardViewModelInstance::Ptr createInstance (const char* instanceName) const
+    {
+        return artboardFile->createArtboardViewModelInstance (viewModelLabSchemaName, instanceName);
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<Artboard> artboard;
+};
+
+//==============================================================================
+
+TEST_F (ViewModelLabBindingTests, ArtboardIsDesignedAgainstTheLabViewModel)
+{
+    EXPECT_EQ (String ("Lab"), artboard->getViewModelName());
+}
+
+TEST_F (ViewModelLabBindingTests, BindingTheAuthoredPresetInstanceSurvivesAdvances)
+{
+    auto instance = createInstance (viewModelLabPresetInstanceName);
+    ASSERT_NE (nullptr, instance.get());
+
+    EXPECT_TRUE (artboard->bindViewModelInstance (instance));
+    EXPECT_EQ (instance.get(), artboard->getBoundViewModelInstance().get());
+
+    // Advancing exercises the nested artboards, the row list and the data bindings.
+    for (int frame = 0; frame < 30; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_EQ (std::optional<String> ("Preset data"), instance->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<String> ("Failed"), instance->getEnumProperty ("status"));
+    EXPECT_EQ (1, instance->getListSize ("rows"));
+}
+
+TEST_F (ViewModelLabBindingTests, WritesAndListMutationsWhileBoundApplyOnAdvance)
+{
+    auto instance = createInstance (viewModelLabDefaultInstanceName);
+    ASSERT_NE (nullptr, instance.get());
+    ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+
+    EXPECT_TRUE (instance->setStringProperty ("title", "bound"));
+    EXPECT_TRUE (instance->setNumberProperty ("count", 7.0));
+    EXPECT_TRUE (instance->setNumberProperty ("progress", 0.75));
+    EXPECT_TRUE (instance->setBoolProperty ("enabled", false));
+    EXPECT_TRUE (instance->setEnumProperty ("status", "Failed"));
+    EXPECT_TRUE (instance->trigger ("ping"));
+    EXPECT_TRUE (instance->setNumberProperty ("details.weight", 1.5));
+    EXPECT_TRUE (instance->addListItem ("rows", viewModelLabRowSchemaName));
+    EXPECT_TRUE (instance->swapListItems ("rows", 0, 3));
+    EXPECT_TRUE (instance->removeListItem ("rows", 3));
+
+    EXPECT_EQ (3, instance->getListSize ("rows"));
+
+    for (int frame = 0; frame < 20; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_EQ (std::optional<String> ("bound"), instance->getStringProperty ("title"));
+    EXPECT_EQ (std::optional<double> (7.0), instance->getNumberProperty ("count"));
+    EXPECT_EQ (std::optional<bool> (false), instance->getBoolProperty ("enabled"));
+    EXPECT_EQ (std::optional<String> ("Failed"), instance->getEnumProperty ("status"));
+    EXPECT_EQ (std::optional<double> (1.5), instance->getNumberProperty ("details.weight"));
+}
+
+TEST_F (ViewModelLabBindingTests, ClearingTheAuthoredListWhileBoundKeepsAdvancing)
+{
+    auto instance = createInstance (viewModelLabDefaultInstanceName);
+    ASSERT_NE (nullptr, instance.get());
+    ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+
+    instance->clearListItems ("rows");
+    EXPECT_EQ (0, instance->getListSize ("rows"));
+
+    for (int frame = 0; frame < 10; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    // The list can be repopulated on the bound instance again.
+    EXPECT_TRUE (instance->addListItem ("rows", viewModelLabRowSchemaName));
+    EXPECT_EQ (1, instance->getListSize ("rows"));
+
+    for (int frame = 0; frame < 10; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+}
+
+TEST_F (ViewModelLabBindingTests, UnbindingDropsTheBoundInstance)
+{
+    auto instance = createInstance (viewModelLabDefaultInstanceName);
+    ASSERT_NE (nullptr, instance.get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    artboard->unbindViewModelInstance();
+
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+}
+
+// Disabled: advancing after the instance is unbound crashes inside Yoga.
+TEST_F (ViewModelLabBindingTests, DISABLED_UnbindingAndAdvancingKeepsTheArtboardUsable)
+{
+    auto instance = createInstance (viewModelLabDefaultInstanceName);
+    ASSERT_NE (nullptr, instance.get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (instance));
+    artboard->unbindViewModelInstance();
+
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_TRUE (artboard->bindViewModelInstance (instance));
+    EXPECT_EQ (instance.get(), artboard->getBoundViewModelInstance().get());
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+}

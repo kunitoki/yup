@@ -391,7 +391,7 @@ namespace
 
 const StringArray& allSchemaFixtureFileNames()
 {
-    static const StringArray names { "data-binding.riv", "game-animation.riv", "layout-ui.riv", "responsive-sliders.riv" };
+    static const StringArray names { "data-binding.riv", "game-animation.riv", "layout-ui.riv", "responsive-sliders.riv", "viewmodel-lab.riv" };
     return names;
 }
 
@@ -420,6 +420,19 @@ const File findAllSchemaFixturesDirectory()
     return File ("/data/rive");
 }
 
+// viewmodel-lab.riv ships ScriptAssets, which the Rive runtime can only import when
+// it is compiled with WITH_RIVE_SCRIPTING (the rive module's `defines:`): without it
+// a script's in-band FileAssetContents is routed to the previous asset's importer and
+// trips the assert in FileAssetImporter::onFileAssetContents.
+constexpr bool isViewModelLabSchemaScriptingAvailable() noexcept
+{
+#ifdef WITH_RIVE_SCRIPTING
+    return true;
+#else
+    return false;
+#endif
+}
+
 } // namespace
 
 TEST (ArtboardViewModelFixtureCoverage, EverySchemaPropertyReportsAConsistentType)
@@ -430,6 +443,11 @@ TEST (ArtboardViewModelFixtureCoverage, EverySchemaPropertyReportsAConsistentTyp
     {
         const auto file = directory.getChildFile (fileName);
         if (! file.existsAsFile())
+            continue;
+
+        // A scripting-less Rive build cannot import the ScriptAssets of this
+        // fixture, so it is covered by ViewModelLabSchemaTests instead.
+        if (fileName == "viewmodel-lab.riv" && ! isViewModelLabSchemaScriptingAvailable())
             continue;
 
         ::testing::NiceMock<MockRiveFactory> factory;
@@ -472,6 +490,232 @@ TEST (ArtboardViewModelFixtureCoverage, EverySchemaPropertyReportsAConsistentTyp
 
             EXPECT_FALSE (viewModel->hasProperty ("definitelyNotAProperty"));
             EXPECT_EQ (ArtboardViewModel::PropertyType::none, viewModel->getProperty ("definitelyNotAProperty").type);
+        }
+    }
+}
+
+//==============================================================================
+// ArtboardViewModel schema handle against tests/data/rive/viewmodel-lab.riv
+//
+// viewmodel-lab.riv is the ViewModel coverage fixture: four schemas authored in
+// a known order, authored instances per schema, and a "Lab" schema declaring
+// every property type the API models. The expected content asserted below is
+// the one tools/rive_inspect.py reports for the fixture.
+//==============================================================================
+
+namespace
+{
+
+const File findViewModelLabSchemaTestFile()
+{
+    // Try source-relative path first (works on desktop builds)
+    auto dir = File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory()
+                   .getChildFile ("data")
+                   .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir.getChildFile ("viewmodel-lab.riv");
+
+    dir = File::getCurrentWorkingDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getChildFile ("tests")
+              .getChildFile ("data")
+              .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir.getChildFile ("viewmodel-lab.riv");
+
+    return File ("/data/rive/viewmodel-lab.riv");
+}
+
+} // namespace
+
+class ViewModelLabSchemaTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        if (! isViewModelLabSchemaScriptingAvailable())
+        {
+            GTEST_SKIP() << "tests/data/rive/viewmodel-lab.riv ships ScriptAssets, which needs Rive built with WITH_RIVE_SCRIPTING";
+            return;
+        }
+
+        const auto file = findViewModelLabSchemaTestFile();
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-lab.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+};
+
+//==============================================================================
+
+TEST_F (ViewModelLabSchemaTests, FileReportsEverySchemaInFileOrder)
+{
+    ASSERT_EQ (4, artboardFile->getNumViewModels());
+
+    const auto names = artboardFile->getViewModelNames();
+    ASSERT_EQ (4, names.size());
+    EXPECT_EQ (String ("Details"), names[0]);
+    EXPECT_EQ (String ("Row"), names[1]);
+    EXPECT_EQ (String ("Panel"), names[2]);
+    EXPECT_EQ (String ("Lab"), names[3]);
+}
+
+TEST_F (ViewModelLabSchemaTests, LabSchemaDeclaresEveryPropertyType)
+{
+    auto viewModel = artboardFile->getArtboardViewModel ("Lab");
+    ASSERT_NE (nullptr, viewModel.get());
+    EXPECT_EQ (String ("Lab"), viewModel->getName());
+    EXPECT_EQ (artboardFile.get(), viewModel->getArtboardFile());
+
+    struct ExpectedProperty
+    {
+        const char* name;
+        ArtboardViewModel::PropertyType type;
+    };
+
+    const ExpectedProperty expected[] = {
+        { "title", ArtboardViewModel::PropertyType::string },
+        { "count", ArtboardViewModel::PropertyType::number },
+        { "progress", ArtboardViewModel::PropertyType::number },
+        { "enabled", ArtboardViewModel::PropertyType::boolean },
+        { "accent", ArtboardViewModel::PropertyType::color },
+        { "status", ArtboardViewModel::PropertyType::enumType },
+        { "ping", ArtboardViewModel::PropertyType::trigger },
+        { "note", ArtboardViewModel::PropertyType::string },
+        { "details", ArtboardViewModel::PropertyType::viewModel },
+        { "rows", ArtboardViewModel::PropertyType::list },
+        { "icon", ArtboardViewModel::PropertyType::assetImage },
+        { "panel", ArtboardViewModel::PropertyType::artboard },
+        { "panelData", ArtboardViewModel::PropertyType::viewModel },
+    };
+
+    ASSERT_EQ (13, viewModel->getNumProperties());
+
+    int index = 0;
+    for (const auto& expectedProperty : expected)
+    {
+        const auto info = viewModel->getPropertyAt (index++);
+
+        EXPECT_EQ (String (expectedProperty.name), info.name);
+        EXPECT_EQ (expectedProperty.type, info.type);
+        EXPECT_TRUE (viewModel->hasProperty (expectedProperty.name));
+    }
+}
+
+TEST_F (ViewModelLabSchemaTests, EnumPropertyExposesItsDisplayValues)
+{
+    auto viewModel = artboardFile->getArtboardViewModel ("Lab");
+    ASSERT_NE (nullptr, viewModel.get());
+
+    const auto status = viewModel->getProperty ("status");
+    EXPECT_EQ (ArtboardViewModel::PropertyType::enumType, status.type);
+
+    ASSERT_EQ (3, status.enumValues.size());
+    EXPECT_EQ (String ("Idle"), status.enumValues[0]);
+    EXPECT_EQ (String ("Running"), status.enumValues[1]);
+    EXPECT_EQ (String ("Failed"), status.enumValues[2]);
+
+    // Options are only ever reported for enum properties.
+    EXPECT_TRUE (viewModel->getProperty ("title").enumValues.isEmpty());
+    EXPECT_TRUE (viewModel->getProperty ("count").enumValues.isEmpty());
+    EXPECT_TRUE (viewModel->getProperty ("ping").enumValues.isEmpty());
+}
+
+TEST_F (ViewModelLabSchemaTests, RowSchemaPropertiesAreInputs)
+{
+    auto viewModel = artboardFile->getArtboardViewModel ("Row");
+    ASSERT_NE (nullptr, viewModel.get());
+    ASSERT_EQ (4, viewModel->getNumProperties());
+
+    struct ExpectedProperty
+    {
+        const char* name;
+        ArtboardViewModel::PropertyType type;
+        bool isInput;
+    };
+
+    const ExpectedProperty expected[] = {
+        { "label", ArtboardViewModel::PropertyType::string, true },
+        { "amount", ArtboardViewModel::PropertyType::number, true },
+        { "done", ArtboardViewModel::PropertyType::boolean, true },
+        { "index", ArtboardViewModel::PropertyType::symbolListIndex, false },
+    };
+
+    int index = 0;
+    for (const auto& expectedProperty : expected)
+    {
+        const auto info = viewModel->getPropertyAt (index++);
+
+        EXPECT_EQ (String (expectedProperty.name), info.name);
+        EXPECT_EQ (expectedProperty.type, info.type);
+        EXPECT_EQ (expectedProperty.isInput, info.isInput);
+        EXPECT_FALSE (info.isOutput);
+    }
+
+    // "Lab" drives an artboard of its own, so nothing is annotated as a binding.
+    auto lab = artboardFile->getArtboardViewModel ("Lab");
+    ASSERT_NE (nullptr, lab.get());
+
+    for (int i = 0; i < lab->getNumProperties(); ++i)
+    {
+        EXPECT_FALSE (lab->getPropertyAt (i).isInput);
+        EXPECT_FALSE (lab->getPropertyAt (i).isOutput);
+    }
+}
+
+TEST_F (ViewModelLabSchemaTests, EverySchemaReportsItsAuthoredInstances)
+{
+    const auto expectInstanceNames = [] (const ArtboardViewModel::Ptr& viewModel, const StringArray& expected)
+    {
+        ASSERT_NE (nullptr, viewModel.get());
+
+        const auto names = viewModel->getInstanceNames();
+        ASSERT_EQ (expected.size(), names.size());
+        EXPECT_EQ (expected.size(), viewModel->getNumInstances());
+
+        for (int i = 0; i < expected.size(); ++i)
+            EXPECT_EQ (expected[i], names[i]);
+    };
+
+    expectInstanceNames (artboardFile->getArtboardViewModel ("Details"), StringArray { "Default" });
+    expectInstanceNames (artboardFile->getArtboardViewModel ("Row"), StringArray ({ "Default", "Alpha", "Beta", "Gamma" }));
+    expectInstanceNames (artboardFile->getArtboardViewModel ("Panel"), StringArray { "Default" });
+    expectInstanceNames (artboardFile->getArtboardViewModel ("Lab"), StringArray ({ "Default", "Preset" }));
+}
+
+TEST_F (ViewModelLabSchemaTests, EveryAuthoredInstanceClonesUnderItsSchemaName)
+{
+    for (const auto& schemaName : artboardFile->getViewModelNames())
+    {
+        auto viewModel = artboardFile->getArtboardViewModel (schemaName);
+        ASSERT_NE (nullptr, viewModel.get());
+
+        for (const auto& instanceName : viewModel->getInstanceNames())
+        {
+            auto instance = artboardFile->createArtboardViewModelInstance (viewModel->getName(), instanceName);
+            ASSERT_NE (nullptr, instance.get()) << instanceName;
+            EXPECT_EQ (viewModel->getName(), instance->getName());
+            EXPECT_EQ (artboardFile.get(), instance->getArtboardFile());
         }
     }
 }

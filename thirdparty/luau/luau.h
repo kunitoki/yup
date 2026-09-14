@@ -32,7 +32,7 @@
     website:          https://github.com/luau-lang/luau
     license:          MIT
 
-    defines:          LUA_USE_LONGJMP=1 RIVE_LUAU=1
+    defines:          LUA_USE_LONGJMP=1
     searchpaths:      upstream/VM/include upstream/Common/include upstream/VM/src
 
   END_YUP_MODULE_DECLARATION

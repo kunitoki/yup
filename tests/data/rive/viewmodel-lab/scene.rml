@@ -1,0 +1,1191 @@
+<!--
+
+  ViewModel Lab — a fixture for host-side ViewModel instance editing.
+
+  A host (unit tests, a demo app, the YUP bridge) can read and write *every*
+  view model property type here and watch the picture follow: each value below
+  is bound into the UI, so a write that took effect is a pixel that changed and
+  `--data` / `--data-dump` can assert on it.
+
+  Layout: a header bar (title, subtitle, the two colour swatches, live `count`),
+  then two columns of cards, then a row pairing the nested artboard with the
+  list.
+
+    header    `title`, `count`, `accent` and (nested) `details.tint` swatches
+    col A     strings & numbers — `note` + `count` values, and the three
+              write-back pills (`count +1`, `write note`, `status: failed`)
+              nested view model — `details` through depth-2 bind paths
+              asset image — `icon` bound to Image.assetId
+              trigger — `ping` bound to the Flash state
+    col B     progress — number -> bound width (DataConverterRangeMapper)
+              status — custom enum -> EnumToUint chain + a state per value
+              enabled — boolean -> two authored transitions + a write-back click
+              list length — DataConverterListToLength -> ToString chain
+    bottom    artboard `panel` (plus `panelData`, its own instance) and the list:
+              `rows` — three Row instances, each with its own label, amount,
+              done flag and `itemIndex`
+
+  Writes that travel the other way — scene -> host — are the four listeners in
+  the state machine, plus the row artboard's `done` flags. Click them and read
+  the instance back:
+
+    - `count +1` pill      `count`   += 1      scripted listener action
+    - `write note` pill    `note`    = literal ListenerViewModelChange
+    - `status: failed`     `status`  = failed  ListenerViewModelChange
+    - the switch           `enabled` = not it  scripted listener action
+
+  The two scripted ones are scripts for a reason worth knowing: a converter on
+  the *read* context of a `ListenerViewModelChange` does not survive — the read
+  resolves to nothing and the write lands as the bindable's default — so
+  "negate the current value" and "add one to the current value" cannot be built
+  from `DataConverterBooleanNegate`/`DataConverterOperationValue`. A plain
+  two-context bindable with no converter does pass the source's value through,
+  and a literal write (`propertyValue=` on the bindable, no read context) is
+  reliable; see count_plus_one.luau and toggle_enabled.luau.
+
+  Four things worth knowing when testing:
+    - every artboard needs a `defaultStateMachineId`, or no bind is ever
+      pushed and nothing here reacts;
+    - `changed` in a `--data-dump` is cumulative since bind, and only tracks
+      writes *into* a property — an inert bind reads identical to a live one;
+    - `--data=` paths are relative to the bound instance and every segment is a
+      property *name*: `progress=1`, `details/weight=11.5`, `status=failed`;
+    - a `Text` (or `Shape`, or `Image`) only joins its parent's flex flow if
+      it carries a `LayoutParticipant`. Without one it keeps its own x/y --
+      measured from the parent's top-left -- and is stretched to the parent's
+      box, so every sibling stacks in the same corner and the padding is
+      ignored. Every `Text` here has one, `fixed` to the width and height on
+      the `Text` itself; keep the two in step when editing;
+    - in this format a child wider than its container's content box is not
+      clipped, it is *squeezed*: a `Text` whose authored width overflows (the
+      card's padding and the row gaps count) collapses to a one-character slot
+      and then wraps one letter per line. Every width below was worked out
+      against its container and there is slack everywhere — the comments spell
+      the arithmetic out. Keep that true when editing, or the text goes
+      vertical again.
+
+-->
+<Rive version="1" kind="fragment">
+    <Artboard defaultStateMachineId="1:1" viewModelId="5:1" viewModelInstanceId="5:2" clip="true" width="920" height="960" styleId="0:2" name="ViewModel Lab" id="0:1">
+        <Fill name="Background">
+            <SolidColor colorValue="FF11141A" name="Color"/>
+        </Fill>
+        <LayoutComponentStyle minWidth="360" minWidthUnitsValue="points" flexDirectionValue="column" layoutAlignmentType="topLeft" name="Lab Style" id="0:2"/>
+        <ElasticScrollPhysics name="Scroll Physics" id="0:610"/>
+
+        <!-- The page scrolls: it hugs its own height, so it grows past the
+             artboard as cards stack, and the artboard clips what hangs off. -->
+        <LayoutComponent clip="false" styleId="0:601" name="Page" id="0:600">
+            <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="14" gapVerticalUnitsValue="points" paddingLeft="20" paddingRight="20" paddingTop="20" paddingBottom="20" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" name="Page Style" id="0:601"/>
+            <ScrollConstraint directionValue="vertical" physicsId="0:610" name="Scroll"/>
+
+            <!-- ============================== header ============================== -->
+            <!-- 920 wide, 20 of padding a side, so 848 of content: 440 + 120 + 200. -->
+            <LayoutComponent clip="false" height="84" styleId="0:101" name="Header" id="0:100">
+                <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="10" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Header Style" id="0:101"/>
+                <Fill name="Fill">
+                    <SolidColor colorValue="FF171B22" name="Color"/>
+                </Fill>
+                <LayoutComponent clip="false" height="52" styleId="0:103" name="Title Col" id="0:102">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="52" minHeightUnitsValue="points" minWidth="240" minWidthUnitsValue="points" gapVertical="6" gapVerticalUnitsValue="points" name="Title Col Style" id="0:103"/>
+                    <Text width="424" height="26" sizingValue="autoHeight" name="Title" id="0:104">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="424" name="Title Layout"/>
+                        <TextStylePaint fontSize="20" fontAssetId="7:3" familyName="Karla" name="Title Paint" id="0:105">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:105" text="ViewModel Lab" name="Run" id="0:106">
+                            <DataBindContext sourcePathIds="5:1-5:3" propertyKey="268"/>
+                        </TextValueRun>
+                    </Text>
+                    <Text width="424" height="18" sizingValue="autoHeight" name="Subtitle" id="0:107">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="424" name="Subtitle Layout"/>
+                        <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Subtitle Paint" id="0:108">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF8A93A5" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:108" text="every view model property type, bound to the picture" name="Run" id="0:109"/>
+                    </Text>
+                </LayoutComponent>
+                <!-- The two colour properties: `accent`, and `details.tint` through the
+                     nested view model. 28 + 8 + 28 = 64 wide, 28 + 6 + 14 = 48 tall. -->
+                <LayoutComponent clip="false" height="28" styleId="0:131" name="Swatch Col" id="0:130">
+                    <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="28" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Swatch Col Style" id="0:131"/>
+                    <LayoutComponent clip="false" width="64" height="28" styleId="0:133" name="Swatch Row" id="0:132">
+                        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" gapHorizontal="8" gapHorizontalUnitsValue="points" name="Swatch Row Style" id="0:133"/>
+                        <LayoutComponent clip="true" width="28" height="28" styleId="0:141" name="Accent Swatch" id="0:140">
+                            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="6" cornerRadiusTR="6" cornerRadiusBL="6" cornerRadiusBR="6" name="Swatch Style" id="0:141"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF57A5E0" name="Color" id="0:142">
+                                    <DataBindContext sourcePathIds="5:1-5:7" propertyKey="37"/>
+                                </SolidColor>
+                            </Fill>
+                        </LayoutComponent>
+                        <LayoutComponent clip="true" width="28" height="28" styleId="0:145" name="Tint Swatch" id="0:144">
+                            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="6" cornerRadiusTR="6" cornerRadiusBL="6" cornerRadiusBR="6" name="Swatch Style" id="0:145"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FFF5B02E" name="Color" id="0:146">
+                                    <DataBindContext sourcePathIds="5:1-5:11-5:34" propertyKey="37"/>
+                                </SolidColor>
+                            </Fill>
+                        </LayoutComponent>
+                    </LayoutComponent>
+                    <Text width="112" height="14" sizingValue="autoHeight" name="Swatch Label" id="0:148">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="112" name="Swatch Label Layout"/>
+                        <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Swatch Label Paint" id="0:149">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF8A93A5" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:149" text="accent · tint" name="Run" id="0:150"/>
+                    </Text>
+                </LayoutComponent>
+            </LayoutComponent>
+
+            <!-- ========================== two columns of cards ========================== -->
+            <!-- 848 of content: column A is 424 fixed, column B takes the remaining 410+32. -->
+            <LayoutComponent clip="false" height="584" styleId="0:201" name="Columns" id="0:200">
+                <LayoutComponentStyle flexDirectionValue="row" flexWrapValue="wrap" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapHorizontal="14" gapHorizontalUnitsValue="points" gapVertical="12" gapVerticalUnitsValue="points" name="Columns Style" id="0:201"/>
+
+                <LayoutComponent clip="false" width="0" styleId="0:211" name="Col A" id="0:210">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minWidth="380" minWidthUnitsValue="points" gapVertical="12" gapVerticalUnitsValue="points" name="Col A Style" id="0:211"/>
+
+                    <!-- ============ 1. strings and numbers: read the UI, write it back ============ -->
+                    <!-- 424 - 32 of card padding = 392 of content, 148 - 24 = 124 tall:
+                         18 + 8 + 22 + 8 + 22 + 8 + 32 = 118. -->
+                    <LayoutComponent clip="true" height="148" styleId="0:221" name="Card Numbers" id="0:220">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:221"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF1A1E26" name="Color"/>
+                        </Fill>
+                        <Text width="392" height="18" sizingValue="autoHeight" name="Card Title" id="0:222">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="392" name="Card Title Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:223">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:223" text="strings &amp; numbers — written back by the buttons" name="Run" id="0:224"/>
+                        </Text>
+                        <LayoutComponent clip="false" height="22" styleId="0:226" name="Row Count" id="0:225">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Row Style" id="0:226"/>
+                            <Text width="64" height="18" sizingValue="fixed" name="Label" id="0:227">
+                                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="64" height="18" name="Label Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:228">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:228" text="count" name="Run" id="0:229"/>
+                            </Text>
+                            <Text width="300" height="18" sizingValue="autoHeight" name="Value" id="0:230">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="300" name="Value Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Value Paint" id="0:231">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:231" text="0" name="Run" id="0:232">
+                                    <DataBindContext sourcePathIds="5:1-5:4" propertyKey="268" converterId="6:11"/>
+                                </TextValueRun>
+                            </Text>
+                        </LayoutComponent>
+                        <LayoutComponent clip="false" height="22" styleId="0:234" name="Row Note" id="0:233">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Row Style" id="0:234"/>
+                            <Text width="64" height="18" sizingValue="fixed" name="Label" id="0:235">
+                                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="64" height="18" name="Label Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:236">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:236" text="note" name="Run" id="0:237"/>
+                            </Text>
+                            <Text width="300" height="18" sizingValue="autoHeight" name="Value" id="0:238">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="300" name="Value Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Value Paint" id="0:239">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:239" text="edit me from the host" name="Run" id="0:240">
+                                    <DataBindContext sourcePathIds="5:1-5:10" propertyKey="268"/>
+                                </TextValueRun>
+                            </Text>
+                        </LayoutComponent>
+                        <!-- Three 120-wide pills with 10 of gap = 380 of 392. -->
+                        <LayoutComponent clip="false" height="32" styleId="0:242" name="Buttons" id="0:241">
+                            <LayoutComponentStyle flexWrapValue="wrap" gapVertical="10" gapVerticalUnitsValue="points" flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="32" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Buttons Style" id="0:242"/>
+                            <LayoutComponent clip="false" width="120" height="32" styleId="0:244" name="Count +1" id="0:243">
+                                <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="center" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="8" cornerRadiusTR="8" cornerRadiusBL="8" cornerRadiusBR="8" name="Pill Style" id="0:244"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF262D3A" name="Color"/>
+                                </Fill>
+                                <Text width="112" height="32" sizingValue="fixed" alignValue="center" verticalAlignValue="middle" name="Pill Label" id="0:245">
+                                    <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="112" height="32" name="Pill Label Layout"/>
+                                    <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Pill Paint" id="0:246">
+                                        <Fill name="Fill">
+                                            <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                        </Fill>
+                                    </TextStylePaint>
+                                    <TextValueRun styleId="0:246" text="count +1" name="Run" id="0:247"/>
+                                </Text>
+                            </LayoutComponent>
+                            <LayoutComponent clip="false" width="120" height="32" styleId="0:249" name="Write note" id="0:248">
+                                <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="center" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="8" cornerRadiusTR="8" cornerRadiusBL="8" cornerRadiusBR="8" name="Pill Style" id="0:249"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF262D3A" name="Color"/>
+                                </Fill>
+                                <Text width="112" height="32" sizingValue="fixed" alignValue="center" verticalAlignValue="middle" name="Pill Label" id="0:250">
+                                    <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="112" height="32" name="Pill Label Layout"/>
+                                    <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Pill Paint" id="0:251">
+                                        <Fill name="Fill">
+                                            <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                        </Fill>
+                                    </TextStylePaint>
+                                    <TextValueRun styleId="0:251" text="write note" name="Run" id="0:252"/>
+                                </Text>
+                            </LayoutComponent>
+                            <LayoutComponent clip="false" width="120" height="32" styleId="0:254" name="Status failed" id="0:253">
+                                <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="center" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="8" cornerRadiusTR="8" cornerRadiusBL="8" cornerRadiusBR="8" name="Pill Style" id="0:254"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF262D3A" name="Color"/>
+                                </Fill>
+                                <Text width="112" height="32" sizingValue="fixed" alignValue="center" verticalAlignValue="middle" name="Pill Label" id="0:255">
+                                    <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="112" height="32" name="Pill Label Layout"/>
+                                    <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Pill Paint" id="0:256">
+                                        <Fill name="Fill">
+                                            <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                        </Fill>
+                                    </TextStylePaint>
+                                    <TextValueRun styleId="0:256" text="status: failed" name="Run" id="0:257"/>
+                                </Text>
+                            </LayoutComponent>
+                        </LayoutComponent>
+                    </LayoutComponent>
+
+                    <!-- ================= 4. nested view model: deeper bind paths ================= -->
+                    <LayoutComponent clip="true" height="132" styleId="0:261" name="Card Nested" id="0:260">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:261"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF1A1E26" name="Color"/>
+                        </Fill>
+                        <Text width="392" height="18" sizingValue="autoHeight" name="Card Title" id="0:262">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="392" name="Card Title Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:263">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:263" text="nested view model `details` — depth-2 bind paths" name="Run" id="0:264"/>
+                        </Text>
+                        <LayoutComponent clip="false" height="22" styleId="0:266" name="Row Note" id="0:265">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Row Style" id="0:266"/>
+                            <Text width="64" height="18" sizingValue="fixed" name="Label" id="0:267">
+                                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="64" height="18" name="Label Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:268">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:268" text="note" name="Run" id="0:269"/>
+                            </Text>
+                            <Text width="300" height="18" sizingValue="autoHeight" name="Value" id="0:270">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="300" name="Value Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Value Paint" id="0:271">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:271" text="nested view model" name="Run" id="0:272">
+                                    <DataBindContext sourcePathIds="5:1-5:11-5:32" propertyKey="268"/>
+                                </TextValueRun>
+                            </Text>
+                        </LayoutComponent>
+                        <LayoutComponent clip="false" height="22" styleId="0:274" name="Row Weight" id="0:273">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Row Style" id="0:274"/>
+                            <Text width="64" height="18" sizingValue="fixed" name="Label" id="0:275">
+                                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="64" height="18" name="Label Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:276">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:276" text="weight" name="Run" id="0:277"/>
+                            </Text>
+                            <Text width="300" height="18" sizingValue="autoHeight" name="Value" id="0:278">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="300" name="Value Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Value Paint" id="0:279">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:279" text="0.0" name="Run" id="0:280">
+                                    <DataBindContext sourcePathIds="5:1-5:11-5:33" propertyKey="268" converterId="6:13"/>
+                                </TextValueRun>
+                            </Text>
+                        </LayoutComponent>
+                    </LayoutComponent>
+
+                    <!-- ================ 8. asset image: bound Image.assetId ================ -->
+                    <LayoutComponent clip="true" height="132" styleId="0:291" name="Card Image" id="0:290">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:291"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF1A1E26" name="Color"/>
+                        </Fill>
+                        <Text width="392" height="18" sizingValue="autoHeight" name="Card Title" id="0:292">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="392" name="Card Title Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:293">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:293" text="asset image `icon` — host swaps the picture" name="Run" id="0:294"/>
+                        </Text>
+                        <LayoutComponent clip="false" height="52" styleId="0:296" name="Image Row" id="0:295">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="52" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Image Row Style" id="0:296"/>
+                            <LayoutComponent clip="false" width="44" height="44" styleId="0:298" name="Icon Box" id="0:297">
+                                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Icon Box Style" id="0:298"/>
+                                <Image assetId="7:1" fit="contain" name="Icon" id="0:299">
+                                    <DataBindContext sourcePathIds="5:1-5:13" propertyKey="206"/>
+                                </Image>
+                            </LayoutComponent>
+                            <Text width="330" height="18" sizingValue="autoHeight" name="Hint" id="0:300">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="330" name="Hint Layout"/>
+                                <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Hint Paint" id="0:301">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:301" text="Image.assetId — 7:1 tick, 7:2 cross" name="Run" id="0:302"/>
+                            </Text>
+                        </LayoutComponent>
+                    </LayoutComponent>
+
+                    <!-- ================= 7. trigger: fire-once, host-fired ================= -->
+                    <LayoutComponent clip="true" height="132" styleId="0:321" name="Card Trigger" id="0:320">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:321"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF1A1E26" name="Color"/>
+                        </Fill>
+                        <Text width="392" height="18" sizingValue="autoHeight" name="Card Title" id="0:322">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="392" name="Card Title Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:323">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:323" text="trigger `ping` — fire it from the host" name="Run" id="0:324"/>
+                        </Text>
+                        <LayoutComponent clip="false" height="46" styleId="0:326" name="Trigger Row" id="0:325">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="46" minHeightUnitsValue="points" gapHorizontal="12" gapHorizontalUnitsValue="points" name="Trigger Row Style" id="0:326"/>
+                            <LayoutComponent clip="true" width="34" height="34" styleId="0:328" name="Ping Ring" id="0:327">
+                                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="17" cornerRadiusTR="17" cornerRadiusBL="17" cornerRadiusBR="17" name="Ring Style" id="0:328"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF2B3140" name="Color" id="0:329"/>
+                                </Fill>
+                            </LayoutComponent>
+                            <Text width="330" height="18" sizingValue="autoHeight" name="Hint" id="0:330">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="330" name="Hint Layout"/>
+                                <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Hint Paint" id="0:331">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:331" text="a fire flips the ring to Flash" name="Run" id="0:332"/>
+                            </Text>
+                        </LayoutComponent>
+                    </LayoutComponent>
+                <!-- ========== 9. artboard property + nested view model placement ==========-->
+                <!-- Just another card in the column: the Panel artboard is a leaf, so its
+                     slot scales it rather than reflowing the art inside. -->
+                <LayoutComponent clip="true" height="220" styleId="0:521" name="Card Artboard" id="0:520">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minWidth="260" minWidthUnitsValue="points" gapVertical="10" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:521"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF1A1E26" name="Color"/>
+                    </Fill>
+                    <LayoutComponent clip="false" height="18" styleId="0:152" name="Title Box" id="0:151">
+                        <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" name="Title Box Style" id="0:152"/>
+                        <Text width="228" height="18" sizingValue="fixed" name="Card Title" id="0:522">
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:523">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:523" text="artboard `panel`" name="Run" id="0:524"/>
+                        </Text>
+                    </LayoutComponent>
+                    <LayoutComponent clip="false" height="16" styleId="0:154" name="Hint Box" id="0:153">
+                        <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" name="Hint Box Style" id="0:154"/>
+                        <Text width="228" height="16" sizingValue="fixed" name="Hint" id="0:525">
+                            <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Hint Paint" id="0:526">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:526" text="bound NestedArtboard.artboardId" name="Run" id="0:527"/>
+                        </Text>
+                    </LayoutComponent>
+                    <LayoutComponent clip="true" height="96" styleId="0:529" name="Panel Box" id="0:528">
+                        <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" minWidth="180" minWidthUnitsValue="points" name="Panel Box Style" id="0:529"/>
+                        <NestedArtboard artboardId="0:90" dataBindPathIds="5:1-5:15" x="0" y="0" name="Panel" id="0:530">
+                            <DataBindContext sourcePathIds="5:1-5:14" propertyKey="197"/>
+                            <NestedStateMachine animationId="3:1" name="Panel SM"/>
+                        </NestedArtboard>
+                    </LayoutComponent>
+                </LayoutComponent>
+                </LayoutComponent>
+
+                <LayoutComponent clip="false" width="0" styleId="0:351" name="Col B" id="0:350">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minWidth="380" minWidthUnitsValue="points" gapVertical="12" gapVerticalUnitsValue="points" name="Col B Style" id="0:351"/>
+
+                    <!-- ================= 2. number -> width through a range mapper ================= -->
+                    <!-- Column B ends up 410 wide of card content before padding. Card
+                         heights mirror column A row for row -- 148, 132, 132, 132, which
+                         with three 12 gaps is the same 580 -- so the two columns line up. -->
+                    <LayoutComponent clip="true" height="148" styleId="0:361" name="Card Progress" id="0:360">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:361"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF1A1E26" name="Color"/>
+                        </Fill>
+                        <!-- 240 + 150 = 390 of 410. -->
+                        <LayoutComponent clip="false" height="18" styleId="0:363" name="Progress Head" id="0:362">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="spaceBetweenCenter" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="18" minHeightUnitsValue="points" name="Head Style" id="0:363"/>
+                            <Text width="240" height="18" sizingValue="autoHeight" name="Card Title" id="0:364">
+                                <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="240" name="Card Title Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:365">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:365" text="progress -> width (0..1 -> 0..480)" name="Run" id="0:366"/>
+                            </Text>
+                            <Text width="150" height="18" sizingValue="fixed" alignValue="right" name="Progress Value" id="0:367">
+                                <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="150" height="18" name="Progress Value Layout"/>
+                                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Progress Value Paint" id="0:368">
+                                    <Fill name="Fill">
+                                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                                    </Fill>
+                                </TextStylePaint>
+                                <TextValueRun styleId="0:368" text="0.00" name="Run" id="0:369">
+                                    <DataBindContext sourcePathIds="5:1-5:5" propertyKey="268" converterId="6:12"/>
+                                </TextValueRun>
+                            </Text>
+                        </LayoutComponent>
+                        <!-- The track. The fill inside it is absolute and its width is bound,
+                             so it grows rightwards from the track's left edge. -->
+                        <LayoutComponent clip="true" height="14" styleId="0:371" name="Track" id="0:370">
+                            <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" cornerRadiusTL="7" cornerRadiusTR="7" cornerRadiusBL="7" cornerRadiusBR="7" name="Track Style" id="0:371"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF232936" name="Color"/>
+                            </Fill>
+                            <LayoutComponent clip="true" width="0" height="14" styleId="0:373" name="Fill Bar" id="0:372">
+                                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" positionTypeValue="absolute" positionLeftUnitsValue="points" positionTopUnitsValue="points" positionLeft="0" positionTop="0" cornerRadiusTL="7" cornerRadiusTR="7" cornerRadiusBL="7" cornerRadiusBR="7" name="Fill Bar Style" id="0:373"/>
+                                <DataBindContext sourcePathIds="5:1-5:5" propertyKey="7" converterId="6:10"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF57A5E0" name="Color"/>
+                                </Fill>
+                            </LayoutComponent>
+                        </LayoutComponent>
+                </LayoutComponent>
+
+                <!-- ============ 5. custom enum: bound width + state machine ============ -->
+                <LayoutComponent clip="true" height="132" styleId="0:381" name="Card Enum" id="0:380">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:381"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF1A1E26" name="Color"/>
+                    </Fill>
+                    <Text width="410" height="18" sizingValue="autoHeight" name="Card Title" id="0:382">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="410" name="Card Title Layout"/>
+                        <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:383">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF57A5E0" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:383" text="custom enum `status` — one state per value" name="Run" id="0:384"/>
+                    </Text>
+                    <!-- 28 + 10 + 360 = 398 of 410. -->
+                    <LayoutComponent clip="false" height="28" styleId="0:386" name="Enum Row" id="0:385">
+                        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="28" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Enum Row Style" id="0:386"/>
+                        <LayoutComponent clip="true" width="28" height="28" styleId="0:388" name="Status Dot" id="0:387">
+                            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="14" cornerRadiusTR="14" cornerRadiusBL="14" cornerRadiusBR="14" name="Dot Style" id="0:388"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF3A4152" name="Color" id="0:389"/>
+                            </Fill>
+                        </LayoutComponent>
+                        <Text width="360" height="18" sizingValue="autoHeight" name="Status Names" id="0:390">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="360" name="Status Names Layout"/>
+                            <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Names Paint" id="0:391">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:391" text="idle · running · failed" name="Run" id="0:392"/>
+                        </Text>
+                    </LayoutComponent>
+                    <LayoutComponent clip="true" height="10" styleId="0:394" name="Status Track" id="0:393">
+                        <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" cornerRadiusTL="5" cornerRadiusTR="5" cornerRadiusBL="5" cornerRadiusBR="5" name="Track Style" id="0:394"/>
+                        <Fill name="Fill">
+                            <SolidColor colorValue="FF232936" name="Color"/>
+                        </Fill>
+                        <LayoutComponent clip="true" width="0" height="10" styleId="0:396" name="Status Fill" id="0:395">
+                            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" positionTypeValue="absolute" positionLeftUnitsValue="points" positionTopUnitsValue="points" positionLeft="0" positionTop="0" cornerRadiusTL="5" cornerRadiusTR="5" cornerRadiusBL="5" cornerRadiusBR="5" name="Fill Style" id="0:396"/>
+                            <DataBindContext sourcePathIds="5:1-5:8" propertyKey="7" converterId="6:16"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF7FB4FF" name="Color"/>
+                            </Fill>
+                        </LayoutComponent>
+                    </LayoutComponent>
+                </LayoutComponent>
+
+                <!-- ====== 6. boolean: state machine conditions, and a write-back toggle ====== -->
+                <LayoutComponent clip="true" height="132" styleId="0:401" name="Card Boolean" id="0:400">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:401"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF1A1E26" name="Color"/>
+                    </Fill>
+                    <Text width="410" height="18" sizingValue="autoHeight" name="Card Title" id="0:402">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="410" name="Card Title Layout"/>
+                        <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:403">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF57A5E0" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:403" text="boolean `enabled` — a condition per direction" name="Run" id="0:404"/>
+                    </Text>
+                    <!-- 88 + 12 + 290 = 390 of 410. -->
+                    <LayoutComponent clip="false" height="40" styleId="0:406" name="Bool Row" id="0:405">
+                        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="40" minHeightUnitsValue="points" gapHorizontal="12" gapHorizontalUnitsValue="points" name="Bool Row Style" id="0:406"/>
+                        <LayoutComponent clip="true" width="88" height="36" styleId="0:408" name="Switch Track" id="0:407">
+                            <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" paddingLeft="6" paddingLeftUnitsValue="points" cornerRadiusTL="18" cornerRadiusTR="18" cornerRadiusBL="18" cornerRadiusBR="18" name="Switch Style" id="0:408"/>
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF3A4152" name="Color" id="0:409"/>
+                            </Fill>
+                            <LayoutComponent clip="true" width="24" height="24" styleId="0:411" name="Switch Knob" id="0:410">
+                                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Knob Style" id="0:411"/>
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color" id="0:412"/>
+                                </Fill>
+                            </LayoutComponent>
+                        </LayoutComponent>
+                        <Text width="290" height="18" sizingValue="autoHeight" name="Hint" id="0:413">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="290" name="Hint Layout"/>
+                            <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Hint Paint" id="0:414">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:414" text="click: writes `enabled` back" name="Run" id="0:415"/>
+                        </Text>
+                    </LayoutComponent>
+                </LayoutComponent>
+
+                <!-- ================= 10. list length: a converter chain ================= -->
+                <LayoutComponent clip="true" height="132" styleId="0:421" name="Card List Length" id="0:420">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="8" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:421"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF1A1E26" name="Color"/>
+                    </Fill>
+                    <Text width="410" height="18" sizingValue="autoHeight" name="Card Title" id="0:422">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="410" name="Card Title Layout"/>
+                        <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:423">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF57A5E0" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:423" text="list `rows` — length, without host code" name="Run" id="0:424"/>
+                    </Text>
+                    <!-- 60 + 10 + 340 = 410 exactly; the row's own gap supplies the slack. -->
+                    <LayoutComponent clip="false" height="22" styleId="0:426" name="Row Rows" id="0:425">
+                        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" gapHorizontal="10" gapHorizontalUnitsValue="points" name="Row Style" id="0:426"/>
+                        <Text width="60" height="18" sizingValue="fixed" name="Label" id="0:427">
+                            <LayoutParticipant layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" width="60" height="18" name="Label Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:428">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:428" text="rows" name="Run" id="0:429"/>
+                        </Text>
+                        <Text width="320" height="18" sizingValue="autoHeight" name="Value" id="0:430">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="320" name="Value Layout"/>
+                            <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Value Paint" id="0:431">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FFFFD166" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:431" text="0" name="Run" id="0:432">
+                                <DataBindContext sourcePathIds="5:1-5:12" propertyKey="268" converterId="6:22"/>
+                            </TextValueRun>
+                        </Text>
+                    </LayoutComponent>
+                    <LayoutComponent clip="false" height="22" styleId="0:434" name="Row Hint" id="0:433">
+                        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" minHeight="22" minHeightUnitsValue="points" name="Row Style" id="0:434"/>
+                        <Text width="400" height="18" sizingValue="autoHeight" name="Hint" id="0:435">
+                            <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="400" name="Hint Layout"/>
+                            <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Hint Paint" id="0:436">
+                                <Fill name="Fill">
+                                    <SolidColor colorValue="FF8A93A5" name="Color"/>
+                                </Fill>
+                            </TextStylePaint>
+                            <TextValueRun styleId="0:436" text="ListToLength -> ToString" name="Run" id="0:437"/>
+                        </Text>
+                    </LayoutComponent>
+                </LayoutComponent>
+                <!-- ============== the list: three instances of the Row component ============== -->
+                <!-- The Row artboard fills the list box, so the rows track the card width. -->
+                <LayoutComponent clip="true" height="220" styleId="0:501" name="Card List" id="0:500">
+                    <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="hug" gapVertical="10" gapVerticalUnitsValue="points" paddingLeft="16" paddingRight="16" paddingTop="12" paddingBottom="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" paddingTopUnitsValue="points" paddingBottomUnitsValue="points" cornerRadiusTL="12" cornerRadiusTR="12" cornerRadiusBL="12" cornerRadiusBR="12" name="Card Style" id="0:501"/>
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF1A1E26" name="Color"/>
+                    </Fill>
+                    <Text width="574" height="18" sizingValue="autoHeight" name="Card Title" id="0:502">
+                        <LayoutParticipant layoutWidthScaleType="fill" layoutHeightScaleType="hug" width="574" name="Card Title Layout"/>
+                        <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Card Title Paint" id="0:503">
+                            <Fill name="Fill">
+                                <SolidColor colorValue="FF57A5E0" name="Color"/>
+                            </Fill>
+                        </TextStylePaint>
+                        <TextValueRun styleId="0:503" text="list `rows` — three Row instances" name="Run" id="0:504"/>
+                    </Text>
+                    <LayoutComponent clip="true" width="560" height="160" styleId="0:506" name="List Box" id="0:505">
+                        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="topLeft" layoutWidthScaleType="fill" layoutHeightScaleType="fixed" gapVertical="12" gapVerticalUnitsValue="points" name="List Box Style" id="0:506"/>
+                        <ArtboardComponentList name="Rows" id="0:507">
+                            <DataBindContext sourcePathIds="5:1-5:12" propertyKey="800"/>
+                        </ArtboardComponentList>
+                    </LayoutComponent>
+                </LayoutComponent>
+            </LayoutComponent>
+        </LayoutComponent>
+
+
+        </LayoutComponent>
+
+        <!-- ============================== state machine ============================== -->
+        <StateMachine name="State Machine 1" id="1:1">
+            <!-- The four writes the picture makes back to the instance. The first and
+                 last are scripted: "negate the current value" and "add one to the
+                 current value" cannot be built from a converter on a listener read
+                 context, because the converter drops the read. The middle two write
+                 a literal, which is reliable, and are the shape to reach for when the
+                 value being written does not depend on what is already there. -->
+            <StateMachineListenerSingle targetId="0:243" listenerTypeValue="click" name="Count +1" id="1:40">
+                <ScriptedListenerAction scriptAssetId="8:1" id="1:46"/>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:248" listenerTypeValue="click" name="Write note" id="1:42">
+                <ListenerViewModelChange>
+                    <BindablePropertyString propertyValue="written by the scene">
+                        <DataBindContext sourcePathIds="5:1-5:10" propertyKey="635" direction="true"/>
+                    </BindablePropertyString>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:253" listenerTypeValue="click" name="Status failed" id="1:43">
+                <ListenerViewModelChange>
+                    <BindablePropertyEnum propertyValue="6:4">
+                        <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637" direction="true"/>
+                    </BindablePropertyEnum>
+                </ListenerViewModelChange>
+            </StateMachineListenerSingle>
+            <StateMachineListenerSingle targetId="0:407" listenerTypeValue="click" name="Toggle enabled" id="1:44">
+                <ScriptedListenerAction scriptAssetId="8:2" id="1:47"/>
+            </StateMachineListenerSingle>
+
+            <!-- boolean: one transition per value, both authored -->
+            <StateMachineLayer name="Enabled" id="1:2">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="1:10"/>
+                </EntryState>
+                <AnimationState x="0" y="60" animationId="1:12" id="1:10">
+                    <StateTransition stateToId="1:11" duration="150">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="5:1-5:6" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="true"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="200" y="60" animationId="1:13" id="1:11">
+                    <StateTransition stateToId="1:10" duration="150">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="5:1-5:6" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="false"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+
+            <!-- enum: three states, one per value, all six ways out authored -->
+            <StateMachineLayer name="Status" id="1:3">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="1:20"/>
+                </EntryState>
+                <AnimationState x="0" y="60" animationId="1:23" id="1:20">
+                    <StateTransition stateToId="1:21" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="1:22" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:4"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="200" y="60" animationId="1:24" id="1:21">
+                    <StateTransition stateToId="1:20" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="1:22" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:4"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="400" y="60" animationId="1:25" id="1:22">
+                    <StateTransition stateToId="1:20" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:2"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                    <StateTransition stateToId="1:21" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyEnum>
+                                    <DataBindContext sourcePathIds="5:1-5:8" propertyKey="637"/>
+                                </BindablePropertyEnum>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueEnumComparator value="6:3"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+
+            <!-- trigger: in on the fire, out on exit time -->
+            <StateMachineLayer name="Ping" id="1:4">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="1:30"/>
+                </EntryState>
+                <AnimationState x="0" y="60" animationId="1:32" id="1:30">
+                    <StateTransition stateToId="1:31" duration="0">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyTrigger>
+                                    <DataBindContext sourcePathIds="5:1-5:9" propertyKey="686"/>
+                                </BindablePropertyTrigger>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueTriggerComparator/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="200" y="60" animationId="1:33" id="1:31">
+                    <StateTransition stateToId="1:30" duration="150" enableExitTime="true" exitTimeIsPercetange="true" exitTime="100"/>
+                </AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+
+        <!-- One hold key per state; the transitions cross-fade between them. -->
+        <LinearAnimation duration="1" name="Switch Off" id="1:12">
+            <KeyedObject objectId="0:409">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF3A4152" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:412">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF8A93A5" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="1" name="Switch On" id="1:13">
+            <KeyedObject objectId="0:409">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF2F6F4F" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+            <KeyedObject objectId="0:412">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF3DDC84" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="1" name="Status Idle" id="1:23">
+            <KeyedObject objectId="0:389">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF3A4152" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="1" name="Status Running" id="1:24">
+            <KeyedObject objectId="0:389">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF57A5E0" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="1" name="Status Failed" id="1:25">
+            <KeyedObject objectId="0:389">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FFE85656" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="30" name="Ping Rest" id="1:32">
+            <KeyedObject objectId="0:329">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF2B3140" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="30" name="Ping Flash" id="1:33">
+            <KeyedObject objectId="0:329">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FFFFD166" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+    </Artboard>
+
+    <!-- ============ the row component: one artboard, data per instance ============ -->
+    <!-- 560 wide, 12 of padding a side, so 536 of content: 120 + 220 + 90 + 20 + gaps. -->
+    <Artboard x="980" y="0" defaultStateMachineId="2:1" viewModelId="5:40" viewModelInstanceId="5:41" isComponent="true" artboardKind="1" clip="true" width="320" height="44" styleId="0:52" name="Row" id="0:50">
+        <Fill name="Background">
+            <SolidColor colorValue="FF1F242E" name="Color"/>
+        </Fill>
+        <LayoutComponentStyle flexDirectionValue="row" layoutAlignmentType="centerLeft" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" gapHorizontal="12" gapHorizontalUnitsValue="points" paddingLeft="12" paddingRight="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" cornerRadiusTL="8" cornerRadiusTR="8" cornerRadiusBL="8" cornerRadiusBR="8" name="Row Style" id="0:52"/>
+        <!-- Texts here are wrapped in fixed boxes so they get a slot. A nested
+             `LayoutParticipant` does the same job in one element instead of two
+             -- that is what the Lab artboard above uses -- but either way a bare
+             Text draws at its parent's origin and stacks on its siblings. -->
+        <LayoutComponent clip="false" height="18" styleId="0:71" name="Label Box" id="0:70">
+            <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" minWidth="64" minWidthUnitsValue="points" name="Label Box Style" id="0:71"/>
+            <Text width="120" height="18" sizingValue="fixed" name="Label" id="0:51">
+                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Label Paint" id="0:53">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:53" text="name" name="Run" id="0:54">
+                    <DataBindContext sourcePathIds="5:40-5:45" propertyKey="268"/>
+                </TextValueRun>
+            </Text>
+        </LayoutComponent>
+        <LayoutComponent clip="true" height="8" styleId="0:56" name="Index Track" id="0:55">
+            <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" minWidth="48" minWidthUnitsValue="points" cornerRadiusTL="4" cornerRadiusTR="4" cornerRadiusBL="4" cornerRadiusBR="4" name="Index Track Style" id="0:56"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FF232936" name="Color"/>
+            </Fill>
+            <!-- The per-row bar: the row's `index` (itemIndex) through
+                 DataConverterEnumToUint-style mapping -- here a RangeMapper 0..4 ->
+                 24..200. `minWidth` matters: a bind whose source resolves to
+                 nothing writes 0, and a zero-width bar draws as nothing at all, so
+                 the floor keeps the bar visible and the failure legible. That is
+                 what happens here: `--data-dump` shows each row's `index` as 0, 1
+                 and 2, but a bind off it *inside this artboard* still resolves to
+                 nothing, so all three rows draw the 24px floor. Worth knowing
+                 before you trust `itemIndex` in a row. -->
+            <LayoutComponent clip="true" width="24" height="8" styleId="0:58" name="Index Bar" id="0:57">
+                <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" minWidth="24" minWidthUnitsValue="points" positionTypeValue="absolute" positionLeftUnitsValue="points" positionTopUnitsValue="points" positionLeft="0" positionTop="0" cornerRadiusTL="4" cornerRadiusTR="4" cornerRadiusBL="4" cornerRadiusBR="4" name="Index Bar Style" id="0:58"/>
+                <DataBindContext sourcePathIds="5:40-5:48" propertyKey="7" converterId="6:20"/>
+                <Fill name="Fill">
+                    <SolidColor colorValue="FF7FB4FF" name="Color"/>
+                </Fill>
+            </LayoutComponent>
+        </LayoutComponent>
+        <LayoutComponent clip="false" height="18" styleId="0:73" name="Amount Box" id="0:72">
+            <LayoutComponentStyle layoutWidthScaleType="fill" layoutHeightScaleType="fixed" minWidth="56" minWidthUnitsValue="points" name="Amount Box Style" id="0:73"/>
+            <Text width="90" height="18" sizingValue="fixed" alignValue="right" name="Amount" id="0:59">
+                <TextStylePaint fontSize="13" fontAssetId="7:3" familyName="Karla" name="Amount Paint" id="0:60">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:60" text="0.00" name="Run" id="0:61">
+                    <DataBindContext sourcePathIds="5:40-5:46" propertyKey="268" converterId="6:14"/>
+                </TextValueRun>
+            </Text>
+        </LayoutComponent>
+        <LayoutComponent clip="true" width="20" height="20" styleId="0:63" name="Done Badge" id="0:62">
+            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" cornerRadiusTL="10" cornerRadiusTR="10" cornerRadiusBL="10" cornerRadiusBR="10" name="Badge Style" id="0:63"/>
+            <Fill name="Fill">
+                <SolidColor colorValue="FF3A4152" name="Color" id="0:64"/>
+            </Fill>
+        </LayoutComponent>
+
+        <StateMachine name="State Machine 1" id="2:1">
+            <StateMachineLayer name="Done" id="2:2">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState>
+                    <StateTransition stateToId="2:10"/>
+                </EntryState>
+                <AnimationState x="0" y="60" animationId="2:12" id="2:10">
+                    <StateTransition stateToId="2:11" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="5:40-5:47" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="true"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+                <AnimationState x="200" y="60" animationId="2:13" id="2:11">
+                    <StateTransition stateToId="2:10" duration="120">
+                        <TransitionViewModelCondition>
+                            <TransitionPropertyViewModelComparator>
+                                <BindablePropertyBoolean>
+                                    <DataBindContext sourcePathIds="5:40-5:47" propertyKey="634"/>
+                                </BindablePropertyBoolean>
+                            </TransitionPropertyViewModelComparator>
+                            <TransitionValueBooleanComparator value="false"/>
+                        </TransitionViewModelCondition>
+                    </StateTransition>
+                </AnimationState>
+            </StateMachineLayer>
+        </StateMachine>
+
+        <LinearAnimation duration="1" name="Not Done" id="2:12">
+            <KeyedObject objectId="0:64">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF3A4152" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+        <LinearAnimation duration="1" name="Done" id="2:13">
+            <KeyedObject objectId="0:64">
+                <KeyedProperty propertyKey="37">
+                    <KeyFrameColor value="FF3DDC84" frame="0" interpolationType="linear"/>
+                </KeyedProperty>
+            </KeyedObject>
+        </LinearAnimation>
+    </Artboard>
+
+    <!-- ================= the artboard the `panel` property holds ================= -->
+    <Artboard x="1600" y="0" defaultStateMachineId="3:1" viewModelId="5:50" viewModelInstanceId="5:51" isComponent="true" artboardKind="1" clip="true" width="220" height="96" styleId="0:92" name="Panel" id="0:90">
+        <Fill name="Background">
+            <SolidColor colorValue="FF22303C" name="Color"/>
+        </Fill>
+        <LayoutComponentStyle flexDirectionValue="column" layoutAlignmentType="center" layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" gapVertical="6" gapVerticalUnitsValue="points" paddingLeft="12" paddingRight="12" paddingLeftUnitsValue="points" paddingRightUnitsValue="points" cornerRadiusTL="10" cornerRadiusTR="10" cornerRadiusBL="10" cornerRadiusBR="10" name="Panel Style" id="0:92"/>
+        <LayoutComponent clip="false" width="196" height="20" styleId="0:99" name="Caption Box" id="0:98">
+            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Caption Box Style" id="0:99"/>
+            <Text width="196" height="20" sizingValue="fixed" alignValue="center" name="Caption" id="0:91">
+                <TextStylePaint fontSize="14" fontAssetId="7:3" familyName="Karla" name="Caption Paint" id="0:93">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FFE6E9EF" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:93" text="Panel artboard" name="Run" id="0:94">
+                    <DataBindContext sourcePathIds="5:50-5:52" propertyKey="268"/>
+                </TextValueRun>
+            </Text>
+        </LayoutComponent>
+        <LayoutComponent clip="false" width="196" height="16" styleId="0:89" name="Note Box" id="0:88">
+            <LayoutComponentStyle layoutWidthScaleType="fixed" layoutHeightScaleType="fixed" name="Note Box Style" id="0:89"/>
+            <Text width="196" height="16" sizingValue="fixed" alignValue="center" name="Note" id="0:95">
+                <TextStylePaint fontSize="12" fontAssetId="7:3" familyName="Karla" name="Note Paint" id="0:96">
+                    <Fill name="Fill">
+                        <SolidColor colorValue="FF8A93A5" name="Color"/>
+                    </Fill>
+                </TextStylePaint>
+                <TextValueRun styleId="0:96" text="nested artboard, own view model" name="Run" id="0:97"/>
+            </Text>
+        </LayoutComponent>
+        <StateMachine name="State Machine 1" id="3:1">
+            <StateMachineLayer name="Layer 1" id="3:2">
+                <AnyState x="200" y="-120"/>
+                <ExitState x="400" y="-120"/>
+                <EntryState/>
+            </StateMachineLayer>
+        </StateMachine>
+    </Artboard>
+
+    <!-- ============================== custom enum ============================== -->
+    <DataEnumCustom name="Status" id="6:1">
+        <DataEnumValue key="idle" value="Idle" id="6:2"/>
+        <DataEnumValue key="running" value="Running" id="6:3"/>
+        <DataEnumValue key="failed" value="Failed" id="6:4"/>
+    </DataEnumCustom>
+
+    <!-- ============================== converters ============================== -->
+    <DataConverterRangeMapper minInput="0" maxInput="1" minOutput="0" maxOutput="480" clampLower="true" clampUpper="true" name="Progress to width" id="6:10"/>
+    <DataConverterToString decimals="0" round="true" name="Count text" id="6:11"/>
+    <DataConverterToString decimals="2" round="true" name="Progress text" id="6:12"/>
+    <DataConverterToString decimals="1" round="true" name="Weight text" id="6:13"/>
+    <DataConverterToString decimals="2" round="true" name="Amount text" id="6:14"/>
+    <DataConverterEnumToUint name="Status index" id="6:15"/>
+    <DataConverterRangeMapper minInput="0" maxInput="2" minOutput="0" maxOutput="480" clampLower="true" clampUpper="true" name="Status to width" id="6:17"/>
+    <DataConverterGroup name="Status to width group" id="6:16">
+        <DataConverterGroupItem converterId="6:15"/>
+        <DataConverterGroupItem converterId="6:17"/>
+    </DataConverterGroup>
+    <DataConverterRangeMapper minInput="0" maxInput="4" minOutput="24" maxOutput="200" clampLower="true" clampUpper="true" name="Index to width" id="6:20"/>
+    <DataConverterListToLength name="Row count" id="6:23"/>
+    <DataConverterToString decimals="0" round="true" name="Row count text" id="6:24"/>
+    <DataConverterGroup name="Row count label" id="6:22">
+        <DataConverterGroupItem converterId="6:23"/>
+        <DataConverterGroupItem converterId="6:24"/>
+    </DataConverterGroup>
+
+    <!-- ============================== view models ============================== -->
+
+    <!-- Details: the nested one. -->
+    <ViewModel defaultInstanceId="5:31" name="Details" id="5:30">
+        <ViewModelPropertyString name="note" id="5:32"/>
+        <ViewModelPropertyNumber name="weight" id="5:33"/>
+        <ViewModelPropertyColor name="tint" id="5:34"/>
+        <ViewModelInstance exports="true" name="Default" id="5:31">
+            <ViewModelInstanceString propertyValue="nested view model" viewModelPropertyId="5:32"/>
+            <ViewModelInstanceNumber propertyValue="62.5" viewModelPropertyId="5:33"/>
+            <ViewModelInstanceColor propertyValue="FFF5B02E" viewModelPropertyId="5:34"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <!-- Row: the list's item view model. The list matches on this view model id. -->
+    <ViewModel defaultInstanceId="5:41" name="Row" id="5:40">
+        <ViewModelPropertyString componentProps="1" displayName="Label" name="label" id="5:45"/>
+        <ViewModelPropertyNumber componentProps="1" displayName="Amount" name="amount" id="5:46"/>
+        <ViewModelPropertyBoolean componentProps="1" displayName="Done" name="done" id="5:47"/>
+        <!-- symbolTypeValue is the whole lookup: without it nothing writes the row's index. -->
+        <ViewModelPropertySymbolListIndex symbolTypeValue="itemIndex" name="index" id="5:48"/>
+        <ViewModelInstance exports="true" name="Default" id="5:41">
+            <ViewModelInstanceString propertyValue="Row" viewModelPropertyId="5:45"/>
+            <ViewModelInstanceNumber propertyValue="0" viewModelPropertyId="5:46"/>
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="5:47"/>
+            <ViewModelInstanceSymbolListIndex viewModelPropertyId="5:48"/>
+        </ViewModelInstance>
+        <ViewModelInstance exports="true" name="Alpha" id="5:42">
+            <ViewModelInstanceString propertyValue="Alpha" viewModelPropertyId="5:45"/>
+            <ViewModelInstanceNumber propertyValue="12.5" viewModelPropertyId="5:46"/>
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="5:47"/>
+            <ViewModelInstanceSymbolListIndex viewModelPropertyId="5:48"/>
+        </ViewModelInstance>
+        <ViewModelInstance exports="true" name="Beta" id="5:43">
+            <ViewModelInstanceString propertyValue="Beta" viewModelPropertyId="5:45"/>
+            <ViewModelInstanceNumber propertyValue="240" viewModelPropertyId="5:46"/>
+            <ViewModelInstanceBoolean propertyValue="true" viewModelPropertyId="5:47"/>
+            <ViewModelInstanceSymbolListIndex viewModelPropertyId="5:48"/>
+        </ViewModelInstance>
+        <ViewModelInstance exports="true" name="Gamma" id="5:44">
+            <ViewModelInstanceString propertyValue="Gamma" viewModelPropertyId="5:45"/>
+            <ViewModelInstanceNumber propertyValue="-3.75" viewModelPropertyId="5:46"/>
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="5:47"/>
+            <ViewModelInstanceSymbolListIndex viewModelPropertyId="5:48"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <!-- Panel: the view model of the artboard the `panel` property points at. -->
+    <ViewModel defaultInstanceId="5:51" name="Panel" id="5:50">
+        <ViewModelPropertyString name="caption" id="5:52"/>
+        <ViewModelInstance exports="true" name="Default" id="5:51">
+            <ViewModelInstanceString propertyValue="Panel artboard" viewModelPropertyId="5:52"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <!-- Lab: the one the host edits. -->
+    <ViewModel defaultInstanceId="5:2" name="Lab" id="5:1">
+        <ViewModelPropertyString name="title" id="5:3"/>
+        <ViewModelPropertyNumber name="count" id="5:4"/>
+        <ViewModelPropertyNumber name="progress" id="5:5"/>
+        <ViewModelPropertyBoolean name="enabled" id="5:6"/>
+        <ViewModelPropertyColor name="accent" id="5:7"/>
+        <ViewModelPropertyEnumCustom enumId="6:1" name="status" id="5:8"/>
+        <ViewModelPropertyTrigger name="ping" id="5:9"/>
+        <ViewModelPropertyString name="note" id="5:10"/>
+        <ViewModelPropertyViewModel viewModelReferenceId="5:30" name="details" id="5:11"/>
+        <ViewModelPropertyList name="rows" id="5:12"/>
+        <ViewModelPropertyAssetImage name="icon" id="5:13"/>
+        <ViewModelPropertyArtboard name="panel" id="5:14"/>
+        <ViewModelPropertyViewModel viewModelReferenceId="5:50" name="panelData" id="5:15"/>
+
+        <ViewModelInstance exports="true" name="Default" id="5:2">
+            <ViewModelInstanceString propertyValue="ViewModel Lab" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="3" viewModelPropertyId="5:4"/>
+            <ViewModelInstanceNumber propertyValue="0.42" viewModelPropertyId="5:5"/>
+            <ViewModelInstanceBoolean propertyValue="true" viewModelPropertyId="5:6"/>
+            <ViewModelInstanceColor propertyValue="FF57A5E0" viewModelPropertyId="5:7"/>
+            <ViewModelInstanceEnum propertyValue="6:3" viewModelPropertyId="5:8"/>
+            <ViewModelInstanceTrigger viewModelPropertyId="5:9"/>
+            <ViewModelInstanceString propertyValue="edit me from the host" viewModelPropertyId="5:10"/>
+            <ViewModelInstanceViewModel propertyValue="5:31" viewModelPropertyId="5:11"/>
+            <ViewModelInstanceList viewModelPropertyId="5:12">
+                <ViewModelInstanceListItem viewModelId="5:40" viewModelInstanceId="5:42" name="Alpha"/>
+                <ViewModelInstanceListItem viewModelId="5:40" viewModelInstanceId="5:43" name="Beta"/>
+                <ViewModelInstanceListItem viewModelId="5:40" viewModelInstanceId="5:44" name="Gamma"/>
+            </ViewModelInstanceList>
+            <ViewModelInstanceAssetImage propertyValue="7:1" viewModelPropertyId="5:13"/>
+            <ViewModelInstanceArtboard propertyValue="0:90" viewModelPropertyId="5:14"/>
+            <ViewModelInstanceViewModel propertyValue="5:51" viewModelPropertyId="5:15"/>
+        </ViewModelInstance>
+
+        <!-- A second instance, so the host can swap between two whole data sets. -->
+        <ViewModelInstance exports="true" name="Preset" id="5:60">
+            <ViewModelInstanceString propertyValue="Preset data" viewModelPropertyId="5:3"/>
+            <ViewModelInstanceNumber propertyValue="99" viewModelPropertyId="5:4"/>
+            <ViewModelInstanceNumber propertyValue="1" viewModelPropertyId="5:5"/>
+            <ViewModelInstanceBoolean propertyValue="false" viewModelPropertyId="5:6"/>
+            <ViewModelInstanceColor propertyValue="FFE85656" viewModelPropertyId="5:7"/>
+            <ViewModelInstanceEnum propertyValue="6:4" viewModelPropertyId="5:8"/>
+            <ViewModelInstanceTrigger viewModelPropertyId="5:9"/>
+            <ViewModelInstanceString propertyValue="preset note" viewModelPropertyId="5:10"/>
+            <ViewModelInstanceViewModel propertyValue="5:31" viewModelPropertyId="5:11"/>
+            <ViewModelInstanceList viewModelPropertyId="5:12">
+                <ViewModelInstanceListItem viewModelId="5:40" viewModelInstanceId="5:42" name="Alpha"/>
+            </ViewModelInstanceList>
+            <ViewModelInstanceAssetImage propertyValue="7:2" viewModelPropertyId="5:13"/>
+            <ViewModelInstanceArtboard propertyValue="0:90" viewModelPropertyId="5:14"/>
+            <ViewModelInstanceViewModel propertyValue="5:51" viewModelPropertyId="5:15"/>
+        </ViewModelInstance>
+    </ViewModel>
+
+    <!-- ============================== assets ============================== -->
+    <ImageAsset file="assets/check.png" name="check" id="7:1"/>
+    <ImageAsset file="assets/cross.png" name="cross" id="7:2"/>
+    <FontAsset file="assets/karla.ttf" name="Karla" id="7:3"/>
+    <ComponentAsset artboardId="0:50" name="Row"/>
+    <ComponentAsset artboardId="0:90" name="Panel"/>
+    <ScriptAsset file="count_plus_one.luau" name="count_plus_one" id="8:1"/>
+    <ScriptAsset file="toggle_enabled.luau" name="toggle_enabled" id="8:2"/>
+</Rive>
