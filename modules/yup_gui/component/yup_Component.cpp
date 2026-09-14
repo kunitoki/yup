@@ -23,6 +23,46 @@ namespace yup
 {
 
 //==============================================================================
+namespace
+{
+// Returns the axis-aligned bounding box of a rectangle mapped through a transform.
+Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const AffineTransform& transform)
+{
+    const auto x1 = bounds.getX();
+    const auto y1 = bounds.getY();
+    const auto x2 = bounds.getRight();
+    const auto y2 = bounds.getBottom();
+
+    float px1 = x1, py1 = y1;
+    float px2 = x2, py2 = y1;
+    float px3 = x1, py3 = y2;
+    float px4 = x2, py4 = y2;
+
+    transform.transformPoint (px1, py1);
+    transform.transformPoint (px2, py2);
+    transform.transformPoint (px3, py3);
+    transform.transformPoint (px4, py4);
+
+    auto minX = px1, maxX = px1;
+    auto minY = py1, maxY = py1;
+
+    const auto updateMinMax = [&] (float x, float y)
+    {
+        minX = jmin (minX, x);
+        maxX = jmax (maxX, x);
+        minY = jmin (minY, y);
+        maxY = jmax (maxY, y);
+    };
+
+    updateMinMax (px2, py2);
+    updateMinMax (px3, py3);
+    updateMinMax (px4, py4);
+
+    return { minX, minY, maxX - minX, maxY - minY };
+}
+} // namespace
+
+//==============================================================================
 
 Component::Component()
     : optionsValue (0)
@@ -408,6 +448,21 @@ Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
     }
 
     return bounds;
+}
+
+AffineTransform Component::getTransformToTopLevelComponent() const
+{
+    AffineTransform toTopLevel;
+
+    for (auto comp = this; comp != nullptr && ! comp->options.onDesktop && ! comp->options.paintAsOffscreenRoot; comp = comp->getParentComponent())
+    {
+        if (comp->isTransformed())
+            toTopLevel = toTopLevel.followedBy (comp->getTransform());
+
+        toTopLevel = toTopLevel.translated (comp->getPosition());
+    }
+
+    return toTopLevel;
 }
 
 float Component::proportionOfWidth (float proportion) const
@@ -1371,18 +1426,26 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 namespace
 {
-/** Returns the rectangles of @a region that lie inside @a bounds, rounded to whole pixels.
+/** Returns the rectangles of @a region that lie inside @a localBounds mapped through @a toTopLevel,
+    rounded to whole pixels.
+
+    The @a region rectangles live in the coordinate space of the top level component, so @a localBounds
+    are mapped through the accumulated transform of the component and its ancestors to obtain the area
+    it really covers there. For untransformed components that mapping is a plain offset, so the
+    intersection reduces to a bounds check.
 
     The returned list never contains overlapping rectangles, so it can be used directly as a
     clip region.
 */
-RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region, const Rectangle<float>& bounds)
+RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region, const Rectangle<float>& localBounds, const AffineTransform& toTopLevel)
 {
+    const auto clipBounds = getTransformedBounds (localBounds, toTopLevel);
+
     RectangleList<float> result;
 
     for (const auto& rect : region.getRectangles())
     {
-        const auto clipped = bounds.intersection (rect).roundToInt().to<float>();
+        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
 
         if (! clipped.isEmpty())
             result.add (clipped);
@@ -1561,14 +1624,16 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     const auto bounds = getBoundsRelativeToTopLevelComponent();
 
-    auto boundsToRedraw = intersectRepaintRegion (repaintRegions, bounds);
+    const auto toTopLevel = getTransformToTopLevelComponent();
+
+    auto boundsToRedraw = intersectRepaintRegion (repaintRegions, getLocalBounds(), toTopLevel);
 
     if (boundsToRedraw.isEmpty())
     {
         if (! renderContinuous)
             return;
 
-        boundsToRedraw.addWithoutMerge (bounds);
+        boundsToRedraw.addWithoutMerge (getTransformedBounds (getLocalBounds(), toTopLevel));
     }
 
     const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;

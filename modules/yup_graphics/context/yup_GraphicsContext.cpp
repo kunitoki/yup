@@ -33,7 +33,7 @@ bool GraphicsContext::isGpuAvailable() const noexcept
 
 //==============================================================================
 std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GpuDevice::Options, GpuDevice::Ptr = {});
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
@@ -58,7 +58,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (GpuPlatform gra
         case GpuPlatform::Headless:
             return yup_constructHeadlessGraphicsContext (options, std::move (existingGpu));
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
             return yup_constructMetalGraphicsContext (options, std::move (existingGpu));
 #endif

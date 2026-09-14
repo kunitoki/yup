@@ -25,7 +25,7 @@ namespace yup
 //==============================================================================
 
 std::unique_ptr<GpuDevice> yup_constructHeadlessGpuDevice (GpuDevice::Options);
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuDevice> yup_constructMetalGpuDevice (GpuDevice::Options);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
@@ -52,7 +52,7 @@ GpuDevice::Ptr GpuDevice::create (GpuPlatform gpuApi, Options options)
             ctx = yup_constructHeadlessGpuDevice (options);
             break;
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
             ctx = yup_constructMetalGpuDevice (options);
             break;

@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include "rive_renderer.h"
+#include "rive.h"
 
 #if __clang__
  #pragma clang diagnostic push
@@ -30,27 +30,27 @@
  #pragma GCC diagnostic ignored "-Wattributes"
 #endif
 
-#include "source/gl/gl_state.cpp"
-#include "source/gl/gl_utils.cpp"
-#include "source/gl/load_store_actions_ext.cpp"
-#include "source/gl/pls_impl_ext_native.cpp"
-#include "source/gl/pls_impl_rw_texture.cpp"
-#include "source/gl/pls_impl_webgl.cpp"
-#include "source/gl/render_buffer_gl_impl.cpp"
-#include "source/gl/render_context_gl_impl.cpp"
-#include "source/gl/render_target_gl.cpp"
+#include "source/renderer/gl/gl_state.cpp"
+#include "source/renderer/gl/gl_utils.cpp"
+#include "source/renderer/gl/load_store_actions_ext.cpp"
+#include "source/renderer/gl/pls_impl_ext_native.cpp"
+#include "source/renderer/gl/pls_impl_rw_texture.cpp"
+#include "source/renderer/gl/pls_impl_webgl.cpp"
+#include "source/renderer/gl/render_buffer_gl_impl.cpp"
+#include "source/renderer/gl/render_context_gl_impl.cpp"
+#include "source/renderer/gl/render_target_gl.cpp"
 
-#include "source/ore/gl/ore_bind_group_gl.cpp"
-#include "source/ore/gl/ore_buffer_gl.cpp"
-#include "source/ore/gl/ore_context_gl.cpp"
-#include "source/ore/gl/ore_pipeline_gl.cpp"
+#include "source/renderer/ore/gl/ore_bind_group_gl.cpp"
+#include "source/renderer/ore/gl/ore_buffer_gl.cpp"
+#include "source/renderer/ore/gl/ore_context_gl.cpp"
+#include "source/renderer/ore/gl/ore_pipeline_gl.cpp"
 #define oreCompareFunctionToGL oreCompareFunctionToGL_rp
-#include "source/ore/gl/ore_render_pass_gl.cpp"
+#include "source/renderer/ore/gl/ore_render_pass_gl.cpp"
 #undef oreCompareFunctionToGL
-#include "source/ore/gl/ore_sampler_gl.cpp"
-#include "source/ore/gl/ore_shader_module_gl.cpp"
+#include "source/renderer/ore/gl/ore_sampler_gl.cpp"
+#include "source/renderer/ore/gl/ore_shader_module_gl.cpp"
 #define oreFormatToGLInternal oreFormatToGLInternal_tex
-#include "source/ore/gl/ore_texture_gl.cpp"
+#include "source/renderer/ore/gl/ore_texture_gl.cpp"
 #undef oreFormatToGLInternal
 
 #if __clang__

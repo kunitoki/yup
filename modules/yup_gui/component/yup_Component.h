@@ -1477,6 +1477,7 @@ private:
     void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
+    AffineTransform getTransformToTopLevelComponent() const;
     void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);

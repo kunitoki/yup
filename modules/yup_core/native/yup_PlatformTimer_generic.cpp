@@ -129,7 +129,7 @@ private:
 
         void run()
         {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
             tryToUpgradeCurrentThreadToRealtime (Thread::RealtimeOptions {}.withPeriodMs (intervalMs));
 #endif
 

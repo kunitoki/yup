@@ -51,6 +51,9 @@
             "**/*.h",
             "**/*.hh",
             "**/*.hpp"
+          ],
+          "preserve_globs": [
+            "rive/renderer/**"
           ]
         },
         {
@@ -64,23 +67,14 @@
             "**/*.hh",
             "**/*.hpp",
             "**/*.mm"
+          ],
+          "preserve_globs": [
+            "renderer/**"
           ]
-        }
-      ]
-    },
-    {
-      "name": "rive_renderer",
-      "repo": "https://github.com/rive-app/rive-runtime.git",
-      "ref": "main",
-      "destination": "thirdparty/rive_renderer",
-      "license": "MIT",
-      "module_header": "thirdparty/rive_renderer/rive_renderer.h",
-      "module_version_from_ref": true,
-      "follow_rive_ref": true,
-      "copies": [
+        },
         {
-          "from": "renderer/include",
-          "to": "include",
+          "from": "renderer/include/rive/renderer",
+          "to": "include/rive/renderer",
           "include_globs": [
             "**/*.h",
             "**/*.hh",
@@ -89,7 +83,7 @@
         },
         {
           "from": "renderer/src",
-          "to": "source",
+          "to": "source/renderer",
           "include_globs": [
             "**/*.c",
             "**/*.cc",
@@ -119,6 +113,28 @@
       ],
       "patches": [
         {
+          "path": "source/assets/script_asset.cpp",
+          "note": "drop the missing-generator diagnostic: a non-tools runtime only registers scripts whose in-band signature verified, so an unverified script's scripted objects fail this lookup on every advance and spammed stderr with one line per object per frame",
+          "already_contains": "    if (ref == 0)\n    {\n        return false;\n    }",
+          "replace": {
+            "from": [
+              "    if (ref == 0)",
+              "    {",
+              "        fprintf(stderr,",
+              "                \"ScriptAsset doesn't have a generator function %s\\n\",",
+              "                name().c_str());",
+              "        return false;",
+              "    }"
+            ],
+            "to": [
+              "    if (ref == 0)",
+              "    {",
+              "        return false;",
+              "    }"
+            ]
+          }
+        },
+        {
           "path": "include/rive/renderer/ore/ore_context_wgpu.hpp",
           "note": "ContextWGPU owned-encoder mode: add m_ownsCommandEncoder flag",
           "already_contains": "m_ownsCommandEncoder",
@@ -135,7 +151,7 @@
           }
         },
         {
-          "path": "source/ore/wgpu/ore_context_wgpu.cpp",
+          "path": "source/renderer/ore/wgpu/ore_context_wgpu.cpp",
           "note": "ContextWGPU owned-encoder mode: create/submit own encoder when beginFrame has no external one (fixes GpuFrame on Emscripten WebGPU)",
           "already_contains": "m_ownsCommandEncoder",
           "replace": {
@@ -203,7 +219,7 @@
           }
         },
         {
-          "path": "source/ore/gl/ore_context_gl.cpp",
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
           "note": "Ore GL render pass: disable the scissor test for the duration of the pass, since the host renderer may leave a stale scissor rect enabled that would clip the pass's clears and draws",
           "already_contains": "    glBindFramebuffer(GL_FRAMEBUFFER, pass->m_glFBO);\n\n    glDisable(GL_SCISSOR_TEST);",
           "replace": {
@@ -228,7 +244,7 @@
           }
         },
         {
-          "path": "source/ore/gl/ore_context_gl.cpp",
+          "path": "source/renderer/ore/gl/ore_context_gl.cpp",
           "note": "Ore GL render pass: force the color/depth/stencil write masks on before the clears — the host renderer may leave them disabled, which silently discards glClearBuffer* and leaves stale content in reused render targets (trails/ghosting)",
           "already_contains": "    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);\n    glDepthMask(GL_TRUE);\n    glStencilMask(0xFF);",
           "replace": {
@@ -250,7 +266,7 @@
       "shader_generation": {
         "source_dir": "renderer/src/shaders",
         "output_dir": "out/generated",
-        "destination": "thirdparty/rive_renderer/source/generated/shaders",
+        "destination": "thirdparty/rive/source/renderer/generated/shaders",
         "python_package": "ply",
         "required_tools": {
           "minify": [
@@ -810,7 +826,8 @@
         "**/*.cpp"
       ],
       "exclude_globs": [
-        "**/*_test.*"
+        "**/*_test.*",
+        "renderer/**"
       ],
       "include_overrides": {
         "source/animation/nested_bool.cpp": [
@@ -906,6 +923,11 @@
           "#include \"source/lua/lua_data_value.cpp\"",
           "#undef data_value_namecall"
         ],
+        "source/lua/renderer/lua_mesh.cpp": [
+          "#define empty yup_rive_lua_mesh_empty",
+          "#include \"source/lua/renderer/lua_mesh.cpp\"",
+          "#undef empty"
+        ],
         "source/math/hit_test.cpp": [
           "#include \"rive/math/hit_test.hpp\"",
           "#include \"rive/math/mat2d.hpp\"",
@@ -925,18 +947,34 @@
       }
     },
     {
-      "path": "thirdparty/rive_renderer/rive_renderer.cpp",
+      "path": "thirdparty/rive/rive_renderer.cpp",
       "start_marker": "// BEGIN YUP GENERATED RIVE RENDERER INCLUDES",
       "end_marker": "// END YUP GENERATED RIVE RENDERER INCLUDES",
-      "insert_after": "#include \"rive_renderer.h\"",
+      "insert_after": "#undef YUP_RIVE_NO_INCLUDES",
       "insert_before": "#if __clang__",
-      "root": "thirdparty/rive_renderer/source",
-      "prefix": "source",
+      "root": "thirdparty/rive/source/renderer",
+      "prefix": "source/renderer",
       "include_globs": [
         "*.c",
         "*.cc",
-        "*.cpp"
-      ]
+        "*.cpp",
+        "ore/*.c",
+        "ore/*.cc",
+        "ore/*.cpp"
+      ],
+      "exclude_globs": [
+        "**/*_test.*",
+        "ore/*/*"
+      ],
+      "include_overrides": {
+        "source/renderer/ore/hlsl_struct_layout.cpp": [
+          "#define readU16LE readU16LE_vec",
+          "#define readU32LE readU32LE_vec",
+          "#include \"source/renderer/ore/hlsl_struct_layout.cpp\"",
+          "#undef readU16LE",
+          "#undef readU32LE"
+        ]
+      }
     },
     {
       "path": "thirdparty/rive_decoders/rive_decoders.cpp",

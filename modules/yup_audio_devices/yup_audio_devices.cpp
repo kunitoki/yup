@@ -68,7 +68,7 @@
 #include "midi_io/ump/yup_UMPU32InputHandler.h"
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include <yup_audio_basics/native/yup_CoreAudioTimeConversions_apple.h>
 #include <yup_audio_basics/native/yup_AudioWorkgroup_apple.h>
 #endif

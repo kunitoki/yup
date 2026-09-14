@@ -113,7 +113,7 @@ void MessageManager::registerShutdownCallback (std::function<void()> shutdownCal
 }
 
 //==============================================================================
-#if ! (YUP_MAC || YUP_IOS || YUP_WASM)
+#if ! (YUP_APPLE || YUP_WASM)
 // implemented in platform-specific code (yup_Messaging_linux.cpp, yup_Messaging_android.cpp and yup_Messaging_windows.cpp)
 bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 

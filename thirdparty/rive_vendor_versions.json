@@ -8,12 +8,6 @@
     },
     {
       "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
-      "name": "rive_renderer",
-      "ref": "runtime-v0.1.155",
-      "version": "0.1.155"
-    },
-    {
-      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
       "name": "glad",
       "ref": "runtime-v0.1.155",
       "version": "0.1.155"

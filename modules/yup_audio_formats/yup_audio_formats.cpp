@@ -53,7 +53,7 @@
 #include <flac_library/flac_library.h>
 #endif
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
 

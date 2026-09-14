@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if ! defined(DOXYGEN) && (YUP_MAC || YUP_IOS)
+#if ! defined(DOXYGEN) && YUP_APPLE
 
 struct CoreAudioLayouts
 {

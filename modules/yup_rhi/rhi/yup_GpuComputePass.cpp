@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
@@ -33,7 +33,7 @@ std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplD3D11 (GpuDevice&
 #if (YUP_EMSCRIPTEN && RIVE_WEBGPU) || YUP_RIVE_USE_DAWN
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplWebGPU (GpuDevice&);
 #endif
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#if YUP_RHI_USE_GL_COMPUTE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplGL (GpuDevice&);
 #endif
 
@@ -86,7 +86,7 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
 
     switch (ctx->getPlatform())
     {
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
             pass.impl = yup_createComputePassImplMetal (*ctx);
             break;
@@ -108,7 +108,7 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
             break;
 #endif
 
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#if YUP_RHI_USE_GL_COMPUTE
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
             pass.impl = yup_createComputePassImplGL (*ctx);

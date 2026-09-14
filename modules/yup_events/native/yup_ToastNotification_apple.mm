@@ -33,7 +33,7 @@
     hidden or cleared.
 */
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 
 namespace yup::detail
 {
@@ -621,4 +621,4 @@ void toastNotificationSetPermissionStateChangedCallback (std::function<void (Toa
 } // namespace detail
 } // namespace yup
 
-#endif // YUP_MAC || YUP_IOS
+#endif // YUP_APPLE

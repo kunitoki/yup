@@ -30,35 +30,36 @@
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
  #pragma warning (push)
- #pragma warning (disable: 4244)
+ #pragma warning (disable : 4244)
 #endif
 
-#include "rive_renderer.h"
+#define YUP_RIVE_NO_INCLUDES 1
+#include "rive.h"
+#undef YUP_RIVE_NO_INCLUDES
 
 // BEGIN YUP GENERATED RIVE RENDERER INCLUDES
-#include "source/rive_renderer.cpp"
-#include "source/render_context.cpp"
-#include "source/rive_render_paint.cpp"
-#include "source/rive_render_path.cpp"
-#include "source/rive_render_image.cpp"
-#include "source/intersection_board.cpp"
-#include "source/draw.cpp"
-#include "source/gr_triangulator.cpp"
-#include "source/gradient.cpp"
-#include "source/sk_rectanizer_skyline.cpp"
-#include "source/gpu.cpp"
-#include "source/rive_render_factory.cpp"
-#include "source/render_context_helper_impl.cpp"
-#include "source/gpu_resource.cpp"
-// END YUP GENERATED RIVE RENDERER INCLUDES
-
+#include "source/renderer/rive_renderer.cpp"
+#include "source/renderer/render_context.cpp"
+#include "source/renderer/rive_render_paint.cpp"
+#include "source/renderer/rive_render_path.cpp"
+#include "source/renderer/rive_render_image.cpp"
+#include "source/renderer/intersection_board.cpp"
+#include "source/renderer/draw.cpp"
+#include "source/renderer/gr_triangulator.cpp"
+#include "source/renderer/gradient.cpp"
+#include "source/renderer/sk_rectanizer_skyline.cpp"
+#include "source/renderer/gpu.cpp"
+#include "source/renderer/rive_render_factory.cpp"
+#include "source/renderer/render_context_helper_impl.cpp"
+#include "source/renderer/gpu_resource.cpp"
 #define readU16LE readU16LE_vec
 #define readU32LE readU32LE_vec
-#include "source/ore/hlsl_struct_layout.cpp"
+#include "source/renderer/ore/hlsl_struct_layout.cpp"
 #undef readU16LE
 #undef readU32LE
-#include "source/ore/ore_bind_group_layout.cpp"
-#include "source/ore/ore_binding_map.cpp"
+#include "source/renderer/ore/ore_bind_group_layout.cpp"
+#include "source/renderer/ore/ore_binding_map.cpp"
+// END YUP GENERATED RIVE RENDERER INCLUDES
 
 #if __clang__
  #pragma clang diagnostic pop

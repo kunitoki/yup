@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_simd yup_rhi yup_shading rive rive_renderer libclipper2
+    dependencies:       yup_core yup_simd yup_rhi yup_shading rive libclipper2
     optionalDeps:       libpng libjpeg libwebp libgif libtiff
     appleFrameworks:    Metal
     searchpaths:        native
@@ -58,7 +58,7 @@ YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/text/font_hb.hpp>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
-#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/rive_renderer.hpp>
 #include <rive/renderer/ore/ore_context.hpp>
 #include <rive/renderer/ore/ore_binding_map.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE

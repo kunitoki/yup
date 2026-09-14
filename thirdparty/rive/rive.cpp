@@ -22,9 +22,11 @@
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wattributes"
  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #elif __GNUC__
  #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wattributes"
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif _MSC_VER
  #pragma warning (push)

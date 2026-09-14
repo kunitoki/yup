@@ -231,7 +231,7 @@ public:
                                                   ump::PacketProtocol protocol,
                                                   ump::Receiver* receiver);
 
-#if YUP_LINUX || YUP_BSD || YUP_MAC || YUP_IOS || YUP_WASM || DOXYGEN
+#if YUP_LINUX || YUP_BSD || YUP_APPLE || YUP_WASM || DOXYGEN
     /** This will try to create a new midi input device (only available on Linux, macOS and iOS).
 
         This will attempt to create a new midi input device with the specified name for other
@@ -390,7 +390,7 @@ public:
     static std::unique_ptr<MidiOutput> openDevice (const String& deviceIdentifier,
                                                    ump::PacketProtocol protocol);
 
-#if YUP_LINUX || YUP_BSD || YUP_MAC || YUP_IOS || YUP_WASM || DOXYGEN
+#if YUP_LINUX || YUP_BSD || YUP_APPLE || YUP_WASM || DOXYGEN
     /** This will try to create a new midi output device (only available on Linux, macOS and iOS).
 
         This will attempt to create a new midi output device with the specified name that other

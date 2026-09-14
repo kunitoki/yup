@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if ! DOXYGEN && (YUP_MAC || YUP_IOS)
+#if ! DOXYGEN && YUP_APPLE
 using OSType = unsigned int;
 #endif
 
@@ -1136,7 +1136,7 @@ public:
 #endif
 
     //==============================================================================
-#if YUP_MAC || YUP_IOS || DOXYGEN
+#if YUP_APPLE || DOXYGEN
     /** OSX ONLY - Finds the OSType of a file from the its resources. */
     OSType getMacOSType() const;
 
@@ -1149,7 +1149,7 @@ public:
     void addToDock() const;
 #endif
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     /** Returns the path to the container shared by all apps with the provided app group ID.
 
         You *must* pass one of the app group IDs listed in your app's entitlements file.

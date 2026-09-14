@@ -78,7 +78,7 @@ struct ThreadPriorities
         { Thread::Priority::background, 0 },
 #endif
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
         { Thread::Priority::highest, 4 },
         { Thread::Priority::high, 3 },
         { Thread::Priority::normal, 2 },

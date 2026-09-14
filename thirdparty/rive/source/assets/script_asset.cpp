@@ -138,9 +138,6 @@ bool ScriptAsset::initScriptedObjectWith(ScriptedObject* object)
 
     if (ref == 0)
     {
-        fprintf(stderr,
-                "ScriptAsset doesn't have a generator function %s\n",
-                name().c_str());
         return false;
     }
     rive_lua_pushRef(state, ref);
