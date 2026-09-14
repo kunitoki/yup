@@ -108,7 +108,7 @@
 #include "native/yup_GpuComputePipeline_webgpu.cpp"
 #include "native/yup_GpuComputePass_webgpu.cpp"
 #endif
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#if YUP_RHI_USE_GL_COMPUTE
 #include "native/yup_GpuComputePipeline_opengl.cpp"
 #include "native/yup_GpuComputePass_opengl.cpp"
 #endif

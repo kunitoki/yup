@@ -119,7 +119,7 @@
 #endif 
 
 #if YUP_RIVE_USE_OPENGL
-#if !defined(RIVE_DESKTOP_GL) && !defined(RIVE_WEBGL)
+#if !defined(RIVE_DESKTOP_GL) && !defined(RIVE_WEBGL) && !defined(RIVE_ANDROID) && !YUP_ANDROID && !YUP_WASM
 #define RIVE_DESKTOP_GL 1
 #endif
 #endif

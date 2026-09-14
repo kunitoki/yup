@@ -54,7 +54,7 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr
             return yup_constructComputePipelineWebGPU (*ctx, source, workgroupSize);
 #endif
 
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#if YUP_RHI_USE_GL_COMPUTE
         case GpuPlatform::OpenGL:
         case GpuPlatform::OpenGLES:
         {

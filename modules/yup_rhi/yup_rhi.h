@@ -58,6 +58,20 @@ YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
+/** Config: YUP_RHI_USE_GL_COMPUTE
+
+    Enables the OpenGL compute backend, which needs desktop GL 4.3+ or GLES 3.1+ entry points.
+    WebGL (and WebGPU on the web) only reach GLES 3.0, so they build without it.
+*/
+#ifndef YUP_RHI_USE_GL_COMPUTE
+#if (YUP_RIVE_USE_OPENGL && ! YUP_WASM)
+#define YUP_RHI_USE_GL_COMPUTE 1
+#else
+#define YUP_RHI_USE_GL_COMPUTE 0
+#endif
+#endif
+
+//==============================================================================
 #include <memory>
 #include <optional>
 #include <vector>
