@@ -115,7 +115,7 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4245 4100)
 #include <intrin.h>
 #endif
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include <libkern/OSAtomic.h>
 #include <libkern/OSByteOrder.h>
 #include <xlocale.h>

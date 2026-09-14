@@ -7,7 +7,7 @@ dependencies are pulled in automatically by the [CMake API](build-system/cmake-a
 
 ```{note}
 All `yup_*` modules share the same version number. Modules also depend on a few
-bundled third-party libraries (`zlib`, `rive`, `rive_renderer`, `libclipper2`,
+bundled third-party libraries (`zlib`, `rive`, `libclipper2`,
 `xsimd`), which are resolved for you by the build system.
 ```
 
@@ -150,7 +150,7 @@ pulling in the 2D graphics stack.
 flowchart LR
     yup_rhi:::self --> yup_core
     yup_rhi --> yup_shading
-    yup_rhi --> rive_renderer:::ext
+    yup_rhi --> rive:::ext
     classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
@@ -171,7 +171,6 @@ flowchart LR
     yup_graphics --> yup_rhi
     yup_graphics --> yup_shading
     yup_graphics --> rive:::ext
-    yup_graphics --> rive_renderer:::ext
     yup_graphics --> libclipper2:::ext
     yup_graphics -. optional .-> libpng:::opt
     yup_graphics -. optional .-> libjpeg:::opt

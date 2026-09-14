@@ -322,6 +322,24 @@ comp.repaint (10, 10, 100, 100);      // x, y, w, h overload
 this in debug builds.
 ```
 
+### Multiple dirty areas (`RepaintMode`)
+
+When several disjoint areas of a window are dirty in the same frame, the framework
+repaints each dirty rectangle in isolation: a parent shared by several dirty
+rectangles is painted once, clipped to those rectangles, and only the parts of the
+hierarchy that overlap a dirty rectangle are repainted. Anything between two distant
+dirty rectangles is left untouched, so it is not redrawn even though it did not
+change. This is the default (`RepaintMode::disjointRegions`).
+
+The older behaviour — collapsing every dirty rectangle into a single bounding box,
+which repaints everything in between — remains available as a safe fallback:
+
+```cpp
+ComponentNative::Options opts;
+opts.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+rootComponent.addToDesktop (opts);
+```
+
 ### Optimising paint with opacity
 
 If a component is fully opaque (covers its background entirely), inform the

@@ -59,6 +59,7 @@
 #include "keyboard/yup_PitchWheelComponent.h"
 #include "keyboard/yup_ModWheelComponent.h"
 #include "displays/yup_AudioViewComponent.h"
+#include "displays/yup_SpectrumBinMapping.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
 #include "displays/yup_SpectrogramComponent.h"
 #include "displays/yup_CartesianPlane.h"

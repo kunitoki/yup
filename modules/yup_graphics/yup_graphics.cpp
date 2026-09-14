@@ -71,7 +71,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
-#elif YUP_MAC || YUP_IOS
+#elif YUP_APPLE
 
 #if YUP_RIVE_USE_METAL
 #import <Metal/Metal.h>

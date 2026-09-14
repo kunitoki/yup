@@ -32,7 +32,7 @@
     website:            https://github.com/kunitoki/yup
     license:            ISC
 
-    dependencies:       yup_core yup_shading yup_simd rive_renderer
+    dependencies:       yup_core yup_shading yup_simd rive
     appleFrameworks:    Metal
 
   END_YUP_MODULE_DECLARATION
@@ -49,12 +49,27 @@
 
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+#include <rive/rive.h>
 #include <rive/refcnt.hpp>
-#include <rive_renderer/rive_renderer.h>
+#include <rive/renderer/rive_renderer.hpp>
 #include <rive/renderer/render_canvas.hpp>
 #include <rive/renderer/ore/ore_context.hpp>
 #include <rive/renderer/ore/ore_binding_map.hpp>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
+
+//==============================================================================
+/** Config: YUP_RHI_USE_GL_COMPUTE
+
+    Enables the OpenGL compute backend, which needs desktop GL 4.3+ or GLES 3.1+ entry points.
+    WebGL (and WebGPU on the web) only reach GLES 3.0, so they build without it.
+*/
+#ifndef YUP_RHI_USE_GL_COMPUTE
+#if (YUP_RIVE_USE_OPENGL && ! YUP_WASM)
+#define YUP_RHI_USE_GL_COMPUTE 1
+#else
+#define YUP_RHI_USE_GL_COMPUTE 0
+#endif
+#endif
 
 //==============================================================================
 #include <memory>

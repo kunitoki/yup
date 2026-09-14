@@ -88,6 +88,7 @@
 #define CF_EXCLUDE_CSTD_HEADERS 1
 #include <TargetConditionals.h> // (needed to find out what platform we're using)
 #include <AvailabilityMacros.h>
+#define YUP_APPLE 1
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
 #define YUP_IPHONE 1
 #define YUP_IOS 1
@@ -140,7 +141,7 @@
 #endif
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 
 // Expands to true if the API of the specified version is available at build time, false otherwise
 #define YUP_MAC_API_VERSION_CAN_BE_BUILT(major, minor) \

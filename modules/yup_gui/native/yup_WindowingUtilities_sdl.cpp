@@ -394,7 +394,7 @@ GpuPlatform getGraphicsContextApi (const std::optional<GpuPlatform>& forceContex
 {
     GpuPlatform desiredApi;
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #if YUP_RIVE_USE_METAL
     desiredApi = forceContextApi.value_or (GpuPlatform::Metal);
 #elif YUP_RIVE_USE_OPENGL

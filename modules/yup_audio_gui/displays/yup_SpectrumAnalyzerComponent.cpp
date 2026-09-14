@@ -32,6 +32,7 @@ SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& sta
 
     initializeFFTBuffers();
     generateWindow();
+    updateBinMapping();
 
     startTimerHz (30); // 30 FPS updates by default
 }
@@ -44,14 +45,22 @@ SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 //==============================================================================
 void SpectrumAnalyzerComponent::initializeFFTBuffers()
 {
-    fftProcessor = std::make_unique<FFTProcessor> (fftSize);
+    fftProcessor = std::make_unique<FFTProcessor<float>> (fftSize);
     fftInputBuffer.resize (fftSize, 0.0f);
     fftOutputBuffer.resize (fftSize * 2, 0.0f); // Complex output needs 2x space
     windowBuffer.resize (fftSize, 0.0f);
 
-    // Pre-allocate magnitude buffer to avoid allocations during processing
+    // Pre-allocate magnitude buffers to avoid allocations during processing
     const int numBins = fftSize / 2 + 1;
     magnitudeBuffer.resize (numBins, 0.0f);
+    binLevelBuffer.resize (numBins, 0.0f);
+}
+
+void SpectrumAnalyzerComponent::updateBinMapping()
+{
+    binMapping.setFftParameters (fftSize, sampleRate);
+    binMapping.setFrequencyRange (minFrequency, maxFrequency);
+    binMapping.setNumDisplayPoints (scopeSize);
 }
 
 //==============================================================================
@@ -95,8 +104,7 @@ void SpectrumAnalyzerComponent::processFFT()
     }
 
     // Apply window function
-    for (int i = 0; i < fftSize; ++i)
-        fftInputBuffer[static_cast<size_t> (i)] *= windowBuffer[static_cast<size_t> (i)];
+    FloatVectorOperations::multiply (fftInputBuffer.data(), windowBuffer.data(), fftInputBuffer.data(), fftSize);
 
     // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
@@ -112,59 +120,35 @@ void SpectrumAnalyzerComponent::processFFT()
 
         magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
     }
+
+    // Pre-compute the calibrated level of every bin for the active level mode, so that display bands
+    // can be evaluated by interpolating between neighbouring bins instead of snapping to one of them.
+    for (int binIndex = 0; binIndex < numBins; ++binIndex)
+        binLevelBuffer[static_cast<size_t> (binIndex)] = getBinLinearLevel (binIndex);
 }
 
 void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
 {
+    const auto aggregation = getBandAggregation();
+
     // Always apply consistent smoothing to prevent pulsating
     // Process display bins
     for (int i = 0; i < scopeSize; ++i)
     {
         float targetLevel = 0.0f;
 
-        if (hasNewFFTData)
+        if (hasNewFFTData && isPositiveAndBelow (i, binMapping.getNumDisplayPoints()))
         {
-            // Calculate frequency range for this display bin
-            const float proportion = float (i) / float (scopeSize - 1);
-            const float logFreq = logMinFrequency + proportion * (logMaxFrequency - logMinFrequency);
-            const float centerFreq = std::pow (10.0f, logFreq);
-
-            // Calculate the frequency range that this display bin represents
-            float freqRangeStart, freqRangeEnd;
-            if (i == 0)
-            {
-                freqRangeStart = minFrequency;
-                const float nextLogFreq = logMinFrequency + (float (i + 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
-                const float nextFreq = std::pow (10.0f, nextLogFreq);
-                freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
-            }
-            else if (i == scopeSize - 1)
-            {
-                const float prevLogFreq = logMinFrequency + (float (i - 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
-                const float prevFreq = std::pow (10.0f, prevLogFreq);
-                freqRangeStart = (prevFreq + centerFreq) * 0.5f;
-                freqRangeEnd = maxFrequency;
-            }
-            else
-            {
-                const float prevLogFreq = logMinFrequency + (float (i - 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
-                const float nextLogFreq = logMinFrequency + (float (i + 1) / float (scopeSize - 1)) * (logMaxFrequency - logMinFrequency);
-                const float prevFreq = std::pow (10.0f, prevLogFreq);
-                const float nextFreq = std::pow (10.0f, nextLogFreq);
-                freqRangeStart = (prevFreq + centerFreq) * 0.5f;
-                freqRangeEnd = (centerFreq + nextFreq) * 0.5f;
-            }
-
-            // Convert frequency range to bin range
-            const float startBin = (freqRangeStart * float (fftSize)) / float (sampleRate);
-            const float endBin = (freqRangeEnd * float (fftSize)) / float (sampleRate);
-            const float binSpan = endBin - startBin;
-
-            const float exactBin = (centerFreq * float (fftSize)) / float (sampleRate);
-            const float magnitudeDb = getDisplayDecibelsForBinRange (startBin, endBin, exactBin);
+            // The band covered by this display point is resolved across the fractional FFT bin
+            // domain, so neighbouring display points always produce gradually changing levels.
+            const float bandLevel = binMapping.getBandLevel (binLevelBuffer, i, aggregation);
 
             // Map to display range [0.0, 1.0]
-            targetLevel = jmap (jlimit (minDecibels, maxDecibels, magnitudeDb), minDecibels, maxDecibels, 0.0f, 1.0f);
+            targetLevel = jmap (jlimit (minDecibels, maxDecibels, linearLevelToDecibels (bandLevel)),
+                                minDecibels,
+                                maxDecibels,
+                                0.0f,
+                                1.0f);
         }
 
         // Apply peak-hold with time-based release: instant attack, controlled release
@@ -294,88 +278,22 @@ float SpectrumAnalyzerComponent::linearLevelToDecibels (float level) const noexc
     return (isPowerMode() ? 10.0f : 20.0f) * std::log10 (level);
 }
 
-float SpectrumAnalyzerComponent::getInterpolatedPeakDecibels (float exactBin) const noexcept
+SpectrumBinMapping::BandAggregation SpectrumAnalyzerComponent::getBandAggregation() const noexcept
 {
-    const int numBins = fftSize / 2 + 1;
-    const int lastBin = numBins - 1;
-    const int nearestBin = jlimit (0, lastBin, roundToInt (exactBin));
-
-    int peakBin = nearestBin;
-    float peakLevel = getBinLinearLevel (nearestBin);
-
-    const int searchStart = jmax (0, nearestBin - 1);
-    const int searchEnd = jmin (lastBin, nearestBin + 1);
-
-    for (int binIndex = searchStart; binIndex <= searchEnd; ++binIndex)
+    switch (levelMode)
     {
-        const float binLevel = getBinLinearLevel (binIndex);
+        case LevelMode::powerDecibels:
+            return SpectrumBinMapping::BandAggregation::sum;
 
-        if (binLevel > peakLevel)
-        {
-            peakLevel = binLevel;
-            peakBin = binIndex;
-        }
+        case LevelMode::powerSpectralDensity:
+            return SpectrumBinMapping::BandAggregation::mean;
+
+        case LevelMode::peakDecibels:
+        case LevelMode::rmsDecibels:
+            break;
     }
 
-    const float peakDecibels = linearLevelToDecibels (peakLevel);
-
-    if (peakBin <= 0 || peakBin >= lastBin)
-        return peakDecibels;
-
-    const float y0 = linearLevelToDecibels (getBinLinearLevel (peakBin - 1));
-    const float y1 = peakDecibels;
-    const float y2 = linearLevelToDecibels (getBinLinearLevel (peakBin + 1));
-    const float denominator = y0 - 2.0f * y1 + y2;
-
-    if (std::abs (denominator) < 1.0e-6f || denominator >= 0.0f)
-        return y1;
-
-    const float offset = jlimit (-1.0f, 1.0f, 0.5f * (y0 - y2) / denominator);
-    return y1 - 0.25f * (y0 - y2) * offset;
-}
-
-float SpectrumAnalyzerComponent::getDisplayDecibelsForBinRange (float startBin, float endBin, float centerBin) const noexcept
-{
-    const int numBins = fftSize / 2 + 1;
-    const int lastBin = numBins - 1;
-    const float binSpan = endBin - startBin;
-
-    if (binSpan <= 1.5f && ! isPowerMode())
-        return getInterpolatedPeakDecibels (centerBin);
-
-    const int binStart = jlimit (0, lastBin, static_cast<int> (std::floor (startBin)));
-    const int binEnd = jlimit (0, lastBin, static_cast<int> (std::ceil (endBin)));
-
-    if (levelMode == LevelMode::powerDecibels)
-    {
-        float bandPower = 0.0f;
-
-        for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-            bandPower += getBinPower (binIndex);
-
-        return linearLevelToDecibels (bandPower);
-    }
-
-    if (levelMode == LevelMode::powerSpectralDensity)
-    {
-        float densitySum = 0.0f;
-        int densityCount = 0;
-
-        for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-        {
-            densitySum += getBinPowerSpectralDensity (binIndex);
-            ++densityCount;
-        }
-
-        return linearLevelToDecibels (densityCount > 0 ? densitySum / float (densityCount) : 0.0f);
-    }
-
-    float peakLevel = 0.0f;
-
-    for (int binIndex = binStart; binIndex <= binEnd; ++binIndex)
-        peakLevel = jmax (peakLevel, getBinLinearLevel (binIndex));
-
-    return linearLevelToDecibels (peakLevel);
+    return SpectrumBinMapping::BandAggregation::peak;
 }
 
 bool SpectrumAnalyzerComponent::isPowerMode() const noexcept
@@ -411,12 +329,7 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
     if (scopeSize < 3)
         return;
 
-    const float firstY = binToY (0, bounds.getHeight());
-
-    Path spectrumPath;
-    spectrumPath.startNewSubPath (bounds.getX(), firstY);
-    computeSpectrumPath (spectrumPath, bounds, false);
-
+    auto spectrumPath = createSpectrumPath (bounds, false);
     auto filledPath = spectrumPath.createStrokePolygon (4.0f);
     auto lineColor = Color (0xFF00a840);
 
@@ -448,13 +361,8 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
     if (scopeSize < 3)
         return;
 
-    const float firstX = frequencyToX (std::pow (10.0f, logMinFrequency), bounds);
-    const float firstY = binToY (0, bounds.getHeight());
-
     // Create filled path that starts and ends properly at baseline
-    Path fillPath;
-    fillPath.startNewSubPath (firstX, bounds.getBottom());
-    computeSpectrumPath (fillPath, bounds, true);
+    auto fillPath = createSpectrumPath (bounds, true);
 
     auto gradient = ColorGradient (
         Color (0xc000ff40), bounds.getX(), bounds.getY(), Color (0x1000ff40), bounds.getX(), bounds.getBottom());
@@ -462,9 +370,7 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
     g.fillPath (fillPath);
 
     // Draw the spectrum outline
-    Path spectrumPath;
-    spectrumPath.startNewSubPath (bounds.getX(), firstY);
-    computeSpectrumPath (spectrumPath, bounds, false);
+    auto spectrumPath = createSpectrumPath (bounds, false);
 
     g.setStrokeColor (Color (0xFF00ff40));
     g.setStrokeWidth (1.5f);
@@ -586,29 +492,38 @@ void SpectrumAnalyzerComponent::resized()
 }
 
 //==============================================================================
-void SpectrumAnalyzerComponent::computeSpectrumPath (Path spectrumPath, const Rectangle<float>& bounds, bool closePath)
+Path SpectrumAnalyzerComponent::createSpectrumPath (const Rectangle<float>& bounds, bool closePath) const
 {
-    float lastX = 0.0f;
+    Path path;
 
-    // Draw the spectrum curve
-    for (int i = 0; i < scopeSize; ++i)
+    const float width = bounds.getWidth();
+
+    if (scopeSize < 2 || width <= 0.0f || bounds.getHeight() <= 0.0f)
+        return path;
+
+    // A closed path starts and ends on the baseline, so that it can be filled directly.
+    path.startNewSubPath (bounds.getX(),
+                          closePath ? bounds.getBottom() : levelToY (getDisplayLevelForPosition (0.0f), bounds));
+
+    // Sample one point per pixel column and interpolate between the smoothed display points, so the
+    // outline stays continuous at any component width.
+    const int numColumns = jmax (1, roundToInt (width));
+
+    for (int column = 0; column <= numColumns; ++column)
     {
-        const float proportion = float (i) / float (scopeSize - 1);
-        const float frequency = std::pow (10.0f, logMinFrequency + proportion * (logMaxFrequency - logMinFrequency));
-        const float x = frequencyToX (frequency, bounds);
-        const float y = binToY (i, bounds.getHeight());
+        const float proportion = float (column) / float (numColumns);
+        const float level = getDisplayLevelForPosition (proportion * float (scopeSize - 1));
 
-        spectrumPath.lineTo (x, y);
-
-        lastX = x;
+        path.lineTo (bounds.getX() + width * proportion, levelToY (level, bounds));
     }
 
-    // End at baseline at the last spectrum frequency
     if (closePath)
     {
-        spectrumPath.lineTo (lastX, bounds.getBottom());
-        spectrumPath.closeSubPath();
+        path.lineTo (bounds.getRight(), bounds.getBottom());
+        path.closeSubPath();
     }
+
+    return path;
 }
 
 //==============================================================================
@@ -646,6 +561,8 @@ void SpectrumAnalyzerComponent::setFrequencyRange (float minFreq, float maxFreq)
         logMinFrequency = std::log10 (minFreq);
         logMaxFrequency = std::log10 (maxFreq);
 
+        updateBinMapping();
+
         repaint();
     }
 }
@@ -672,6 +589,8 @@ void SpectrumAnalyzerComponent::setSampleRate (double sampleRateToUse)
     {
         sampleRate = sampleRateToUse;
 
+        updateBinMapping();
+
         repaint();
     }
 }
@@ -690,6 +609,12 @@ void SpectrumAnalyzerComponent::setLevelMode (LevelMode mode)
     if (levelMode != mode)
     {
         levelMode = mode;
+
+        // The calibration of the per-bin levels depends on the level mode.
+        if (! binLevelBuffer.empty())
+            for (int binIndex = 0; binIndex < fftSize / 2 + 1; ++binIndex)
+                binLevelBuffer[static_cast<size_t> (binIndex)] = getBinLinearLevel (binIndex);
+
         repaint();
     }
 }
@@ -715,12 +640,21 @@ float SpectrumAnalyzerComponent::frequencyToX (float frequency, const Rectangle<
     return jmap (std::log10 (frequency), logMinFrequency, logMaxFrequency, bounds.getX(), bounds.getRight());
 }
 
-float SpectrumAnalyzerComponent::binToY (int binIndex, float height) const noexcept
+float SpectrumAnalyzerComponent::levelToY (float level, const Rectangle<float>& bounds) const noexcept
 {
-    if (isPositiveAndBelow (binIndex, (int) scopeData.size()))
-        return jmap (scopeData[static_cast<size_t> (binIndex)], 0.0f, 1.0f, height, 0.0f);
+    return jmap (jlimit (0.0f, 1.0f, level), 0.0f, 1.0f, bounds.getBottom(), bounds.getY());
+}
 
-    return 0.0f;
+float SpectrumAnalyzerComponent::getDisplayLevelForPosition (float displayPoint) const noexcept
+{
+    const float position = jlimit (0.0f, float (scopeSize - 1), displayPoint);
+    const int lowerPoint = jlimit (0, scopeSize - 2, (int) std::floor (position));
+    const float fraction = position - float (lowerPoint);
+
+    const float lowerLevel = scopeData[static_cast<size_t> (lowerPoint)];
+    const float upperLevel = scopeData[static_cast<size_t> (lowerPoint + 1)];
+
+    return lowerLevel + fraction * (upperLevel - lowerLevel);
 }
 
 float SpectrumAnalyzerComponent::decibelToY (float decibel, const Rectangle<float>& bounds) const noexcept
@@ -756,6 +690,7 @@ void SpectrumAnalyzerComponent::setFFTSize (int size)
 
         initializeFFTBuffers();
         generateWindow();
+        updateBinMapping();
 
         repaint();
     }

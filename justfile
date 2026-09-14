@@ -156,7 +156,7 @@ rive_shaders_update:
   uv venv .venv --clear
   source .venv/bin/activate
   uv pip install ply
-  uv run make -C thirdparty/rive_renderer/source/shaders -j 8
-  cp -R thirdparty/rive_renderer/source/shaders/out/generated/* thirdparty/rive_renderer/source/generated/shaders/
-  rm -Rf thirdparty/rive_renderer/source/shaders/out
+  uv run make -C thirdparty/rive/source/renderer/shaders -j 8
+  cp -R thirdparty/rive/source/renderer/shaders/out/generated/* thirdparty/rive/source/renderer/generated/shaders/
+  rm -Rf thirdparty/rive/source/renderer/shaders/out
   .venv/bin/deactivate

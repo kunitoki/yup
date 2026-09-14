@@ -410,7 +410,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #include "detail/yup_CallbackListenerList.h"
 
-#if YUP_CORE_INCLUDE_OBJC_HELPERS && (YUP_MAC || YUP_IOS)
+#if YUP_CORE_INCLUDE_OBJC_HELPERS && YUP_APPLE
 #include "native/yup_CFHelpers_apple.h"
 #include "native/yup_ObjCHelpers_apple.h"
 #endif

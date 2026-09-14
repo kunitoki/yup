@@ -23,6 +23,46 @@ namespace yup
 {
 
 //==============================================================================
+namespace
+{
+// Returns the axis-aligned bounding box of a rectangle mapped through a transform.
+Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const AffineTransform& transform)
+{
+    const auto x1 = bounds.getX();
+    const auto y1 = bounds.getY();
+    const auto x2 = bounds.getRight();
+    const auto y2 = bounds.getBottom();
+
+    float px1 = x1, py1 = y1;
+    float px2 = x2, py2 = y1;
+    float px3 = x1, py3 = y2;
+    float px4 = x2, py4 = y2;
+
+    transform.transformPoint (px1, py1);
+    transform.transformPoint (px2, py2);
+    transform.transformPoint (px3, py3);
+    transform.transformPoint (px4, py4);
+
+    auto minX = px1, maxX = px1;
+    auto minY = py1, maxY = py1;
+
+    const auto updateMinMax = [&] (float x, float y)
+    {
+        minX = jmin (minX, x);
+        maxX = jmax (maxX, x);
+        minY = jmin (minY, y);
+        maxY = jmax (maxY, y);
+    };
+
+    updateMinMax (px2, py2);
+    updateMinMax (px3, py3);
+    updateMinMax (px4, py4);
+
+    return { minX, minY, maxX - minX, maxY - minY };
+}
+} // namespace
+
+//==============================================================================
 
 Component::Component()
     : optionsValue (0)
@@ -408,6 +448,21 @@ Rectangle<float> Component::getBoundsRelativeToTopLevelComponent() const
     }
 
     return bounds;
+}
+
+AffineTransform Component::getTransformToTopLevelComponent() const
+{
+    AffineTransform toTopLevel;
+
+    for (auto comp = this; comp != nullptr && ! comp->options.onDesktop && ! comp->options.paintAsOffscreenRoot; comp = comp->getParentComponent())
+    {
+        if (comp->isTransformed())
+            toTopLevel = toTopLevel.followedBy (comp->getTransform());
+
+        toTopLevel = toTopLevel.translated (comp->getPosition());
+    }
+
+    return toTopLevel;
 }
 
 float Component::proportionOfWidth (float proportion) const
@@ -1390,10 +1445,60 @@ void Component::internalRepaint (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Component::paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous)
+namespace
+{
+/** Returns the rectangles of @a region that lie inside @a localBounds mapped through @a toTopLevel,
+    rounded to whole pixels.
+
+    The @a region rectangles live in the coordinate space of the top level component, so @a localBounds
+    are mapped through the accumulated transform of the component and its ancestors to obtain the area
+    it really covers there. For untransformed components that mapping is a plain offset, so the
+    intersection reduces to a bounds check.
+
+    The returned list never contains overlapping rectangles, so it can be used directly as a
+    clip region.
+*/
+RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region, const Rectangle<float>& localBounds, const AffineTransform& toTopLevel)
+{
+    const auto clipBounds = getTransformedBounds (localBounds, toTopLevel);
+
+    RectangleList<float> result;
+
+    for (const auto& rect : region.getRectangles())
+    {
+        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
+
+        if (! clipped.isEmpty())
+            result.add (clipped);
+    }
+
+    return result;
+}
+
+/** Clips subsequent drawing to the union of the rectangles in @a region. */
+void setClipRegion (Graphics& g, const RectangleList<float>& region)
+{
+    if (region.getNumRectangles() == 1)
+    {
+        g.setClipPath (region.getRectangles()[0]);
+        return;
+    }
+
+    Path path;
+
+    for (const auto& rect : region.getRectangles())
+        path.addRectangle (rect);
+
+    g.setClipPath (path);
+}
+} // namespace
+
+//==============================================================================
+
+void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous)
 {
     for (auto child : children)
-        child->internalPaint (g, clipArea, renderContinuous);
+        child->internalPaint (g, clipRegion, renderContinuous);
 
     paintOverChildren (g);
 }
@@ -1427,7 +1532,7 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
         options.paintAsOffscreenRoot = true;
 
         auto localBounds = getLocalBounds();
-        paintSubtree (offscreenG, localBounds, localBounds, opacity, renderContinuous);
+        paintSubtree (offscreenG, localBounds, RectangleList<float> { localBounds }, opacity, renderContinuous);
 
         options.paintAsOffscreenRoot = false;
 
@@ -1447,7 +1552,7 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
 //==============================================================================
 
-void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous)
+void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
@@ -1476,12 +1581,12 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
         g.setOpacity (opacity);
         g.setDrawingArea (drawingArea);
         if (! options.unclippedRendering)
-            g.setClipPath (clipArea);
+            setClipRegion (g, clipRegion);
         g.setTransform (transform);
 
         bool canSkipPaint = false;
-        if (! options.unclippedRendering && ! isTransformed())
-            canSkipPaint = hasOpaqueChildCoveringArea (clipArea);
+        if (! options.unclippedRendering && ! isTransformed() && clipRegion.getNumRectangles() == 1)
+            canSkipPaint = hasOpaqueChildCoveringArea (clipRegion.getRectangles()[0]);
 
         if (! canSkipPaint)
         {
@@ -1509,7 +1614,7 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
             const int64 childrenStartTicks = Time::getHighResolutionTicks();
 
             for (auto child : children)
-                child->internalPaint (g, clipArea, renderContinuous);
+                child->internalPaint (g, clipRegion, renderContinuous);
 
             metrics.childrenTicks += Time::getHighResolutionTicks() - childrenStartTicks;
 
@@ -1526,27 +1631,31 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
         }
         else
         {
-            paintChildrenAndOverChildren (g, clipArea, renderContinuous);
+            paintChildrenAndOverChildren (g, clipRegion, renderContinuous);
         }
     }
 }
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
+void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous)
 {
     if (! isVisible() || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
 
-    auto bounds = getBoundsRelativeToTopLevelComponent();
+    const auto bounds = getBoundsRelativeToTopLevelComponent();
 
-    auto boundsToRedraw = bounds
-                              .intersection (repaintArea)
-                              .roundToInt()
-                              .to<float>();
+    const auto toTopLevel = getTransformToTopLevelComponent();
 
-    if (! renderContinuous && boundsToRedraw.isEmpty())
-        return;
+    auto boundsToRedraw = intersectRepaintRegion (repaintRegions, getLocalBounds(), toTopLevel);
+
+    if (boundsToRedraw.isEmpty())
+    {
+        if (! renderContinuous)
+            return;
+
+        boundsToRedraw.addWithoutMerge (getTransformedBounds (getLocalBounds(), toTopLevel));
+    }
 
     const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
     const auto opacity = g.getOpacity() * selfOpacity;
@@ -1567,7 +1676,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             g.setOpacity (opacity);
             g.setDrawingArea (bounds);
             if (! options.unclippedRendering)
-                g.setClipPath (boundsToRedraw);
+                setClipRegion (g, boundsToRedraw);
             g.setTransform (transform);
 
             componentEffect->apply (g, texture, getLocalBounds());
@@ -1609,7 +1718,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             g.setOpacity (opacity);
             g.setDrawingArea (bounds);
             if (! options.unclippedRendering)
-                g.setClipPath (boundsToRedraw);
+                setClipRegion (g, boundsToRedraw);
             g.setTransform (transform);
 
             if (cachedTextureCanvas != nullptr)
@@ -1628,17 +1737,29 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-    g.setFillColor (debugColor);
-    g.setOpacity (0.2f);
-    g.fillAll();
+    paintDebugOverlay (g, bounds, boundsToRedraw);
+#endif
+}
+
+#if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
+void Component::paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const RectangleList<float>& boundsToRedraw)
+{
+    const auto saved = g.saveState();
+
+    g.setDrawingArea (bounds);
+    if (! options.unclippedRendering)
+        setClipRegion (g, boundsToRedraw);
+    g.setTransform (transform);
+    g.setFillColor (debugColor.withMultipliedAlpha (0.2f));
+    g.fillRect (getLocalBounds());
 
     if (--counter == 0)
     {
         counter = 2;
         debugColor = Color::opaqueRandom();
     }
-#endif
 }
+#endif
 
 //==============================================================================
 

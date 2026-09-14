@@ -8,7 +8,7 @@ which calls `unhandledException` on the application - and `PyYUPApplication` for
 Python with the traceback rebuilt.
 
 The macOS dispatch loops were the gap: `yup_MessageManager.cpp` is guarded by
-`#if ! (YUP_MAC || YUP_IOS || YUP_WASM)`, and the `.mm` replacements had no C++ catch at all,
+`#if ! (YUP_APPLE || YUP_WASM)`, and the `.mm` replacements had no C++ catch at all,
 only an `@catch (NSException*)` - a disjoint set. So on macOS the exception escaped the loop
 entirely and `unhandledException` was unreachable.
 

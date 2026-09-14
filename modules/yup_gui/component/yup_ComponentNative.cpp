@@ -123,6 +123,12 @@ ComponentNative::Options& ComponentNative::Options::withUpdateOnlyFocused (bool 
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withRepaintMode (RepaintMode newRepaintMode) noexcept
+{
+    repaintMode = newRepaintMode;
+    return *this;
+}
+
 //==============================================================================
 
 ComponentNative::ComponentNative (Component& newComponent, const Flags& newFlags)

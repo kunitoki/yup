@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_ANDROID
+#if YUP_RHI_USE_GL_COMPUTE
 
 namespace yup
 {

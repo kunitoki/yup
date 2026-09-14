@@ -161,7 +161,7 @@
 #endif
 
 //==============================================================================
-#if (YUP_MAC || YUP_IOS) && __has_include(<Accelerate/Accelerate.h>)
+#if YUP_APPLE && __has_include(<Accelerate/Accelerate.h>)
 #ifndef YUP_USE_VDSP_FRAMEWORK
 #define YUP_USE_VDSP_FRAMEWORK 1
 #endif

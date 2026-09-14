@@ -170,7 +170,7 @@ public:
         if (computeDevice == nullptr)
         {
             const yup::GpuPlatform platforms[] = {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
                 yup::GpuPlatform::Metal,
 #else
 #if YUP_WINDOWS

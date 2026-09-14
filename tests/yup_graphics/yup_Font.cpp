@@ -1108,7 +1108,7 @@ TEST (FontTests, LoadSerifSystemTextFontDoesNotCrash)
 {
     auto font = Font::loadSerifSystemTextFont();
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     EXPECT_TRUE (font.wasOk());
 #else
     // On other platforms the presence of system fonts varies; just ensure no crash.
@@ -1121,7 +1121,7 @@ TEST (FontTests, LoadMonospaceSystemTextFontDoesNotCrash)
 {
     auto font = Font::loadMonospaceSystemTextFont();
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     EXPECT_TRUE (font.wasOk());
 #else
     if (font.wasOk())

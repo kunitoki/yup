@@ -1,0 +1,5 @@
+name: viewmodel-lab
+main: ViewModel Lab
+logs:
+  file: build/rive.log
+  problems: build/problems.log

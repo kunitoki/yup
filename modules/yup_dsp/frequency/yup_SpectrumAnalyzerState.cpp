@@ -53,10 +53,12 @@ SpectrumAnalyzerState::~SpectrumAnalyzerState()
 void SpectrumAnalyzerState::pushSample (float sample) noexcept
 {
     // Lock-free write to FIFO - safe for audio thread
-    const auto writeScope = audioFifo->write (1);
+    {
+        const auto writeScope = audioFifo->write (1);
 
-    if (writeScope.blockSize1 > 0)
-        sampleBuffer[static_cast<size_t> (writeScope.startIndex1)] = sample;
+        if (writeScope.blockSize1 > 0)
+            sampleBuffer[static_cast<size_t> (writeScope.startIndex1)] = sample;
+    }
 
     // Check if we have enough samples for FFT processing with overlap
     if (audioFifo->getNumReady() >= fftSize)
@@ -72,18 +74,20 @@ void SpectrumAnalyzerState::pushSamples (const float* samples, int numSamples) n
         return;
 
     // Lock-free write to FIFO - safe for audio thread
-    const auto writeScope = audioFifo->write (numSamples);
-
-    // Copy first block
-    if (writeScope.blockSize1 > 0)
     {
-        std::copy_n (samples, writeScope.blockSize1, &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
-    }
+        const auto writeScope = audioFifo->write (numSamples);
 
-    // Copy second block (wrap-around case)
-    if (writeScope.blockSize2 > 0)
-    {
-        std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2, &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
+        // Copy first block
+        if (writeScope.blockSize1 > 0)
+        {
+            std::copy_n (samples, writeScope.blockSize1, &sampleBuffer[static_cast<size_t> (writeScope.startIndex1)]);
+        }
+
+        // Copy second block (wrap-around case)
+        if (writeScope.blockSize2 > 0)
+        {
+            std::copy_n (samples + writeScope.blockSize1, writeScope.blockSize2, &sampleBuffer[static_cast<size_t> (writeScope.startIndex2)]);
+        }
     }
 
     // Check if we have enough samples for FFT processing with overlap

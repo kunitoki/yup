@@ -302,7 +302,7 @@ void SpectralBridge::allocateResources()
     hopSize = fftSize / overlapFactor;
 
     fft.setSize (fftSize);
-    fft.setScaling (FFTProcessor::FFTScaling::asymmetric);
+    fft.setScaling (FFTProcessor<float>::FFTScaling::asymmetric);
 
     buildWindows();
 

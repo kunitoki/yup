@@ -25,8 +25,9 @@ set (target_version "2.0.0")
 
 project (${target_name} VERSION ${target_version})
 
-set (rive_file "data/rive/alien.riv")
-set (lottie_file "data/lottie/goal.lottie")
+set (rive_file "data/alien.riv")
+set (lottie_file "data/goal.lottie")
+set (layout_ui_rive_file "data/layout-ui.riv")
 
 # ==== Select which demo(s) to build
 # Set to "ALL" (default) to build the full demo browser with every example. Set to a single demo:
@@ -94,6 +95,7 @@ if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/data/logo.png@data/logo.png")
     if (need_rive_file)
         list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@${rive_file}")
+        list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/${layout_ui_rive_file}@${layout_ui_rive_file}")
     endif()
     if (need_lottie_file)
         list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/${lottie_file}@${lottie_file}")
@@ -143,8 +145,6 @@ yup_standalone_app (
     PTHREAD_POOL_SIZE 16
     STACK_SIZE 4194304
     DEFINITIONS
-        YUP_EXAMPLE_GRAPHICS_RIVE_FILE="${rive_file}"
-        YUP_EXAMPLE_GRAPHICS_LOTTIE_FILE="${lottie_file}"
         ${additional_definitions}
     BUNDLE_RESOURCES
         ${bundle_resources}

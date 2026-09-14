@@ -81,6 +81,7 @@ set (target_modules
     libjpeg
     libgif
     libtiff
+    luau
     glslang
     spirv_cross)
 

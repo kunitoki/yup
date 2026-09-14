@@ -152,7 +152,7 @@ private:
     std::vector<float> magnitude; // [numFrames x numBins]
     std::vector<float> lgd;       // [numFrames x (fftSize/2)]
 
-    FFTProcessor fft;
+    FFTProcessor<float> fft;
     std::vector<float> fftInput;
     std::vector<float> fftOutput;
 };

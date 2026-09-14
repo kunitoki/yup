@@ -26,6 +26,7 @@
 #include <yup_audio_basics/yup_audio_basics.h>
 
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -376,8 +377,7 @@ private:
 
     float generatePinkNoise()
     {
-        // Paul Kellett's refined method for pink noise
-        float white = yup::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
+        float white = generateWhiteNoise();
 
         pinkFilters[0] = 0.99886f * pinkFilters[0] + white * 0.0555179f;
         pinkFilters[1] = 0.99332f * pinkFilters[1] + white * 0.0750759f;
@@ -394,10 +394,12 @@ private:
 
     float generateBrownNoise()
     {
-        float white = yup::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f;
-        brownState = (brownState + (0.02f * white)) / 1.02f;
-        brownState *= 3.5f; // Scale up
-        return brownState;
+        float white = generateWhiteNoise();
+
+        brownState = (brownState + 0.02f * white) / 1.02f;
+
+        float output = brownState * 3.5f;
+        return yup::jlimit (output, -1.0f, 1.0f);
     }
 
     void updatePhaseIncrement()
@@ -446,6 +448,99 @@ private:
 };
 
 //==============================================================================
+// Plays a decoded audio file (e.g. the bundled mp3) through the demo, resampled
+// to the device rate and looped. The whole file is decoded to mono floats on
+// load so playback is a simple indexed read on the audio thread.
+class AudioFilePlayer
+{
+public:
+    bool load (yup::AudioFormatManager& formatManager, const yup::File& file)
+    {
+        auto newReader = formatManager.createReaderFor (file);
+        if (newReader == nullptr)
+            return false;
+
+        const double newSampleRate = newReader->sampleRate > 0 ? newReader->sampleRate : 44100.0;
+        const int numChannels = yup::jmax (1, newReader->numChannels);
+        const auto numFrames = newReader->lengthInSamples;
+        if (numFrames <= 0)
+            return false;
+
+        // Decode the whole file into an AudioBuffer, then downmix to mono
+        // floats so playback is an indexed read.
+        yup::AudioBuffer<float> decoded (numChannels, static_cast<int> (numFrames));
+        if (! newReader->read (&decoded, 0, static_cast<int> (numFrames), 0, true, numChannels > 1))
+            return false;
+
+        std::vector<float> mono (static_cast<std::size_t> (numFrames), 0.0f);
+        const float gain = 1.0f / static_cast<float> (numChannels);
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const auto* channelData = decoded.getReadPointer (ch);
+            for (std::size_t i = 0; i < mono.size(); ++i)
+                mono[i] += channelData[i] * gain;
+        }
+
+        reader = std::move (newReader);
+        samples = std::move (mono);
+        sourceSampleRate = newSampleRate;
+        position = 0.0;
+        return true;
+    }
+
+    bool isLoaded() const noexcept { return ! samples.empty(); }
+
+    void setAmplitude (float value) { gain = value; }
+
+    void setTargetSampleRate (double newRate) noexcept
+    {
+        targetSampleRate = newRate > 0 ? newRate : 44100.0;
+    }
+
+    void renderNextBlock (float* output, int numSamples) noexcept
+    {
+        if (output == nullptr || numSamples <= 0)
+            return;
+
+        if (samples.empty())
+        {
+            for (int i = 0; i < numSamples; ++i)
+                output[i] = 0.0f;
+            return;
+        }
+
+        const std::size_t length = samples.size();
+        const double ratio = sourceSampleRate / targetSampleRate;
+
+        if (position >= static_cast<double> (length))
+            position = std::fmod (position, static_cast<double> (length));
+
+        const float gainToApply = gain.load();
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Linear interpolation between adjacent source samples, wrapping at
+            // the end of the file to loop playback.
+            const std::size_t i0 = static_cast<std::size_t> (position) % length;
+            const std::size_t i1 = (i0 + 1) % length;
+            const float s0 = samples[i0];
+            const float s1 = samples[i1];
+            const float frac = static_cast<float> (position - static_cast<double> (static_cast<std::size_t> (position)));
+            output[i] = (s0 + frac * (s1 - s0)) * gainToApply;
+
+            position += ratio;
+        }
+    }
+
+private:
+    std::unique_ptr<yup::AudioFormatReader> reader;
+    std::vector<float> samples;
+    double sourceSampleRate = 44100.0;
+    double targetSampleRate = 44100.0;
+    double position = 0.0;
+    std::atomic<float> gain = 1.0f;
+};
+
+//==============================================================================
 
 class SpectrumAnalyzerDemo
     : public yup::Component
@@ -463,8 +558,9 @@ public:
     SpectrumAnalyzerDemo()
         : Component ("SpectrumAnalyzerDemo")
         , analyzerComponent (analyzerState)
-        , spectrogramComponent (analyzerState)
+        , spectrogramComponent (spectrogramState)
     {
+        loadAudioFile(); // Pre-decode the bundled mp3 before the audio device starts
         setupUI();
         setupAudio();
     }
@@ -560,7 +656,10 @@ public:
         if (monoOutputBuffer.size() < static_cast<std::size_t> (numSamples))
             monoOutputBuffer.resize (static_cast<std::size_t> (numSamples), 0.0f);
 
-        signalGenerator.renderNextBlock (monoOutputBuffer.data(), numSamples);
+        if (useAudioFile.load() && filePlayer.isLoaded())
+            filePlayer.renderNextBlock (monoOutputBuffer.data(), numSamples);
+        else
+            signalGenerator.renderNextBlock (monoOutputBuffer.data(), numSamples);
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
@@ -570,8 +669,10 @@ public:
             for (int channel = 0; channel < numOutputChannels; ++channel)
                 outputChannelData[channel][sample] = audioSample;
 
-            // Feed to spectrum analyzer
+            // Feed to both spectrum displays (each owns its own analysis state
+            // so they do not compete for the same FIFO and starve each other)
             analyzerState.pushSample (audioSample);
+            spectrogramState.pushSample (audioSample);
         }
     }
 
@@ -589,10 +690,14 @@ public:
             signalGenerator.setAmplitude (currentAmplitude);
             signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
             monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
+
+            // Match the file player's resampler to the device rate.
+            filePlayer.setTargetSampleRate (sampleRate);
         }
 
-        // Configure spectrum analyzer
+        // Configure spectrum displays
         analyzerComponent.setSampleRate (sampleRate);
+        spectrogramComponent.setSampleRate (sampleRate);
     }
 
     void audioDeviceStopped() override
@@ -622,6 +727,7 @@ private:
         signalTypeCombo->addItem ("White Noise", 7);
         signalTypeCombo->addItem ("Pink Noise", 8);
         signalTypeCombo->addItem ("Brown Noise", 9);
+        signalTypeCombo->addItem ("Audio File", 10);
         signalTypeCombo->setSelectedId (3);
         signalTypeCombo->onSelectedItemChanged = [this]
         {
@@ -651,9 +757,10 @@ private:
         amplitudeSlider->onValueChanged = [this] (double value)
         {
             currentAmplitude = (float) value;
-            updateSignalGenerator ([value] (SignalGenerator& generator)
+            updateSignalGenerator ([value, this] (SignalGenerator& generator)
             {
                 generator.setAmplitude ((float) value);
+                filePlayer.setAmplitude ((float) value);
             });
         };
         addAndMakeVisible (*amplitudeSlider);
@@ -745,6 +852,7 @@ private:
         overlapSlider->onValueChanged = [this] (double value)
         {
             analyzerComponent.setOverlapFactor ((float) value);
+            spectrogramComponent.setOverlapFactor ((float) value);
         };
         addAndMakeVisible (*overlapSlider);
 
@@ -818,7 +926,6 @@ private:
         spectrogramComponent.setWindowType (yup::WindowType::hann);
         spectrogramComponent.setFrequencyRange (20.0f, 22000.0f);
         spectrogramComponent.setDecibelRange (-100.0f, 10.0f);
-        spectrogramComponent.setUpdateRate (25);
         spectrogramComponent.setSampleRate (44100.0);
         spectrogramComponent.setOverlapFactor (0.75f);
         spectrogramComponent.setColorMap (yup::SpectrogramColorMap::Type::heatmap);
@@ -933,6 +1040,23 @@ private:
         fftInfoLabel->setBounds (fftStatus);
     }
 
+    // Decodes the bundled mp3 into the file player so it is ready (and
+    // immutable) before the audio device starts rendering.
+    void loadAudioFile()
+    {
+        formatManager.registerDefaultFormats();
+
+        auto dataDir = yup::File (__FILE__)
+                           .getParentDirectory()
+                           .getParentDirectory()
+                           .getParentDirectory()
+                           .getChildFile ("data");
+
+        auto audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.mp3");
+        if (audioFile.existsAsFile())
+            filePlayer.load (formatManager, audioFile);
+    }
+
     void updateSignalType()
     {
         SignalGenerator::SignalType signalType = SignalGenerator::SignalType::singleTone;
@@ -974,6 +1098,11 @@ private:
                 break;
         }
 
+        // The "Audio File" source plays the pre-decoded mp3 through the file
+        // player instead of the signal generator (loaded in the constructor, so
+        // it is immutable while the audio callback reads it).
+        useAudioFile = (signalTypeCombo->getSelectedId() == 10);
+
         updateSignalGenerator ([signalType, sweepPlaybackMode] (SignalGenerator& generator)
         {
             generator.setSignalType (signalType);
@@ -990,8 +1119,9 @@ private:
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 64 << (selectedId - 1); // 64, 128, 256, ..., 16384
 
-        // Update the analyzer component (which will update the state)
+        // Update both displays (each owns its own state)
         analyzerComponent.setFFTSize (currentFFTSize);
+        spectrogramComponent.setFFTSize (currentFFTSize);
     }
 
     void updateWindowType()
@@ -1036,6 +1166,7 @@ private:
         }
 
         analyzerComponent.setWindowType (windowType);
+        spectrogramComponent.setWindowType (windowType);
     }
 
     void updateDisplayType()
@@ -1136,9 +1267,16 @@ private:
     yup::AudioDeviceManager deviceManager;
     SignalGenerator signalGenerator;
 
-    // Spectrum analyzer
+    // Optional audio-file playback (the bundled mp3)
+    yup::AudioFormatManager formatManager;
+    AudioFilePlayer filePlayer;
+    std::atomic<bool> useAudioFile { false };
+
+    // Spectrum displays (each with its own analysis state - sharing one FIFO
+    // between two consumers would starve the spectrogram)
     yup::SpectrumAnalyzerState analyzerState;
     yup::SpectrumAnalyzerComponent analyzerComponent;
+    yup::SpectrumAnalyzerState spectrogramState;
     yup::SpectrogramComponent spectrogramComponent;
 
     // UI components

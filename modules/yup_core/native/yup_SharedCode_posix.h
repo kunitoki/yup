@@ -253,7 +253,7 @@ bool yup_doStatFS (File f, struct statfs& result)
     return statfs (f.getFullPathName().toUTF8(), &result) == 0;
 }
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 static int64 getCreationTime (const yup_statStruct& s) noexcept
 {
     return (int64) s.st_birthtime;
@@ -1153,7 +1153,7 @@ public:
 
 // We only use this helper if we're on an old macos/ios platform that might
 // still respect legacy pthread priorities for SCHED_OTHER.
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
             const auto min = jmax (0, sched_get_priority_min (SCHED_OTHER));
             const auto max = jmax (0, sched_get_priority_max (SCHED_OTHER));
 
@@ -1183,7 +1183,7 @@ public:
             return 0;
         }();
 
-#if YUP_MAC || YUP_IOS || YUP_BSD
+#if YUP_APPLE || YUP_BSD
         const auto scheduler = SCHED_OTHER;
 #elif YUP_LINUX
         const auto backgroundSched = prio == Thread::Priority::background ? SCHED_IDLE

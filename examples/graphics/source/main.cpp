@@ -257,6 +257,7 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
         addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+        addDemo ("Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
         addDemo ("Audio", [] { return std::make_unique<AudioExample>(); });

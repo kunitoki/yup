@@ -111,6 +111,9 @@ public:
     void repaint (const Rectangle<float>& rect) override;
     const RectangleList<float>& getRepaintAreas() const override;
 
+    /** Returns how the accumulated dirty rectangles are turned into repaint work. */
+    RepaintMode getRepaintMode() const;
+
     //==============================================================================
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
@@ -274,6 +277,7 @@ private:
 
     RectangleList<float> currentRepaintAreas;
     CriticalSection repaintLock;
+    RepaintMode repaintMode = RepaintMode::disjointRegions;
 
     struct ContextActivatorGuard : public ReferenceCountedObject
     {
@@ -293,7 +297,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
-    float lastWindowUnitsPerPoint = 1.0f;
+    float windowUnitsPerPoint = 1.0f;
     bool internalBoundsChange = false;
     bool firstDisplay = true;
 
