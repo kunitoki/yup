@@ -98,7 +98,12 @@ public:
 
     static void triggerPaint (Component& comp, Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous = false)
     {
-        comp.internalPaint (g, repaintArea, renderContinuous);
+        comp.internalPaint (g, RectangleList<float> { repaintArea }, renderContinuous);
+    }
+
+    static void triggerPaint (Component& comp, Graphics& g, const RectangleList<float>& repaintRegion, bool renderContinuous = false)
+    {
+        comp.internalPaint (g, repaintRegion, renderContinuous);
     }
 };
 

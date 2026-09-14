@@ -1441,7 +1441,7 @@ private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalRepaint();
     void internalRepaint (const Rectangle<float>& rect);
-    void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
+    void internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
@@ -1477,13 +1477,13 @@ private:
     void sendResized();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
-    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const Rectangle<float>& clipArea, float opacity, bool renderContinuous);
-    void paintChildrenAndOverChildren (Graphics& g, const Rectangle<float>& clipArea, bool renderContinuous);
+    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
+    void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);
     GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-    void paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const Rectangle<float>& boundsToRedraw);
+    void paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const RectangleList<float>& boundsToRedraw);
 #endif
 
     friend class ComponentNative;
