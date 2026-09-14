@@ -52,8 +52,6 @@
 #include "source/renderer/rive_render_factory.cpp"
 #include "source/renderer/render_context_helper_impl.cpp"
 #include "source/renderer/gpu_resource.cpp"
-// END YUP GENERATED RIVE RENDERER INCLUDES
-
 #define readU16LE readU16LE_vec
 #define readU32LE readU32LE_vec
 #include "source/renderer/ore/hlsl_struct_layout.cpp"
@@ -61,6 +59,7 @@
 #undef readU32LE
 #include "source/renderer/ore/ore_bind_group_layout.cpp"
 #include "source/renderer/ore/ore_binding_map.cpp"
+// END YUP GENERATED RIVE RENDERER INCLUDES
 
 #if __clang__
  #pragma clang diagnostic pop
