@@ -181,6 +181,8 @@ private:
     friend class AnimationRenderer;
     mutable std::optional<Path> cachedMaskClipPath;
     mutable float cachedMaskFrameNo = -1.0f;
+    mutable bool cachedMaskIsStatic = false;
+    mutable Size<float> cachedMaskSize;
 };
 
 //==============================================================================

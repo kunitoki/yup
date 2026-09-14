@@ -67,14 +67,44 @@ private:
         /** Maps layer id → accumulated world-space transform (parents resolved). */
         HashMap<int, AffineTransform> parentTransforms;
 
+        /** Maps layer id → layer, so a parent chain resolves without rescanning
+            the layer list once per link. */
+        HashMap<int, const AnimationLayer*> layersById;
+
         void buildParentTransforms (const std::vector<AnimationLayer::Ptr>& layers);
+
+        /** Returns the layer's transform with every ancestor's folded in,
+            resolving (and storing) each layer at most once. */
+        const AffineTransform& resolveWorldTransform (const AnimationLayer& layer, int depth);
     };
 
     // Precomp texture cache — renders a precomp asset once per frame and reuses
-    // the resulting GPU texture for subsequent instances of the same asset.
+    // the resulting GPU texture for the layers that share the asset.
     struct PrecompCache
     {
         HashMap<String, GpuTexture::Ptr> textures;
+
+        /** Number of layers asking for each precomp render in this frame.
+
+            Keyed by asset id *and* the phase it is sampled at (see
+            precompCacheKey in yup_AnimationRenderer.cpp): two layers can draw the
+            same asset at different points in its timeline, and those renders are
+            not interchangeable. Only layers the frame actually draws are counted,
+            so an asset whose referencing layers have non-overlapping visibility
+            windows counts as a single render. A render drawn only once has no
+            second reader to share an offscreen texture with, so it is drawn
+            straight into its parent instead - see
+            AnimationRenderer::renderPrecompLayer.
+        */
+        HashMap<String, int> referenceCounts;
+
+        /** Returns true when more than one layer asks for @p renderKey in this
+            frame, meaning a single offscreen render can serve all of them. */
+        [[nodiscard]] bool isSharedAsset (const String& renderKey) const
+        {
+            const auto* count = referenceCounts.getPointer (renderKey);
+            return count != nullptr && *count > 1;
+        }
     };
 
     // Per-layer context (cheap to copy — no heap allocations)
