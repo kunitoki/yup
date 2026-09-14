@@ -49,6 +49,7 @@
 
 //==============================================================================
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+#include <rive/rive.h>
 #include <rive/refcnt.hpp>
 #include <rive/renderer/rive_renderer.hpp>
 #include <rive/renderer/render_canvas.hpp>
