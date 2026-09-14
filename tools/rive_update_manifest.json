@@ -66,6 +66,30 @@
             "**/*.mm"
           ]
         }
+      ],
+      "patches": [
+        {
+          "path": "source/assets/script_asset.cpp",
+          "note": "drop the missing-generator diagnostic: a non-tools runtime only registers scripts whose in-band signature verified, so an unverified script's scripted objects fail this lookup on every advance and spammed stderr with one line per object per frame",
+          "already_contains": "    if (ref == 0)\n    {\n        return false;\n    }",
+          "replace": {
+            "from": [
+              "    if (ref == 0)",
+              "    {",
+              "        fprintf(stderr,",
+              "                \"ScriptAsset doesn't have a generator function %s\\n\",",
+              "                name().c_str());",
+              "        return false;",
+              "    }"
+            ],
+            "to": [
+              "    if (ref == 0)",
+              "    {",
+              "        return false;",
+              "    }"
+            ]
+          }
+        }
       ]
     },
     {
