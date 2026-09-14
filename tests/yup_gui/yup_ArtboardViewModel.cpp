@@ -377,3 +377,101 @@ TEST_F (ArtboardViewModelSchemaTests, AuthoredInstancesAreReportedConsistently)
     ASSERT_NE (nullptr, instance.get());
     EXPECT_EQ (instance->getName(), viewModel->getName());
 }
+
+//==============================================================================
+// Schema type coverage across every shipped fixture
+//
+// The schema tests above bind to one fixture at a time. This walks every schema
+// of every fixture so toPropertyType() runs for each property type the fixtures
+// actually provide, rather than only the ones the two fixtures above expose.
+//==============================================================================
+
+namespace
+{
+
+const StringArray& allSchemaFixtureFileNames()
+{
+    static const StringArray names { "data-binding.riv", "game-animation.riv", "layout-ui.riv", "responsive-sliders.riv" };
+    return names;
+}
+
+const File findAllSchemaFixturesDirectory()
+{
+    auto dir = File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory()
+                   .getChildFile ("data")
+                   .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir;
+
+    dir = File::getCurrentWorkingDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getChildFile ("tests")
+              .getChildFile ("data")
+              .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir;
+
+    return File ("/data/rive");
+}
+
+} // namespace
+
+TEST (ArtboardViewModelFixtureCoverage, EverySchemaPropertyReportsAConsistentType)
+{
+    const auto directory = findAllSchemaFixturesDirectory();
+
+    for (const auto& fileName : allSchemaFixtureFileNames())
+    {
+        const auto file = directory.getChildFile (fileName);
+        if (! file.existsAsFile())
+            continue;
+
+        ::testing::NiceMock<MockRiveFactory> factory;
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+            continue;
+
+        auto artboardFile = result.getValue();
+
+        EXPECT_EQ (artboardFile->getNumViewModels(), artboardFile->getViewModelNames().size());
+
+        for (const auto& viewModelName : artboardFile->getViewModelNames())
+        {
+            auto viewModel = artboardFile->getArtboardViewModel (viewModelName);
+            ASSERT_NE (nullptr, viewModel.get());
+            EXPECT_EQ (viewModelName, viewModel->getName());
+            EXPECT_EQ (artboardFile.get(), viewModel->getArtboardFile());
+
+            const auto instanceNames = viewModel->getInstanceNames();
+            EXPECT_EQ (viewModel->getNumInstances(), instanceNames.size());
+
+            for (int i = 0; i < viewModel->getNumProperties(); ++i)
+            {
+                const auto byIndex = viewModel->getPropertyAt (i);
+                ASSERT_FALSE (byIndex.name.isEmpty());
+
+                const auto byName = viewModel->getProperty (byIndex.name);
+                EXPECT_EQ (byIndex.name, byName.name);
+                EXPECT_EQ (byIndex.type, byName.type);
+                EXPECT_EQ (byIndex.isInput, byName.isInput);
+                EXPECT_EQ (byIndex.isOutput, byName.isOutput);
+                EXPECT_EQ (byIndex.enumValues.size(), byName.enumValues.size());
+
+                EXPECT_TRUE (viewModel->hasProperty (byIndex.name));
+
+                // Enum options are only ever populated for enum-typed properties.
+                if (byIndex.type != ArtboardViewModel::PropertyType::enumType)
+                    EXPECT_TRUE (byIndex.enumValues.isEmpty());
+            }
+
+            EXPECT_FALSE (viewModel->hasProperty ("definitelyNotAProperty"));
+            EXPECT_EQ (ArtboardViewModel::PropertyType::none, viewModel->getProperty ("definitelyNotAProperty").type);
+        }
+    }
+}

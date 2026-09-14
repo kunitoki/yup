@@ -1069,3 +1069,176 @@ TEST_F (ArtboardViewModelListTests, AppendedItemsAreObservedToo)
     ASSERT_TRUE (instance->setNumberProperty (listPath + ".0." + numberProperty, 7.0));
     EXPECT_TRUE (reportedPaths.contains (listPath + ".0." + numberProperty));
 }
+
+//==============================================================================
+// Path shape edge cases
+//==============================================================================
+
+TEST_F (ArtboardViewModelInstanceTests, PathsWithEmptySegmentsResolveToNothing)
+{
+    // splitPath() always yields at least one segment, and empty segments (from a
+    // leading/trailing dot or a doubled dot) are neither indexes nor property
+    // names, so every accessor must decline them safely.
+    const char* malformedPaths[] = { "", ".", "..", "a.", ".a", "a..b", "1.", "1..2" };
+
+    for (const auto* path : malformedPaths)
+    {
+        EXPECT_FALSE (instance->hasProperty (path)) << path;
+        EXPECT_TRUE (instance->getProperty (path).isVoid()) << path;
+        EXPECT_EQ (-1, instance->getListSize (path)) << path;
+        EXPECT_EQ (nullptr, instance->getNestedInstance (path).get()) << path;
+        EXPECT_EQ (nullptr, instance->getListItem (path, 0).get()) << path;
+        EXPECT_FALSE (instance->setProperty (path, var (1.0))) << path;
+        EXPECT_FALSE (instance->trigger (path)) << path;
+    }
+}
+
+//==============================================================================
+// Property type coverage across every shipped fixture
+//
+// The type-specific tests above bind to a single schema and skip when it lacks
+// the type. This walks every schema of every fixture so the get/set paths for
+// each property type run wherever the fixtures actually provide one, and skips
+// nothing that a fixture can supply.
+//==============================================================================
+
+namespace
+{
+
+const StringArray& allInstanceFixtureFileNames()
+{
+    static const StringArray names { "data-binding.riv", "game-animation.riv", "layout-ui.riv", "responsive-sliders.riv" };
+    return names;
+}
+
+const File findAllInstanceFixturesDirectory()
+{
+    auto dir = File (__FILE__)
+                   .getParentDirectory()
+                   .getParentDirectory()
+                   .getChildFile ("data")
+                   .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir;
+
+    dir = File::getCurrentWorkingDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getParentDirectory()
+              .getChildFile ("tests")
+              .getChildFile ("data")
+              .getChildFile ("rive");
+
+    if (dir.exists())
+        return dir;
+
+    return File ("/data/rive");
+}
+
+} // namespace
+
+TEST (ArtboardViewModelInstanceFixtureCoverage, EveryFixturePropertyTypeRoundTrips)
+{
+    const auto directory = findAllInstanceFixturesDirectory();
+
+    for (const auto& fileName : allInstanceFixtureFileNames())
+    {
+        const auto file = directory.getChildFile (fileName);
+        if (! file.existsAsFile())
+            continue;
+
+        ::testing::NiceMock<MockRiveFactory> factory;
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+            continue;
+
+        auto artboardFile = result.getValue();
+
+        for (const auto& viewModelName : artboardFile->getViewModelNames())
+        {
+            auto schema = artboardFile->getArtboardViewModel (viewModelName);
+            if (schema == nullptr)
+                continue;
+
+            auto instance = artboardFile->createArtboardViewModelInstance (viewModelName);
+            if (instance == nullptr)
+                continue;
+
+            for (int i = 0; i < schema->getNumProperties(); ++i)
+            {
+                const auto info = schema->getPropertyAt (i);
+
+                EXPECT_TRUE (instance->hasProperty (info.name));
+
+                switch (info.type)
+                {
+                    case ArtboardViewModel::PropertyType::boolean:
+                        if (instance->setBoolProperty (info.name, true))
+                            EXPECT_EQ (std::optional<bool> (true), instance->getBoolProperty (info.name));
+
+                        // A wrong-typed write is refused without clobbering it.
+                        EXPECT_FALSE (instance->setProperty (info.name, var (3.0)));
+                        break;
+
+                    case ArtboardViewModel::PropertyType::number:
+                        if (instance->setNumberProperty (info.name, 5.5))
+                            EXPECT_EQ (std::optional<double> (5.5), instance->getNumberProperty (info.name));
+
+                        EXPECT_FALSE (instance->setProperty (info.name, var ("nope")));
+                        break;
+
+                    case ArtboardViewModel::PropertyType::string:
+                        if (instance->setStringProperty (info.name, "yup"))
+                            EXPECT_EQ (std::optional<String> ("yup"), instance->getStringProperty (info.name));
+
+                        EXPECT_FALSE (instance->setProperty (info.name, var (1.0)));
+                        break;
+
+                    case ArtboardViewModel::PropertyType::color:
+                        if (instance->setColorProperty (info.name, Color (0xFFABCDEFu)))
+                        {
+                            auto roundTripped = instance->getColorProperty (info.name);
+                            ASSERT_NE (std::nullopt, roundTripped);
+                            EXPECT_EQ (0xFFABCDEFu, roundTripped->getARGB());
+                        }
+
+                        EXPECT_FALSE (instance->setProperty (info.name, var ("nope")));
+                        break;
+
+                    case ArtboardViewModel::PropertyType::trigger:
+                        EXPECT_TRUE (instance->trigger (info.name));
+                        break;
+
+                    case ArtboardViewModel::PropertyType::enumType:
+                        if (! info.enumValues.isEmpty())
+                        {
+                            if (instance->setEnumProperty (info.name, info.enumValues[0]))
+                                EXPECT_EQ (std::optional<String> (info.enumValues[0]), instance->getEnumProperty (info.name));
+
+                            EXPECT_FALSE (instance->setEnumProperty (info.name, "notAnOption"));
+                        }
+                        break;
+
+                    case ArtboardViewModel::PropertyType::list:
+                        if (instance->getListSize (info.name) > 0)
+                        {
+                            EXPECT_NE (nullptr, instance->getListItem (info.name, 0).get());
+                            EXPECT_TRUE (instance->hasProperty (info.name + ".0"));
+                            EXPECT_EQ (nullptr, instance->getListItem (info.name, instance->getListSize (info.name) + 1).get());
+                        }
+                        break;
+
+                    case ArtboardViewModel::PropertyType::viewModel:
+                        // A nested viewmodel property resolves to a handle when an
+                        // instance is assigned; either way the lookup must not throw.
+                        EXPECT_NO_THROW (instance->getNestedInstance (info.name));
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+}

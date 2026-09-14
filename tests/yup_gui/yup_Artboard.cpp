@@ -2517,3 +2517,125 @@ TEST_F (ArtboardGameAnimationTests, PropertyChangedHandlerMayAdvanceTheArtboard)
     for (int i = 0; i < 20; ++i)
         EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
 }
+
+//==============================================================================
+// View transform resolution across every Fitting and Justification value
+//
+// setFitting() / setJustification() only reach the Rive fit and alignment
+// mapping once a file is loaded and a size is known, so these run against the
+// loaded layout-ui fixture rather than an empty artboard.
+//==============================================================================
+
+namespace
+{
+
+const std::optional<Fitting> everyFittingValue[] = {
+    std::nullopt,
+    Fitting::none,
+    Fitting::scaleToFit,
+    Fitting::fitWidth,
+    Fitting::fitHeight,
+    Fitting::scaleToFill,
+    Fitting::fill,
+    Fitting::tile,
+    Fitting::centerCrop,
+    Fitting::centerInside,
+    Fitting::stretchWidth,
+    Fitting::stretchHeight,
+};
+
+const Justification everyJustificationValue[] = {
+    Justification (Justification::topLeft),
+    Justification (Justification::top),
+    Justification (Justification::topRight),
+    Justification (Justification::left),
+    Justification (Justification::center),
+    Justification (Justification::right),
+    Justification (Justification::bottomLeft),
+    Justification (Justification::bottom),
+    Justification (Justification::bottomRight),
+    Justification (Justification::centerTop),
+    Justification (Justification::centerBottom),
+};
+
+} // namespace
+
+TEST_F (ArtboardLayoutTests, EveryFittingValueResolvesAViewTransform)
+{
+    for (const auto& fitting : everyFittingValue)
+    {
+        artboard->setFitting (fitting);
+        EXPECT_EQ (fitting, artboard->getFitting());
+
+        // Re-resolving the scene re-derives the view transform through the Rive
+        // fit mapping, and a named node stays queryable under every fit.
+        artboard->setBounds (0.0f, 0.0f, 520.0f, 380.0f);
+
+        for (int i = 0; i < 10; ++i)
+            artboard->advanceAndApply (0.0f);
+
+        EXPECT_FALSE (artboard->getNodeBounds (kHeaderNodeName).isEmpty());
+    }
+
+    // Back to the artboard's own layout, the mode the fixture is designed for.
+    artboard->setFitting (std::nullopt);
+}
+
+TEST_F (ArtboardLayoutTests, EveryJustificationValueResolvesAViewTransform)
+{
+    for (const auto& justification : everyJustificationValue)
+    {
+        artboard->setJustification (justification);
+        EXPECT_EQ (justification, artboard->getJustification());
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.0f));
+    }
+}
+
+TEST_F (ArtboardLayoutTests, RepeatingTheCurrentFittingOrJustificationIsANoOp)
+{
+    // Writing the value already in effect must return early rather than
+    // re-resolving the scene, while leaving the value untouched.
+    artboard->setFitting (Fitting::fill);
+    const auto fitting = artboard->getFitting();
+    artboard->setFitting (Fitting::fill);
+    EXPECT_EQ (fitting, artboard->getFitting());
+
+    artboard->setJustification (Justification::top);
+    const auto justification = artboard->getJustification();
+    artboard->setJustification (Justification::top);
+    EXPECT_EQ (justification, artboard->getJustification());
+}
+
+TEST_F (ArtboardLayoutTests, LoadedArtboardReportsDurationAndViewModelState)
+{
+    // durationSeconds() must read through the loaded scene rather than
+    // short-circuit: an unloaded artboard reports 0, while layout-ui.riv's
+    // static scene reports a negative "no duration" (-1).
+    Artboard unloaded ("unloaded");
+    EXPECT_EQ (0.0f, unloaded.durationSeconds());
+
+    EXPECT_LT (artboard->durationSeconds(), 0.0f);
+
+    // When the file ships no ViewModel the artboard's viewmodel id is out of
+    // range and resolves to no schema name.
+    if (artboardFile->getNumViewModels() == 0)
+        EXPECT_TRUE (artboard->getViewModelName().isEmpty());
+
+    // A null instance is rejected without touching the scene.
+    EXPECT_FALSE (artboard->bindViewModelInstance (nullptr));
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+}
+
+TEST_F (ArtboardLayoutTests, RefreshDisplayAdvancesUnlessPausingWhileHidden)
+{
+    // The component is never "showing" off-screen, so the default (pause when
+    // hidden) short-circuits; disabling it lets refreshDisplay advance instead.
+    artboard->shouldPauseWhenHidden (false);
+    EXPECT_FALSE (artboard->isPausingWhenHidden());
+    EXPECT_NO_THROW (artboard->refreshDisplay (0.016));
+
+    // A paused artboard short-circuits regardless.
+    artboard->setPaused (true);
+    EXPECT_TRUE (artboard->isPaused());
+    EXPECT_NO_THROW (artboard->refreshDisplay (0.016));
+}

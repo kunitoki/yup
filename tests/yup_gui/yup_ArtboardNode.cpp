@@ -349,3 +349,43 @@ TEST_F (ArtboardNodeTests, ReplacingTheFileInvalidatesHandlesTakenBefore)
     EXPECT_TRUE (after->isValid());
     EXPECT_NE (before.get(), after.get());
 }
+
+//==============================================================================
+// Geometry across the whole tree
+//==============================================================================
+
+TEST_F (ArtboardNodeTests, EveryNodeReportsFiniteBoundsAndTransforms)
+{
+    int visited = 0;
+
+    // computeNodeBounds() takes a different path for layout components, shapes
+    // and everything else, and the transform accessors take a different one for
+    // nodes that carry no transform. Walking the whole tree exercises whichever
+    // of those the fixture's node types reach, which the type-only walks above
+    // do not.
+    visitNodeTree (root,
+                   0,
+                   [&] (const ArtboardNode::Ptr& node, int)
+                   {
+                       ++visited;
+
+                       const auto bounds = node->getBounds();
+                       EXPECT_TRUE (std::isfinite (bounds.getX()));
+                       EXPECT_TRUE (std::isfinite (bounds.getY()));
+                       EXPECT_TRUE (std::isfinite (bounds.getWidth()));
+                       EXPECT_TRUE (std::isfinite (bounds.getHeight()));
+
+                       const auto local = node->getLocalTransform();
+                       const auto world = node->getWorldTransform();
+                       const auto view = node->getViewTransform();
+
+                       EXPECT_TRUE (std::isfinite (local.getTranslateX()));
+                       EXPECT_TRUE (std::isfinite (world.getTranslateX()));
+                       EXPECT_TRUE (std::isfinite (view.getTranslateX()));
+
+                       // Every node but the artboard root reports a parent.
+                       EXPECT_TRUE (node->getParent() != nullptr || node.get() == root.get());
+                   });
+
+    EXPECT_GT (visited, 0);
+}
