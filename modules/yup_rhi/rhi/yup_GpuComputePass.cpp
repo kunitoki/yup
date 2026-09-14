@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 std::unique_ptr<GpuComputePass::Impl> yup_createComputePassImplMetal (GpuDevice&);
 #endif
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
@@ -86,7 +86,7 @@ GpuComputePass GpuComputePass::begin (GpuDevice::Ptr ctx)
 
     switch (ctx->getPlatform())
     {
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
             pass.impl = yup_createComputePassImplMetal (*ctx);
             break;

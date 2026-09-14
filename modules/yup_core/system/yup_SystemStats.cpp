@@ -376,7 +376,7 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
 
 bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     static bool isRunningInAppSandbox = [&]
     {
         File bundle = File::getSpecialLocation (File::invokedExecutableFile).getParentDirectory();

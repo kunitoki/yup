@@ -195,7 +195,7 @@ inline double ByteOrder::swap (double v) noexcept
 
 inline uint32 ByteOrder::swap (uint32 n) noexcept
 {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     return OSSwapInt32 (n);
 #elif (YUP_GCC || YUP_CLANG) && YUP_INTEL && ! YUP_NO_INLINE_ASM
     asm ("bswap %%eax"
@@ -213,7 +213,7 @@ inline uint32 ByteOrder::swap (uint32 n) noexcept
 
 inline uint64 ByteOrder::swap (uint64 value) noexcept
 {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     return OSSwapInt64 (value);
 #elif YUP_MSVC
     return _byteswap_uint64 (value);

@@ -98,7 +98,7 @@
 
 //==============================================================================
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 

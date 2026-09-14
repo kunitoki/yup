@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-#if ! defined(DOXYGEN) && (YUP_MAC || YUP_IOS)
+#if ! defined(DOXYGEN) && YUP_APPLE
 // Annoyingly we can only forward-declare a typedef by forward-declaring the
 // aliased type
 #if __has_attribute(objc_bridge)
@@ -1365,7 +1365,7 @@ public:
     void swapWith (String& other) noexcept;
 
     //==============================================================================
-#if YUP_MAC || YUP_IOS || DOXYGEN
+#if YUP_APPLE || DOXYGEN
     /** OSX ONLY - Creates a String from an OSX CFString. */
     static String fromCFString (CFStringRef cfString);
 

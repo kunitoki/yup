@@ -32,7 +32,7 @@ TEST (DynamicLibraryTests, OpenSystemLibrary)
     DynamicLibrary lib;
 
     // Try to open a system library
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     EXPECT_TRUE (lib.open ("/usr/lib/libSystem.dylib"));
 #elif YUP_LINUX || YUP_ANDROID
     EXPECT_TRUE (lib.open ("libc.so.6") || lib.open ("libc.so"));
@@ -56,7 +56,7 @@ TEST (DynamicLibraryTests, Close)
     // Close without opening should not crash
     EXPECT_NO_THROW (lib.close());
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     lib.open ("/usr/lib/libSystem.dylib");
 #elif YUP_LINUX || YUP_ANDROID
     lib.open ("libc.so.6");
@@ -76,7 +76,7 @@ TEST (DynamicLibraryTests, GetFunction)
     // Getting function from unopened library should return nullptr
     EXPECT_EQ (lib.getFunction ("some_function"), nullptr);
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     if (lib.open ("/usr/lib/libSystem.dylib"))
     {
         // Try to get a known function
@@ -105,7 +105,7 @@ TEST (DynamicLibraryTests, ReopenAfterClose)
 {
     DynamicLibrary lib;
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     EXPECT_TRUE (lib.open ("/usr/lib/libSystem.dylib"));
     lib.close();
     EXPECT_TRUE (lib.open ("/usr/lib/libSystem.dylib"));

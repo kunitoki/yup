@@ -70,7 +70,7 @@
     Enable Apple's vDSP backend.
 */
 #ifndef YUP_ENABLE_VDSP
-#if (YUP_MAC || YUP_IOS) && YUP_USE_VDSP_FRAMEWORK
+#if YUP_APPLE && YUP_USE_VDSP_FRAMEWORK
 #define YUP_ENABLE_VDSP 1
 #else
 #define YUP_ENABLE_VDSP 0

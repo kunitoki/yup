@@ -279,7 +279,7 @@ void ToastNotification::sendNotification (StringRef title, StringRef message, st
 }
 
 //==============================================================================
-#if ! (YUP_WINDOWS || YUP_MAC || YUP_IOS || YUP_ANDROID || YUP_LINUX || YUP_BSD || YUP_WASM)
+#if ! (YUP_WINDOWS || YUP_APPLE || YUP_ANDROID || YUP_LINUX || YUP_BSD || YUP_WASM)
 namespace detail
 {
 Result toastNotificationInitialize (const ToastNotificationSettings&)

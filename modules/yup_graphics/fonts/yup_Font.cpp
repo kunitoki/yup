@@ -27,7 +27,7 @@ namespace
 
 //==============================================================================
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 ResultValue<Font> loadSystemUIFont (CTFontUIFontType fontType)
 {
     if (auto systemFont = CTFontCreateUIFontForLanguage (fontType, 0.0, nullptr))
@@ -144,7 +144,7 @@ ResultValue<Font> Font::loadFontFromFirstAvailableFile (std::initializer_list<co
 
 ResultValue<Font> Font::loadSerifSystemTextFont()
 {
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
     return loadSystemUIFont (kCTFontUIFontSystem);
 
 #elif YUP_WINDOWS

@@ -43,7 +43,7 @@
 
 //==============================================================================
 
-#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && (YUP_MAC || YUP_IOS)
+#if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_VDSP && YUP_APPLE
 #define YUP_FFT_USING_VDSP 1
 #define YUP_FFT_FOUND_BACKEND 1
 #include <Accelerate/Accelerate.h>

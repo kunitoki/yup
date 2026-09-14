@@ -124,7 +124,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include "notifications/yup_ToastNotification.cpp"
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include "native/yup_MessageQueue_apple.h"
 #if YUP_MAC
 #include "native/yup_MessageManager_mac.mm"

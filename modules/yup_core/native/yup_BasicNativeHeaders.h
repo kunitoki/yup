@@ -42,7 +42,7 @@
 #undef T
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 
 #if YUP_IOS
 #define Component CarbonDummyCompName

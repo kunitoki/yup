@@ -253,7 +253,7 @@ inline const Type* addBytesToPointer(const Type* basePointer, IntegerType bytes)
 }
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS || DOXYGEN
+#if YUP_APPLE || DOXYGEN
 
 /** A handy C++ wrapper that creates and deletes an NSAutoreleasePool object using RAII.
     You should use the YUP_AUTORELEASEPOOL macro to create a local auto-release pool on the stack.

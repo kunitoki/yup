@@ -100,7 +100,7 @@ struct GpuBuffer::Impl
     size_t byteSize = 0;
     rive::rcp<rive::ore::Buffer> oreBuffer;
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
     id<MTLBuffer> mtlStorageBuffer = nil;
 #endif
 
@@ -175,7 +175,7 @@ bool GpuBuffer::isValid() const noexcept
 
     if (i->type == GpuBufferType::storage)
     {
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         if (i->mtlStorageBuffer != nil)
             return true;
 #endif

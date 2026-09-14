@@ -109,7 +109,7 @@
     Enable CoreAudio audio format support on Apple platforms.
 */
 #ifndef YUP_AUDIO_FORMAT_COREAUDIO
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #define YUP_AUDIO_FORMAT_COREAUDIO 1
 #endif
 #endif
@@ -152,7 +152,7 @@
 #define YUP_AUDIO_FORMAT_FLAC 0
 #endif
 
-#if YUP_AUDIO_FORMAT_COREAUDIO && ! (YUP_MAC || YUP_IOS)
+#if YUP_AUDIO_FORMAT_COREAUDIO && ! YUP_APPLE
 #undef YUP_AUDIO_FORMAT_COREAUDIO
 #define YUP_AUDIO_FORMAT_COREAUDIO 0
 #endif

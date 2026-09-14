@@ -155,7 +155,7 @@ extern char** environ;
 #include <semaphore.h>
 #endif
 
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include <xlocale.h>
 #include <mach/mach.h>
 #endif
@@ -255,7 +255,7 @@ extern char** environ;
 #endif
 
 //==============================================================================
-#if YUP_MAC || YUP_IOS
+#if YUP_APPLE
 #include "native/yup_Files_apple.mm"
 #include "native/yup_Network_apple.mm"
 #include "native/yup_Strings_apple.mm"

@@ -38,7 +38,7 @@
 #include <rive/renderer/gl/gles3.hpp>
 #endif
 
-#elif YUP_MAC || YUP_IOS
+#elif YUP_APPLE
 #if YUP_RIVE_USE_METAL
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -69,7 +69,7 @@
 
 #include "native/yup_GpuDevice_headless.cpp"
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 #include "native/yup_GpuDevice_metal.cpp"
 #endif
 
@@ -96,7 +96,7 @@
 //==============================================================================
 #include "rhi/yup_GpuComputePass.cpp"
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 #include "native/yup_GpuComputePipeline_metal.cpp"
 #include "native/yup_GpuComputePass_metal.cpp"
 #endif

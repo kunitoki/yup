@@ -36,7 +36,7 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compile (GpuDevice::Ptr
 
     switch (ctx->getPlatform())
     {
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
         case GpuPlatform::Metal:
             return yup_constructComputePipelineMetal (*ctx, source, workgroupSize);
 #endif

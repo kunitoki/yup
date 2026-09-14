@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
+#if YUP_RIVE_USE_METAL && YUP_APPLE
 
 namespace yup
 {
