@@ -37,6 +37,7 @@
 #include "waveform/yup_AudioThumbnail.cpp"
 #include "keyboard/yup_MidiKeyboardComponent.cpp"
 #include "displays/yup_AudioViewComponent.cpp"
+#include "displays/yup_SpectrumBinMapping.cpp"
 #include "displays/yup_SpectrumAnalyzerComponent.cpp"
 #include "displays/yup_SpectrogramComponent.cpp"
 #include "displays/yup_CartesianPlane.cpp"

@@ -63,6 +63,7 @@
 
 #if ! YUP_FFT_FOUND_BACKEND && YUP_ENABLE_PFFFT && YUP_MODULE_AVAILABLE_pffft_library
 #include <pffft_library/pffft_library.h>
+#include <pffft_library/pffft_double.h>
 #define YUP_FFT_USING_PFFFT 1
 #define YUP_FFT_FOUND_BACKEND 1
 #endif
@@ -102,5 +103,6 @@
 //==============================================================================
 
 #if YUP_ENABLE_OOURA && YUP_FFT_USING_OOURA
-#include "frequency/yup_OouraFFT8g.cpp"
+#include "frequency/yup_OouraFFT8g_float.cpp"
+#include "frequency/yup_OouraFFT8g_double.cpp"
 #endif

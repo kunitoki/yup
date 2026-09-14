@@ -850,3 +850,104 @@ TEST_F (SpectrumAnalyzerComponentTests, RapidConfigurationChanges)
     // Should handle rapid changes without crashing
     EXPECT_TRUE (true);
 }
+
+TEST_F (SpectrumAnalyzerComponentTests, PaintWithEveryLevelModeAndDisplayType)
+{
+    const SpectrumAnalyzerComponent::LevelMode levelModes[] = {
+        SpectrumAnalyzerComponent::LevelMode::peakDecibels,
+        SpectrumAnalyzerComponent::LevelMode::rmsDecibels,
+        SpectrumAnalyzerComponent::LevelMode::powerDecibels,
+        SpectrumAnalyzerComponent::LevelMode::powerSpectralDensity
+    };
+
+    const SpectrumAnalyzerComponent::DisplayType displayTypes[] = {
+        SpectrumAnalyzerComponent::DisplayType::filled,
+        SpectrumAnalyzerComponent::DisplayType::lines
+    };
+
+    std::vector<float> testData (2048);
+
+    for (int i = 0; i < 2048; ++i)
+        testData[static_cast<size_t> (i)] = std::sin (2.0f * MathConstants<float>::pi * static_cast<float> (i) / 100.0f);
+
+    state->pushSamples (testData.data(), 2048);
+    analyzer->timerCallback();
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (800, 400);
+    Graphics g (*context, *renderer);
+
+    for (auto levelMode : levelModes)
+    {
+        analyzer->setLevelMode (levelMode);
+
+        for (auto displayType : displayTypes)
+        {
+            analyzer->setDisplayType (displayType);
+            analyzer->paint (g);
+
+            EXPECT_EQ (levelMode, analyzer->getLevelMode());
+            EXPECT_EQ (displayType, analyzer->getDisplayType());
+        }
+    }
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, PaintWithBandsNarrowerThanOneBin)
+{
+    // 20 Hz > 25 Hz at 44.1 kHz makes every display band narrower than an FFT bin, so the rendered
+    // levels come from the interpolation between the surrounding bins.
+    analyzer->setFFTSize (2048);
+    analyzer->setSampleRate (44100.0);
+    analyzer->setFrequencyRange (20.0f, 25.0f);
+
+    std::vector<float> testData (2048);
+
+    for (int i = 0; i < 2048; ++i)
+        testData[static_cast<size_t> (i)] = std::sin (2.0f * MathConstants<float>::pi * static_cast<float> (i) / 400.0f);
+
+    state->pushSamples (testData.data(), 2048);
+    analyzer->timerCallback();
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (400, 200);
+    Graphics g (*context, *renderer);
+
+    analyzer->setDisplayType (SpectrumAnalyzerComponent::DisplayType::filled);
+    analyzer->paint (g);
+
+    analyzer->setDisplayType (SpectrumAnalyzerComponent::DisplayType::lines);
+    analyzer->paint (g);
+
+    EXPECT_FLOAT_EQ (20.0f, analyzer->getMinFrequency());
+    EXPECT_FLOAT_EQ (25.0f, analyzer->getMaxFrequency());
+}
+
+TEST_F (SpectrumAnalyzerComponentTests, PaintAfterEveryMappingChangingConfiguration)
+{
+    // The bin mapping is rebuilt from the FFT size, the sample rate and the frequency range, so
+    // every combination has to keep rendering.
+    const double sampleRates[] = { 44100.0, 48000.0, 96000.0 };
+    const int fftSizes[] = { 512, 2048, 8192 };
+
+    auto context = yup_constructHeadlessGraphicsContext ({}, {});
+    auto renderer = context->makeRenderer (300, 150);
+    Graphics g (*context, *renderer);
+
+    for (auto sampleRate : sampleRates)
+    {
+        for (auto fftSize : fftSizes)
+        {
+            analyzer->setSampleRate (sampleRate);
+            analyzer->setFFTSize (fftSize);
+            analyzer->setFrequencyRange (30.0f, static_cast<float> (sampleRate) / 3.0f);
+
+            std::vector<float> testData (static_cast<size_t> (fftSize), 0.5f);
+
+            state->pushSamples (testData.data(), fftSize);
+            analyzer->timerCallback();
+            analyzer->paint (g);
+
+            EXPECT_EQ (fftSize, analyzer->getFFTSize());
+        }
+    }
+}

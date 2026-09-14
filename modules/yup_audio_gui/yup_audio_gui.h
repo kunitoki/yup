@@ -57,6 +57,7 @@
 #include "waveform/yup_AudioThumbnail.h"
 #include "keyboard/yup_MidiKeyboardComponent.h"
 #include "displays/yup_AudioViewComponent.h"
+#include "displays/yup_SpectrumBinMapping.h"
 #include "displays/yup_SpectrumAnalyzerComponent.h"
 #include "displays/yup_SpectrogramComponent.h"
 #include "displays/yup_CartesianPlane.h"
