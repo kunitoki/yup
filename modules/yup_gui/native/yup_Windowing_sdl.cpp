@@ -181,7 +181,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
-        SDL_GL_SetSwapInterval (vsyncEnabled ? 1 : 0);
+        SDL_GL_SetSwapInterval (vsyncEnabled ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
 
 #if ! YUP_EMSCRIPTEN
         SDL_GL_SetAttribute (SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
@@ -194,6 +194,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
 #endif
 
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created GL context");
+    }
+    else
+    {
+        SDL_SetWindowSurfaceVSync (window, vsyncEnabled ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
     }
 
     // Create the rendering context

@@ -84,24 +84,7 @@ public:
         if (! artboardFile)
             return false;
 
-        loadedArtboardFile = artboardFile.getValue();
-
-        // Setup artboards
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-        {
-            auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
-            addAndMakeVisible (art);
-
-            art->setFile (loadedArtboardFile);
-            art->setFitting (getSelectedFitting());
-            art->setJustification (getSelectedJustification (alignmentCombo));
-
-            art->advanceAndApply (i * art->durationSeconds());
-
-            attachTrackedComponent (*art);
-        }
-
-        resized();
+        setArtboardFile (artboardFile.getValue());
 
         return true;
     }
@@ -176,6 +159,30 @@ protected:
     virtual std::unique_ptr<yup::Component> createTrackedComponent()
     {
         return std::make_unique<NodeMarker>();
+    }
+
+    void setArtboardFile (std::shared_ptr<yup::ArtboardFile> newFile)
+    {
+        loadedArtboardFile = std::move (newFile);
+
+        trackedComponents.clear();
+        artboards.clear();
+
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+        {
+            auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
+            addAndMakeVisible (art);
+
+            art->setFile (loadedArtboardFile);
+            art->setFitting (getSelectedFitting());
+            art->setJustification (getSelectedJustification (alignmentCombo));
+
+            art->advanceAndApply (i * art->durationSeconds());
+
+            attachTrackedComponent (*art);
+        }
+
+        resized();
     }
 
     std::shared_ptr<yup::ArtboardFile> loadedArtboardFile;
@@ -444,6 +451,76 @@ public:
         : ArtboardDemoBase ("data/alien.riv", "Mouth")
     {
     }
+
+    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    {
+        return findRiveFile (data).has_value();
+    }
+
+    void itemDragEnter (const yup::DragAndDropData&, const yup::Point<float>&) override
+    {
+        setDropHighlighted (true);
+    }
+
+    void itemDragExit (const yup::DragAndDropData&) override
+    {
+        setDropHighlighted (false);
+    }
+
+    bool itemsDropped (const yup::Point<float>&, const yup::DragAndDropData& data) override
+    {
+        setDropHighlighted (false);
+
+        const auto file = findRiveFile (data);
+        if (! file.has_value())
+            return false;
+
+        auto factory = getNativeComponent()->getFactory();
+        if (factory == nullptr)
+            return false;
+
+        auto artboardFile = yup::ArtboardFile::load (*file, *factory);
+        if (! artboardFile)
+            return false;
+
+        setArtboardFile (artboardFile.getValue());
+
+        return true;
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        ArtboardDemoBase::paint (g);
+
+        if (dropHighlighted)
+        {
+            g.setStrokeColor (yup::Colors::darkorange);
+            g.setStrokeWidth (3.0f);
+            g.strokeRoundedRect (getLocalBounds().to<float>().reduced (2.0f), 6.0f);
+        }
+    }
+
+private:
+    // Returns the first dropped file that looks like a Rive file, if any.
+    static std::optional<yup::File> findRiveFile (const yup::DragAndDropData& data)
+    {
+        for (const auto& file : data.getFiles())
+            if (file.hasFileExtension ("riv"))
+                return file;
+
+        return std::nullopt;
+    }
+
+    void setDropHighlighted (bool shouldBeHighlighted)
+    {
+        if (dropHighlighted == shouldBeHighlighted)
+            return;
+
+        dropHighlighted = shouldBeHighlighted;
+        repaint();
+    }
+
+    bool dropHighlighted = false;
 };
 
 //==============================================================================
