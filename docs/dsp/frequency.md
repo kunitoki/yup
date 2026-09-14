@@ -6,9 +6,9 @@ implementation the module can fall back on.
 
 ## FFTProcessor
 
-`FFTProcessor` is a multi-backend, float-only FFT engine with a unified
-interface. The best available backend is selected **at compile time**, in this
-priority order:
+`FFTProcessor<SampleType>` is a multi-backend FFT engine with a unified
+interface, available in `float` and `double` precision. The best available
+backend is selected **at compile time**, in this priority order:
 
 1. **PFFFT** (`YUP_FFT_USING_PFFFT`)
 2. **Apple vDSP** (`YUP_FFT_USING_VDSP`, via the `Accelerate` framework)
@@ -20,12 +20,26 @@ The engine is non-copyable and move-only; `getBackendName()` reports which
 backend is active (`"PFFFT"`, `"Apple vDSP"`, `"Intel IPP"`, `"FFTW3"`,
 `"Ooura FFT"`, or `"Unknown"`).
 
+### Precision
+
+The processing precision is the template argument — `FFTProcessor<float>`
+(the default) or `FFTProcessor<double>`. Each backend uses its native
+double-precision path where the underlying library exposes one: PFFFT
+(`pffft_` / `pffftd_`), Apple vDSP (`vDSP_…` / `vDSP_…D`), Intel IPP
+(`_32f` / `_64f`) and FFTW3 (`fftwf_` / `fftw_`). The Ooura fallback ships both
+precisions of its transform routines.
+
+```cpp
+FFTProcessor<float>  fftFloat  (512);   // fastest
+FFTProcessor<double> fftDouble (512);   // higher precision
+```
+
 ### Supported sizes and layout
 
 FFT sizes are powers of two in `[64, 65536]`. Buffers are **interleaved
 complex pairs** — `[re0, im0, re1, im1, ...]` — so an N-point complex spectrum
-occupies `2 * N` floats. The engine handles backend-specific packed layouts
-(e.g. PFFFT's `[DC, Nyquist, re1, im1, ...]`, Ooura's real-DFT packing)
+occupies `2 * N` sample values. The engine handles backend-specific packed
+layouts (e.g. PFFFT's `[DC, Nyquist, re1, im1, ...]`, Ooura's real-DFT packing)
 internally, presenting the same interleaved format to the caller for every
 backend.
 
@@ -40,16 +54,16 @@ backend.
 | `asymmetric` | inverse scaled by `1/N`, forward unscaled |
 
 ```cpp
-FFTProcessor fft (512);
+FFTProcessor<float> fft (512);
 std::vector<float> realInput (512), complexOutput (1024);
 
-fft.performRealFFTForward (realInput.data(), complexOutput.data());  // R → C, 512 reals → 1024 floats
+fft.performRealFFTForward (realInput.data(), complexOutput.data());  // R → C, 512 reals → 1024 samples
 fft.performRealFFTInverse (complexOutput.data(), realInput.data());  // C → R
 
 fft.performComplexFFTForward (complexInput, complexOutput);          // C → C
 fft.performComplexFFTInverse (complexInput, complexOutput);
 
-fft.setScaling (FFTProcessor::FFTScaling::unitary);
+fft.setScaling (FFTProcessor<float>::FFTScaling::unitary);
 fft.setSize (1024);   // re-initialize for a new power-of-two size
 ```
 
@@ -95,34 +109,6 @@ Key methods:
 - `setFftSize (int)` — changes size and reinitializes the FIFO (clears buffered
   data).
 - `reset()` — clears the FIFO and the ready flag.
-
-## OouraFFT8g
-
-`yup_OouraFFT8g.h` exposes Takuya Ooura's classic **FFT8g** suite: single-
-dimension, power-of-two, split-radix, decimation-in-frequency, in-place,
-table-based transforms (public-domain ISC license, © 1996–2001 Ooura). These
-are the primitives used by the Ooura backend of `FFTProcessor`, and are also
-available directly:
-
-- `cdft (n, isgn, a, ip, w)` — complex DFT; `n = 2 × (#complex points)`;
-  `isgn = 1` forward, `-1` inverse; in-place.
-- `rdft (n, isgn, a, ip, w)` — real DFT; packed output
-  `[DC, Nyquist, Re1, Im1, Re2, Im2, ...]`; in-place.
-- `ddct` / `ddst` — discrete cosine / sine transforms.
-- `dfct` / `dfst` — cosine / sine transforms of a real DFT, needing an extra
-  scratch buffer `t`.
-
-The work areas follow Ooura's original contract: `ip[0]` must be `0` on first
-use (initialization flag), `ip` needs `2 + sqrt(n/2)` ints, and `w` needs
-`n/2` floats:
-
-```cpp
-std::vector<float> a (1024);               // 512 complex points
-std::vector<int>   ip (2 + int (std::sqrt (512)));
-std::vector<float> w (512);
-ip[0] = 0;                                 // first call only
-yup::cdft (1024, 1, a.data(), ip.data(), w.data());  // forward complex FFT, in-place
-```
 
 ## Related
 

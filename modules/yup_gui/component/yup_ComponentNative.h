@@ -83,6 +83,35 @@ public:
     static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay | vsync;
 
     //==============================================================================
+    /** Determines how the accumulated dirty rectangles are turned into repaint work.
+
+        When a single frame accumulates several, possibly far apart, dirty rectangles
+        the way they are expanded into paint calls has a large impact on how much of
+        the component hierarchy is repainted.
+
+        @see Options::withRepaintMode
+    */
+    enum class RepaintMode
+    {
+        /** Repaint each dirty rectangle in isolation.
+
+            The dirty rectangles are treated as one disjoint region: a parent shared by
+            several dirty rectangles is painted once, clipped to the region, and only the
+            parts of the hierarchy that overlap the region are repainted. Everything that
+            lies between two distant dirty rectangles is left untouched. This is the default.
+        */
+        disjointRegions,
+
+        /** Merge every dirty rectangle into a single bounding box and repaint it.
+
+            Everything that falls inside the bounding box of all dirty rectangles is
+            repainted, even if it lies between two distant dirty rectangles and did not
+            actually change.
+        */
+        boundingBox
+    };
+
+    //==============================================================================
     /**
         Configuration options for creating a native component.
 
@@ -202,6 +231,16 @@ public:
         */
         Options& withUpdateOnlyFocused (bool onlyWhenFocused) noexcept;
 
+        /** Sets how dirty rectangles are turned into repaint work.
+
+            @param newRepaintMode The repaint mode to use.
+
+            @return Reference to this Options object for method chaining.
+
+            @see RepaintMode
+        */
+        Options& withRepaintMode (RepaintMode newRepaintMode) noexcept;
+
         /** The configuration flags for the component. */
         Flags flags = defaultFlags;
         /** The graphics API to use for rendering. */
@@ -214,6 +253,8 @@ public:
         std::optional<RelativeTime> doubleClickTime;
         /** Whether updates should only happen when the window is focused. */
         bool updateOnlyWhenFocused = false;
+        /** How dirty rectangles are turned into repaint work. */
+        RepaintMode repaintMode = RepaintMode::disjointRegions;
     };
 
     //==============================================================================

@@ -188,7 +188,15 @@ public:
                               const Rectangle<float>& repaintArea,
                               bool renderContinuous = false)
     {
-        comp.internalPaint (g, repaintArea, renderContinuous);
+        comp.internalPaint (g, RectangleList<float> { repaintArea }, renderContinuous);
+    }
+
+    static void triggerPaint (Component& comp,
+                              Graphics& g,
+                              const RectangleList<float>& repaintRegion,
+                              bool renderContinuous = false)
+    {
+        comp.internalPaint (g, repaintRegion, renderContinuous);
     }
 
     static bool triggerItemsDropped (Component& comp,
@@ -3154,4 +3162,182 @@ TEST_F (ComponentTest, GetParentComponentWithTypeWalksUpTheChain)
 
     // Direct parent match.
     EXPECT_EQ (child->getParentComponentWithType<Component>(), parent.get());
+}
+
+// =============================================================================
+// Multi-rect (disjoint region) repaint.
+// =============================================================================
+
+TEST (ComponentNativeOptionsTest, RepaintModeDefaultsToDisjointRegionsAndIsSettable)
+{
+    ComponentNative::Options options;
+    EXPECT_EQ (ComponentNative::RepaintMode::disjointRegions, options.repaintMode);
+
+    options.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+    EXPECT_EQ (ComponentNative::RepaintMode::boundingBox, options.repaintMode);
+}
+
+namespace
+{
+class CountingComponent : public Component
+{
+public:
+    void paint (Graphics&) override { ++paintCount; }
+
+    int paintCount = 0;
+};
+} // namespace
+
+class ComponentRepaintRegionTest : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    void SetUp() override
+    {
+        GraphicsContext::Options opts;
+        opts.allowHeadlessRendering = true;
+        context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+        ASSERT_NE (nullptr, context);
+
+        renderer = context->makeRenderer (300, 300);
+        ASSERT_NE (nullptr, renderer);
+
+        root = std::make_unique<CountingComponent>();
+        root->setBounds (0, 0, 300, 300);
+        root->setVisible (true);
+
+        left = &addChild (*root, { 0, 0, 10, 10 });
+        middle = &addChild (*root, { 100, 100, 10, 10 });
+        right = &addChild (*root, { 200, 200, 10, 10 });
+    }
+
+    CountingComponent& addChild (Component& parent, Rectangle<int> bounds)
+    {
+        auto child = std::make_unique<CountingComponent>();
+        child->setBounds (bounds.to<float>());
+        child->setVisible (true);
+        parent.addChildComponent (*child);
+        children.push_back (std::move (child));
+        return *children.back();
+    }
+
+    static RectangleList<float> region (std::initializer_list<Rectangle<int>> rects)
+    {
+        RectangleList<float> result;
+
+        for (const auto& rect : rects)
+            result.addWithoutMerge (rect.to<float>());
+
+        return result;
+    }
+
+    std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+    std::unique_ptr<CountingComponent> root;
+    std::vector<std::unique_ptr<CountingComponent>> children;
+    CountingComponent* left = nullptr;
+    CountingComponent* middle = nullptr;
+    CountingComponent* right = nullptr;
+};
+
+TEST_F (ComponentRepaintRegionTest, EmptyRegionPaintsNothing)
+{
+    const RectangleList<float> empty;
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, empty, false);
+
+    EXPECT_EQ (0, root->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, DisjointRegionSkipsComponentsInTheGap)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 10, 10 }, { 200, 200, 10, 10 } }), false);
+
+    EXPECT_EQ (1, root->paintCount); // shared ancestor painted once
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (0, middle->paintCount); // lies between the two dirty rects → skipped
+    EXPECT_EQ (1, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, SingleBoundingBoxRegionPaintsEverythingInside)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, root->getLocalBounds(), false);
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (1, middle->paintCount);
+    EXPECT_EQ (1, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, ContinuousWithEmptyRegionPaintsEverything)
+{
+    const RectangleList<float> empty;
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, empty, true);
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (1, middle->paintCount);
+    EXPECT_EQ (1, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, RegionOutsideBoundsPaintsNothing)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 1000, 1000, 10, 10 } }), false);
+
+    EXPECT_EQ (0, root->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, OverlappingRectsPaintCoveredComponentOnce)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 95, 95, 10, 10 }, { 100, 100, 10, 10 } }), false);
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (0, left->paintCount);
+    EXPECT_EQ (1, middle->paintCount); // covered by the overlap, still only once
+    EXPECT_EQ (0, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, PartiallyOverlappingRegionPaintsComponentOnce)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    // Extends past `left`, so no single opaque child covers the dirty area and the parent
+    // still paints its own background. `left` straddles the dirty area and is painted once.
+    ComponentHelper::triggerPaint (*root, g, region ({ { 5, 5, 20, 20 } }), false);
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (0, middle->paintCount);
+    EXPECT_EQ (0, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, DirtyRectFullyCoveredByOpaqueChildSkipsParentPaint)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    // Components are opaque by default, so a dirty rect wholly inside `left` lets the existing
+    // opaque-child shortcut skip the parent's own background paint (children still paint).
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 5, 5 } }), false);
+
+    EXPECT_EQ (0, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (0, middle->paintCount);
+    EXPECT_EQ (0, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, AdjacentDirtyRectsAreHandledWithoutDoublePainting)
+{
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 0, 0, 6, 10 }, { 6, 0, 6, 10 } }), false);
+
+    EXPECT_EQ (1, root->paintCount);
+    EXPECT_EQ (1, left->paintCount);
+    EXPECT_EQ (0, middle->paintCount);
+    EXPECT_EQ (0, right->paintCount);
 }

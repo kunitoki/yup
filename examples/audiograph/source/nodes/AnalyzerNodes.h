@@ -601,7 +601,7 @@ private:
     SpectrumAnalyzerProcessor& processor;
     yup::Color accentColor;
     int fftSize = 0;
-    yup::FFTProcessor fftProcessor;
+    yup::FFTProcessor<float> fftProcessor;
     std::vector<float> fftInput;
     std::vector<float> fftOutput;
     std::vector<float> window;
