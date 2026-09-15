@@ -337,7 +337,7 @@ bool performNativeDrag (Component&,
             typeAtoms.add (type);
 
         XChangeProperty (display, sourceWindow, atoms.typeList, XA_ATOM, 32, PropModeReplace,
-                         reinterpret_cast<const unsigned char*> (typeAtoms.getData()),
+                         reinterpret_cast<const unsigned char*> (typeAtoms.getRawDataPointer()),
                          typeAtoms.size());
     }
 
@@ -395,7 +395,7 @@ bool performNativeDrag (Component&,
             for (const auto type : offeredTypes)
                 typeAtoms.add (type);
 
-            transfer = reinterpret_cast<const char*> (typeAtoms.getData());
+            transfer = reinterpret_cast<const char*> (typeAtoms.getRawDataPointer());
             transferLength = static_cast<unsigned long> (typeAtoms.size());
         }
         else if (request.target == atoms.uriList && ! data.getFiles().isEmpty())
