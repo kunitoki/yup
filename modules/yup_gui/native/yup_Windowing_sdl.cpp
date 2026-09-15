@@ -72,9 +72,6 @@ SDLComponentNative::SDLComponentNative (Component& component,
     if (options.flags.test (allowHighDensityDisplay))
         windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
-    if (options.flags.test (temporaryWindow))
-        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_UTILITY;
-
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
@@ -86,6 +83,15 @@ SDLComponentNative::SDLComponentNative (Component& component,
 
     if (options.flags.test (alwaysOnTopWindow))
         windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP;
+
+    if (options.flags.test (temporaryWindow))
+    {
+#if YUP_MAC    
+        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_UTILITY;
+#else
+        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_POPUP_MENU;
+#endif
+    }
 
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
     SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
