@@ -47,6 +47,26 @@ bool DragAndDropManager::startDragging (DragAndDropSource& source, Component& co
     if (options.data.isEmpty())
         return false;
 
+    if (options.allowExternalDrag)
+    {
+        const auto data = options.data;
+
+        if (auto performed = performNativeDrag (component, data))
+        {
+            source.dragOperationStarted (data);
+
+            if (source.onDragStarted)
+                source.onDragStarted (data);
+
+            source.dragOperationEnded (data, *performed);
+
+            if (source.onDragEnded)
+                source.onDragEnded (data, *performed);
+
+            return true;
+        }
+    }
+
     return beginSession (source, component, std::move (options));
 }
 
@@ -151,24 +171,9 @@ void DragAndDropManager::mouseDrag (const MouseEvent& event)
         return;
 
     const auto screenPosition = event.getScreenPosition();
-    auto* component = resolveComponentAt (screenPosition);
-
-    if (component == nullptr && currentOptions.allowExternalDrag)
-    {
-        currentOptions.allowExternalDrag = false;
-
-        if (auto* source = getCurrentDragSourceComponent())
-        {
-            if (auto performed = performNativeDrag (*source, currentData))
-            {
-                endSession (*performed);
-                return;
-            }
-        }
-    }
 
     moveGhostTo (screenPosition);
-    dispatchHover (component, screenPosition, currentData);
+    dispatchHover (resolveComponentAt (screenPosition), screenPosition, currentData);
 }
 
 void DragAndDropManager::mouseUp (const MouseEvent& event)

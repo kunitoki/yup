@@ -23,10 +23,19 @@
 
 /** The source an AppKit drag session reports its operations to.
 
-    Stateless, and shared: it only implements the one method AppKit requires, and the session retains
-    it for its duration. The operation the destination settles on arrives in the optional "ended"
-    callback, which is not wired up yet. */
+    Stateless, and shared: it offers all three operations and records the one the destination settles
+    on, in the optional "ended" callback AppKit invokes before the session-starting call returns.
+
+    It lives outside the yup namespace, because an Objective-C class cannot be declared inside one -
+    which is why the action type is spelled out here rather than picked up unqualified. */
 @interface YUPDraggingSource : NSObject <NSDraggingSource>
+
+/** The operation the destination settled on.
+
+    Recorded by the session's ended callback, which AppKit invokes before the call that started the
+    session returns - so the caller can read it straight afterwards. */
+@property (nonatomic, assign) yup::DragAndDropAction performedAction;
+
 @end
 
 @implementation YUPDraggingSource
@@ -36,6 +45,20 @@
 {
     // Offer all three so the destination can choose for itself.
     return NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
+}
+
+- (void) draggingSession: (NSDraggingSession*) __unused session
+             endedAtPoint: (NSPoint) __unused screenPoint
+                operation: (NSDragOperation) operation
+{
+    if ((operation & NSDragOperationMove) != 0)
+        self.performedAction = yup::DragAndDropAction::move;
+    else if ((operation & NSDragOperationLink) != 0)
+        self.performedAction = yup::DragAndDropAction::link;
+    else if ((operation & NSDragOperationCopy) != 0)
+        self.performedAction = yup::DragAndDropAction::copy;
+    else
+        self.performedAction = yup::DragAndDropAction::none;
 }
 
 @end
@@ -205,13 +228,13 @@ std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, 
 
     static YUPDraggingSource* dragSource = [[YUPDraggingSource alloc] init];
 
+    dragSource.performedAction = DragAndDropAction::none;
+
     [view beginDraggingSessionWithItems: items event: event source: dragSource];
 
-    // AppKit runs the session inside its own event handling, so as far as the in app session is
-    // concerned the gesture is finished: the manager drops it without telling the source the drag
-    // ended. Reporting which operation the destination chose needs the session's "ended" callback,
-    // and is the next step for this platform.
-    return DragAndDropAction::none;
+    // The session runs its own event loop inside that call, so by the time it returns the drag is over
+    // and the destination's operation has already been recorded by the source's ended callback.
+    return dragSource.performedAction;
 }
 
 } // namespace yup

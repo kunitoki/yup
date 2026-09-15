@@ -32,8 +32,13 @@
     cross-window component resolution, and that a single-window test cannot reach.
 
     The Inbox panel accepts files and text dragged in from outside the application and lists what
-    arrived, so an OS-originated drag can be tried too. Dragging a tile out to another application
-    needs the native export, which is not wired up yet.
+    arrived, so an OS-originated drag can be tried too. The logo in the header is the one item that
+    drags *out*: its payload is the logo image, and it is the only source here asking for an external
+    drag, so it can be dropped on another application - arriving there as a PNG.
+
+    Tiles deliberately do not ask for that: dragging one between the two windows crosses out of the
+    first window on the way, which the manager cannot tell apart from a drag leaving the
+    application, so the export on a tile would break cross-window dragging.
 
     @see yup::DragAndDropSource, yup::DragAndDropTarget, yup::DragAndDropManager
 */
@@ -194,9 +199,28 @@ public:
             if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
                 return;
 
+            // No in-app return value beyond the payload: asking for the external export hands the
+            // whole gesture to the platform from the first mouse move, so the drag image is the
+            // platform's own.
             startDragging (yup::DragAndDropSource::DragOptions{}
                                .withData (yup::DragAndDropData{}.withImage (logo))
                                .withExternalDragAllowed (true));
+        }
+
+        void dragOperationEnded (const yup::DragAndDropData&, yup::DragAndDropAction performed) override
+        {
+            // The only place this demo can see what the destination did: an exported drag reports the
+            // operation the platform's session settled on.
+            const char* name = "nothing";
+
+            if (performed == yup::DragAndDropAction::copy)
+                name = "copy";
+            else if (performed == yup::DragAndDropAction::move)
+                name = "move";
+            else if (performed == yup::DragAndDropAction::link)
+                name = "link";
+
+            yup::Logger::writeToLog (yup::String ("Logo dropped: ") + name);
         }
 
     private:

@@ -3,8 +3,8 @@
 YUP carries drag-and-drop in both directions. Inbound, it delivers files, text and other
 MIME payloads from the operating system into the application. Outbound, application code
 starts a drag carrying a payload, which follows the cursor as a ghost window and can be
-dropped on any target — in the same window, in another window of the same process, or, once
-the native export lands, in another application.
+dropped on any target — in the same window, in another window of the same process, or, when a
+source asks for it and the platform supports it, in another application.
 
 Both ends are opt-in mixins rather than part of `Component`: a component that accepts drops
 derives from `DragAndDropTarget`, one that starts drags derives from `DragAndDropSource`, and
@@ -474,8 +474,14 @@ private:
 
 ## Limitations
 
-- **No native export yet.** A drag cannot leave the application: `DragOptions::allowExternalDrag`
-  is accepted but not honoured. `DragAndDropData`'s `var` native object is same-process only.
+- **The native export is macOS-only so far.** `DragOptions::allowExternalDrag` opts a source in,
+  and on macOS the gesture is handed to AppKit, which carries files, text and PNG images to another
+  application. Windows and X11 keep such a gesture in the app until each has an implementation.
+- **A source cannot be both in-app and external.** The manager decides the gesture has left the
+  application when it finds no component of ours under the pointer — and crossing between two windows
+  looks exactly like that. So asking for the export on something that is also dragged between windows
+  would break the cross-window case; keep the two roles on separate sources.
+- **`DragAndDropData`'s `var` native object is same-process only** and is never exported.
 - **An OS drag reports no payload until it is dropped**, so targets cannot inspect what is
   being dragged while it hovers. See the note under `isInterestedInDragSource`.
 - **`Desktop::findComponentAt()` does not do a full z-order walk**, so overlapping windows or

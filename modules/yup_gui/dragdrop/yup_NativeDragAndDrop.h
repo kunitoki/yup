@@ -46,10 +46,9 @@ namespace yup
 
     @returns The action the platform reported, or `std::nullopt` when the drag was not exported.
 
-    @note macOS returns `DragAndDropAction::none` once it has handed the gesture to AppKit, because the
-          session runs inside AppKit's own event handling and the operation the destination chose only
-          arrives in the session's "ended" callback. Reporting that operation back to the source is
-          the next step for that platform; until then the source is told nothing was performed.
+    @note A platform drag runs its own event loop, so this does not return until the drag is over. The
+          caller learns the outcome afterwards: a `DragAndDropSource` receives `dragOperationStarted`
+          and `dragOperationEnded` together, once this has returned.
 
     @see DragAndDropSource, DragAndDropManager
 */
