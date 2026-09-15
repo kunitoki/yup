@@ -180,6 +180,13 @@ public:
         component.native = new TestComponentNative (component);
     }
 
+    /** Attaches a native the caller built, which the component then owns. */
+    static void attachNative (Component& component, ComponentNative* newNative)
+    {
+        jassert (component.native == nullptr);
+        component.native = newNative;
+    }
+
     static void detachMockNative (Component& component)
     {
         component.native = nullptr;

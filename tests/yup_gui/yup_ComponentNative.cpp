@@ -464,8 +464,11 @@ TEST_F (ComponentNativeRepaintTests, FullRepaintResetsPendingAreas)
     unpainted in its new place until something else happens to repaint over it. */
 TEST_F (ComponentNativeRepaintTests, MovingAComponentMarksTheOldAreaAndTheNewOne)
 {
+    // Built here and handed over rather than assigned directly: the component's native is private, so
+    // the test helper is the way in.
     auto* native = new StubComponentNative (comp, ComponentNative::defaultFlags);
-    comp.native = native;
+
+    yup::ComponentTestHelper<Component>::attachNative (comp, native);
 
     // Both areas are computed the same way the engine computes them when it resolves the region.
     const auto oldArea = comp.getBoundsRelativeToTopLevelComponent();
