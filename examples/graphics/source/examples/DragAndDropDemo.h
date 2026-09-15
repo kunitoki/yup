@@ -134,50 +134,88 @@ public:
             return liveTiles;
         }
 
-        /** Renders the tile into an image, so that a drag out of the application carries the
-            coloured item itself rather than only its name. */
-        yup::Image renderToImage() const
-        {
-            auto* native = getNativeComponent();
-
-            if (native == nullptr)
-                return {};
-
-            auto* context = native->getGraphicsContext();
-
-            if (context == nullptr)
-                return {};
-
-            yup::Image image (static_cast<int> (getWidth()), static_cast<int> (getHeight()), yup::PixelFormat::RGBA);
-
-            if (! image.isValid())
-                return {};
-
-            yup::Graphics g (*context, image);
-            paint (g);
-
-            return image;
-        }
-
         void startDrag()
         {
-            auto data = yup::DragAndDropData{}.withText (tileName);
-
-            if (auto image = renderToImage(); image.isValid())
-                data = data.withImage (image);
-
             ghost.reset (new Tile (tileName, color, GhostTag{}));
 
             startDragging (yup::DragAndDropSource::DragOptions{}
-                               .withData (data)
+                               .withData (yup::DragAndDropData{}.withText (tileName))
                                .withDragImageComponent (ghost.get(), yup::Point<float> (36.0f, 21.0f))
-                               .withImageOpacity (0.8f)
-                               .withExternalDragAllowed (true));
+                               .withImageOpacity (0.8f));
         }
 
         yup::String tileName;
         yup::Color color;
         std::unique_ptr<Tile> ghost;
+    };
+
+    //==============================================================================
+    /** The application logo: the one thing in this demo meant to be dragged *out* of the app.
+
+        It has to be a separate item, because a source cannot be both. An in-app drag that crosses
+        between two windows leaves the first window on the way, which at the manager is
+        indistinguishable from a drag leaving the application. So tiles stay in-app and carry text,
+        while the logo carries an image and asks for the external drag.
+    */
+    class LogoItem final : public yup::Component
+        , public yup::DragAndDropSource
+    {
+    public:
+        LogoItem()
+            : yup::Component ("logo")
+        {
+            logo = loadLogo();
+
+            setSize (72, 72);
+        }
+
+        //==============================================================================
+        void paint (yup::Graphics& g) override
+        {
+            if (! logo.isValid())
+                return;
+
+            const auto bounds = getLocalBounds();
+            const auto scale = yup::jmin (bounds.getWidth() / static_cast<float> (logo.getWidth()),
+                                          bounds.getHeight() / static_cast<float> (logo.getHeight()));
+            const auto size = yup::Point<float> (logo.getWidth() * scale, logo.getHeight() * scale);
+            const auto offset = (yup::Point<float> (bounds.getWidth(), bounds.getHeight()) - size) * 0.5f;
+
+            g.drawImage (logo, yup::Rectangle<float> (offset.getX(), offset.getY(), size.getX(), size.getY()));
+        }
+
+        void mouseDrag (const yup::MouseEvent& event) override
+        {
+            if (isCurrentlyDragging() || ! logo.isValid())
+                return;
+
+            const auto delta = event.getPosition() - event.getLastMouseDownPosition();
+
+            if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
+                return;
+
+            startDragging (yup::DragAndDropSource::DragOptions{}
+                               .withData (yup::DragAndDropData{}.withImage (logo))
+                               .withExternalDragAllowed (true));
+        }
+
+    private:
+        static yup::Image loadLogo()
+        {
+            const auto file = getAssetPath ("data/logo.png");
+
+            if (! file.existsAsFile())
+                return {};
+
+            yup::ImageFormatManager formatManager;
+            formatManager.registerDefaultFormats();
+
+            auto reader = formatManager.createReaderFor (file);
+
+            return reader != nullptr ? reader->readImage() : yup::Image();
+        }
+
+        yup::Image logo;
     };
 
     //==============================================================================
@@ -483,12 +521,15 @@ public:
         : yup::Component ("DragAndDropDemo")
     {
         hint = std::make_unique<yup::Label> ("hint");
-        hint->setText ("Drag tiles between the trays, or a row out of the list. Drop files or text onto the Inbox.");
+        hint->setText ("Drag tiles between the trays, or the logo out of the window. Drop files or text onto the Inbox.");
         addAndMakeVisible (hint.get());
 
         newWindowButton = std::make_unique<yup::TextButton> ("New Window");
         newWindowButton->onClick = [this] { createSecondWindow(); };
         addAndMakeVisible (newWindowButton.get());
+
+        logo = std::make_unique<LogoItem>();
+        addAndMakeVisible (logo.get());
 
         leftTray = std::make_unique<Tray> ("leftTray");
         rightTray = std::make_unique<Tray> ("rightTray");
@@ -516,7 +557,11 @@ public:
         auto bounds = getLocalBounds().reduced (12);
 
         hint->setBounds (bounds.removeFromTop (26));
-        newWindowButton->setBounds (bounds.removeFromTop (28).withWidth (140));
+
+        auto headerRow = bounds.removeFromTop (48);
+
+        newWindowButton->setBounds (headerRow.removeFromRight (140).withHeight (28));
+        logo->setBounds (headerRow.removeFromRight (48).reduced (4));
 
         bounds.removeFromTop (10);
 
@@ -581,5 +626,7 @@ private:
     std::unique_ptr<Tray> rightTray;
     std::unique_ptr<Inbox> inbox;
     std::unique_ptr<RowList> rowList;
+    std::unique_ptr<LogoItem> logo;
+
     std::unique_ptr<SecondWindow> secondWindow;
 };

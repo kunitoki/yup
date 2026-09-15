@@ -21,13 +21,6 @@
 
 #if YUP_MAC
 
-namespace yup
-{
-
-//==============================================================================
-namespace
-{
-
 /** The source an AppKit drag session reports its operations to.
 
     Stateless, and shared: it only implements the one method AppKit requires, and the session retains
@@ -38,17 +31,21 @@ namespace
 
 @implementation YUPDraggingSource
 
-- (NSDragOperation) draggingSession: (NSDraggingSession*) session
-    sourceOperationMaskForDraggingContext: (NSDraggingContext) context
+- (NSDragOperation) draggingSession: (NSDraggingSession*) __unused session
+    sourceOperationMaskForDraggingContext: (NSDraggingContext) __unused context
 {
-    ignoreUnused (session);
-    ignoreUnused (context);
-
     // Offer all three so the destination can choose for itself.
     return NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
 }
 
 @end
+
+namespace yup
+{
+
+//==============================================================================
+namespace
+{
 
 //==============================================================================
 
@@ -167,11 +164,18 @@ std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, 
     {
         auto* pasteboardItem = [[NSPasteboardItem alloc] init];
 
+        if (pngData != nil)
+        {
+            [pasteboardItem setData: pngData forType: NSPasteboardTypePNG];
+
+            NSData* tiffData = [pngImage TIFFRepresentation];
+
+            if (tiffData != nil)
+                [pasteboardItem setData: tiffData forType: NSPasteboardTypeTIFF];
+        }
+
         if (text.isNotEmpty())
             [pasteboardItem setString: toNSString (text) forType: NSPasteboardTypeString];
-
-        if (pngData != nil)
-            [pasteboardItem setData: pngData forType: NSPasteboardTypePNG];
 
         auto* dragItem = [[NSDraggingItem alloc] initWithPasteboardWriter: pasteboardItem];
 
