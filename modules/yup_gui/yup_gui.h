@@ -39,6 +39,7 @@
     iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
+    linuxLibs:            X11
 
   END_YUP_MODULE_DECLARATION
 
