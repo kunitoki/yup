@@ -254,4 +254,39 @@ ComponentNative::Ptr Desktop::getNativeComponent (void* userdata) const
     return nullptr;
 }
 
+//==============================================================================
+
+Component* Desktop::findComponentAt (const Point<float>& screenPosition, Component* componentToIgnore) const
+{
+    // A window that currently holds keyboard focus wins over one that merely overlaps it; SDL gives
+    // no usable stacking order to rank the rest, so the first other match is kept as a fallback.
+    Component* fallback = nullptr;
+
+    for (const auto& [userdata, nativeComponent] : nativeComponents)
+    {
+        ignoreUnused (userdata);
+
+        if (nativeComponent == nullptr || ! nativeComponent->isVisible())
+            continue;
+
+        auto& root = nativeComponent->getComponent();
+
+        if (&root == componentToIgnore || ! root.isVisible())
+            continue;
+
+        const auto localPosition = screenPosition - nativeComponent->getBounds().getPosition().to<float>();
+
+        if (auto* found = root.findComponentAt (localPosition))
+        {
+            if (nativeComponent->getFocusedComponent() != nullptr)
+                return found;
+
+            if (fallback == nullptr)
+                fallback = found;
+        }
+    }
+
+    return fallback;
+}
+
 } // namespace yup

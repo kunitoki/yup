@@ -77,6 +77,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/ComputeParticlesDemo.h"
 #include "examples/ConvolutionDemo.h"
 #include "examples/CrossoverDemo.h"
+#include "examples/DragAndDropDemo.h"
 #include "examples/CodeEditor.h"
 #include "examples/FileChooser.h"
 #include "examples/FilterDemo.h"
@@ -190,6 +191,7 @@ public:
         addDemo ("Compute Particles", [] { return std::make_unique<ComputeParticlesDemo>(); });
         addDemo ("Convolution Demo", [] { return std::make_unique<ConvolutionDemo>(); });
         addDemo ("Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
+        addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
         addDemo ("Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });

@@ -126,6 +126,8 @@ public:
 
     GraphicsContext* getGraphicsContext() override { return nullptr; }
 
+    void setGlobalMouseCaptureActive (bool) override {}
+
     Component& getComponent() const { return component; }
 
     Flags getFlags() const { return flags; }
@@ -452,4 +454,33 @@ TEST_F (ComponentNativeRepaintTests, FullRepaintResetsPendingAreas)
 
     EXPECT_EQ (1, native.getRepaintAreas().getNumRectangles());
     EXPECT_TRUE (native.getRepaintAreas().contains (comp.getBounds()));
+}
+
+/** A component that moves has to repaint both where it was and where it went.
+
+    Component::repaint() resolves its dirty region when it is requested, against the bounds the
+    component has at that moment, so setBounds() has to mark the area it is leaving before the
+    change and the area it is arriving in after it. Without the second call the component is left
+    unpainted in its new place until something else happens to repaint over it. */
+TEST_F (ComponentNativeRepaintTests, MovingAComponentMarksTheOldAreaAndTheNewOne)
+{
+    // Built here and handed over rather than assigned directly: the component's native is private, so
+    // the test helper is the way in.
+    auto* native = new StubComponentNative (comp, ComponentNative::defaultFlags);
+
+    yup::ComponentTestHelper<Component>::attachNative (comp, native);
+
+    // repaint() is gated on isShowing(), so a component that was never made visible drops every mark
+    // before it reaches the native. Being parentless, comp is showing as soon as it is visible.
+    comp.setVisible (true);
+
+    // Both areas are computed the same way the engine computes them when it resolves the region.
+    const auto oldArea = comp.getBoundsRelativeToTopLevelComponent();
+
+    comp.setBounds (60.0f, 20.0f, 30.0f, 40.0f);
+
+    const auto newArea = comp.getBoundsRelativeToTopLevelComponent();
+
+    EXPECT_TRUE (native->getRepaintAreas().contains (oldArea));
+    EXPECT_TRUE (native->getRepaintAreas().contains (newArea));
 }

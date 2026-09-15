@@ -259,6 +259,22 @@ TEST (MouseEventTests, GetScreenPositionWithoutSourceComponent)
     EXPECT_EQ (position, event.getScreenPosition());
 }
 
+TEST (MouseEventTests, GetScreenPositionWithSourceComponent)
+{
+    Component source ("source");
+    source.setBounds (10.0f, 20.0f, 100.0f, 100.0f);
+
+    Point<float> position (5.0f, 7.0f);
+    MouseEvent event (MouseEvent::noButtons, KeyModifiers(), position, &source);
+
+    // Regression: the event used to add the source component's (already
+    // screen-absolute) position to an already-absolute position, double-counting
+    // the component offset. The position is source-relative and must be mapped
+    // through the component once.
+    EXPECT_EQ (event.getScreenPosition(), source.localToScreen (position));
+    EXPECT_EQ (event.getScreenPosition(), Point<float> (15.0f, 27.0f));
+}
+
 TEST (MouseEventTests, WithPositionReturnsNewObject)
 {
     MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (10.0f, 20.0f));
