@@ -195,32 +195,16 @@ public:
                 return;
 
             const auto delta = event.getPosition() - event.getLastMouseDownPosition();
-
             if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
                 return;
 
-            // No in-app return value beyond the payload: asking for the external export hands the
-            // whole gesture to the platform from the first mouse move, so the drag image is the
-            // platform's own.
             startDragging (yup::DragAndDropSource::DragOptions{}
                                .withData (yup::DragAndDropData{}.withImage (logo))
                                .withExternalDragAllowed (true));
         }
 
-        void dragOperationEnded (const yup::DragAndDropData&, yup::DragAndDropAction performed) override
+        void dragOperationEnded (const yup::DragAndDropData&, yup::DragAndDropAction) override
         {
-            // The only place this demo can see what the destination did: an exported drag reports the
-            // operation the platform's session settled on.
-            const char* name = "nothing";
-
-            if (performed == yup::DragAndDropAction::copy)
-                name = "copy";
-            else if (performed == yup::DragAndDropAction::move)
-                name = "move";
-            else if (performed == yup::DragAndDropAction::link)
-                name = "link";
-
-            yup::Logger::writeToLog (yup::String ("Logo dropped: ") + name);
         }
 
     private:
