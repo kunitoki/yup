@@ -23,13 +23,14 @@ namespace yup
 {
 
 //==============================================================================
-#if !YUP_MAC && !YUP_WINDOWS
+#if !YUP_MAC && !YUP_WINDOWS && !YUP_LINUX
 /** No implementation on this platform yet, so nothing is exported - which is what tells the manager
     to keep treating the gesture as an in-app drag.
 
-    macOS has its own in `native/yup_NativeDragAndDrop_mac.mm` and Windows in
-    `native/yup_NativeDragAndDrop_windows.cpp`; X11 will add theirs, and each one takes its platform
-    out of this guard as it lands, so exactly one definition is ever compiled on any given platform. */
+    macOS has its own in `native/yup_NativeDragAndDrop_mac.mm`, Windows in
+    `native/yup_NativeDragAndDrop_windows.cpp` and Linux in `native/yup_NativeDragAndDrop_linux.cpp`;
+    each one takes its platform out of this guard as it lands, so exactly one definition is ever
+    compiled on any given platform. */
 bool performNativeDrag (Component&, const DragAndDropData&, std::function<void (std::optional<DragAndDropAction>)>)
 {
     return false;

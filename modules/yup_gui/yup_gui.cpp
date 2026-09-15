@@ -132,6 +132,7 @@
 
 #include "native/yup_FileChooser_linux.cpp"
 #include "native/yup_Windowing_linux.cpp"
+#include "native/yup_NativeDragAndDrop_linux.cpp"
 
 //==============================================================================
 
