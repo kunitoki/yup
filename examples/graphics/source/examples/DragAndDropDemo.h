@@ -85,15 +85,6 @@ public:
         //==============================================================================
         void paint (yup::Graphics& g) override
         {
-            if (isGhost)
-            {
-                // The ghost window has no per-pixel alpha yet, so the replica covers its whole window
-                // rather than letting the un-cleared corners show through as black.
-                g.setFillColor (color);
-                g.fillRect (getLocalBounds().to<float>());
-                return;
-            }
-
             const auto bounds = getLocalBounds().to<float>().reduced (3.0f);
 
             g.setFillColor (color);
@@ -110,7 +101,6 @@ public:
                 return;
 
             const auto delta = event.getPosition() - event.getLastMouseDownPosition();
-
             if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
                 return;
 
@@ -135,12 +125,8 @@ public:
             , tileName (newTileName)
             , color (newColor)
         {
-            isGhost = true;
             setSize (72, 42);
         }
-
-        /** True only for the ghost replica, which has to cover its whole window (see paint()). */
-        bool isGhost = false;
 
         static yup::Array<Tile*>& getLiveTiles()
         {
@@ -150,9 +136,6 @@ public:
 
         void startDrag()
         {
-            // A live copy is used as the ghost: the manager reparents it into its ghost window for
-            // the duration of the drag, and removes it again when the drag ends. Built with new
-            // rather than make_unique, which cannot reach a private constructor.
             ghost.reset (new Tile (tileName, color, GhostTag{}));
 
             startDragging (yup::DragAndDropSource::DragOptions{}
