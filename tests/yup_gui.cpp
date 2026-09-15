@@ -38,6 +38,7 @@
 #include "yup_gui/yup_ComponentEffect.cpp"
 #include "yup_gui/yup_Desktop.cpp"
 #include "yup_gui/yup_DragAndDropData.cpp"
+#include "yup_gui/yup_DragAndDropManager.cpp"
 #include "yup_gui/yup_DragAndDropTarget.cpp"
 #include "yup_gui/yup_FileChooser.cpp"
 #include "yup_gui/yup_FlexBox.cpp"

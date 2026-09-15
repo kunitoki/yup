@@ -407,9 +407,15 @@ void Component::setBounds (float x, float y, float width, float height)
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
+    // A repaint resolves its dirty region immediately, so this marks where the component is now,
+    // which is the area it is about to leave.
     repaint();
 
     boundsInParent = newBounds;
+
+    // And this marks where it is going. Nothing else does, so a component that moves without some
+    // unrelated repaint covering the same area would not be drawn in its new place.
+    repaint();
 
     if (options.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());

@@ -1119,6 +1119,113 @@ TEST_F (ListBoxTests, ModelDragSourceDescriptionReturnsData)
 }
 
 //==============================================================================
+// Selection Interaction Tests
+//==============================================================================
+
+namespace
+{
+/** Builds a click in the middle of a row, with the modifiers to hold down. */
+MouseEvent makeRowClick (ListBox& listBox, int rowIndex, KeyModifiers modifiers = {})
+{
+    const auto rowBounds = listBox.getRowBounds (rowIndex);
+    const Point<float> centre { rowBounds.getX() + rowBounds.getWidth() * 0.5f,
+                                rowBounds.getY() + rowBounds.getHeight() * 0.5f };
+
+    return MouseEvent (MouseEvent::leftButton, modifiers, centre);
+}
+
+Array<int> rowsOf (const ListBox& listBox)
+{
+    return listBox.getSelectedRows();
+}
+} // namespace
+
+TEST_F (ListBoxTests, PlainClickReplacesTheSelectionInMultipleMode)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 5, 10 }, dontSendNotification);
+
+    listBox->mouseDown (makeRowClick (*listBox, 15));
+
+    // selectRow() only ever adds in multiple mode, so without clearing first this would have
+    // accumulated into { 5, 10, 15 }.
+    EXPECT_EQ (Array<int> ({ 15 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, ShiftClickExtendsARangeFromTheLastPlainClick)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+
+    listBox->mouseDown (makeRowClick (*listBox, 2));
+    EXPECT_EQ (Array<int> ({ 2 }), rowsOf (*listBox));
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::shiftMask)));
+    EXPECT_EQ (Array<int> ({ 2, 3, 4, 5 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, RepeatedShiftClicksKeepTheOriginalAnchor)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+
+    listBox->mouseDown (makeRowClick (*listBox, 2));
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::shiftMask)));
+
+    // A shift-click must not move the anchor, so this shrinks the range back towards row 2 rather
+    // than extending from row 5.
+    listBox->mouseDown (makeRowClick (*listBox, 3, KeyModifiers (KeyModifiers::shiftMask)));
+
+    EXPECT_EQ (Array<int> ({ 2, 3 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, CommandClickTogglesARow)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 2 }, dontSendNotification);
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::commandMask)));
+    EXPECT_EQ (Array<int> ({ 2, 5 }), rowsOf (*listBox));
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::commandMask)));
+    EXPECT_EQ (Array<int> ({ 2 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, ClickingASelectedRowDefersTheCollapseToMouseUp)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 2, 5 }, dontSendNotification);
+
+    // The press may be the start of a drag carrying the whole selection, so nothing collapses yet.
+    listBox->mouseDown (makeRowClick (*listBox, 5));
+    EXPECT_EQ (Array<int> ({ 2, 5 }), rowsOf (*listBox));
+
+    listBox->mouseUp (makeRowClick (*listBox, 5));
+    EXPECT_EQ (Array<int> ({ 5 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, DragSourceCanBeDisabled)
+{
+    EXPECT_TRUE (listBox->isDragSourceEnabled());
+
+    listBox->setDragSourceEnabled (false);
+    EXPECT_FALSE (listBox->isDragSourceEnabled());
+
+    listBox->setDragSourceEnabled (true);
+    EXPECT_TRUE (listBox->isDragSourceEnabled());
+}
+
+TEST_F (ListBoxTests, DefaultDragSourceComponentCarriesTheSelectionCount)
+{
+    auto dragImage = listBox->createDragSourceComponent ({ 2, 5, 7 });
+
+    ASSERT_NE (nullptr, dragImage);
+
+    // The drag image becomes the whole of the ghost window, so it has to be sized by whoever
+    // creates it.
+    EXPECT_GT (dragImage->getWidth(), 0.0f);
+    EXPECT_GT (dragImage->getHeight(), 0.0f);
+}
+
+//==============================================================================
 // Paint Tests
 //==============================================================================
 

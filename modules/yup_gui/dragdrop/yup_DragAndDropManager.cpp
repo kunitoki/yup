@@ -151,9 +151,24 @@ void DragAndDropManager::mouseDrag (const MouseEvent& event)
         return;
 
     const auto screenPosition = event.getScreenPosition();
+    auto* component = resolveComponentAt (screenPosition);
+
+    if (component == nullptr && currentOptions.allowExternalDrag)
+    {
+        currentOptions.allowExternalDrag = false;
+
+        if (auto* source = getCurrentDragSourceComponent())
+        {
+            if (auto performed = performNativeDrag (*source, currentData))
+            {
+                endSession (*performed);
+                return;
+            }
+        }
+    }
 
     moveGhostTo (screenPosition);
-    dispatchHover (resolveComponentAt (screenPosition), screenPosition, currentData);
+    dispatchHover (component, screenPosition, currentData);
 }
 
 void DragAndDropManager::mouseUp (const MouseEvent& event)

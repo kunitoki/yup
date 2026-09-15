@@ -14,7 +14,7 @@ windowing, widgets, and theming are still to come.
 
 - **Components** — the `Component` tree, painting, input, and lifecycle.
 - **Styling** — colors, metrics, and `ComponentStyle` with theme cascading.
-- **Drag and drop** — receiving external file and text drops.
+- **Drag and drop** — receiving drops and starting drags, in one window or across several.
 - **Effects** — GPU shader effects applied to a component subtree.
 - **Caching** — cache a component's paint output to a GPU texture.
 - **Snapshots** — capture a component subtree to a CPU-side `Image`.
@@ -30,8 +30,8 @@ windowing, widgets, and theming are still to come.
 
 - [Component basics](component-basics.md) — the `Component`
   tree, painting, input, and lifecycle.
-- [Drag and drop](component-drag-and-drop.md) — receiving external
-  file and text payloads.
+- [Drag and drop](component-drag-and-drop.md) — drop targets, drag
+  sources, payloads, and the drag session.
 - [Component styling](component-styling.md) — colors, metrics,
   `ComponentStyle`, and `ApplicationTheme`.
 - [Component effects (shaders)](component-effects.md) — apply GPU shader

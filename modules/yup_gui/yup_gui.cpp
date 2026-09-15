@@ -108,6 +108,7 @@
 
 #include "native/yup_FileChooser_mac.mm"
 #include "native/yup_Windowing_mac.mm"
+#include "native/yup_NativeDragAndDrop_mac.mm"
 #endif
 
 #if YUP_IOS
@@ -186,6 +187,7 @@
 #include "dragdrop/yup_DragImageComponent.cpp"
 #include "dragdrop/yup_DragAndDropSource.cpp"
 #include "dragdrop/yup_DragAndDropManager.cpp"
+#include "dragdrop/yup_NativeDragAndDrop.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"
 #include "buttons/yup_TextButton.cpp"

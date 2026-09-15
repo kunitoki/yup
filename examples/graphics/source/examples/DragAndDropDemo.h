@@ -134,14 +134,45 @@ public:
             return liveTiles;
         }
 
+        /** Renders the tile into an image, so that a drag out of the application carries the
+            coloured item itself rather than only its name. */
+        yup::Image renderToImage() const
+        {
+            auto* native = getNativeComponent();
+
+            if (native == nullptr)
+                return {};
+
+            auto* context = native->getGraphicsContext();
+
+            if (context == nullptr)
+                return {};
+
+            yup::Image image (static_cast<int> (getWidth()), static_cast<int> (getHeight()), yup::PixelFormat::RGBA);
+
+            if (! image.isValid())
+                return {};
+
+            yup::Graphics g (*context, image);
+            paint (g);
+
+            return image;
+        }
+
         void startDrag()
         {
+            auto data = yup::DragAndDropData{}.withText (tileName);
+
+            if (auto image = renderToImage(); image.isValid())
+                data = data.withImage (image);
+
             ghost.reset (new Tile (tileName, color, GhostTag{}));
 
             startDragging (yup::DragAndDropSource::DragOptions{}
-                               .withData (yup::DragAndDropData{}.withText (tileName))
+                               .withData (data)
                                .withDragImageComponent (ghost.get(), yup::Point<float> (36.0f, 21.0f))
-                               .withImageOpacity (0.8f));
+                               .withImageOpacity (0.8f)
+                               .withExternalDragAllowed (true));
         }
 
         yup::String tileName;

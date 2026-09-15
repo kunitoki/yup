@@ -817,6 +817,46 @@ void registerYupGuiBindings (py::module_& m)
         .def_readwrite ("onItemDragExit", &DragAndDropTarget::onItemDragExit, "Assignable alternative to itemDragExit().")
     ;
 
+    // ============================================================================================ yup::DragAndDropSource
+
+    // multiple_inheritance() because a Python class is expected to derive from Component alongside
+    // this mixin, which puts the source subobject at a non-zero offset within the instance.
+    py::class_<DragAndDropSource, PyDragAndDropSource<>, py::smart_holder> classDragAndDropSource (m, "DragAndDropSource", py::multiple_inheritance());
+
+    classDragAndDropSource
+        .def ("startDragging", &DragAndDropSource::startDragging, "options"_a, "Starts a drag carrying options. Returns true when a session was started.")
+        .def ("isCurrentlyDragging", &DragAndDropSource::isCurrentlyDragging, "Returns true while a drag started by this object is in flight.")
+        .def ("getDragSourceComponent", &DragAndDropSource::getDragSourceComponent, py::return_value_policy::reference, "Returns this object as a Component (which it always is).")
+        .def ("dragOperationStarted", &DragAndDropSource::dragOperationStarted, "data"_a, "Called when this source's drag starts.")
+        .def ("dragOperationEnded", &DragAndDropSource::dragOperationEnded, "data"_a, "performed"_a, "Called when this source's drag ends.")
+        .def_readwrite ("onDragStarted", &DragAndDropSource::onDragStarted, "Assignable alternative to dragOperationStarted().")
+        .def_readwrite ("onDragEnded", &DragAndDropSource::onDragEnded, "Assignable alternative to dragOperationEnded().")
+    ;
+
+    // ============================================================================================ yup::DragAndDropSource::DragOptions
+
+    py::class_<DragAndDropSource::DragOptions> classDragOptions (m, "DragOptions");
+
+    classDragOptions
+        .def (py::init<>(), "Describes what is being dragged and how the ghost should look.")
+        .def_readwrite ("data", &DragAndDropSource::DragOptions::data, "The payload to drag. Required: an empty payload cannot start a drag.")
+        .def_readwrite ("dragImageComponent", &DragAndDropSource::DragOptions::dragImageComponent, "An optional live component to show as the ghost. The caller keeps ownership.")
+        .def_readwrite ("dragImage", &DragAndDropSource::DragOptions::dragImage, "An optional static image to show as the ghost.")
+        .def_readwrite ("imageOffset", &DragAndDropSource::DragOptions::imageOffset, "The point within the ghost that sits under the cursor.")
+        .def_readwrite ("imageOpacity", &DragAndDropSource::DragOptions::imageOpacity, "The opacity applied to the ghost window.")
+        .def_readwrite ("allowedActions", &DragAndDropSource::DragOptions::allowedActions, "The operations this drag offers.")
+        .def_readwrite ("allowExternalDrag", &DragAndDropSource::DragOptions::allowExternalDrag)
+
+        // The builders return a reference to the same options, so from Python they mutate in place
+        // and hand the object back for chaining; reference_internal keeps it alive across the chain.
+        .def ("withData", &DragAndDropSource::DragOptions::withData, "newData"_a, py::return_value_policy::reference_internal, "Sets the payload and returns these options.")
+        .def ("withDragImage", &DragAndDropSource::DragOptions::withDragImage, "newImage"_a, "offset"_a = Point<float>(), py::return_value_policy::reference_internal)
+        .def ("withDragImageComponent", &DragAndDropSource::DragOptions::withDragImageComponent, "component"_a, "offset"_a = Point<float>(), py::return_value_policy::reference_internal, "Sets a live component as the drag image.")
+        .def ("withImageOpacity", &DragAndDropSource::DragOptions::withImageOpacity, "newOpacity"_a, py::return_value_policy::reference_internal)
+        .def ("withAllowedActions", &DragAndDropSource::DragOptions::withAllowedActions, "newActions"_a, py::return_value_policy::reference_internal)
+        .def ("withExternalDragAllowed", &DragAndDropSource::DragOptions::withExternalDragAllowed, "shouldAllowExternalDrag"_a, py::return_value_policy::reference_internal)
+    ;
+
     // ============================================================================================ yup::DocumentWindow
 
     py::class_<DocumentWindow, Component, PyDocumentWindow<>, py::smart_holder> classDocumentWindow (m, "DocumentWindow");

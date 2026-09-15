@@ -567,6 +567,32 @@ struct PyDragAndDropTargetComponent : PyComponent<Base>
 
 // ============================================================================================
 
+/** Trampoline for the drag source mixin. Unlike DragAndDropTarget, which carries its trampoline on
+    DragAndDropTargetComponent, there is no convenience source component, so the mixin itself has to
+    forward: a Python class deriving from Component and DragAndDropSource gets its virtuals called.
+
+    It derives from pybind11::trampoline_self_life_support directly instead of through a PyComponent
+    chain, which is what keeps the Python wrapper alive while C++ owns the object. The target
+    trampoline inherits that support from PyComponent; this one has nowhere else to get it from, and
+    py::smart_holder rejects a trampoline without it. */
+template <class Base = yup::DragAndDropSource>
+struct PyDragAndDropSource : Base, pybind11::trampoline_self_life_support
+{
+    using Base::Base;
+
+    void dragOperationStarted (const yup::DragAndDropData& data) override
+    {
+        PYBIND11_OVERRIDE (void, Base, dragOperationStarted, data);
+    }
+
+    void dragOperationEnded (const yup::DragAndDropData& data, yup::DragAndDropAction performed) override
+    {
+        PYBIND11_OVERRIDE (void, Base, dragOperationEnded, data, performed);
+    }
+};
+
+// ============================================================================================
+
 template <class Base = yup::DocumentWindow>
 struct PyDocumentWindow : PyComponent<Base>
 {

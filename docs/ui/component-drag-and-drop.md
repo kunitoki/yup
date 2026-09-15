@@ -1,11 +1,14 @@
 # Component Drag and Drop
 
-YUP delivers files, text and other MIME payloads from the operating system into the
-application, and lets components accept them as drops. Drag-and-drop targets are an opt-in
-mixin rather than a `Component` base: a component that wants drops derives from
-`DragAndDropTarget` in addition to `Component`, so `Component` itself carries no
-drag-and-drop surface. There is no drag source API for in-app drag operations — a drag is
-always started by the operating system.
+YUP carries drag-and-drop in both directions. Inbound, it delivers files, text and other
+MIME payloads from the operating system into the application. Outbound, application code
+starts a drag carrying a payload, which follows the cursor as a ghost window and can be
+dropped on any target — in the same window, in another window of the same process, or, once
+the native export lands, in another application.
+
+Both ends are opt-in mixins rather than part of `Component`: a component that accepts drops
+derives from `DragAndDropTarget`, one that starts drags derives from `DragAndDropSource`, and
+`Component` itself keeps no drag-and-drop surface.
 
 ```cpp
 #include <yup_gui/yup_gui.h>
@@ -15,21 +18,28 @@ always started by the operating system.
 
 ## Overview
 
-The payload is carried by `DragAndDropData`. Drop targets implement the
-`DragAndDropTarget` mixin, and the platform bridge (SDL) translates OS drag-and-drop events
-into `DragAndDropTarget::dispatchItemDrop()` / `dispatchItemDragEnter()` /
-`dispatchItemDragMove()` / `dispatchItemDragExit()` calls. No macOS or Windows
-platform-specific implementation exists at this time — the inbound drag path is SDL-only.
+The payload is always a `DragAndDropData`. A **target** implements `DragAndDropTarget`; a
+**source** implements `DragAndDropSource`. `DragAndDropManager` — one app-global instance —
+owns a drag while it is in flight: the ghost window, the component currently under the
+cursor, and the enter/move/exit bookkeeping.
 
-The flow:
+An in-app drag:
 
-1. The user drags files or text from the OS into a YUP window.
-2. The platform layer builds a `DragAndDropData` payload.
+1. The source calls `startDragging()` with a payload and an optional drag image.
+2. The manager shows the ghost, takes the global mouse, and tracks the component under the
+   cursor across every native window (`Desktop::findComponentAt`).
 3. The dispatcher walks from the deepest component under the cursor up to the root,
    resolving each component to a `DragAndDropTarget` with a `dynamic_cast` — components
    that are not targets are skipped.
 4. Interested targets receive `itemDragEnter` / `itemDragMove`, and either `itemDropped`
-   (if released) or `itemDragExit` (if the drag leaves).
+   (if released) or `itemDragExit` (if the drag is cancelled or leaves).
+5. The manager reports the performed action back to the source through
+   `dragOperationEnded`.
+
+An OS-originated drag arrives through the same machinery: the platform backend resolves the
+component under the cursor and hands it to the manager, so targets see identical callbacks
+whichever direction the drag came from. No macOS or Windows platform-specific implementation
+exists for inbound drags at this time — that path is SDL-only.
 
 ---
 
@@ -116,6 +126,13 @@ Defaults to `false`. A target **must** answer `true` to receive any other callba
 `isVisible()` and `isEnabled()` are checked before this is called — invisible or disabled
 components are skipped entirely.
 
+```{note}
+For a drag that originated outside the application, the operating system does not report
+what is being dragged until it is actually dropped, so `details.data` stays **empty** for
+the whole time the drag hovers. A target that wants to react before that — to highlight
+itself, say — has to accept an empty payload here.
+```
+
 ### itemDropped — handle the drop
 
 ```cpp
@@ -186,14 +203,170 @@ class MyTarget : public DragAndDropTargetComponent
 
 ---
 
+## `DragAndDropSource` — starting a drag
+
+A component that starts drags derives from `DragAndDropSource` alongside `Component`, and
+calls `startDragging()` from its own `mouseDrag` once the gesture has moved far enough to
+count as a drag rather than a click:
+
+```cpp
+class DraggableTile : public Component,
+                      public DragAndDropSource
+{
+    void mouseDrag (const MouseEvent& event) override
+    {
+        if (isCurrentlyDragging())
+            return;
+
+        const auto delta = event.getPosition() - event.getLastMouseDownPosition();
+
+        if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f) // 8px
+            return;
+
+        startDragging (DragOptions{}.withData (DragAndDropData{}.withText (name)));
+    }
+};
+```
+
+### `DragOptions`
+
+```cpp
+struct DragOptions
+{
+    DragAndDropData data;                  // required: an empty payload cannot start a drag
+    Component*      dragImageComponent;    // optional live ghost; the caller keeps ownership
+    Image           dragImage;             // optional static ghost
+    Point<float>    imageOffset;           // the point of the ghost under the cursor
+    float           imageOpacity = 0.7f;   // applied to the ghost window
+    DragAndDropActions allowedActions = copy | move | link;
+    bool            allowExternalDrag = false; // not honoured yet, see Limitations
+};
+```
+
+The builders return a reference, so the fluent form composes:
+
+```cpp
+startDragging (DragOptions{}
+                   .withData (DragAndDropData{}.withText ("hello"))
+                   .withDragImageComponent (&preview, Point<float> (10.0f, 10.0f))
+                   .withImageOpacity (0.8f));
+```
+
+`startDragging()` returns `false` if a drag is already in flight or if the payload is empty.
+
+### Callbacks
+
+```cpp
+virtual void dragOperationStarted (const DragAndDropData& data);
+virtual void dragOperationEnded   (const DragAndDropData& data, DragAndDropAction performed);
+```
+
+`performed` is `DragAndDropAction::none` when nothing accepted the drop. As with targets,
+both can be overridden or assigned (`onDragStarted` / `onDragEnded`), so both mechanisms
+work. A live drag image handed to `startDragging` is safe to destroy in
+`dragOperationEnded`: the ghost window has already given it up by then.
+
+### The ghost window
+
+The drag image is shown in a borderless, always-on-top, transparent and non-focusable
+window that follows the cursor. It is the whole of that window, so a component used as a
+live ghost is expected to size itself. Transparency depends on the platform compositor:
+macOS, Windows and X11/Wayland are handled, but X11 additionally needs a compositing
+manager running.
+
+### Cancelling
+
+Escape cancels a drag in progress. The interaction stops immediately — the ghost disappears
+and no drop happens when the button is released — but the source is told only when the
+button comes up, because the session has to stay alive until then: the source is still
+inside its own mouse gesture and would otherwise start the same drag again on the next mouse
+move. `DragAndDropManager::getInstance()->cancelDrag()` does the same programmatically.
+
+### Which action is performed
+
+The performed action is reported as `copy`, or as `move` when Shift is held down at the drop
+and the source offered `move`. Only that pair is negotiated today.
+
+---
+
+## `DragAndDropManager`
+
+One app-global instance owns the drag in flight. Application code rarely touches it: it is
+reachable as a singleton for cancelling a drag or querying the current one
+(`isDragging()`, `getCurrentDragData()`, `getCurrentDragSourceComponent()`,
+`getCurrentDragTarget()`).
+
+A drag has to outlive any single component hierarchy, because the pointer can cross into
+another window and can leave every YUP window entirely. So the session cannot hang off a
+parent component: the manager listens for global mouse events for the duration of the drag,
+and resolves the component under the cursor across all native windows.
+
+The `handleExternalDragPosition()` / `handleExternalDrop()` / `handleExternalDragExit()`
+entry points are what the platform backend calls for an OS-originated drag. They are
+`@internal`, but they are how the inbound path joins the same target-resolution and
+enter/move/exit bookkeeping as an in-app drag.
+
+```{note}
+`Desktop::findComponentAt()` resolves the deepest component containing a point, and among
+several candidates it prefers the focused one. It does not do a full z-order walk, so where
+windows or components overlap, the result may not be the visually topmost one.
+```
+
+---
+
+## `ListBox` — a ready-made source
+
+`ListBox` is already a `DragAndDropSource`. Dragging a row asks the model for a description
+and, when that returns anything other than a default-constructed `var`, starts a drag
+carrying it:
+
+```cpp
+class MyModel : public ListBoxModel
+{
+    var getDragSourceDescription (const Array<int>& selectedRows) override
+    {
+        return selectedRows.isEmpty() ? var() : String ("row ") + String (selectedRows[0]);
+    }
+};
+```
+
+A string description is mirrored into the `text` MIME type as well, so a target that reads
+only MIME data still sees it, and the whole `var` is available to same-process targets
+through `getNativeObject()`.
+
+The drag image comes from `createDragSourceComponent()`, which can be overridden; the
+default is a circle carrying the number of dragged rows:
+
+```cpp
+virtual std::unique_ptr<Component> createDragSourceComponent (const Array<int>& selectedRows);
+```
+
+Its selection is what a drag carries, so the click semantics matter:
+
+| click | effect |
+| --- | --- |
+| plain | replaces the selection |
+| shift | extends a range from the last plain click, holding that anchor across further shift-clicks |
+| command / control | toggles the row |
+
+Pressing a row that is already part of a multiple selection does not collapse the selection
+until the mouse is released, and not at all if a drag begins — which is what lets a drag
+started on one of several selected rows carry all of them.
+
+`setDragSourceEnabled (false)` makes a list undraggable without consulting its model at all;
+it is enabled by default.
+
+---
+
 ## Python
 
 The Python module exposes `yup.DragAndDropData`, `yup.DragAndDropAction` /
-`yup.DragAndDropActions`, `yup.DragAndDropSourceDetails` and `yup.DragAndDropTargetComponent`.
-A Python drop target subclasses the last of those and overrides `isInterestedInDragSource` /
-`itemDropped` / `itemDragEnter` / `itemDragMove` / `itemDragExit`, or assigns the
-`onIsInterestedInDragSource` / `onItemDropped` / `onItemDragEnter` / `onItemDragMove` /
-`onItemDragExit` callables:
+`yup.DragAndDropActions`, `yup.DragAndDropSourceDetails`, `yup.DragAndDropTargetComponent`,
+and — for the source side — `yup.DragAndDropSource` with `yup.DragOptions`.
+
+A Python drop target subclasses `DragAndDropTargetComponent` and overrides
+`isInterestedInDragSource` / `itemDropped` / `itemDragEnter` / `itemDragMove` /
+`itemDragExit`, or assigns the matching `on*` callables:
 
 ```python
 class DropTarget(yup.DragAndDropTargetComponent):
@@ -206,6 +379,18 @@ class DropTarget(yup.DragAndDropTargetComponent):
         return True
 ```
 
+A source derives from `Component` and `yup.DragAndDropSource`:
+
+```python
+class DragSource(yup.Component, yup.DragAndDropSource):
+    def mouseDrag(self, event):
+        opts = yup.DragOptions().withData(yup.DragAndDropData().withText("hello"))
+        self.startDragging(opts)
+
+    def dragOperationEnded(self, data, performed):
+        print("ended", data.getText(), performed)
+```
+
 `details` is a borrowed view, valid only for the duration of the call — copy it with
 `yup.DragAndDropSourceDetails(details)` if you need to keep it.
 
@@ -213,7 +398,27 @@ class DropTarget(yup.DragAndDropTargetComponent):
 
 ## Usage example
 
+A target that accepts files and text, and a source that drags its own name:
+
 ```cpp
+class Draggable : public Component,
+                  public DragAndDropSource
+{
+public:
+    void mouseDrag (const MouseEvent& event) override
+    {
+        if (isCurrentlyDragging())
+            return;
+
+        const auto delta = event.getPosition() - event.getLastMouseDownPosition();
+
+        if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
+            return;
+
+        startDragging (DragOptions{}.withData (DragAndDropData{}.withText (getName())));
+    }
+};
+
 class DroppableArea : public Component,
                       public DragAndDropTarget
 {
@@ -264,6 +469,20 @@ private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DroppableArea)
 };
 ```
+
+---
+
+## Limitations
+
+- **No native export yet.** A drag cannot leave the application: `DragOptions::allowExternalDrag`
+  is accepted but not honoured. `DragAndDropData`'s `var` native object is same-process only.
+- **An OS drag reports no payload until it is dropped**, so targets cannot inspect what is
+  being dragged while it hovers. See the note under `isInterestedInDragSource`.
+- **`Desktop::findComponentAt()` does not do a full z-order walk**, so overlapping windows or
+  components may resolve to a component that is not visually topmost.
+- **The ghost's transparency needs the platform.** It is handled for macOS, Windows and
+  X11/Wayland, but X11 needs a running compositing manager for the window to composite at all.
+- **No lazy data providers.** Every MIME blob in a payload is an eagerly-owned `MemoryBlock`.
 
 ---
 
