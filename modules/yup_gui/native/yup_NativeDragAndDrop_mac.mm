@@ -125,22 +125,24 @@ void addDragItem (NSMutableArray<NSDraggingItem*>* items, NSPasteboardItem* past
 
 //==============================================================================
 
-std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, const DragAndDropData& data)
+bool performNativeDrag (Component& sourceComponent,
+                        const DragAndDropData& data,
+                        std::function<void (std::optional<DragAndDropAction>)> onComplete)
 {
     auto* native = sourceComponent.getNativeComponent();
 
     if (native == nullptr)
-        return std::nullopt;
+        return false;
 
     NSWindow* window = (__bridge NSWindow*) native->getNativeHandle();
 
     if (window == nil)
-        return std::nullopt;
+        return false;
 
     NSView* view = [window contentView];
 
     if (view == nil)
-        return std::nullopt;
+        return false;
 
     // AppKit starts a session from the event that began the drag, and by the time the gesture has left
     // our windows that event is no longer being dispatched. currentEvent is what the application is
@@ -149,7 +151,7 @@ std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, 
     NSEvent* event = [NSApp currentEvent];
 
     if (event == nil)
-        return std::nullopt;
+        return false;
 
     constexpr CGFloat imageSize = 52.0f;
 
@@ -224,7 +226,7 @@ std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, 
 
     // Nothing AppKit can carry, so the drag stays in app, where the ghost still shows it.
     if ([items count] == 0)
-        return std::nullopt;
+        return false;
 
     static YUPDraggingSource* dragSource = [[YUPDraggingSource alloc] init];
 
@@ -234,7 +236,10 @@ std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, 
 
     // The session runs its own event loop inside that call, so by the time it returns the drag is over
     // and the destination's operation has already been recorded by the source's ended callback.
-    return dragSource.performedAction;
+    if (onComplete != nullptr)
+        MessageManager::callAsync ([completion = std::move (onComplete), action = dragSource.performedAction] { completion (action); });
+
+    return true;
 }
 
 } // namespace yup

@@ -221,6 +221,8 @@ private:
     static bool anyNativeWindowHasKeyboardFocus();
     static bool anyNativeWindowContains (Point<float> screenPosition);
 
+    void resetMouseInteractionState();
+
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);

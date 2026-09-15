@@ -240,7 +240,22 @@ public:
         if (formats.isEmpty())
             return S_FALSE;
 
-        return SHCreateStdEnumFmtEtc (static_cast<UINT> (formats.size()), formats.getData(), enumerator);
+        return SHCreateStdEnumFmtEtc (static_cast<UINT> (formats.size()), formats.getRawDataPointer(), enumerator);
+    }
+
+    HRESULT STDMETHODCALLTYPE DAdvise (FORMATETC*, DWORD, IAdviseSink*, DWORD*) override
+    {
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE DUnadvise (DWORD) override
+    {
+        return E_NOTIMPL;
+    }
+
+    HRESULT STDMETHODCALLTYPE EnumDAdvise (IEnumSTATDATA**) override
+    {
+        return E_NOTIMPL;
     }
 
 private:
@@ -348,9 +363,7 @@ public:
         if (escapePressed)
             return DRAGDROP_S_CANCEL;
 
-        // OLE reports the pointer's button by its absence from the key state: the drag is over as
-        // soon as it comes up.
-        if ((keyState & MK_LBUTTON) == 0)
+        if ((keyState & (MK_LBUTTON | MK_RBUTTON)) == 0)
             return DRAGDROP_S_DROP;
 
         return S_OK;
@@ -365,52 +378,97 @@ private:
     volatile LONG refCount = 1;
 };
 
+//==============================================================================
+
+/** Runs the OLE drag loop for one payload.
+
+    OLE's DoDragDrop runs a nested modal message loop. Calling it from the message thread would block
+    the app - and, worse, re-enter the platform's own event dispatch - for the whole gesture, so it
+    runs on a worker thread instead, the same approach JUCE takes. Keeping the message loop pumping is
+    what lets the window, cursor and event state stay consistent while the OS drives the drag, which is
+    what stops a rejected drop leaving its "no drop" cursor behind. */
+class NativeDragJob final : public ThreadPoolJob
+{
+public:
+    NativeDragJob (const DragAndDropData& newPayload,
+                   std::function<void (std::optional<DragAndDropAction>)> newCompletion)
+        : ThreadPoolJob ("YUP Native Drag")
+        , payload (newPayload)
+        , onComplete (std::move (newCompletion))
+    {
+    }
+
+    JobStatus runJob() override
+    {
+        // OLE drag-and-drop needs a single-threaded apartment, which this pool thread provides.
+        const auto oleResult = OleInitialize (nullptr);
+
+        auto* dataObject = new PayloadDataObject (payload);
+        auto* dropSource = new PayloadDropSource();
+
+        DWORD effect = DROPEFFECT_NONE;
+
+        const auto result = DoDragDrop (dataObject,
+                                        dropSource,
+                                        DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK,
+                                        &effect);
+
+        dataObject->Release();
+        dropSource->Release();
+
+        if (oleResult == S_OK || oleResult == S_FALSE)
+            OleUninitialize();
+
+        std::optional<DragAndDropAction> performed;
+
+        if (result == DRAGDROP_S_DROP || result == DRAGDROP_S_CANCEL)
+        {
+            if ((effect & DROPEFFECT_MOVE) != 0)
+                performed = DragAndDropAction::move;
+            else if ((effect & DROPEFFECT_LINK) != 0)
+                performed = DragAndDropAction::link;
+            else if ((effect & DROPEFFECT_COPY) != 0)
+                performed = DragAndDropAction::copy;
+            else
+                performed = DragAndDropAction::none;
+        }
+
+        if (onComplete != nullptr)
+            MessageManager::callAsync ([completion = onComplete, performed] { completion (performed); });
+
+        return jobHasFinished;
+    }
+
+private:
+    DragAndDropData payload;
+    std::function<void (std::optional<DragAndDropAction>)> onComplete;
+};
+
+/** The single-threaded pool the native drag runs on.
+
+    One thread only, so two external drags can never run their modal OLE loops at the same time. */
+ThreadPool& nativeDragPool()
+{
+    static ThreadPool pool { ThreadPoolOptions{}.withNumberOfThreads (1).withThreadName ("YUP Native Drag") };
+    return pool;
+}
+
 } // namespace
 
 //==============================================================================
 
-std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, const DragAndDropData& data)
+bool performNativeDrag (Component& sourceComponent,
+                        const DragAndDropData& data,
+                        std::function<void (std::optional<DragAndDropAction>)> onComplete)
 {
     auto* native = sourceComponent.getNativeComponent();
 
-    if (native == nullptr)
-        return std::nullopt;
+    if (native == nullptr || native->getNativeHandle() == nullptr)
+        return false;
 
-    auto* window = static_cast<HWND> (native->getNativeHandle());
+    nativeDragPool().addJob (new NativeDragJob (data, std::move (onComplete)), true);
 
-    if (window == nullptr)
-        return std::nullopt;
-
-    auto* dataObject = new PayloadDataObject (data);
-    auto* dropSource = new PayloadDropSource();
-
-    DWORD effect = DROPEFFECT_NONE;
-
-    // Runs the OLE drag loop, so this does not return until the gesture is over and the effect comes
-    // back with it - the same shape as the AppKit implementation.
-    const auto result = DoDragDrop (window,
-                                    dataObject,
-                                    DROPEFFECT_COPY | DROPEFFECT_MOVE | DROPEFFECT_LINK,
-                                    &effect);
-
-    dataObject->Release();
-    dropSource->Release();
-
-    // A cancelled drag was still exported, so it reports nothing performed rather than falling back to
-    // an in-app drag; only a failure to start at all does that.
-    if (result != DRAGDROP_S_DROP && result != DRAGDROP_S_CANCEL)
-        return std::nullopt;
-
-    if ((effect & DROPEFFECT_MOVE) != 0)
-        return DragAndDropAction::move;
-
-    if ((effect & DROPEFFECT_LINK) != 0)
-        return DragAndDropAction::link;
-
-    if ((effect & DROPEFFECT_COPY) != 0)
-        return DragAndDropAction::copy;
-
-    return DragAndDropAction::none;
+    return true;
 }
 
 } // namespace yup

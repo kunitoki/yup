@@ -32,9 +32,9 @@ namespace yup
     over none of our windows and the source asked for external drags, and the platform runs the
     native drag from there.
 
-    Returning `std::nullopt` means the gesture was not exported - either the platform has no
-    implementation, or the payload cannot be represented on the system clipboard. The caller keeps
-    the drag in flight in that case, so a drag that cannot be exported still behaves as an in-app one.
+    Returning false means the gesture was not exported - either the platform has no implementation,
+    or the payload cannot be represented on the system clipboard. The caller keeps the drag in flight
+    in that case, so a drag that cannot be exported still behaves as an in-app one.
 
     Only what can be expressed on the system clipboard travels: files, text and URIs today. The `var`
     native object in a `DragAndDropData` is same-process only and is never exported, and an image-only
@@ -43,15 +43,20 @@ namespace yup
     @param sourceComponent  The component the drag started from, which the platform may snapshot for
                             the native drag image.
     @param data             The payload to place on the system clipboard.
+    @param onComplete       Called on the message thread once the drag is over, with the action the
+                            platform reported (`DragAndDropAction::none` when nothing was performed).
 
-    @returns The action the platform reported, or `std::nullopt` when the drag was not exported.
+    @returns True when a native drag was started; false when the gesture could not be exported, in
+             which case @a onComplete is not called and the caller keeps the drag as an in-app one.
 
-    @note A platform drag runs its own event loop, so this does not return until the drag is over. The
-          caller learns the outcome afterwards: a `DragAndDropSource` receives `dragOperationStarted`
-          and `dragOperationEnded` together, once this has returned.
+    @note A platform drag runs its own event loop. A blocking implementation (macOS) returns only once
+          the drag is over, while Windows starts the drag on a worker thread and returns immediately,
+          so the outcome always arrives through @a onComplete.
 
     @see DragAndDropSource, DragAndDropManager
 */
-std::optional<DragAndDropAction> performNativeDrag (Component& sourceComponent, const DragAndDropData& data);
+bool performNativeDrag (Component& sourceComponent,
+                        const DragAndDropData& data,
+                        std::function<void (std::optional<DragAndDropAction>)> onComplete);
 
 } // namespace yup

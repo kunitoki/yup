@@ -1002,6 +1002,19 @@ void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn
 
 //==============================================================================
 
+void SDLComponentNative::resetMouseInteractionState()
+{
+    lastComponentClicked = nullptr;
+    lastMouseDownPosition.reset();
+    lastMouseDownTime.reset();
+
+#if YUP_WINDOWS
+    ReleaseCapture();
+#endif
+
+    currentMouseButtons = MouseEvent::noButtons;
+}
+
 void SDLComponentNative::timerCallback()
 {
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
@@ -1011,7 +1024,10 @@ void SDLComponentNative::timerCallback()
         SDL_GetWindowPosition (window, &windowX, &windowY);
 
         float mouseX = 0.0f, mouseY = 0.0f;
-        SDL_GetGlobalMouseState (&mouseX, &mouseY);
+        const auto mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
+
+        if (lastComponentClicked != nullptr && mouseState == 0)
+            resetMouseInteractionState();
 
         const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
                                                    mouseY - static_cast<float> (windowY) }

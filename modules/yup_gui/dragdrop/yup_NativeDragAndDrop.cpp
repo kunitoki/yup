@@ -30,9 +30,9 @@ namespace yup
     macOS has its own in `native/yup_NativeDragAndDrop_mac.mm` and Windows in
     `native/yup_NativeDragAndDrop_windows.cpp`; X11 will add theirs, and each one takes its platform
     out of this guard as it lands, so exactly one definition is ever compiled on any given platform. */
-std::optional<DragAndDropAction> performNativeDrag (Component&, const DragAndDropData&)
+bool performNativeDrag (Component&, const DragAndDropData&, std::function<void (std::optional<DragAndDropAction>)>)
 {
-    return std::nullopt;
+    return false;
 }
 #endif
 

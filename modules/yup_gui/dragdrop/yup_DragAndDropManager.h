@@ -107,6 +107,7 @@ private:
 
     bool beginSession (DragAndDropSource& source, Component& sourceComponent, DragAndDropSource::DragOptions&& options);
     void endSession (DragAndDropAction performed);
+    void finishNativeDrag (std::optional<DragAndDropAction> performed);
     void createGhost();
 
     Component* resolveComponentAt (const Point<float>& screenPosition) const;

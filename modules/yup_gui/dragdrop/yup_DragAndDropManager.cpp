@@ -51,23 +51,44 @@ bool DragAndDropManager::startDragging (DragAndDropSource& source, Component& co
     {
         const auto data = options.data;
 
-        if (auto performed = performNativeDrag (component, data))
+        currentData = data;
+        sourceComponent = &component;
+
+        if (performNativeDrag (component, data, [this] (std::optional<DragAndDropAction> performed) { finishNativeDrag (performed); }))
         {
             source.dragOperationStarted (data);
 
             if (source.onDragStarted)
                 source.onDragStarted (data);
 
-            source.dragOperationEnded (data, *performed);
-
-            if (source.onDragEnded)
-                source.onDragEnded (data, *performed);
-
             return true;
         }
+
+        currentData = {};
+        sourceComponent = nullptr;
     }
 
     return beginSession (source, component, std::move (options));
+}
+
+void DragAndDropManager::finishNativeDrag (std::optional<DragAndDropAction> performed)
+{
+    const auto data = currentData;
+
+    auto* sourceComponentPtr = sourceComponent.get();
+
+    currentData = {};
+    sourceComponent = nullptr;
+
+    if (auto* source = dynamic_cast<DragAndDropSource*> (sourceComponentPtr))
+    {
+        const auto action = performed.value_or (DragAndDropAction::none);
+
+        source->dragOperationEnded (data, action);
+
+        if (source->onDragEnded)
+            source->onDragEnded (data, action);
+    }
 }
 
 bool DragAndDropManager::beginSession (DragAndDropSource& source, Component& component, DragAndDropSource::DragOptions&& options)
