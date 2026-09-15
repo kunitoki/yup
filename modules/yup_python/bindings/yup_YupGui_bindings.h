@@ -461,31 +461,6 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, styleChanged);
     }
 
-    bool isInterestedInDrag (const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, isInterestedInDrag, data);
-    }
-
-    bool itemsDropped (const Point<float>& position, const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, itemsDropped, position, data);
-    }
-
-    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragEnter, data, position);
-    }
-
-    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragMove, data, position);
-    }
-
-    void itemDragExit (const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragExit, data);
-    }
-
     void keyDown (const yup::KeyPress& key, const Point<float>& position) override
     {
         PYBIND11_OVERRIDE (void, Base, keyDown, key, position);
@@ -555,6 +530,39 @@ struct PyComponent : PyMouseListener<Base>
     //{
     //    PYBIND11_OVERRIDE (void, Base, colourChanged);
     //}
+};
+
+// ============================================================================================
+
+template <class Base = yup::DragAndDropTargetComponent>
+struct PyDragAndDropTargetComponent : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isInterestedInDragSource, details);
+    }
+
+    void itemDragEnter (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragEnter, details);
+    }
+
+    void itemDragMove (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragMove, details);
+    }
+
+    void itemDragExit (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragExit, details);
+    }
+
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, itemDropped, details);
+    }
 };
 
 // ============================================================================================

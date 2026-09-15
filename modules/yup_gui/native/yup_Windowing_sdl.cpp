@@ -78,6 +78,15 @@ SDLComponentNative::SDLComponentNative (Component& component,
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
+    if (options.flags.test (transparentWindow))
+        windowFlags |= SDL_WINDOW_TRANSPARENT;
+
+    if (options.flags.test (nonFocusableWindow))
+        windowFlags |= SDL_WINDOW_NOT_FOCUSABLE;
+
+    if (options.flags.test (alwaysOnTopWindow))
+        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP;
+
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
     SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
@@ -156,7 +165,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
     }
 
-    SDL_SetWindowFocusable (window, true);
+    SDL_SetWindowFocusable (window, ! options.flags.test (nonFocusableWindow));
     SDL_PumpEvents();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created window: id=" << static_cast<int64> (SDL_GetWindowID (window)) << ", window=" << String::toHexString (static_cast<int64> (reinterpret_cast<pointer_sized_uint> (window))));
@@ -276,7 +285,9 @@ SDLComponentNative::~SDLComponentNative()
     stopRendering();
 
     // Unregister this component from the desktop
-    Desktop::getInstance()->unregisterNativeComponent (this);
+    if (auto* desktop = Desktop::getInstanceWithoutCreating())
+        desktop->unregisterNativeComponent (this);
+
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered native component");
 
     // Destroy graphics resources before the SDL window
@@ -1132,7 +1143,7 @@ bool SDLComponentNative::renderFrame()
             }
         });
 
-        const auto loadAction = (renderContinuous)
+        const auto loadAction = (renderContinuous || ! clearColor.isOpaque())
                                 ? rive::gpu::LoadAction::clear
                                 : rive::gpu::LoadAction::preserveRenderTarget;
 
@@ -1623,7 +1634,7 @@ void SDLComponentNative::handleTouchDown (SDL_FingerID fingerId, const Point<flo
     finger.buttons = MouseEvent::leftButton;
 
     activeTouches.add (finger);
-    handleMouseDown (position, MouseEvent::leftButton, KeyModifiers (SDL_GetModState()), &activeTouches.getReference (activeTouches.size() - 1));
+    handleMouseDown (position, MouseEvent::leftButton, toKeyModifiers (SDL_GetModState()), &activeTouches.getReference (activeTouches.size() - 1));
 }
 
 void SDLComponentNative::handleTouchMove (SDL_FingerID fingerId, const Point<float>& position, float pressure)
@@ -1794,6 +1805,20 @@ void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 1);
 
+    // A drag takes the gesture away from the focused component, so it also takes Escape: otherwise
+    // the key would go to a component that has nothing to do with the drag.
+    if (keys.getKey() == KeyPress::escapeKey)
+    {
+        if (auto* manager = DragAndDropManager::getInstanceWithoutCreating())
+        {
+            if (manager->isDragging())
+            {
+                manager->cancelDrag();
+                return;
+            }
+        }
+    }
+
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyDown (keys, position); // TODO: remove position
     else
@@ -1821,39 +1846,15 @@ void SDLComponentNative::handleTextInput (const String& textInput)
 
 void SDLComponentNative::handleItemsDropped (const Point<float>& position, const DragAndDropData& data)
 {
-    if (Component* target = findComponentForMouseEvent (position))
-        target->internalItemsDropped (data, position);
+    // Both in-app and OS-originated drags go through the manager, so there is one target-resolution
+    // path: it finds the component under the cursor, offers the drop to it and to its ancestors, and
+    // knows whether a session of ours is already in flight.
+    DragAndDropManager::getInstance()->handleExternalDrop (component, position, data);
 }
 
 void SDLComponentNative::handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data)
 {
-    Component* target = findComponentForMouseEvent (position);
-
-    if (target != nullptr)
-    {
-        if (lastComponentUnderDrag == nullptr)
-        {
-            target->internalItemDragEnter (data, position);
-        }
-        else if (lastComponentUnderDrag != target)
-        {
-            lastComponentUnderDrag->internalItemDragExit (data);
-            target->internalItemDragEnter (data, position);
-        }
-        else
-        {
-            target->internalItemDragMove (data, position);
-        }
-    }
-    else
-    {
-        if (lastComponentUnderDrag != nullptr)
-        {
-            lastComponentUnderDrag->internalItemDragExit (data);
-        }
-    }
-
-    lastComponentUnderDrag = target;
+    DragAndDropManager::getInstance()->handleExternalDragPosition (component, position, data);
 }
 
 //==============================================================================
@@ -2305,7 +2306,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / windowUnitsPerPoint;
             auto mouseButton = toMouseButton (event->button.button);
-            auto keyModifiers = KeyModifiers (SDL_GetModState());
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseDown (cursorPosition, mouseButton, keyModifiers); });
@@ -2320,7 +2321,7 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) }
                                 / windowUnitsPerPoint;
             auto mouseButton = toMouseButton (event->button.button);
-            auto keyModifiers = KeyModifiers (SDL_GetModState());
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
             if (event->button.windowID == SDL_GetWindowID (window) || lastComponentClicked != nullptr)
                 processEvent ([this, cursorPosition, mouseButton, keyModifiers] { handleMouseUp (cursorPosition, mouseButton, keyModifiers); });
@@ -2458,18 +2459,12 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
                 
                 processEvent ([this]
                 {
-                    if (lastComponentUnderDrag != nullptr)
-                    {
-                        auto data = DragAndDropData()
-                                        .withFiles (pendingDroppedFiles)
-                                        .withText (pendingDroppedText);
-
-                        lastComponentUnderDrag->internalItemDragExit (data);
-                        lastComponentUnderDrag = nullptr;
-                    }
+                    // The manager owns the enter/move/exit bookkeeping for both drag paths.
+                    DragAndDropManager::getInstance()->handleExternalDragExit();
 
                     pendingDroppedFiles.clear();
                     pendingDroppedText.clear();
+                    lastExternalDropPosition.reset();
                 });
             }
 
@@ -2511,7 +2506,10 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
                 auto dropPosition = Point<float> (event->drop.x, event->drop.y) / windowUnitsPerPoint;
-            
+
+                // Kept for the drop itself, which has no position to offer.
+                lastExternalDropPosition = dropPosition;
+
                 processEvent ([this, dropPosition]
                 {
                     auto data = DragAndDropData()
@@ -2531,26 +2529,25 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
 
             if (event->drop.windowID == SDL_GetWindowID (window))
             {
-                auto cursorPosition = getCursorPosition();
-            
-                processEvent ([this, cursorPosition]
+                // Prefer where the drag itself last reported being, over the current mouse state,
+                // which can still be pointing at wherever the pointer was before the drag began.
+                auto dropPosition = lastExternalDropPosition.value_or (getCursorPosition());
+
+                processEvent ([this, dropPosition]
                 {
                     auto data = DragAndDropData()
                                     .withFiles (pendingDroppedFiles)
                                     .withText (pendingDroppedText);
 
                     if (! data.isEmpty())
-                        handleItemsDropped (cursorPosition, data);
+                        handleItemsDropped (dropPosition, data);
 
-                    // Clean up drag enter/exit tracking
-                    if (lastComponentUnderDrag != nullptr)
-                    {
-                        lastComponentUnderDrag->internalItemDragExit (data);
-                        lastComponentUnderDrag = nullptr;
-                    }
+                    // The manager owns the enter/move/exit bookkeeping for both drag paths.
+                    DragAndDropManager::getInstance()->handleExternalDragExit();
 
                     pendingDroppedFiles.clear();
                     pendingDroppedText.clear();
+                    lastExternalDropPosition.reset();
                 });
             }
 
@@ -2701,6 +2698,21 @@ void SDLComponentNative::updateMouseCapture (bool shouldBeActive)
     if (! shouldCaptureMouse)
         shouldBeActive = false;
 
+    if (shouldBeActive == mouseCaptureActive)
+        return;
+
+    if (shouldBeActive)
+    {
+        mouseCaptureActive = requestMouseCapture();
+        return;
+    }
+
+    releaseMouseCapture();
+    mouseCaptureActive = false;
+}
+
+void SDLComponentNative::setGlobalMouseCaptureActive (bool shouldBeActive)
+{
     if (shouldBeActive == mouseCaptureActive)
         return;
 

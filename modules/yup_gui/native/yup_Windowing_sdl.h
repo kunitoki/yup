@@ -139,6 +139,9 @@ public:
     void* getNativeHandle() const override;
 
     //==============================================================================
+    void setGlobalMouseCaptureActive (bool shouldBeActive) override;
+
+    //==============================================================================
     void startTextInput (Component& component) override;
     void stopTextInput (Component& component) override;
     void updateTextInputRect (Component& component) override;
@@ -264,7 +267,6 @@ private:
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
-    WeakReference<Component> lastComponentUnderDrag;
     WeakReference<Component> currentTextInputComponent;
 
     HashMap<int, char> keyState;
@@ -274,6 +276,15 @@ private:
     Array<TouchClickState> touchClickStates;
     Array<File> pendingDroppedFiles;
     String pendingDroppedText;
+
+    /** The last position a drag from outside the application reported while over this window.
+
+        The drop itself carries no position of its own, and the current mouse state is not a
+        reliable substitute: while an OS drag is over a window that does not have keyboard focus,
+        SDL_GetMouseState() can still report where the pointer was before the drag began, which
+        sends the drop to the wrong component.
+    */
+    std::optional<Point<float>> lastExternalDropPosition;
     RelativeTime doubleClickTime;
 
     RectangleList<float> currentRepaintAreas;

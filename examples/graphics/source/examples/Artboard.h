@@ -445,6 +445,7 @@ private:
 //==============================================================================
 
 class ArtboardDemo : public ArtboardDemoBase
+    , public yup::DragAndDropTarget
 {
 public:
     ArtboardDemo()
@@ -452,26 +453,26 @@ public:
     {
     }
 
-    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
     {
-        return findRiveFile (data).has_value();
+        return findRiveFile (details.data).has_value();
     }
 
-    void itemDragEnter (const yup::DragAndDropData&, const yup::Point<float>&) override
+    void itemDragEnter (const yup::DragAndDropSourceDetails&) override
     {
         setDropHighlighted (true);
     }
 
-    void itemDragExit (const yup::DragAndDropData&) override
+    void itemDragExit (const yup::DragAndDropSourceDetails&) override
     {
         setDropHighlighted (false);
     }
 
-    bool itemsDropped (const yup::Point<float>&, const yup::DragAndDropData& data) override
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
     {
         setDropHighlighted (false);
 
-        const auto file = findRiveFile (data);
+        const auto file = findRiveFile (details.data);
         if (! file.has_value())
             return false;
 

@@ -126,6 +126,8 @@ public:
 
     GraphicsContext* getGraphicsContext() override { return nullptr; }
 
+    void setGlobalMouseCaptureActive (bool) override {}
+
     Component& getComponent() const { return component; }
 
     Flags getFlags() const { return flags; }

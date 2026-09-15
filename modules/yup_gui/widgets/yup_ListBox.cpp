@@ -23,6 +23,41 @@ namespace yup
 {
 
 //==============================================================================
+
+namespace
+{
+
+/** The default drag image: a circle carrying the number of rows being dragged. */
+class DragCountComponent final : public Component
+{
+public:
+    explicit DragCountComponent (int count)
+        : text (String (count))
+    {
+        setSize (48, 48);
+        setOpaque (false);
+    }
+
+    void paint (Graphics& g) override
+    {
+        const auto bounds = getLocalBounds().to<float>();
+
+        g.setFillColor (Color (0xff9e3f6d));
+        g.fillEllipse (bounds);
+
+        g.setFillColor (Colors::white);
+        g.fillFittedText (text, ApplicationTheme::getGlobalTheme()->getDefaultFont(), bounds);
+    }
+
+private:
+    String text;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DragCountComponent)
+};
+
+} // namespace
+
+//==============================================================================
 int ListBoxModel::getRowHeight (int rowIndex)
 {
     ignoreUnused (rowIndex);
@@ -627,6 +662,8 @@ void ListBox::mouseDown (const MouseEvent& event)
 {
     takeKeyboardFocus();
 
+    rowSelectedOnMouseUp = -1;
+
     auto rowIndex = getRowIndexAt (event.getPosition());
 
     if (rowIndex >= 0)
@@ -635,7 +672,17 @@ void ListBox::mouseDown (const MouseEvent& event)
         bool isShiftDown = modifiers.isShiftDown();
         bool isCommandDown = modifiers.isCommandDown() || modifiers.isControlDown();
 
-        handleRowSelection (rowIndex, isCommandDown, isShiftDown);
+        if (! isShiftDown && ! isCommandDown
+            && selectionMode == SelectionMode::multiple
+            && isRowSelected (rowIndex))
+        {
+            rowSelectedOnMouseUp = rowIndex;
+        }
+        else
+        {
+            handleRowSelection (rowIndex, isCommandDown, isShiftDown);
+        }
+
         handleRowClick (rowIndex, event);
     }
 }
@@ -643,6 +690,72 @@ void ListBox::mouseDown (const MouseEvent& event)
 void ListBox::mouseUp (const MouseEvent& event)
 {
     ignoreUnused (event);
+
+    if (rowSelectedOnMouseUp >= 0)
+    {
+        const auto rowIndex = rowSelectedOnMouseUp;
+        rowSelectedOnMouseUp = -1;
+
+        if (! isCurrentlyDragging())
+            handleRowSelection (rowIndex, false, false);
+    }
+}
+
+void ListBox::setDragSourceEnabled (bool shouldBeEnabled)
+{
+    dragSourceEnabled = shouldBeEnabled;
+}
+
+bool ListBox::isDragSourceEnabled() const noexcept
+{
+    return dragSourceEnabled;
+}
+
+std::unique_ptr<Component> ListBox::createDragSourceComponent (const Array<int>& selectedRows)
+{
+    return std::make_unique<DragCountComponent> (selectedRows.size());
+}
+
+void ListBox::dragOperationEnded (const DragAndDropData&, DragAndDropAction)
+{
+    dragSourceComponent.reset();
+}
+
+void ListBox::mouseDrag (const MouseEvent& event)
+{
+    if (! dragSourceEnabled || model == nullptr || isCurrentlyDragging())
+        return;
+
+    const auto delta = event.getPosition() - event.getLastMouseDownPosition();
+
+    if (delta.getX() * delta.getX() + delta.getY() * delta.getY() < 64.0f)
+        return;
+
+    const auto rows = getSelectedRows();
+    const auto description = model->getDragSourceDescription (rows);
+
+    if (description.isVoid())
+        return;
+
+    auto data = DragAndDropData{}.withNativeObject (description);
+
+    if (description.isString())
+        data = data.withText (description.toString());
+
+    dragSourceComponent = createDragSourceComponent (rows);
+
+    auto options = DragAndDropSource::DragOptions{}.withData (data);
+
+    if (dragSourceComponent != nullptr)
+    {
+        const Point<float> hotspot { dragSourceComponent->getWidth() * 0.5f, dragSourceComponent->getHeight() * 0.5f };
+
+        options = options.withDragImageComponent (dragSourceComponent.get(), hotspot);
+    }
+
+    rowSelectedOnMouseUp = -1;
+
+    startDragging (options);
 }
 
 void ListBox::mouseMove (const MouseEvent& event)
@@ -658,7 +771,6 @@ void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelDa
                        ? wheelData.getDeltaY()
                        : wheelData.getDeltaX();
 
-        // Scroll by approximately 3 rows worth of content
         auto scrollAmount = delta * fixedRowHeight * 3.0f;
         scrollBy (-scrollAmount);
         updateHoveredRow (event.getPosition());
@@ -1076,7 +1188,7 @@ void ListBox::handleRowSelection (int rowIndex, bool shouldToggle, bool shouldEx
             selectedRows.add (i);
         }
 
-        lastSelectedRow = rowIndex;
+        updateVisibleRows();
         notifySelectionChanged();
     }
     else if (shouldToggle)
@@ -1090,6 +1202,7 @@ void ListBox::handleRowSelection (int rowIndex, bool shouldToggle, bool shouldEx
     else
     {
         // Replace selection
+        deselectAllRows (dontSendNotification);
         selectRow (rowIndex, false, sendNotification);
     }
 }

@@ -46,6 +46,9 @@ class YUP_API ComponentNative : public ReferenceCountedObject
     struct allowHighDensityDisplayTag;
     struct captureMouseTag;
     struct vsyncTag;
+    struct transparentWindowTag;
+    struct nonFocusableWindowTag;
+    struct alwaysOnTopWindowTag;
 
 public:
     //==============================================================================
@@ -61,7 +64,10 @@ public:
                           renderContinuousTag,
                           allowHighDensityDisplayTag,
                           captureMouseTag,
-                          vsyncTag>;
+                          vsyncTag,
+                          transparentWindowTag,
+                          nonFocusableWindowTag,
+                          alwaysOnTopWindowTag>;
 
     /** No flags set. */
     static inline constexpr Flags noFlags = Flags();
@@ -79,6 +85,12 @@ public:
     static inline constexpr Flags captureMouse = Flags::declareValue<captureMouseTag>();
     /** Flag to synchronize presentation to the display refresh (vsync). */
     static inline constexpr Flags vsync = Flags::declareValue<vsyncTag>();
+    /** Flag to give the window a transparent buffer, so per-pixel alpha is preserved. */
+    static inline constexpr Flags transparentWindow = Flags::declareValue<transparentWindowTag>();
+    /** Flag to keep the window out of the focus chain, so clicking it never steals focus. */
+    static inline constexpr Flags nonFocusableWindow = Flags::declareValue<nonFocusableWindowTag>();
+    /** Flag to keep the window above all others. */
+    static inline constexpr Flags alwaysOnTopWindow = Flags::declareValue<alwaysOnTopWindowTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
     static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay | vsync;
 
@@ -183,6 +195,30 @@ public:
         */
         Options& withVSync (bool shouldUseVSync) noexcept;
 
+        /** Sets whether the window should preserve per-pixel alpha.
+
+            @param shouldBeTransparent True to give the window a transparent buffer, false for an opaque one.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withTransparent (bool shouldBeTransparent) noexcept;
+
+        /** Sets whether the window can take keyboard focus.
+
+            @param shouldBeFocusable False to keep the window out of the focus chain, true for a normal focusable window.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withFocusable (bool shouldBeFocusable) noexcept;
+
+        /** Sets whether the window should stay above all others.
+
+            @param shouldBeAlwaysOnTop True to keep the window on top, false for normal stacking.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withAlwaysOnTop (bool shouldBeAlwaysOnTop) noexcept;
+
         /** Sets whether the window should be treated as a temporary popup/menu window.
 
             @param shouldBeTemporary True for popup/menu-style windows, false for regular windows.
@@ -268,22 +304,6 @@ public:
 
     /** Destructor. */
     virtual ~ComponentNative();
-
-    //==============================================================================
-    /** Runs @a fn with the native GPU context made current on this thread, when
-        the backend requires it.
-
-        OpenGL contexts are thread-affine, and the windowing layer binds the
-        context to a dedicated render thread. Offscreen GPU work initiated from
-        other threads (e.g. component snapshots taken from the message thread)
-        must run through this hook so the context is bound, and its access is
-        serialized with the render thread, for the duration of @a fn.
-
-        The default implementation simply invokes @a fn.
-
-        @param fn The GPU work to run with the context current.
-    */
-    virtual void runWithGraphicsContext (const std::function<void()>& fn) { fn(); }
 
     //==============================================================================
     /** Sets the window title.
@@ -468,6 +488,16 @@ public:
     virtual const RectangleList<float>& getRepaintAreas() const = 0;
 
     //==============================================================================
+    /** Enables or disables mouse capture unconditionally, ignoring the ComponentNative::captureMouse flag.
+
+        A drag session uses this to keep receiving mouse events while the pointer travels outside the
+        window the drag started from, even when that window was not created with captureMouse.
+
+        @param shouldBeActive True to capture mouse input outside the native window, false to release it.
+    */
+    virtual void setGlobalMouseCaptureActive (bool shouldBeActive) = 0;
+
+    //==============================================================================
     /** Starts text input for the specified component.
 
         @param component The component to start text input for.
@@ -525,6 +555,35 @@ public:
         @return Pointer to the GraphicsContext, or nullptr if unavailable.
     */
     virtual GraphicsContext* getGraphicsContext() = 0;
+
+    //==============================================================================
+    /** Runs @a fn with the native GPU context made current on this thread, when
+        the backend requires it.
+
+        OpenGL contexts are thread-affine, and the windowing layer binds the
+        context to a dedicated render thread. Offscreen GPU work initiated from
+        other threads (e.g. component snapshots taken from the message thread)
+        must run through this hook so the context is bound, and its access is
+        serialized with the render thread, for the duration of @a fn.
+
+        The default implementation simply invokes @a fn.
+
+        @param fn The GPU work to run with the context current.
+    */
+    virtual void runWithGraphicsContext (const std::function<void()>& fn) { fn(); }
+
+    //==============================================================================
+    /** Returns the Component this native window displays.
+
+        @return The root Component associated with this native component.
+    */
+    Component& getComponent();
+
+    /** Returns the Component this native window displays.
+
+        @return The root Component associated with this native component.
+    */
+    const Component& getComponent() const;
 
     //==============================================================================
     /** Creates a platform-specific ComponentNative instance.

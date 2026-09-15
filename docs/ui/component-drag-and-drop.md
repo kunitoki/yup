@@ -1,8 +1,11 @@
 # Component Drag and Drop
 
-YUP supports external-only drag-and-drop: the operating system delivers files or
-text into the application, and `Component` subclasses handle those payloads.
-There is no drag source API for in-app drag operations.
+YUP delivers files, text and other MIME payloads from the operating system into the
+application, and lets components accept them as drops. Drag-and-drop targets are an opt-in
+mixin rather than a `Component` base: a component that wants drops derives from
+`DragAndDropTarget` in addition to `Component`, so `Component` itself carries no
+drag-and-drop surface. There is no drag source API for in-app drag operations — a drag is
+always started by the operating system.
 
 ```cpp
 #include <yup_gui/yup_gui.h>
@@ -12,165 +15,243 @@ There is no drag source API for in-app drag operations.
 
 ## Overview
 
-Drag-and-drop is implemented through five virtual methods on `Component` and the
-`DragAndDropData` payload class. The platform bridge (SDL) translates OS
-drag-and-drop events into component dispatch calls. No macOS or Windows
-platform-specific implementation exists at this time — drag-and-drop is
-SDL-only.
+The payload is carried by `DragAndDropData`. Drop targets implement the
+`DragAndDropTarget` mixin, and the platform bridge (SDL) translates OS drag-and-drop events
+into `DragAndDropTarget::dispatchItemDrop()` / `dispatchItemDragEnter()` /
+`dispatchItemDragMove()` / `dispatchItemDragExit()` calls. No macOS or Windows
+platform-specific implementation exists at this time — the inbound drag path is SDL-only.
 
 The flow:
 
 1. The user drags files or text from the OS into a YUP window.
 2. The platform layer builds a `DragAndDropData` payload.
-3. The component tree walks from the deepest child under the cursor up to the
-   root, calling `isInterestedInDrag()` on each.
-4. Interested components receive `itemDragEnter`, `itemDragMove`, and either
-   `itemsDropped` (if released) or `itemDragExit` (if the drag leaves).
+3. The dispatcher walks from the deepest component under the cursor up to the root,
+   resolving each component to a `DragAndDropTarget` with a `dynamic_cast` — components
+   that are not targets are skipped.
+4. Interested targets receive `itemDragEnter` / `itemDragMove`, and either `itemDropped`
+   (if released) or `itemDragExit` (if the drag leaves).
 
 ---
 
 ## `DragAndDropData` — Payload Class
 
 An immutable value type representing the payload delivered during a drag-and-drop
-operation. Built using fluent `with*` methods.
+operation, modelled as a set of MIME-typed blobs. Built using fluent `with*` methods.
 
 ### Construction
 
 ```cpp
-DragAndDropData data; // empty (no files, no text, no URIs)
+DragAndDropData data; // empty
 ```
 
 ### Fluent builders (immutable — return a copy)
 
 ```cpp
 auto data = DragAndDropData()
-                .withFiles (fileList)
-                .withText ("hello world")
-                .withUris  (uriList);
+                .withFiles  (fileList)          // text/uri-list, file:// URIs
+                .withText   ("hello world")     // text/plain;charset=utf-8
+                .withUris   (uriList)           // text/uri-list
+                .withImage  (image)             // image/png
+                .withMimeData ("application/x-my-type", block)
+                .withNativeObject (var (myObject)); // same-process only
 ```
 
-Each `with*` method copies the current object, sets the specified field, and
-returns the copy. The original is never modified.
+Each `with*` method copies the current object, sets the entry, and returns the copy. The
+original is never modified. Setting empty data removes the entry, so a payload entry is
+present exactly when it is non-empty.
 
-### Getters
+### Getters and inspection
 
 ```cpp
-const Array<File>& files = data.getFiles();
-const String&      text  = data.getText();
-const StringArray& uris  = data.getUris();
+String      text  = data.getText();
+Array<File> files = data.getFiles();
+StringArray uris  = data.getUris();
+Image       image = data.getImage();
+MemoryBlock block = data.getMimeData ("application/x-my-type");
+StringArray types = data.getMimeTypes();
+
+bool hasText  = data.hasText();
+bool hasFiles = data.hasFiles();
+bool hasUris  = data.hasUris();
+bool hasImage = data.hasImage();
+bool empty    = data.isEmpty();
 ```
 
-### Inspection
+The getters return by value because they decode from the MIME store. An empty string `""`
+does **not** count as having text — `hasText()` returns `false`.
 
-```cpp
-bool hasFiles   = data.hasFiles();   // files array is non-empty
-bool hasText    = data.hasText();    // text string is non-empty
-bool hasUris    = data.hasUris();    // URIs array is non-empty
-bool empty      = data.isEmpty();    // none of the above
-```
-
-An empty string `""` does **not** count as having text — `hasText()` returns `false`.
+`withNativeObject()` / `getNativeObject()` carry an arbitrary `var` alongside the MIME
+store. This is a same-process, zero-copy escape hatch for handing a live C++ object to a
+drop target; it is never transported across a process or application boundary, so a target
+must treat it as empty for OS-originated drags.
 
 ---
 
-## Component virtual methods
+## `DragAndDropTarget` — the opt-in mixin
 
-### isInterestedInDrag — opt-in gate
-
-```cpp
-virtual bool isInterestedInDrag (const DragAndDropData& data);
-```
-
-Defaults to `false`. A component **must** override this and return `true` to
-receive any drag-and-drop callbacks. Both `isVisible()` and `isEnabled()` are
-checked before this is called — invisible or disabled components are skipped
-entirely.
-
-### itemsDropped — handle the drop
+A component opts in to receiving drops by deriving from `DragAndDropTarget` alongside
+`Component`:
 
 ```cpp
-virtual bool itemsDropped (const Point<float>& position,
-                           const DragAndDropData& data);
+class DroppableArea : public Component,
+                      public DragAndDropTarget
+{
+    // ...
+};
 ```
 
-Called when the user releases the drag payload over this component. `position`
-is in component-local coordinates. Return `true` to stop bubbling; return
-`false` to let the payload bubble up to parent components.
+A target must also be a `Component` (`getTargetComponent()` returns it). Callbacks can be
+overridden as virtual methods or assigned as `std::function` members
+(`onIsInterestedInDragSource`, `onItemDropped`, `onItemDragEnter`, `onItemDragMove`,
+`onItemDragExit`); the virtual runs first and the function afterwards, so both mechanisms
+work and the boolean-returning pairs OR-combine.
+
+### isInterestedInDragSource — opt-in gate
+
+```cpp
+virtual bool isInterestedInDragSource (const DragAndDropSourceDetails& details);
+```
+
+Defaults to `false`. A target **must** answer `true` to receive any other callback. Both
+`isVisible()` and `isEnabled()` are checked before this is called — invisible or disabled
+components are skipped entirely.
+
+### itemDropped — handle the drop
+
+```cpp
+virtual bool itemDropped (const DragAndDropSourceDetails& details);
+```
+
+Return `true` to stop bubbling; return `false` to let the payload bubble up to parent
+components.
 
 ### Drag-over tracking
 
 ```cpp
-virtual void itemDragEnter (const DragAndDropData& data,
-                            const Point<float>& position);
-
-virtual void itemDragMove (const DragAndDropData& data,
-                           const Point<float>& position);
-
-virtual void itemDragExit (const DragAndDropData& data);
+virtual void itemDragEnter (const DragAndDropSourceDetails& details);
+virtual void itemDragMove  (const DragAndDropSourceDetails& details);
+virtual void itemDragExit  (const DragAndDropSourceDetails& details);
 ```
 
-- `itemDragEnter` — drag enters the component's area.
-- `itemDragMove` — drag moves within the component's area.
-- `itemDragExit` — drag leaves the component's area. No position is provided.
+`itemDragEnter` — the drag enters the target's area. `itemDragMove` — the drag moves within
+it. `itemDragExit` — the drag leaves it (no meaningful position is provided).
 
-All positions are in component-local coordinates. For enter/move, all interested
-ancestors in the parent chain are notified (bubbling does not stop). For exit,
-all previously interested ancestors receive the call.
+All positions in `DragAndDropSourceDetails::localPosition` are in the target's local coordinates. For
+enter/move, **all** interested ancestors in the parent chain are notified (bubbling does
+not stop). For exit, all previously interested ancestors receive the call.
 
-### Bubbling behavior
+### `DragAndDropSourceDetails`
 
-`itemsDropped`: bubbling stops when a component returns `true`. The deepest
-interested component is tried first; if it returns `false`, its parent gets a
-chance, and so on up to the root.
+```cpp
+struct DragAndDropSourceDetails
+{
+    DragAndDropData          data;              // the payload being dragged
+    WeakReference<Component> sourceComponent;   // null for OS-originated drags
+    Point<float>             localPosition;     // in the target's coordinates
+    DragAndDropActions       allowedActions;    // copy | move | link
+    DragAndDropAction        suggestedAction = DragAndDropAction::copy;
+};
+```
 
-`itemDragEnter`/`itemDragMove`: **all** interested ancestors are notified.
-Bubbling does not stop.
+`sourceComponent` is a `WeakReference<Component>`: it reads as null both for an OS-originated
+drag and once the source has been destroyed, so check it before use rather than assuming the
+source outlives the drag.
+
+`DragAndDropAction` is `none` / `copy` / `move` / `link`, and `DragAndDropActions` is a
+`FlagSet` of those (see `dragAndDropActionCopy` etc.).
+
+### Bubbling behaviour
+
+`itemDropped`: bubbling stops when a target returns `true`. The deepest interested target
+is tried first; if it returns `false`, its parent gets a chance, and so on up to the root.
+
+`itemDragEnter` / `itemDragMove` / `itemDragExit`: **all** interested ancestors are
+notified. Bubbling does not stop.
+
+The static `DragAndDropTarget::dispatch*` entry points implement this walk and are intended
+for the platform backends; application code normally only implements the callbacks.
+
+### `DragAndDropTargetComponent`
+
+Deriving from `Component` and `DragAndDropTarget` is enough for most call sites, but some
+places need a single concrete type that is nameable on its own — factories, containers, and the
+language bindings. `DragAndDropTargetComponent` (in the same header) is exactly that:
+
+```cpp
+class MyTarget : public DragAndDropTargetComponent
+{
+    // ...
+};
+```
+
+---
+
+## Python
+
+The Python module exposes `yup.DragAndDropData`, `yup.DragAndDropAction` /
+`yup.DragAndDropActions`, `yup.DragAndDropSourceDetails` and `yup.DragAndDropTargetComponent`.
+A Python drop target subclasses the last of those and overrides `isInterestedInDragSource` /
+`itemDropped` / `itemDragEnter` / `itemDragMove` / `itemDragExit`, or assigns the
+`onIsInterestedInDragSource` / `onItemDropped` / `onItemDragEnter` / `onItemDragMove` /
+`onItemDragExit` callables:
+
+```python
+class DropTarget(yup.DragAndDropTargetComponent):
+    def isInterestedInDragSource(self, details):
+        return details.data.hasFiles()
+
+    def itemDropped(self, details):
+        for file in details.data.getFiles():
+            print("dropped", file.getFullPathName())
+        return True
+```
+
+`details` is a borrowed view, valid only for the duration of the call — copy it with
+`yup.DragAndDropSourceDetails(details)` if you need to keep it.
 
 ---
 
 ## Usage example
 
 ```cpp
-class DroppableArea : public Component
+class DroppableArea : public Component,
+                      public DragAndDropTarget
 {
 public:
-    bool isInterestedInDrag (const DragAndDropData& data) override
+    bool isInterestedInDragSource (const DragAndDropSourceDetails& details) override
     {
-        return data.hasFiles() || data.hasText();
+        return details.data.hasFiles() || details.data.hasText();
     }
 
-    bool itemsDropped (const Point<float>& position,
-                       const DragAndDropData& data) override
+    bool itemDropped (const DragAndDropSourceDetails& details) override
     {
-        if (data.hasFiles())
+        if (details.data.hasFiles())
         {
-            for (auto& file : data.getFiles())
+            for (const auto& file : details.data.getFiles())
                 Logger::writeToLog ("Dropped file: " + file.getFullPathName());
             return true;
         }
-        if (data.hasText())
+        if (details.data.hasText())
         {
-            insertText (data.getText());
+            insertText (details.data.getText());
             return true;
         }
         return false;
     }
 
-    void itemDragEnter (const DragAndDropData& data,
-                        const Point<float>& position) override
+    void itemDragEnter (const DragAndDropSourceDetails&) override
     {
         highlight = true;
         repaint();
     }
 
-    void itemDragMove (const DragAndDropData& data,
-                       const Point<float>& position) override
+    void itemDragMove (const DragAndDropSourceDetails& details) override
     {
-        lastDragPosition = position;
+        lastDragPosition = details.localPosition;
         repaint();
     }
 
-    void itemDragExit (const DragAndDropData& data) override
+    void itemDragExit (const DragAndDropSourceDetails&) override
     {
         highlight = false;
         repaint();

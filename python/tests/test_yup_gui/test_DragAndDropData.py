@@ -1,11 +1,8 @@
 import yup
 
 """
-DragAndDropData is the payload Component's drag-and-drop hooks carry, so these tests cover
-both the value type itself and the component entry points that deliver it.
-
-The platform (SDL) is what actually starts a drag, so nothing here goes through a real drop:
-the component hooks are driven directly, which is what they are for.
+DragAndDropData is the payload carried by a drag-and-drop operation. These tests cover the value
+type itself; the C++ side is what turns it into drops.
 """
 
 
@@ -102,88 +99,147 @@ def test_get_files_hands_back_a_copy():
 
 
 # ==============================================================================
-# Component drag-and-drop hooks
+# DragAndDropData: MIME store, image and native object
 # ==============================================================================
 
-class DropTarget(yup.Component):
+def test_new_payload_predicates_default_to_false():
+    data = yup.DragAndDropData()
+
+    assert data.hasImage() is False
+    assert data.hasNativeObject() is False
+    assert data.hasMimeData("application/x-yup") is False
+    assert data.getMimeTypes().isEmpty() is True
+    assert data.getImage().isValid() is False
+
+
+def test_mime_types_reflect_the_stored_entries():
+    data = yup.DragAndDropData().withText("hi")
+
+    types = data.getMimeTypes()
+    assert types.size() == 1
+    assert types[0] == "text/plain;charset=utf-8"
+    assert data.hasMimeData("text/plain;charset=utf-8") is True
+
+
+def test_native_object_round_trips():
+    data = yup.DragAndDropData().withNativeObject(42)
+
+    assert data.hasNativeObject() is True
+    assert data.isEmpty() is False
+    assert data.getNativeObject() == 42
+
+
+# ==============================================================================
+# DragAndDropTargetComponent
+# ==============================================================================
+
+class DropTarget(yup.DragAndDropTargetComponent):
     def __init__(self):
         super().__init__()
         self.interested = False
         self.handlesDrop = False
         self.log = []
 
-    def isInterestedInDrag(self, data):
-        self.log.append(("isInterestedInDrag", data))
+    def isInterestedInDragSource(self, details):
+        self.log.append(("isInterestedInDragSource", details))
         return self.interested
 
-    def itemsDropped(self, position, data):
-        self.log.append(("itemsDropped", position, data))
+    def itemDropped(self, details):
+        self.log.append(("itemDropped", details))
         return self.handlesDrop
 
-    def itemDragEnter(self, data, position):
-        self.log.append(("itemDragEnter", data, position))
+    def itemDragEnter(self, details):
+        self.log.append(("itemDragEnter", details))
 
-    def itemDragMove(self, data, position):
-        self.log.append(("itemDragMove", data, position))
+    def itemDragMove(self, details):
+        self.log.append(("itemDragMove", details))
 
-    def itemDragExit(self, data):
-        self.log.append(("itemDragExit", data))
-
-
-def test_default_hooks_do_not_handle_the_payload():
-    component = yup.Component()
-    data = text_payload()
-
-    assert component.isInterestedInDrag(data) is False
-    assert component.itemsDropped(yup.Point[float](10.0, 20.0), data) is False
-    component.itemDragEnter(data, yup.Point[float](10.0, 20.0))
-    component.itemDragMove(data, yup.Point[float](15.0, 25.0))
-    component.itemDragExit(data)
+    def itemDragExit(self, details):
+        self.log.append(("itemDragExit", details))
 
 
-def test_python_overrides_receive_the_payload():
-    component = DropTarget()
-    data = text_payload()
-    position = yup.Point[float](10.0, 20.0)
+def details_for(data=None):
+    details = yup.DragAndDropSourceDetails()
+    details.data = data if data is not None else text_payload()
+    details.localPosition = yup.Point[float](10.0, 20.0)
+    return details
 
-    component.interested = True
-    component.handlesDrop = True
 
-    assert component.isInterestedInDrag(data) is True
-    assert component.itemsDropped(position, data) is True
+def test_target_defaults_are_not_interested():
+    target = yup.DragAndDropTargetComponent()
+    details = details_for()
 
-    component.itemDragEnter(data, position)
-    component.itemDragMove(data, position)
-    component.itemDragExit(data)
+    assert target.isInterestedInDragSource(details) is False
+    assert target.itemDropped(details) is False
 
-    assert [entry[0] for entry in component.log] == [
-        "isInterestedInDrag",
-        "itemsDropped",
+
+def test_target_is_a_component():
+    target = yup.DragAndDropTargetComponent("target")
+
+    assert isinstance(target, yup.Component)
+    assert target.getTargetComponent() is not None
+    assert target.getComponentID() == "target"
+
+
+def test_python_target_receives_the_details():
+    target = DropTarget()
+    details = details_for()
+
+    target.interested = True
+    target.handlesDrop = True
+
+    assert target.isInterestedInDragSource(details) is True
+    assert target.itemDropped(details) is True
+
+    target.itemDragEnter(details)
+    target.itemDragMove(details)
+    target.itemDragExit(details)
+
+    assert [entry[0] for entry in target.log] == [
+        "isInterestedInDragSource",
+        "itemDropped",
         "itemDragEnter",
         "itemDragMove",
         "itemDragExit",
     ]
 
 
-def test_override_receives_the_payload_and_position_the_caller_passed():
-    component = DropTarget()
+def test_details_carry_the_payload_and_position():
+    target = DropTarget()
+    details = details_for(yup.DragAndDropData().withFiles([yup.File("/tmp/one.txt")]))
 
-    component.itemDragEnter(text_payload(), yup.Point[float](1.0, 2.0))
+    target.itemDragEnter(details)
 
-    _, data, position = component.log[0]
+    _, received = target.log[0]
 
-    assert data.hasText() is True
-    assert data.getText() == "hello"
-    assert position.getX() == 1.0
-    assert position.getY() == 2.0
+    assert received.data.hasFiles() is True
+    assert received.data.getFiles()[0] == yup.File("/tmp/one.txt")
+    assert received.localPosition.getX() == 10.0
+    assert received.localPosition.getY() == 20.0
 
 
-def test_override_can_read_a_file_payload():
-    component = DropTarget()
+def test_details_can_be_copied_out_of_the_callback():
+    details = details_for()
 
-    component.itemsDropped(yup.Point[float](0.0, 0.0), yup.DragAndDropData().withFiles([yup.File("/tmp/one.txt")]))
+    copy = yup.DragAndDropSourceDetails(details)
 
-    _, _, data = component.log[0]
+    assert copy.data.hasText() is True
+    assert copy.data.getText() == "hello"
+    assert copy.localPosition.getX() == details.localPosition.getX()
 
-    assert data.hasFiles() is True
-    assert data.getFiles()[0] == yup.File("/tmp/one.txt")
+
+def test_std_function_hooks_are_assignable():
+    target = yup.DragAndDropTargetComponent()
+    seen = []
+
+    target.onIsInterestedInDragSource = lambda details: True
+    target.onItemDragEnter = lambda details: seen.append("enter")
+    target.onItemDropped = lambda details: (seen.append(details.data.getText()), True)[1]
+
+    details = details_for()
+
+    assert target.onIsInterestedInDragSource(details) is True
+    target.onItemDragEnter(details)
+    assert target.onItemDropped(details) is True
+
+    assert seen == ["enter", "hello"]

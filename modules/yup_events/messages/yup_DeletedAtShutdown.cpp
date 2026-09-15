@@ -52,8 +52,17 @@ static Array<DeletedAtShutdown*>& getDeletedAtShutdownObjects()
     return objects;
 }
 
+static std::atomic_bool& isDeleteAllInProgress()
+{
+    static std::atomic_bool inProgress = false;
+    return inProgress;
+}
+
 DeletedAtShutdown::DeletedAtShutdown()
 {
+    // If this fires, an object is being created while deleteAll() is busy deleting the others.
+    jassert (! isDeleteAllInProgress());
+
     const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
     getDeletedAtShutdownObjects().add (this);
 }
@@ -73,6 +82,8 @@ void DeletedAtShutdown::deleteAll()
     // make a local copy of the array, so it can't get into a loop if something
     // creates another DeletedAtShutdown object during its destructor.
     Array<DeletedAtShutdown*> localCopy;
+
+    isDeleteAllInProgress() = true;
 
     {
         const SpinLock::ScopedLockType sl (getDeletedAtShutdownSpinLock());
@@ -97,6 +108,8 @@ void DeletedAtShutdown::deleteAll()
         }
         YUP_CATCH_EXCEPTION
     }
+
+    isDeleteAllInProgress() = false;
 
     // if this fails, then it's likely that some new DeletedAtShutdown objects were
     // created while executing the destructors of the other ones.

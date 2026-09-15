@@ -502,6 +502,16 @@ void registerYupGuiBindings (py::module_& m)
         .def ("hasText", &DragAndDropData::hasText)
         .def ("hasUris", &DragAndDropData::hasUris)
         .def ("isEmpty", &DragAndDropData::isEmpty)
+        .def ("withImage", &DragAndDropData::withImage, "image"_a, "Returns a copy of this payload with the given image set, encoded as PNG.")
+        .def ("withMimeData", py::overload_cast<const String&, MemoryBlock> (&DragAndDropData::withMimeData, py::const_), "mimeType"_a, "data"_a, "Returns a copy of this payload with the given MIME data set.")
+        .def ("withNativeObject", &DragAndDropData::withNativeObject, "object"_a, "Returns a copy of this payload with the given same-process native object set.")
+        .def ("getImage", &DragAndDropData::getImage, "Returns the image decoded from the image/png MIME type, or an invalid image.")
+        .def ("getMimeData", &DragAndDropData::getMimeData, "mimeType"_a, "Returns the data stored for the given MIME type, or an empty block.")
+        .def ("getMimeTypes", &DragAndDropData::getMimeTypes, "Returns the MIME types currently present in the payload.")
+        .def ("getNativeObject", &DragAndDropData::getNativeObject, "Returns the same-process native object, or None.")
+        .def ("hasImage", &DragAndDropData::hasImage)
+        .def ("hasMimeData", &DragAndDropData::hasMimeData, "mimeType"_a)
+        .def ("hasNativeObject", &DragAndDropData::hasNativeObject)
         .def ("__repr__", [] (const DragAndDropData& self)
         {
             String result;
@@ -512,6 +522,46 @@ void registerYupGuiBindings (py::module_& m)
                 << " text=\"" << self.getText() << "\">";
             return result;
         });
+
+    // ============================================================================================ yup::DragAndDropAction
+
+    py::enum_<DragAndDropAction> (m, "DragAndDropAction")
+        .value ("none", DragAndDropAction::none)
+        .value ("copy", DragAndDropAction::copy)
+        .value ("move", DragAndDropAction::move)
+        .value ("link", DragAndDropAction::link);
+
+    // ============================================================================================ yup::DragAndDropActions
+
+    py::class_<DragAndDropActions> classDragAndDropActions (m, "DragAndDropActions");
+
+    classDragAndDropActions
+        .def (py::init<>())
+        .def ("test", &DragAndDropActions::test, "other"_a, "Returns true if any of the given action bits are set.")
+        .def ("withSet", &DragAndDropActions::withSet, "other"_a)
+        .def ("withUnset", &DragAndDropActions::withUnset, "other"_a)
+        .def ("__or__", &DragAndDropActions::operator|)
+        .def ("__and__", &DragAndDropActions::operator&);
+
+    m.attr ("dragAndDropActionsNone") = dragAndDropActionsNone;
+    m.attr ("dragAndDropActionCopy") = dragAndDropActionCopy;
+    m.attr ("dragAndDropActionMove") = dragAndDropActionMove;
+    m.attr ("dragAndDropActionLink") = dragAndDropActionLink;
+
+    // ============================================================================================ yup::DragAndDropSourceDetails
+
+    py::class_<DragAndDropSourceDetails> classDragAndDropSourceDetails (m, "DragAndDropSourceDetails");
+
+    classDragAndDropSourceDetails
+        .def (py::init<>())
+        .def (py::init<const DragAndDropSourceDetails&>(), "other"_a, "Copies a details object, so a callback can keep it beyond the call.")
+        .def_readwrite ("data", &DragAndDropSourceDetails::data, "The payload being dragged.")
+        .def_property_readonly ("sourceComponent",
+                                [] (const DragAndDropSourceDetails& details) { return details.sourceComponent.get(); },
+                                "The component the drag started from, or None. Held weakly, so it is also None once the source has been destroyed.")
+        .def_readwrite ("localPosition", &DragAndDropSourceDetails::localPosition, "The cursor position, in the coordinates of the target being notified.")
+        .def_readwrite ("allowedActions", &DragAndDropSourceDetails::allowedActions, "The operations the source is willing to perform.")
+        .def_readwrite ("suggestedAction", &DragAndDropSourceDetails::suggestedAction, "The operation the source suggests, derived from the modifier keys.");
 
     // ============================================================================================ yup::ComponentPaintMetrics
 
@@ -707,14 +757,6 @@ void registerYupGuiBindings (py::module_& m)
         .def ("addMouseListener", &Component::addMouseListener, "listener"_a, py::keep_alive<1, 2>())
         .def ("removeMouseListener", &Component::removeMouseListener, "listener"_a)
 
-        // Drag and drop. The platform delivers the payload through these virtuals, so a Python
-        // subclass overrides them; binding them keeps the entry points callable from Python too.
-        .def ("isInterestedInDrag", &Component::isInterestedInDrag, "data"_a)
-        .def ("itemsDropped", &Component::itemsDropped, "position"_a, "data"_a)
-        .def ("itemDragEnter", &Component::itemDragEnter, "data"_a, "position"_a)
-        .def ("itemDragMove", &Component::itemDragMove, "data"_a, "position"_a)
-        .def ("itemDragExit", &Component::itemDragExit, "data"_a)
-
         // Component listeners. The listener list only holds weak references, so the component
         // keeps the Python listener alive for as long as it is registered.
         .def ("addComponentListener", &Component::addComponentListener, "listener"_a, py::keep_alive<1, 2>())
@@ -748,6 +790,31 @@ void registerYupGuiBindings (py::module_& m)
               "when the context has no GPU or the component has no size.")
         .def ("snapshotToTexture", &Component::snapshotToTexture, "ctx"_a, "includeEffects"_a = true,
               "Like snapshotToImage, but returns the GPU texture without reading pixels back.")
+    ;
+
+    // ============================================================================================ yup::DragAndDropTarget
+
+    py::class_<DragAndDropTarget, py::smart_holder> classDragAndDropTarget (m, "DragAndDropTarget");
+
+    // ============================================================================================ yup::DragAndDropTargetComponent
+
+    py::class_<DragAndDropTargetComponent, Component, DragAndDropTarget, PyDragAndDropTargetComponent<>, py::smart_holder>
+        classDragAndDropTargetComponent (m, "DragAndDropTargetComponent", py::multiple_inheritance());
+
+    classDragAndDropTargetComponent
+        .def (py::init_alias<>())
+        .def (py::init_alias<StringRef>(), "componentID"_a)
+        .def ("getTargetComponent", &DragAndDropTarget::getTargetComponent, py::return_value_policy::reference, "Returns this object as a Component (which it always is).")
+        .def ("isInterestedInDragSource", &DragAndDropTarget::isInterestedInDragSource, "details"_a, "Returns true if this target wants to receive the drag.")
+        .def ("itemDropped", &DragAndDropTarget::itemDropped, "details"_a, "Called when an accepted drag is dropped onto this target.")
+        .def ("itemDragEnter", &DragAndDropTarget::itemDragEnter, "details"_a)
+        .def ("itemDragMove", &DragAndDropTarget::itemDragMove, "details"_a)
+        .def ("itemDragExit", &DragAndDropTarget::itemDragExit, "details"_a)
+        .def_readwrite ("onIsInterestedInDragSource", &DragAndDropTarget::onIsInterestedInDragSource, "Assignable alternative to isInterestedInDragSource().")
+        .def_readwrite ("onItemDropped", &DragAndDropTarget::onItemDropped, "Assignable alternative to itemDropped().")
+        .def_readwrite ("onItemDragEnter", &DragAndDropTarget::onItemDragEnter, "Assignable alternative to itemDragEnter().")
+        .def_readwrite ("onItemDragMove", &DragAndDropTarget::onItemDragMove, "Assignable alternative to itemDragMove().")
+        .def_readwrite ("onItemDragExit", &DragAndDropTarget::onItemDragExit, "Assignable alternative to itemDragExit().")
     ;
 
     // ============================================================================================ yup::DocumentWindow

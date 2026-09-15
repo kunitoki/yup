@@ -84,8 +84,8 @@ public:
         If you return a Component, the ListBox takes ownership of it and will delete it
         when it's no longer needed.
 
-        If you return nullptr, the ListBox will create a ListBoxItem and use
-        the paintListBoxItem(), getRowText(), and getRowIcon() methods to render it.
+        If you return nullptr, the ListBox will create a ListBoxItem and use the
+        getRowText() and getRowIcon() methods to render it.
 
         @param rowIndex          The index of the row (0 to getNumRows()-1)
         @param existingComponent An existing component that might be reusable, or nullptr
@@ -94,13 +94,12 @@ public:
     virtual Component* refreshComponentForRow (int rowIndex, Component* existingComponent);
 
     //==============================================================================
-    /** Paints the content of a list item when using default rendering.
+    /** Paints the content of a list item.
 
-        This is only called when refreshComponentForRow() returns nullptr and the
-        ListBox creates a ListBoxItem for rendering.
-
-        You can override this to provide custom painting, or use getRowText() and
-        getRowIcon() for simple text+icon rendering.
+        @warning Nothing calls this. The built-in row renderer takes a row's text and icon from
+                 getRowText() and getRowIcon(), and anything custom is expected to come from
+                 refreshComponentForRow() as a component instead. It survives as a virtual only so
+                 that existing overrides keep compiling.
 
         @param rowIndex   The index of the row being painted
         @param g          The graphics context to paint with
@@ -216,6 +215,7 @@ private:
     @see ListBoxModel, ListBoxItem
 */
 class YUP_API ListBox : public Component
+    , public DragAndDropSource
 {
 public:
     //==============================================================================
@@ -340,6 +340,42 @@ public:
         @return The number of selected rows
     */
     int getNumSelectedRows() const;
+
+    //==============================================================================
+    /** Creates the component shown under the cursor while rows are being dragged.
+
+        The default returns a circle with the number of dragged rows inside it. Override this to
+        show something else - typically something that says what is being dragged.
+
+        The returned component must have the size it wants to be shown at, because it becomes the
+        whole of the drag image window. The list box owns it for the duration of the drag and
+        deletes it when the drag ends, so an override can simply return a freshly created component.
+        Returning nullptr means no drag image.
+
+        @param selectedRows  The rows being dragged, sorted ascending
+        @return The component to show, or nullptr for none
+    */
+    virtual std::unique_ptr<Component> createDragSourceComponent (const Array<int>& selectedRows);
+
+    /** @internal Called when a drag this list started has ended, to release the drag image. */
+    void dragOperationEnded (const DragAndDropData& data, DragAndDropAction performed) override;
+
+    //==============================================================================
+    /** Enables or disables dragging rows out of this list.
+
+        Enabled by default. When disabled, a drag never starts and getDragSourceDescription() is not
+        consulted at all, so this is how a particular list is made undraggable independently of what
+        its model would otherwise allow.
+
+        @param shouldBeEnabled  Whether rows can be dragged out of the list
+    */
+    void setDragSourceEnabled (bool shouldBeEnabled);
+
+    /** Returns whether rows can be dragged out of this list.
+
+        @return True if dragging is enabled
+    */
+    bool isDragSourceEnabled() const noexcept;
 
     //==============================================================================
     /** Rebuilds the list content from the model.
@@ -544,6 +580,8 @@ public:
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
+    void mouseDrag (const MouseEvent& event) override;
+    /** @internal */
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override;
@@ -593,8 +631,30 @@ private:
     SelectionMode selectionMode = SelectionMode::single;
 
     Array<int> selectedRows;
+
+    /** The row a shift-click extends the selection from: the last row clicked without shift, or -1.
+
+        Shift-clicks deliberately leave it alone, so repeated shift-clicks grow or shrink one range
+        anchored at that row instead of moving the anchor each time.
+    */
     int lastSelectedRow = -1;
+
     int hoveredRow = -1;
+
+    /** The row whose selection was deferred from mouse down to mouse up, or -1.
+
+        Pressing a row that is already part of a multiple selection must not collapse that selection
+        straight away, because the press may be the start of a drag that carries all of it. The
+        collapse is applied on release instead, and skipped when a drag actually begins.
+    */
+    int rowSelectedOnMouseUp = -1;
+
+    /** Whether rows can be dragged out of this list. See setDragSourceEnabled(). */
+    bool dragSourceEnabled = true;
+
+    /** The drag image handed to the drag in progress, or nullptr. Owned here because the manager
+        only borrows it for the duration of the drag. */
+    std::unique_ptr<Component> dragSourceComponent;
 
     int fixedRowHeight = 24;
     int fixedRowWidth = 100;
