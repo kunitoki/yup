@@ -165,6 +165,25 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
     }
 
+#if YUP_LINUX
+    if (options.flags.test (temporaryWindow))
+    {
+        const auto windowProperties = SDL_GetWindowProperties (window);
+        auto* display = static_cast<Display*> (SDL_GetPointerProperty (windowProperties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+        const auto xwindow = static_cast<Window> (SDL_GetNumberProperty (windowProperties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+
+        if (display != nullptr && xwindow != 0)
+        {
+            const auto tooltipType = XInternAtom (display, "_NET_WM_WINDOW_TYPE_TOOLTIP", False);
+
+            XChangeProperty (display, xwindow, XInternAtom (display, "_NET_WM_WINDOW_TYPE", False),
+                             XInternAtom (display, "ATOM", False), 32, PropModeReplace,
+                             reinterpret_cast<const unsigned char*> (&tooltipType), 1);
+            XFlush (display);
+        }
+    }
+#endif
+
     SDL_SetWindowFocusable (window, ! options.flags.test (nonFocusableWindow));
     SDL_PumpEvents();
 
