@@ -32,6 +32,7 @@ DragImageComponent::DragImageComponent()
                       .withAlwaysOnTop (true)
                       .withTransparent (true)
                       .withFocusable (false)
+                      .withTemporaryWindow (true)
                       .withClearColor (Colors::transparentBlack));
 
     setVisible (false);

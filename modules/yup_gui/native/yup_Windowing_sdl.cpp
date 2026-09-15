@@ -73,7 +73,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
         windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     if (options.flags.test (temporaryWindow))
-        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP; // SDL_WINDOW_POPUP_MENU | SDL_WINDOW_UTILITY
+        windowFlags |= SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_UTILITY;
 
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
