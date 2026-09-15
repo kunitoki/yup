@@ -374,6 +374,12 @@ public:
             removeFromDesktop();
         }
 
+        void userTriedToCloseWindow() override
+        {
+            if (onClose)
+                yup::MessageManager::callAsync (onClose);
+        }
+
         void paint (yup::Graphics& g) override
         {
             // A window's root component is opaque, so it has to paint its own background.
