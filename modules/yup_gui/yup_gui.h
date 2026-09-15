@@ -163,7 +163,6 @@
 #include "dragdrop/yup_DragImageComponent.h"
 #include "dragdrop/yup_DragAndDropSource.h"
 #include "dragdrop/yup_DragAndDropManager.h"
-#include "dragdrop/yup_NativeDragAndDrop.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
 #include "buttons/yup_TextButton.h"

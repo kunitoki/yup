@@ -149,6 +149,7 @@
 
 #include "native/yup_FileChooser_windows.cpp"
 #include "native/yup_Windowing_windows.cpp"
+#include "native/yup_NativeDragAndDrop_windows.cpp"
 
 //==============================================================================
 
