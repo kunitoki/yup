@@ -470,6 +470,10 @@ TEST_F (ComponentNativeRepaintTests, MovingAComponentMarksTheOldAreaAndTheNewOne
 
     yup::ComponentTestHelper<Component>::attachNative (comp, native);
 
+    // repaint() is gated on isShowing(), so a component that was never made visible drops every mark
+    // before it reaches the native. Being parentless, comp is showing as soon as it is visible.
+    comp.setVisible (true);
+
     // Both areas are computed the same way the engine computes them when it resolves the region.
     const auto oldArea = comp.getBoundsRelativeToTopLevelComponent();
 
