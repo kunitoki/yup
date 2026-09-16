@@ -75,6 +75,12 @@ public:
         audioDeviceManager.closeAudioDevice();
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColour (yup::Color (0xff404040));
+        g.fillAll();
+    }
+
     void resized() override
     {
         auto bounds = getLocalBounds().reduced (10);
@@ -317,8 +323,6 @@ private:
 
     void createUI()
     {
-        setOpaque (false);
-
         // Get fonts
         auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
         auto buttonFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f);
