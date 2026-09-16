@@ -130,6 +130,8 @@ public:
 
     void setGlobalMouseCaptureActive (bool) override {}
 
+    void cancelCurrentMouseGesture() override {}
+
 private:
     Component* focusedComponent = nullptr;
 };

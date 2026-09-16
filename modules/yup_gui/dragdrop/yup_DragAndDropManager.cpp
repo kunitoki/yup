@@ -75,12 +75,20 @@ void DragAndDropManager::finishNativeDrag (std::optional<DragAndDropAction> perf
 {
     const auto data = currentData;
 
-    auto* sourceComponentPtr = sourceComponent.get();
+    // The mouse up below runs user code that may delete the source, so the component is held weakly
+    // rather than as a pointer resolved once.
+    const auto sourceComponentRef = sourceComponent;
 
     currentData = {};
     sourceComponent = nullptr;
 
-    if (auto* source = dynamic_cast<DragAndDropSource*> (sourceComponentPtr))
+    // The platform drag ran its own event loop and consumed the button release that ended it, so the
+    // window the drag started from is still in the middle of a mouse gesture and has to be told.
+    if (auto* component = sourceComponentRef.get())
+        if (auto* native = component->getNativeComponent())
+            native->cancelCurrentMouseGesture();
+
+    if (auto* source = dynamic_cast<DragAndDropSource*> (sourceComponentRef.get()))
     {
         const auto action = performed.value_or (DragAndDropAction::none);
 
