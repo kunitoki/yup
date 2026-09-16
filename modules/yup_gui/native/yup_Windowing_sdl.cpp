@@ -281,6 +281,7 @@ SDLComponentNative::~SDLComponentNative()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unregistered window event watch");
 
     updateMouseCapture (false);
+    setGlobalMouseCaptureActive (false);
 
     // Stop the rendering first, before touching any SDL resources
     stopRendering();
@@ -1060,19 +1061,6 @@ void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn
 
 //==============================================================================
 
-void SDLComponentNative::resetMouseInteractionState()
-{
-    lastComponentClicked = nullptr;
-    lastMouseDownPosition.reset();
-    lastMouseDownTime.reset();
-
-#if YUP_WINDOWS
-    ReleaseCapture();
-#endif
-
-    currentMouseButtons = MouseEvent::noButtons;
-}
-
 void SDLComponentNative::timerCallback()
 {
 #if ! (YUP_MOBILE || YUP_EMSCRIPTEN)
@@ -1082,10 +1070,7 @@ void SDLComponentNative::timerCallback()
         SDL_GetWindowPosition (window, &windowX, &windowY);
 
         float mouseX = 0.0f, mouseY = 0.0f;
-        const auto mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
-
-        if (lastComponentClicked != nullptr && mouseState == 0)
-            resetMouseInteractionState();
+        SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
         const auto cursorPosition = Point<float> { mouseX - static_cast<float> (windowX),
                                                    mouseY - static_cast<float> (windowY) }
@@ -1669,7 +1654,9 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         return;
     }
 
-    currentMouseButtons = static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
+    currentMouseButtons = wasCanceled
+                          ? MouseEvent::noButtons
+                          : static_cast<MouseEvent::Buttons> (toMouseButtons (SDL_GetMouseState (nullptr, nullptr)) & ~button);
 
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1722,8 +1709,16 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
 
     lastMouseMovePosition = position;
 
-    if (! event.isTouch() && isMouseOutsideWindow (window))
+    if (! wasCanceled && ! event.isTouch() && isMouseOutsideWindow (window))
         handleFocusChanged (false);
+}
+
+void SDLComponentNative::cancelCurrentMouseGesture()
+{
+    if (lastComponentClicked == nullptr)
+        return;
+
+    handleMouseUp (lastMouseMovePosition, currentMouseButtons, currentKeyModifiers, nullptr, true);
 }
 
 //==============================================================================
@@ -2805,35 +2800,33 @@ bool SDLComponentNative::anyNativeWindowContains (Point<float> screenPosition)
 
 void SDLComponentNative::updateMouseCapture (bool shouldBeActive)
 {
-    if (! shouldCaptureMouse)
-        shouldBeActive = false;
-
-    if (shouldBeActive == mouseCaptureActive)
-        return;
-
-    if (shouldBeActive)
-    {
-        mouseCaptureActive = requestMouseCapture();
-        return;
-    }
-
-    releaseMouseCapture();
-    mouseCaptureActive = false;
+    setMouseCaptureReference (mouseCaptureActive, shouldCaptureMouse && shouldBeActive);
 }
 
 void SDLComponentNative::setGlobalMouseCaptureActive (bool shouldBeActive)
 {
-    if (shouldBeActive == mouseCaptureActive)
+    setMouseCaptureReference (globalMouseCaptureActive, shouldBeActive);
+}
+
+/** Holds or drops one reference on the shared capture count.
+
+    The window and a drag session capture for unrelated reasons and can want it at the same time, so
+    each tracks its own reference: sharing one flag would let either of them release the capture the
+    other is relying on.
+*/
+void SDLComponentNative::setMouseCaptureReference (bool& isHeld, bool shouldBeHeld)
+{
+    if (shouldBeHeld == isHeld)
         return;
 
-    if (shouldBeActive)
+    if (shouldBeHeld)
     {
-        mouseCaptureActive = requestMouseCapture();
+        isHeld = requestMouseCapture();
         return;
     }
 
     releaseMouseCapture();
-    mouseCaptureActive = false;
+    isHeld = false;
 }
 
 void SDLComponentNative::pollCapturedMouseState()

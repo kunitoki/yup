@@ -135,6 +135,7 @@ public:
 
     //==============================================================================
     void setGlobalMouseCaptureActive (bool shouldBeActive) override;
+    void cancelCurrentMouseGesture() override;
 
     //==============================================================================
     void startTextInput (Component& component) override;
@@ -205,19 +206,14 @@ private:
 
     static bool requestMouseCapture();
     static void releaseMouseCapture();
-    static int mouseCaptureRequestCount;
-    static uint32_t lastCapturedMouseButtonState;
-    static bool popupDismissalCheckPending;
-
-    void updateMouseCapture (bool shouldBeActive);
     static void pollCapturedMouseState();
     static void triggerPopupDismissalCheck();
     static void dismissPopupsIfNoNativeWindowHasFocus();
     static bool anyNativeWindowHasKeyboardFocus();
     static bool anyNativeWindowContains (Point<float> screenPosition);
 
-    void resetMouseInteractionState();
-
+    void updateMouseCapture (bool shouldBeActive);
+    void setMouseCaptureReference (bool& isHeld, bool shouldBeHeld);
     Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);
@@ -247,6 +243,10 @@ private:
     void getRenderContext();
     void runWithComputeContext (const std::function<void()>& fn);
     bool renderFrame();
+
+    static int mouseCaptureRequestCount;
+    static uint32_t lastCapturedMouseButtonState;
+    static bool popupDismissalCheckPending;
 
     friend class WeakReference<SDLComponentNative>;
     WeakReference<SDLComponentNative>::Master masterReference;
@@ -340,6 +340,7 @@ private:
     bool updateOnlyWhenFocused = false;
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;
+    bool globalMouseCaptureActive = false;
     bool vsyncEnabled = false;
 };
 
