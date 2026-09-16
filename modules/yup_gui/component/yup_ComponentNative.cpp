@@ -105,6 +105,12 @@ ComponentNative::Options& ComponentNative::Options::withFramerateRedraw (std::op
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withUnfocusedFramerateRedraw (std::optional<float> newUnfocusedFramerateRedraw) noexcept
+{
+    unfocusedFramerateRedraw = newUnfocusedFramerateRedraw;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withClearColor (std::optional<Color> newClearColor) noexcept
 {
     clearColor = newClearColor;

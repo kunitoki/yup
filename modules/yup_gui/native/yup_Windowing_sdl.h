@@ -118,6 +118,7 @@ public:
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
     float getDesiredFrameRate() const override;
+    void setDesiredFrameRate (float newFrameRate) override;
 
     //==============================================================================
     void setOpacity (float opacity) override;
@@ -228,6 +229,8 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    void updateEffectiveFrameRate (bool hasFocus);
+
     bool startRenderThread();
     void startRendering();
     void stopRendering();
@@ -292,7 +295,9 @@ private:
     ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
     CriticalSection& glContextLock { contextGuard->lock };
 
-    float desiredFrameRate = 60.0f;
+    std::atomic<float> desiredFrameRate = 60.0f;
+    std::optional<float> unfocusedFrameRate;
+    std::atomic<float> effectiveFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     double frameRateStartTimeSeconds = 0.0;
     uint64_t frameRateCounter = 0;

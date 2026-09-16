@@ -43,6 +43,8 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , repaintMode (options.repaintMode)
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
+    , unfocusedFrameRate (options.unfocusedFramerateRedraw)
+    , effectiveFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
     , shouldCaptureMouse (options.flags.test (captureMouse))
@@ -799,7 +801,33 @@ float SDLComponentNative::getCurrentFrameRate() const
 
 float SDLComponentNative::getDesiredFrameRate() const
 {
-    return desiredFrameRate;
+    return desiredFrameRate.load (std::memory_order_relaxed);
+}
+
+void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
+{
+    YUP_ASSERT_MESSAGE_THREAD
+
+    desiredFrameRate.store (jmax (1.0f, newFrameRate), std::memory_order_relaxed);
+
+    updateEffectiveFrameRate (hasNativeKeyboardFocus());
+}
+
+void SDLComponentNative::updateEffectiveFrameRate (bool hasFocus)
+{
+    const auto desired = desiredFrameRate.load (std::memory_order_relaxed);
+
+    const auto effective = (unfocusedFrameRate.has_value() && ! hasFocus)
+                             ? jmin (desired, jmax (1.0f, *unfocusedFrameRate))
+                             : desired;
+
+    if (effectiveFrameRate.exchange (effective, std::memory_order_relaxed) == effective)
+        return;
+
+    if (isTimerRunning())
+        startTimerHz (roundToInt (effective));
+
+    renderEvent.signal();
 }
 
 //==============================================================================
@@ -892,13 +920,22 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
-    const double maxFrameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate));
-
-    double renderCostMs = maxFrameTimeMs * 0.5;
-    double nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
+    double activeFrameRate = 0.0;
+    double maxFrameTimeMs = 0.0;
+    double renderCostMs = 0.0;
+    double nextFrameMs = 0.0;
 
     while (! threadShouldExit())
     {
+        if (const auto rate = jmax (1.0, static_cast<double> (effectiveFrameRate.load (std::memory_order_relaxed)));
+            rate != activeFrameRate)
+        {
+            activeFrameRate = rate;
+            maxFrameTimeMs = 1000.0 / rate;
+            renderCostMs = maxFrameTimeMs * 0.5;
+            nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
+        }
+
         const double budgetMs = jmax (1.0, renderCostMs * 1.15);
 
         renderEvent.wait (jmax (1.0, (nextFrameMs - budgetMs) - yup::Time::getMillisecondCounterHiRes()));
@@ -1291,7 +1328,7 @@ bool SDLComponentNative::startRenderThread()
     // Scheduling in it stays deadline driven, so an audio thread on a shorter period still preempts
     // us. Only done on Apple: elsewhere a realtime thread either needs privileges we cannot assume,
     // or raises the priority of the whole process.
-    const auto frameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate));
+    const auto frameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate.load (std::memory_order_relaxed)));
 
     return startRealtimeThread (RealtimeOptions {}
                                     .withPeriodMs (frameTimeMs)
@@ -1310,15 +1347,19 @@ void SDLComponentNative::startRendering()
     frameRateStartTimeSeconds = lastRenderTimeSeconds;
     frameRateCounter = 0;
 
+    updateEffectiveFrameRate (hasNativeKeyboardFocus());
+
+    const auto timerRateHz = roundToInt (effectiveFrameRate.load (std::memory_order_relaxed));
+
     if constexpr (renderDrivenByTimer)
     {
         if (! isTimerRunning())
-            startTimerHz (desiredFrameRate);
+            startTimerHz (timerRateHz);
     }
     else
     {
         if (! isTimerRunning())
-            startTimerHz (desiredFrameRate);
+            startTimerHz (timerRateHz);
 
         if (! isThreadRunning() && ! startRenderThread())
             startThread (Priority::high);
@@ -2056,6 +2097,9 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleFocusChanged " << String (gotFocus ? "true" : "false") << ", rendering=" << String (isRendering() ? "true" : "false"));
+
+    if (! updateOnlyWhenFocused)
+        updateEffectiveFrameRate (gotFocus);
 
     if (gotFocus)
     {
