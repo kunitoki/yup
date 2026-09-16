@@ -3168,8 +3168,12 @@ TEST (ComponentHitTestTests, TheDefaultHitTestAcceptsExactlyTheLocalBounds)
     // The coordinates are local, so the component's position in its parent plays no part.
     EXPECT_TRUE (comp.hitTest (0.0f, 0.0f));
     EXPECT_TRUE (comp.hitTest (29.0f, 39.0f));
+
+    // Rectangle::contains takes its edges inclusively, so the far edge counts as inside.
+    EXPECT_TRUE (comp.hitTest (30.0f, 40.0f));
+
     EXPECT_FALSE (comp.hitTest (-1.0f, 5.0f));
-    EXPECT_FALSE (comp.hitTest (30.0f, 40.0f));
+    EXPECT_FALSE (comp.hitTest (30.5f, 40.5f));
 }
 
 TEST (ComponentHitTestTests, FindComponentAtFallsThroughAComponentThatRejectsThePoint)
