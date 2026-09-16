@@ -76,6 +76,9 @@ public:
             scd.BufferCount = 2;
             scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
+            if ((GetWindowLongPtrW ((HWND) window, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) != 0)
+                scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+
             VERIFY_OK (d3dFactory->CreateSwapChainForHwnd (device.Get(),
                                                            (HWND) window,
                                                            &scd,

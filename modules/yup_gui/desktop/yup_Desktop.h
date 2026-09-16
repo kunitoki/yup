@@ -145,6 +145,24 @@ public:
     ReferenceCountedObjectPtr<ComponentNative> getNativeComponent (void* userdata) const;
 
     //==============================================================================
+    /** Finds the deepest Component at an absolute screen position, across every native window.
+
+        Walks the registered native windows and asks each one's root Component for the component
+        under the point, converted into that window's coordinates. A window whose root is
+        @a componentToIgnore is skipped, which is how the drag image window excludes itself.
+
+        @note SDL exposes no reliable cross-window stacking order, so when more than one window
+              contains the point this prefers a window that currently holds keyboard focus and
+              otherwise returns the first match, not a strictly topmost one.
+
+        @param screenPosition    The position to hit-test, in absolute screen coordinates.
+        @param componentToIgnore A Component whose native window is skipped, or nullptr.
+
+        @return The deepest Component under the point, or nullptr when no window contains it.
+    */
+    Component* findComponentAt (const Point<float>& screenPosition, Component* componentToIgnore = nullptr) const;
+
+    //==============================================================================
     /** Updates the list of screens. */
     void updateScreens();
 

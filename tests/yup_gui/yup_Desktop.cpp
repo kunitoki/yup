@@ -916,3 +916,29 @@ TEST_F (DesktopTest, GetScreenContainingMouseCursorDoesNotCrash)
     if (desktop->getNumScreens() > 0)
         EXPECT_NE (nullptr, screen);
 }
+
+//==============================================================================
+// Screen Lookup Fallbacks
+//==============================================================================
+
+TEST_F (DesktopTest, GetScreenContainingPointOutsideEveryScreenFallsBackToThePrimary)
+{
+    // A point no display contains: rather than returning null the desktop keeps a screen, so a
+    // caller on any platform can use the result without a null check.
+    auto screen = desktop->getScreenContaining (Point<float> (1.0e7f, 1.0e7f));
+
+    if (desktop->getNumScreens() > 0)
+        EXPECT_EQ (desktop->getPrimaryScreen(), screen);
+    else
+        EXPECT_EQ (nullptr, screen);
+}
+
+TEST_F (DesktopTest, GetScreenContainingRectangleOutsideEveryScreenFallsBackToThePrimary)
+{
+    auto screen = desktop->getScreenContaining (Rectangle<float> (1.0e7f, 1.0e7f, 10.0f, 10.0f));
+
+    if (desktop->getNumScreens() > 0)
+        EXPECT_EQ (desktop->getPrimaryScreen(), screen);
+    else
+        EXPECT_EQ (nullptr, screen);
+}

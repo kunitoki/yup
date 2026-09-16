@@ -126,6 +126,8 @@ public:
 
     GraphicsContext* getGraphicsContext() override { return nullptr; }
 
+    void setGlobalMouseCaptureActive (bool) override {}
+
     Component& getComponent() const { return component; }
 
     Flags getFlags() const { return flags; }
@@ -452,4 +454,79 @@ TEST_F (ComponentNativeRepaintTests, FullRepaintResetsPendingAreas)
 
     EXPECT_EQ (1, native.getRepaintAreas().getNumRectangles());
     EXPECT_TRUE (native.getRepaintAreas().contains (comp.getBounds()));
+}
+
+TEST_F (ComponentNativeRepaintTests, MovingAComponentMarksTheOldAreaAndTheNewOne)
+{
+    auto* native = new StubComponentNative (comp, ComponentNative::defaultFlags);
+
+    yup::ComponentTestHelper<Component>::attachNative (comp, native);
+
+    comp.setVisible (true);
+
+    const auto oldArea = comp.getBoundsRelativeToTopLevelComponent();
+
+    comp.setBounds (160.0f, 120.0f, 30.0f, 40.0f);
+
+    const auto newArea = comp.getBoundsRelativeToTopLevelComponent();
+
+    auto areas = native->getRepaintAreas();
+    EXPECT_TRUE (areas.contains (oldArea));
+    EXPECT_TRUE (areas.contains (newArea));
+}
+
+// ==============================================================================
+// ComponentNative::Options — flags that clear a bit rather than set it
+// ==============================================================================
+
+TEST_F (ComponentNativeOptionsTests, WithTransparentFalseClearsTheFlag)
+{
+    opts.withTransparent (true);
+    opts.withTransparent (false);
+    EXPECT_FALSE (opts.flags.test (ComponentNative::transparentWindow));
+}
+
+TEST_F (ComponentNativeOptionsTests, WithFocusableRestoresFocusability)
+{
+    opts.withFocusable (false);
+    EXPECT_TRUE (opts.flags.test (ComponentNative::nonFocusableWindow));
+
+    opts.withFocusable (true);
+    EXPECT_FALSE (opts.flags.test (ComponentNative::nonFocusableWindow));
+}
+
+TEST_F (ComponentNativeOptionsTests, WithAlwaysOnTopFalseClearsTheFlag)
+{
+    opts.withAlwaysOnTop (true);
+    opts.withAlwaysOnTop (false);
+    EXPECT_FALSE (opts.flags.test (ComponentNative::alwaysOnTopWindow));
+}
+
+// ==============================================================================
+// ComponentNative — base-class contract
+// ==============================================================================
+
+TEST_F (ComponentNativeConstructionTests, BaseAccessorsReturnTheOwnedComponent)
+{
+    auto* native = new StubComponentNative (comp, ComponentNative::defaultFlags);
+
+    // The stub declares its own getComponent(), which hides these; it is the base overloads that a
+    // generic caller - the desktop, the drag manager - actually reaches through a ComponentNative&.
+    ComponentNative& base = *native;
+    const ComponentNative& constBase = *native;
+
+    EXPECT_EQ (&comp, &base.getComponent());
+    EXPECT_EQ (&comp, &constBase.getComponent());
+
+    delete native;
+}
+
+TEST_F (ComponentNativeConstructionTests, RunWithGraphicsContextRunsTheWorkInlineByDefault)
+{
+    StubComponentNative native (comp, ComponentNative::defaultFlags);
+
+    bool ran = false;
+    native.runWithGraphicsContext ([&] { ran = true; });
+
+    EXPECT_TRUE (ran);
 }

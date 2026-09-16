@@ -1119,6 +1119,113 @@ TEST_F (ListBoxTests, ModelDragSourceDescriptionReturnsData)
 }
 
 //==============================================================================
+// Selection Interaction Tests
+//==============================================================================
+
+namespace
+{
+/** Builds a click in the middle of a row, with the modifiers to hold down. */
+MouseEvent makeRowClick (ListBox& listBox, int rowIndex, KeyModifiers modifiers = {})
+{
+    const auto rowBounds = listBox.getRowBounds (rowIndex);
+    const Point<float> centre { rowBounds.getX() + rowBounds.getWidth() * 0.5f,
+                                rowBounds.getY() + rowBounds.getHeight() * 0.5f };
+
+    return MouseEvent (MouseEvent::leftButton, modifiers, centre);
+}
+
+Array<int> rowsOf (const ListBox& listBox)
+{
+    return listBox.getSelectedRows();
+}
+} // namespace
+
+TEST_F (ListBoxTests, PlainClickReplacesTheSelectionInMultipleMode)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 5, 10 }, dontSendNotification);
+
+    listBox->mouseDown (makeRowClick (*listBox, 15));
+
+    // selectRow() only ever adds in multiple mode, so without clearing first this would have
+    // accumulated into { 5, 10, 15 }.
+    EXPECT_EQ (Array<int> ({ 15 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, ShiftClickExtendsARangeFromTheLastPlainClick)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+
+    listBox->mouseDown (makeRowClick (*listBox, 2));
+    EXPECT_EQ (Array<int> ({ 2 }), rowsOf (*listBox));
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::shiftMask)));
+    EXPECT_EQ (Array<int> ({ 2, 3, 4, 5 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, RepeatedShiftClicksKeepTheOriginalAnchor)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+
+    listBox->mouseDown (makeRowClick (*listBox, 2));
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::shiftMask)));
+
+    // A shift-click must not move the anchor, so this shrinks the range back towards row 2 rather
+    // than extending from row 5.
+    listBox->mouseDown (makeRowClick (*listBox, 3, KeyModifiers (KeyModifiers::shiftMask)));
+
+    EXPECT_EQ (Array<int> ({ 2, 3 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, CommandClickTogglesARow)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 2 }, dontSendNotification);
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::commandMask)));
+    EXPECT_EQ (Array<int> ({ 2, 5 }), rowsOf (*listBox));
+
+    listBox->mouseDown (makeRowClick (*listBox, 5, KeyModifiers (KeyModifiers::commandMask)));
+    EXPECT_EQ (Array<int> ({ 2 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, ClickingASelectedRowDefersTheCollapseToMouseUp)
+{
+    listBox->setSelectionMode (ListBox::SelectionMode::multiple);
+    listBox->setSelectedRows ({ 2, 5 }, dontSendNotification);
+
+    // The press may be the start of a drag carrying the whole selection, so nothing collapses yet.
+    listBox->mouseDown (makeRowClick (*listBox, 5));
+    EXPECT_EQ (Array<int> ({ 2, 5 }), rowsOf (*listBox));
+
+    listBox->mouseUp (makeRowClick (*listBox, 5));
+    EXPECT_EQ (Array<int> ({ 5 }), rowsOf (*listBox));
+}
+
+TEST_F (ListBoxTests, DragSourceCanBeDisabled)
+{
+    EXPECT_TRUE (listBox->isDragSourceEnabled());
+
+    listBox->setDragSourceEnabled (false);
+    EXPECT_FALSE (listBox->isDragSourceEnabled());
+
+    listBox->setDragSourceEnabled (true);
+    EXPECT_TRUE (listBox->isDragSourceEnabled());
+}
+
+TEST_F (ListBoxTests, DefaultDragSourceComponentCarriesTheSelectionCount)
+{
+    auto dragImage = listBox->createDragSourceComponent ({ 2, 5, 7 });
+
+    ASSERT_NE (nullptr, dragImage);
+
+    // The drag image becomes the whole of the ghost window, so it has to be sized by whoever
+    // creates it.
+    EXPECT_GT (dragImage->getWidth(), 0.0f);
+    EXPECT_GT (dragImage->getHeight(), 0.0f);
+}
+
+//==============================================================================
 // Paint Tests
 //==============================================================================
 
@@ -1242,4 +1349,116 @@ TEST_F (ListBoxTests, RefreshComponentForRowDefaultReturnsExisting)
 
     auto* refreshed = model.refreshComponentForRow (0, nullptr);
     EXPECT_EQ (nullptr, refreshed);
+}
+
+//==============================================================================
+// ListBoxModel — the hooks a text-only model does not override
+//==============================================================================
+
+namespace
+{
+
+/** The barest model that compiles: only getNumRows() is pure virtual, so everything else here is
+    the inherited default. */
+class BareListBoxModel : public ListBoxModel
+{
+public:
+    int getNumRows() override { return 0; }
+};
+
+} // namespace
+
+TEST (ListBoxModelTests, TheInheritedDefaultsAreInert)
+{
+    BareListBoxModel model;
+
+    EXPECT_EQ (0, model.getRowHeight (0));
+    EXPECT_EQ (0, model.getRowWidth (0));
+    EXPECT_EQ (nullptr, model.refreshComponentForRow (0, nullptr));
+    EXPECT_EQ (String(), model.getRowText (0));
+    EXPECT_FALSE (model.getRowIcon (0).isValid());
+
+    Array<int> selection;
+    selection.add (0);
+
+    // A model that offers nothing to drag gets an empty var.
+    EXPECT_TRUE (model.getDragSourceDescription (selection).isVoid());
+
+    // Nothing to notify - and notifying anyway is safe.
+    const MouseEvent event;
+    model.selectedRowsChanged (selection);
+    model.rowClicked (0, event);
+    model.rowDoubleClicked (0, event);
+    model.returnKeyPressed (0);
+    model.deleteKeyPressed (selection);
+
+    GraphicsContext::Options opts;
+    opts.allowHeadlessRendering = true;
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+    ASSERT_NE (nullptr, context);
+
+    auto renderer = context->makeRenderer (16, 16);
+    ASSERT_NE (nullptr, renderer);
+
+    Graphics g (*context, *renderer, 1.0f);
+
+    // The default paints nothing at all, which is what a text-only list relies on.
+    model.paintListBoxItem (0, g, Rectangle<float> (0.0f, 0.0f, 10.0f, 10.0f), false);
+}
+
+//==============================================================================
+// Scrolling
+//==============================================================================
+
+TEST_F (ListBoxTests, BringingAnOffscreenRowIntoViewScrollsTheList)
+{
+    // 20 rows of 50pt is 1000pt of content inside a 400pt viewport, so the list has room to scroll.
+    listBox->setRowHeight (50);
+
+    EXPECT_EQ (0, listBox->getVisibleRowRange().getStart());
+
+    // Row 19 sits below the fold, so bringing it into view has to pull the offset down.
+    listBox->scrollToEnsureRowIsVisible (19);
+
+    const auto afterScrolling = listBox->getVisibleRowRange().getStart();
+    EXPECT_GT (afterScrolling, 0);
+    EXPECT_TRUE (listBox->getVisibleRowRange().contains (19));
+
+    // It is on screen now, so asking again must leave the view exactly where it is.
+    listBox->scrollToEnsureRowIsVisible (19);
+    EXPECT_EQ (afterScrolling, listBox->getVisibleRowRange().getStart());
+
+    // A row above the fold moves the offset back the other way.
+    listBox->scrollToEnsureRowIsVisible (0);
+    EXPECT_EQ (0, listBox->getVisibleRowRange().getStart());
+}
+
+TEST_F (ListBoxTests, WheelScrollingMovesTheViewAndClampsAtTheTop)
+{
+    // 20 rows of 50pt is 1000pt of content inside a 400pt viewport, so there is somewhere to go.
+    listBox->setRowHeight (50);
+
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), Point<float> (10.0f, 10.0f));
+
+    // Which way a notch scrolls follows the platform's wheel convention, so find the direction that
+    // moves away from the top and drive that one.
+    float awayFromTop = -10000.0f;
+    listBox->mouseWheel (event, MouseWheelData (0.0f, awayFromTop));
+
+    if (listBox->getVisibleRowRange().getStart() == 0)
+    {
+        awayFromTop = 10000.0f;
+        listBox->mouseWheel (event, MouseWheelData (0.0f, awayFromTop));
+    }
+
+    EXPECT_GT (listBox->getVisibleRowRange().getStart(), 0);
+
+    // A notch the other way comes straight back to the top rather than running off it.
+    listBox->mouseWheel (event, MouseWheelData (0.0f, -awayFromTop));
+    EXPECT_EQ (0, listBox->getVisibleRowRange().getStart());
+
+    // Once it is there, another notch the same way has nothing left to move.
+    listBox->mouseWheel (event, MouseWheelData (0.0f, -awayFromTop));
+    EXPECT_EQ (0, listBox->getVisibleRowRange().getStart());
 }

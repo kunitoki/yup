@@ -29,6 +29,7 @@
     direction (forward / reverse / ping-pong), speed, and a scrub slider.
 */
 class LottieDemo : public yup::Component
+    , public yup::DragAndDropTarget
 {
 public:
     LottieDemo()
@@ -213,9 +214,9 @@ public:
         }
     }
 
-    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
     {
-        for (const auto& file : data.getFiles())
+        for (const auto& file : details.data.getFiles())
         {
             if (isSupportedFile (file))
                 return true;
@@ -224,9 +225,9 @@ public:
         return false;
     }
 
-    bool itemsDropped (const yup::Point<float>& position, const yup::DragAndDropData& data) override
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
     {
-        for (const auto& file : data.getFiles())
+        for (const auto& file : details.data.getFiles())
         {
             if (isSupportedFile (file))
             {

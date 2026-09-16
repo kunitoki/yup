@@ -7,10 +7,10 @@ import pytest
 import yup
 
 """
-A Python class that derives from two bound YUP types (`class X(yup.Component, yup.Timer)`, the
-direct translation of the JUCE idiom) used to corrupt memory on destruction: the instance is
-torn down through pybind11's multiple-inheritance value_and_holder layout, and the dealloc walk
-reaches `~PyComponent()` with a stale `this` and segfaults.
+A Python class that derives from two bound YUP types (`class X(yup.Component, yup.Timer)`) used
+to corrupt memory on destruction: the instance is torn down through pybind11's multiple-inheritance
+value_and_holder layout, and the dealloc walk reaches `~PyComponent()` with a stale `this` and
+segfaults.
 
 The pattern is exercised in a child interpreter on purpose - the failure mode is a signal, not an
 exception, so running it in-process would take the whole suite down with it. Each test therefore
