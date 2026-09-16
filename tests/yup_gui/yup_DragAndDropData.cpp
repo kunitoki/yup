@@ -260,3 +260,33 @@ TEST (DragAndDropDataTests, ImageRoundTripsThroughPng)
     EXPECT_EQ (decoded.getHeight(), 3);
 }
 #endif
+
+// =============================================================================
+// Edge cases of the fluent builders
+// =============================================================================
+
+TEST (DragAndDropDataTests, WithImageIgnoresAnInvalidImage)
+{
+    // There is nothing to encode, so the payload comes back untouched rather than gaining an
+    // empty PNG entry that would claim the drag carries an image.
+    EXPECT_TRUE (DragAndDropData{}.withImage (Image()).isEmpty());
+}
+
+TEST (DragAndDropDataTests, WithMimeDataAcceptsAClipboardEntry)
+{
+    const String payload ("clipboard-payload");
+    const auto bytes = MemoryBlock (payload.toRawUTF8(), payload.getNumBytesAsUTF8());
+
+    auto data = DragAndDropData{}.withMimeData (ClipboardData ("application/x-yup-clipboard", bytes));
+
+    EXPECT_TRUE (data.hasMimeData ("application/x-yup-clipboard"));
+    EXPECT_EQ (bytes, data.getMimeData ("application/x-yup-clipboard"));
+}
+
+TEST (DragAndDropDataTests, GetMimeDataReturnsAnEmptyBlockForAnUnknownType)
+{
+    auto data = DragAndDropData{}.withText ("hello");
+
+    // Asking for something the payload does not carry is not an error, it is simply empty.
+    EXPECT_EQ (0u, data.getMimeData ("application/x-absent").getSize());
+}

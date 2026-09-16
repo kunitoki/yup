@@ -609,3 +609,58 @@ TEST (MouseEventTests, EqualitySameTouchState)
     EXPECT_TRUE (a == b);
     EXPECT_FALSE (a != b);
 }
+
+//==============================================================================
+// Relative Positions
+//==============================================================================
+
+namespace
+{
+
+/** A two-level tree is enough: the walk subtracts the offset of the target component and of every
+    ancestor below the top-level one. */
+class MouseEventRelativePositionTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        parent.setBounds (10.0f, 20.0f, 100.0f, 100.0f);
+
+        child.setBounds (5.0f, 6.0f, 50.0f, 50.0f);
+        parent.addAndMakeVisible (child);
+    }
+
+    Component parent;
+    Component child;
+};
+
+} // namespace
+
+TEST_F (MouseEventRelativePositionTests, RelativePositionWalksUpToTheTopLevelComponent)
+{
+    const auto event = MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (30.0f, 40.0f));
+
+    const auto relative = event.withRelativePositionTo (&child);
+
+    // A position in the parent's coordinates becomes child-local once the child's offset comes off it.
+    EXPECT_EQ (Point<float> (25.0f, 34.0f), relative.getPosition());
+    EXPECT_EQ (static_cast<Component*> (&child), relative.getSourceComponent());
+}
+
+TEST_F (MouseEventRelativePositionTests, RelativePositionAlsoTranslatesTheLastMouseDownPosition)
+{
+    const auto event = MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (30.0f, 40.0f))
+                           .withLastMouseDownPosition (Point<float> (30.0f, 40.0f));
+
+    const auto relative = event.withRelativePositionTo (&child);
+
+    EXPECT_EQ (Point<float> (25.0f, 34.0f), relative.getPosition());
+    EXPECT_EQ (Point<float> (25.0f, 34.0f), relative.getLastMouseDownPosition());
+}
+
+TEST_F (MouseEventRelativePositionTests, ANullTargetLeavesThePositionAlone)
+{
+    const auto event = MouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (30.0f, 40.0f));
+
+    EXPECT_EQ (event.getPosition(), event.withRelativePositionTo (nullptr).getPosition());
+}

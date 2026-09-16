@@ -521,3 +521,27 @@ TEST_F (DragAndDropTargetTests, StdFunctionCallbacksAreInvoked)
     EXPECT_EQ (dropCount, 1);
     EXPECT_EQ (exitCount, 1);
 }
+
+// =============================================================================
+// The defaults a target inherits
+// =============================================================================
+
+TEST_F (DragAndDropTargetTests, TheInheritedDefaultImplementationsArePassive)
+{
+    // DragAndDropTargetComponent is the nameable "a Component that can receive drops" type used by
+    // factories, containers and the language bindings, with none of the callbacks overridden.
+    DragAndDropTargetComponent plain;
+
+    DragAndDropSourceDetails details;
+    details.data = DragAndDropData().withText ("hello");
+
+    // The inherited defaults: no interest, nothing handled, and the notifications are safe no-ops.
+    EXPECT_FALSE (plain.isInterestedInDragSource (details));
+    EXPECT_FALSE (plain.itemDropped (details));
+
+    plain.itemDragEnter (details);
+    plain.itemDragMove (details);
+    plain.itemDragExit (details);
+
+    EXPECT_EQ (static_cast<Component*> (&plain), plain.getTargetComponent());
+}
