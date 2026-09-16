@@ -26,14 +26,40 @@ namespace yup
 
 namespace {
 
-#if YUP_APPLE
-static void machSpinWaitHint() noexcept
+#if YUP_APPLE || YUP_LINUX || YUP_ANDROID
+static void spinWaitHint() noexcept
 {
-#if YUP_ARM
+#if defined(__aarch64__) || defined(__arm__)
     __asm__ __volatile__ ("isb" ::: "memory");
+#elif defined(__x86_64__) || defined(__i386__)
+    __builtin_ia32_pause();
 #else
-    __asm__ __volatile__ ("pause" ::: "memory");
+    std::atomic_signal_fence (std::memory_order_acq_rel);
 #endif
+}
+#endif
+
+#if YUP_LINUX || YUP_ANDROID
+/*  CLOCK_MONOTONIC in nanoseconds: the clock Time::getMillisecondCounterHiRes() reads, without
+    its truncation to microseconds.
+*/
+static int64 monotonicNanos() noexcept
+{
+    timespec t;
+    clock_gettime (CLOCK_MONOTONIC, &t);
+
+    return (t.tv_sec * (int64) 1000000000) + t.tv_nsec;
+}
+
+static void reduceTimerSlackOnce() noexcept
+{
+    static thread_local bool alreadyReduced = false;
+
+    if (alreadyReduced)
+        return;
+
+    alreadyReduced = true;
+    prctl (PR_SET_TIMERSLACK, 1UL);
 }
 #endif
 
@@ -96,7 +122,32 @@ void WaitableTimer::waitUntil (double milliseconds)
     }
 
     while (Time::getMillisecondCounterHiRes() < milliseconds)
-        machSpinWaitHint();
+        spinWaitHint();
+
+#elif YUP_LINUX || YUP_ANDROID
+    constexpr double sleepFraction = 0.75;
+    constexpr double spinMilliseconds = 0.15;
+
+    reduceTimerSlackOnce();
+
+    for (;;)
+    {
+        const auto remainingMs = milliseconds - Time::getMillisecondCounterHiRes();
+        if (remainingMs <= spinMilliseconds)
+            break;
+
+        const auto targetNs = monotonicNanos() + (int64) (remainingMs * sleepFraction * 1.0e6);
+
+        timespec target;
+        target.tv_sec = (time_t) (targetNs / 1000000000);
+        target.tv_nsec = (long) (targetNs % 1000000000);
+
+        while (clock_nanosleep (CLOCK_MONOTONIC, TIMER_ABSTIME, &target, nullptr) == EINTR)
+            ;
+    }
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds)
+        spinWaitHint();
 
 #else
     waitUntilFallback (milliseconds);
@@ -104,7 +155,7 @@ void WaitableTimer::waitUntil (double milliseconds)
 #endif
 }
 
-#if ! YUP_APPLE
+#if ! (YUP_APPLE || YUP_LINUX || YUP_ANDROID)
 void WaitableTimer::waitUntilFallback (double milliseconds)
 {
     if (const auto nowMs = Time::getMillisecondCounterHiRes(); milliseconds - nowMs > 4.0)

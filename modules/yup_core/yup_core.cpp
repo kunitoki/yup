@@ -165,6 +165,7 @@ extern char** environ;
 #include <unwind.h>
 #include <dlfcn.h>
 #include <android/log.h>
+#include <sys/prctl.h>
 #endif
 
 #undef check

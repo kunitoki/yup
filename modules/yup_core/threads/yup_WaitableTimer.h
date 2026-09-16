@@ -48,6 +48,13 @@ namespace yup
       the deadline by a large fraction of it, while shrinking sleeps make that
       error decay geometrically over a handful of syscalls.
 
+    - On Linux and Android it runs the same cascade on absolute
+      clock_nanosleep() sleeps. It also asks for the smallest possible timer
+      slack on the calling thread the first time that thread waits: Linux
+      applies 50 us of slack to every timer expiry for threads outside the
+      realtime scheduling classes, which an application is not normally
+      allowed to join.
+
     - On other platforms it blocks on a condition variable for the bulk of
       the wait (to avoid burning CPU), then finishes with a short, tiered
       busy-wait against Time::getMillisecondCounterHiRes() for the last few
@@ -85,7 +92,7 @@ private:
     void* handle = nullptr;
 #endif
 
-#if ! YUP_APPLE
+#if ! (YUP_APPLE || YUP_LINUX || YUP_ANDROID)
     void waitUntilFallback (double milliseconds);
 
     std::mutex mutex;
