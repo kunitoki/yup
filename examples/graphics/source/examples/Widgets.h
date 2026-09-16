@@ -63,10 +63,18 @@ private:
         };
         addAndMakeVisible (switchButton.get());
 
-        // Image Button
-        //imageButton = std::make_unique<ImageButton> ("imageButton");
-        // Note: You would set images here with setImages()
-        //addAndMakeVisible (imageButton.get());
+        // Image Button whose clickable area follows the logo's opaque pixels
+        imageButton = std::make_unique<ImageHitTestButton>();
+        imageButton->onClick = [this]
+        {
+            updateStatus ("Image Button clicked on an opaque pixel!");
+        };
+        addAndMakeVisible (imageButton.get());
+
+        imageButtonLabel = std::make_unique<yup::Label> ("imageButtonLabel");
+        imageButtonLabel->setText ("Image Button: only the logo's opaque pixels are clickable",
+                                   yup::dontSendNotification);
+        addAndMakeVisible (imageButtonLabel.get());
 
         // Labels
         titleLabel = std::make_unique<yup::Label> ("titleLabel");
@@ -182,7 +190,6 @@ private:
         textButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
         toggleButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + buttonWidth + spacing), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
         switchButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + 2 * (buttonWidth + spacing)), static_cast<float> (y), 80.0f, static_cast<float> (componentHeight)));
-        //imageButton->setBounds (yup::Rectangle<float> (static_cast<float>(margin + 3 * (buttonWidth + spacing)), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
         y += componentHeight + spacing * 2;
 
         // Input widgets
@@ -194,9 +201,16 @@ private:
         textEditor->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 100.0f));
         y += 110;
 
-        // Slider
-        slider->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth / 2), static_cast<float> (inputWidth / 2)));
-        y += static_cast<int> (inputWidth / 2) + spacing * 2;
+        // Slider, and the image button sharing the row the square slider leaves half empty
+        auto sliderSize = static_cast<int> (inputWidth / 2);
+        slider->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (sliderSize), static_cast<float> (sliderSize)));
+
+        auto imageButtonSize = 110;
+        auto imageButtonX = margin + sliderSize + spacing * 2;
+        imageButton->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y), static_cast<float> (imageButtonSize), static_cast<float> (imageButtonSize)));
+        imageButtonLabel->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y + imageButtonSize + spacing), static_cast<float> (bounds.getWidth() - imageButtonX - margin), 20.0f));
+
+        y += sliderSize + spacing * 2;
 
         // Progress Bar (normal mode)
         progressBarLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
@@ -218,6 +232,100 @@ private:
         g.fillAll();
     }
 
+    //==============================================================================
+    /** A button whose clickable area is the logo's opaque pixels rather than its bounds.
+
+        hitTest() is what decides which component a mouse event reaches, so sampling the
+        image's alpha there makes the transparent parts of the PNG fall through to whatever
+        is behind the button. The hover highlight goes through the same test, so dragging
+        the pointer across a transparent region inside the button's bounds drops it - which
+        is the easiest way to see the irregular hit area.
+    */
+    class ImageHitTestButton final : public yup::Button
+    {
+    public:
+        ImageHitTestButton()
+            : yup::Button ("imageButton")
+        {
+            logo = loadLogo();
+        }
+
+        bool hitTest (float x, float y) override
+        {
+            if (! logo.isValid())
+                return yup::Button::hitTest (x, y);
+
+            const auto pixel = componentToImage ({ x, y });
+            const auto pixelX = static_cast<int> (pixel.getX());
+            const auto pixelY = static_cast<int> (pixel.getY());
+
+            // Letterboxing leaves bands of the component the image does not cover, and
+            // getPixelColor() throws rather than clamping, so the bounds test has to come first.
+            if (! yup::isPositiveAndBelow (pixelX, logo.getWidth())
+                || ! yup::isPositiveAndBelow (pixelY, logo.getHeight()))
+                return false;
+
+            return logo.getPixelColor (pixelX, pixelY).getAlpha() >= minimumHitAlpha;
+        }
+
+        void paintButton (yup::Graphics& g) override
+        {
+            const auto imageArea = getImageArea();
+
+            if (isButtonOver())
+            {
+                g.setFillColor (yup::Colors::white.withAlpha (isButtonDown() ? 0.35f : 0.15f));
+                g.fillRoundedRect (imageArea, 8.0f);
+            }
+
+            if (logo.isValid())
+                g.drawImage (logo, imageArea);
+        }
+
+    private:
+        // The logo is anti-aliased, so a bare test for full transparency would leave a fringe
+        // of barely visible pixels clickable.
+        static constexpr yup::uint8 minimumHitAlpha = 128;
+
+        yup::Rectangle<float> getImageArea() const
+        {
+            if (! logo.isValid())
+                return getLocalBounds();
+
+            const auto bounds = getLocalBounds();
+            const auto scale = yup::jmin (bounds.getWidth() / static_cast<float> (logo.getWidth()),
+                                          bounds.getHeight() / static_cast<float> (logo.getHeight()));
+
+            return bounds.withSizeKeepingCenter (logo.getWidth() * scale, logo.getHeight() * scale);
+        }
+
+        yup::Point<float> componentToImage (const yup::Point<float>& localPoint) const
+        {
+            const auto imageArea = getImageArea();
+            const auto scale = imageArea.getWidth() / static_cast<float> (logo.getWidth());
+
+            return (localPoint - imageArea.getPosition()) / scale;
+        }
+
+        static yup::Image loadLogo()
+        {
+            const auto file = getAssetPath ("data/logo.png");
+
+            if (! file.existsAsFile())
+                return {};
+
+            yup::ImageFormatManager formatManager;
+            formatManager.registerDefaultFormats();
+
+            auto reader = formatManager.createReaderFor (file);
+
+            return reader != nullptr ? reader->readImage() : yup::Image();
+        }
+
+        yup::Image logo;
+    };
+
+    //==============================================================================
     // Custom ComboBox to handle selection changes
     class CustomComboBox : public yup::ComboBox
     {
@@ -243,7 +351,8 @@ private:
     std::unique_ptr<yup::TextButton> textButton;
     std::unique_ptr<yup::ToggleButton> toggleButton;
     std::unique_ptr<yup::SwitchButton> switchButton;
-    //std::unique_ptr<yup::ImageButton> imageButton;
+    std::unique_ptr<ImageHitTestButton> imageButton;
+    std::unique_ptr<yup::Label> imageButtonLabel;
     std::unique_ptr<yup::Label> titleLabel;
     std::unique_ptr<yup::Label> statusLabel;
     std::unique_ptr<CustomComboBox> comboBox;
