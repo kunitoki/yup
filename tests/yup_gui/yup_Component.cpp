@@ -122,6 +122,8 @@ public:
 
     float getDesiredFrameRate() const override { return 60.0f; }
 
+    void setDesiredFrameRate (float) override {}
+
     void* getNativeHandle() const override { return nullptr; }
 
     rive::Factory* getFactory() override { return nullptr; }

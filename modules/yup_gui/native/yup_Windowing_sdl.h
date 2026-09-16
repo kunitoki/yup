@@ -28,12 +28,6 @@ class SDLComponentNative final
     , public Timer
     , public Thread
 {
-#if YUP_EMSCRIPTEN
-    static constexpr bool renderDrivenByTimer = true;
-#else
-    static constexpr bool renderDrivenByTimer = false;
-#endif
-
     static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
 
     struct TouchFinger
@@ -231,6 +225,16 @@ private:
 
     void updateEffectiveFrameRate (bool hasFocus);
 
+#if YUP_EMSCRIPTEN
+    struct AnimationFrameLoop;
+
+    static EM_BOOL animationFrameCallback (double timestampMs, void* userData);
+
+    void startAnimationFrameLoop();
+    void stopAnimationFrameLoop();
+    void renderAnimationFrame (double timestampMs);
+#endif
+
     bool startRenderThread();
     void startRendering();
     void stopRendering();
@@ -294,6 +298,13 @@ private:
 
     ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
     CriticalSection& glContextLock { contextGuard->lock };
+
+#if YUP_EMSCRIPTEN
+    AnimationFrameLoop* activeAnimationFrameLoop = nullptr;
+    double lastAnimationFrameMs = 0.0;
+    double displayFrameMs = 1000.0 / 60.0;
+    int animationFrameCounter = 0;
+#endif
 
     std::atomic<float> desiredFrameRate = 60.0f;
     std::optional<float> unfocusedFrameRate;

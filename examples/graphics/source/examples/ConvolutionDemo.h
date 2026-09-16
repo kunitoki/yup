@@ -77,7 +77,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColour (yup::Color (0xff404040));
+        g.setFillColor (yup::Color (0xff404040));
         g.fillAll();
     }
 
