@@ -79,8 +79,12 @@ public:
     MOCK_METHOD (void, userTriedToCloseWindow, (), (override));
     MOCK_METHOD (void, focusGained, (), (override));
     MOCK_METHOD (void, focusLost, (), (override));
+    MOCK_METHOD (void, focusOfChildComponentChanged, (yup::Component*, yup::FocusChangeType), (override));
     MOCK_METHOD (void, parentHierarchyChanged, (), (override));
     MOCK_METHOD (void, childrenChanged, (), (override));
+    MOCK_METHOD (void, childBoundsChanged, (yup::Component*), (override));
+    MOCK_METHOD (void, parentSizeChanged, (), (override));
+    MOCK_METHOD (void, indexInParentChildrenChanged, (int, int), (override));
 
     // Rendering
     MOCK_METHOD (void, paint, (yup::Graphics&), (override));
@@ -100,6 +104,8 @@ public:
     MOCK_METHOD (void, keyDown, (const yup::KeyPress&, const yup::Point<float>&), (override));
     MOCK_METHOD (void, keyUp, (const yup::KeyPress&, const yup::Point<float>&), (override));
     MOCK_METHOD (void, textInput, (const yup::String&), (override));
+    MOCK_METHOD (void, keyStateChanged, (const yup::KeyPress&, bool), (override));
+    MOCK_METHOD (void, modifierKeysChanged, (const yup::KeyModifiers&), (override));
 
     // Display / transform
     MOCK_METHOD (void, contentScaleChanged, (float), (override));

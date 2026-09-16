@@ -25,7 +25,8 @@ namespace yup
 //==============================================================================
 namespace
 {
-// Returns the axis-aligned bounding box of a rectangle mapped through a transform.
+
+/** Returns the axis-aligned bounding box of a rectangle mapped through a transform. */
 Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const AffineTransform& transform)
 {
     const auto x1 = bounds.getX();
@@ -60,6 +61,52 @@ Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const Aff
 
     return { minX, minY, maxX - minX, maxY - minY };
 }
+
+/** Returns the rectangles of @a region that lie inside @a localBounds mapped through @a toTopLevel,
+    rounded to whole pixels.
+
+    The @a region rectangles live in the coordinate space of the top level component, so @a localBounds
+    are mapped through the accumulated transform of the component and its ancestors to obtain the area
+    it really covers there. For untransformed components that mapping is a plain offset, so the
+    intersection reduces to a bounds check.
+
+    The returned list never contains overlapping rectangles, so it can be used directly as a
+    clip region.
+*/
+RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region, const Rectangle<float>& localBounds, const AffineTransform& toTopLevel)
+{
+    const auto clipBounds = getTransformedBounds (localBounds, toTopLevel);
+
+    RectangleList<float> result;
+
+    for (const auto& rect : region.getRectangles())
+    {
+        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
+
+        if (! clipped.isEmpty())
+            result.add (clipped);
+    }
+
+    return result;
+}
+
+/** Clips subsequent drawing to the union of the rectangles in @a region. */
+void setClipRegion (Graphics& g, const RectangleList<float>& region)
+{
+    if (region.getNumRectangles() == 1)
+    {
+        g.setClipPath (region.getRectangles()[0]);
+        return;
+    }
+
+    Path path;
+
+    for (const auto& rect : region.getRectangles())
+        path.addRectangle (rect);
+
+    g.setClipPath (path);
+}
+
 } // namespace
 
 //==============================================================================
@@ -353,10 +400,17 @@ void Component::sendMoved()
 {
     moved();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     componentListeners.call ([this] (ComponentListener& listener)
     {
         listener.componentMoved (*this);
     });
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    sendChildBoundsChangedToParent();
 }
 
 //==============================================================================
@@ -418,12 +472,21 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 
     auto bailOutChecker = BailOutChecker (this);
 
+    suppressChildBoundsChanged = true;
+
     sendResized();
 
     if (bailOutChecker.shouldBailOut())
         return;
 
     sendMoved();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    suppressChildBoundsChanged = false;
+
+    sendChildBoundsChangedToParent();
 }
 
 Rectangle<float> Component::getBounds() const
@@ -483,11 +546,40 @@ void Component::sendResized()
 {
     resized();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     componentListeners.call ([this] (ComponentListener& listener)
     {
         listener.componentResized (*this);
     });
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (int index = children.size(); --index >= 0;)
+    {
+        children.getUnchecked (index)->parentSizeChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        index = jmin (index, children.size());
+    }
+
+    sendChildBoundsChangedToParent();
 }
+
+void Component::sendChildBoundsChangedToParent()
+{
+    if (suppressChildBoundsChanged || parentComponent == nullptr)
+        return;
+
+    parentComponent->childBoundsChanged (this);
+}
+
+void Component::parentSizeChanged() {}
+
+void Component::childBoundsChanged ([[maybe_unused]] Component* child) {}
 
 //==============================================================================
 
@@ -828,6 +920,14 @@ void Component::addChildComponent (Component* component, int index)
 
             auto bailOutChecker = BailOutChecker (this);
 
+            if (const int newIndex = children.indexOf (component); newIndex != currentIndex)
+            {
+                component->indexInParentChildrenChanged (currentIndex, newIndex);
+
+                if (bailOutChecker.shouldBailOut())
+                    return;
+            }
+
             component->internalHierarchyChanged();
 
             if (bailOutChecker.shouldBailOut())
@@ -946,6 +1046,8 @@ void Component::parentHierarchyChanged() {}
 
 void Component::childrenChanged() {}
 
+void Component::indexInParentChildrenChanged ([[maybe_unused]] int oldIndex, [[maybe_unused]] int newIndex) {}
+
 //==============================================================================
 
 int Component::getNumChildComponents() const
@@ -963,9 +1065,14 @@ int Component::getIndexOfChildComponent (Component* component) const
     return children.indexOf (component);
 }
 
+bool Component::hitTest (float x, float y)
+{
+    return getLocalBounds().contains (x, y);
+}
+
 Component* Component::findComponentAt (const Point<float>& p)
 {
-    if (! options.isVisible || ! boundsInParent.withZeroPosition().contains (p))
+    if (! options.isVisible || ! hitTest (p.getX(), p.getY()))
         return nullptr;
 
     for (int index = children.size(); --index >= 0;)
@@ -1038,11 +1145,16 @@ bool Component::getClickingGrabFocus() const
 
 void Component::takeKeyboardFocus()
 {
+    takeKeyboardFocus (FocusChangeType::focusChangedDirectly);
+}
+
+void Component::takeKeyboardFocus (FocusChangeType cause)
+{
     if (! options.wantsKeyboardFocus || ! isEnabled())
         return;
 
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->setFocusedComponent (this);
+        nativeComponent->setFocusedComponent (this, cause);
 }
 
 void Component::leaveKeyboardFocus()
@@ -1069,6 +1181,8 @@ void Component::focusGained() {}
 
 void Component::focusLost() {}
 
+void Component::focusOfChildComponentChanged ([[maybe_unused]] Component* child, [[maybe_unused]] FocusChangeType cause) {}
+
 //==============================================================================
 
 void Component::handleKeyboardFocusFromClick()
@@ -1077,7 +1191,7 @@ void Component::handleKeyboardFocusFromClick()
     {
         if (component->options.wantsKeyboardFocus && ! component->options.clickingDoesNotGrabFocus)
         {
-            component->takeKeyboardFocus();
+            component->takeKeyboardFocus (FocusChangeType::focusChangedByMouseClick);
             return;
         }
     }
@@ -1097,14 +1211,14 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g)
+void Component::paint ([[maybe_unused]] Graphics& g)
 {
     jassert (! isOpaque()); // If your component is opaque, you need to paint it !
 }
 
-void Component::paintOverChildren (Graphics& g) {}
+void Component::paintOverChildren ([[maybe_unused]] Graphics& g) {}
 
-void Component::refreshDisplay (double lastFrameTimeSeconds) {}
+void Component::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds) {}
 
 //==============================================================================
 
@@ -1126,27 +1240,31 @@ bool Component::doesWantChildrenMouseEvents() const
 
 //==============================================================================
 
-void Component::mouseEnter (const MouseEvent& event) {}
+void Component::mouseEnter ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseExit (const MouseEvent& event) {}
+void Component::mouseExit ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseDown (const MouseEvent& event) {}
+void Component::mouseDown ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseMove (const MouseEvent& event) {}
+void Component::mouseMove ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseDrag (const MouseEvent& event) {}
+void Component::mouseDrag ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseUp (const MouseEvent& event) {}
+void Component::mouseUp ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseDoubleClick (const MouseEvent& event) {}
+void Component::mouseDoubleClick ([[maybe_unused]] const MouseEvent& event) {}
 
-void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
+void Component::mouseWheel ([[maybe_unused]] const MouseEvent& event, [[maybe_unused]] const MouseWheelData& wheelData) {}
 
-void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
+void Component::keyDown ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
 
-void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
+void Component::keyUp ([[maybe_unused]] const KeyPress& keys, [[maybe_unused]] const Point<float>& position) {}
 
-void Component::textInput (const String& text) {}
+void Component::textInput ([[maybe_unused]] const String& text) {}
+
+void Component::keyStateChanged ([[maybe_unused]] const KeyPress& key, [[maybe_unused]] bool isDown) {}
+
+void Component::modifierKeysChanged ([[maybe_unused]] const KeyModifiers& modifiers) {}
 
 //==============================================================================
 
@@ -1378,7 +1496,6 @@ void Component::userTriedToCloseWindow() {}
 
 bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
 {
-    // Check only direct children - no recursive hierarchy traversal
     for (int childIndex = children.size(); --childIndex >= 0;)
     {
         auto child = children.getUnchecked (childIndex);
@@ -1416,56 +1533,6 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     if (auto nativeComponent = getNativeComponent())
         nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
 }
-
-//==============================================================================
-
-namespace
-{
-/** Returns the rectangles of @a region that lie inside @a localBounds mapped through @a toTopLevel,
-    rounded to whole pixels.
-
-    The @a region rectangles live in the coordinate space of the top level component, so @a localBounds
-    are mapped through the accumulated transform of the component and its ancestors to obtain the area
-    it really covers there. For untransformed components that mapping is a plain offset, so the
-    intersection reduces to a bounds check.
-
-    The returned list never contains overlapping rectangles, so it can be used directly as a
-    clip region.
-*/
-RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region, const Rectangle<float>& localBounds, const AffineTransform& toTopLevel)
-{
-    const auto clipBounds = getTransformedBounds (localBounds, toTopLevel);
-
-    RectangleList<float> result;
-
-    for (const auto& rect : region.getRectangles())
-    {
-        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
-
-        if (! clipped.isEmpty())
-            result.add (clipped);
-    }
-
-    return result;
-}
-
-/** Clips subsequent drawing to the union of the rectangles in @a region. */
-void setClipRegion (Graphics& g, const RectangleList<float>& region)
-{
-    if (region.getNumRectangles() == 1)
-    {
-        g.setClipPath (region.getRectangles()[0]);
-        return;
-    }
-
-    Path path;
-
-    for (const auto& rect : region.getRectangles())
-        path.addRectangle (rect);
-
-    g.setClipPath (path);
-}
-} // namespace
 
 //==============================================================================
 
@@ -1636,7 +1703,6 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
     if (opacity <= 0.0f)
         return;
 
-    // Effect path: render full subtree offscreen, apply effect, composite
     if (componentEffect != nullptr)
     {
         auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous, std::move (effectOffscreenCanvas));
@@ -1664,7 +1730,6 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         return;
     }
 
-    // Cache path: cache own paint(), children paint on top
     if (options.cachedToTexture)
     {
         if (cachedTextureCanvas == nullptr)
@@ -1707,7 +1772,6 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         return;
     }
 
-    // Normal paint path
     paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
@@ -1920,6 +1984,26 @@ void Component::internalTextInput (const String& text)
 
 //==============================================================================
 
+void Component::internalKeyStateChanged (const KeyPress& keys, bool isDown)
+{
+    if (! isVisible() || ! isEnabled())
+        return;
+
+    keyStateChanged (keys, isDown);
+}
+
+//==============================================================================
+
+void Component::internalModifierKeysChanged (const KeyModifiers& modifiers)
+{
+    if (! isVisible() || ! isEnabled())
+        return;
+
+    modifierKeysChanged (modifiers);
+}
+
+//==============================================================================
+
 void Component::internalResized (int width, int height)
 {
     const auto newBounds = boundsInParent.withSize (Size<int> (width, height).to<float>());
@@ -1954,6 +2038,25 @@ void Component::internalFocusChanged (bool gotFocus)
         focusGained();
     else
         focusLost();
+}
+
+//==============================================================================
+
+void Component::internalFocusOfComponentChanged (FocusChangeType cause)
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    for (auto* ancestor = parentComponent; ancestor != nullptr;)
+    {
+        auto ancestorBailOutChecker = BailOutChecker (ancestor);
+
+        ancestor->focusOfChildComponentChanged (this, cause);
+
+        if (bailOutChecker.shouldBailOut() || ancestorBailOutChecker.shouldBailOut())
+            return;
+
+        ancestor = ancestor->parentComponent;
+    }
 }
 
 //==============================================================================

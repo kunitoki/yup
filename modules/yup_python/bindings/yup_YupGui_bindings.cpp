@@ -414,6 +414,12 @@ void registerYupGuiBindings (py::module_& m)
               "Pushes a moved caret or edited area to the system while text input is active.")
         .def ("isTextInputActive", &TextInputTarget::isTextInputActive);
 
+    // ============================================================================================ yup::FocusChangeType
+
+    py::enum_<FocusChangeType> (m, "FocusChangeType")
+        .value ("focusChangedByMouseClick", FocusChangeType::focusChangedByMouseClick)
+        .value ("focusChangedDirectly", FocusChangeType::focusChangedDirectly);
+
     // ============================================================================================ yup::ComponentNative
 
     py::class_<ComponentNative> classComponentNative (m, "ComponentNative");
@@ -453,7 +459,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isDecorated", &ComponentNative::isDecorated)
         .def ("setOpacity", &ComponentNative::setOpacity)
         .def ("getOpacity", &ComponentNative::getOpacity)
-        .def ("setFocusedComponent", &ComponentNative::setFocusedComponent)
+        .def ("setFocusedComponent", &ComponentNative::setFocusedComponent, "comp"_a, "cause"_a = FocusChangeType::focusChangedDirectly)
         .def ("getFocusedComponent", &ComponentNative::getFocusedComponent)
         .def ("isContinuousRepaintingEnabled", &ComponentNative::isContinuousRepaintingEnabled)
         .def ("enableContinuousRepainting", &ComponentNative::enableContinuousRepainting)
@@ -725,7 +731,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getWantsKeyboardFocus", &Component::getWantsKeyboardFocus)
         .def ("setClickingGrabFocus", &Component::setClickingGrabFocus)
         .def ("getClickingGrabFocus", &Component::getClickingGrabFocus)
-        .def ("takeKeyboardFocus", &Component::takeKeyboardFocus)
+        .def ("takeKeyboardFocus", py::overload_cast<>(&Component::takeKeyboardFocus))
         .def ("leaveKeyboardFocus", &Component::leaveKeyboardFocus)
         .def ("hasKeyboardFocus", &Component::hasKeyboardFocus)
 
@@ -744,6 +750,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getChildComponent", &Component::getChildComponent, py::return_value_policy::reference_internal)
         .def ("getIndexOfChildComponent", &Component::getIndexOfChildComponent)
         .def ("findComponentAt", &Component::findComponentAt, py::return_value_policy::reference_internal)
+        .def ("hitTest", &Component::hitTest, "x"_a, "y"_a)
         .def ("getTopLevelComponent", &Component::getTopLevelComponent, py::return_value_policy::reference_internal)
 
         // Properties

@@ -646,7 +646,7 @@ float SDLComponentNative::getOpacity() const
 
 //==============================================================================
 
-void SDLComponentNative::setFocusedComponent (Component* comp)
+void SDLComponentNative::setFocusedComponent (Component* comp, FocusChangeType cause)
 {
     const auto focusNativeWindowIfNeeded = [&]
     {
@@ -688,10 +688,16 @@ void SDLComponentNative::setFocusedComponent (Component* comp)
         if (previousWantsTextInput && previousComponentWeak.get() != nullptr)
             stopTextInput (*previousComponentWeak.get());
 
+        if (previousComponentWeak.get() != nullptr)
+            previousComponentWeak->internalFocusOfComponentChanged (cause);
+
         return;
     }
 
     lastComponentFocused = comp;
+
+    if (previousComponentWeak.get() != nullptr)
+        previousComponentWeak->internalFocusOfComponentChanged (cause);
 
     // Check if the newly focused component needs text input
     Component* newComponent = lastComponentFocused.get();
@@ -708,7 +714,10 @@ void SDLComponentNative::setFocusedComponent (Component* comp)
         lastComponentFocused->focusGained();
 
         if (! focusBailOut.shouldBailOut())
+        {
             lastComponentFocused->repaint();
+            lastComponentFocused->internalFocusOfComponentChanged (cause);
+        }
     }
 
     focusNativeWindowIfNeeded();
@@ -1438,7 +1447,7 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
 
 void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger)
 {
-    currentKeyModifiers = modifiers;
+    updateKeyModifiers (modifiers);
 
     if (touchFinger != nullptr)
     {
@@ -1507,7 +1516,7 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
 
 void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger, bool wasCanceled)
 {
-    currentKeyModifiers = modifiers;
+    updateKeyModifiers (modifiers);
 
     if (touchFinger != nullptr)
     {
@@ -1818,8 +1827,15 @@ void SDLComponentNative::handleMouseLeave (const Point<float>& position)
 
 void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
 {
-    currentKeyModifiers = keys.getModifiers();
-    keyState.set (keys.getKey(), 1);
+    updateKeyModifiers (keys.getModifiers());
+
+    // SDL repeats a held key, so only the transition from up to down is a state change.
+    if (keyState[keys.getKey()] == 0)
+    {
+        keyState.set (keys.getKey(), 1);
+
+        getKeyboardEventTarget()->internalKeyStateChanged (keys, true);
+    }
 
     // A drag takes the gesture away from the focused component, so it also takes Escape: otherwise
     // the key would go to a component that has nothing to do with the drag.
@@ -1843,13 +1859,34 @@ void SDLComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>
 
 void SDLComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
 {
-    currentKeyModifiers = keys.getModifiers();
-    keyState.set (keys.getKey(), 0);
+    updateKeyModifiers (keys.getModifiers());
+
+    if (keyState[keys.getKey()] != 0)
+    {
+        keyState.set (keys.getKey(), 0);
+
+        getKeyboardEventTarget()->internalKeyStateChanged (keys, false);
+    }
 
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyUp (keys, position); // TODO: remove position
     else
         component.internalKeyUp (keys, position);
+}
+
+Component* SDLComponentNative::getKeyboardEventTarget()
+{
+    return lastComponentFocused != nullptr ? lastComponentFocused.get() : std::addressof (component);
+}
+
+void SDLComponentNative::updateKeyModifiers (KeyModifiers modifiers)
+{
+    if (currentKeyModifiers == modifiers)
+        return;
+
+    currentKeyModifiers = modifiers;
+
+    getKeyboardEventTarget()->internalModifierKeysChanged (modifiers);
 }
 
 void SDLComponentNative::handleTextInput (const String& textInput)
@@ -2058,7 +2095,10 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
             lastComponentFocused->focusGained();
 
             if (! focusBailOut.shouldBailOut())
+            {
                 lastComponentFocused->repaint();
+                lastComponentFocused->internalFocusOfComponentChanged (FocusChangeType::focusChangedDirectly);
+            }
         }
     }
     else
@@ -2070,7 +2110,10 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
             lastComponentFocused->focusLost();
 
             if (! focusBailOut.shouldBailOut())
+            {
                 lastComponentFocused->repaint();
+                lastComponentFocused->internalFocusOfComponentChanged (FocusChangeType::focusChangedDirectly);
+            }
         }
         else if (currentTextInputComponent != nullptr)
         {
@@ -2083,6 +2126,10 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
         lastComponentClicked = nullptr;
         lastMouseDownPosition.reset();
         lastMouseDownTime.reset();
+
+        // A key released while another window has the focus never reaches us, so keeping the
+        // old state would swallow the next press of that key.
+        keyState.clear();
 
         if (updateOnlyWhenFocused)
         {
