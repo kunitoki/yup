@@ -228,6 +228,7 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    bool startRenderThread();
     void startRendering();
     void stopRendering();
     bool isRendering() const;

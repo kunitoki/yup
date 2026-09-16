@@ -80,7 +80,7 @@ public:
     /** Flag to synchronize presentation to the display refresh (vsync). */
     static inline constexpr Flags vsync = Flags::declareValue<vsyncTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
-    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay | vsync;
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Determines how the accumulated dirty rectangles are turned into repaint work.

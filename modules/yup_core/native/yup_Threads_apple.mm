@@ -180,7 +180,12 @@ bool Thread::createNativeThread(Priority priority)
 
         return nullptr; });
 
-    return threadId != nullptr && threadData.started.get_future().get();
+    const auto started = threadId != nullptr && threadData.started.get_future().get();
+
+    if (!started)
+        closeThreadHandle();
+
+    return started;
 }
 
 void Thread::killThread()

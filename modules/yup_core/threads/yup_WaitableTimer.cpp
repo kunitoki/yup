@@ -24,6 +24,23 @@ namespace yup
 
 //==============================================================================
 
+namespace {
+
+#if YUP_APPLE
+static void machSpinWaitHint() noexcept
+{
+#if YUP_ARM
+    __asm__ __volatile__ ("isb" ::: "memory");
+#else
+    __asm__ __volatile__ ("pause" ::: "memory");
+#endif
+}
+#endif
+
+} // namespace
+
+//==============================================================================
+
 WaitableTimer::WaitableTimer()
 {
 #if YUP_WINDOWS
@@ -44,11 +61,11 @@ WaitableTimer::~WaitableTimer()
 
 void WaitableTimer::waitUntil (double milliseconds)
 {
-#if YUP_WINDOWS
     const auto relativeMs = (milliseconds - 1.0) - Time::getMillisecondCounterHiRes();
     if (relativeMs <= 0.0)
         return;
 
+#if YUP_WINDOWS
     LARGE_INTEGER dueTime;
     dueTime.QuadPart = -static_cast<LONGLONG> (relativeMs * 10000.0); // relative, in 100ns units
 
@@ -61,11 +78,33 @@ void WaitableTimer::waitUntil (double milliseconds)
 
         return;
     }
-#endif
 
     waitUntilFallback (milliseconds);
+
+#elif YUP_APPLE
+    constexpr double sleepFraction = 0.75;
+    constexpr double spinMilliseconds = 0.05;
+    const auto ticksPerMillisecond = (double) Time::getHighResolutionTicksPerSecond() / 1000.0;
+
+    for (;;)
+    {
+        const auto remainingMs = milliseconds - Time::getMillisecondCounterHiRes();
+        if (remainingMs <= spinMilliseconds)
+            break;
+
+        mach_wait_until (mach_absolute_time() + (uint64) (remainingMs * sleepFraction * ticksPerMillisecond));
+    }
+
+    while (Time::getMillisecondCounterHiRes() < milliseconds)
+        machSpinWaitHint();
+
+#else
+    waitUntilFallback (milliseconds);
+
+#endif
 }
 
+#if ! YUP_APPLE
 void WaitableTimer::waitUntilFallback (double milliseconds)
 {
     if (const auto nowMs = Time::getMillisecondCounterHiRes(); milliseconds - nowMs > 4.0)
@@ -92,5 +131,6 @@ void WaitableTimer::waitUntilFallback (double milliseconds)
     while (Time::getMillisecondCounterHiRes() < milliseconds)
         std::this_thread::yield();
 }
+#endif
 
 } // namespace yup

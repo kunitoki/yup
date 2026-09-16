@@ -892,24 +892,29 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
-    const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
-    const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
+    const double maxFrameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate));
+
+    double renderCostMs = maxFrameTimeMs * 0.5;
+    double nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
 
     while (! threadShouldExit())
     {
-        const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        const double budgetMs = jmax (1.0, renderCostMs * 1.15);
 
-        renderEvent.wait (jmax (1.0, maxFrameTimeMs - 4.0));
+        renderEvent.wait (jmax (1.0, (nextFrameMs - budgetMs) - yup::Time::getMillisecondCounterHiRes()));
         renderEvent.reset();
 
         if (threadShouldExit())
             break;
 
+        const double renderStartMs = yup::Time::getMillisecondCounterHiRes();
+        bool didPaint = false;
+
         YUP_TRY
         {
             YUP_AUTORELEASEPOOL
             {
-                renderFrame();
+                didPaint = renderFrame();
             }
         }
         YUP_CATCH_EXCEPTION
@@ -917,14 +922,20 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
+        if (didPaint)
+            renderCostMs = renderCostMs * 0.9 + (yup::Time::getMillisecondCounterHiRes() - renderStartMs) * 0.1;
+
         if (vsyncEnabled)
+        {
+            nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
             continue;
+        }
 
-        const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
-        const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
+        if (const auto nowMs = yup::Time::getMillisecondCounterHiRes(); nextFrameMs < nowMs)
+            nextFrameMs = nowMs;
 
-        if (secondsToWait > 0.0)
-            frameTimer.waitUntil (yup::Time::getMillisecondCounterHiRes() + secondsToWait * 1000.0);
+        frameTimer.waitUntil (nextFrameMs);
+        nextFrameMs += maxFrameTimeMs;
     }
 }
 
@@ -1272,6 +1283,25 @@ bool SDLComponentNative::renderFrame()
 
 //==============================================================================
 
+bool SDLComponentNative::startRenderThread()
+{
+#if YUP_APPLE
+    // Outside the Mach time-constraint class the kernel coalesces timer expiries into a window of
+    // roughly 25% of the requested sleep, so frame pacing overshoots whichever primitive waits.
+    // Scheduling in it stays deadline driven, so an audio thread on a shorter period still preempts
+    // us. Only done on Apple: elsewhere a realtime thread either needs privileges we cannot assume,
+    // or raises the priority of the whole process.
+    const auto frameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate));
+
+    return startRealtimeThread (RealtimeOptions {}
+                                    .withPeriodMs (frameTimeMs)
+                                    .withProcessingTimeMs (frameTimeMs * 0.5)
+                                    .withMaximumProcessingTimeMs (frameTimeMs));
+#else
+    return false;
+#endif
+}
+
 void SDLComponentNative::startRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
@@ -1290,7 +1320,7 @@ void SDLComponentNative::startRendering()
         if (! isTimerRunning())
             startTimerHz (desiredFrameRate);
 
-        if (! isThreadRunning())
+        if (! isThreadRunning() && ! startRenderThread())
             startThread (Priority::high);
     }
 
