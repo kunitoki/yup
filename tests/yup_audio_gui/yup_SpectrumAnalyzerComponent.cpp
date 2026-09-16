@@ -227,8 +227,7 @@ TEST_F (SpectrumAnalyzerComponentTests, SetUpdateRate30Hz)
 TEST_F (SpectrumAnalyzerComponentTests, SetUpdateRate60Hz)
 {
     analyzer->setUpdateRate (60);
-    // Due to integer rounding in timer interval calculation, actual rate may vary slightly
-    EXPECT_NEAR (60, analyzer->getUpdateRate(), 5);
+    EXPECT_EQ (60, analyzer->getUpdateRate());
 }
 
 TEST_F (SpectrumAnalyzerComponentTests, SetUpdateRate15Hz)

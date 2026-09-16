@@ -99,6 +99,45 @@ TEST_F (TimerTests, StartTimerHzSetsCorrectInterval)
     t.stopTimer();
 }
 
+TEST_F (TimerTests, StartTimerHzRoundsAnIntervalThatIsNotWholeMilliseconds)
+{
+    struct TestTimer : Timer
+    {
+        void timerCallback() override {}
+    } t;
+
+    t.startTimerHz (60); // 1000 / 60 = 16.667ms, kept as such internally
+    EXPECT_TRUE (t.isTimerRunning());
+    EXPECT_EQ (t.getTimerInterval(), 17);
+    t.stopTimer();
+}
+
+TEST_F (TimerTests, StartTimerHzFasterThanOneKilohertzStillReportsRunning)
+{
+    struct TestTimer : Timer
+    {
+        void timerCallback() override {}
+    } t;
+
+    t.startTimerHz (2000); // 0.5ms, which has no whole millisecond to report
+    EXPECT_TRUE (t.isTimerRunning());
+    EXPECT_EQ (t.getTimerInterval(), 1);
+    t.stopTimer();
+}
+
+TEST_F (TimerTests, StartTimerRoundsIntervalsBelowOneUpToOne)
+{
+    struct TestTimer : Timer
+    {
+        void timerCallback() override {}
+    } t;
+
+    t.startTimer (0);
+    EXPECT_TRUE (t.isTimerRunning());
+    EXPECT_EQ (t.getTimerInterval(), 1);
+    t.stopTimer();
+}
+
 TEST_F (TimerTests, CallPendingTimersSynchronouslyDoesNotCrash)
 {
     struct TestTimer : Timer

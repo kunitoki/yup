@@ -206,9 +206,9 @@ TEST_F (ComponentNativeOptionsTests, WithRenderContinuousFalseDisablesFlag)
     EXPECT_FALSE (opts.flags.test (ComponentNative::renderContinuous));
 }
 
-TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveVSyncEnabled)
+TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveVSyncDisabled)
 {
-    EXPECT_TRUE (opts.flags.test (ComponentNative::vsync));
+    EXPECT_FALSE (opts.flags.test (ComponentNative::vsync));
 }
 
 TEST_F (ComponentNativeOptionsTests, WithVSyncTrueEnablesFlag)

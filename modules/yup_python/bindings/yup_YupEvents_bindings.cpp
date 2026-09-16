@@ -255,6 +255,7 @@ void registerYupEventsBindings (py::module_& m)
         .def ("stopTimer", &Timer::stopTimer)
         .def ("isTimerRunning", &Timer::isTimerRunning)
         .def ("getTimerInterval", &Timer::getTimerInterval)
+        .def ("getTimerFrequencyHz", &Timer::getTimerFrequencyHz)
         .def_static ("callAfterDelay", &Timer::callAfterDelay)
         .def_static ("callPendingTimersSynchronously", &Timer::callPendingTimersSynchronously);
 
