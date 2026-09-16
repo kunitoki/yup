@@ -459,7 +459,16 @@ protected:
 
     DragAndDropManager& manager() const { return *DragAndDropManager::getInstance(); }
 
-    Point<float> overTarget() const { return target.getScreenBounds().getCenter(); }
+    /** A screen position that lands on the target however the platform placed the window.
+
+        Desktop::findComponentAt subtracts the native window's origin before hit-testing the root
+        component, so building the point from that same origin cancels it out exactly. Deriving it
+        from the component's screen bounds instead disagrees whenever the window is placed somewhere
+        other than where it was asked to go - which is what happens under a window manager. */
+    Point<float> overTarget() const
+    {
+        return root.getNativeComponent()->getBounds().getPosition().to<float>() + target.getBounds().getCenter();
+    }
 
     Component root;
     ManagerTestTarget target;
@@ -520,6 +529,8 @@ TEST_F (DragAndDropManagerDropTests, ATargetThatIsNotInterestedLeavesTheDropUnpe
 
     Desktop::getInstance()->handleGlobalMouseUp (screenEventAt (overTarget()));
 
+    // The cursor did resolve to the target - it just declined the payload, so nothing is performed.
+    EXPECT_EQ (1, target.interestQueryCount);
     EXPECT_EQ (0, target.dropCount);
     EXPECT_EQ (DragAndDropAction::none, source.lastPerformed);
     EXPECT_FALSE (manager().isDragging());

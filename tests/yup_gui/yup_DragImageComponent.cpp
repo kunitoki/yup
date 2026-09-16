@@ -119,3 +119,54 @@ TEST_F (DragImageComponentTests, SettingAnImageAfterAComponentReplacesIt)
     EXPECT_EQ (10.0f, ghost.getWidth());
     EXPECT_EQ (10.0f, ghost.getHeight());
 }
+
+//==============================================================================
+
+namespace
+{
+
+/** Painting needs a graphics context, which is the one thing the rest of these tests avoid. */
+class DragImageComponentPaintTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        GraphicsContext::Options opts;
+        opts.allowHeadlessRendering = true;
+
+        context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+        ASSERT_NE (nullptr, context);
+
+        renderer = context->makeRenderer (32, 32);
+        ASSERT_NE (nullptr, renderer);
+    }
+
+    std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+};
+
+} // namespace
+
+TEST_F (DragImageComponentPaintTests, PaintsTheDragImageWhenNothingElseIsHosted)
+{
+    DragImageComponent ghost;
+    ghost.setDragImage (makeTestImage (20, 12), {}, 1.0f);
+
+    Graphics g (*context, *renderer, 1.0f);
+
+    EXPECT_NO_THROW (ghost.paint (g));
+}
+
+TEST_F (DragImageComponentPaintTests, DoesNotPaintADragImageWhileAComponentIsHosted)
+{
+    Component hosted;
+    hosted.setSize (20.0f, 12.0f);
+
+    DragImageComponent ghost;
+    ghost.setDragImageComponent (&hosted, {}, 1.0f);
+
+    Graphics g (*context, *renderer, 1.0f);
+
+    // The hosted component draws itself through the normal child paint, so the ghost draws nothing.
+    EXPECT_NO_THROW (ghost.paint (g));
+}

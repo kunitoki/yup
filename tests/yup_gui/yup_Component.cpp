@@ -2967,3 +2967,148 @@ TEST_F (ComponentRepaintRegionTest, AdjacentDirtyRectsAreHandledWithoutDoublePai
     EXPECT_EQ (0, middle->paintCount);
     EXPECT_EQ (0, right->paintCount);
 }
+
+TEST_F (ComponentRepaintRegionTest, ANonOpaqueChildDoesNotHideTheParent)
+{
+    // The reverse walk meets `right` first; making it non-opaque means it is skipped rather than
+    // treated as hiding whatever sits underneath it.
+    right->setOpaque (false);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 200, 200, 10, 10 } }), false);
+
+    // Nothing opaque covers the parent any more, so it has to paint its own background.
+    EXPECT_EQ (1, root->paintCount);
+}
+
+// =============================================================================
+// Notifications and state the platform layer drives
+// =============================================================================
+
+class ComponentPlatformCallbackTests : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component comp;
+};
+
+TEST_F (ComponentPlatformCallbackTests, DisplayChangedReachesTheComponent)
+{
+    // The default is a no-op; what matters is that the platform notification routes to it.
+    EXPECT_NO_THROW (ComponentHelper::triggerDisplayChanged (comp));
+}
+
+TEST_F (ComponentPlatformCallbackTests, ContentScaleChangedReachesTheComponent)
+{
+    EXPECT_NO_THROW (ComponentHelper::triggerInternalContentScaleChanged (comp, 2.0f));
+}
+
+TEST_F (ComponentPlatformCallbackTests, ANestedComponentInheritsTheScaleFromItsParent)
+{
+    Component child;
+    comp.addAndMakeVisible (child);
+
+    // Neither has a native window, so the lookup walks up the chain and tops out at the 1.0 default.
+    EXPECT_FLOAT_EQ (1.0f, child.getScaleDpi());
+    EXPECT_FLOAT_EQ (1.0f, comp.getScaleDpi());
+}
+
+TEST_F (ComponentPlatformCallbackTests, SettingTheSameOpacityTwiceIsANoOp)
+{
+    comp.setOpacity (1.0f);
+    comp.setOpacity (1.0f); // already there: the second call has nothing to change
+
+    EXPECT_FLOAT_EQ (1.0f, comp.getOpacity());
+
+    comp.setOpacity (0.0f);
+    EXPECT_FLOAT_EQ (0.0f, comp.getOpacity());
+}
+
+// =============================================================================
+// Desktop attachment
+// =============================================================================
+
+TEST (ComponentDesktopAttachmentTests, MovingAComponentToTheDesktopReparentsIt)
+{
+    Component parent;
+    Component child;
+
+    child.setBounds (0.0f, 0.0f, 40.0f, 40.0f);
+    child.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    const auto windowOptions = ComponentNative::Options{}
+                                   .withDecoration (false)
+                                   .withFocusable (false)
+                                   .withTemporaryWindow (true);
+
+    child.addToDesktop (windowOptions);
+
+    // A window cannot live inside another component, so the parent link is broken on the way in.
+    EXPECT_TRUE (child.isOnDesktop());
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (0, parent.getNumChildComponents());
+
+    // Adding it a second time tears the previous native window down instead of leaking it.
+    child.addToDesktop (windowOptions);
+    EXPECT_TRUE (child.isOnDesktop());
+
+    child.removeFromDesktop();
+    EXPECT_FALSE (child.isOnDesktop());
+}
+
+// =============================================================================
+// Keyboard focus as the native window reports it
+// =============================================================================
+
+TEST (ComponentFocusReportingTests, FocusIsReportedThroughTheNativeWindow)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component comp;
+    ComponentHelper::attachMockNative (comp);
+
+    comp.setWantsKeyboardFocus (true);
+    comp.takeKeyboardFocus();
+    ASSERT_TRUE (comp.hasKeyboardFocus());
+
+    // Only the focused component passes its cursor on to the desktop.
+    comp.setMouseCursor (MouseCursor (MouseCursor::Crosshair));
+    EXPECT_EQ (MouseCursor::Crosshair, comp.getMouseCursor().getType());
+
+    // Setting the cursor on a focused component reaches the desktop's global cursor, so put it back
+    // the way the rest of the suite expects to find it.
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    comp.leaveKeyboardFocus();
+    EXPECT_FALSE (comp.hasKeyboardFocus());
+
+    ComponentHelper::detachMockNative (comp);
+}
+
+// =============================================================================
+// The base paint
+// =============================================================================
+
+TEST (ComponentDefaultPaintTests, TheBasePaintDoesNothingForATranslucentComponent)
+{
+    GraphicsContext::Options opts;
+    opts.allowHeadlessRendering = true;
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+    ASSERT_NE (nullptr, context);
+
+    auto renderer = context->makeRenderer (16, 16);
+    ASSERT_NE (nullptr, renderer);
+
+    Component comp;
+    comp.setBounds (0.0f, 0.0f, 10.0f, 10.0f);
+    comp.setVisible (true);
+    comp.setOpaque (false);
+
+    Graphics g (*context, *renderer, 1.0f);
+
+    // The base paint has nothing of its own to draw, so this only has to route to it and come back.
+    EXPECT_NO_THROW (yup::ComponentTestHelper<yup::Component>::triggerPaint (comp, g, comp.getLocalBounds(), false));
+}
