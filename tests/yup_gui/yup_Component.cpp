@@ -81,7 +81,7 @@ public:
 
     float getOpacity() const override { return 1.0f; }
 
-    void setFocusedComponent (Component* component) override
+    void setFocusedComponent (Component* component, FocusChangeType) override
     {
         focusedComponent = component;
     }
@@ -265,6 +265,21 @@ public:
     static void triggerTextInput (Component& comp, const String& text)
     {
         comp.internalTextInput (text);
+    }
+
+    static void triggerKeyStateChanged (Component& comp, const KeyPress& keys, bool isDown)
+    {
+        comp.internalKeyStateChanged (keys, isDown);
+    }
+
+    static void triggerModifierKeysChanged (Component& comp, const KeyModifiers& modifiers)
+    {
+        comp.internalModifierKeysChanged (modifiers);
+    }
+
+    static void triggerFocusOfComponentChanged (Component& comp, FocusChangeType cause)
+    {
+        comp.internalFocusOfComponentChanged (cause);
     }
 
     static void triggerMouseEnter (Component& comp, const MouseEvent& event)
@@ -3115,4 +3130,415 @@ TEST (ComponentDefaultPaintTests, TheBasePaintDoesNothingForATranslucentComponen
 
     // The base paint has nothing of its own to draw, so this only has to route to it and come back.
     EXPECT_NO_THROW (yup::ComponentTestHelper<yup::Component>::triggerPaint (comp, g, comp.getLocalBounds(), false));
+}
+
+// =============================================================================
+// hitTest
+// =============================================================================
+
+namespace
+{
+
+/** Rejects the left half of its bounds, the way a component with a transparent margin would. */
+class RightHalfOnlyComponent : public Component
+{
+public:
+    using Component::Component;
+
+    bool hitTest (float x, float y) override
+    {
+        return getLocalBounds().withTrimmedLeft (getWidth() / 2.0f).contains (x, y);
+    }
+};
+
+/** Claims every point handed to it, including ones outside its own bounds. */
+class AlwaysHitComponent : public Component
+{
+public:
+    using Component::Component;
+
+    bool hitTest (float, float) override { return true; }
+};
+
+} // namespace
+
+TEST (ComponentHitTestTests, TheDefaultHitTestAcceptsExactlyTheLocalBounds)
+{
+    Component comp;
+    comp.setBounds (10.0f, 20.0f, 30.0f, 40.0f);
+
+    // The coordinates are local, so the component's position in its parent plays no part.
+    EXPECT_TRUE (comp.hitTest (0.0f, 0.0f));
+    EXPECT_TRUE (comp.hitTest (29.0f, 39.0f));
+
+    // Rectangle::contains takes its edges inclusively, so the far edge counts as inside.
+    EXPECT_TRUE (comp.hitTest (30.0f, 40.0f));
+
+    EXPECT_FALSE (comp.hitTest (-1.0f, 5.0f));
+    EXPECT_FALSE (comp.hitTest (30.5f, 40.5f));
+}
+
+TEST (ComponentHitTestTests, FindComponentAtFallsThroughAComponentThatRejectsThePoint)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.setVisible (true);
+
+    RightHalfOnlyComponent child;
+    child.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_EQ (&child, parent.findComponentAt (Point<float> (75.0f, 50.0f)));
+    EXPECT_EQ (&parent, parent.findComponentAt (Point<float> (25.0f, 50.0f)));
+}
+
+TEST (ComponentHitTestTests, FindComponentAtReturnsNothingWhenTheRootRejectsThePoint)
+{
+    RightHalfOnlyComponent root;
+    root.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    root.setVisible (true);
+
+    EXPECT_EQ (&root, root.findComponentAt (Point<float> (75.0f, 50.0f)));
+    EXPECT_EQ (nullptr, root.findComponentAt (Point<float> (25.0f, 50.0f)));
+}
+
+TEST (ComponentHitTestTests, AHitTestOverrideCannotClaimPointsOutsideItsOwnBounds)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.setVisible (true);
+
+    AlwaysHitComponent child;
+    child.setBounds (0.0f, 0.0f, 10.0f, 10.0f);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_EQ (&child, parent.findComponentAt (Point<float> (5.0f, 5.0f)));
+
+    // The parent rejects the point on the child's behalf before hitTest is ever consulted.
+    EXPECT_EQ (&parent, parent.findComponentAt (Point<float> (50.0f, 50.0f)));
+}
+
+// =============================================================================
+// childBoundsChanged
+// =============================================================================
+
+TEST (ComponentChildBoundsChangedTests, SetBoundsOnAChildReportsExactlyOneChangeToTheParent)
+{
+    ComponentMock parent;
+    Component child;
+    parent.addChildComponent (child);
+
+    // setBounds moves and resizes in one go, and the parent hears about it once.
+    EXPECT_CALL (parent, childBoundsChanged (&child)).Times (1);
+
+    child.setBounds (5.0f, 5.0f, 20.0f, 20.0f);
+}
+
+TEST (ComponentChildBoundsChangedTests, SetPositionOnAChildReportsAChangeToTheParent)
+{
+    ComponentMock parent;
+    Component child;
+    parent.addChildComponent (child);
+
+    EXPECT_CALL (parent, childBoundsChanged (&child)).Times (1);
+
+    child.setPosition (Point<float> (7.0f, 8.0f));
+}
+
+TEST (ComponentChildBoundsChangedTests, SetSizeOnAChildReportsAChangeToTheParent)
+{
+    ComponentMock parent;
+    Component child;
+    parent.addChildComponent (child);
+
+    EXPECT_CALL (parent, childBoundsChanged (&child)).Times (1);
+
+    child.setSize (Size<float> (12.0f, 14.0f));
+}
+
+TEST (ComponentChildBoundsChangedTests, AParentIsNotToldAboutItsGrandchildren)
+{
+    ComponentMock root;
+    Component middle;
+    Component leaf;
+
+    root.addChildComponent (middle);
+    middle.addChildComponent (leaf);
+
+    EXPECT_CALL (root, childBoundsChanged (_)).Times (0);
+
+    leaf.setBounds (0.0f, 0.0f, 5.0f, 5.0f);
+}
+
+TEST (ComponentChildBoundsChangedTests, AParentlessComponentReportsToNobody)
+{
+    Component orphan;
+
+    EXPECT_NO_THROW (orphan.setBounds (0.0f, 0.0f, 10.0f, 10.0f));
+}
+
+// =============================================================================
+// parentSizeChanged
+// =============================================================================
+
+TEST (ComponentParentSizeChangedTests, ResizingAParentNotifiesItsDirectChildren)
+{
+    Component parent;
+    ComponentMock first;
+    ComponentMock second;
+
+    parent.addChildComponent (first);
+    parent.addChildComponent (second);
+
+    EXPECT_CALL (first, parentSizeChanged()).Times (1);
+    EXPECT_CALL (second, parentSizeChanged()).Times (1);
+
+    parent.setSize (Size<float> (50.0f, 60.0f));
+}
+
+TEST (ComponentParentSizeChangedTests, OnlyDirectChildrenAreNotified)
+{
+    Component root;
+    Component middle;
+    ComponentMock leaf;
+
+    root.addChildComponent (middle);
+    middle.addChildComponent (leaf);
+
+    // middle keeps its own size, so nothing propagates past it.
+    EXPECT_CALL (leaf, parentSizeChanged()).Times (0);
+
+    root.setSize (Size<float> (50.0f, 60.0f));
+}
+
+TEST (ComponentParentSizeChangedTests, MovingAParentDoesNotNotifyItsChildren)
+{
+    Component parent;
+    ComponentMock child;
+    parent.addChildComponent (child);
+
+    EXPECT_CALL (child, parentSizeChanged()).Times (0);
+
+    parent.setPosition (Point<float> (30.0f, 30.0f));
+}
+
+TEST (ComponentParentSizeChangedTests, SetBoundsOnAParentNotifiesItsChildrenOnce)
+{
+    Component parent;
+    ComponentMock child;
+    parent.addChildComponent (child);
+
+    EXPECT_CALL (child, parentSizeChanged()).Times (1);
+
+    parent.setBounds (10.0f, 10.0f, 50.0f, 60.0f);
+}
+
+// =============================================================================
+// indexInParentChildrenChanged
+// =============================================================================
+
+TEST (ComponentIndexInParentChildrenChangedTests, AddingAChildForTheFirstTimeReportsNoIndexChange)
+{
+    Component parent;
+    ComponentMock child;
+
+    EXPECT_CALL (child, indexInParentChildrenChanged (_, _)).Times (0);
+
+    parent.addChildComponent (child);
+}
+
+TEST (ComponentIndexInParentChildrenChangedTests, ToFrontReportsTheOldAndNewIndex)
+{
+    Component parent;
+    ComponentMock first;
+    Component second;
+    Component third;
+
+    parent.addChildComponent (first);
+    parent.addChildComponent (second);
+    parent.addChildComponent (third);
+
+    EXPECT_CALL (first, indexInParentChildrenChanged (0, 2)).Times (1);
+
+    first.toFront (false);
+
+    EXPECT_EQ (2, parent.getIndexOfChildComponent (&first));
+}
+
+TEST (ComponentIndexInParentChildrenChangedTests, ToBackReportsTheOldAndNewIndex)
+{
+    Component parent;
+    Component first;
+    Component second;
+    ComponentMock third;
+
+    parent.addChildComponent (first);
+    parent.addChildComponent (second);
+    parent.addChildComponent (third);
+
+    EXPECT_CALL (third, indexInParentChildrenChanged (2, 0)).Times (1);
+
+    third.toBack();
+
+    EXPECT_EQ (0, parent.getIndexOfChildComponent (&third));
+}
+
+TEST (ComponentIndexInParentChildrenChangedTests, MovingAChildToTheIndexItAlreadyHasReportsNothing)
+{
+    Component parent;
+    Component first;
+    ComponentMock second;
+
+    parent.addChildComponent (first);
+    parent.addChildComponent (second);
+
+    // Already at the front: toFront clamps back onto the index it started from.
+    EXPECT_CALL (second, indexInParentChildrenChanged (_, _)).Times (0);
+
+    second.toFront (false);
+}
+
+TEST (ComponentIndexInParentChildrenChangedTests, TheSiblingsThatShiftAreNotNotified)
+{
+    Component parent;
+    Component first;
+    ComponentMock second;
+
+    parent.addChildComponent (first);
+    parent.addChildComponent (second);
+
+    // second moves from 1 to 0 as a side effect, but only the component that was asked to
+    // move reports a new index.
+    EXPECT_CALL (second, indexInParentChildrenChanged (_, _)).Times (0);
+
+    first.toFront (false);
+
+    EXPECT_EQ (0, parent.getIndexOfChildComponent (&second));
+}
+
+// =============================================================================
+// focusOfChildComponentChanged
+// =============================================================================
+
+TEST (ComponentFocusOfChildComponentChangedTests, EveryAncestorIsNotified)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock root;
+    ComponentMock middle;
+    Component leaf;
+
+    root.addChildComponent (middle);
+    middle.addChildComponent (leaf);
+
+    EXPECT_CALL (root, focusOfChildComponentChanged (&leaf, FocusChangeType::focusChangedByMouseClick)).Times (1);
+    EXPECT_CALL (middle, focusOfChildComponentChanged (&leaf, FocusChangeType::focusChangedByMouseClick)).Times (1);
+
+    ComponentHelper::triggerFocusOfComponentChanged (leaf, FocusChangeType::focusChangedByMouseClick);
+}
+
+TEST (ComponentFocusOfChildComponentChangedTests, TheComponentWhoseFocusChangedIsNotNotified)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component root;
+    ComponentMock leaf;
+    root.addChildComponent (leaf);
+
+    EXPECT_CALL (leaf, focusOfChildComponentChanged (_, _)).Times (0);
+
+    ComponentHelper::triggerFocusOfComponentChanged (leaf, FocusChangeType::focusChangedDirectly);
+}
+
+TEST (ComponentFocusOfChildComponentChangedTests, AParentlessComponentNotifiesNobody)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component orphan;
+
+    EXPECT_NO_THROW (ComponentHelper::triggerFocusOfComponentChanged (orphan, FocusChangeType::focusChangedDirectly));
+}
+
+TEST (ComponentFocusOfChildComponentChangedTests, TheCauseIsPassedThrough)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock root;
+    Component leaf;
+    root.addChildComponent (leaf);
+
+    EXPECT_CALL (root, focusOfChildComponentChanged (&leaf, FocusChangeType::focusChangedDirectly)).Times (1);
+
+    ComponentHelper::triggerFocusOfComponentChanged (leaf, FocusChangeType::focusChangedDirectly);
+}
+
+// =============================================================================
+// keyStateChanged and modifierKeysChanged
+// =============================================================================
+
+TEST (ComponentKeyStateChangedTests, TheKeyAndItsDirectionAreDeliveredToAVisibleEnabledComponent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock comp;
+    comp.setVisible (true);
+
+    const KeyPress key (KeyPress::spaceKey);
+
+    EXPECT_CALL (comp, keyStateChanged (_, true)).Times (1);
+    EXPECT_CALL (comp, keyStateChanged (_, false)).Times (1);
+
+    ComponentHelper::triggerKeyStateChanged (comp, key, true);
+    ComponentHelper::triggerKeyStateChanged (comp, key, false);
+}
+
+TEST (ComponentKeyStateChangedTests, AnInvisibleComponentIsNotNotified)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock comp;
+    comp.setVisible (false);
+
+    EXPECT_CALL (comp, keyStateChanged (_, _)).Times (0);
+
+    ComponentHelper::triggerKeyStateChanged (comp, KeyPress (KeyPress::spaceKey), true);
+}
+
+TEST (ComponentKeyStateChangedTests, ADisabledComponentIsNotNotified)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock comp;
+    comp.setVisible (true);
+    comp.setEnabled (false);
+
+    EXPECT_CALL (comp, keyStateChanged (_, _)).Times (0);
+
+    ComponentHelper::triggerKeyStateChanged (comp, KeyPress (KeyPress::spaceKey), true);
+}
+
+TEST (ComponentModifierKeysChangedTests, TheModifiersAreDeliveredToAVisibleEnabledComponent)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock comp;
+    comp.setVisible (true);
+
+    const KeyModifiers modifiers (KeyModifiers::shiftMask);
+
+    EXPECT_CALL (comp, modifierKeysChanged (modifiers)).Times (1);
+
+    ComponentHelper::triggerModifierKeysChanged (comp, modifiers);
+}
+
+TEST (ComponentModifierKeysChangedTests, AnInvisibleComponentIsNotNotified)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    ComponentMock comp;
+    comp.setVisible (false);
+
+    EXPECT_CALL (comp, modifierKeysChanged (_)).Times (0);
+
+    ComponentHelper::triggerModifierKeysChanged (comp, KeyModifiers (KeyModifiers::shiftMask));
 }

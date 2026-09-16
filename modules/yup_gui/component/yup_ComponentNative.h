@@ -25,6 +25,18 @@ namespace yup
 class Component;
 
 //==============================================================================
+/** Describes what caused the keyboard focus to move.
+
+    @see Component::focusOfChildComponentChanged, ComponentNative::setFocusedComponent
+*/
+enum class FocusChangeType
+{
+    focusChangedByMouseClick, /**< The focus moved because the user clicked on a component. */
+    focusChangedDirectly      /**< The focus was moved programmatically. */
+};
+
+//==============================================================================
+
 /**
     Provides platform-native window and rendering capabilities for Components.
 
@@ -442,9 +454,11 @@ public:
     //==============================================================================
     /** Sets the focused component.
 
-        @param comp The component to focus, or nullptr to clear focus.
+        @param comp  The component to focus, or nullptr to clear focus.
+        @param cause What triggered the focus change, reported to the ancestors of the
+                     components losing and gaining the focus.
     */
-    virtual void setFocusedComponent (Component* comp) = 0;
+    virtual void setFocusedComponent (Component* comp, FocusChangeType cause = FocusChangeType::focusChangedDirectly) = 0;
 
     /** Gets the currently focused component.
 
