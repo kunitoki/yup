@@ -79,24 +79,24 @@ if (YUP_EXPORT_MODULES)
 endif()
 
 # Enable profiling
-if (YUP_ENABLE_PROFILING)
+if (YUP_ENABLE_PROFILING AND NOT YUP_BUILD_WHEEL)
     _yup_message (STATUS "Enabling profiling")
     _yup_fetch_perfetto()
 endif()
 
 # Setup validation tools
-if (YUP_ENABLE_PLUGINVAL)
+if (YUP_ENABLE_PLUGINVAL AND NOT YUP_BUILD_WHEEL)
     _yup_message (STATUS "Setting up pluginval")
     yup_setup_pluginval()
 endif()
 
-if (YUP_ENABLE_CLAP_VALIDATOR)
+if (YUP_ENABLE_CLAP_VALIDATOR AND NOT YUP_BUILD_WHEEL)
     _yup_message (STATUS "Setting up clap-validator")
     yup_setup_clap_validator()
 endif()
 
 # Targets
-if (YUP_BUILD_EXAMPLES)
+if (YUP_BUILD_EXAMPLES AND NOT YUP_BUILD_WHEEL)
     _yup_message (STATUS "Building examples")
     add_subdirectory (examples/console)
     add_subdirectory (examples/app)

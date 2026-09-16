@@ -461,31 +461,6 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, styleChanged);
     }
 
-    bool isInterestedInDrag (const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, isInterestedInDrag, data);
-    }
-
-    bool itemsDropped (const Point<float>& position, const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (bool, Base, itemsDropped, position, data);
-    }
-
-    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragEnter, data, position);
-    }
-
-    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragMove, data, position);
-    }
-
-    void itemDragExit (const DragAndDropData& data) override
-    {
-        PYBIND11_OVERRIDE (void, Base, itemDragExit, data);
-    }
-
     void keyDown (const yup::KeyPress& key, const Point<float>& position) override
     {
         PYBIND11_OVERRIDE (void, Base, keyDown, key, position);
@@ -555,6 +530,65 @@ struct PyComponent : PyMouseListener<Base>
     //{
     //    PYBIND11_OVERRIDE (void, Base, colourChanged);
     //}
+};
+
+// ============================================================================================
+
+template <class Base = yup::DragAndDropTargetComponent>
+struct PyDragAndDropTargetComponent : PyComponent<Base>
+{
+    using PyComponent<Base>::PyComponent;
+
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isInterestedInDragSource, details);
+    }
+
+    void itemDragEnter (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragEnter, details);
+    }
+
+    void itemDragMove (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragMove, details);
+    }
+
+    void itemDragExit (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDragExit, details);
+    }
+
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, itemDropped, details);
+    }
+};
+
+// ============================================================================================
+
+/** Trampoline for the drag source mixin. Unlike DragAndDropTarget, which carries its trampoline on
+    DragAndDropTargetComponent, there is no convenience source component, so the mixin itself has to
+    forward: a Python class deriving from Component and DragAndDropSource gets its virtuals called.
+
+    It derives from pybind11::trampoline_self_life_support directly instead of through a PyComponent
+    chain, which is what keeps the Python wrapper alive while C++ owns the object. The target
+    trampoline inherits that support from PyComponent; this one has nowhere else to get it from, and
+    py::smart_holder rejects a trampoline without it. */
+template <class Base = yup::DragAndDropSource>
+struct PyDragAndDropSource : Base, pybind11::trampoline_self_life_support
+{
+    using Base::Base;
+
+    void dragOperationStarted (const yup::DragAndDropData& data) override
+    {
+        PYBIND11_OVERRIDE (void, Base, dragOperationStarted, data);
+    }
+
+    void dragOperationEnded (const yup::DragAndDropData& data, yup::DragAndDropAction performed) override
+    {
+        PYBIND11_OVERRIDE (void, Base, dragOperationEnded, data, performed);
+    }
 };
 
 // ============================================================================================

@@ -958,7 +958,7 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
     if (progressBar.isIndeterminate())
     {
-        // Indeterminate mode - draw animated diagonal stripes (JUCE-style)
+        // Indeterminate mode - draw animated diagonal stripes
         const auto stripeWidth = bounds.getHeight() * 2.0f;
         const auto halfStripeWidth = stripeWidth * 0.5f;
         // Reverse animation direction (right to left becomes left to right)

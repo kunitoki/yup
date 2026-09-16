@@ -117,6 +117,6 @@ def test_get_interface_broadcast_address_of_a_non_interface_is_null():
 #==================================================================================================
 
 def test_invalid_address_string_yields_a_null_address():
-    # JUCE's parser leaves the address null rather than throwing when the text is not
+    # YUP's parser leaves the address null rather than throwing when the text is not
     # a dotted quad, so this documents the real behaviour instead of a hoped-for one.
     assert yup.IPAddress("not an address").isNull()

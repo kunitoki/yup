@@ -93,6 +93,33 @@ ComponentNative::Options& ComponentNative::Options::withTemporaryWindow (bool sh
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withTransparent (bool shouldBeTransparent) noexcept
+{
+    if (shouldBeTransparent)
+        flags |= transparentWindow;
+    else
+        flags &= ~transparentWindow;
+    return *this;
+}
+
+ComponentNative::Options& ComponentNative::Options::withFocusable (bool shouldBeFocusable) noexcept
+{
+    if (shouldBeFocusable)
+        flags &= ~nonFocusableWindow;
+    else
+        flags |= nonFocusableWindow;
+    return *this;
+}
+
+ComponentNative::Options& ComponentNative::Options::withAlwaysOnTop (bool shouldBeAlwaysOnTop) noexcept
+{
+    if (shouldBeAlwaysOnTop)
+        flags |= alwaysOnTopWindow;
+    else
+        flags &= ~alwaysOnTopWindow;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withGraphicsApi (std::optional<GpuPlatform> newGraphicsApi) noexcept
 {
     graphicsApi = newGraphicsApi;
@@ -145,6 +172,18 @@ ComponentNative::ComponentNative (Component& newComponent, const Flags& newFlags
 
 ComponentNative::~ComponentNative()
 {
+}
+
+//==============================================================================
+
+Component& ComponentNative::getComponent()
+{
+    return component;
+}
+
+const Component& ComponentNative::getComponent() const
+{
+    return component;
 }
 
 } // namespace yup

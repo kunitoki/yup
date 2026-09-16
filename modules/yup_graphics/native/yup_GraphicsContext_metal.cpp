@@ -172,7 +172,13 @@ public:
 
         swapchain = [CAMetalLayer layer];
         swapchain.device = gpu;
+
+#if YUP_MAC
+        swapchain.opaque = nsWindow.opaque;
+#else
         swapchain.opaque = YES;
+#endif
+
         swapchain.framebufferOnly = ! options.readableFramebuffer;
         swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
 #if YUP_MAC

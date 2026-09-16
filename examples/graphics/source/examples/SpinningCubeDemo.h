@@ -58,6 +58,7 @@
     animation with the dropped file.
 */
 class SpinningCubeDemo : public yup::Component
+    , public yup::DragAndDropTarget
 {
 public:
     //==============================================================================
@@ -373,9 +374,9 @@ public:
     }
 
     //==============================================================================
-    bool isInterestedInDrag (const yup::DragAndDropData& data) override
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) override
     {
-        for (const auto& file : data.getFiles())
+        for (const auto& file : details.data.getFiles())
         {
             if (isSupportedLottieFile (file))
                 return true;
@@ -384,9 +385,9 @@ public:
         return false;
     }
 
-    bool itemsDropped (const yup::Point<float>&, const yup::DragAndDropData& data) override
+    bool itemDropped (const yup::DragAndDropSourceDetails& details) override
     {
-        for (const auto& file : data.getFiles())
+        for (const auto& file : details.data.getFiles())
         {
             if (isSupportedLottieFile (file))
                 return loadLottieFile (file);

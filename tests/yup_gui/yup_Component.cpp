@@ -130,6 +130,8 @@ public:
 
     GraphicsContext* getGraphicsContext() override { return nullptr; }
 
+    void setGlobalMouseCaptureActive (bool) override {}
+
 private:
     Component* focusedComponent = nullptr;
 };
@@ -180,6 +182,13 @@ public:
         component.native = new TestComponentNative (component);
     }
 
+    /** Attaches a native the caller built, which the component then owns. */
+    static void attachNative (Component& component, ComponentNative* newNative)
+    {
+        jassert (component.native == nullptr);
+        component.native = newNative;
+    }
+
     static void detachMockNative (Component& component)
     {
         component.native = nullptr;
@@ -199,33 +208,6 @@ public:
                               bool renderContinuous = false)
     {
         comp.internalPaint (g, repaintRegion, renderContinuous);
-    }
-
-    static bool triggerItemsDropped (Component& comp,
-                                     const Point<float>& windowPosition,
-                                     const DragAndDropData& data)
-    {
-        return comp.internalItemsDropped (data, windowPosition);
-    }
-
-    static void triggerItemDragEnter (Component& comp,
-                                      const Point<float>& windowPosition,
-                                      const DragAndDropData& data)
-    {
-        comp.internalItemDragEnter (data, windowPosition);
-    }
-
-    static void triggerItemDragMove (Component& comp,
-                                     const Point<float>& windowPosition,
-                                     const DragAndDropData& data)
-    {
-        comp.internalItemDragMove (data, windowPosition);
-    }
-
-    static void triggerItemDragExit (Component& comp,
-                                     const DragAndDropData& data)
-    {
-        comp.internalItemDragExit (data);
     }
 
     static void triggerInternalResized (Component& comp, int width, int height)
@@ -2503,417 +2485,6 @@ TEST_F (ComponentMockTest, MetricAcceptsZeroAndNegative)
     EXPECT_FLOAT_EQ (negative.value(), -2.5f);
 }
 
-// =============================================================================
-
-namespace
-{
-
-class DragDropComponent : public Component
-{
-public:
-    using Component::Component;
-
-    bool isInterestedInDrag (const DragAndDropData& data) override
-    {
-        ++interestQueryCount;
-        return interested;
-    }
-
-    bool itemsDropped (const Point<float>& position, const DragAndDropData& data) override
-    {
-        ++dropCount;
-        lastDropPosition = position;
-        lastDropData = data;
-        return handlesDrop;
-    }
-
-    void itemDragEnter (const DragAndDropData& data, const Point<float>& position) override
-    {
-        ++dragEnterCount;
-        lastDragEnterPosition = position;
-        lastDragEnterData = data;
-    }
-
-    void itemDragMove (const DragAndDropData& data, const Point<float>& position) override
-    {
-        ++dragMoveCount;
-        lastDragMovePosition = position;
-        lastDragMoveData = data;
-    }
-
-    void itemDragExit (const DragAndDropData& data) override
-    {
-        ++dragExitCount;
-        lastDragExitData = data;
-    }
-
-    bool interested = false;
-    bool handlesDrop = false;
-    int interestQueryCount = 0;
-    int dropCount = 0;
-    int dragEnterCount = 0;
-    int dragMoveCount = 0;
-    int dragExitCount = 0;
-    Point<float> lastDropPosition;
-    DragAndDropData lastDropData;
-    Point<float> lastDragEnterPosition;
-    DragAndDropData lastDragEnterData;
-    Point<float> lastDragMovePosition;
-    DragAndDropData lastDragMoveData;
-    DragAndDropData lastDragExitData;
-};
-
-} // namespace
-
-class ComponentDragDropTest : public ::testing::Test
-{
-protected:
-    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
-
-    void SetUp() override
-    {
-        root = std::make_unique<DragDropComponent> ("root");
-        parent = std::make_unique<DragDropComponent> ("parent");
-        child = std::make_unique<DragDropComponent> ("child");
-
-        root->setBounds (0, 0, 400, 300);
-        parent->setBounds (50, 50, 200, 150);
-        child->setBounds (25, 25, 100, 75);
-
-        root->addChildComponent (*parent);
-        parent->addChildComponent (*child);
-
-        root->setVisible (true);
-        parent->setVisible (true);
-        child->setVisible (true);
-    }
-
-    std::unique_ptr<DragDropComponent> root;
-    std::unique_ptr<DragDropComponent> parent;
-    std::unique_ptr<DragDropComponent> child;
-};
-
-TEST_F (ComponentTest, DefaultDragAndDropCallbacksDoNotHandlePayload)
-{
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_FALSE (child->isInterestedInDrag (data));
-    EXPECT_FALSE (child->itemsDropped ({ 10.0f, 20.0f }, data));
-    EXPECT_NO_FATAL_FAILURE (child->itemDragEnter (data, { 10.0f, 20.0f }));
-    EXPECT_NO_FATAL_FAILURE (child->itemDragMove (data, { 15.0f, 25.0f }));
-    EXPECT_NO_FATAL_FAILURE (child->itemDragExit (data));
-}
-
-TEST_F (ComponentDragDropTest, InterestedTopmostHandlesDrop)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    // Window position (85,85) is inside child (child screen origin = 75,75).
-    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 1);
-    EXPECT_EQ (parent->dropCount, 0);
-    EXPECT_EQ (root->dropCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, InterestedButReturnsFalseBubblesToParent)
-{
-    child->interested = true;
-    child->handlesDrop = false;
-    parent->interested = true;
-    parent->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 1);
-    EXPECT_EQ (parent->dropCount, 1);
-    EXPECT_EQ (root->dropCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, UninterestedComponentSkippedEvenIfItOverridesDrop)
-{
-    child->interested = false;
-    child->handlesDrop = true;
-    parent->interested = true;
-    parent->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 0);
-    EXPECT_EQ (parent->dropCount, 1);
-}
-
-TEST_F (ComponentDragDropTest, DropPositionIsComponentLocal)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    // Window (85,85). Child screen origin = root(0,0)+parent(50,50)+child(25,25) = (75,75).
-    // Local position = (10,10).
-    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
-    EXPECT_FLOAT_EQ (child->lastDropPosition.getX(), 10.0f);
-    EXPECT_FLOAT_EQ (child->lastDropPosition.getY(), 10.0f);
-}
-
-TEST_F (ComponentDragDropTest, DropPositionRecomputedPerAncestor)
-{
-    child->interested = true;
-    child->handlesDrop = false;
-    parent->interested = true;
-    parent->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    // Window (85,85). Parent screen origin = (50,50). Parent-local = (35,35).
-    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
-    EXPECT_FLOAT_EQ (parent->lastDropPosition.getX(), 35.0f);
-    EXPECT_FLOAT_EQ (parent->lastDropPosition.getY(), 35.0f);
-}
-
-TEST_F (ComponentDragDropTest, InvisibleComponentSkipped)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-    child->setVisible (false);
-    parent->interested = true;
-    parent->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 0);
-    EXPECT_EQ (parent->dropCount, 1);
-}
-
-TEST_F (ComponentDragDropTest, DisabledComponentSkipped)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-    child->setEnabled (false);
-    parent->interested = true;
-    parent->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_TRUE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 0);
-    EXPECT_EQ (parent->dropCount, 1);
-}
-
-TEST_F (ComponentDragDropTest, NobodyHandlesReturnsFalse)
-{
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    EXPECT_FALSE (ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data));
-    EXPECT_EQ (child->dropCount, 0);
-    EXPECT_EQ (parent->dropCount, 0);
-    EXPECT_EQ (root->dropCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, FilesOnlyPayloadDelivered)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-
-    Array<File> files;
-    files.add (File ("/tmp/one.txt"));
-    files.add (File ("/tmp/two.txt"));
-    DragAndDropData data = DragAndDropData().withFiles (files);
-
-    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
-    EXPECT_TRUE (child->lastDropData.hasFiles());
-    EXPECT_FALSE (child->lastDropData.hasText());
-    EXPECT_EQ (child->lastDropData.getFiles().size(), 2);
-}
-
-TEST_F (ComponentDragDropTest, TextOnlyPayloadDelivered)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-
-    DragAndDropData data = DragAndDropData().withText ("dropped");
-
-    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
-    EXPECT_FALSE (child->lastDropData.hasFiles());
-    EXPECT_TRUE (child->lastDropData.hasText());
-    EXPECT_EQ (child->lastDropData.getText(), String ("dropped"));
-}
-
-TEST_F (ComponentDragDropTest, MixedPayloadDelivered)
-{
-    child->interested = true;
-    child->handlesDrop = true;
-
-    Array<File> files;
-    files.add (File ("/tmp/one.txt"));
-    DragAndDropData data = DragAndDropData().withFiles (files).withText ("dropped");
-
-    ComponentHelper::triggerItemsDropped (*child, { 85.0f, 85.0f }, data);
-    EXPECT_TRUE (child->lastDropData.hasFiles());
-    EXPECT_TRUE (child->lastDropData.hasText());
-}
-
-// =============================================================================
-
-TEST_F (ComponentDragDropTest, DragEnterCalledWhenInterested)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragEnterCount, 1);
-    EXPECT_EQ (child->dragMoveCount, 0);
-    EXPECT_EQ (child->dragExitCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragEnterPositionIsLocalToComponent)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    // Window position (85,85) maps to child-local (10,10)
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getX(), 10.0f);
-    EXPECT_FLOAT_EQ (child->lastDragEnterPosition.getY(), 10.0f);
-}
-
-TEST_F (ComponentDragDropTest, DragEnterBubblesToParentIfInterested)
-{
-    child->interested = true;
-    parent->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragEnterCount, 1);
-    EXPECT_EQ (parent->dragEnterCount, 1);
-    EXPECT_EQ (root->dragEnterCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragEnterNotCalledWhenNotInterested)
-{
-    child->interested = false;
-    parent->interested = false;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragEnterCount, 0);
-    EXPECT_EQ (parent->dragEnterCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragMoveCalledForSameComponent)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragMoveCount, 1);
-    EXPECT_EQ (child->dragEnterCount, 0);
-    EXPECT_EQ (child->dragExitCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragMoveBubblesToParentIfInterested)
-{
-    child->interested = true;
-    parent->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragMoveCount, 1);
-    EXPECT_EQ (parent->dragMoveCount, 1);
-}
-
-TEST_F (ComponentDragDropTest, DragExitCalledWhenInterested)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragExit (*child, data);
-    EXPECT_EQ (child->dragExitCount, 1);
-    EXPECT_EQ (child->dragEnterCount, 0);
-    EXPECT_EQ (child->dragMoveCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragExitBubblesToParentIfInterested)
-{
-    child->interested = true;
-    parent->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragExit (*child, data);
-    EXPECT_EQ (child->dragExitCount, 1);
-    EXPECT_EQ (parent->dragExitCount, 1);
-}
-
-TEST_F (ComponentDragDropTest, DragEnterRespectsDisabledComponent)
-{
-    child->interested = true;
-    child->setEnabled (false);
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragEnterCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, DragEnterRespectsHiddenComponent)
-{
-    child->interested = true;
-    child->setVisible (false);
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_EQ (child->dragEnterCount, 0);
-}
-
-TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragEnter)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello").withFiles ({ File ("/tmp/a.txt") });
-
-    ComponentHelper::triggerItemDragEnter (*child, { 85.0f, 85.0f }, data);
-    EXPECT_TRUE (child->lastDragEnterData.hasText());
-    EXPECT_EQ (child->lastDragEnterData.getText(), String ("hello"));
-    EXPECT_TRUE (child->lastDragEnterData.hasFiles());
-    EXPECT_EQ (child->lastDragEnterData.getFiles().size(), 1);
-}
-
-TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragMove)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withText ("hello");
-
-    ComponentHelper::triggerItemDragMove (*child, { 85.0f, 85.0f }, data);
-    EXPECT_TRUE (child->lastDragMoveData.hasText());
-    EXPECT_EQ (child->lastDragMoveData.getText(), String ("hello"));
-}
-
-TEST_F (ComponentDragDropTest, PayloadDataDeliveredToDragExit)
-{
-    child->interested = true;
-
-    DragAndDropData data = DragAndDropData().withFiles ({ File ("/tmp/a.txt") });
-
-    ComponentHelper::triggerItemDragExit (*child, data);
-    EXPECT_TRUE (child->lastDragExitData.hasFiles());
-    EXPECT_EQ (child->lastDragExitData.getFiles().size(), 1);
-}
 
 // =============================================================================
 // Coverage: desktop-native delegation, hierarchy no-ops, internal dispatch
@@ -3004,6 +2575,25 @@ TEST_F (ComponentTest, TransformAndCoordinateQueries)
     // getTransformToScreen with a non-identity transform.
     root->setTransform (AffineTransform::translation (5.0f, 7.0f));
     root->getTransformToScreen();
+}
+
+TEST (ComponentScreenPositionTests, ReportsOriginInScreenSpace)
+{
+    Component parent ("parent");
+    parent.setBounds (10.0f, 20.0f, 200.0f, 200.0f);
+
+    Component child ("child");
+    parent.addChildComponent (child);
+    child.setBounds (3.0f, 4.0f, 50.0f, 50.0f);
+
+    // Regression: getScreenPosition() used to call localToScreen (getPosition()),
+    // which adds the component's own offset a second time. It must agree with the
+    // origin of getScreenBounds(), for both a root and a nested component.
+    EXPECT_EQ (parent.getScreenPosition(), parent.getScreenBounds().getPosition());
+    EXPECT_EQ (child.getScreenPosition(), child.getScreenBounds().getPosition());
+
+    EXPECT_EQ (parent.getScreenPosition(), Point<float> (10.0f, 20.0f));
+    EXPECT_EQ (child.getScreenPosition(), Point<float> (13.0f, 24.0f));
 }
 
 TEST_F (ComponentTest, FindColorWalksUpTheHierarchy)
@@ -3190,6 +2780,42 @@ public:
 };
 } // namespace
 
+TEST (ComponentTests, ReparentingDetachesFromThePreviousParent)
+{
+    yup::Component firstParent, secondParent, child;
+
+    firstParent.addAndMakeVisible (child);
+
+    ASSERT_EQ (&firstParent, child.getParentComponent());
+    ASSERT_EQ (1, firstParent.getNumChildComponents());
+
+    // A component can only have one parent. Adding it to another has to detach it from the first,
+    // or that parent keeps painting and laying out a child it no longer owns.
+    secondParent.addAndMakeVisible (child);
+
+    EXPECT_EQ (&secondParent, child.getParentComponent());
+    EXPECT_EQ (0, firstParent.getNumChildComponents());
+    EXPECT_EQ (1, secondParent.getNumChildComponents());
+    EXPECT_EQ (&child, secondParent.getChildComponent (0));
+}
+
+TEST (ComponentTests, ReparentingWithinTheSameParentOnlyReorders)
+{
+    yup::Component parent, firstChild, secondChild;
+
+    parent.addAndMakeVisible (firstChild);
+    parent.addAndMakeVisible (secondChild);
+
+    ASSERT_EQ (2, parent.getNumChildComponents());
+    ASSERT_EQ (&firstChild, parent.getChildComponent (0));
+
+    parent.addAndMakeVisible (secondChild, 0);
+
+    EXPECT_EQ (2, parent.getNumChildComponents());
+    EXPECT_EQ (&secondChild, parent.getChildComponent (0));
+    EXPECT_EQ (&firstChild, parent.getChildComponent (1));
+}
+
 class ComponentRepaintRegionTest : public ::testing::Test
 {
 protected:
@@ -3342,4 +2968,149 @@ TEST_F (ComponentRepaintRegionTest, AdjacentDirtyRectsAreHandledWithoutDoublePai
     EXPECT_EQ (1, left->paintCount);
     EXPECT_EQ (0, middle->paintCount);
     EXPECT_EQ (0, right->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, ANonOpaqueChildDoesNotHideTheParent)
+{
+    // The reverse walk meets `right` first; making it non-opaque means it is skipped rather than
+    // treated as hiding whatever sits underneath it.
+    right->setOpaque (false);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, region ({ { 200, 200, 10, 10 } }), false);
+
+    // Nothing opaque covers the parent any more, so it has to paint its own background.
+    EXPECT_EQ (1, root->paintCount);
+}
+
+// =============================================================================
+// Notifications and state the platform layer drives
+// =============================================================================
+
+class ComponentPlatformCallbackTests : public ::testing::Test
+{
+protected:
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component comp;
+};
+
+TEST_F (ComponentPlatformCallbackTests, DisplayChangedReachesTheComponent)
+{
+    // The default is a no-op; what matters is that the platform notification routes to it.
+    EXPECT_NO_THROW (ComponentHelper::triggerDisplayChanged (comp));
+}
+
+TEST_F (ComponentPlatformCallbackTests, ContentScaleChangedReachesTheComponent)
+{
+    EXPECT_NO_THROW (ComponentHelper::triggerInternalContentScaleChanged (comp, 2.0f));
+}
+
+TEST_F (ComponentPlatformCallbackTests, ANestedComponentInheritsTheScaleFromItsParent)
+{
+    Component child;
+    comp.addAndMakeVisible (child);
+
+    // Neither has a native window, so the lookup walks up the chain and tops out at the 1.0 default.
+    EXPECT_FLOAT_EQ (1.0f, child.getScaleDpi());
+    EXPECT_FLOAT_EQ (1.0f, comp.getScaleDpi());
+}
+
+TEST_F (ComponentPlatformCallbackTests, SettingTheSameOpacityTwiceIsANoOp)
+{
+    comp.setOpacity (1.0f);
+    comp.setOpacity (1.0f); // already there: the second call has nothing to change
+
+    EXPECT_FLOAT_EQ (1.0f, comp.getOpacity());
+
+    comp.setOpacity (0.0f);
+    EXPECT_FLOAT_EQ (0.0f, comp.getOpacity());
+}
+
+// =============================================================================
+// Desktop attachment
+// =============================================================================
+
+TEST (ComponentDesktopAttachmentTests, MovingAComponentToTheDesktopReparentsIt)
+{
+    Component parent;
+    Component child;
+
+    child.setBounds (0.0f, 0.0f, 40.0f, 40.0f);
+    child.setVisible (true);
+    parent.addAndMakeVisible (child);
+
+    const auto windowOptions = ComponentNative::Options{}
+                                   .withDecoration (false)
+                                   .withFocusable (false)
+                                   .withTemporaryWindow (true);
+
+    child.addToDesktop (windowOptions);
+
+    // A window cannot live inside another component, so the parent link is broken on the way in.
+    EXPECT_TRUE (child.isOnDesktop());
+    EXPECT_EQ (nullptr, child.getParentComponent());
+    EXPECT_EQ (0, parent.getNumChildComponents());
+
+    // Adding it a second time tears the previous native window down instead of leaking it.
+    child.addToDesktop (windowOptions);
+    EXPECT_TRUE (child.isOnDesktop());
+
+    child.removeFromDesktop();
+    EXPECT_FALSE (child.isOnDesktop());
+}
+
+// =============================================================================
+// Keyboard focus as the native window reports it
+// =============================================================================
+
+TEST (ComponentFocusReportingTests, FocusIsReportedThroughTheNativeWindow)
+{
+    using ComponentHelper = yup::ComponentTestHelper<yup::Component>;
+
+    Component comp;
+    ComponentHelper::attachMockNative (comp);
+
+    comp.setWantsKeyboardFocus (true);
+    comp.takeKeyboardFocus();
+    ASSERT_TRUE (comp.hasKeyboardFocus());
+
+    // Only the focused component passes its cursor on to the desktop.
+    comp.setMouseCursor (MouseCursor (MouseCursor::Crosshair));
+    EXPECT_EQ (MouseCursor::Crosshair, comp.getMouseCursor().getType());
+
+    // Setting the cursor on a focused component reaches the desktop's global cursor, so put it back
+    // the way the rest of the suite expects to find it.
+    Desktop::getInstance()->setMouseCursor (MouseCursor (MouseCursor::Default));
+
+    comp.leaveKeyboardFocus();
+    EXPECT_FALSE (comp.hasKeyboardFocus());
+
+    ComponentHelper::detachMockNative (comp);
+}
+
+// =============================================================================
+// The base paint
+// =============================================================================
+
+TEST (ComponentDefaultPaintTests, TheBasePaintDoesNothingForATranslucentComponent)
+{
+    GraphicsContext::Options opts;
+    opts.allowHeadlessRendering = true;
+
+    auto context = GraphicsContext::createContext (GpuPlatform::Headless, opts);
+    ASSERT_NE (nullptr, context);
+
+    auto renderer = context->makeRenderer (16, 16);
+    ASSERT_NE (nullptr, renderer);
+
+    Component comp;
+    comp.setBounds (0.0f, 0.0f, 10.0f, 10.0f);
+    comp.setVisible (true);
+    comp.setOpaque (false);
+
+    Graphics g (*context, *renderer, 1.0f);
+
+    // The base paint has nothing of its own to draw, so this only has to route to it and come back.
+    EXPECT_NO_THROW (yup::ComponentTestHelper<yup::Component>::triggerPaint (comp, g, comp.getLocalBounds(), false));
 }

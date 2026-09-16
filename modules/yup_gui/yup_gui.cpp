@@ -108,6 +108,7 @@
 
 #include "native/yup_FileChooser_mac.mm"
 #include "native/yup_Windowing_mac.mm"
+#include "native/yup_NativeDragAndDrop_mac.mm"
 #endif
 
 #if YUP_IOS
@@ -131,6 +132,7 @@
 
 #include "native/yup_FileChooser_linux.cpp"
 #include "native/yup_Windowing_linux.cpp"
+#include "native/yup_NativeDragAndDrop_linux.cpp"
 
 //==============================================================================
 
@@ -148,6 +150,7 @@
 
 #include "native/yup_FileChooser_windows.cpp"
 #include "native/yup_Windowing_windows.cpp"
+#include "native/yup_NativeDragAndDrop_windows.cpp"
 
 //==============================================================================
 
@@ -180,8 +183,13 @@
 #include "mouse/yup_MouseCursor.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
-#include "component/yup_DragAndDropData.cpp"
 #include "component/yup_Component.cpp"
+#include "dragdrop/yup_DragAndDropData.cpp"
+#include "dragdrop/yup_DragAndDropTarget.cpp"
+#include "dragdrop/yup_DragImageComponent.cpp"
+#include "dragdrop/yup_DragAndDropSource.cpp"
+#include "dragdrop/yup_DragAndDropManager.cpp"
+#include "dragdrop/yup_NativeDragAndDrop.cpp"
 #include "menus/yup_PopupMenu.cpp"
 #include "buttons/yup_Button.cpp"
 #include "buttons/yup_TextButton.cpp"

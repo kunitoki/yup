@@ -27,9 +27,9 @@ namespace yup
 /**
     A flexible slider component that supports multiple types and orientations.
 
-    This class provides a comprehensive slider implementation similar to JUCE's Slider,
-    supporting rotary knobs, linear sliders with various orientations, and two-value
-    range sliders. It integrates with the YUP theming system for customizable appearance.
+    This class provides a comprehensive slider implementation similar supporting rotary
+    knobs, linear sliders with various orientations, and two-value range sliders. It
+    integrates with the YUP theming system for customizable appearance.
 
     @see Component, NormalisableRange, ComponentStyle
  */

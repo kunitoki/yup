@@ -22,14 +22,26 @@
 namespace yup
 {
 
-namespace
+//==============================================================================
+namespace detail
 {
+/** Which kind of signal a graph connection carries.
+
+    Deliberately not in the anonymous namespace: the compiled structs below are subobjects of an
+    externally linked class, and an internal-linkage type in one of those is an ODR hazard.
+*/
 enum class GraphSignalType
 {
     audio,
     midi
 };
+} // namespace detail
 
+using GraphSignalType = detail::GraphSignalType;
+
+//==============================================================================
+namespace
+{
 int getTotalAudioChannels (Span<const AudioBus> buses)
 {
     int result = 0;

@@ -39,6 +39,7 @@
     iosSimFrameworks:     CoreMotion
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
+    linuxLibs:            X11
 
   END_YUP_MODULE_DECLARATION
 
@@ -156,8 +157,13 @@
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_ComponentPaintMetrics.h"
 #include "component/yup_ComponentListener.h"
-#include "component/yup_DragAndDropData.h"
 #include "component/yup_Component.h"
+#include "dragdrop/yup_DragAndDropData.h"
+#include "dragdrop/yup_DragAndDropTarget.h"
+#include "dragdrop/yup_NativeDragAndDrop.h"
+#include "dragdrop/yup_DragImageComponent.h"
+#include "dragdrop/yup_DragAndDropSource.h"
+#include "dragdrop/yup_DragAndDropManager.h"
 #include "menus/yup_PopupMenu.h"
 #include "buttons/yup_Button.h"
 #include "buttons/yup_TextButton.h"
