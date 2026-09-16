@@ -128,6 +128,8 @@ public:
 
     void setGlobalMouseCaptureActive (bool) override {}
 
+    void cancelCurrentMouseGesture() override {}
+
     Component& getComponent() const { return component; }
 
     Flags getFlags() const { return flags; }

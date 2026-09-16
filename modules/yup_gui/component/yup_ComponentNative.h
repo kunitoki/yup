@@ -511,6 +511,16 @@ public:
     */
     virtual void setGlobalMouseCaptureActive (bool shouldBeActive) = 0;
 
+    /** Ends the mouse gesture currently in flight, when the platform consumed the button release.
+
+        A native drag session runs its own event loop and swallows the release that ends it, so the
+        window would be left believing the button is still down. This delivers the missing mouse up
+        to the component that was clicked and forgets the gesture.
+
+        Does nothing when no button is down.
+    */
+    virtual void cancelCurrentMouseGesture() = 0;
+
     //==============================================================================
     /** Starts text input for the specified component.
 
