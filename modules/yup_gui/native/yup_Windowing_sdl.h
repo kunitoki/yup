@@ -211,6 +211,7 @@ private:
 
     static bool requestMouseCapture();
     static void releaseMouseCapture();
+    static void pollCapturedMouseState();
     static void triggerPopupDismissalCheck();
     static void dismissPopupsIfNoNativeWindowHasFocus();
     static bool anyNativeWindowHasKeyboardFocus();
