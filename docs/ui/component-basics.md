@@ -153,14 +153,40 @@ Component* hit = parent.findComponentAt (clickPoint);
 
 Return value is the deepest visible child under the point, or `nullptr`.
 
+Each component decides for itself whether a point is inside it, by way of
+`hitTest()`. The default accepts the whole of `getLocalBounds()`; override it to
+carve away the parts that should let events through to whatever is behind them:
+
+```cpp
+bool RoundButton::hitTest (float x, float y) override
+{
+    return getLocalBounds().getCenter().distanceTo ({ x, y }) <= getWidth() / 2.0f;
+}
+```
+
+This is the same test the mouse uses, so a point the override rejects is
+delivered to the component behind instead. An override can only take area away:
+a point outside the component's bounds never reaches it, because its parent
+rejects the point before `hitTest()` is consulted.
+
 ### Lifecycle callbacks
 
 Override these to react to tree changes:
 
 ```cpp
-void parentHierarchyChanged() override; // added to or removed from a parent
-void childrenChanged() override;        // child added or removed
+void parentHierarchyChanged() override;                        // added to or removed from a parent
+void childrenChanged() override;                               // child added or removed
+void childBoundsChanged (Component* child) override;           // a direct child moved or was resized
+void parentSizeChanged() override;                             // this component's parent was resized
+void indexInParentChildrenChanged (int oldI, int newI) override; // this component's z-order changed
 ```
+
+A single `setBounds()` on a child reports one `childBoundsChanged()`, not one
+for the move and one for the resize, so a parent can lay itself out from that
+callback without doing the work twice. `parentSizeChanged()` runs after the
+parent's own `resized()`, so any layout the parent performs is already reflected
+in this component's bounds, and it only reaches direct children — it does not
+propagate down the whole subtree.
 
 ---
 
@@ -257,6 +283,10 @@ void MyComponent::resized() override
 Do **not** call `repaint()` inside `resized()`. `setBounds()` already triggers a
 repaint of the old and new areas.
 ```
+
+To react to a *parent* being resized rather than this component, override
+`parentSizeChanged()`; to react to a *child* changing bounds, override
+`childBoundsChanged()`.
 
 ### Coordinate conversion
 
@@ -426,6 +456,15 @@ comp.raiseBy (1);               // move up by 1 position
 comp.lowerBy (2);               // move down by 2 positions
 ```
 
+A component that changes position in this list is told its old and new index:
+
+```cpp
+void MyComponent::indexInParentChildrenChanged (int oldIndex, int newIndex) override;
+```
+
+Only the component that moved is notified — the siblings that shift to make room
+for it are not.
+
 ---
 
 ## Mouse and keyboard
@@ -566,6 +605,23 @@ void MyTextEditor::focusGained() override { showCaret = true; repaint(); }
 void MyTextEditor::focusLost()   override { showCaret = false; repaint(); }
 ```
 
+A container that needs to know when the focus enters or leaves its subtree
+overrides `focusOfChildComponentChanged()` instead. Every ancestor of the
+component whose focus changed is notified, along with what caused the change:
+
+```cpp
+void MyPanel::focusOfChildComponentChanged (Component* child, FocusChangeType cause) override
+{
+    ignoreUnused (cause); // focusChangedByMouseClick or focusChangedDirectly
+
+    setHighlighted (child->hasKeyboardFocus());
+}
+```
+
+Moving the focus between two components notifies the ancestors of both, so a
+shared ancestor is called twice: once with the component that lost the focus and
+once with the one that gained it.
+
 ### Keyboard input
 
 ```cpp
@@ -573,6 +629,21 @@ virtual void keyDown   (const KeyPress& keys, const Point<float>& pos) override;
 virtual void keyUp     (const KeyPress& keys, const Point<float>& pos) override;
 virtual void textInput (const String& text) override;
 ```
+
+Two lower-level callbacks report input that `keyDown()` may never see:
+
+```cpp
+virtual void keyStateChanged (const KeyPress& key, bool isDown) override;
+virtual void modifierKeysChanged (const KeyModifiers& modifiers) override;
+```
+
+`keyStateChanged()` fires once when a key goes down and once when it comes up,
+including for presses consumed before they reach `keyDown()`, and auto-repeat
+does not retrigger it — which makes it the reliable way to track whether a chord
+key is being held. `modifierKeysChanged()` fires whenever the modifier state
+changes, and modifiers are refreshed by mouse button events as well as key
+events — so a click can report a modifier that changed while the keyboard was
+idle. Plain mouse movement does not refresh them.
 
 ### Mouse listeners (external objects)
 

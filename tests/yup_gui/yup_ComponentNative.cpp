@@ -76,7 +76,7 @@ public:
 
     float getOpacity() const override { return 1.0f; }
 
-    void setFocusedComponent (Component*) override {}
+    void setFocusedComponent (Component*, FocusChangeType) override {}
 
     Component* getFocusedComponent() const override { return nullptr; }
 

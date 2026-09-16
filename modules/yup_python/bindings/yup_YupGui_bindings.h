@@ -395,10 +395,15 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, childrenChanged);
     }
 
-    //bool hitTest (int x, int y) override
-    //{
-    //    PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
-    //}
+    void indexInParentChildrenChanged (int oldIndex, int newIndex) override
+    {
+        PYBIND11_OVERRIDE (void, Base, indexInParentChildrenChanged, oldIndex, newIndex);
+    }
+
+    bool hitTest (float x, float y) override
+    {
+        PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
+    }
 
     //void lookAndFeelChanged() override
     //{
@@ -414,11 +419,6 @@ struct PyComponent : PyMouseListener<Base>
     {
         PYBIND11_OVERRIDE (void, Base, safeAreaChanged);
     }
-
-    //void alphaChanged() override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, alphaChanged);
-    //}
 
     void refreshDisplay (double lastFrameTimeSeconds) override
     {
@@ -476,15 +476,15 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, textInput, text);
     }
 
-    //bool keyStateChanged (bool isDown) override
-    //{
-    //    PYBIND11_OVERRIDE (bool, Base, keyStateChanged, isDown);
-    //}
+    void keyStateChanged (const yup::KeyPress& key, bool isDown) override
+    {
+        PYBIND11_OVERRIDE (void, Base, keyStateChanged, key, isDown);
+    }
 
-    //void modifierKeysChanged (const yup::ModifierKeys& modifiers) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, modifierKeysChanged, modifiers);
-    //}
+    void modifierKeysChanged (const yup::KeyModifiers& modifiers) override
+    {
+        PYBIND11_OVERRIDE (void, Base, modifierKeysChanged, modifiers);
+    }
 
     void focusGained() override
     {
@@ -496,10 +496,10 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, focusLost);
     }
 
-    //void focusOfChildComponentChanged (yup::Component::FocusChangeType cause) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, focusOfChildComponentChanged, cause);
-    //}
+    void focusOfChildComponentChanged (yup::Component* child, yup::FocusChangeType cause) override
+    {
+        PYBIND11_OVERRIDE (void, Base, focusOfChildComponentChanged, child, cause);
+    }
 
     void resized() override
     {
@@ -511,15 +511,15 @@ struct PyComponent : PyMouseListener<Base>
         PYBIND11_OVERRIDE (void, Base, moved);
     }
 
-    //void childBoundsChanged (yup::Component* child) override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, childBoundsChanged, child);
-    //}
+    void childBoundsChanged (yup::Component* child) override
+    {
+        PYBIND11_OVERRIDE (void, Base, childBoundsChanged, child);
+    }
 
-    //void parentSizeChanged() override
-    //{
-    //    PYBIND11_OVERRIDE (void, Base, parentSizeChanged);
-    //}
+    void parentSizeChanged() override
+    {
+        PYBIND11_OVERRIDE (void, Base, parentSizeChanged);
+    }
 
     //void broughtToFront() override
     //{

@@ -359,6 +359,16 @@ public:
      */
     virtual void resized();
 
+    /**
+        Called on each child when the size of this component's parent changes.
+
+        This is called after the parent's resized() has run, so any layout the parent
+        performs from resized() is already reflected in this component's bounds.
+
+        @see resized, childBoundsChanged
+     */
+    virtual void parentSizeChanged();
+
     //==============================================================================
     /**
         Set the bounds of the component.
@@ -858,6 +868,24 @@ public:
      */
     virtual void focusLost();
 
+    /**
+        Called on the ancestors of a component that gained or lost the keyboard focus.
+
+        Every component between the one whose focus changed and the top level component is
+        notified, which lets a container repaint or update itself when the focus enters or
+        leaves its subtree. Moving the focus between two components notifies the ancestors
+        of both, so a shared ancestor is called twice: once with the component that lost
+        the focus and once with the one that gained it. Use hasKeyboardFocus() on the child
+        to tell the two apart.
+
+        @param child The descendant whose focus changed. This is not necessarily a direct
+                     child of this component.
+        @param cause What triggered the focus change.
+
+        @see focusGained, focusLost
+     */
+    virtual void focusOfChildComponentChanged (Component* child, FocusChangeType cause);
+
     //==============================================================================
     /**
         Check if the component has a parent component.
@@ -982,6 +1010,31 @@ public:
     */
     virtual void childrenChanged();
 
+    /** Called on the parent when one of its direct children has moved or been resized.
+
+        A single setBounds() on the child reports one change here even though it moves
+        and resizes the child, so a parent can lay itself out from this callback without
+        doing the work twice.
+
+        @param child The direct child whose bounds changed.
+
+        @see moved, resized, parentSizeChanged
+    */
+    virtual void childBoundsChanged (Component* child);
+
+    /** Called on a child when its index amongst its parent's children changes.
+
+        This is the z-order position reported by getIndexOfChildComponent(), so it changes
+        when toFront(), toBack(), raiseAbove(), lowerBelow(), raiseBy() or lowerBy() are
+        used, or when addChildComponent() is called with a new index for a component that
+        is already a child. Only the moved component is notified: the siblings that shift
+        to make room for it are not.
+
+        @param oldIndex The index the component used to have.
+        @param newIndex The index the component has now.
+    */
+    virtual void indexInParentChildrenChanged (int oldIndex, int newIndex);
+
     //==============================================================================
     /**
         Get the number of child components of the component.
@@ -999,6 +1052,28 @@ public:
         Returns the index of a child component, or -1 if not found.
      */
     int getIndexOfChildComponent (Component* component) const;
+
+    /**
+        Tests whether a point in local coordinates is inside this component.
+
+        This decides which component mouse events are delivered to, so overriding it also
+        overrides hit testing for the mouse: return false for the parts of the component
+        that should let events through to whatever is behind them. Non-rectangular widgets
+        such as rounded buttons or knobs use this to keep their corners transparent to
+        clicks.
+
+        An override can only take area away: a point outside the component's bounds never
+        reaches it, whatever this returns, because the parent rejects the point before
+        asking. The default implementation accepts the whole of getLocalBounds().
+
+        @param x The x coordinate to test, relative to this component's top left.
+        @param y The y coordinate to test, relative to this component's top left.
+
+        @return True if the point counts as being inside this component.
+
+        @see findComponentAt
+     */
+    virtual bool hitTest (float x, float y);
 
     /**
         Find the child component at a given point.
@@ -1175,6 +1250,34 @@ public:
         @param text The text input.
      */
     virtual void textInput (const String& text);
+
+    /**
+        Called when a key is pressed or released, whether or not it produced a keyDown().
+
+        This reports the raw transition of a key between up and down, so it fires once per
+        physical press and once per release, and auto-repeat does not retrigger it. It is
+        also delivered when a key press has been consumed before reaching keyDown(), which
+        makes it the reliable place to track whether a modifier or a chord key is being
+        held.
+
+        @param key    The key that changed state.
+        @param isDown True if the key has just gone down, false if it has just come up.
+
+        @see keyDown, keyUp, modifierKeysChanged
+     */
+    virtual void keyStateChanged (const KeyPress& key, bool isDown);
+
+    /**
+        Called when the state of the modifier keys changes.
+
+        Modifiers are refreshed from mouse button events as well as key events, so this also
+        fires when a click reveals a modifier that changed while the keyboard was idle.
+
+        @param modifiers The modifier keys that are now held down.
+
+        @see keyStateChanged
+     */
+    virtual void modifierKeysChanged (const KeyModifiers& modifiers);
 
     //==============================================================================
 
@@ -1383,9 +1486,12 @@ private:
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
+    void internalKeyStateChanged (const KeyPress& keys, bool isDown);
+    void internalModifierKeysChanged (const KeyModifiers& modifiers);
     void internalResized (int width, int height);
     void internalMoved (int xpos, int ypos);
     void internalFocusChanged (bool gotFocus);
+    void internalFocusOfComponentChanged (FocusChangeType cause);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
     void internalSafeAreaChanged();
@@ -1395,12 +1501,14 @@ private:
     void internalAttachedToNative();
     void internalDetachedFromNative();
 
+    void takeKeyboardFocus (FocusChangeType cause);
     void handleKeyboardFocusFromClick();
 
     void updateMouseCursor();
 
     void sendMoved();
     void sendResized();
+    void sendChildBoundsChangedToParent();
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
@@ -1440,6 +1548,7 @@ private:
     GpuCanvas::Ptr effectOffscreenCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
+    bool suppressChildBoundsChanged = false;
     std::atomic_bool isRepainting { false };
 
     struct Options

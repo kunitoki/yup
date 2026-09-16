@@ -124,7 +124,7 @@ public:
     float getOpacity() const override;
 
     //==============================================================================
-    void setFocusedComponent (Component* comp) override;
+    void setFocusedComponent (Component* comp, FocusChangeType cause) override;
     Component* getFocusedComponent() const override;
 
     //==============================================================================
@@ -167,6 +167,8 @@ public:
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);
+    void updateKeyModifiers (KeyModifiers modifiers);
+    Component* getKeyboardEventTarget();
     void handleItemsDropped (const Point<float>& position, const DragAndDropData& data);
     void handleItemsDragPosition (const Point<float>& position, const DragAndDropData& data);
     void handleMoved (int xpos, int ypos);
