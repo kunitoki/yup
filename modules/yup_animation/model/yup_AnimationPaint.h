@@ -85,6 +85,11 @@ public:
         int colorPoints);
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationGradient)
+
+private:
+    [[nodiscard]] bool isFullyStatic() const noexcept;
+
+    mutable std::optional<ColorGradient> cachedGradient;
 };
 
 //==============================================================================

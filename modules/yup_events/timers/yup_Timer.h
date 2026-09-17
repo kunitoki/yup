@@ -107,7 +107,13 @@ public:
     void startTimer (int intervalInMilliseconds) noexcept;
 
     /** Starts the timer with an interval specified in Hertz.
-        This is effectively the same as calling startTimer (1000 / timerFrequencyHz).
+
+        The interval is kept at sub-millisecond resolution internally, so a rate that is not a
+        whole number of milliseconds is still honoured on average: 60Hz really is 60Hz, and not
+        the 62.5Hz that a truncated 16ms interval would give. getTimerInterval() still reports
+        whole milliseconds, so it rounds.
+
+        @param  timerFrequencyHz  the rate to run at, or any value less than 1 to stop the timer
     */
     void startTimerHz (int timerFrequencyHz) noexcept;
 
@@ -125,13 +131,38 @@ public:
 
     //==============================================================================
     /** Returns true if the timer is currently running. */
-    bool isTimerRunning() const noexcept { return getTimerInterval() > 0; }
+    bool isTimerRunning() const noexcept { return timerPeriodMs.load (std::memory_order_relaxed) > 0.0; }
 
     /** Returns the timer's interval.
 
+        Rounded to the nearest whole millisecond, and never zero while the timer is running, so a
+        timer started at a rate faster than 1kHz still reports 1.
+
         @returns the timer's interval in milliseconds if it's running, or 0 if it's not.
     */
-    int getTimerInterval() const noexcept { return timerPeriodMs.load (std::memory_order_relaxed); }
+    int getTimerInterval() const noexcept
+    {
+        const auto period = timerPeriodMs.load (std::memory_order_relaxed);
+
+        return period > 0.0 ? jmax (1, roundToInt (period)) : 0;
+    }
+
+    /** Returns the rate the timer is running at, in Hz.
+
+        Taken from the sub-millisecond interval, so unlike deriving a rate from getTimerInterval()
+        this does not round-trip through whole milliseconds: a timer started with
+        startTimerHz (60) reports 60, and not the 58.8 a rounded 17ms interval would give.
+
+        @returns the timer's rate in Hz if it's running, or 0 if it's not.
+
+        @see startTimerHz, getTimerInterval
+    */
+    double getTimerFrequencyHz() const noexcept
+    {
+        const auto period = timerPeriodMs.load (std::memory_order_relaxed);
+
+        return period > 0.0 ? 1000.0 / period : 0.0;
+    }
 
     //==============================================================================
     /** Invokes a lambda after a given number of milliseconds. */
@@ -143,8 +174,13 @@ public:
 
 private:
     class TimerThread;
+
+    void startTimerInternal (double intervalInMilliseconds) noexcept;
+
+    double getTimerIntervalHiRes() const noexcept { return timerPeriodMs.load (std::memory_order_relaxed); }
+
     size_t positionInQueue = (size_t) -1;
-    std::atomic<int> timerPeriodMs = 0;
+    std::atomic<double> timerPeriodMs = 0.0;
 
     Timer& operator= (const Timer&) = delete;
 };

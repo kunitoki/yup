@@ -104,7 +104,7 @@ public:
     /** Flag to keep the window above all others. */
     static inline constexpr Flags alwaysOnTopWindow = Flags::declareValue<alwaysOnTopWindowTag>();
     /** Default flags combining decoratedWindow, resizableWindow, and allowHighDensityDisplay. */
-    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay | vsync;
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Determines how the accumulated dirty rectangles are turned into repaint work.
@@ -198,8 +198,9 @@ public:
 
         /** Sets whether presentation should be synchronized to the display refresh.
 
-            With vsync enabled the backend's present call blocks until the display is ready, so
-            frames are paced by the display rather than by `framerateRedraw`. Off by default.
+            The render loop still observes `framerateRedraw`, because some backends submit a
+            synchronized presentation asynchronously rather than blocking until the display is
+            ready. Off by default.
 
             @param shouldUseVSync True to synchronize presentation to the display, false to pace frames with the software timer.
 
@@ -255,6 +256,22 @@ public:
         */
         Options& withFramerateRedraw (std::optional<float> newFramerateRedraw) noexcept;
 
+        /** Sets the framerate to fall back to while the window does not have keyboard focus.
+
+            Use it to throttle a window that is in the background, or that is covered by a modal
+            window, without stopping it altogether the way withUpdateOnlyFocused() does. The rate
+            is never raised above the one set with withFramerateRedraw(), and if updates are
+            already limited to the focused state then that takes precedence and nothing is drawn
+            at all while unfocused.
+
+            @param newUnfocusedFramerateRedraw The unfocused target framerate, or std::nullopt to keep rendering at the normal rate.
+
+            @return Reference to this Options object for method chaining.
+
+            @see withFramerateRedraw, withUpdateOnlyFocused
+        */
+        Options& withUnfocusedFramerateRedraw (std::optional<float> newUnfocusedFramerateRedraw) noexcept;
+
         /** Sets the clear color used when rendering.
 
             @param newClearColor The clear color, or std::nullopt to use the default.
@@ -295,6 +312,8 @@ public:
         std::optional<GpuPlatform> graphicsApi;
         /** The target framerate for continuous rendering. */
         std::optional<float> framerateRedraw;
+        /** The target framerate to use while the window does not have keyboard focus. */
+        std::optional<float> unfocusedFramerateRedraw;
         /** The clear color to use when rendering. */
         std::optional<Color> clearColor;
         /** The maximum time between clicks to be considered a double-click. */
@@ -556,9 +575,28 @@ public:
 
     /** Gets the desired framerate.
 
+        This is the rate that was asked for, which is not necessarily the rate frames are being
+        produced at: the window throttles itself while unfocused if an unfocused framerate was
+        configured, and a frame that takes longer than its budget delays the ones after it. Use
+        getCurrentFrameRate() for the rate actually being achieved.
+
         @return The desired framerate in frames per second.
+
+        @see setDesiredFrameRate, getCurrentFrameRate
     */
     virtual float getDesiredFrameRate() const = 0;
+
+    /** Sets the desired framerate.
+
+        Takes effect on the next frame, so it is safe to call while the window is rendering. Use
+        it to throttle a window that has nothing to show, for example one that is obscured by
+        another window, or to raise the rate again when it becomes interesting.
+
+        @param newFrameRate The desired framerate in frames per second.
+
+        @see getDesiredFrameRate, Options::withUnfocusedFramerateRedraw
+    */
+    virtual void setDesiredFrameRate (float newFrameRate) = 0;
 
     //==============================================================================
     /** Gets the native handle for the component.

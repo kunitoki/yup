@@ -1349,6 +1349,1021 @@ constexpr const char* kNestedTrimmedGroupJson = R"json({
     ]
 })json";
 
+// One asset drawn by two precomp layers: the offscreen render is shared between
+// the references.
+constexpr const char* kSharedPrecompJson = R"json({
+    "v": "5.5.2",
+    "nm": "SharedPrecompTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "sharedAsset",
+            "nm": "Shared",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 40,
+            "h": 40,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Inner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [20, 20] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "PrecompLeft",
+            "ind": 1,
+            "refId": "sharedAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [25, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        },
+        {
+            "ty": 0,
+            "nm": "PrecompRight",
+            "ind": 2,
+            "refId": "sharedAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [75, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+// A precomp drawn by another precomp, each referenced exactly once: nothing can
+// share an offscreen render, so both levels draw directly into the parent.
+constexpr const char* kNestedPrecompJson = R"json({
+    "v": "5.5.2",
+    "nm": "NestedPrecompTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "innerAsset",
+            "nm": "Inner",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 20,
+            "h": 20,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Innermost",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [10, 10] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [12, 12] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 0, 1, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "outerAsset",
+            "nm": "Outer",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 40,
+            "h": 40,
+            "layers": [
+                {
+                    "ty": 0,
+                    "nm": "MiddlePrecomp",
+                    "ind": 1,
+                    "refId": "innerAsset",
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "w": 20,
+                    "h": 20,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [20, 20] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    }
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "OutermostPrecomp",
+            "ind": 1,
+            "refId": "outerAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+// A precomp layer whose file omits the precomp's w/h: the reader falls back to
+// the composition size rather than handing the renderer a zero-area precomp.
+constexpr const char* kZeroSizePrecompJson = R"json({
+    "v": "5.5.2",
+    "nm": "ZeroSizePrecompTest",
+    "ip": 0,
+    "op": 10,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "emptyAreaAsset",
+            "nm": "EmptyArea",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 10,
+            "w": 0,
+            "h": 0,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Inner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 10,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [0, 0] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "ZeroSizePrecomp",
+            "ind": 1,
+            "refId": "emptyAreaAsset",
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 0,
+            "h": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+// The same asset drawn at two different precomp sizes: the mask clip is derived
+// from the precomp's size, so the two never share a cached clip path.
+constexpr const char* kPrecompSizedAssetJson = R"json({
+    "v": "5.5.2",
+    "nm": "PrecompSizedAssetTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 200,
+    "h": 200,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "sizedAsset",
+            "nm": "Sized",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 40,
+            "h": 40,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "MaskedInner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [0, 0] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "masksProperties": [
+                        {
+                            "inv": true,
+                            "mode": "a",
+                            "pt": { "a": 0, "k": { "i": [[0,0],[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0],[0,0]], "v": [[5,5],[35,5],[35,35],[5,35]], "c": true } },
+                            "o": { "a": 0, "k": 100 }
+                        }
+                    ],
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [36, 36] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "SmallPrecomp",
+            "ind": 1,
+            "refId": "sizedAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        },
+        {
+            "ty": 0,
+            "nm": "LargePrecomp",
+            "ind": 2,
+            "refId": "sizedAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 80,
+            "h": 80,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [150, 150] },
+                "s": { "a": 0, "k": [200, 200] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+// A mask that lies entirely outside the composition viewport.
+constexpr const char* kMaskOutsideViewportJson = R"json({
+    "v": "5.5.2",
+    "nm": "MaskOutsideViewportTest",
+    "ip": 0,
+    "op": 10,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "OffscreenMaskedLayer",
+            "ind": 1,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [0, 0] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "masksProperties": [
+                {
+                    "inv": false,
+                    "mode": "a",
+                    "pt": { "a": 0, "k": { "i": [[0,0],[0,0],[0,0],[0,0]], "o": [[0,0],[0,0],[0,0],[0,0]], "v": [[300,300],[400,300],[400,400],[300,400]], "c": true } },
+                    "o": { "a": 0, "k": 100 }
+                }
+            ],
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [80, 80] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+// A layer parented to itself, plus a valid two-layer chain next to it.
+constexpr const char* kSelfParentJson = R"json({
+    "v": "5.5.2",
+    "nm": "SelfParentTest",
+    "ip": 0,
+    "op": 10,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "SelfParentedLayer",
+            "ind": 1,
+            "parent": 1,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [30, 30] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        },
+        {
+            "ty": 4,
+            "nm": "GrandChild",
+            "ind": 2,
+            "parent": 3,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [10, 10] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [20, 20] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        },
+        {
+            "ty": 3,
+            "nm": "ParentNull",
+            "ind": 3,
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 45 },
+                "o": { "a": 0, "k": 0 }
+            }
+        }
+    ]
+})json";
+
+// One layer per opacity decision: a solid and a null below the opaque threshold
+// (neither needs a transparency layer), a near-opaque solid (treated as opaque),
+// and a solid carrying a drop shadow (which still does need one).
+constexpr const char* kPartialOpacityLayersJson = R"json({
+    "v": "5.5.2",
+    "nm": "PartialOpacityLayersTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 200,
+    "h": 200,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 1,
+            "nm": "HalfSolid",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "sc": "#ff0000",
+            "sw": 60,
+            "sh": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 50 }
+            }
+        },
+        {
+            "ty": 3,
+            "nm": "PartialNull",
+            "ind": 2,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [100, 100] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 40 }
+            }
+        },
+        {
+            "ty": 1,
+            "nm": "NotQuiteOpaqueSolid",
+            "ind": 3,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "sc": "#00ff00",
+            "sw": 60,
+            "sh": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [150, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 99 }
+            }
+        },
+        {
+            "ty": 1,
+            "nm": "ShadowedSolid",
+            "ind": 4,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "sc": "#0000ff",
+            "sw": 60,
+            "sh": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 150] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 50 }
+            },
+            "ef": [
+                {
+                    "ty": 25,
+                    "nm": "Drop Shadow",
+                    "mn": "ADBE Drop Shadow",
+                    "en": 1,
+                    "ef": [
+                        { "ty": 2, "nm": "Shadow Color", "mn": "ADBE Drop Shadow-0001", "v": { "a": 0, "k": [0, 0, 0, 1] } },
+                        { "ty": 0, "nm": "Opacity",      "mn": "ADBE Drop Shadow-0002", "v": { "a": 0, "k": 51 } },
+                        { "ty": 0, "nm": "Direction",    "mn": "ADBE Drop Shadow-0003", "v": { "a": 0, "k": 135 } },
+                        { "ty": 0, "nm": "Distance",     "mn": "ADBE Drop Shadow-0004", "v": { "a": 0, "k": 6 } },
+                        { "ty": 0, "nm": "Softness",     "mn": "ADBE Drop Shadow-0005", "v": { "a": 0, "k": 0 } },
+                        { "ty": 7, "nm": "Shadow Only",  "mn": "ADBE Drop Shadow-0006", "v": { "a": 0, "k": 0 } }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+// Both sides of the near-opaque threshold: 99.9 is treated as opaque, 99 is not.
+constexpr const char* kNearOpaqueShapeJson = R"json({
+    "v": "5.5.2",
+    "nm": "NearOpaqueShapeTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [],
+    "layers": [
+        {
+            "ty": 4,
+            "nm": "RoundedDown",
+            "ind": 1,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [30, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 99.9 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [30, 30] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        },
+        {
+            "ty": 4,
+            "nm": "NotRoundedDown",
+            "ind": 2,
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [70, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 99 }
+            },
+            "shapes": [
+                {
+                    "ty": "gr",
+                    "nm": "Group",
+                    "it": [
+                        { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [30, 30] }, "r": { "a": 0, "k": 0 } },
+                        { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 0, 1, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                    ]
+                }
+            ]
+        }
+    ]
+})json";
+
+// A precomp much smaller than the composition it sits in, drawn at partial
+// opacity: its transparency target only needs to cover the precomp's own box.
+constexpr const char* kPartialOpacityPrecompJson = R"json({
+    "v": "5.5.2",
+    "nm": "PartialOpacityPrecompTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 200,
+    "h": 200,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "smallAsset",
+            "nm": "Small",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 40,
+            "h": 40,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Inner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [20, 20] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [24, 24] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "FadedPrecomp",
+            "ind": 1,
+            "refId": "smallAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [60, 60] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 40 }
+            }
+        }
+    ]
+})json";
+
+// Three time slices of one asset, each visible in its own window - the shape a
+// "sequential shots of one scene" export produces. Only ever one of them is
+// drawn, so the asset is a single-reference asset on every frame.
+constexpr const char* kSequentialPrecompSlicesJson = R"json({
+    "v": "5.5.2",
+    "nm": "SequentialPrecompSlicesTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "sliceAsset",
+            "nm": "Slice",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 60,
+            "h": 60,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Inner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": 0, "k": [30, 30] },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [30, 30] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [0, 1, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "SliceStart",
+            "ind": 1,
+            "refId": "sliceAsset",
+            "ip": 0,
+            "op": 10,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 60,
+            "h": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        },
+        {
+            "ty": 0,
+            "nm": "SliceMiddle",
+            "ind": 2,
+            "refId": "sliceAsset",
+            "ip": 10,
+            "op": 20,
+            "st": 10,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 60,
+            "h": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        },
+        {
+            "ty": 0,
+            "nm": "SliceEnd",
+            "ind": 3,
+            "refId": "sliceAsset",
+            "ip": 20,
+            "op": 30,
+            "st": 20,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 60,
+            "h": 60,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [50, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
+// One asset drawn twice at once, but at two different phases of its own timeline
+// (the start frames differ). The two renders are not interchangeable.
+constexpr const char* kSameAssetDifferentPhasesJson = R"json({
+    "v": "5.5.2",
+    "nm": "SameAssetDifferentPhasesTest",
+    "ip": 0,
+    "op": 30,
+    "fr": 25.0,
+    "w": 100,
+    "h": 100,
+    "ddd": 0,
+    "assets": [
+        {
+            "id": "phaseAsset",
+            "nm": "Phase",
+            "fr": 25.0,
+            "ip": 0,
+            "op": 30,
+            "w": 40,
+            "h": 40,
+            "layers": [
+                {
+                    "ty": 4,
+                    "nm": "Inner",
+                    "ind": 1,
+                    "ip": 0,
+                    "op": 30,
+                    "st": 0,
+                    "sr": 1,
+                    "hd": false,
+                    "bm": 0,
+                    "ks": {
+                        "a": { "a": 0, "k": [0, 0] },
+                        "p": { "a": { "a": 1, "k": [
+                            { "t": 0,  "s": [10, 20], "i": { "x": [0.5], "y": [0.5] }, "o": { "x": [0.5], "y": [0.5] } },
+                            { "t": 29, "s": [30, 20] }
+                        ] } },
+                        "s": { "a": 0, "k": [100, 100] },
+                        "r": { "a": 0, "k": 0 },
+                        "o": { "a": 0, "k": 100 }
+                    },
+                    "shapes": [
+                        {
+                            "ty": "gr",
+                            "nm": "Group",
+                            "it": [
+                                { "ty": "rc", "nm": "Rect", "p": { "a": 0, "k": [0, 0] }, "s": { "a": 0, "k": [16, 16] }, "r": { "a": 0, "k": 0 } },
+                                { "ty": "fl", "nm": "Fill", "c": { "a": 0, "k": [1, 0, 0, 1] }, "o": { "a": 0, "k": 100 }, "r": 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "layers": [
+        {
+            "ty": 0,
+            "nm": "PhaseAhead",
+            "ind": 1,
+            "refId": "phaseAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 10,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [30, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        },
+        {
+            "ty": 0,
+            "nm": "PhaseBehind",
+            "ind": 2,
+            "refId": "phaseAsset",
+            "ip": 0,
+            "op": 30,
+            "st": 0,
+            "sr": 1,
+            "hd": false,
+            "bm": 0,
+            "w": 40,
+            "h": 40,
+            "ks": {
+                "a": { "a": 0, "k": [0, 0] },
+                "p": { "a": 0, "k": [70, 50] },
+                "s": { "a": 0, "k": [100, 100] },
+                "r": { "a": 0, "k": 0 },
+                "o": { "a": 0, "k": 100 }
+            }
+        }
+    ]
+})json";
+
 } // namespace
 
 class AnimationRendererTests : public ::testing::Test
@@ -2175,3 +3190,335 @@ TEST_F (AnimationRendererTests, RenderProgrammaticCompositionSmokeTest)
         AnimationRenderer::renderComposition (g, *comp, 15.0f, Rectangle<float> (0, 0, 200, 200));
     });
 }
+
+// =============================================================================
+// Clip culling and precomp reuse
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderSharedPrecompLayerDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kSharedPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 2u);
+
+    // Both references must resolve to the same asset, which is what makes one
+    // offscreen render serve both of them.
+    const auto* left = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    const auto* right = dynamic_cast<const PrecompLayer*> (comp->layers[1].get());
+    ASSERT_NE (left, nullptr);
+    ASSERT_NE (right, nullptr);
+    EXPECT_EQ (left->precompRefId, right->precompRefId);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    for (const float frame : { 0.0f, 10.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderNestedPrecompLayerDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kNestedPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    // The outer asset must draw the inner asset, so the render walks two levels
+    // of precomp - each referenced only once.
+    ASSERT_TRUE (comp->assets.contains (String ("outerAsset")));
+    const auto& outer = comp->assets[String ("outerAsset")];
+    ASSERT_NE (outer, nullptr);
+    ASSERT_EQ (outer->layers.size(), 1u);
+
+    const auto* middle = dynamic_cast<const PrecompLayer*> (outer->layers[0].get());
+    ASSERT_NE (middle, nullptr);
+    EXPECT_EQ (middle->precompRefId, String ("innerAsset"));
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    for (const float frame : { 0.0f, 10.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderPrecompLayerWithoutSizeFallsBackToCompositionSize)
+{
+    auto comp = LottieReader::parseData (kZeroSizePrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    // The reader normalizes a precomp layer with no w/h to the composition size,
+    // so the renderer only sees a zero-area precomp when a caller builds one by
+    // hand - its degenerate-bounds guard is a safety net, not the common path.
+    const auto* precomp = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    ASSERT_NE (precomp, nullptr);
+    EXPECT_EQ (precomp->layerSize, comp->size);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderSharedAssetAtDifferentPrecompSizesDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kPrecompSizedAssetJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 2u);
+
+    // The same masked asset drawn at two sizes derives two different mask clips,
+    // so the per-layer mask cache must not hand one size's clip to the other.
+    const auto* small = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    const auto* large = dynamic_cast<const PrecompLayer*> (comp->layers[1].get());
+    ASSERT_NE (small, nullptr);
+    ASSERT_NE (large, nullptr);
+    EXPECT_EQ (small->precompRefId, large->precompRefId);
+    EXPECT_NE (small->layerSize, large->layerSize);
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 200, 200);
+
+    for (const float frame : { 0.0f, 10.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderStaticMaskAcrossFramesDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kMaskAddJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    // A static mask must keep clipping the same way on every frame, including
+    // after the clip has been cached for the layer.
+    for (const float frame : { 0.0f, 1.0f, 4.5f, 9.0f, 3.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderMaskOutsideViewportDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kMaskOutsideViewportJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    // The mask cannot overlap the composition viewport, so the layer is culled
+    // without building the clip intersection.
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+
+    // The culled render must leave the Graphics state balanced, so a following
+    // render into the same context still draws.
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderLayerWithSelfParentDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kSelfParentJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_GE (comp->layers.size(), 3u);
+
+    // A layer parented to itself must not send the parent-chain walk into a loop.
+    ASSERT_NE (comp->layers[0], nullptr);
+    EXPECT_EQ (comp->layers[0]->parentId, comp->layers[0]->id);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 100, 100));
+    });
+}
+
+TEST_F (AnimationRendererTests, RenderBoundsOutsideCompositionDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kShapeLayerJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    // Bounds that miss the composition cull the whole render, which returns
+    // before any layer is walked.
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (500, 500, 50, 50));
+    });
+
+    // Rendering normally afterwards must still produce output, proving the
+    // culling path restored the Graphics state it saved.
+    EXPECT_NO_THROW ({
+        AnimationRenderer::renderComposition (g, *comp, 0.0f, Rectangle<float> (0, 0, 200, 200));
+    });
+}
+
+// =============================================================================
+// Opacity handling: which layers need a transparency layer at all
+// =============================================================================
+
+TEST_F (AnimationRendererTests, RenderPartialOpacityLayersDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kPartialOpacityLayersJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 4u);
+
+    // The fixture has to cover each decision the renderer makes about opacities:
+    // a solid and a null below the threshold (neither needs isolating), a solid
+    // just under it, and a solid carrying a drop shadow (which still does).
+    ASSERT_NE (comp->layers[0], nullptr);
+    EXPECT_EQ (comp->layers[0]->getType(), AnimationLayer::Type::Solid);
+    EXPECT_NEAR (comp->layers[0]->transform.opacityAt (0.0f), 0.5f, 1.0e-4f);
+    EXPECT_FALSE (comp->layers[0]->dropShadow.has_value());
+
+    ASSERT_NE (comp->layers[1], nullptr);
+    EXPECT_EQ (comp->layers[1]->getType(), AnimationLayer::Type::Null);
+    EXPECT_NEAR (comp->layers[1]->transform.opacityAt (0.0f), 0.4f, 1.0e-4f);
+
+    ASSERT_NE (comp->layers[2], nullptr);
+    EXPECT_EQ (comp->layers[2]->getType(), AnimationLayer::Type::Solid);
+    EXPECT_NEAR (comp->layers[2]->transform.opacityAt (0.0f), 0.99f, 1.0e-4f);
+
+    ASSERT_NE (comp->layers[3], nullptr);
+    EXPECT_EQ (comp->layers[3]->getType(), AnimationLayer::Type::Solid);
+    ASSERT_TRUE (comp->layers[3]->dropShadow.has_value());
+    EXPECT_TRUE (comp->layers[3]->dropShadow->enabled);
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 200, 200);
+
+    for (const float frame : { 0.0f, 5.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderNearOpaqueShapeLayersDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kNearOpaqueShapeJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 2u);
+
+    // 99.9 is an exporter's rounding of "fully opaque" and must not isolate the
+    // layer; 99 is a real half-percent and still has to composite offscreen.
+    ASSERT_NE (comp->layers[0], nullptr);
+    EXPECT_NEAR (comp->layers[0]->transform.opacityAt (0.0f), 0.999f, 1.0e-4f);
+
+    ASSERT_NE (comp->layers[1], nullptr);
+    EXPECT_NEAR (comp->layers[1]->transform.opacityAt (0.0f), 0.99f, 1.0e-4f);
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    for (const float frame : { 0.0f, 7.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderSequentialPrecompSlicesDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kSequentialPrecompSlicesJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 3u);
+
+    // All three layers draw the same asset, but their visibility windows must not
+    // overlap, so only one of them is ever drawn - the asset must not be treated
+    // as shared on the strength of the two invisible references.
+    const auto* start = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    const auto* middle = dynamic_cast<const PrecompLayer*> (comp->layers[1].get());
+    const auto* end = dynamic_cast<const PrecompLayer*> (comp->layers[2].get());
+    ASSERT_NE (start, nullptr);
+    ASSERT_NE (middle, nullptr);
+    ASSERT_NE (end, nullptr);
+    EXPECT_EQ (start->precompRefId, middle->precompRefId);
+    EXPECT_EQ (middle->precompRefId, end->precompRefId);
+
+    for (const float frame : { 5.0f, 15.0f, 25.0f })
+    {
+        int visible = 0;
+        for (const auto& layer : comp->layers)
+        {
+            if (layer != nullptr && layer->isVisibleAt (frame))
+                ++visible;
+        }
+
+        EXPECT_EQ (visible, 1) << "at frame " << frame;
+    }
+
+    auto renderer = context->makeRenderer (100, 100);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 100, 100);
+
+    // Cover both sides of each window boundary as well as its interior.
+    for (const float frame : { 0.0f, 5.0f, 9.0f, 10.0f, 15.0f, 19.0f, 20.0f, 25.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+
+TEST_F (AnimationRendererTests, RenderPartialOpacityPrecompLayerDoesNotCrash)
+{
+    auto comp = LottieReader::parseData (kPartialOpacityPrecompJson).valueOr (nullptr);
+    ASSERT_NE (comp, nullptr);
+    ASSERT_EQ (comp->layers.size(), 1u);
+
+    // The isolated target for this layer only needs to cover the precomp's own
+    // box, which is far smaller than the composition it is drawn into.
+    const auto* precomp = dynamic_cast<const PrecompLayer*> (comp->layers[0].get());
+    ASSERT_NE (precomp, nullptr);
+    EXPECT_NEAR (precomp->transform.opacityAt (0.0f), 0.4f, 1.0e-4f);
+    EXPECT_LT (precomp->layerSize.getWidth(), comp->size.getWidth());
+    EXPECT_LT (precomp->layerSize.getHeight(), comp->size.getHeight());
+
+    auto renderer = context->makeRenderer (200, 200);
+    Graphics g (*context, *renderer);
+
+    const Rectangle<float> bounds (0, 0, 200, 200);
+
+    for (const float frame : { 0.0f, 5.0f, 29.0f })
+    {
+        EXPECT_NO_THROW ({
+            AnimationRenderer::renderComposition (g, *comp, frame, bounds);
+        });
+    }
+}
+

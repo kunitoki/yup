@@ -82,10 +82,16 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
   emcmake cmake -G "Ninja Multi-Config" -B build/emscripten
   @just build emscripten {{CONFIG}} {{TARGET}}
 
-[doc("run tests for WASM")]
+[doc("run Debug tests for WASM")]
 [working-directory: 'build/emscripten/tests/Debug/']
-emscripten_test:
+emscripten_test_debug:
   @just build emscripten Debug
+  node yup_tests.js --gtest_filter={{gtest_filter}}
+
+[doc("run Release tests for WASM")]
+[working-directory: 'build/emscripten/tests/Release/']
+emscripten_test_release:
+  @just build emscripten Release
   node yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]

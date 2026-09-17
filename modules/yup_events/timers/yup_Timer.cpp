@@ -68,19 +68,23 @@ public:
 
     void run() override
     {
-        auto lastTime = Time::getMillisecondCounter();
+        auto lastTime = Time::getMillisecondCounterHiRes();
         ReferenceCountedObjectPtr<CallTimersMessage> messageToSend (new CallTimersMessage());
 
         while (! threadShouldExit())
         {
-            auto now = Time::getMillisecondCounter();
-            auto elapsed = (int) (now >= lastTime ? (now - lastTime)
-                                                  : (std::numeric_limits<uint32>::max() - (lastTime - now)));
+            // Called for its side effect: it is the only thing that refreshes the value behind
+            // Time::getApproximateMillisecondCounter(). The countdowns themselves are kept on the
+            // hi-res clock, so that an interval of less than a whole millisecond still elapses.
+            Time::getMillisecondCounter();
+
+            auto now = Time::getMillisecondCounterHiRes();
+            auto elapsed = jmax (0.0, now - lastTime);
             lastTime = now;
 
             auto timeUntilFirstTimer = getTimeUntilFirstTimer (elapsed);
 
-            if (timeUntilFirstTimer <= 0)
+            if (timeUntilFirstTimer <= 0.0)
             {
                 if (callbackArrived.wait (0))
                 {
@@ -103,39 +107,38 @@ public:
             }
 
             // don't wait for too long because running this loop also helps keep the
-            // Time::getApproximateMillisecondTimer value stay up-to-date
-            wait (jlimit (1, maxTimeoutMilliseconds, timeUntilFirstTimer));
+            // Time::getApproximateMillisecondTimer value stay up-to-date.
+            // Truncated rather than rounded, so a wait never reaches past the deadline.
+            wait (jlimit (1, maxTimeoutMilliseconds, (int) timeUntilFirstTimer));
         }
     }
 
     void callTimers()
     {
-        auto now = Time::getMillisecondCounter();
+        auto now = Time::getMillisecondCounterHiRes();
         auto timeout = now + maxTimeoutMilliseconds;
 
-#if YUP_EMSCRIPTEN && ! defined(__EMSCRIPTEN_PTHREADS__)
-        auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
-                                                  : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
+        const auto elapsed = lastCallTime > 0.0 ? jmax (0.0, now - lastCallTime) : 0.0;
         lastCallTime = now;
 
         const LockType::ScopedLockType sl (lock);
 
-        countdownTimers (elapsed);
-
-#else
-        const LockType::ScopedLockType sl (lock);
-
-#endif
+        if (! isThreadRunning())
+            countdownTimers (elapsed);
 
         while (! timers.empty())
         {
             auto& first = timers.front();
 
-            if (first.countdownMs > 0)
+            if (first.countdownMs > 0.0)
                 break;
 
             auto* timer = first.timer;
-            first.countdownMs = timer->getTimerInterval();
+            const auto interval = timer->getTimerIntervalHiRes();
+
+            first.countdownMs = first.countdownMs > -interval ? first.countdownMs + interval
+                                                              : interval;
+
             shuffleTimerBackInQueue (0);
             notify();
 
@@ -148,7 +151,7 @@ public:
             YUP_CATCH_EXCEPTION
 
             // avoid getting stuck in a loop if a timer callback repeatedly takes too long
-            if (Time::getMillisecondCounter() > timeout)
+            if (Time::getMillisecondCounterHiRes() > timeout)
                 break;
         }
 
@@ -176,7 +179,7 @@ public:
 
         auto pos = timers.size();
 
-        timers.push_back ({ t, t->getTimerInterval() });
+        timers.push_back ({ t, t->getTimerIntervalHiRes() });
         t->positionInQueue = pos;
         shuffleTimerForwardInQueue (pos);
         notify();
@@ -211,7 +214,7 @@ public:
         jassert (timers[pos].timer == t);
 
         auto lastCountdown = timers[pos].countdownMs;
-        auto newCountdown = t->getTimerInterval();
+        auto newCountdown = t->getTimerIntervalHiRes();
 
         if (newCountdown != lastCountdown)
         {
@@ -232,11 +235,11 @@ private:
     struct TimerCountdown
     {
         Timer* timer;
-        int countdownMs;
+        double countdownMs;
     };
 
     std::vector<TimerCountdown> timers;
-    uint32 lastCallTime = 0;
+    double lastCallTime = 0.0;
 
     WaitableEvent callbackArrived;
 
@@ -302,19 +305,19 @@ private:
         }
     }
 
-    int getTimeUntilFirstTimer (int numMillisecsElapsed)
+    double getTimeUntilFirstTimer (double numMillisecsElapsed)
     {
         const LockType::ScopedLockType sl (lock);
 
         if (timers.empty())
-            return 1000;
+            return 1000.0;
 
         countdownTimers (numMillisecsElapsed);
 
         return timers.front().countdownMs;
     }
 
-    void countdownTimers (int numMillisecsElapsed)
+    void countdownTimers (double numMillisecsElapsed)
     {
         for (auto& t : timers)
             t.countdownMs -= numMillisecsElapsed;
@@ -345,30 +348,35 @@ Timer::~Timer()
 
 void Timer::startTimer (int interval) noexcept
 {
+    startTimerInternal (jmax (1, interval));
+}
+
+void Timer::startTimerHz (int timerFrequencyHz) noexcept
+{
+    if (timerFrequencyHz > 0)
+        startTimerInternal (1000.0 / timerFrequencyHz);
+    else
+        stopTimer();
+}
+
+void Timer::startTimerInternal (double interval) noexcept
+{
     // If you're calling this before (or after) the MessageManager is
     // running, then you're not going to get any timer callbacks!
     YUP_ASSERT_MESSAGE_MANAGER_EXISTS
 
     if (auto* instance = TimerThread::getInstance())
     {
-        if (timerPeriodMs.exchange (jmax (1, interval)) == 0)
+        if (timerPeriodMs.exchange (jmax (0.001, interval)) == 0.0)
             instance->addTimer (this);
         else
             instance->resetTimerCounter (this);
     }
 }
 
-void Timer::startTimerHz (int timerFrequencyHz) noexcept
-{
-    if (timerFrequencyHz > 0)
-        startTimer (1000 / timerFrequencyHz);
-    else
-        stopTimer();
-}
-
 void Timer::stopTimer() noexcept
 {
-    if (timerPeriodMs.exchange (0, std::memory_order_relaxed) > 0)
+    if (timerPeriodMs.exchange (0.0, std::memory_order_relaxed) > 0.0)
     {
         if (auto* instance = TimerThread::getInstanceWithoutCreating())
             instance->removeTimer (this);

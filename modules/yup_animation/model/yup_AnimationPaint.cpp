@@ -27,10 +27,28 @@ namespace yup
 
 void AnimationGradient::addColorStop (float pos, Color color)
 {
+    cachedGradient.reset();
+
     ColorStop stop;
     stop.position.withStaticValue (pos);
     stop.color.withStaticValue (color);
     colorStops.push_back (std::move (stop));
+}
+
+bool AnimationGradient::isFullyStatic() const noexcept
+{
+    if (! animatedStops.empty()
+        || ! startPoint.isStatic()
+        || ! endPoint.isStatic()
+        || ! highlightLen.isStatic()
+        || ! highlightAngle.isStatic())
+        return false;
+
+    for (const auto& stop : colorStops)
+        if (! stop.position.isStatic() || ! stop.color.isStatic())
+            return false;
+
+    return true;
 }
 
 std::vector<std::pair<float, Color>> AnimationGradient::parseStopsFromFlatArray (
@@ -82,6 +100,10 @@ std::vector<std::pair<float, Color>> AnimationGradient::parseStopsFromFlatArray 
 
 ColorGradient AnimationGradient::toColorGradient (float frameNo) const
 {
+    const auto isStatic = isFullyStatic();
+    if (isStatic && cachedGradient.has_value())
+        return *cachedGradient;
+
     const Point<float> start = startPoint.getValueAt (frameNo);
     const Point<float> end = endPoint.getValueAt (frameNo);
 
@@ -135,7 +157,12 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
     const auto stops = resolveStops (frameNo);
 
     if (stops.empty())
-        return ColorGradient (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
+    {
+        ColorGradient result (Color(), start, Color(), end, gradientType == GradientType::Radial ? ColorGradient::Type::Radial : ColorGradient::Type::Linear);
+        if (isStatic)
+            cachedGradient = result;
+        return result;
+    }
 
     // Radial gradient highlight (focal point) - adjusts the center point along the
     // start→end axis by highlightLength ratio, rotated by highlightAngle.
@@ -166,6 +193,9 @@ ColorGradient AnimationGradient::toColorGradient (float frameNo) const
 
     if (spread != ColorGradient::Spread::Pad)
         result = result.withSpread (spread);
+
+    if (isStatic)
+        cachedGradient = result;
 
     return result;
 }

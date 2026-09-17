@@ -275,6 +275,18 @@ TEST_F (AnimationGradientTests, ToColorGradient_WithStopsReturnsNonEmptyGradient
     EXPECT_NE (cg.getNumStops(), 0);
 }
 
+TEST_F (AnimationGradientTests, AddColorStopInvalidatesCachedGradient)
+{
+    AnimationGradient grad;
+    grad.addColorStop (0.0f, Color (0xFF000000));
+    grad.addColorStop (1.0f, Color (0xFFFFFFFF));
+    (void) grad.toColorGradient (0.0f);
+
+    grad.addColorStop (0.5f, Color (0xFFFF0000));
+
+    EXPECT_EQ (grad.toColorGradient (0.0f).getNumStops(), 3u);
+}
+
 TEST_F (AnimationGradientTests, ToColorGradient_LinearAndRadialProduceGradient)
 {
     AnimationGradient linear, radial;

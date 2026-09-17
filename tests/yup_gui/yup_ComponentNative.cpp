@@ -118,7 +118,9 @@ public:
 
     float getCurrentFrameRate() const override { return 60.0f; }
 
-    float getDesiredFrameRate() const override { return 60.0f; }
+    float getDesiredFrameRate() const override { return desiredFrameRate; }
+
+    void setDesiredFrameRate (float newFrameRate) override { desiredFrameRate = newFrameRate; }
 
     void* getNativeHandle() const override { return nullptr; }
 
@@ -135,6 +137,7 @@ public:
     Flags getFlags() const { return flags; }
 
     RectangleList<float> repaintAreas;
+    float desiredFrameRate = 60.0f;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StubComponentNative)
 };
@@ -207,9 +210,9 @@ TEST_F (ComponentNativeOptionsTests, WithRenderContinuousFalseDisablesFlag)
     EXPECT_FALSE (opts.flags.test (ComponentNative::renderContinuous));
 }
 
-TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveVSyncEnabled)
+TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveVSyncDisabled)
 {
-    EXPECT_TRUE (opts.flags.test (ComponentNative::vsync));
+    EXPECT_FALSE (opts.flags.test (ComponentNative::vsync));
 }
 
 TEST_F (ComponentNativeOptionsTests, WithVSyncTrueEnablesFlag)
@@ -293,6 +296,25 @@ TEST_F (ComponentNativeOptionsTests, WithFramerateRedrawNulloptClearsValue)
     EXPECT_FALSE (opts.framerateRedraw.has_value());
 }
 
+TEST_F (ComponentNativeOptionsTests, WithUnfocusedFramerateRedrawSetsValue)
+{
+    opts.withUnfocusedFramerateRedraw (10.0f);
+    ASSERT_TRUE (opts.unfocusedFramerateRedraw.has_value());
+    EXPECT_FLOAT_EQ (*opts.unfocusedFramerateRedraw, 10.0f);
+}
+
+TEST_F (ComponentNativeOptionsTests, WithUnfocusedFramerateRedrawNulloptClearsValue)
+{
+    opts.withUnfocusedFramerateRedraw (10.0f);
+    opts.withUnfocusedFramerateRedraw (std::nullopt);
+    EXPECT_FALSE (opts.unfocusedFramerateRedraw.has_value());
+}
+
+TEST_F (ComponentNativeOptionsTests, UnfocusedFramerateRedrawDefaultsToUnset)
+{
+    EXPECT_FALSE (opts.unfocusedFramerateRedraw.has_value());
+}
+
 TEST_F (ComponentNativeOptionsTests, WithClearColorSetsValue)
 {
     const Color col (0xff112233);
@@ -349,6 +371,7 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
         .withTemporaryWindow (true)
         .withGraphicsApi (GpuPlatform::Headless)
         .withFramerateRedraw (60.0f)
+        .withUnfocusedFramerateRedraw (5.0f)
         .withClearColor (Color (0xff000000))
         .withDoubleClickTime (RelativeTime::milliseconds (500))
         .withUpdateOnlyFocused (true);
@@ -364,6 +387,8 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
     EXPECT_EQ (*opts.graphicsApi, GpuPlatform::Headless);
     ASSERT_TRUE (opts.framerateRedraw.has_value());
     EXPECT_FLOAT_EQ (*opts.framerateRedraw, 60.0f);
+    ASSERT_TRUE (opts.unfocusedFramerateRedraw.has_value());
+    EXPECT_FLOAT_EQ (*opts.unfocusedFramerateRedraw, 5.0f);
     ASSERT_TRUE (opts.clearColor.has_value());
     EXPECT_TRUE (opts.updateOnlyWhenFocused);
 }

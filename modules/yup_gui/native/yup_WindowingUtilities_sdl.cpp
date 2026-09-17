@@ -478,4 +478,47 @@ Uint32 setContextWindowHints (GpuPlatform desiredApi)
     return 0;
 }
 
+//==============================================================================
+
+/** Turns the accumulated dirty rectangles into the region that is handed to the paint pass.
+
+    Rive applies rectangular clips as anti-aliased coverage, not as a pixel-exact scissor, so
+    fragments touching a clip edge can bleed a tiny amount into the neighbouring pixel row.
+    With a preserved render target that row is never redrawn and the bleed accumulates over
+    frames into a visible line, so every dirty area is grown by half a pixel and snapped to the
+    enclosing whole-pixel rectangle to let the parent repaint that border.
+
+    With @a mode == RepaintMode::boundingBox the whole dirty list is collapsed into a single
+    (enlarged) rectangle. With @a mode == RepaintMode::disjointRegions each dirty rectangle is
+    clamped to @a contentBounds, enlarged, and merged into a disjoint list, so only the parts of
+    the hierarchy that actually overlap a dirty rectangle are repainted.
+*/
+static RectangleList<float> makeRepaintRegion (const RectangleList<float>& dirtyAreas,
+                                               const Rectangle<float>& contentBounds,
+                                               ComponentNative::RepaintMode mode)
+{
+    RectangleList<float> region;
+
+    if (dirtyAreas.isEmpty())
+        return region;
+
+    if (mode == ComponentNative::RepaintMode::disjointRegions)
+    {
+        for (const auto& rect : dirtyAreas.getRectangles())
+        {
+            const auto clipped = rect.intersection (contentBounds).enlarged (0.5f).smallestIntContainer();
+
+            if (! clipped.isEmpty())
+                region.add (clipped);
+        }
+
+        if (! region.isEmpty())
+            return region;
+    }
+
+    region.clearQuick();
+    region.addWithoutMerge (dirtyAreas.getBoundingBox().enlarged (0.5f).smallestIntContainer());
+    return region;
+}
+
 } // namespace yup

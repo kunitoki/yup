@@ -28,12 +28,6 @@ class SDLComponentNative final
     , public Timer
     , public Thread
 {
-#if YUP_EMSCRIPTEN
-    static constexpr bool renderDrivenByTimer = true;
-#else
-    static constexpr bool renderDrivenByTimer = false;
-#endif
-
     static constexpr size_t renderThreadStackSize = 8 * 1024 * 1024;
 
     struct TouchFinger
@@ -118,6 +112,7 @@ public:
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
     float getDesiredFrameRate() const override;
+    void setDesiredFrameRate (float newFrameRate) override;
 
     //==============================================================================
     void setOpacity (float opacity) override;
@@ -231,6 +226,19 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    void updateEffectiveFrameRate (bool hasFocus);
+
+#if YUP_EMSCRIPTEN
+    struct AnimationFrameLoop;
+
+    static EM_BOOL animationFrameCallback (double timestampMs, void* userData);
+
+    void startAnimationFrameLoop();
+    void stopAnimationFrameLoop();
+    void renderAnimationFrame (double timestampMs);
+#endif
+
+    bool startRenderThread();
     void startRendering();
     void stopRendering();
     bool isRendering() const;
@@ -306,7 +314,16 @@ private:
     ContextActivatorGuard::Ptr contextGuard { new ContextActivatorGuard };
     CriticalSection& glContextLock { contextGuard->lock };
 
-    float desiredFrameRate = 60.0f;
+#if YUP_EMSCRIPTEN
+    AnimationFrameLoop* activeAnimationFrameLoop = nullptr;
+    double lastAnimationFrameMs = 0.0;
+    double displayFrameMs = 1000.0 / 60.0;
+    int animationFrameCounter = 0;
+#endif
+
+    std::atomic<float> desiredFrameRate = 60.0f;
+    std::optional<float> unfocusedFrameRate;
+    std::atomic<float> effectiveFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     double frameRateStartTimeSeconds = 0.0;
     uint64_t frameRateCounter = 0;

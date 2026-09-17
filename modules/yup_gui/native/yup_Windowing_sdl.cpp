@@ -43,6 +43,8 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , repaintMode (options.repaintMode)
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
+    , unfocusedFrameRate (options.unfocusedFramerateRedraw)
+    , effectiveFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
     , shouldCaptureMouse (options.flags.test (captureMouse))
@@ -259,11 +261,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
         updateMouseCapture (true);
 
     // Release the GL context on the message thread
-    if constexpr (! renderDrivenByTimer)
-    {
-        if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
-            SDL_GL_MakeCurrent (window, nullptr);
-    }
+#if ! YUP_EMSCRIPTEN
+    if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
+        SDL_GL_MakeCurrent (window, nullptr);
+#endif
 
     // Start the rendering
     startRendering();
@@ -777,8 +778,9 @@ void SDLComponentNative::repaint()
         currentRepaintAreas.add (fullArea);
     }
 
-    if constexpr (! renderDrivenByTimer)
-        renderEvent.signal();
+#if ! YUP_EMSCRIPTEN
+    renderEvent.signal();
+#endif
 }
 
 void SDLComponentNative::repaint (const Rectangle<float>& rect)
@@ -788,8 +790,9 @@ void SDLComponentNative::repaint (const Rectangle<float>& rect)
         currentRepaintAreas.add (rect);
     }
 
-    if constexpr (! renderDrivenByTimer)
-        renderEvent.signal();
+#if ! YUP_EMSCRIPTEN
+    renderEvent.signal();
+#endif
 }
 
 const RectangleList<float>& SDLComponentNative::getRepaintAreas() const
@@ -820,13 +823,41 @@ float SDLComponentNative::getCurrentFrameRate() const
 
 float SDLComponentNative::getDesiredFrameRate() const
 {
-    return desiredFrameRate;
+    return desiredFrameRate.load (std::memory_order_relaxed);
+}
+
+void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
+{
+    YUP_ASSERT_MESSAGE_THREAD
+
+    desiredFrameRate.store (jmax (1.0f, newFrameRate), std::memory_order_relaxed);
+
+    updateEffectiveFrameRate (hasNativeKeyboardFocus());
+}
+
+void SDLComponentNative::updateEffectiveFrameRate (bool hasFocus)
+{
+    const auto desired = desiredFrameRate.load (std::memory_order_relaxed);
+
+    const auto effective = (unfocusedFrameRate.has_value() && ! hasFocus)
+                             ? jmin (desired, jmax (1.0f, *unfocusedFrameRate))
+                             : desired;
+
+    if (effectiveFrameRate.exchange (effective, std::memory_order_relaxed) == effective)
+        return;
+
+    if (isTimerRunning())
+        startTimerHz (roundToInt (effective));
+
+    renderEvent.signal();
 }
 
 //==============================================================================
 
 Point<float> SDLComponentNative::getCursorPosition() const
 {
+    YUP_ASSERT_MESSAGE_THREAD
+
     float x = 0, y = 0;
 
     SDL_GetMouseState (&x, &y);
@@ -859,6 +890,8 @@ void* SDLComponentNative::getNativeHandle() const
 
 void SDLComponentNative::startTextInput (Component& component)
 {
+    YUP_ASSERT_MESSAGE_THREAD
+
     if (window == nullptr)
         return;
 
@@ -878,6 +911,8 @@ void SDLComponentNative::startTextInput (Component& component)
 
 void SDLComponentNative::updateTextInputRect (Component& component)
 {
+    YUP_ASSERT_MESSAGE_THREAD
+
     if (window == nullptr || currentTextInputComponent != std::addressof (component))
         return;
 
@@ -898,6 +933,8 @@ void SDLComponentNative::updateTextInputRect (Component& component)
 
 void SDLComponentNative::stopTextInput (Component& component)
 {
+    YUP_ASSERT_MESSAGE_THREAD
+
     if (window == nullptr)
         return;
 
@@ -913,24 +950,57 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
-    const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
-    const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
+    double activeFrameRate = 0.0;
+    double maxFrameTimeMs = 0.0;
+    double renderCostMs = 0.0;
+    double nextFrameDeadlineMs = 0.0;
 
     while (! threadShouldExit())
     {
-        const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        if (const auto rate = jmax (1.0, static_cast<double> (effectiveFrameRate.load (std::memory_order_relaxed)));
+            rate != activeFrameRate)
+        {
+            activeFrameRate = rate;
+            maxFrameTimeMs = 1000.0 / rate;
+            renderCostMs = maxFrameTimeMs * 0.5;
+            nextFrameDeadlineMs = yup::Time::getMillisecondCounterHiRes();
+        }
 
-        renderEvent.wait (jmax (1.0, maxFrameTimeMs - 4.0));
-        renderEvent.reset();
+        const double renderBudgetMs = jlimit (1.0, maxFrameTimeMs, renderCostMs * 1.15);
+
+        for (;;)
+        {
+            const auto wakeTimeMs = nextFrameDeadlineMs - renderBudgetMs;
+            const auto waitMs = wakeTimeMs - yup::Time::getMillisecondCounterHiRes();
+            if (waitMs <= 0.0)
+                break;
+
+            if (waitMs > 1.0)
+            {
+                renderEvent.wait (waitMs - 1.0);
+                renderEvent.reset();
+
+                if (threadShouldExit())
+                    break;
+
+                continue;
+            }
+
+            frameTimer.waitUntil (wakeTimeMs);
+            break;
+        }
 
         if (threadShouldExit())
             break;
+
+        const double renderStartMs = yup::Time::getMillisecondCounterHiRes();
+        bool didPaint = false;
 
         YUP_TRY
         {
             YUP_AUTORELEASEPOOL
             {
-                renderFrame();
+                didPaint = renderFrame();
             }
         }
         YUP_CATCH_EXCEPTION
@@ -938,14 +1008,14 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        if (vsyncEnabled)
-            continue;
+        if (didPaint)
+            renderCostMs = renderCostMs * 0.9 + (yup::Time::getMillisecondCounterHiRes() - renderStartMs) * 0.1;
 
-        const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
-        const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
-
-        if (secondsToWait > 0.0)
-            frameTimer.waitUntil (yup::Time::getMillisecondCounterHiRes() + secondsToWait * 1000.0);
+        const auto nowMs = yup::Time::getMillisecondCounterHiRes();
+        do
+        {
+            nextFrameDeadlineMs += maxFrameTimeMs;
+        } while (nextFrameDeadlineMs <= nowMs);
     }
 }
 
@@ -973,11 +1043,13 @@ void SDLComponentNative::runWithComputeContext (const std::function<void()>& fn)
         Logger::outputDebugString ("SDL: unable to make GL compute context current, GPU compute is disabled: " + String (SDL_GetError()));
 
         computeContextLost = true;
+
         SDL_GL_MakeCurrent (window, previousContext);
         return;
     }
 
     fn();
+
     SDL_GL_MakeCurrent (window, previousContext);
 }
 
@@ -985,27 +1057,26 @@ void SDLComponentNative::runWithComputeContext (const std::function<void()>& fn)
 
 void SDLComponentNative::runWithGraphicsContext (const std::function<void()>& fn)
 {
-    if constexpr (! renderDrivenByTimer)
+#if ! YUP_EMSCRIPTEN
+    const ScopedLock sl (glContextLock);
+
+    const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
+
+    if (isGL)
     {
-        const ScopedLock sl (glContextLock);
+        const bool wasCurrent = SDL_GL_GetCurrentContext() == windowContext;
 
-        const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
+        if (! wasCurrent)
+            SDL_GL_MakeCurrent (window, windowContext);
 
-        if (isGL)
-        {
-            const bool wasCurrent = SDL_GL_GetCurrentContext() == windowContext;
+        fn();
 
-            if (! wasCurrent)
-                SDL_GL_MakeCurrent (window, windowContext);
+        if (! wasCurrent)
+            SDL_GL_MakeCurrent (window, nullptr);
 
-            fn();
-
-            if (! wasCurrent)
-                SDL_GL_MakeCurrent (window, nullptr);
-
-            return;
-        }
+        return;
     }
+#endif
 
     fn();
 }
@@ -1033,52 +1104,6 @@ void SDLComponentNative::timerCallback()
 
     pollCapturedMouseState();
 #endif
-
-    if constexpr (renderDrivenByTimer)
-        renderFrame();
-}
-
-//==============================================================================
-
-/** Turns the accumulated dirty rectangles into the region that is handed to the paint pass.
-
-    Rive applies rectangular clips as anti-aliased coverage, not as a pixel-exact scissor, so
-    fragments touching a clip edge can bleed a tiny amount into the neighbouring pixel row.
-    With a preserved render target that row is never redrawn and the bleed accumulates over
-    frames into a visible line, so every dirty area is grown by half a pixel and snapped to the
-    enclosing whole-pixel rectangle to let the parent repaint that border.
-
-    With @a mode == RepaintMode::boundingBox the whole dirty list is collapsed into a single
-    (enlarged) rectangle. With @a mode == RepaintMode::disjointRegions each dirty rectangle is
-    clamped to @a contentBounds, enlarged, and merged into a disjoint list, so only the parts of
-    the hierarchy that actually overlap a dirty rectangle are repainted.
-*/
-static RectangleList<float> makeRepaintRegion (const RectangleList<float>& dirtyAreas,
-                                               const Rectangle<float>& contentBounds,
-                                               ComponentNative::RepaintMode mode)
-{
-    RectangleList<float> region;
-
-    if (dirtyAreas.isEmpty())
-        return region;
-
-    if (mode == ComponentNative::RepaintMode::disjointRegions)
-    {
-        for (const auto& rect : dirtyAreas.getRectangles())
-        {
-            const auto clipped = rect.intersection (contentBounds).enlarged (0.5f).smallestIntContainer();
-
-            if (! clipped.isEmpty())
-                region.add (clipped);
-        }
-
-        if (! region.isEmpty())
-            return region;
-    }
-
-    region.clearQuick();
-    region.addWithoutMerge (dirtyAreas.getBoundingBox().enlarged (0.5f).smallestIntContainer());
-    return region;
 }
 
 //==============================================================================
@@ -1112,25 +1137,23 @@ bool SDLComponentNative::renderFrame()
             currentContentWidth = contentWidth;
             currentContentHeight = contentHeight;
 
-            if constexpr (! renderDrivenByTimer)
-            {
-                glContextLock.enter();
+#if ! YUP_EMSCRIPTEN
+            glContextLock.enter();
 
-                if (isGL)
-                    SDL_GL_MakeCurrent (window, windowContext);
-            }
+            if (isGL)
+                SDL_GL_MakeCurrent (window, windowContext);
+#endif
 
             context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
             renderer = context->makeRenderer (contentWidth, contentHeight);
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 
-            if constexpr (! renderDrivenByTimer)
-            {
-                if (isGL)
-                    SDL_GL_MakeCurrent (window, nullptr);
+#if ! YUP_EMSCRIPTEN
+            if (isGL)
+                SDL_GL_MakeCurrent (window, nullptr);
 
-                glContextLock.exit();
-            }
+            glContextLock.exit();
+#endif
 
             repaint();
         }
@@ -1189,14 +1212,13 @@ bool SDLComponentNative::renderFrame()
         if (! renderContinuous && repaintAreas.isEmpty())
             return false;
 
-        if constexpr (! renderDrivenByTimer)
-        {
-            glContextLock.enter();
-            glContextLocked = true;
+#if ! YUP_EMSCRIPTEN
+        glContextLock.enter();
+        glContextLocked = true;
 
-            if (isGL)
-                SDL_GL_MakeCurrent (window, windowContext);
-        }
+        if (isGL)
+            SDL_GL_MakeCurrent (window, windowContext);
+#endif
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
@@ -1257,35 +1279,31 @@ bool SDLComponentNative::renderFrame()
             }
         }
 
-        if constexpr (! renderDrivenByTimer)
+#if ! YUP_EMSCRIPTEN
+        if (glContextLocked)
         {
-            if (glContextLocked)
-            {
-                if (isGL && window != nullptr)
-                    SDL_GL_MakeCurrent (window, nullptr);
-
-                glContextLock.exit();
-            }
+            if (isGL && window != nullptr)
+                SDL_GL_MakeCurrent (window, nullptr);
+            
+            glContextLock.exit();
         }
+#endif
     });
 
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderInternal);
 
-        if constexpr (! renderDrivenByTimer)
-        {
-            const MessageManagerLock mmLock (Thread::getCurrentThread());
-            if (! mmLock.lockWasGained())
-                return false;
+#if ! YUP_EMSCRIPTEN
+        const MessageManagerLock mmLock (Thread::getCurrentThread());
+        if (! mmLock.lockWasGained())
+            return false;
 
-            if (! renderInternal())
-                return false;
-        }
-        else
-        {
-            if (! renderInternal())
-                return false;
-        }
+        if (! renderInternal())
+            return false;
+#else
+        if (! renderInternal())
+            return false;
+#endif
     }
 
     return true;
@@ -1293,27 +1311,111 @@ bool SDLComponentNative::renderFrame()
 
 //==============================================================================
 
+#if YUP_EMSCRIPTEN
+/*  The browser only ever presents on a refresh boundary, and requestAnimationFrame is the callback
+    that runs on one. Driving frames from a Timer instead means the frame clock is the timer thread
+    (a worker, because emscripten builds always pass -pthread), which posts a message that the main
+    thread only drains on its next animation frame. Rendering straight from the animation frame
+    removes that handshake from the frame path.
+*/
+struct SDLComponentNative::AnimationFrameLoop
+{
+    WeakReference<SDLComponentNative> owner;
+};
+
+EM_BOOL SDLComponentNative::animationFrameCallback (double timestampMs, void* userData)
+{
+    std::unique_ptr<AnimationFrameLoop> loop (static_cast<AnimationFrameLoop*> (userData));
+
+    if (auto* native = loop->owner.get(); native != nullptr && native->activeAnimationFrameLoop == loop.get())
+    {
+        native->renderAnimationFrame (timestampMs);
+
+        loop.release();
+
+        return EM_TRUE;
+    }
+
+    return EM_FALSE;
+}
+
+void SDLComponentNative::startAnimationFrameLoop()
+{
+    if (activeAnimationFrameLoop != nullptr)
+        return;
+
+    lastAnimationFrameMs = 0.0;
+    animationFrameCounter = 0;
+    activeAnimationFrameLoop = new AnimationFrameLoop { WeakReference<SDLComponentNative> (this) };
+
+    emscripten_request_animation_frame_loop (animationFrameCallback, activeAnimationFrameLoop);
+}
+
+void SDLComponentNative::stopAnimationFrameLoop()
+{
+    activeAnimationFrameLoop = nullptr;
+}
+
+void SDLComponentNative::renderAnimationFrame (double timestampMs)
+{
+    if (lastAnimationFrameMs > 0.0)
+    {
+        const auto delta = jlimit (1.0, 100.0, timestampMs - lastAnimationFrameMs);
+        displayFrameMs = displayFrameMs * 0.9 + delta * 0.1;
+    }
+
+    lastAnimationFrameMs = timestampMs;
+
+    const auto wantedFrameMs = 1000.0 / jmax (1.0f, effectiveFrameRate.load (std::memory_order_relaxed));
+
+    if (++animationFrameCounter < jmax (1, roundToInt (wantedFrameMs / displayFrameMs)))
+        return;
+
+    animationFrameCounter = 0;
+
+    YUP_TRY
+    {
+        renderFrame();
+    }
+    YUP_CATCH_EXCEPTION
+}
+#endif
+
+//==============================================================================
+
+bool SDLComponentNative::startRenderThread()
+{
+#if YUP_APPLE
+    const auto frameTimeMs = 1000.0 / jmax (1.0, static_cast<double> (desiredFrameRate.load (std::memory_order_relaxed)));
+
+    return startRealtimeThread (RealtimeOptions {}
+                                    .withPeriodMs (frameTimeMs)
+                                    .withProcessingTimeMs (frameTimeMs * 0.5)
+                                    .withMaximumProcessingTimeMs (frameTimeMs));
+#else
+    return false;
+#endif
+}
+
 void SDLComponentNative::startRendering()
 {
-    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
+    YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
     lastRenderTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
     frameRateStartTimeSeconds = lastRenderTimeSeconds;
     frameRateCounter = 0;
 
-    if constexpr (renderDrivenByTimer)
-    {
-        if (! isTimerRunning())
-            startTimerHz (desiredFrameRate);
-    }
-    else
-    {
-        if (! isTimerRunning())
-            startTimerHz (desiredFrameRate);
+    updateEffectiveFrameRate (hasNativeKeyboardFocus());
 
-        if (! isThreadRunning())
-            startThread (Priority::high);
-    }
+#if YUP_EMSCRIPTEN
+    startAnimationFrameLoop();
+#else
+    if (! isTimerRunning())
+        startTimerHz (roundToInt (effectiveFrameRate.load (std::memory_order_relaxed)));
+
+    if (! isThreadRunning() && ! startRenderThread())
+        startThread (Priority::high);
+#endif // YUP_EMSCRIPTEN
 
     repaint();
 
@@ -1324,33 +1426,35 @@ void SDLComponentNative::stopRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering requested: rendering=" << String (isRendering() ? "true" : "false"));
 
+#if YUP_EMSCRIPTEN
+        stopAnimationFrameLoop();
+#else
     if (isTimerRunning())
     {
         stopTimer();
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render/input timer");
     }
 
-    if constexpr (! renderDrivenByTimer)
+    if (isThreadRunning())
     {
-        if (isThreadRunning())
-        {
-            signalThreadShouldExit();
-            renderEvent.signal();
-            notify();
-            stopThread (-1);
-            YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render thread");
-        }
+        signalThreadShouldExit();
+        renderEvent.signal();
+        notify();
+        stopThread (-1);
+        YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopped render thread");
     }
+#endif // YUP_EMSCRIPTEN
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: stopRendering completed: rendering=" << String (isRendering() ? "true" : "false"));
 }
 
 bool SDLComponentNative::isRendering() const
 {
-    if constexpr (renderDrivenByTimer)
-        return isTimerRunning();
-    else
-        return isThreadRunning();
+#if YUP_EMSCRIPTEN
+    return activeAnimationFrameLoop != nullptr;
+#else
+    return isThreadRunning();
+#endif // YUP_EMSCRIPTEN
 }
 
 //==============================================================================
@@ -2075,6 +2179,9 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleFocusChanged " << String (gotFocus ? "true" : "false") << ", rendering=" << String (isRendering() ? "true" : "false"));
+
+    if (! updateOnlyWhenFocused)
+        updateEffectiveFrameRate (gotFocus);
 
     if (gotFocus)
     {

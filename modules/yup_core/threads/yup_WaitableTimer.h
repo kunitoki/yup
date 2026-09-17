@@ -39,13 +39,29 @@ namespace yup
       CPU while blocked. Plain sleeps are only as accurate as the 1 ms timer
       tick requested via timeBeginPeriod(), so a sleep targeting a deadline
       can overshoot it by up to a full tick.
+
+    - On Apple platforms it converges on the deadline with a short series of
+      absolute mach_wait_until() sleeps, each covering most of the time that
+      is left, and closes the last few microseconds with a busy-wait. Darwin
+      coalesces timer expiries into a window proportional to the requested
+      sleep duration, so sleeping the whole remaining time in one go overshoots
+      the deadline by a large fraction of it, while shrinking sleeps make that
+      error decay geometrically over a handful of syscalls.
+
+    - On Linux and Android it runs the same cascade on absolute
+      clock_nanosleep() sleeps. It also asks for the smallest possible timer
+      slack on the calling thread the first time that thread waits: Linux
+      applies 50 us of slack to every timer expiry for threads outside the
+      realtime scheduling classes, which an application is not normally
+      allowed to join.
+
     - On other platforms it blocks on a condition variable for the bulk of
       the wait (to avoid burning CPU), then finishes with a short, tiered
       busy-wait against Time::getMillisecondCounterHiRes() for the last few
       milliseconds. The condition-variable wake alone is not precise enough
-      on its own: OS scheduling and timer-coalescing latency (particularly
-      on macOS) can make it overshoot the deadline by several milliseconds,
-      which the trailing busy-wait corrects for.
+      on its own: OS scheduling and timer-coalescing latency can make it
+      overshoot the deadline by several milliseconds, which the trailing
+      busy-wait corrects for.
 
     Use it for frame pacing or any loop that must meet a deadline rather than
     merely sleep for a while.
@@ -55,7 +71,10 @@ namespace yup
 class YUP_API WaitableTimer
 {
 public:
+    /** Constructs a new waitable timer. */
     WaitableTimer();
+
+    /** Destroys the waitable timer. */
     ~WaitableTimer();
 
     /**
@@ -63,18 +82,22 @@ public:
         as Time::getMillisecondCounterHiRes().
 
         Returns immediately if the deadline has already passed.
+
+        @param milliseconds  The absolute time in milliseconds to wait until.
     */
     void waitUntil (double milliseconds);
 
 private:
-    void waitUntilFallback (double milliseconds);
-
 #if YUP_WINDOWS
     void* handle = nullptr;
 #endif
 
+#if ! (YUP_APPLE || YUP_LINUX || YUP_ANDROID)
+    void waitUntilFallback (double milliseconds);
+
     std::mutex mutex;
     std::condition_variable cv;
+#endif
 
     YUP_DECLARE_NON_COPYABLE (WaitableTimer)
 };

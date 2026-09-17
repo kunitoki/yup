@@ -23,53 +23,336 @@ namespace yup
 {
 
 //==============================================================================
+
+namespace
+{
+
+/** Depth caps for the two recursive walks over layer data. Both guard against
+    cycles in malformed files rather than limiting any legitimate animation. */
+constexpr int maxParentChainDepth = 32;
+constexpr int maxPrecompDepth = 16;
+
+/** Cache key for one precomp render: the asset, plus the position in its own
+    timeline it is sampled at.
+
+    Two layers can reference the same asset at different phases - their start
+    frames differ - and those renders are not interchangeable, so the phase has to
+    be part of the key. Quantised to a thousandth of a frame to keep the key an
+    exact integer rather than a formatted float.
+*/
+String precompCacheKey (const String& precompRefId, float localFrame)
+{
+    return precompRefId + "|" + String (static_cast<int> (std::round (localFrame * 1000.0f)));
+}
+
+/** Counts how many layer instances draw each precomp render of @p comp, at
+    @p frameNo for the given level.
+
+    Only layers this frame actually draws are counted. A composition referenced
+    by several layers whose visibility windows never overlap - the common
+    "sequential slices of one scene" export - is drawn once per frame like any
+    single-reference layer, and counting the invisible references too would put a
+    full-size offscreen target back in its path for nothing.
+
+    Each render is expanded once: a render asked for more than once is rasterized
+    a single time and then blitted, so its contents are also drawn exactly once -
+    which is what the count records.
+*/
+void countPrecompReferences (const AnimationComposition& comp,
+                             const std::vector<AnimationLayer::Ptr>& layers,
+                             float frameNo,
+                             HashMap<String, int>& counts,
+                             HashMap<String, int>& expandedRenders,
+                             int depth)
+{
+    if (depth > maxPrecompDepth)
+        return;
+
+    for (const auto& layer : layers)
+    {
+        if (layer == nullptr || layer->hidden || layer->isMatteSource)
+            continue;
+
+        if (! layer->isVisibleAt (frameNo))
+            continue;
+
+        if (layer->getType() != AnimationLayer::Type::Precomp)
+            continue;
+
+        const auto& precompLayer = static_cast<const PrecompLayer&> (*layer);
+        const auto localFrame = precompLayer.localFrame (frameNo, comp.frameRate);
+        const auto renderKey = precompCacheKey (precompLayer.precompRefId, localFrame);
+
+        const int previousCount = counts.contains (renderKey) ? counts[renderKey] : 0;
+        counts.set (renderKey, previousCount + 1);
+
+        if (expandedRenders.contains (renderKey))
+            continue;
+
+        expandedRenders.set (renderKey, 1);
+
+        if (const auto* assetPtr = comp.assets.getPointer (precompLayer.precompRefId))
+        {
+            if (const auto* asset = assetPtr->get())
+                countPrecompReferences (comp, asset->layers, localFrame, counts, expandedRenders, depth + 1);
+        }
+    }
+}
+
+/** Pushes @p clipPath as the clip in effect, interpreting it in the current
+    transform. Callers must have saved the Graphics state, which owns the clip
+    until it is restored. */
+void pushClipPath (Graphics& g, const Path& clipPath)
+{
+    const auto savedTransform = g.getTransform();
+
+    g.setTransform (AffineTransform::identity());
+    g.setClipPath (clipPath);
+    g.setTransform (savedTransform);
+}
+
+/** Culls everything drawn until the caller's saved Graphics state is restored. */
+void pushEmptyClip (Graphics& g)
+{
+    pushClipPath (g, Path());
+}
+
+/** Clips @p clipRect, given in composition space, into the current transform and
+    intersects it with the clip already in effect.
+
+    Returns false when nothing drawn afterwards can be visible, which lets the
+    caller skip its content outright.
+
+    The intersection itself is left to the renderer, which resolves two
+    overlapping rectangular clips with a bounds test. Running a path boolean op
+    here instead produces the same region as a polygon with a redundant vertex
+    per crossing, which the renderer then has to tessellate as a clip path.
+*/
+bool applyViewportClip (Graphics& g, Rectangle<float> clipRect)
+{
+    if (clipRect.getWidth() <= 0.0f || clipRect.getHeight() <= 0.0f)
+    {
+        pushEmptyClip (g);
+        return false;
+    }
+
+    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+
+    Path viewportClip;
+    viewportClip.addRectangle (clipRect);
+    auto transformedViewportClip = viewportClip.transformed (clipTransform);
+
+    const auto viewportBounds = transformedViewportClip.getBounds();
+    if (transformedViewportClip.isEmpty() || viewportBounds.getWidth() <= 0.0f || viewportBounds.getHeight() <= 0.0f)
+    {
+        pushEmptyClip (g);
+        return false;
+    }
+
+    const auto currentClipPath = g.getClipPath();
+    if (! currentClipPath.isEmpty())
+    {
+        const auto currentBounds = currentClipPath.getBounds();
+
+        if (currentBounds.getWidth() <= 0.0f || currentBounds.getHeight() <= 0.0f
+            || ! currentBounds.intersects (viewportBounds))
+        {
+            pushEmptyClip (g);
+            return false;
+        }
+
+        if (viewportBounds.contains (currentBounds))
+            return true;
+    }
+
+    pushClipPath (g, transformedViewportClip);
+    return true;
+}
+
+/** Intersects the current clip with @p clipPath, given in the current transform,
+    and pushes the result.
+
+    Returns false when nothing drawn afterwards can be visible. When
+    @p allowEmpty is false an empty @p clipPath means "no clip" and leaves the
+    clip in effect untouched.
+*/
+bool applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool allowEmpty = false)
+{
+    if (clipPath.isEmpty() && ! allowEmpty)
+        return true;
+
+    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+    auto transformedClipPath = clipPath.transformed (clipTransform);
+
+    const auto clipBounds = transformedClipPath.getBounds();
+    if (transformedClipPath.isEmpty() || clipBounds.getWidth() <= 0.0f || clipBounds.getHeight() <= 0.0f)
+    {
+        pushEmptyClip (g);
+        return false;
+    }
+
+    const auto currentClipPath = g.getClipPath();
+    if (! currentClipPath.isEmpty())
+    {
+        const auto currentBounds = currentClipPath.getBounds();
+
+        if (currentBounds.getWidth() <= 0.0f || currentBounds.getHeight() <= 0.0f
+            || ! currentBounds.intersects (clipBounds))
+        {
+            pushEmptyClip (g);
+            return false;
+        }
+
+        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
+    }
+
+    if (transformedClipPath.isEmpty())
+        return false;
+
+    pushClipPath (g, transformedClipPath);
+    return true;
+}
+
+/** Content bounds of @p layer in its own space, used to size clips and
+    offscreen targets. */
+Rectangle<float> getLayerContentBounds (const AnimationLayer& layer, Size<float> compSize)
+{
+    Size<float> size = compSize;
+
+    switch (layer.getType())
+    {
+        case AnimationLayer::Type::Solid:
+            size = static_cast<const SolidLayer&> (layer).layerSize;
+            break;
+
+        case AnimationLayer::Type::Image:
+            if (const auto& image = static_cast<const ImageLayer&> (layer).image)
+                size = { static_cast<float> (image->getWidth()), static_cast<float> (image->getHeight()) };
+            break;
+
+        case AnimationLayer::Type::Precomp:
+            size = static_cast<const PrecompLayer&> (layer).layerSize;
+            break;
+
+        case AnimationLayer::Type::Shape:
+        case AnimationLayer::Type::Text:
+        case AnimationLayer::Type::Null:
+            break;
+    }
+
+    if (size.getWidth() <= 0.0f || size.getHeight() <= 0.0f)
+        size = compSize;
+
+    return { 0.0f, 0.0f, size.getWidth(), size.getHeight() };
+}
+
+/** Screen-space bounds of everything @p layer can draw, or an empty rectangle
+    when they cannot be derived cheaply.
+
+    Only the layer types whose content is bounded by the layer's own box are
+    reported. A shape layer draws wherever its geometry happens to be, and an
+    enabled drop shadow adds a second draw offset from the content, so both fall
+    back to the caller's conservative bounds.
+*/
+Rectangle<float> layerContentBoundsOnScreen (const AnimationLayer& layer,
+                                             Size<float> compSize,
+                                             const AffineTransform& layerToScreen)
+{
+    if (layer.dropShadow.has_value() && layer.dropShadow->enabled)
+        return {};
+
+    switch (layer.getType())
+    {
+        case AnimationLayer::Type::Solid:
+        case AnimationLayer::Type::Image:
+        case AnimationLayer::Type::Precomp:
+            return getLayerContentBounds (layer, compSize).transformed (layerToScreen);
+
+        case AnimationLayer::Type::Shape:
+        case AnimationLayer::Type::Text:
+        case AnimationLayer::Type::Null:
+            break;
+    }
+
+    return {};
+}
+
+/** Opacities this close to fully opaque are treated as opaque. Exporters write
+    values like 99 or 99.9 for layers meant to be seen at full strength, and
+    isolating one behind a full-size offscreen composite to reproduce a sub-1%
+    difference in alpha costs far more than the difference is worth. */
+constexpr float opaqueOpacityThreshold = 0.999f;
+
+/** Returns true when @p layer's opacity has to be applied by compositing the
+    layer offscreen rather than by scaling each of its paints.
+
+    A layer that fills or blits a single primitive already folds its opacity into
+    that primitive's alpha, so compositing it offscreen would only reproduce the
+    same pixels through a render target. Layers that draw several primitives which
+    can overlap need the offscreen composite for correct group opacity, and an
+    enabled drop shadow adds a second, overlapping draw to any layer type.
+*/
+bool needsTransparencyLayer (const AnimationLayer& layer)
+{
+    if (layer.dropShadow.has_value() && layer.dropShadow->enabled)
+        return true;
+
+    switch (layer.getType())
+    {
+        case AnimationLayer::Type::Shape:
+        case AnimationLayer::Type::Precomp:
+            return true;
+
+        case AnimationLayer::Type::Solid:
+        case AnimationLayer::Type::Image:
+        case AnimationLayer::Type::Text:
+        case AnimationLayer::Type::Null:
+            return false;
+    }
+
+    return true;
+}
+
+} // namespace
+
+//==============================================================================
 // SceneContext
 
 void AnimationRenderer::SceneContext::buildParentTransforms (const std::vector<AnimationLayer::Ptr>& layers)
 {
+    layersById.clear();
+
+    for (const auto& layer : layers)
+    {
+        if (layer != nullptr)
+            layersById.set (layer->id, layer.get());
+    }
+
     parentTransforms.clear();
 
-    std::vector<bool> resolved (layers.size(), false);
-    bool anyResolved = true;
-
-    while (anyResolved)
+    for (const auto& layer : layers)
     {
-        anyResolved = false;
-        for (size_t i = 0; i < layers.size(); ++i)
-        {
-            if (resolved[i])
-                continue;
+        if (layer != nullptr)
+            resolveWorldTransform (*layer, 0);
+    }
+}
 
-            const AnimationLayer* layer = layers[i].get();
-            if (layer == nullptr)
-            {
-                resolved[i] = true;
-                continue;
-            }
+const AffineTransform& AnimationRenderer::SceneContext::resolveWorldTransform (const AnimationLayer& layer, int depth)
+{
+    if (auto* resolved = parentTransforms.getPointer (layer.id))
+        return *resolved;
 
-            if (layer->parentId < 0)
-            {
-                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
-                resolved[i] = true;
-                anyResolved = true;
-            }
-            else if (auto* parentXf = parentTransforms.getPointer (layer->parentId))
-            {
-                parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo).followedBy (*parentXf));
-                resolved[i] = true;
-                anyResolved = true;
-            }
-        }
+    AffineTransform transform = layer.transform.toAffineTransform (frameNo);
+
+    if (depth < maxParentChainDepth && layer.parentId >= 0 && layer.parentId != layer.id)
+    {
+        if (auto* parent = layersById.getPointer (layer.parentId))
+            transform = transform.followedBy (resolveWorldTransform (**parent, depth + 1));
     }
 
-    for (size_t i = 0; i < layers.size(); ++i)
-    {
-        if (! resolved[i] && layers[i] != nullptr)
-        {
-            const AnimationLayer* layer = layers[i].get();
-            parentTransforms.set (layer->id, layer->transform.toAffineTransform (frameNo));
-        }
-    }
+    parentTransforms.set (layer.id, transform);
+
+    return *parentTransforms.getPointer (layer.id);
 }
 
 //==============================================================================
@@ -192,28 +475,22 @@ void AnimationRenderer::renderComposition (Graphics& g,
     const Rectangle<float> clipRect = fittedRect.intersection (bounds);
 
     auto clipState = g.saveState();
-    Path viewportClip;
-    viewportClip.addRectangle (clipRect);
 
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-
-    auto transformedViewportClip = viewportClip.transformed (clipTransform);
-    const auto currentClipPath = g.getClipPath();
-    if (! transformedViewportClip.isEmpty() && ! currentClipPath.isEmpty())
-        transformedViewportClip = currentClipPath.combinedWith (transformedViewportClip, Path::BooleanOperation::Intersect);
-
-    const auto savedTransform = g.getTransform();
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (transformedViewportClip);
-    g.setTransform (savedTransform);
+    if (! applyViewportClip (g, clipRect))
+        return;
 
     SceneContext sceneCtx { comp, frameNo, compSize };
     sceneCtx.buildParentTransforms (comp.layers);
 
     PrecompCache precompCache;
+    {
+        HashMap<String, int> expandedAssets;
+        countPrecompReferences (comp, comp.layers, frameNo, precompCache.referenceCounts, expandedAssets, 0);
+    }
+
     std::vector<AnimationRenderResources::MatteCanvasLease> matteLeases;
-    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources, &matteLeases };
+    std::vector<AnimationRenderResources::PrecompCanvasLease> precompLeases;
+    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources, &matteLeases, &precompLeases };
 
     renderLayerList (g, comp.layers, ctx);
 }
@@ -253,10 +530,12 @@ void AnimationRenderer::renderLayer (Graphics& g,
                                      const RenderContext& ctx,
                                      const AnimationLayer* matteSource)
 {
-    const float opacity = ctx.opacity * layer.transform.opacityAt (ctx.scene.frameNo);
+    const float opacity = jmin (1.0f, ctx.opacity * layer.transform.opacityAt (ctx.scene.frameNo));
 
     if (opacity <= 0.0f)
         return;
+
+    const float effectiveOpacity = opacity >= opaqueOpacityThreshold ? 1.0f : opacity;
 
     // Track mattes need the source's *rendered alpha* (including its fill opacity,
     // gradients, and anti-aliased edges), not just its silhouette. Composite the
@@ -265,13 +544,15 @@ void AnimationRenderer::renderLayer (Graphics& g,
     // unavailable (e.g. headless) or an offscreen target cannot be allocated.
     if (matteSource != nullptr
         && layer.matteType != AnimationLayer::MatteType::None
-        && renderLayerWithMatte (g, layer, ctx, *matteSource, opacity))
+        && renderLayerWithMatte (g, layer, ctx, *matteSource, effectiveOpacity))
         return;
 
-    if (opacity < 1.0f && renderLayerIsolated (g, layer, ctx, matteSource, opacity))
+    if (effectiveOpacity < 1.0f
+        && needsTransparencyLayer (layer)
+        && renderLayerIsolated (g, layer, ctx, matteSource, effectiveOpacity))
         return;
 
-    renderLayerDirect (g, layer, ctx, matteSource, opacity);
+    renderLayerDirect (g, layer, ctx, matteSource, effectiveOpacity);
 }
 
 void AnimationRenderer::renderLayerDirect (Graphics& g,
@@ -341,14 +622,30 @@ bool AnimationRenderer::renderLayerIsolated (Graphics& g,
     const Rectangle<float> compRect (0.0f, 0.0f, ctx.scene.compSize.getWidth(), ctx.scene.compSize.getHeight());
     const Rectangle<float> fittedRect = compRect.transformed (ctx.viewTransform);
 
-    auto transparencyLayer = g.beginTransparencyLayer (fittedRect, opacity);
+    auto targetArea = fittedRect;
+
+    if (auto contentBounds = layerContentBoundsOnScreen (layer, ctx.scene.compSize, ctx.resolveLayerTransform (layer));
+        ! contentBounds.isEmpty())
+    {
+        // Anything the layer draws is clipped to the composition viewport, so the
+        // target never needs to reach past it.
+        contentBounds = contentBounds.intersection (fittedRect);
+
+        if (contentBounds.isEmpty())
+            return false;
+
+        targetArea = contentBounds;
+    }
+
+    auto transparencyLayer = g.beginTransparencyLayer (targetArea, opacity);
     if (! transparencyLayer.isValid())
         return false;
 
-    // Inside the layer, render with the fitted scale but no translation: the
-    // layer-local origin is already the fitted rectangle's top-left corner.
+    const auto targetShift = targetArea.getTopLeft() - fittedRect.getTopLeft();
+
     RenderContext layerCtx = ctx;
-    layerCtx.viewTransform = AffineTransform::scaling (ctx.viewTransform.getScaleX(), ctx.viewTransform.getScaleY());
+    layerCtx.viewTransform = AffineTransform::scaling (ctx.viewTransform.getScaleX(), ctx.viewTransform.getScaleY())
+                                 .followedBy (AffineTransform::translation (-targetShift.getX(), -targetShift.getY()));
     layerCtx.opacity = 1.0f;
 
     renderLayerDirect (transparencyLayer.getGraphics(), layer, layerCtx, matteSource, 1.0f);
@@ -586,46 +883,30 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
     const float localFrame = layer.localFrame (ctx.scene.frameNo, ctx.scene.comp.frameRate);
     const Rectangle<float> precompBounds (0.0f, 0.0f, layer.layerSize.getWidth(), layer.layerSize.getHeight());
 
-    // Apply viewport clip matching renderComposition's clip behavior
     auto clipState = g.saveState();
-    Path viewportClip;
-    viewportClip.addRectangle (precompBounds);
+    if (! applyViewportClip (g, precompBounds))
+        return;
 
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-    auto transformedViewportClip = viewportClip.transformed (clipTransform);
-    const auto currentClipPath = g.getClipPath();
-    if (! transformedViewportClip.isEmpty() && ! currentClipPath.isEmpty())
-        transformedViewportClip = currentClipPath.combinedWith (transformedViewportClip, Path::BooleanOperation::Intersect);
+    // The asset's content depends on the phase it is sampled at, so the cache is
+    // keyed by asset *and* phase. A phase asked for only once is drawn straight
+    // into the parent: opening a target for it would buy nothing, since no other
+    // reference wants that render.
+    const auto renderKey = precompCacheKey (layer.precompRefId, localFrame);
 
-    const auto savedTransform = g.getTransform();
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (transformedViewportClip);
-    g.setTransform (savedTransform);
+    const bool needsOffscreen = ctx.precompCache != nullptr
+                             && (opacity < 1.0f || ctx.precompCache->isSharedAsset (renderKey));
 
-    // Check cache first — if this precomp asset was already rendered this frame,
-    // just draw the cached texture. Skip caching when already rendering to an
-    // offscreen target (nested precomps or inside GpuCanvas).
-    if (ctx.precompCache != nullptr)
+    SceneContext precompScene { ctx.scene.comp, localFrame, layer.layerSize };
+
+    if (needsOffscreen)
     {
-        if (auto* cached = ctx.precompCache->textures.getPointer (layer.precompRefId))
+        if (auto* cached = ctx.precompCache->textures.getPointer (renderKey))
         {
             g.setOpacity (g.getOpacity() * opacity);
             g.drawTexture (*cached, precompBounds);
             return;
         }
-    }
 
-    // Build a scene context for the asset's layers (reuses the parent comp's assets map)
-    SceneContext precompScene { ctx.scene.comp, localFrame, layer.layerSize };
-
-    const float scaleX = precompBounds.getWidth() / layer.layerSize.getWidth();
-    const float scaleY = precompBounds.getHeight() / layer.layerSize.getHeight();
-    const AffineTransform precompViewXf = AffineTransform::scaling (scaleX, scaleY)
-                                              .followedBy (AffineTransform::translation (precompBounds.getX(), precompBounds.getY()));
-
-    if (ctx.precompCache != nullptr)
-    {
-        // Render precomp to an offscreen canvas once, then cache for reuse.
         // Size the offscreen target to the on-screen device resolution so the
         // cached texture is not upscaled (which would lose quality). The current
         // graphics transform maps layer space to device pixels, so its scale
@@ -637,25 +918,34 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
         if (w > 0 && h > 0)
         {
-            auto canvas = ctx.renderResources != nullptr
-                            ? ctx.renderResources->getPrecompCanvas (g.getGraphicsContext(), layer.precompRefId, w, h)
-                            : GpuCanvas::create (g.getGraphicsContext(), w, h);
+            AnimationRenderResources::PrecompCanvasLease canvasLease;
+            GpuCanvas::Ptr localCanvas;
+
+            if (ctx.renderResources != nullptr)
+                canvasLease = ctx.renderResources->acquirePrecompCanvas (g.getGraphicsContext(), w, h);
+            else
+                localCanvas = GpuCanvas::create (g.getGraphicsContext(), w, h);
+
+            auto* canvas = canvasLease.isValid() ? std::addressof (canvasLease.getCanvas())
+                                                 : localCanvas.get();
             if (canvas != nullptr)
             {
                 {
                     auto& offscreenG = canvas->beginDraw();
 
-                    SceneContext offscreenScene { ctx.scene.comp, localFrame, layer.layerSize };
-                    offscreenScene.buildParentTransforms (asset->layers);
+                    precompScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { offscreenScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases };
+                    RenderContext offscreenCtx { precompScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
                 auto tex = canvas->asTexture();
                 if (tex != nullptr)
                 {
-                    ctx.precompCache->textures.set (layer.precompRefId, tex);
+                    ctx.precompCache->textures.set (renderKey, tex);
+
+                    if (canvasLease.isValid() && ctx.precompLeases != nullptr)
+                        ctx.precompLeases->push_back (std::move (canvasLease));
 
                     g.setOpacity (g.getOpacity() * opacity);
                     g.drawTexture (tex, precompBounds);
@@ -665,9 +955,14 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
         }
     }
 
+    const float scaleX = precompBounds.getWidth() / layer.layerSize.getWidth();
+    const float scaleY = precompBounds.getHeight() / layer.layerSize.getHeight();
+    const AffineTransform precompViewXf = AffineTransform::scaling (scaleX, scaleY)
+                                              .followedBy (AffineTransform::translation (precompBounds.getX(), precompBounds.getY()));
+
     precompScene.buildParentTransforms (asset->layers);
 
-    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, nullptr, ctx.renderResources, ctx.matteLeases };
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
 
     renderLayerList (g, asset->layers, precompCtx);
 }
@@ -677,37 +972,6 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 namespace
 {
 
-Rectangle<float> getLayerContentBounds (const AnimationLayer& layer, Size<float> compSize)
-{
-    Size<float> size = compSize;
-
-    switch (layer.getType())
-    {
-        case AnimationLayer::Type::Solid:
-            size = static_cast<const SolidLayer&> (layer).layerSize;
-            break;
-
-        case AnimationLayer::Type::Image:
-            if (const auto& image = static_cast<const ImageLayer&> (layer).image)
-                size = { static_cast<float> (image->getWidth()), static_cast<float> (image->getHeight()) };
-            break;
-
-        case AnimationLayer::Type::Precomp:
-            size = static_cast<const PrecompLayer&> (layer).layerSize;
-            break;
-
-        case AnimationLayer::Type::Shape:
-        case AnimationLayer::Type::Text:
-        case AnimationLayer::Type::Null:
-            break;
-    }
-
-    if (size.getWidth() <= 0.0f || size.getHeight() <= 0.0f)
-        size = compSize;
-
-    return { 0.0f, 0.0f, size.getWidth(), size.getHeight() };
-}
-
 Path createRectanglePath (Rectangle<float> bounds)
 {
     Path path;
@@ -715,31 +979,17 @@ Path createRectanglePath (Rectangle<float> bounds)
     return path;
 }
 
-void applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool allowEmpty = false)
-{
-    if (clipPath.isEmpty() && ! allowEmpty)
-        return;
-
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-    auto transformedClipPath = clipPath.transformed (clipTransform);
-    const auto currentClipPath = g.getClipPath();
-    if (! transformedClipPath.isEmpty() && ! currentClipPath.isEmpty())
-        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
-
-    const auto savedTransform = g.getTransform();
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (transformedClipPath);
-    g.setTransform (savedTransform);
-}
-
 } // namespace
 
 AnimationRenderer::ClipPathResult AnimationRenderer::buildLayerMaskClipPath (const AnimationLayer& layer, float frameNo, Size<float> compSize)
 {
-    if (layer.areAllMasksStatic()
-        && layer.cachedMaskClipPath.has_value()
-        && layer.cachedMaskFrameNo == frameNo)
+    const bool masksAreStatic = layer.areAllMasksStatic();
+
+    const bool cacheHits = masksAreStatic
+                             ? layer.cachedMaskIsStatic
+                             : (layer.cachedMaskClipPath.has_value() && layer.cachedMaskFrameNo == frameNo);
+
+    if (cacheHits && layer.cachedMaskSize == compSize)
         return { *layer.cachedMaskClipPath, true };
 
     const auto maskBoundsPath = createRectanglePath (getLayerContentBounds (layer, compSize));
@@ -788,10 +1038,12 @@ AnimationRenderer::ClipPathResult AnimationRenderer::buildLayerMaskClipPath (con
         }
     }
 
-    if (layer.areAllMasksStatic() && hasAnyMask)
+    if (hasAnyMask)
     {
         layer.cachedMaskClipPath = clipPath;
         layer.cachedMaskFrameNo = frameNo;
+        layer.cachedMaskIsStatic = masksAreStatic;
+        layer.cachedMaskSize = compSize;
     }
 
     return { clipPath, hasAnyMask };
@@ -809,8 +1061,7 @@ bool AnimationRenderer::applyMasks (Graphics& g, const AnimationLayer& layer, fl
     if (clipPath.path.isEmpty())
         return false;
 
-    applyClipPathInCurrentTransform (g, clipPath.path);
-    return true;
+    return applyClipPathInCurrentTransform (g, clipPath.path);
 }
 
 //==============================================================================

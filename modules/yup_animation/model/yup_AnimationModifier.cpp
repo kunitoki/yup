@@ -102,7 +102,14 @@ float AnimationRepeater::endOpacityAt (float frameNo) const
 
 Path AnimationMask::shapeAt (float frameNo) const
 {
-    return shape.getValueAt (frameNo).toPath();
+    if (shape.isStatic() && cachedShape.has_value())
+        return *cachedShape;
+
+    auto result = shape.getValueAt (frameNo).toPath();
+    if (shape.isStatic())
+        cachedShape = result;
+
+    return result;
 }
 
 float AnimationMask::opacityAt (float frameNo) const

@@ -546,7 +546,7 @@ void SpectrumAnalyzerComponent::setUpdateRate (int hz)
 
 int SpectrumAnalyzerComponent::getUpdateRate() const noexcept
 {
-    return getTimerInterval() > 0 ? 1000 / getTimerInterval() : 0;
+    return roundToInt (getTimerFrequencyHz());
 }
 
 void SpectrumAnalyzerComponent::setFrequencyRange (float minFreq, float maxFreq)

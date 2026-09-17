@@ -119,6 +119,7 @@ bool Drawable::parseSVG (const File& svgFile, const ParseOptions& options)
     YUP_DRAWABLE_LOG ("parseSVG(file, options) - file: " << svgFile.getFullPathName());
 
     document = SVGParser::parse (svgFile, options);
+    prepareDocument();
     return document != nullptr;
 }
 
@@ -136,7 +137,244 @@ bool Drawable::parseSVG (StringRef svgText, const ParseOptions& options)
     YUP_DRAWABLE_LOG ("parseSVG(text, options) - length: " << String (svgText.text).length());
 
     document = SVGParser::parse (svgText, options);
+    prepareDocument();
     return document != nullptr;
+}
+
+//==============================================================================
+
+void Drawable::prepareDocument()
+{
+    if (document == nullptr)
+        return;
+
+    document->visit ([this] (SVGData& data)
+    {
+        std::unordered_set<SVGElement*> preparedElements;
+
+        const auto prepareElements = [this, &data, &preparedElements] (auto& elements)
+        {
+            for (auto& element : elements)
+                if (element != nullptr)
+                    prepareElement (data, *element, preparedElements);
+        };
+
+        prepareElements (data.elements);
+
+        for (auto& clipPath : data.clipPaths)
+            if (clipPath != nullptr)
+                prepareElements (clipPath->elements);
+        for (auto& mask : data.masks)
+            if (mask != nullptr)
+                prepareElements (mask->elements);
+        for (auto& marker : data.markers)
+            if (marker != nullptr)
+                prepareElements (marker->elements);
+        for (auto& pattern : data.patterns)
+            if (pattern != nullptr)
+                prepareElements (pattern->elements);
+    });
+}
+
+void Drawable::prepareElement (SVGData& data, SVGElement& element, std::unordered_set<SVGElement*>& preparedElements)
+{
+    if (! preparedElements.insert (std::addressof (element)).second)
+        return;
+
+    if (element.path.has_value())
+    {
+        element.preparedPathBounds = element.path->getBounds();
+
+        if (element.strokeDashArray.has_value() && ! element.strokeDashArray->isEmpty())
+            element.preparedDashedPath = createDashedPath (*element.path, *element.strokeDashArray, element.strokeDashOffset.value_or (0.0f));
+
+        prepareMarkerPlacements (element);
+    }
+
+    prepareTextElement (element);
+
+    if (element.image.has_value() && element.imageBounds.has_value() && element.image->isValid())
+    {
+        const Rectangle<float> sourceBounds (0.0f,
+                                             0.0f,
+                                             static_cast<float> (element.image->getWidth()),
+                                             static_cast<float> (element.image->getHeight()));
+        element.preparedImageBounds = sourceBounds.transformed (
+            calculateTransformForTarget (sourceBounds,
+                                         *element.imageBounds,
+                                         element.preserveAspectRatioFitting,
+                                         element.preserveAspectRatioJustification));
+    }
+
+    const auto prepareGradient = [this, &data, &element] (const std::optional<String>& gradientId,
+                                                           std::optional<ColorGradient>& destination)
+    {
+        if (! gradientId.has_value())
+            return;
+
+        const auto gradient = getGradientById (data, *gradientId);
+        if (gradient == nullptr)
+            return;
+
+        std::optional<Rectangle<float>> bounds;
+        if (element.path.has_value())
+            bounds = getPathBounds (element);
+        else if (element.reference.has_value())
+        {
+            if (const auto referenced = data.elementsById[*element.reference]; referenced != nullptr && referenced->path.has_value())
+                bounds = getPathBounds (*referenced);
+        }
+
+        if (gradient->type == SVGGradient::Radial
+            && element.path.has_value()
+            && bounds.has_value()
+            && ! gradient->transform.isIdentity())
+            return;
+
+        destination = createColorGradientFromSVG (*gradient, bounds ? std::addressof (*bounds) : nullptr);
+    };
+
+    prepareGradient (element.fillUrl, element.preparedFillGradient);
+    prepareGradient (element.strokeUrl, element.preparedStrokeGradient);
+
+    for (auto& child : element.children)
+        if (child != nullptr)
+            prepareElement (data, *child, preparedElements);
+}
+
+void Drawable::prepareMarkerPlacements (SVGElement& element)
+{
+    if (! element.path.has_value()
+        || (! element.markerStart.has_value() && ! element.markerMid.has_value() && ! element.markerEnd.has_value()))
+        return;
+
+    Point<float> firstPoint, previousPoint, subpathStart;
+    bool hasFirstPoint = false;
+    float previousTangent = 0.0f;
+    bool firstSegmentAfterMove = false;
+
+    for (const auto& segment : *element.path)
+    {
+        if (segment.verb == Path::Verb::MoveTo)
+        {
+            firstPoint = segment.point;
+            previousPoint = segment.point;
+            subpathStart = segment.point;
+            hasFirstPoint = true;
+            firstSegmentAfterMove = true;
+            previousTangent = 0.0f;
+            element.preparedMarkerEnds.clear();
+            continue;
+        }
+
+        if (! hasFirstPoint)
+            continue;
+
+        if (segment.verb == Path::Verb::Close)
+        {
+            if (! firstSegmentAfterMove)
+                element.preparedMarkerMids.push_back ({ previousPoint, previousTangent });
+
+            previousPoint = subpathStart;
+            firstSegmentAfterMove = true;
+            element.preparedMarkerEnds.clear();
+            continue;
+        }
+
+        Point<float> startDirectionPoint = segment.point;
+        Point<float> endDirectionPoint = previousPoint;
+
+        if (segment.verb == Path::Verb::QuadTo)
+        {
+            startDirectionPoint = segment.controlPoint1;
+            endDirectionPoint = segment.controlPoint1;
+        }
+        else if (segment.verb == Path::Verb::CubicTo)
+        {
+            startDirectionPoint = segment.controlPoint1;
+            endDirectionPoint = segment.controlPoint2;
+        }
+
+        const auto startAngle = std::atan2 (startDirectionPoint.getY() - previousPoint.getY(),
+                                             startDirectionPoint.getX() - previousPoint.getX());
+        const auto endAngle = std::atan2 (segment.point.getY() - endDirectionPoint.getY(),
+                                           segment.point.getX() - endDirectionPoint.getX());
+
+        if (firstSegmentAfterMove)
+        {
+            element.preparedMarkerStarts.push_back ({ firstPoint, startAngle });
+            firstSegmentAfterMove = false;
+        }
+        else
+        {
+            element.preparedMarkerMids.push_back ({ previousPoint, previousTangent });
+        }
+
+        previousPoint = segment.point;
+        previousTangent = endAngle;
+        element.preparedMarkerEnds = { { segment.point, endAngle } };
+    }
+}
+
+void Drawable::prepareTextElement (SVGElement& element)
+{
+    if (! element.text.has_value() || ! element.textPosition.has_value() || element.text->isEmpty())
+        return;
+
+    auto position = *element.textPosition;
+
+    if (element.textX && ! element.textX->isEmpty())
+        position.setX (element.textX->getFirst());
+    if (element.textY && ! element.textY->isEmpty())
+        position.setY (element.textY->getFirst());
+    if (element.textDx && ! element.textDx->isEmpty())
+        position.setX (position.getX() + element.textDx->getFirst());
+    if (element.textDy && ! element.textDy->isEmpty())
+        position.setY (position.getY() + element.textDy->getFirst());
+
+    const auto font = resolveFont (element);
+    const auto fontSize = element.fontSize.value_or (16.0f);
+    auto styledText = std::make_shared<StyledText>();
+
+    {
+        auto modifier = styledText->startUpdate();
+        modifier.setMaxSize (Size<float> (jmax (fontSize, static_cast<float> (element.text->length()) * fontSize * 2.0f),
+                                            fontSize * 4.0f));
+        modifier.setWrap (StyledText::noWrap);
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::top);
+        modifier.appendText (*element.text, font, -1.0f, element.letterSpacing.value_or (0.0f));
+    }
+
+    const auto computedTextBounds = styledText->getComputedTextBounds();
+    const auto fontAscent = font.getAscent();
+    const auto fontDescent = font.getDescent();
+    const auto hasUsableFontMetrics = fontAscent < 0.0f && fontDescent > fontAscent;
+    const auto ascent = hasUsableFontMetrics ? fontAscent : -0.8f;
+    const auto descent = hasUsableFontMetrics ? fontDescent : 0.2f;
+    const auto metricsHeight = (descent - ascent) * fontSize;
+    const auto textWidth = jmax (fontSize, computedTextBounds.getWidth());
+    const auto textHeight = jmax (computedTextBounds.getHeight(), metricsHeight);
+
+    auto textX = position.getX();
+    if (element.textAnchor == "middle")
+        textX -= textWidth * 0.5f;
+    else if (element.textAnchor == "end")
+        textX -= textWidth;
+
+    element.preparedText = std::move (styledText);
+    element.preparedTextBounds = Rectangle<float> (textX,
+                                                    position.getY() + (ascent * fontSize),
+                                                    textWidth,
+                                                    textHeight + fontSize * 0.25f);
+}
+
+Rectangle<float> Drawable::getPathBounds (const SVGElement& element) const
+{
+    if (element.preparedPathBounds.has_value())
+        return *element.preparedPathBounds;
+
+    return element.path.has_value() ? element.path->getBounds() : Rectangle<float>();
 }
 
 //==============================================================================
@@ -401,11 +639,11 @@ void Drawable::paintElement (Graphics& g,
             if (clipPath->units == SVGClipPath::ObjectBoundingBox)
             {
                 if (element.path)
-                    clipObjectBounds = element.path->getBounds();
+                    clipObjectBounds = getPathBounds (element);
                 else if (element.reference)
                 {
                     if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
-                        clipObjectBounds = refElement->path->getBounds();
+                        clipObjectBounds = getPathBounds (*refElement);
                 }
                 else if (element.imageBounds)
                 {
@@ -459,11 +697,11 @@ void Drawable::paintElement (Graphics& g,
             if (mask->maskUnits == SVGMask::ObjectBoundingBox)
             {
                 if (element.path)
-                    maskObjectBounds = element.path->getBounds();
+                    maskObjectBounds = getPathBounds (element);
                 else if (element.reference)
                 {
                     if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
-                        maskObjectBounds = refElement->path->getBounds();
+                        maskObjectBounds = getPathBounds (*refElement);
                 }
                 else if (element.imageBounds)
                 {
@@ -528,17 +766,22 @@ void Drawable::paintElement (Graphics& g,
     }
     else if (element.fillUrl)
     {
-        if (auto gradient = getGradientById (data, *element.fillUrl))
+        if (element.preparedFillGradient.has_value())
+        {
+            g.setFillColorGradient (*element.preparedFillGradient);
+            isFillDefined = true;
+        }
+        else if (auto gradient = getGradientById (data, *element.fillUrl))
         {
             auto resolvedGradient = gradient;
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
-                gradientBounds = element.path->getBounds();
+                gradientBounds = getPathBounds (element);
             else if (element.reference)
             {
                 if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
-                    gradientBounds = refElement->path->getBounds();
+                    gradientBounds = getPathBounds (*refElement);
             }
 
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
@@ -601,7 +844,7 @@ void Drawable::paintElement (Graphics& g,
                 {
                     YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
                                                              << " id: " << (element.id ? *element.id : "none")
-                                                             << " bounds: " << element.path->getBounds().toString()
+                                                             << " bounds: " << getPathBounds (element).toString()
                                                              << " clip: " << (hasClipping ? "true" : "false"));
                     fillElementPath();
                 }
@@ -610,7 +853,7 @@ void Drawable::paintElement (Graphics& g,
             {
                 YUP_DRAWABLE_LOG ("Filling path - tag: " << element.tagName
                                                          << " id: " << (element.id ? *element.id : "none")
-                                                         << " bounds: " << element.path->getBounds().toString()
+                                                         << " bounds: " << getPathBounds (element).toString()
                                                          << " clip: " << (hasClipping ? "true" : "false"));
                 fillElementPath();
             }
@@ -682,17 +925,22 @@ void Drawable::paintElement (Graphics& g,
     }
     else if (element.strokeUrl)
     {
-        if (auto gradient = getGradientById (data, *element.strokeUrl))
+        if (element.preparedStrokeGradient.has_value())
+        {
+            g.setStrokeColorGradient (*element.preparedStrokeGradient);
+            isStrokeDefined = true;
+        }
+        else if (auto gradient = getGradientById (data, *element.strokeUrl))
         {
             auto resolvedGradient = gradient;
             std::optional<Rectangle<float>> gradientBounds;
 
             if (element.path)
-                gradientBounds = element.path->getBounds();
+                gradientBounds = getPathBounds (element);
             else if (element.reference)
             {
                 if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
-                    gradientBounds = refElement->path->getBounds();
+                    gradientBounds = getPathBounds (*refElement);
             }
 
             ColorGradient colorGradient = createColorGradientFromSVG (*resolvedGradient,
@@ -728,8 +976,15 @@ void Drawable::paintElement (Graphics& g,
 
         if (pathToStroke != nullptr && currentStrokeDashArray && ! currentStrokeDashArray->isEmpty())
         {
-            dashedPath = createDashedPath (*pathToStroke, *currentStrokeDashArray, currentStrokeDashOffset);
-            pathToStroke = std::addressof (*dashedPath);
+            if (element.strokeDashArray.has_value() && element.preparedDashedPath.has_value())
+            {
+                pathToStroke = std::addressof (*element.preparedDashedPath);
+            }
+            else
+            {
+                dashedPath = createDashedPath (*pathToStroke, *currentStrokeDashArray, currentStrokeDashOffset);
+                pathToStroke = std::addressof (*dashedPath);
+            }
         }
 
         if (pathToStroke != nullptr)
@@ -787,8 +1042,15 @@ void Drawable::paintElement (Graphics& g,
 
                 if (referenceStrokeDashArray && ! referenceStrokeDashArray->isEmpty())
                 {
-                    dashedReferencePath = createDashedPath (*referencePathToStroke, *referenceStrokeDashArray, referenceStrokeDashOffset);
-                    referencePathToStroke = std::addressof (*dashedReferencePath);
+                    if (refElement->strokeDashArray.has_value() && refElement->preparedDashedPath.has_value())
+                    {
+                        referencePathToStroke = std::addressof (*refElement->preparedDashedPath);
+                    }
+                    else
+                    {
+                        dashedReferencePath = createDashedPath (*referencePathToStroke, *referenceStrokeDashArray, referenceStrokeDashOffset);
+                        referencePathToStroke = std::addressof (*dashedReferencePath);
+                    }
                 }
 
                 g.strokePath (*referencePathToStroke);
@@ -801,147 +1063,13 @@ void Drawable::paintElement (Graphics& g,
 
     if (element.path && (element.markerStart || element.markerMid || element.markerEnd))
     {
-        struct MarkerPlacement
-        {
-            Point<float> position;
-            float tangentAngle = 0.0f;
-        };
-
-        std::vector<MarkerPlacement> startPlacements, midPlacements, endPlacements;
-        Point<float> firstPoint, prevPoint, subpathStart;
-        bool hasFirstPoint = false;
-        float firstTangent = 0.0f, prevTangent = 0.0f;
-        bool firstSegmentAfterMove = false;
-
-        for (const auto& seg : *element.path)
-        {
-            switch (seg.verb)
-            {
-                case Path::Verb::MoveTo:
-                {
-                    if (hasFirstPoint && ! endPlacements.empty())
-                    {
-                        // Flush pending end for the previous sub-path
-                    }
-
-                    firstPoint = seg.point;
-                    prevPoint = seg.point;
-                    subpathStart = seg.point;
-                    hasFirstPoint = true;
-                    firstSegmentAfterMove = true;
-                    firstTangent = 0.0f;
-                    prevTangent = 0.0f;
-                    endPlacements.clear();
-                    break;
-                }
-
-                case Path::Verb::LineTo:
-                {
-                    if (! hasFirstPoint)
-                        break;
-
-                    const float dx = seg.point.getX() - prevPoint.getX();
-                    const float dy = seg.point.getY() - prevPoint.getY();
-                    const float angle = std::atan2 (dy, dx);
-
-                    if (firstSegmentAfterMove)
-                    {
-                        startPlacements.push_back ({ firstPoint, angle });
-                        firstTangent = angle;
-                        firstSegmentAfterMove = false;
-                    }
-                    else
-                    {
-                        midPlacements.push_back ({ prevPoint, prevTangent });
-                    }
-
-                    prevPoint = seg.point;
-                    prevTangent = angle;
-                    endPlacements = { { seg.point, angle } };
-                    break;
-                }
-
-                case Path::Verb::QuadTo:
-                {
-                    if (! hasFirstPoint)
-                        break;
-
-                    const float dx = seg.point.getX() - seg.controlPoint1.getX();
-                    const float dy = seg.point.getY() - seg.controlPoint1.getY();
-                    const float angle = std::atan2 (dy, dx);
-                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
-                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
-                    const float startAngle = std::atan2 (startDy, startDx);
-
-                    if (firstSegmentAfterMove)
-                    {
-                        startPlacements.push_back ({ firstPoint, startAngle });
-                        firstTangent = startAngle;
-                        firstSegmentAfterMove = false;
-                    }
-                    else
-                    {
-                        midPlacements.push_back ({ prevPoint, prevTangent });
-                    }
-
-                    prevPoint = seg.point;
-                    prevTangent = angle;
-                    endPlacements = { { seg.point, angle } };
-                    break;
-                }
-
-                case Path::Verb::CubicTo:
-                {
-                    if (! hasFirstPoint)
-                        break;
-
-                    const float dx = seg.point.getX() - seg.controlPoint2.getX();
-                    const float dy = seg.point.getY() - seg.controlPoint2.getY();
-                    const float angle = std::atan2 (dy, dx);
-                    const float startDx = seg.controlPoint1.getX() - prevPoint.getX();
-                    const float startDy = seg.controlPoint1.getY() - prevPoint.getY();
-                    const float startAngle = std::atan2 (startDy, startDx);
-
-                    if (firstSegmentAfterMove)
-                    {
-                        startPlacements.push_back ({ firstPoint, startAngle });
-                        firstTangent = startAngle;
-                        firstSegmentAfterMove = false;
-                    }
-                    else
-                    {
-                        midPlacements.push_back ({ prevPoint, prevTangent });
-                    }
-
-                    prevPoint = seg.point;
-                    prevTangent = angle;
-                    endPlacements = { { seg.point, angle } };
-                    break;
-                }
-
-                case Path::Verb::Close:
-                {
-                    if (! hasFirstPoint)
-                        break;
-
-                    if (! firstSegmentAfterMove)
-                        midPlacements.push_back ({ prevPoint, prevTangent });
-
-                    prevPoint = subpathStart;
-                    firstSegmentAfterMove = true;
-                    endPlacements.clear();
-                    break;
-                }
-            }
-        }
-
         const float sw = element.strokeWidth.value_or (1.0f);
 
         if (element.markerStart)
         {
             if (auto marker = getMarkerById (data, *element.markerStart))
             {
-                for (const auto& p : startPlacements)
+                for (const auto& p : element.preparedMarkerStarts)
                 {
                     float angle = p.tangentAngle;
                     if (marker->orientAutoStartReverse)
@@ -956,7 +1084,7 @@ void Drawable::paintElement (Graphics& g,
         {
             if (auto marker = getMarkerById (data, *element.markerMid))
             {
-                for (const auto& p : midPlacements)
+                for (const auto& p : element.preparedMarkerMids)
                     paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
             }
         }
@@ -965,7 +1093,7 @@ void Drawable::paintElement (Graphics& g,
         {
             if (auto marker = getMarkerById (data, *element.markerEnd))
             {
-                for (const auto& p : endPlacements)
+                for (const auto& p : element.preparedMarkerEnds)
                     paintMarker (g, data, *marker, sw, p.position, p.tangentAngle, visitingElements, recursionDepth);
             }
         }
@@ -1182,97 +1310,25 @@ Font Drawable::resolveFont (const SVGElement& element) const
 
 void Drawable::renderTextElement (Graphics& g, const SVGElement& element)
 {
-    if (! element.text || ! element.textPosition || element.text->isEmpty())
+    if (element.preparedText == nullptr || ! element.preparedTextBounds.has_value())
         return;
 
-    auto position = *element.textPosition;
-
-    if (element.textX && ! element.textX->isEmpty())
-        position.setX (element.textX->getFirst());
-    if (element.textY && ! element.textY->isEmpty())
-        position.setY (element.textY->getFirst());
-    if (element.textDx && ! element.textDx->isEmpty())
-        position.setX (position.getX() + element.textDx->getFirst());
-    if (element.textDy && ! element.textDy->isEmpty())
-        position.setY (position.getY() + element.textDy->getFirst());
-
-    const auto font = resolveFont (element);
-    const auto fontSize = element.fontSize.value_or (16.0f);
-
-    StyledText styledText;
-    {
-        auto modifier = styledText.startUpdate();
-        modifier.setMaxSize (Size<float> (jmax (fontSize, static_cast<float> (element.text->length()) * fontSize * 2.0f),
-                                          fontSize * 4.0f));
-        modifier.setWrap (StyledText::noWrap);
-        modifier.setHorizontalAlign (StyledText::left);
-        modifier.setVerticalAlign (StyledText::top);
-        modifier.appendText (*element.text, font, -1.0f, element.letterSpacing.value_or (0.0f));
-    }
-
-    const auto computedTextBounds = styledText.getComputedTextBounds();
-    const auto fontAscent = font.getAscent();
-    const auto fontDescent = font.getDescent();
-    const auto hasUsableFontMetrics = fontAscent < 0.0f && fontDescent > fontAscent;
-    const auto ascent = hasUsableFontMetrics ? fontAscent : -0.8f;
-    const auto descent = hasUsableFontMetrics ? fontDescent : 0.2f;
-    const auto metricsHeight = (descent - ascent) * fontSize;
-    const auto textWidth = jmax (fontSize, computedTextBounds.getWidth());
-    const auto textHeight = jmax (computedTextBounds.getHeight(), metricsHeight);
-    const auto bottomPadding = fontSize * 0.25f;
-
-    auto textX = position.getX();
-    if (element.textAnchor == "middle")
-        textX -= textWidth * 0.5f;
-    else if (element.textAnchor == "end")
-        textX -= textWidth;
-
-    Rectangle<float> textBounds (textX,
-                                 position.getY() + (ascent * fontSize),
-                                 textWidth,
-                                 textHeight + bottomPadding);
-
-    g.fillFittedText (styledText, textBounds);
+    g.fillFittedText (*element.preparedText, *element.preparedTextBounds);
 }
 
 //==============================================================================
 
 void Drawable::renderImageElement (Graphics& g, const SVGElement& element)
 {
-    if (! element.imageBounds)
+    if (! element.image.has_value()
+        || ! element.image->isValid()
+        || ! element.imageBounds.has_value()
+        || ! element.preparedImageBounds.has_value())
         return;
 
-    auto drawImage = [this, &g, &element] (const Image& image)
-    {
-        if (! image.isValid())
-            return;
-
-        const Rectangle<float> imageSourceBounds (0.0f, 0.0f, static_cast<float> (image.getWidth()), static_cast<float> (image.getHeight()));
-        const auto imageTransform = calculateTransformForTarget (imageSourceBounds,
-                                                                 *element.imageBounds,
-                                                                 element.preserveAspectRatioFitting,
-                                                                 element.preserveAspectRatioJustification);
-        const auto fittedImageBounds = imageSourceBounds.transformed (imageTransform);
-
-        const auto savedState = g.saveState();
-        g.setClipPath (*element.imageBounds);
-        g.drawImage (image, fittedImageBounds);
-    };
-
-    if (element.image)
-    {
-        drawImage (*element.image);
-        return;
-    }
-
-    if (element.imageHref)
-    {
-        if (document != nullptr)
-        {
-            if (auto image = SVGParser::loadImageFromHref (document->getParseOptions(), *element.imageHref))
-                drawImage (*image);
-        }
-    }
+    const auto savedState = g.saveState();
+    g.setClipPath (*element.imageBounds);
+    g.drawImage (*element.image, *element.preparedImageBounds);
 }
 
 //==============================================================================

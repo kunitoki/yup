@@ -2140,6 +2140,56 @@ TEST (SVGParserTests, RenderTextToHeadlessContext)
     EXPECT_NO_THROW (d.paint (*g.graphics, { 0.0f, 0.0f, 128.0f, 64.0f }));
 }
 
+TEST (SVGParserTests, ResolvesTextFontOnlyWhileParsing)
+{
+    Drawable d;
+    Drawable::ParseOptions options;
+    int resolveCount = 0;
+    options.fontResolver = [&resolveCount] (StringRef, float, int, bool) -> std::optional<Font>
+    {
+        ++resolveCount;
+        return std::nullopt;
+    };
+
+    ASSERT_TRUE (d.parseSVG (
+        "<svg viewBox=\"0 0 100 40\">"
+        "<text x=\"5\" y=\"25\" font-family=\"custom\">Cached text</text>"
+        "</svg>",
+        options));
+    EXPECT_EQ (resolveCount, 1);
+
+    auto g = makeHeadlessGraphics (100, 40);
+    d.paint (*g.graphics);
+    d.paint (*g.graphics);
+
+    EXPECT_EQ (resolveCount, 1);
+}
+
+TEST (SVGParserTests, DoesNotRetryFailedImageResolutionWhileRendering)
+{
+    Drawable d;
+    Drawable::ParseOptions options;
+    int resolveCount = 0;
+    options.imageResolver = [&resolveCount] (StringRef, const File&) -> std::optional<Image>
+    {
+        ++resolveCount;
+        return std::nullopt;
+    };
+
+    ASSERT_TRUE (d.parseSVG (
+        "<svg viewBox=\"0 0 100 40\">"
+        "<image x=\"0\" y=\"0\" width=\"100\" height=\"40\" href=\"missing.png\" />"
+        "</svg>",
+        options));
+    EXPECT_EQ (resolveCount, 1);
+
+    auto g = makeHeadlessGraphics (100, 40);
+    d.paint (*g.graphics);
+    d.paint (*g.graphics);
+
+    EXPECT_EQ (resolveCount, 1);
+}
+
 TEST (SVGParserTests, RenderStrokeDashToHeadlessContext)
 {
     Drawable d;
