@@ -313,6 +313,11 @@ public:
 
                 if (timingState->timingInfo.hasPresentationTimestamp)
                     ++timingState->timingInfo.presentationCount;
+                else
+                {
+                    timingState->timingInfo.presentedAtSeconds = 0.0;
+                    timingState->timingInfo.presentationCount = 0;
+                }
             }];
         }
 
@@ -334,7 +339,11 @@ public:
             frameTimingState->timingInfo.hasSubmissionTimestamps = true;
 
             if (! supportsPresentationTiming())
+            {
                 frameTimingState->timingInfo.hasPresentationTimestamp = false;
+                frameTimingState->timingInfo.presentedAtSeconds = 0.0;
+                frameTimingState->timingInfo.presentationCount = 0;
+            }
         }
 
         currentFrameSurface = nil;

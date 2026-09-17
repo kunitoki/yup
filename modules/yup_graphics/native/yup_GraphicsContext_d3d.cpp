@@ -65,6 +65,7 @@ public:
 
     FrameTimingCapabilities getFrameTimingCapabilities() const noexcept override
     {
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
         return frameTimingCapabilities;
     }
 
@@ -311,6 +312,7 @@ private:
 
     void updateFrameTimingCapabilities()
     {
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
         frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
         frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
         frameTimingCapabilities.hasGpuCompletionTiming = false;

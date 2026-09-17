@@ -95,8 +95,8 @@ public:
         lastPresentationTimeSeconds.reset();
         lastPresentedDeltaSeconds.reset();
         lastPresentationCount = 0;
-        diagnostics.schedulerLatenessSeconds = 0.0;
-        diagnostics.usingPresentationTiming = false;
+        diagnostics = {};
+        diagnostics.effectiveMode = resolveEffectiveMode();
     }
 
     WaitPlan planWait (double nowSeconds) noexcept

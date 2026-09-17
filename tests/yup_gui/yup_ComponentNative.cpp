@@ -581,6 +581,24 @@ TEST_F (FramePacerTests, ResetClearsStalePresentationHistory)
     EXPECT_DOUBLE_EQ (0.0, delta.seconds);
 }
 
+TEST_F (FramePacerTests, ResetClearsDiagnostics)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::software, false);
+    pacer.reset (0.0);
+    pacer.recordFrame (0.090, 0.010, 0.002, 0.0);
+
+    EXPECT_GT (pacer.getDiagnostics().missedDeadlines, 0u);
+
+    pacer.reset (1.0);
+
+    const auto diagnostics = pacer.getDiagnostics();
+    EXPECT_EQ (diagnostics.missedDeadlines, 0u);
+    EXPECT_DOUBLE_EQ (diagnostics.renderDurationSeconds, 0.0);
+    EXPECT_DOUBLE_EQ (diagnostics.submitDurationSeconds, 0.0);
+    EXPECT_DOUBLE_EQ (diagnostics.presentDurationSeconds, 0.0);
+    EXPECT_FALSE (diagnostics.usingPresentationTiming);
+}
+
 TEST_F (FramePacerTests, MaximumFramesInFlightConfigurationIsRetained)
 {
     auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, false, {}, 3);
