@@ -301,6 +301,21 @@ public:
 
         auto timingState = frameTimingState;
 
+        if (supportsPresentationTiming())
+        {
+            [currentFrameSurface addPresentedHandler:^(id<MTLDrawable> drawable)
+            {
+                const auto presentedAtSeconds = drawable.presentedTime;
+
+                const CriticalSection::ScopedLockType sl (timingState->lock);
+                timingState->timingInfo.presentedAtSeconds = presentedAtSeconds;
+                timingState->timingInfo.hasPresentationTimestamp = presentedAtSeconds > 0.0;
+
+                if (timingState->timingInfo.hasPresentationTimestamp)
+                    ++timingState->timingInfo.presentationCount;
+            }];
+        }
+
         [presentCommandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedBuffer)
         {
             const CriticalSection::ScopedLockType sl (timingState->lock);
@@ -317,7 +332,9 @@ public:
             frameTimingState->timingInfo.submissionStartedAtSeconds = submissionStartedAtSeconds;
             frameTimingState->timingInfo.submissionCompletedAtSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
             frameTimingState->timingInfo.hasSubmissionTimestamps = true;
-            frameTimingState->timingInfo.hasPresentationTimestamp = false;
+
+            if (! supportsPresentationTiming())
+                frameTimingState->timingInfo.hasPresentationTimestamp = false;
         }
 
         currentFrameSurface = nil;
@@ -343,11 +360,24 @@ private:
 
     void updateFrameTimingCapabilities()
     {
-        frameTimingCapabilities.hasPresentationTiming = false;
+        frameTimingCapabilities.hasPresentationTiming = supportsPresentationTiming();
         frameTimingCapabilities.hasFrameLatencyWait = false;
         frameTimingCapabilities.hasGpuCompletionTiming = true;
         frameTimingCapabilities.hasMaximumFramesInFlight = supportsMaximumFramesInFlightControl();
         frameTimingCapabilities.presentBlocksForDisplay = options.vsync;
+    }
+
+    static bool supportsPresentationTiming() noexcept
+    {
+#if YUP_MAC
+        if (@available(macOS 10.15, *))
+            return true;
+#elif YUP_IOS || YUP_IOS_SIMULATOR
+        if (@available(iOS 10.3, *))
+            return true;
+#endif
+
+        return false;
     }
 
     static bool supportsMaximumFramesInFlightControl() noexcept

@@ -458,6 +458,17 @@ TEST_F (FramePacerTests, AutomaticModeKeepsSoftwarePacingWhenOnlyTimingSupportEx
     EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::software);
 }
 
+TEST_F (FramePacerTests, AutomaticModeKeepsSoftwarePacingWhenOnlyFrameLatencyWaitExistsWithoutVSync)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasFrameLatencyWait = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, false, capabilities);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::software);
+}
+
 TEST_F (FramePacerTests, MaximumFramesInFlightSupportAloneDoesNotEnablePresentationDrivenMode)
 {
     GraphicsContext::FrameTimingCapabilities capabilities;

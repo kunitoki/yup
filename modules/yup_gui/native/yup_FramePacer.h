@@ -197,8 +197,8 @@ private:
         if (requestedMode == ComponentNative::FramePacingMode::off)
             return EffectiveMode::off;
 
-        const bool hasPresentationDrivenSupport = capabilities.hasFrameLatencyWait
-                                               || (capabilities.hasPresentationTiming && configuration.vsyncEnabled);
+        const bool hasPresentationDrivenSupport = configuration.vsyncEnabled
+                                               && (capabilities.hasFrameLatencyWait || capabilities.hasPresentationTiming);
 
         if (requestedMode == ComponentNative::FramePacingMode::presentationDriven)
             return hasPresentationDrivenSupport ? EffectiveMode::presentationDriven
