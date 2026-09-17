@@ -318,7 +318,6 @@ public:
             frameTimingState->timingInfo.submissionCompletedAtSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
             frameTimingState->timingInfo.hasSubmissionTimestamps = true;
             frameTimingState->timingInfo.hasPresentationTimestamp = false;
-            ++frameTimingState->timingInfo.presentationCount;
         }
 
         currentFrameSurface = nil;
@@ -347,8 +346,21 @@ private:
         frameTimingCapabilities.hasPresentationTiming = false;
         frameTimingCapabilities.hasFrameLatencyWait = false;
         frameTimingCapabilities.hasGpuCompletionTiming = true;
-        frameTimingCapabilities.hasMaximumFramesInFlight = swapchain != nil;
+        frameTimingCapabilities.hasMaximumFramesInFlight = supportsMaximumFramesInFlightControl();
         frameTimingCapabilities.presentBlocksForDisplay = options.vsync;
+    }
+
+    static bool supportsMaximumFramesInFlightControl() noexcept
+    {
+#if YUP_MAC
+        if (@available(macOS 10.13, *))
+            return true;
+#elif YUP_IOS || YUP_IOS_SIMULATOR
+        if (@available(iOS 11.2, *))
+            return true;
+#endif
+
+        return false;
     }
 
     const Options options;

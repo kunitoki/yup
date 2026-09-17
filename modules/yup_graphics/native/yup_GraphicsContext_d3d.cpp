@@ -286,15 +286,19 @@ private:
 
         UINT latency = maximumFramesInFlight.value_or (0);
         frameLatencyWaitableObject = nullptr;
+        canControlMaximumFramesInFlight = false;
 
         if (swapchain2 != nullptr && latency > 0)
         {
             if (SUCCEEDED (swapchain2->SetMaximumFrameLatency (latency)))
+            {
+                canControlMaximumFramesInFlight = true;
                 frameLatencyWaitableObject = swapchain2->GetFrameLatencyWaitableObject();
+            }
         }
         else if (auto dxgiDevice = ComPtr<IDXGIDevice1>(); SUCCEEDED (device.As (&dxgiDevice)) && latency > 0)
         {
-            dxgiDevice->SetMaximumFrameLatency (latency);
+            canControlMaximumFramesInFlight = SUCCEEDED (dxgiDevice->SetMaximumFrameLatency (latency));
         }
 
         updateFrameTimingCapabilities();
@@ -305,7 +309,7 @@ private:
         frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
         frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
         frameTimingCapabilities.hasGpuCompletionTiming = false;
-        frameTimingCapabilities.hasMaximumFramesInFlight = swapchain2 != nullptr;
+        frameTimingCapabilities.hasMaximumFramesInFlight = canControlMaximumFramesInFlight;
         frameTimingCapabilities.presentBlocksForDisplay = options.vsync;
     }
 
@@ -326,6 +330,7 @@ private:
     FrameTimingCapabilities frameTimingCapabilities;
     FrameTimingInfo lastFrameTimingInfo;
     HANDLE frameLatencyWaitableObject = nullptr;
+    bool canControlMaximumFramesInFlight = false;
     LARGE_INTEGER qpcFrequency {};
     double lastPresentedAtSeconds = 0.0;
     uint64_t lastPresentedCount = 0;

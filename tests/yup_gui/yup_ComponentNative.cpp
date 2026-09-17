@@ -447,6 +447,17 @@ TEST_F (FramePacerTests, AutomaticModeUsesPresentationDrivenWhenTimingIsAvailabl
     EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::presentationDriven);
 }
 
+TEST_F (FramePacerTests, MaximumFramesInFlightSupportAloneDoesNotEnablePresentationDrivenMode)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasMaximumFramesInFlight = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::presentationDriven, false, capabilities);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::software);
+}
+
 TEST_F (FramePacerTests, PresentationDerivedDeltaIgnoresVariableCpuCadence)
 {
     GraphicsContext::FrameTimingCapabilities capabilities;

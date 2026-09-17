@@ -198,8 +198,7 @@ private:
             return EffectiveMode::off;
 
         const bool hasPresentationDrivenSupport = capabilities.hasPresentationTiming
-                                               || capabilities.hasFrameLatencyWait
-                                               || capabilities.hasMaximumFramesInFlight;
+                                               || capabilities.hasFrameLatencyWait;
 
         if (requestedMode == ComponentNative::FramePacingMode::presentationDriven)
             return hasPresentationDrivenSupport ? EffectiveMode::presentationDriven
