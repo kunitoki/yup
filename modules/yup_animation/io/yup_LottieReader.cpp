@@ -1025,6 +1025,8 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         el->center = parseProperty<Point<float>> (itemObj["p"], extractPoint);
         el->size = parseProperty<Size<float>> (itemObj["s"], extractSize);
         el->setDirection (varInt (itemObj["d"], 1));
+        if (el->center.isStatic() && el->size.isStatic())
+            (void) el->buildPath (0.0f);
     }
     else if (ty == "rc") // Rect
     {
@@ -1035,6 +1037,8 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         rc->size = parseProperty<Size<float>> (itemObj["s"], extractSize);
         rc->roundness = parseProperty<float> (itemObj["r"], extractFloat);
         rc->setDirection (varInt (itemObj["d"], 1));
+        if (rc->position.isStatic() && rc->size.isStatic() && rc->roundness.isStatic())
+            (void) rc->buildPath (0.0f);
     }
     else if (ty == "sh") // Bezier path
     {
@@ -1043,6 +1047,8 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         sh->setHidden ((bool) itemObj["hd"]);
         sh->pathData = parseProperty<AnimationPathData> (itemObj["ks"], extractPath);
         sh->setDirection (varInt (itemObj["d"], 1));
+        if (sh->pathData.isStatic())
+            (void) sh->buildPath (0.0f);
     }
     else if (ty == "sr") // Polystar
     {
@@ -1057,6 +1063,14 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
         sr->outerRoundness = parseProperty<float> (itemObj["os"], extractFloat);
         sr->innerRoundness = parseProperty<float> (itemObj["is"], extractFloat);
         sr->rotation = parseProperty<float> (itemObj["r"], extractFloat);
+        if (sr->position.isStatic()
+            && sr->points.isStatic()
+            && sr->outerRadius.isStatic()
+            && sr->innerRadius.isStatic()
+            && sr->outerRoundness.isStatic()
+            && sr->innerRoundness.isStatic()
+            && sr->rotation.isStatic())
+            (void) sr->buildPath (0.0f);
     }
     else if (ty == "fl") // Fill
     {
@@ -1106,6 +1120,9 @@ void LottieReader::parseSingleItem (const var& itemObj, AnimationGroup& group)
                 dash.value = parseProperty<float> (d["v"], extractFloat);
                 st->dashArray.push_back (std::move (dash));
             }
+
+            if (st->isDashArrayStatic())
+                (void) st->resolveDash (0.0f);
         }
     }
     else if (ty == "gf" || ty == "gs") // Gradient fill / gradient stroke
@@ -1281,6 +1298,8 @@ void LottieReader::parseGradient (const var& gradObj, AnimationGradient& gradien
             }
         }
     }
+
+    (void) gradient.toColorGradient (0.0f);
 }
 
 //==============================================================================
@@ -1309,6 +1328,9 @@ void LottieReader::parseMasks (const var& masksVal, AnimationLayer& layer)
             mask->mode = AnimationMask::Mode::Difference;
         else
             mask->mode = AnimationMask::Mode::None;
+
+        if (mask->shape.isStatic())
+            (void) mask->shapeAt (0.0f);
 
         layer.masks.push_back (mask);
     }
@@ -1507,6 +1529,14 @@ void LottieReader::parseTransform (const var& ksObj, AnimationTransform& t, bool
     parsePositionBounce (pObj, t);
 
     t.scale = parseProperty<Size<float>> (ksObj["s"], extractSize);
+
+    for (size_t index = 1; index < t.spatialKeyframes.size(); ++index)
+    {
+        const auto startFrame = t.spatialKeyframes[index - 1].frame;
+        const auto endFrame = t.spatialKeyframes[index].frame;
+        if (endFrame > startFrame)
+            (void) t.positionAt (startFrame + (endFrame - startFrame) * 0.5f);
+    }
 }
 
 //==============================================================================

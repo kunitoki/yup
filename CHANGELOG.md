@@ -48,6 +48,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Graphics
 
+- SVG drawables now prepare text layout, fitted image bounds, gradients, local dashed paths, marker placements and path bounds while parsing, avoiding repeated CPU work and failed image-resolution retries during rendering.
+- Lottie loading now prewarms static shape, mask, gradient and stroke-dash caches plus spatial motion-path lengths, so their first rendered frame does not perform one-time geometry or paint preparation; static gradients and masks are reused on subsequent frames.
+
 - `Image::getWidth()` and `Image::getHeight()` now return 0 on an invalid image instead of asserting and dereferencing null. Other accessors and pixel access still assert, as documented
 
 - `GpuTexture` now caches the backend texture views it hands out, keyed by view descriptor. A render pass previously allocated a fresh `ore::TextureView` for every attachment on every pass and for every sampled texture on every draw - all identical frame after frame - which on Metal made building the attachment descriptors cost more than creating the command encoder they were for. The cache needs no invalidation because a `GpuTexture` wraps one underlying texture for its whole lifetime: `GpuCanvas` and `GpuTarget` build a new `GpuTexture` whenever their backing changes

@@ -94,6 +94,12 @@ public:
                 Justification justification = Justification::center);
 
 private:
+    void prepareDocument();
+    void prepareElement (SVGData& data, SVGElement& element, std::unordered_set<SVGElement*>& preparedElements);
+    void prepareMarkerPlacements (SVGElement& element);
+    void prepareTextElement (SVGElement& element);
+    [[nodiscard]] Rectangle<float> getPathBounds (const SVGElement& element) const;
+
     void paintElement (Graphics& g,
                        const SVGData& data,
                        const SVGElement& element,

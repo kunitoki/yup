@@ -99,6 +99,26 @@ struct SVGElement : public ReferenceCountedObject
     bool hidden = false;
 
     std::vector<SVGElement::Ptr> children;
+
+private:
+    struct MarkerPlacement
+    {
+        Point<float> position;
+        float tangentAngle = 0.0f;
+    };
+
+    std::optional<Rectangle<float>> preparedPathBounds;
+    std::optional<Path> preparedDashedPath;
+    std::vector<MarkerPlacement> preparedMarkerStarts;
+    std::vector<MarkerPlacement> preparedMarkerMids;
+    std::vector<MarkerPlacement> preparedMarkerEnds;
+    std::shared_ptr<StyledText> preparedText;
+    std::optional<Rectangle<float>> preparedTextBounds;
+    std::optional<Rectangle<float>> preparedImageBounds;
+    std::optional<ColorGradient> preparedFillGradient;
+    std::optional<ColorGradient> preparedStrokeGradient;
+
+    friend class Drawable;
 };
 
 } // namespace yup

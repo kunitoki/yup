@@ -132,6 +132,9 @@ public:
     [[nodiscard]] float opacityAt (float frameNo) const; ///< Returns [0, 1]
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnimationMask)
+
+private:
+    mutable std::optional<Path> cachedShape;
 };
 
 //==============================================================================
