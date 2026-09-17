@@ -480,7 +480,7 @@ TEST_F (FramePacerTests, MaximumFramesInFlightSupportAloneDoesNotEnablePresentat
     EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::software);
 }
 
-TEST_F (FramePacerTests, PresentationDerivedDeltaIgnoresVariableCpuCadence)
+TEST_F (FramePacerTests, PresentationDrivenDeltaIgnoresVariableCpuCadence)
 {
     GraphicsContext::FrameTimingCapabilities capabilities;
     capabilities.hasPresentationTiming = true;

@@ -314,10 +314,7 @@ public:
                 if (timingState->timingInfo.hasPresentationTimestamp)
                     ++timingState->timingInfo.presentationCount;
                 else
-                {
                     timingState->timingInfo.presentedAtSeconds = 0.0;
-                    timingState->timingInfo.presentationCount = 0;
-                }
             }];
         }
 

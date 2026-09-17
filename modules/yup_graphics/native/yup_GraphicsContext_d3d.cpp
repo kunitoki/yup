@@ -256,6 +256,9 @@ private:
 
         if (FAILED (hr) || statistics.PresentCount == 0 || qpcFrequency.QuadPart <= 0)
         {
+            lastFrameTimingInfo.presentedAtSeconds = 0.0;
+            lastFrameTimingInfo.presentationIntervalSeconds = 0.0;
+            lastFrameTimingInfo.presentationCount = 0;
             lastFrameTimingInfo.hasPresentationTimestamp = false;
             hasValidPresentationTiming = false;
             updateFrameTimingCapabilitiesUnlocked();
