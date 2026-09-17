@@ -225,7 +225,7 @@ private:
         if (! timingInfo.hasPresentationTimestamp || timingInfo.isDisjoint || timingInfo.presentationCount == 0)
             return;
 
-        if (timingInfo.presentationCount == lastPresentationCount)
+        if (timingInfo.presentationCount <= lastPresentationCount)
             return;
 
         double deltaSeconds = timingInfo.presentationIntervalSeconds;

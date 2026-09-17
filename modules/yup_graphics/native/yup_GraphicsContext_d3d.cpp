@@ -242,7 +242,7 @@ private:
         lastFrameTimingInfo.isDisjoint = true;
         lastFrameTimingInfo.hasPresentationTimestamp = false;
         hasValidPresentationTiming = false;
-        updateFrameTimingCapabilities();
+        updateFrameTimingCapabilitiesUnlocked();
     }
 
     void updatePresentationTiming()
@@ -258,7 +258,7 @@ private:
         {
             lastFrameTimingInfo.hasPresentationTimestamp = false;
             hasValidPresentationTiming = false;
-            updateFrameTimingCapabilities();
+            updateFrameTimingCapabilitiesUnlocked();
             return;
         }
 
@@ -274,7 +274,7 @@ private:
         lastFrameTimingInfo.presentationCount = statistics.PresentCount;
         lastFrameTimingInfo.hasPresentationTimestamp = true;
         hasValidPresentationTiming = true;
-        updateFrameTimingCapabilities();
+        updateFrameTimingCapabilitiesUnlocked();
 
         lastPresentedAtSeconds = presentedAtSeconds;
         lastPresentedCount = statistics.PresentCount;
@@ -313,6 +313,11 @@ private:
     void updateFrameTimingCapabilities()
     {
         const CriticalSection::ScopedLockType sl (frameTimingLock);
+        updateFrameTimingCapabilitiesUnlocked();
+    }
+
+    void updateFrameTimingCapabilitiesUnlocked() noexcept
+    {
         frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
         frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
         frameTimingCapabilities.hasGpuCompletionTiming = false;

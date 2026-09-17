@@ -599,6 +599,30 @@ TEST_F (FramePacerTests, ResetClearsDiagnostics)
     EXPECT_FALSE (diagnostics.usingPresentationTiming);
 }
 
+TEST_F (FramePacerTests, OutOfOrderPresentationSamplesAreIgnored)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasPresentationTiming = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::presentationDriven, true, capabilities);
+    pacer.reset (1.0);
+
+    GraphicsContext::FrameTimingInfo latestSample;
+    latestSample.hasPresentationTimestamp = true;
+    latestSample.presentedAtSeconds = 1.0 + (2.0 / 60.0);
+    latestSample.presentationCount = 2;
+
+    EXPECT_TRUE (pacer.makeRefreshDelta (1.05, latestSample).usedPresentationTiming);
+
+    GraphicsContext::FrameTimingInfo staleSample = latestSample;
+    staleSample.presentedAtSeconds = 1.0 + (1.0 / 60.0);
+    staleSample.presentationCount = 1;
+
+    const auto delta = pacer.makeRefreshDelta (1.06, staleSample);
+    EXPECT_TRUE (delta.usedPresentationTiming);
+    EXPECT_NEAR (1.0 / 60.0, delta.seconds, 1.0e-6);
+}
+
 TEST_F (FramePacerTests, MaximumFramesInFlightConfigurationIsRetained)
 {
     auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, false, {}, 3);
