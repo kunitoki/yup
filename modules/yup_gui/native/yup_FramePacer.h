@@ -208,7 +208,7 @@ private:
         if (requestedMode == ComponentNative::FramePacingMode::software)
             return configuration.vsyncEnabled ? EffectiveMode::off : EffectiveMode::software;
 
-        if (capabilities.hasPresentationTiming)
+        if (hasPresentationDrivenSupport)
             return EffectiveMode::presentationDriven;
 
         return configuration.vsyncEnabled ? EffectiveMode::off : EffectiveMode::software;

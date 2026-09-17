@@ -132,7 +132,6 @@ public:
             if (swapchain != nullptr)
                 swapchain.As (&swapchain2);
 
-            canQueryPresentationTiming = swapchain != nullptr;
             applyMaximumFrameLatency();
             updateFrameTimingCapabilities();
         }
@@ -285,13 +284,16 @@ private:
         if (isHeadless)
             return;
 
-        UINT latency = maximumFramesInFlight.has_value()
-                         ? static_cast<UINT> (jlimit<uint32_t> (1, 16, *maximumFramesInFlight))
-                         : 0u;
+        static constexpr UINT defaultMaximumFrameLatency = 3u;
+
+        const bool usesDefaultLatency = ! maximumFramesInFlight.has_value();
+        UINT latency = usesDefaultLatency
+                         ? defaultMaximumFrameLatency
+                         : static_cast<UINT> (jlimit<uint32_t> (1, 16, *maximumFramesInFlight));
         frameLatencyWaitableObject = nullptr;
         canControlMaximumFramesInFlight = false;
 
-        if (swapchain2 != nullptr && latency > 0)
+        if (swapchain2 != nullptr)
         {
             if (SUCCEEDED (swapchain2->SetMaximumFrameLatency (latency)))
             {
@@ -299,7 +301,7 @@ private:
                 frameLatencyWaitableObject = swapchain2->GetFrameLatencyWaitableObject();
             }
         }
-        else if (auto dxgiDevice = ComPtr<IDXGIDevice1>(); SUCCEEDED (device.As (&dxgiDevice)) && latency > 0)
+        else if (auto dxgiDevice = ComPtr<IDXGIDevice1>(); SUCCEEDED (device.As (&dxgiDevice)))
         {
             canControlMaximumFramesInFlight = SUCCEEDED (dxgiDevice->SetMaximumFrameLatency (latency));
         }
@@ -309,7 +311,7 @@ private:
 
     void updateFrameTimingCapabilities()
     {
-        frameTimingCapabilities.hasPresentationTiming = canQueryPresentationTiming;
+        frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
         frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
         frameTimingCapabilities.hasGpuCompletionTiming = false;
         frameTimingCapabilities.hasMaximumFramesInFlight = canControlMaximumFramesInFlight;
@@ -333,7 +335,6 @@ private:
     FrameTimingCapabilities frameTimingCapabilities;
     FrameTimingInfo lastFrameTimingInfo;
     HANDLE frameLatencyWaitableObject = nullptr;
-    bool canQueryPresentationTiming = false;
     bool canControlMaximumFramesInFlight = false;
     LARGE_INTEGER qpcFrequency {};
     double lastPresentedAtSeconds = 0.0;
