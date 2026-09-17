@@ -448,6 +448,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("withDoubleClickTime", &ComponentNative::Options::withDoubleClickTime)
         .def ("withUpdateOnlyFocused", &ComponentNative::Options::withUpdateOnlyFocused)
         .def ("withVSync", &ComponentNative::Options::withVSync)
+        .def_readwrite ("framePacingMode", &ComponentNative::Options::framePacingMode)
+        .def_readwrite ("maximumFramesInFlight", &ComponentNative::Options::maximumFramesInFlight)
     ;
 
     classComponentNative

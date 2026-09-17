@@ -132,6 +132,7 @@ public:
             if (swapchain != nullptr)
                 swapchain.As (&swapchain2);
 
+            canQueryPresentationTiming = swapchain != nullptr;
             applyMaximumFrameLatency();
             updateFrameTimingCapabilities();
         }
@@ -284,7 +285,9 @@ private:
         if (isHeadless)
             return;
 
-        UINT latency = maximumFramesInFlight.value_or (0);
+        UINT latency = maximumFramesInFlight.has_value()
+                         ? static_cast<UINT> (jlimit<uint32_t> (1, 16, *maximumFramesInFlight))
+                         : 0u;
         frameLatencyWaitableObject = nullptr;
         canControlMaximumFramesInFlight = false;
 
@@ -306,7 +309,7 @@ private:
 
     void updateFrameTimingCapabilities()
     {
-        frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
+        frameTimingCapabilities.hasPresentationTiming = canQueryPresentationTiming;
         frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
         frameTimingCapabilities.hasGpuCompletionTiming = false;
         frameTimingCapabilities.hasMaximumFramesInFlight = canControlMaximumFramesInFlight;
@@ -330,6 +333,7 @@ private:
     FrameTimingCapabilities frameTimingCapabilities;
     FrameTimingInfo lastFrameTimingInfo;
     HANDLE frameLatencyWaitableObject = nullptr;
+    bool canQueryPresentationTiming = false;
     bool canControlMaximumFramesInFlight = false;
     LARGE_INTEGER qpcFrequency {};
     double lastPresentedAtSeconds = 0.0;

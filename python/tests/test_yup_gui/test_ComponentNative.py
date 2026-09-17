@@ -15,4 +15,5 @@ def test_component_native_options_accept_frame_pacing_settings():
     ).withMaximumFramesInFlight(3)
 
     assert chained is options
-
+    assert options.framePacingMode == yup.ComponentNative.FramePacingMode.presentationDriven
+    assert options.maximumFramesInFlight == 3
