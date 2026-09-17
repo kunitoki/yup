@@ -157,6 +157,23 @@ public:
 
     rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
+    FrameTimingCapabilities getFrameTimingCapabilities() const noexcept override
+    {
+        return frameTimingCapabilities;
+    }
+
+    FrameTimingInfo getLastFrameTimingInfo() const noexcept override
+    {
+        const CriticalSection::ScopedLockType sl (frameTimingState->lock);
+        return frameTimingState->timingInfo;
+    }
+
+    void setMaximumFramesInFlight (std::optional<uint32_t> newMaximumFramesInFlight) override
+    {
+        maximumFramesInFlight = newMaximumFramesInFlight;
+        applyMaximumFramesInFlight();
+    }
+
     //==============================================================================
 
     void attachToWindow (void* window, int width, int height, float dpiScale) override
@@ -195,6 +212,8 @@ public:
 
         swapchain.contentsScale = dpiScale;
         swapchain.drawableSize = CGSizeMake (width, height);
+        applyMaximumFramesInFlight();
+        updateFrameTimingCapabilities();
     }
 
     void onSizeChanged (void*, int width, int height, float dpiScale, uint32_t) override
@@ -258,6 +277,7 @@ public:
         jassert (currentTexture.height == renderTarget->height());
         renderTarget->setTargetTexture (currentTexture);
 
+        const double submissionStartedAtSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
         id<MTLCommandBuffer> presentCommandBuffer = [queue commandBuffer];
         getRenderContext()->flush ({ .renderTarget = renderTarget.get(), .externalCommandBuffer = (__bridge void*) presentCommandBuffer });
 
@@ -279,14 +299,58 @@ public:
         [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
         [renderEncoder endEncoding];
 
+        auto timingState = frameTimingState;
+
+        [presentCommandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedBuffer)
+        {
+            const CriticalSection::ScopedLockType sl (timingState->lock);
+
+            timingState->timingInfo.gpuCompletedAtSeconds = completedBuffer.GPUEndTime;
+            timingState->timingInfo.hasGpuCompletionTimestamp = completedBuffer.GPUEndTime > 0.0;
+        }];
+
         [presentCommandBuffer presentDrawable:currentFrameSurface];
         [presentCommandBuffer commit];
+
+        {
+            const CriticalSection::ScopedLockType sl (frameTimingState->lock);
+            frameTimingState->timingInfo.submissionStartedAtSeconds = submissionStartedAtSeconds;
+            frameTimingState->timingInfo.submissionCompletedAtSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+            frameTimingState->timingInfo.hasSubmissionTimestamps = true;
+            frameTimingState->timingInfo.hasPresentationTimestamp = false;
+            ++frameTimingState->timingInfo.presentationCount;
+        }
 
         currentFrameSurface = nil;
         renderTarget->setTargetTexture (nil);
     }
 
 private:
+    void applyMaximumFramesInFlight()
+    {
+        if (swapchain == nil || ! maximumFramesInFlight.has_value())
+            return;
+
+        const auto maximum = static_cast<NSUInteger> (jlimit<uint32_t> (2, 3, *maximumFramesInFlight));
+
+#if YUP_MAC
+        if (@available(macOS 10.13, *))
+            swapchain.maximumDrawableCount = maximum;
+#elif YUP_IOS || YUP_IOS_SIMULATOR
+        if (@available(iOS 11.2, *))
+            swapchain.maximumDrawableCount = maximum;
+#endif
+    }
+
+    void updateFrameTimingCapabilities()
+    {
+        frameTimingCapabilities.hasPresentationTiming = false;
+        frameTimingCapabilities.hasFrameLatencyWait = false;
+        frameTimingCapabilities.hasGpuCompletionTiming = true;
+        frameTimingCapabilities.hasMaximumFramesInFlight = swapchain != nil;
+        frameTimingCapabilities.presentBlocksForDisplay = options.vsync;
+    }
+
     const Options options;
     rive::gpu::RenderContextMetalImpl::ContextOptions renderContextOptions;
     GpuDevice::Ptr gpuDevice;
@@ -298,6 +362,17 @@ private:
     id<MTLRenderPipelineState> pipelineState = nil;
     id<MTLTexture> currentTexture = nil;
     id<MTLBuffer> quadVertexBuffer = nil;
+    std::optional<uint32_t> maximumFramesInFlight;
+    FrameTimingCapabilities frameTimingCapabilities;
+    struct FrameTimingState : public ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<FrameTimingState>;
+
+        CriticalSection lock;
+        FrameTimingInfo timingInfo;
+    };
+
+    FrameTimingState::Ptr frameTimingState { new FrameTimingState };
 };
 
 //==============================================================================

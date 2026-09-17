@@ -47,6 +47,8 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
     , shouldCaptureMouse (options.flags.test (captureMouse))
     , vsyncEnabled (options.flags.test (vsync))
+    , framePacingMode (options.framePacingMode)
+    , maximumFramesInFlight (options.maximumFramesInFlight)
 {
     incReferenceCount();
 
@@ -238,6 +240,10 @@ SDLComponentNative::SDLComponentNative (Component& component,
         YUP_MODULE_DBG (GUI_WINDOWING, "SDL: unable to create YUP GraphicsContext");
         return; // TODO - raise something ?
     }
+
+    context->setMaximumFramesInFlight (maximumFramesInFlight);
+    frameTimingCapabilities = context->getFrameTimingCapabilities();
+    framePacer.configure ({ framePacingMode, maximumFramesInFlight, desiredFrameRate, vsyncEnabled }, frameTimingCapabilities);
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: created YUP GraphicsContext");
 
@@ -913,15 +919,35 @@ void SDLComponentNative::stopTextInput (Component& component)
 
 void SDLComponentNative::run()
 {
-    const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
-    const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
-
     while (! threadShouldExit())
     {
-        const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
+        const double nowSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        const auto waitPlan = framePacer.planWait (nowSeconds);
 
-        renderEvent.wait (jmax (1.0, maxFrameTimeMs - 4.0));
-        renderEvent.reset();
+        if (renderContinuous)
+        {
+            if (waitPlan.shouldWaitForFrameLatency && context != nullptr)
+                context->waitForFrameLatency (static_cast<uint32_t> (jmax (1.0, waitPlan.targetIntervalSeconds * 1000.0)));
+
+            if (waitPlan.softwareWakeTimeSeconds.has_value())
+            {
+                const double wakeTimeMilliseconds = *waitPlan.softwareWakeTimeSeconds * 1000.0;
+
+                if (wakeTimeMilliseconds > yup::Time::getMillisecondCounterHiRes())
+                    frameTimer.waitUntil (wakeTimeMilliseconds);
+            }
+            else if (! waitPlan.shouldWaitForFrameLatency)
+            {
+                renderEvent.wait (1.0);
+                renderEvent.reset();
+            }
+        }
+        else
+        {
+            renderEvent.wait();
+            renderEvent.reset();
+        }
 
         if (threadShouldExit())
             break;
@@ -934,18 +960,6 @@ void SDLComponentNative::run()
             }
         }
         YUP_CATCH_EXCEPTION
-
-        if (threadShouldExit())
-            break;
-
-        if (vsyncEnabled)
-            continue;
-
-        const double timeSpentSeconds = (yup::Time::getMillisecondCounterHiRes() / 1000.0) - frameStartTimeSeconds;
-        const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
-
-        if (secondsToWait > 0.0)
-            frameTimer.waitUntil (yup::Time::getMillisecondCounterHiRes() + secondsToWait * 1000.0);
     }
 }
 
@@ -1087,9 +1101,20 @@ bool SDLComponentNative::renderFrame()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
+    if (window == nullptr || context == nullptr)
+        return false;
+
+    frameTimingCapabilities = context->getFrameTimingCapabilities();
+    framePacer.configure ({ framePacingMode, maximumFramesInFlight, desiredFrameRate, vsyncEnabled }, frameTimingCapabilities);
+
+    const auto latestFrameTiming = context->getLastFrameTimingInfo();
+    const double frameStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
     const bool isGL = currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES;
     bool glContextLocked = false;
     bool frameBegun = false;
+    double submitStartTimeSeconds = 0.0;
+    double submitEndTimeSeconds = 0.0;
+    double presentBlockDurationSeconds = 0.0;
 
     auto renderInternal = [&]() -> bool
     {
@@ -1122,6 +1147,8 @@ bool SDLComponentNative::renderFrame()
 
             context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, getScaleDpi(), 0);
             renderer = context->makeRenderer (contentWidth, contentHeight);
+            frameTimingCapabilities = context->getFrameTimingCapabilities();
+            framePacer.configure ({ framePacingMode, maximumFramesInFlight, desiredFrameRate, vsyncEnabled }, frameTimingCapabilities);
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL: renderer " << String (renderer != nullptr ? "created" : "creation failed"));
 
             if constexpr (! renderDrivenByTimer)
@@ -1173,7 +1200,8 @@ bool SDLComponentNative::renderFrame()
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
 
-            component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+            const auto refreshDelta = framePacer.makeRefreshDelta (currentTimeSeconds, latestFrameTiming);
+            component.internalRefreshDisplay (refreshDelta.seconds);
             lastRenderTimeSeconds = currentTimeSeconds;
         }
 
@@ -1245,15 +1273,21 @@ bool SDLComponentNative::renderFrame()
             {
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
 
+                submitStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
                 context->end (getNativeHandle());
                 context->tick();
+                submitEndTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
             }
 
             if (isGL && window != nullptr)
             {
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (SwapWindow);
 
+                const double swapStartTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
                 SDL_GL_SwapWindow (window);
+                const double swapEndTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+                presentBlockDurationSeconds = swapEndTimeSeconds - swapStartTimeSeconds;
+                submitEndTimeSeconds = swapEndTimeSeconds;
             }
         }
 
@@ -1288,7 +1322,24 @@ bool SDLComponentNative::renderFrame()
         }
     }
 
+    framePacer.recordFrame (submitEndTimeSeconds,
+                            submitStartTimeSeconds > frameStartTimeSeconds ? submitStartTimeSeconds - frameStartTimeSeconds : 0.0,
+                            submitEndTimeSeconds > submitStartTimeSeconds ? submitEndTimeSeconds - submitStartTimeSeconds : 0.0,
+                            presentBlockDurationSeconds);
+
     return true;
+}
+
+//==============================================================================
+
+void SDLComponentNative::resetFramePacing()
+{
+    const double nowSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+    lastRenderTimeSeconds = nowSeconds;
+    frameTimingCapabilities = context != nullptr ? context->getFrameTimingCapabilities()
+                                                 : GraphicsContext::FrameTimingCapabilities();
+    framePacer.configure ({ framePacingMode, maximumFramesInFlight, desiredFrameRate, vsyncEnabled }, frameTimingCapabilities);
+    framePacer.reset (nowSeconds);
 }
 
 //==============================================================================
@@ -1297,7 +1348,7 @@ void SDLComponentNative::startRendering()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: startRendering requested: timerDriven=" << String (renderDrivenByTimer ? "true" : "false") << ", alreadyRendering=" << String (isRendering() ? "true" : "false") << ", desiredFrameRate=" << String (desiredFrameRate));
 
-    lastRenderTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+    resetFramePacing();
     frameRateStartTimeSeconds = lastRenderTimeSeconds;
     frameRateCounter = 0;
 
@@ -1918,6 +1969,7 @@ void SDLComponentNative::handleMinimized()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMinimized");
     PopupMenu::dismissAllPopups();
+    resetFramePacing();
 
     stopRendering();
 }
@@ -1925,6 +1977,7 @@ void SDLComponentNative::handleMinimized()
 void SDLComponentNative::handleMaximized()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleMaximized");
+    resetFramePacing();
 
     repaint();
 }
@@ -1932,6 +1985,7 @@ void SDLComponentNative::handleMaximized()
 void SDLComponentNative::handleRestored()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleRestored");
+    resetFramePacing();
 
     repaint();
 }
@@ -1939,6 +1993,7 @@ void SDLComponentNative::handleRestored()
 void SDLComponentNative::handleExposed()
 {
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleExposed");
+    resetFramePacing();
 
     repaint();
 }
@@ -1990,6 +2045,7 @@ void SDLComponentNative::handleResized (int width, int height)
         return;
 
     component.internalResized (width, height);
+    resetFramePacing();
 
     screenBounds = screenBounds.withSize (width, height);
 
@@ -2053,6 +2109,7 @@ void SDLComponentNative::handleDisplayChanged()
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleDisplayChanged");
+    resetFramePacing();
 
     component.internalDisplayChanged();
 }
@@ -2064,6 +2121,7 @@ void SDLComponentNative::handleSafeAreaChanged()
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleSafeAreaChanged " << getSafeAreaBounds().toString());
 
     component.internalSafeAreaChanged();
+    resetFramePacing();
 
     component.sendResized();
 
@@ -2075,6 +2133,7 @@ void SDLComponentNative::handleFocusChanged (bool gotFocus)
     YUP_PROFILE_INTERNAL_TRACE();
 
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: handleFocusChanged " << String (gotFocus ? "true" : "false") << ", rendering=" << String (isRendering() ? "true" : "false"));
+    resetFramePacing();
 
     if (gotFocus)
     {
@@ -2335,12 +2394,14 @@ void SDLComponentNative::handleEvent (SDL_Event* event)
         case SDL_EVENT_RENDER_TARGETS_RESET:
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_RENDER_TARGETS_RESET");
+            resetFramePacing();
             break;
         }
 
         case SDL_EVENT_RENDER_DEVICE_RESET:
         {
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_RENDER_DEVICE_RESET");
+            resetFramePacing();
             break;
         }
 

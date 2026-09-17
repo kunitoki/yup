@@ -1882,10 +1882,33 @@ void registerYupGraphicsBindings (py::module_& m)
 
     // ============================================================================================ yup::GraphicsContext
 
+    py::class_<GraphicsContext::FrameTimingCapabilities> (m, "GraphicsContextFrameTimingCapabilities")
+        .def (py::init<>())
+        .def_readwrite ("hasPresentationTiming", &GraphicsContext::FrameTimingCapabilities::hasPresentationTiming)
+        .def_readwrite ("hasFrameLatencyWait", &GraphicsContext::FrameTimingCapabilities::hasFrameLatencyWait)
+        .def_readwrite ("hasGpuCompletionTiming", &GraphicsContext::FrameTimingCapabilities::hasGpuCompletionTiming)
+        .def_readwrite ("hasMaximumFramesInFlight", &GraphicsContext::FrameTimingCapabilities::hasMaximumFramesInFlight)
+        .def_readwrite ("presentBlocksForDisplay", &GraphicsContext::FrameTimingCapabilities::presentBlocksForDisplay);
+
+    py::class_<GraphicsContext::FrameTimingInfo> (m, "GraphicsContextFrameTimingInfo")
+        .def (py::init<>())
+        .def_readwrite ("submissionStartedAtSeconds", &GraphicsContext::FrameTimingInfo::submissionStartedAtSeconds)
+        .def_readwrite ("submissionCompletedAtSeconds", &GraphicsContext::FrameTimingInfo::submissionCompletedAtSeconds)
+        .def_readwrite ("gpuCompletedAtSeconds", &GraphicsContext::FrameTimingInfo::gpuCompletedAtSeconds)
+        .def_readwrite ("presentedAtSeconds", &GraphicsContext::FrameTimingInfo::presentedAtSeconds)
+        .def_readwrite ("presentationIntervalSeconds", &GraphicsContext::FrameTimingInfo::presentationIntervalSeconds)
+        .def_readwrite ("presentationCount", &GraphicsContext::FrameTimingInfo::presentationCount)
+        .def_readwrite ("hasSubmissionTimestamps", &GraphicsContext::FrameTimingInfo::hasSubmissionTimestamps)
+        .def_readwrite ("hasGpuCompletionTimestamp", &GraphicsContext::FrameTimingInfo::hasGpuCompletionTimestamp)
+        .def_readwrite ("hasPresentationTimestamp", &GraphicsContext::FrameTimingInfo::hasPresentationTimestamp)
+        .def_readwrite ("isDisjoint", &GraphicsContext::FrameTimingInfo::isDisjoint);
+
     py::class_<GraphicsContext, std::unique_ptr<GraphicsContext, py::nodelete>> (m, "GraphicsContext")
         .def ("isGpuAvailable", &GraphicsContext::isGpuAvailable)
         .def ("getPlatform", &GraphicsContext::getPlatform)
         .def ("getGpuDevice", &GraphicsContext::getGpuDevice)
+        .def ("getFrameTimingCapabilities", &GraphicsContext::getFrameTimingCapabilities)
+        .def ("getLastFrameTimingInfo", &GraphicsContext::getLastFrameTimingInfo)
         .def ("tick", &GraphicsContext::tick)
     ;
 

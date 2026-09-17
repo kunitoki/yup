@@ -75,6 +75,27 @@ TEST_F (GraphicsContextTests, TickDoesNotCrash)
     EXPECT_NO_THROW (context->tick());
 }
 
+TEST_F (GraphicsContextTests, DefaultFrameTimingCapabilitiesAreEmpty)
+{
+    const auto capabilities = context->getFrameTimingCapabilities();
+
+    EXPECT_FALSE (capabilities.hasPresentationTiming);
+    EXPECT_FALSE (capabilities.hasFrameLatencyWait);
+    EXPECT_FALSE (capabilities.hasGpuCompletionTiming);
+    EXPECT_FALSE (capabilities.hasMaximumFramesInFlight);
+    EXPECT_FALSE (capabilities.presentBlocksForDisplay);
+}
+
+TEST_F (GraphicsContextTests, DefaultFrameTimingInfoIsEmpty)
+{
+    const auto timingInfo = context->getLastFrameTimingInfo();
+
+    EXPECT_FALSE (timingInfo.hasSubmissionTimestamps);
+    EXPECT_FALSE (timingInfo.hasGpuCompletionTimestamp);
+    EXPECT_FALSE (timingInfo.hasPresentationTimestamp);
+    EXPECT_EQ (timingInfo.presentationCount, 0u);
+}
+
 TEST_F (GraphicsContextTests, CreateContextWithNullExistingDeviceSucceeds)
 {
     auto ctx = GraphicsContext::createContext (GpuPlatform::Headless, {}, nullptr);

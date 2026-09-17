@@ -19,6 +19,8 @@
   ==============================================================================
 */
 
+#include "yup_FramePacer.h"
+
 namespace yup
 {
 
@@ -237,6 +239,7 @@ private:
     void getRenderContext();
     void runWithComputeContext (const std::function<void()>& fn);
     bool renderFrame();
+    void resetFramePacing();
 
     static int mouseCaptureRequestCount;
     static uint32_t lastCapturedMouseButtonState;
@@ -327,6 +330,10 @@ private:
     bool mouseCaptureActive = false;
     bool globalMouseCaptureActive = false;
     bool vsyncEnabled = false;
+    ComponentNative::FramePacingMode framePacingMode = ComponentNative::FramePacingMode::automatic;
+    std::optional<uint32_t> maximumFramesInFlight;
+    GraphicsContext::FrameTimingCapabilities frameTimingCapabilities;
+    detail::FramePacer framePacer;
 };
 
 } // namespace yup

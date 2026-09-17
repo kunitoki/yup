@@ -24,6 +24,7 @@
 #include "rive/renderer/d3d11/render_context_d3d_impl.hpp"
 #include "rive/renderer/d3d11/d3d11.hpp"
 #include <dxgi1_2.h>
+#include <dxgi1_3.h>
 
 namespace yup
 {
@@ -49,6 +50,7 @@ public:
         , device (std::move (device))
         , deviceContext (std::move (deviceContext))
     {
+        QueryPerformanceFrequency (&qpcFrequency);
     }
 
     GpuPlatform getPlatform() const noexcept override { return GpuPlatform::Direct3D; }
@@ -61,11 +63,38 @@ public:
 
     rive::gpu::RenderTarget* getRenderTarget() override { return renderTarget.get(); }
 
+    FrameTimingCapabilities getFrameTimingCapabilities() const noexcept override
+    {
+        return frameTimingCapabilities;
+    }
+
+    FrameTimingInfo getLastFrameTimingInfo() const noexcept override
+    {
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
+        return lastFrameTimingInfo;
+    }
+
+    bool waitForFrameLatency (uint32_t timeoutMilliseconds) override
+    {
+        if (frameLatencyWaitableObject == nullptr)
+            return false;
+
+        return WaitForSingleObjectEx (frameLatencyWaitableObject, timeoutMilliseconds, FALSE) == WAIT_OBJECT_0;
+    }
+
+    void setMaximumFramesInFlight (std::optional<uint32_t> newMaximumFramesInFlight) override
+    {
+        maximumFramesInFlight = newMaximumFramesInFlight;
+        applyMaximumFrameLatency();
+    }
+
     void onSizeChanged (void* window, int width, int height, float dpiScale, uint32_t sampleCount) override
     {
         if (! isHeadless)
         {
             swapchain.Reset();
+            swapchain2.Reset();
+            frameLatencyWaitableObject = nullptr;
             cachedBackbuffer.Reset();
             DXGI_SWAP_CHAIN_DESC1 scd {};
             scd.Width = width;
@@ -74,17 +103,37 @@ public:
             scd.SampleDesc.Count = 1;
             scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS;
             scd.BufferCount = 2;
-            scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+            scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            scd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
             if ((GetWindowLongPtrW ((HWND) window, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) != 0)
                 scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
 
-            VERIFY_OK (d3dFactory->CreateSwapChainForHwnd (device.Get(),
-                                                           (HWND) window,
-                                                           &scd,
-                                                           nullptr,
-                                                           nullptr,
-                                                           swapchain.ReleaseAndGetAddressOf()));
+            auto hr = d3dFactory->CreateSwapChainForHwnd (device.Get(),
+                                                          (HWND) window,
+                                                          &scd,
+                                                          nullptr,
+                                                          nullptr,
+                                                          swapchain.ReleaseAndGetAddressOf());
+
+            if (FAILED (hr))
+            {
+                scd.Flags = 0;
+                scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+                VERIFY_OK (d3dFactory->CreateSwapChainForHwnd (device.Get(),
+                                                               (HWND) window,
+                                                               &scd,
+                                                               nullptr,
+                                                               nullptr,
+                                                               swapchain.ReleaseAndGetAddressOf()));
+            }
+
+            if (swapchain != nullptr)
+                swapchain.As (&swapchain2);
+
+            applyMaximumFrameLatency();
+            updateFrameTimingCapabilities();
         }
         else
         {
@@ -148,21 +197,118 @@ public:
 
         if (! isHeadless)
         {
+            const double submissionStartedAtSeconds = getCurrentTimeSeconds();
             HRESULT hr = swapchain->Present (options.vsync ? 1 : 0, 0);
+            const double submissionCompletedAtSeconds = getCurrentTimeSeconds();
+            updateSubmissionTiming (submissionStartedAtSeconds, submissionCompletedAtSeconds);
+
             if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
             {
                 auto reason = device->GetDeviceRemovedReason();
                 fprintf (stderr, "D3D: Present returned device removed/reset: hr=0x%08X, deviceRemovedReason=0x%08X\n", static_cast<unsigned> (hr), static_cast<unsigned> (reason));
+                markPresentationDisjoint();
             }
             else if (FAILED (hr))
             {
                 fprintf (stderr, "D3D: Present failed: hr=0x%08X\n", static_cast<unsigned> (hr));
+                markPresentationDisjoint();
+            }
+            else
+            {
+                updatePresentationTiming();
             }
         }
 
     }
 
 private:
+    static double getCurrentTimeSeconds() noexcept
+    {
+        return yup::Time::getMillisecondCounterHiRes() / 1000.0;
+    }
+
+    void updateSubmissionTiming (double startedAtSeconds, double completedAtSeconds)
+    {
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
+        lastFrameTimingInfo.submissionStartedAtSeconds = startedAtSeconds;
+        lastFrameTimingInfo.submissionCompletedAtSeconds = completedAtSeconds;
+        lastFrameTimingInfo.hasSubmissionTimestamps = true;
+    }
+
+    void markPresentationDisjoint()
+    {
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
+        lastFrameTimingInfo.isDisjoint = true;
+        lastFrameTimingInfo.hasPresentationTimestamp = false;
+        hasValidPresentationTiming = false;
+        updateFrameTimingCapabilities();
+    }
+
+    void updatePresentationTiming()
+    {
+        DXGI_FRAME_STATISTICS statistics {};
+        const HRESULT hr = swapchain->GetFrameStatistics (&statistics);
+
+        const CriticalSection::ScopedLockType sl (frameTimingLock);
+
+        lastFrameTimingInfo.isDisjoint = hr == DXGI_ERROR_FRAME_STATISTICS_DISJOINT;
+
+        if (FAILED (hr) || statistics.PresentCount == 0 || qpcFrequency.QuadPart <= 0)
+        {
+            lastFrameTimingInfo.hasPresentationTimestamp = false;
+            hasValidPresentationTiming = false;
+            updateFrameTimingCapabilities();
+            return;
+        }
+
+        const double presentedAtSeconds = static_cast<double> (statistics.SyncQPCTime.QuadPart)
+                                        / static_cast<double> (qpcFrequency.QuadPart);
+
+        lastFrameTimingInfo.presentationIntervalSeconds = 0.0;
+
+        if (lastPresentedAtSeconds > 0.0 && statistics.PresentCount > lastPresentedCount)
+            lastFrameTimingInfo.presentationIntervalSeconds = presentedAtSeconds - lastPresentedAtSeconds;
+
+        lastFrameTimingInfo.presentedAtSeconds = presentedAtSeconds;
+        lastFrameTimingInfo.presentationCount = statistics.PresentCount;
+        lastFrameTimingInfo.hasPresentationTimestamp = true;
+        hasValidPresentationTiming = true;
+        updateFrameTimingCapabilities();
+
+        lastPresentedAtSeconds = presentedAtSeconds;
+        lastPresentedCount = statistics.PresentCount;
+    }
+
+    void applyMaximumFrameLatency()
+    {
+        if (isHeadless)
+            return;
+
+        UINT latency = maximumFramesInFlight.value_or (0);
+        frameLatencyWaitableObject = nullptr;
+
+        if (swapchain2 != nullptr && latency > 0)
+        {
+            if (SUCCEEDED (swapchain2->SetMaximumFrameLatency (latency)))
+                frameLatencyWaitableObject = swapchain2->GetFrameLatencyWaitableObject();
+        }
+        else if (auto dxgiDevice = ComPtr<IDXGIDevice1>(); SUCCEEDED (device.As (&dxgiDevice)) && latency > 0)
+        {
+            dxgiDevice->SetMaximumFrameLatency (latency);
+        }
+
+        updateFrameTimingCapabilities();
+    }
+
+    void updateFrameTimingCapabilities()
+    {
+        frameTimingCapabilities.hasPresentationTiming = hasValidPresentationTiming;
+        frameTimingCapabilities.hasFrameLatencyWait = frameLatencyWaitableObject != nullptr;
+        frameTimingCapabilities.hasGpuCompletionTiming = false;
+        frameTimingCapabilities.hasMaximumFramesInFlight = swapchain2 != nullptr;
+        frameTimingCapabilities.presentBlocksForDisplay = options.vsync;
+    }
+
     const bool isHeadless;
     Options options;
     GpuDevice::Ptr gpuDevice;
@@ -170,10 +316,20 @@ private:
     ComPtr<ID3D11Device> device;
     ComPtr<ID3D11DeviceContext> deviceContext;
     ComPtr<IDXGISwapChain1> swapchain;
+    ComPtr<IDXGISwapChain2> swapchain2;
     ComPtr<ID3D11Texture2D> cachedBackbuffer;
     ComPtr<ID3D11Texture2D> readbackTexture;
     ComPtr<ID3D11Texture2D> headlessDrawTexture;
     rive::rcp<rive::gpu::RenderTargetD3D> renderTarget;
+    std::optional<uint32_t> maximumFramesInFlight;
+    mutable CriticalSection frameTimingLock;
+    FrameTimingCapabilities frameTimingCapabilities;
+    FrameTimingInfo lastFrameTimingInfo;
+    HANDLE frameLatencyWaitableObject = nullptr;
+    LARGE_INTEGER qpcFrequency {};
+    double lastPresentedAtSeconds = 0.0;
+    uint64_t lastPresentedCount = 0;
+    bool hasValidPresentationTiming = false;
 };
 
 std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GpuDevice::Options options, GpuDevice::Ptr existingGpu)

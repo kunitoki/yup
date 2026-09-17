@@ -43,6 +43,30 @@ public:
     using LoaderFunction = void* (*) (const char*);
 
     //==============================================================================
+    struct FrameTimingCapabilities
+    {
+        bool hasPresentationTiming = false;
+        bool hasFrameLatencyWait = false;
+        bool hasGpuCompletionTiming = false;
+        bool hasMaximumFramesInFlight = false;
+        bool presentBlocksForDisplay = false;
+    };
+
+    struct FrameTimingInfo
+    {
+        double submissionStartedAtSeconds = 0.0;
+        double submissionCompletedAtSeconds = 0.0;
+        double gpuCompletedAtSeconds = 0.0;
+        double presentedAtSeconds = 0.0;
+        double presentationIntervalSeconds = 0.0;
+        uint64_t presentationCount = 0;
+        bool hasSubmissionTimestamps = false;
+        bool hasGpuCompletionTimestamp = false;
+        bool hasPresentationTimestamp = false;
+        bool isDisjoint = false;
+    };
+
+    //==============================================================================
     /** Configuration options for creating a graphics context.
 
         Extends GpuDevice::Options with window-specific settings. */
@@ -157,6 +181,26 @@ public:
 
     /** Performs periodic operations, potentially related to animation or state updates. */
     virtual void tick() {}
+
+    //==============================================================================
+    /** Returns the frame pacing and timing support exposed by this backend. */
+    virtual FrameTimingCapabilities getFrameTimingCapabilities() const noexcept { return {}; }
+
+    /** Returns the latest validated submission / GPU / presentation timing sample. */
+    virtual FrameTimingInfo getLastFrameTimingInfo() const noexcept { return {}; }
+
+    /** Waits until the backend is ready to accept another paced frame, when supported. */
+    virtual bool waitForFrameLatency (uint32_t timeoutMilliseconds)
+    {
+       ignoreUnused (timeoutMilliseconds);
+       return false;
+    }
+
+    /** Applies an optional backend-specific frames-in-flight limit. */
+    virtual void setMaximumFramesInFlight (std::optional<uint32_t> maximumFramesInFlight)
+    {
+       ignoreUnused (maximumFramesInFlight);
+    }
 
     //==============================================================================
     /** Static factory method to create a graphics context using a specific graphics API.

@@ -136,6 +136,41 @@ public:
     };
 
     //==============================================================================
+    /** Selects how a native window paces continuous rendering.
+
+        This is orthogonal to `vsync`: vsync controls whether the backend presents in sync with the
+        display, while frame pacing controls whether the render loop deliberately schedules CPU work
+        or limits queue depth.
+
+        @see Options::withFramePacingMode, Options::withMaximumFramesInFlight
+    */
+    enum class FramePacingMode
+    {
+        /** Uses presentation-driven pacing when the backend can provide validated presentation
+            feedback, otherwise falls back conservatively to the legacy behavior.
+
+            When vsync is enabled and no presentation-driven pacing is available, the backend's
+            present call remains the pacing source. When vsync is disabled, this falls back to the
+            software timer.
+        */
+        automatic,
+
+        /** Disables deliberate frame pacing beyond the graphics backend's own behavior. */
+        off,
+
+        /** Uses the software timer to pace continuous rendering.
+
+            This mode is suppressed when it would conflict with blocking vsync.
+        */
+        software,
+
+        /** Uses backend presentation timing and/or frame-latency waiting when supported, with a
+            conservative software fallback when it is unavailable.
+        */
+        presentationDriven
+    };
+
+    //==============================================================================
     /**
         Configuration options for creating a native component.
 
@@ -199,7 +234,7 @@ public:
         /** Sets whether presentation should be synchronized to the display refresh.
 
             With vsync enabled the backend's present call blocks until the display is ready, so
-            frames are paced by the display rather than by `framerateRedraw`. Off by default.
+            frames are paced by the display rather than by `framerateRedraw`.
 
             @param shouldUseVSync True to synchronize presentation to the display, false to pace frames with the software timer.
 
@@ -255,6 +290,29 @@ public:
         */
         Options& withFramerateRedraw (std::optional<float> newFramerateRedraw) noexcept;
 
+        /** Sets how continuous rendering should be paced.
+
+            `automatic` is the default. It preserves current behavior conservatively: on backends
+            without validated presentation timing it falls back to the legacy pacing path, without
+            forcing a low frames-in-flight limit.
+
+            @param newFramePacingMode The pacing mode to use.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withFramePacingMode (FramePacingMode newFramePacingMode) noexcept;
+
+        /** Sets an optional backend frames-in-flight limit.
+
+            This applies only on backends that support queue-depth limiting. Leaving it unset keeps
+            the backend default and does not force a low-latency limit.
+
+            @param newMaximumFramesInFlight Optional maximum number of frames that may be queued.
+
+            @return Reference to this Options object for method chaining.
+        */
+        Options& withMaximumFramesInFlight (std::optional<uint32_t> newMaximumFramesInFlight) noexcept;
+
         /** Sets the clear color used when rendering.
 
             @param newClearColor The clear color, or std::nullopt to use the default.
@@ -295,6 +353,10 @@ public:
         std::optional<GpuPlatform> graphicsApi;
         /** The target framerate for continuous rendering. */
         std::optional<float> framerateRedraw;
+        /** How continuous rendering should be paced. */
+        FramePacingMode framePacingMode = FramePacingMode::automatic;
+        /** Optional backend frames-in-flight limit. */
+        std::optional<uint32_t> maximumFramesInFlight;
         /** The clear color to use when rendering. */
         std::optional<Color> clearColor;
         /** The maximum time between clicks to be considered a double-click. */

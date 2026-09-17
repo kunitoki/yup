@@ -424,6 +424,12 @@ void registerYupGuiBindings (py::module_& m)
 
     py::class_<ComponentNative> classComponentNative (m, "ComponentNative");
 
+    py::enum_<ComponentNative::FramePacingMode> (classComponentNative, "FramePacingMode")
+        .value ("automatic", ComponentNative::FramePacingMode::automatic)
+        .value ("off", ComponentNative::FramePacingMode::off)
+        .value ("software", ComponentNative::FramePacingMode::software)
+        .value ("presentationDriven", ComponentNative::FramePacingMode::presentationDriven);
+
     py::class_<ComponentNative::Options> classComponentNativeOptions (classComponentNative, "Options");
 
     classComponentNativeOptions
@@ -436,6 +442,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("withMouseCapture", &ComponentNative::Options::withMouseCapture)
         .def ("withGraphicsApi", &ComponentNative::Options::withGraphicsApi)
         .def ("withFramerateRedraw", &ComponentNative::Options::withFramerateRedraw)
+        .def ("withFramePacingMode", &ComponentNative::Options::withFramePacingMode)
+        .def ("withMaximumFramesInFlight", &ComponentNative::Options::withMaximumFramesInFlight)
         .def ("withClearColor", &ComponentNative::Options::withClearColor)
         .def ("withDoubleClickTime", &ComponentNative::Options::withDoubleClickTime)
         .def ("withUpdateOnlyFocused", &ComponentNative::Options::withUpdateOnlyFocused)

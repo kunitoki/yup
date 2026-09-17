@@ -23,6 +23,8 @@
 
 #include <yup_gui/yup_gui.h>
 
+#include "../../modules/yup_gui/native/yup_FramePacer.h"
+
 using namespace yup;
 
 namespace
@@ -156,6 +158,8 @@ TEST_F (ComponentNativeOptionsTests, DefaultOptionsHaveDefaultFlags)
     EXPECT_EQ (opts.flags, ComponentNative::defaultFlags);
     EXPECT_EQ (opts.graphicsApi, std::nullopt);
     EXPECT_EQ (opts.framerateRedraw, std::nullopt);
+    EXPECT_EQ (opts.framePacingMode, ComponentNative::FramePacingMode::automatic);
+    EXPECT_EQ (opts.maximumFramesInFlight, std::nullopt);
     EXPECT_EQ (opts.clearColor, std::nullopt);
     EXPECT_EQ (opts.doubleClickTime, std::nullopt);
     EXPECT_FALSE (opts.updateOnlyWhenFocused);
@@ -293,6 +297,26 @@ TEST_F (ComponentNativeOptionsTests, WithFramerateRedrawNulloptClearsValue)
     EXPECT_FALSE (opts.framerateRedraw.has_value());
 }
 
+TEST_F (ComponentNativeOptionsTests, WithFramePacingModeSetsValue)
+{
+    opts.withFramePacingMode (ComponentNative::FramePacingMode::presentationDriven);
+    EXPECT_EQ (opts.framePacingMode, ComponentNative::FramePacingMode::presentationDriven);
+}
+
+TEST_F (ComponentNativeOptionsTests, WithMaximumFramesInFlightSetsValue)
+{
+    opts.withMaximumFramesInFlight (3);
+    ASSERT_TRUE (opts.maximumFramesInFlight.has_value());
+    EXPECT_EQ (*opts.maximumFramesInFlight, 3u);
+}
+
+TEST_F (ComponentNativeOptionsTests, WithMaximumFramesInFlightNulloptClearsValue)
+{
+    opts.withMaximumFramesInFlight (2);
+    opts.withMaximumFramesInFlight (std::nullopt);
+    EXPECT_FALSE (opts.maximumFramesInFlight.has_value());
+}
+
 TEST_F (ComponentNativeOptionsTests, WithClearColorSetsValue)
 {
     const Color col (0xff112233);
@@ -349,6 +373,8 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
         .withTemporaryWindow (true)
         .withGraphicsApi (GpuPlatform::Headless)
         .withFramerateRedraw (60.0f)
+        .withFramePacingMode (ComponentNative::FramePacingMode::presentationDriven)
+        .withMaximumFramesInFlight (2)
         .withClearColor (Color (0xff000000))
         .withDoubleClickTime (RelativeTime::milliseconds (500))
         .withUpdateOnlyFocused (true);
@@ -364,8 +390,169 @@ TEST_F (ComponentNativeOptionsTests, ChainedOptionsAllApply)
     EXPECT_EQ (*opts.graphicsApi, GpuPlatform::Headless);
     ASSERT_TRUE (opts.framerateRedraw.has_value());
     EXPECT_FLOAT_EQ (*opts.framerateRedraw, 60.0f);
+    EXPECT_EQ (opts.framePacingMode, ComponentNative::FramePacingMode::presentationDriven);
+    ASSERT_TRUE (opts.maximumFramesInFlight.has_value());
+    EXPECT_EQ (*opts.maximumFramesInFlight, 2u);
     ASSERT_TRUE (opts.clearColor.has_value());
     EXPECT_TRUE (opts.updateOnlyWhenFocused);
+}
+
+class FramePacerTests : public ::testing::Test
+{
+protected:
+    using EffectiveMode = detail::FramePacer::EffectiveMode;
+
+    static detail::FramePacer makePacer (ComponentNative::FramePacingMode mode,
+                                         bool vsyncEnabled,
+                                         GraphicsContext::FrameTimingCapabilities capabilities = {},
+                                         std::optional<uint32_t> maximumFramesInFlight = std::nullopt,
+                                         double targetFrameRate = 60.0)
+    {
+        return detail::FramePacer ({ mode, maximumFramesInFlight, targetFrameRate, vsyncEnabled }, capabilities);
+    }
+};
+
+TEST_F (FramePacerTests, AutomaticModeFallsBackToSoftwareWithoutPresentationTiming)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, false);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::software);
+}
+
+TEST_F (FramePacerTests, AutomaticModeDefersToVSyncWithoutPresentationTiming)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, true);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::off);
+}
+
+TEST_F (FramePacerTests, SoftwareModeIsSuppressedWhenVSyncIsEnabled)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::software, true);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::off);
+}
+
+TEST_F (FramePacerTests, AutomaticModeUsesPresentationDrivenWhenTimingIsAvailable)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasPresentationTiming = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, true, capabilities);
+    pacer.reset (1.0);
+
+    EXPECT_EQ (pacer.planWait (1.0).effectiveMode, EffectiveMode::presentationDriven);
+}
+
+TEST_F (FramePacerTests, PresentationDerivedDeltaIgnoresVariableCpuCadence)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasPresentationTiming = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::presentationDriven, true, capabilities);
+    pacer.reset (1.0);
+
+    GraphicsContext::FrameTimingInfo firstSample;
+    firstSample.hasPresentationTimestamp = true;
+    firstSample.presentedAtSeconds = 1.0 + (1.0 / 60.0);
+    firstSample.presentationCount = 1;
+
+    auto firstDelta = pacer.makeRefreshDelta (1.02, firstSample);
+    EXPECT_TRUE (firstDelta.usedPresentationTiming);
+    EXPECT_NEAR (1.0 / 60.0, firstDelta.seconds, 1.0e-6);
+
+    GraphicsContext::FrameTimingInfo secondSample = firstSample;
+    secondSample.presentedAtSeconds = 1.0 + (2.0 / 60.0);
+    secondSample.presentationCount = 2;
+
+    auto secondDelta = pacer.makeRefreshDelta (1.05, secondSample);
+    EXPECT_TRUE (secondDelta.usedPresentationTiming);
+    EXPECT_NEAR (1.0 / 60.0, secondDelta.seconds, 1.0e-6);
+}
+
+TEST_F (FramePacerTests, AdaptiveLeadTimeTracksMoreExpensiveFrames)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::software, false);
+    pacer.reset (0.0);
+
+    pacer.recordFrame (0.010, 0.002, 0.001, 0.0);
+    const auto initialLeadTime = pacer.planWait (0.010).leadTimeSeconds;
+
+    pacer.recordFrame (0.040, 0.010, 0.005, 0.0);
+    const auto adaptedLeadTime = pacer.planWait (0.040).leadTimeSeconds;
+
+    EXPECT_GT (adaptedLeadTime, initialLeadTime);
+}
+
+TEST_F (FramePacerTests, MissedDeadlinesAdvanceToTheNextFutureSlot)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::software, false);
+    pacer.reset (0.0);
+
+    pacer.recordFrame (0.090, 0.010, 0.002, 0.0);
+
+    const auto waitPlan = pacer.planWait (0.090);
+    EXPECT_GT (pacer.getDiagnostics().missedDeadlines, 0u);
+    EXPECT_LT (pacer.getDiagnostics().schedulerLatenessSeconds, waitPlan.targetIntervalSeconds);
+}
+
+TEST_F (FramePacerTests, SoftwareModeSupportsNonIntegralTargetIntervals)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::software, false, {}, std::nullopt, 40.0);
+    pacer.reset (0.0);
+
+    const auto firstPlan = pacer.planWait (0.0);
+    EXPECT_NEAR (1.0 / 40.0, firstPlan.targetIntervalSeconds, 1.0e-9);
+
+    pacer.recordFrame (1.0 / 60.0, 0.003, 0.001, 0.0);
+    const auto secondPlan = pacer.planWait (1.0 / 60.0);
+
+    EXPECT_NEAR (1.0 / 40.0, secondPlan.targetIntervalSeconds, 1.0e-9);
+    ASSERT_TRUE (secondPlan.softwareWakeTimeSeconds.has_value());
+    EXPECT_GT (*secondPlan.softwareWakeTimeSeconds, 1.0 / 60.0);
+}
+
+TEST_F (FramePacerTests, InvalidPresentationFeedbackFallsBackToMonotonicTime)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::presentationDriven, false);
+    pacer.reset (2.0);
+
+    const auto delta = pacer.makeRefreshDelta (2.6, {});
+
+    EXPECT_FALSE (delta.usedPresentationTiming);
+    EXPECT_DOUBLE_EQ (0.25, delta.seconds);
+}
+
+TEST_F (FramePacerTests, ResetClearsStalePresentationHistory)
+{
+    GraphicsContext::FrameTimingCapabilities capabilities;
+    capabilities.hasPresentationTiming = true;
+
+    auto pacer = makePacer (ComponentNative::FramePacingMode::presentationDriven, true, capabilities);
+    pacer.reset (1.0);
+
+    GraphicsContext::FrameTimingInfo sample;
+    sample.hasPresentationTimestamp = true;
+    sample.presentedAtSeconds = 1.0 + (1.0 / 60.0);
+    sample.presentationCount = 1;
+
+    EXPECT_TRUE (pacer.makeRefreshDelta (1.02, sample).usedPresentationTiming);
+
+    pacer.reset (5.0);
+
+    const auto delta = pacer.makeRefreshDelta (5.0, {});
+    EXPECT_FALSE (delta.usedPresentationTiming);
+    EXPECT_DOUBLE_EQ (0.0, delta.seconds);
+}
+
+TEST_F (FramePacerTests, MaximumFramesInFlightConfigurationIsRetained)
+{
+    auto pacer = makePacer (ComponentNative::FramePacingMode::automatic, false, {}, 3);
+    ASSERT_TRUE (pacer.getMaximumFramesInFlight().has_value());
+    EXPECT_EQ (*pacer.getMaximumFramesInFlight(), 3u);
 }
 
 // ==============================================================================

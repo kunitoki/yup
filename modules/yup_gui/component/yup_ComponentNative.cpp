@@ -132,6 +132,18 @@ ComponentNative::Options& ComponentNative::Options::withFramerateRedraw (std::op
     return *this;
 }
 
+ComponentNative::Options& ComponentNative::Options::withFramePacingMode (FramePacingMode newFramePacingMode) noexcept
+{
+    framePacingMode = newFramePacingMode;
+    return *this;
+}
+
+ComponentNative::Options& ComponentNative::Options::withMaximumFramesInFlight (std::optional<uint32_t> newMaximumFramesInFlight) noexcept
+{
+    maximumFramesInFlight = newMaximumFramesInFlight;
+    return *this;
+}
+
 ComponentNative::Options& ComponentNative::Options::withClearColor (std::optional<Color> newClearColor) noexcept
 {
     clearColor = newClearColor;

@@ -70,6 +70,11 @@ public:
 
     rive::gpu::RenderTarget* getRenderTarget() override { return offscreenRenderTarget.get(); }
 
+    FrameTimingCapabilities getFrameTimingCapabilities() const noexcept override
+    {
+        return { false, false, false, false, options.vsync };
+    }
+
     void onSizeChanged (void* window, int newWidth, int newHeight, float dpiScale, uint32_t newSampleCount) override
     {
         width = newWidth;
