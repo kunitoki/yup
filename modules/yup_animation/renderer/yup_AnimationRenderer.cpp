@@ -489,7 +489,8 @@ void AnimationRenderer::renderComposition (Graphics& g,
     }
 
     std::vector<AnimationRenderResources::MatteCanvasLease> matteLeases;
-    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources, &matteLeases };
+    std::vector<AnimationRenderResources::PrecompCanvasLease> precompLeases;
+    RenderContext ctx { sceneCtx, viewXf, opacity, std::move (paintOverride), &precompCache, renderResources, &matteLeases, &precompLeases };
 
     renderLayerList (g, comp.layers, ctx);
 }
@@ -917,11 +918,16 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
         if (w > 0 && h > 0)
         {
-            // Keyed by render rather than by asset: two phases of one asset are
-            // two different images, and sharing a canvas would clobber the first.
-            auto canvas = ctx.renderResources != nullptr
-                            ? ctx.renderResources->getPrecompCanvas (g.getGraphicsContext(), renderKey, w, h)
-                            : GpuCanvas::create (g.getGraphicsContext(), w, h);
+            AnimationRenderResources::PrecompCanvasLease canvasLease;
+            GpuCanvas::Ptr localCanvas;
+
+            if (ctx.renderResources != nullptr)
+                canvasLease = ctx.renderResources->acquirePrecompCanvas (g.getGraphicsContext(), w, h);
+            else
+                localCanvas = GpuCanvas::create (g.getGraphicsContext(), w, h);
+
+            auto* canvas = canvasLease.isValid() ? std::addressof (canvasLease.getCanvas())
+                                                 : localCanvas.get();
             if (canvas != nullptr)
             {
                 {
@@ -929,7 +935,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
                     precompScene.buildParentTransforms (asset->layers);
 
-                    RenderContext offscreenCtx { precompScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases };
+                    RenderContext offscreenCtx { precompScene, AffineTransform::scaling (deviceScale), 1.0f, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
                     renderLayerList (offscreenG, asset->layers, offscreenCtx);
                 }
 
@@ -937,6 +943,9 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
                 if (tex != nullptr)
                 {
                     ctx.precompCache->textures.set (renderKey, tex);
+
+                    if (canvasLease.isValid() && ctx.precompLeases != nullptr)
+                        ctx.precompLeases->push_back (std::move (canvasLease));
 
                     g.setOpacity (g.getOpacity() * opacity);
                     g.drawTexture (tex, precompBounds);
@@ -953,7 +962,7 @@ void AnimationRenderer::renderPrecompLayer (Graphics& g, const PrecompLayer& lay
 
     precompScene.buildParentTransforms (asset->layers);
 
-    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases };
+    RenderContext precompCtx { precompScene, precompViewXf, opacity, ctx.paintOverride, ctx.precompCache, ctx.renderResources, ctx.matteLeases, ctx.precompLeases };
 
     renderLayerList (g, asset->layers, precompCtx);
 }

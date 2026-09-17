@@ -126,63 +126,50 @@ TEST (AnimationRenderResourcesTests, AcquireMatteCanvasesBackendContextSwitching
 }
 
 // ==============================================================================
-// AnimationRenderResources::getPrecompCanvas
+// AnimationRenderResources::acquirePrecompCanvas
 // ==============================================================================
 
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroWidthReturnsNull)
+TEST (AnimationRenderResourcesTests, AcquirePrecompCanvasWithZeroWidthReturnsInvalidLease)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
-    EXPECT_EQ (resources.getPrecompCanvas (*context, "key", 0, 64), nullptr);
+    EXPECT_FALSE (resources.acquirePrecompCanvas (*context, 0, 64).isValid());
 }
 
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasWithZeroHeightReturnsNull)
+TEST (AnimationRenderResourcesTests, AcquirePrecompCanvasWithZeroHeightReturnsInvalidLease)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
-    EXPECT_EQ (resources.getPrecompCanvas (*context, "key", 64, 0), nullptr);
+    EXPECT_FALSE (resources.acquirePrecompCanvas (*context, 64, 0).isValid());
 }
 
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasHeadlessReturnsNull)
+TEST (AnimationRenderResourcesTests, AcquirePrecompCanvasHeadlessReturnsInvalidLease)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
-    EXPECT_EQ (resources.getPrecompCanvas (*context, "key", 64, 64), nullptr);
+    EXPECT_FALSE (resources.acquirePrecompCanvas (*context, 64, 64).isValid());
 }
 
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasSameKeyReusesSlot)
+TEST (AnimationRenderResourcesTests, AcquirePrecompCanvasHeadlessRemainsInvalidAcrossCalls)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
-    auto canvas1 = resources.getPrecompCanvas (*context, "testKey", 64, 64);
-    auto canvas2 = resources.getPrecompCanvas (*context, "testKey", 64, 64);
+    auto canvas1 = resources.acquirePrecompCanvas (*context, 64, 64);
+    auto canvas2 = resources.acquirePrecompCanvas (*context, 64, 64);
 
-    // Both are nullptr on headless, which is consistent.
-    EXPECT_EQ (canvas1, canvas2);
+    EXPECT_FALSE (canvas1.isValid());
+    EXPECT_FALSE (canvas2.isValid());
 }
 
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasDifferentKeysAreIndependent)
-{
-    auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
-    ASSERT_NE (context, nullptr);
-
-    AnimationRenderResources resources;
-    auto canvas1 = resources.getPrecompCanvas (*context, "keyA", 64, 64);
-    auto canvas2 = resources.getPrecompCanvas (*context, "keyB", 64, 64);
-
-    // Both null on headless, but the call path is exercised.
-    EXPECT_EQ (canvas1, canvas2);
-}
-
-TEST (AnimationRenderResourcesTests, GetPrecompCanvasBackendContextSwitchingResetsPools)
+TEST (AnimationRenderResourcesTests, AcquirePrecompCanvasBackendContextSwitchingResetsPools)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
@@ -191,11 +178,12 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasBackendContextSwitchingRese
     ASSERT_NE (otherContext, nullptr);
 
     AnimationRenderResources resources;
-    auto canvas1 = resources.getPrecompCanvas (*context, "key", 64, 64);
+    auto canvas1 = resources.acquirePrecompCanvas (*context, 64, 64);
+    EXPECT_FALSE (canvas1.isValid());
 
     EXPECT_NO_THROW ({
-        auto canvas2 = resources.getPrecompCanvas (*otherContext, "key", 64, 64);
-        EXPECT_EQ (canvas2, nullptr);
+        auto canvas2 = resources.acquirePrecompCanvas (*otherContext, 64, 64);
+        EXPECT_FALSE (canvas2.isValid());
     });
 }
 
@@ -203,17 +191,16 @@ TEST (AnimationRenderResourcesTests, GetPrecompCanvasBackendContextSwitchingRese
 // AnimationRenderResources::reset
 // ==============================================================================
 
-TEST (AnimationRenderResourcesTests, ResetClearsPrecompCanvasCache)
+TEST (AnimationRenderResourcesTests, ResetClearsPrecompCanvasPool)
 {
     auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
     ASSERT_NE (context, nullptr);
 
     AnimationRenderResources resources;
-    resources.getPrecompCanvas (*context, "key", 64, 64);
+    resources.acquirePrecompCanvas (*context, 64, 64);
     resources.reset();
 
-    // After reset, a new getPrecompCanvas with the same key should not crash.
-    EXPECT_EQ (resources.getPrecompCanvas (*context, "key", 64, 64), nullptr);
+    EXPECT_FALSE (resources.acquirePrecompCanvas (*context, 64, 64).isValid());
 }
 
 // ==============================================================================
@@ -223,6 +210,12 @@ TEST (AnimationRenderResourcesTests, ResetClearsPrecompCanvasCache)
 TEST (MatteCanvasLeaseTests, DefaultConstructedIsInvalid)
 {
     AnimationRenderResources::MatteCanvasLease lease;
+    EXPECT_FALSE (lease.isValid());
+}
+
+TEST (PrecompCanvasLeaseTests, DefaultConstructedIsInvalid)
+{
+    AnimationRenderResources::PrecompCanvasLease lease;
     EXPECT_FALSE (lease.isValid());
 }
 
@@ -328,14 +321,13 @@ TEST (AnimationRenderResourcesTests, FullApiSmokeTest)
         EXPECT_FALSE (lease.isValid());
     }
 
-    // getPrecompCanvas
-    auto canvas = resources.getPrecompCanvas (*context, "full", 64, 64);
-    EXPECT_EQ (canvas, nullptr);
+    auto canvas = resources.acquirePrecompCanvas (*context, 64, 64);
+    EXPECT_FALSE (canvas.isValid());
 
     // reset
     resources.reset();
 
     // After reset, can still use APIs
-    auto afterResetCanvas = resources.getPrecompCanvas (*context, "afterReset", 32, 32);
-    EXPECT_EQ (afterResetCanvas, nullptr);
+    auto afterResetCanvas = resources.acquirePrecompCanvas (*context, 32, 32);
+    EXPECT_FALSE (afterResetCanvas.isValid());
 }

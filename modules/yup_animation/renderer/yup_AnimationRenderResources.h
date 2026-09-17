@@ -85,6 +85,38 @@ public:
         size_t slotIndex = 0;
     };
 
+    /** Owns one reusable precomposition canvas while a frame is recorded.
+
+        The lease returns its canvas to the resource pool on destruction. It is
+        move-only so different precomposition renders in the same frame cannot
+        overwrite a texture that is still referenced by recorded draw commands.
+    */
+    class YUP_API PrecompCanvasLease
+    {
+    public:
+        PrecompCanvasLease() = default;
+        PrecompCanvasLease (PrecompCanvasLease&& other) noexcept;
+        PrecompCanvasLease& operator= (PrecompCanvasLease&& other) noexcept;
+        PrecompCanvasLease (const PrecompCanvasLease&) = delete;
+        PrecompCanvasLease& operator= (const PrecompCanvasLease&) = delete;
+        ~PrecompCanvasLease();
+
+        /** Returns true when a canvas was acquired successfully. */
+        bool isValid() const noexcept;
+
+        /** Returns the acquired precomposition canvas. */
+        GpuCanvas& getCanvas() const noexcept;
+
+    private:
+        friend class AnimationRenderResources;
+
+        PrecompCanvasLease (AnimationRenderResources& owner, size_t slotIndex) noexcept;
+        void release() noexcept;
+
+        AnimationRenderResources* owner = nullptr;
+        size_t slotIndex = 0;
+    };
+
     //==============================================================================
     /** Returns the matte-composite pipeline, compiling it against @p context on
         first use. Returns nullptr if the context has no GPU or compilation fails
@@ -99,16 +131,20 @@ public:
     */
     MatteCanvasLease acquireMatteCanvases (GraphicsContext& context, int width, int height);
 
-    /** Returns a persistent canvas for rendering a precomposition.
+    /** Acquires a persistent canvas for rendering a precomposition.
 
-        @p key identifies the precomposition asset. A canvas is recreated only
-        when the asset's required pixel size changes. Resources are tied to the
-        supplied GraphicsContext; using another context resets the pool.
+        The returned lease remains valid until destruction. Separate renders in
+        the same frame receive separate canvases, while sequential frames reuse
+        the same GPU allocations. Resources are tied to the supplied
+        GraphicsContext; using another context resets the pool.
     */
-    GpuCanvas::Ptr getPrecompCanvas (GraphicsContext& context, const String& key, int width, int height);
+    PrecompCanvasLease acquirePrecompCanvas (GraphicsContext& context, int width, int height);
 
-    /** Releases all cached GPU resources. Safe to call while the owning
-        GraphicsContext is still alive. */
+    /** Releases all cached GPU resources.
+
+        Safe to call while the owning GraphicsContext is still alive and no
+        canvas leases are active.
+    */
     void reset();
 
 private:
@@ -124,17 +160,18 @@ private:
 
     struct PrecompCanvasSlot
     {
-        String key;
         GpuCanvas::Ptr canvas;
         int width = 0;
         int height = 0;
+        bool inUse = false;
     };
 
     void releaseMatteCanvasSlot (size_t slotIndex) noexcept;
+    void releasePrecompCanvasSlot (size_t slotIndex) noexcept;
 
     GpuPipeline::Ptr mattePipeline;
     bool mattePipelineCompiled = false;
-    GraphicsContext* matteCanvasContext = nullptr;
+    GraphicsContext* canvasContext = nullptr;
     std::vector<MatteCanvasSlot> matteCanvasPool;
     std::vector<PrecompCanvasSlot> precompCanvasPool;
 

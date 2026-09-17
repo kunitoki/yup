@@ -953,7 +953,7 @@ void SDLComponentNative::run()
     double activeFrameRate = 0.0;
     double maxFrameTimeMs = 0.0;
     double renderCostMs = 0.0;
-    double nextFrameMs = 0.0;
+    double nextFrameDeadlineMs = 0.0;
 
     while (! threadShouldExit())
     {
@@ -963,13 +963,32 @@ void SDLComponentNative::run()
             activeFrameRate = rate;
             maxFrameTimeMs = 1000.0 / rate;
             renderCostMs = maxFrameTimeMs * 0.5;
-            nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
+            nextFrameDeadlineMs = yup::Time::getMillisecondCounterHiRes();
         }
 
-        const double budgetMs = jmax (1.0, renderCostMs * 1.15);
+        const double renderBudgetMs = jlimit (1.0, maxFrameTimeMs, renderCostMs * 1.15);
 
-        renderEvent.wait (jmax (1.0, (nextFrameMs - budgetMs) - yup::Time::getMillisecondCounterHiRes()));
-        renderEvent.reset();
+        for (;;)
+        {
+            const auto wakeTimeMs = nextFrameDeadlineMs - renderBudgetMs;
+            const auto waitMs = wakeTimeMs - yup::Time::getMillisecondCounterHiRes();
+            if (waitMs <= 0.0)
+                break;
+
+            if (waitMs > 1.0)
+            {
+                renderEvent.wait (waitMs - 1.0);
+                renderEvent.reset();
+
+                if (threadShouldExit())
+                    break;
+
+                continue;
+            }
+
+            frameTimer.waitUntil (wakeTimeMs);
+            break;
+        }
 
         if (threadShouldExit())
             break;
@@ -992,17 +1011,11 @@ void SDLComponentNative::run()
         if (didPaint)
             renderCostMs = renderCostMs * 0.9 + (yup::Time::getMillisecondCounterHiRes() - renderStartMs) * 0.1;
 
-        if (vsyncEnabled)
+        const auto nowMs = yup::Time::getMillisecondCounterHiRes();
+        do
         {
-            nextFrameMs = yup::Time::getMillisecondCounterHiRes() + maxFrameTimeMs;
-            continue;
-        }
-
-        if (const auto nowMs = yup::Time::getMillisecondCounterHiRes(); nextFrameMs < nowMs)
-            nextFrameMs = nowMs;
-
-        frameTimer.waitUntil (nextFrameMs);
-        nextFrameMs += maxFrameTimeMs;
+            nextFrameDeadlineMs += maxFrameTimeMs;
+        } while (nextFrameDeadlineMs <= nowMs);
     }
 }
 

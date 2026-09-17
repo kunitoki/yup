@@ -115,7 +115,7 @@ private:
         float opacity = 1.0f;
         std::optional<Color> paintOverride;
         PrecompCache* precompCache = nullptr;                ///< Owned by the outermost renderComposition call.
-        AnimationRenderResources* renderResources = nullptr; ///< Optional persistent GPU resources (matte pipeline).
+        AnimationRenderResources* renderResources = nullptr; ///< Optional persistent GPU resources.
 
         /** Matte canvas leases held until the composition render completes.
 
@@ -127,6 +127,9 @@ private:
             renderComposition call.
         */
         std::vector<AnimationRenderResources::MatteCanvasLease>* matteLeases = nullptr;
+
+        /** Precomposition canvas leases held until the composition render completes. */
+        std::vector<AnimationRenderResources::PrecompCanvasLease>* precompLeases = nullptr;
 
         AffineTransform resolveLayerTransform (const AnimationLayer& layer) const;
     };

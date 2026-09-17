@@ -198,8 +198,9 @@ public:
 
         /** Sets whether presentation should be synchronized to the display refresh.
 
-            With vsync enabled the backend's present call blocks until the display is ready, so
-            frames are paced by the display rather than by `framerateRedraw`. Off by default.
+            The render loop still observes `framerateRedraw`, because some backends submit a
+            synchronized presentation asynchronously rather than blocking until the display is
+            ready. Off by default.
 
             @param shouldUseVSync True to synchronize presentation to the display, false to pace frames with the software timer.
 

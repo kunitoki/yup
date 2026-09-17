@@ -87,15 +87,16 @@ WaitableTimer::~WaitableTimer()
 
 void WaitableTimer::waitUntil (double milliseconds)
 {
-    const auto relativeMs = (milliseconds - 1.0) - Time::getMillisecondCounterHiRes();
-    if (relativeMs <= 0.0)
+    const auto remainingMs = milliseconds - Time::getMillisecondCounterHiRes();
+    if (remainingMs <= 0.0)
         return;
 
 #if YUP_WINDOWS
+    const auto relativeMs = remainingMs - 1.0;
     LARGE_INTEGER dueTime;
     dueTime.QuadPart = -static_cast<LONGLONG> (relativeMs * 10000.0); // relative, in 100ns units
 
-    if (handle != nullptr && SetWaitableTimer (handle, &dueTime, 0, nullptr, nullptr, FALSE) != 0)
+    if (relativeMs > 0.0 && handle != nullptr && SetWaitableTimer (handle, &dueTime, 0, nullptr, nullptr, FALSE) != 0)
     {
         WaitForSingleObject (handle, INFINITE);
 
