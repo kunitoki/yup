@@ -173,7 +173,7 @@ public:
 
         currentOversampledSize = numSamples * OversampleFactor;
         currentNumChannels = numChannels;
-        oversampledBuffer.setSize (numChannels, currentOversampledSize, false, false, true);
+        oversampledBuffer.setSize (currentNumChannels, currentOversampledSize, false, false, true);
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -219,26 +219,32 @@ public:
         Downsample the internal oversampled buffer into an output block.
 
         Applies a lowpass anti-aliasing FIR to the oversampled data and decimates
-        by OversampleFactor. Must be called after the oversampled buffer has been
-        processed (e.g. via processOversampledBlock()).
+        by OversampleFactor.
+
+        The usual caller reaches here after upsample() and some processing of the
+        oversampled buffer (e.g. via processOversampledBlock()), but that order is
+        not required: the oversampled buffer may equally be filled directly
+        through getOversampledChannelData(), which is what a *decimate-first*
+        user does - feeding audio in at the high rate, working at 1/N, and
+        interpolating back with upsample(). The interpolation and decimation
+        filters keep separate history, so one instance serves either direction.
 
         @param output      Array of write pointers, one per channel.
-        @param numChannels Number of channels to write (must match the numChannels
-                           passed to the preceding upsample() call).
-        @param numSamples  Number of output samples per channel (must match the numSamples
-                           passed to the preceding upsample() call).
+        @param numChannels Number of channels to write.
+        @param numSamples  Number of output samples per channel; the oversampled
+                           buffer is read as numSamples * OversampleFactor samples.
     */
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
         ScopedNoDenormals noDenormals;
 
+        const int interpolatedSize = numSamples * OversampleFactor;
+
         jassert (numChannels > 0 && numSamples > 0);
         jassert (numChannels <= xDecim.getNumChannels());
-        jassert (numChannels == currentNumChannels);
-        jassert (currentOversampledSize > 0);
-        jassert (numSamples * OversampleFactor == currentOversampledSize);
-
-        const int interpolatedSize = currentOversampledSize;
+        jassert (numChannels <= oversampledBuffer.getNumChannels());
+        jassert (interpolatedSize <= oversampledBuffer.getNumSamples());
+        jassert (interpolatedSize + SincRadius * OversampleFactor <= xDecim.getNumSamples());
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -317,15 +323,18 @@ public:
     /**
         Returns a writable pointer to the data for a single oversampled channel.
 
+        Writable, and bounded by what prepare() allocated rather than by the last
+        upsample() call: filling this buffer directly is how a decimate-first
+        caller hands high-rate audio to downsample() without upsampling first.
+
         @param channel  Zero-based channel index.
-        @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range, prepare()
-                        has not been called, or the channel was not processed by
-                        the most recent upsample() call.
+        @return         Pointer to the channel's oversampled samples, or nullptr
+                        if the channel index is out of range or prepare() has not
+                        been called.
     */
     forcedinline SampleType* getOversampledChannelData (int channel) noexcept
     {
-        if (channel < 0 || channel >= currentNumChannels)
+        if (channel < 0 || channel >= oversampledBuffer.getNumChannels())
             return nullptr;
 
         return oversampledBuffer.getWritePointer (channel);
@@ -335,14 +344,13 @@ public:
         Returns a read-only pointer to the data for a single oversampled channel.
 
         @param channel  Zero-based channel index.
-        @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range or the
-                        channel was not processed by the most recent upsample()
-                        call.
+        @return         Pointer to the channel's oversampled samples, or nullptr
+                        if the channel index is out of range or prepare() has not
+                        been called.
     */
     const forcedinline SampleType* getOversampledChannelData (int channel) const noexcept
     {
-        if (channel < 0 || channel >= currentNumChannels)
+        if (channel < 0 || channel >= oversampledBuffer.getNumChannels())
             return nullptr;
 
         return oversampledBuffer.getReadPointer (channel);

@@ -30,13 +30,29 @@ namespace yup
     responds to mouse interactions and updates a MidiKeyboardState object. It also
     monitors the state to visually show which keys are currently pressed.
 
+    When the component has keyboard focus, notes can be played with the computer
+    keyboard, using a configurable set of keys (see setKeyboardKeys()) mapped to
+    consecutive semitones starting at the octave set by setOctaveForMiddleC().
+    The default layout is "zsxdcvgbhnjmq2w3er5t6y7ui9o0p"; releasing a key sends
+    the matching note-off. A small octave selector is also drawn on the keyboard
+    itself, letting the base octave be changed with the mouse.
+
+    The mouse wheel scrolls the visible range left/right by single white keys,
+    while Ctrl/Cmd + wheel zooms in and out, clamped to a minimum span of a single
+    octave and a maximum span covering the whole 0-127 note range.
+
     The actual drawing is delegated to the ApplicationTheme system.
+
+    The key state may be updated from any thread (for example from an audio or MIDI
+    input callback via MidiKeyboardState::processNextMidiEvent()); note repaints are
+    coalesced and applied on the message thread.
 
     @tags{AudioGUI}
 */
 class YUP_API MidiKeyboardComponent
     : public Component
     , public MidiKeyboardState::Listener
+    , private AsyncUpdater
 {
 public:
     //==============================================================================
@@ -92,6 +108,22 @@ public:
 
     /** Returns the number of octaves currently being displayed. */
     int getOctaveForMiddleC() const noexcept { return octaveNumForMiddleC; }
+
+    //==============================================================================
+    /** Sets the computer-keyboard keys used to trigger notes, one character per
+        semitone offset from the octave base (offset 0 is the octave root set by
+        setOctaveForMiddleC()). Matching against key presses is case-insensitive.
+
+        Any notes currently held down are released before the new mapping takes
+        effect, so a key held across the change can't get stuck.
+
+        @param keys   ordered characters, e.g. the default "zsxdcvgbhnjmq2w3er5t6y7ui9o0p"
+                      maps 29 consecutive semitones starting at the base octave
+    */
+    void setKeyboardKeys (const String& keys);
+
+    /** Returns the current computer-keyboard key mapping (always lower-case). */
+    String getKeyboardKeys() const noexcept { return keyboardKeys; }
 
     //==============================================================================
     /** Changes the lowest visible key on the keyboard.
@@ -155,6 +187,13 @@ public:
 
     //==============================================================================
     /** @internal */
+    void getKeyPosition (int midiNoteNumber, float keyWidth, Rectangle<float>& keyPos, bool& isBlack) const;
+
+    /** @internal */
+    bool isMouseOverNote (int midiNoteNumber) const { return midiNoteNumber == mouseOverNote; }
+
+    //==============================================================================
+    /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void mouseDown (const MouseEvent& e) override;
@@ -175,17 +214,15 @@ public:
     /** @internal */
     void handleNoteOff (MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override;
     /** @internal */
+    void handleAsyncUpdate() override;
+    /** @internal */
     void resized() override;
     /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
-    void focusLost () override;
-
-    //==============================================================================
+    void keyUp (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
-    void getKeyPosition (int midiNoteNumber, float keyWidth, Rectangle<float>& keyPos, bool& isBlack) const;
-    /** @internal */
-    bool isMouseOverNote (int midiNoteNumber) const { return midiNoteNumber == mouseOverNote; }
+    void focusLost() override;
 
 private:
     //==============================================================================
@@ -198,12 +235,18 @@ private:
     int rangeStart = 12;
     int rangeEnd = 96;
     int octaveNumForMiddleC = 3;
+    String keyboardKeys = "zsxdcvgbhnjmq2w3er5t6y7ui9o0p";
 
     Orientation orientation;
 
     Array<int> mouseDownNotes;
+    Array<int> keyDownNotes;
     int mouseOverNote = -1;
     bool shouldCheckState = false;
+
+    std::unique_ptr<TextButton> octaveDownButton;
+    std::unique_ptr<TextButton> octaveUpButton;
+    std::unique_ptr<Label> octaveLabel;
 
     String getWhiteNoteText (int midiNoteNumber);
     int xyToNote (Point<float> pos, float& mousePositionVelocity);
@@ -213,6 +256,11 @@ private:
     void updateNoteUnderMouse (const MouseEvent& e, bool isDown);
     void resetAnyKeysInUse();
     void updateShadowNoteUnderMouse (const MouseEvent& e);
+
+    int getMidiNoteForKey (const KeyPress& key) const;
+    void scrollByWhiteKeys (int numWhiteKeys);
+    void zoomBy (float zoomDelta, int anchorNote);
+    int whiteKeyToNote (int whiteKeyIndex) const;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiKeyboardComponent)
 };

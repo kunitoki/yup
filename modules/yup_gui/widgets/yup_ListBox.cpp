@@ -660,7 +660,8 @@ void ListBox::resized()
 //==============================================================================
 void ListBox::mouseDown (const MouseEvent& event)
 {
-    takeKeyboardFocus();
+    if (getWantsKeyboardFocus())
+        takeKeyboardFocus();
 
     rowSelectedOnMouseUp = -1;
 

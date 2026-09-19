@@ -1517,6 +1517,75 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     }
 }
 
+void paintVectorWheel (Graphics& g, Rectangle<float> bounds, float normalizedValue, Color topColor, Color bottomColor, Color outlineColor, Color gripColor)
+{
+    if (bounds.isEmpty())
+        return;
+
+    const auto contentBounds = bounds.reduced (0.5f);
+
+    ColorGradient bodyGradient;
+    bodyGradient.addColorStop (topColor, Point<float> (contentBounds.getX(), contentBounds.getY()), 0.0f);
+    bodyGradient.addColorStop (bottomColor, Point<float> (contentBounds.getX(), contentBounds.getBottom()), 1.0f);
+    g.setFillColorGradient (bodyGradient);
+    g.fillRect (contentBounds);
+
+    const float realValue = 1.0f - normalizedValue;
+    const float sinDelta = std::sin (realValue * MathConstants<float>::pi);
+
+    const float travelTop = contentBounds.getY() + contentBounds.getHeight() * 0.04f;
+    const float travel = contentBounds.getHeight() * 0.9f;
+    const float gripY = travelTop + realValue * travel;
+
+    const float bandHalfHeight = (contentBounds.getHeight() * 0.075f + sinDelta * contentBounds.getHeight() * 0.175f) * 0.5f;
+    const float bandTop = jlimit (contentBounds.getY(), contentBounds.getBottom(), gripY - bandHalfHeight);
+    const float bandBottom = jlimit (contentBounds.getY(), contentBounds.getBottom(), gripY + bandHalfHeight);
+
+    ColorGradient bandGradient;
+    bandGradient.addColorStop (bottomColor.withAlpha (0.5f), Point<float> (contentBounds.getX(), bandTop), 0.0f);
+    bandGradient.addColorStop (topColor.withAlpha (0.5f), Point<float> (contentBounds.getX(), bandBottom), 1.0f);
+    g.setFillColorGradient (bandGradient);
+    g.fillRect (Rectangle<float> (contentBounds.getX(), bandTop, contentBounds.getWidth(), bandBottom - bandTop));
+
+    const float gripThickness = jmax (1.0f, contentBounds.getHeight() * 0.015f + contentBounds.getHeight() * 0.015f * sinDelta);
+    g.setFillColor (gripColor);
+    g.fillRect (Rectangle<float> (contentBounds.getX(), gripY - gripThickness * 0.5f, contentBounds.getWidth(), gripThickness));
+
+    g.setStrokeColor (outlineColor);
+    g.setStrokeWidth (1.0f);
+    g.strokeRect (contentBounds);
+}
+
+void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWheelComponent& wheel)
+{
+    const auto topColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyTopColorId).value_or (Color (0xff5a5a5a));
+    const auto bottomColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyBottomColorId).value_or (Color (0xff1a1a1a));
+    const auto outlineColor = theme.findColor (wheel, PitchWheelComponent::Style::outlineColorId).value_or (Color (0xff000000));
+    const auto gripColor = theme.findColor (wheel,
+                                            wheel.isCurrentlyBeingDragged() ? PitchWheelComponent::Style::gripDownColorId
+                                            : wheel.isMouseOver()           ? PitchWheelComponent::Style::gripOverColorId
+                                                                            : PitchWheelComponent::Style::gripColorId)
+                               .value_or (Color (0xff4ebfff));
+
+    const auto normalized = static_cast<float> ((wheel.getValue() + 1.0) * 0.5);
+    paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
+}
+
+void paintModWheel (Graphics& g, const ApplicationTheme& theme, const ModWheelComponent& wheel)
+{
+    const auto topColor = theme.findColor (wheel, ModWheelComponent::Style::bodyTopColorId).value_or (Color (0xff5a5a5a));
+    const auto bottomColor = theme.findColor (wheel, ModWheelComponent::Style::bodyBottomColorId).value_or (Color (0xff1a1a1a));
+    const auto outlineColor = theme.findColor (wheel, ModWheelComponent::Style::outlineColorId).value_or (Color (0xff000000));
+    const auto gripColor = theme.findColor (wheel,
+                                            wheel.isCurrentlyBeingDragged() ? ModWheelComponent::Style::gripDownColorId
+                                            : wheel.isMouseOver()           ? ModWheelComponent::Style::gripOverColorId
+                                                                            : ModWheelComponent::Style::gripColorId)
+                               .value_or (Color (0xff4ebfff));
+
+    const auto normalized = static_cast<float> (wheel.getValue());
+    paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
+}
+
 void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterComponent& meter)
 {
     const auto bounds = meter.getLocalBounds();
@@ -1929,6 +1998,22 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
     theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+
+    theme->setComponentStyle<PitchWheelComponent> (ComponentStyle::createStyle<PitchWheelComponent> (paintPitchWheel));
+    theme->setColor (PitchWheelComponent::Style::bodyTopColorId, Color (0xff5a5a5a));
+    theme->setColor (PitchWheelComponent::Style::bodyBottomColorId, Color (0xff1a1a1a));
+    theme->setColor (PitchWheelComponent::Style::outlineColorId, Colors::black);
+    theme->setColor (PitchWheelComponent::Style::gripColorId, Color (0xff4ebfff));
+    theme->setColor (PitchWheelComponent::Style::gripOverColorId, Color (0xff7bd0ff));
+    theme->setColor (PitchWheelComponent::Style::gripDownColorId, Color (0xff9de3ff));
+
+    theme->setComponentStyle<ModWheelComponent> (ComponentStyle::createStyle<ModWheelComponent> (paintModWheel));
+    theme->setColor (ModWheelComponent::Style::bodyTopColorId, Color (0xff5a5a5a));
+    theme->setColor (ModWheelComponent::Style::bodyBottomColorId, Color (0xff1a1a1a));
+    theme->setColor (ModWheelComponent::Style::outlineColorId, Colors::black);
+    theme->setColor (ModWheelComponent::Style::gripColorId, Color (0xff4ebfff));
+    theme->setColor (ModWheelComponent::Style::gripOverColorId, Color (0xff7bd0ff));
+    theme->setColor (ModWheelComponent::Style::gripDownColorId, Color (0xff9de3ff));
 
     theme->setComponentStyle<KMeterComponent> (ComponentStyle::createStyle<KMeterComponent> (paintKMeter));
     theme->setColor (KMeterComponent::Style::backgroundColorId, Color (0xff1a1a1a));

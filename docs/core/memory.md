@@ -133,6 +133,17 @@ because it is a memory primitive.
 `AllocationHooks` lets tests and tools observe or assert on heap allocations -
 useful for verifying that audio-thread code paths do not allocate.
 
+With `YUP_ENABLE_ALLOCATION_HOOKS=1`, register an `AllocationHooks::Listener`
+with `AllocationHooks::getForCurrentThread()` before measuring, and remove it
+afterward on the same thread. Callbacks must not allocate. Notifications cover
+ordinary C++ `new`/`delete` and nonzero `HeapBlock` allocation/reallocation
+requests, not arbitrary C allocator calls or over-aligned C++ allocations.
+Counts are heap operations, not allocated bytes or peak memory. Recursive
+notifications from the observer infrastructure are suppressed.
+
+For the test target, enable the CMake option `YUP_TEST_ALLOCATION_HOOKS`.
+Allocation-specific YDSP tests skip explicitly when instrumentation is disabled.
+
 ## See also
 
 - [Containers](containers.md) - ownership models applied to collections.

@@ -760,7 +760,7 @@ public:
         const ScopedLockType lock (getLock());
 
         if (isPositiveAndBelow (indexToRemove, values.size()))
-            removeInternal (indexToRemove);
+            values.removeElements (indexToRemove, 1);
     }
 
     /** Removes an element from the array.
@@ -780,7 +780,7 @@ public:
         if (isPositiveAndBelow (indexToRemove, values.size()))
         {
             ElementType removed (values[indexToRemove]);
-            removeInternal (indexToRemove);
+            values.removeElements (indexToRemove, 1);
             return removed;
         }
 
@@ -811,7 +811,7 @@ public:
             return;
         }
 
-        removeInternal (indexToRemove);
+        values.removeElements (indexToRemove, 1);
     }
 
     /** Removes an item from the array.
@@ -832,7 +832,7 @@ public:
         {
             if (valueToRemove == e[i])
             {
-                removeInternal (i);
+                values.removeElements (i, 1);
                 return i;
             }
         }
@@ -858,7 +858,7 @@ public:
         {
             if (valueToRemove == values[i])
             {
-                removeInternal (i);
+                values.removeElements (i, 1);
                 ++numRemoved;
             }
         }
@@ -887,7 +887,7 @@ public:
         {
             if (predicate (values[i]))
             {
-                removeInternal (i);
+                values.removeElements (i, 1);
                 ++numRemoved;
             }
         }
@@ -916,10 +916,7 @@ public:
         numberToRemove = endIndex - startIndex;
 
         if (numberToRemove > 0)
-        {
             values.removeElements (startIndex, numberToRemove);
-            minimiseStorageAfterRemoval();
-        }
     }
 
     /** Removes the last n elements from the array.
@@ -939,7 +936,6 @@ public:
                 howManyToRemove = values.size();
 
             values.removeElements (values.size() - howManyToRemove, howManyToRemove);
-            minimiseStorageAfterRemoval();
         }
     }
 
@@ -956,7 +952,7 @@ public:
 
         if (this == &otherArray)
         {
-            clear();
+            clearQuick();
         }
         else
         {
@@ -964,7 +960,7 @@ public:
             {
                 for (int i = values.size(); --i >= 0;)
                     if (otherArray.contains (values[i]))
-                        removeInternal (i);
+                        values.removeElements (i, 1);
             }
         }
     }
@@ -986,13 +982,13 @@ public:
         {
             if (otherArray.size() <= 0)
             {
-                clear();
+                clearQuick();
             }
             else
             {
                 for (int i = values.size(); --i >= 0;)
                     if (! otherArray.contains (values[i]))
-                        removeInternal (i);
+                        values.removeElements (i, 1);
             }
         }
     }
@@ -1112,18 +1108,6 @@ public:
 private:
     //==============================================================================
     ArrayBase<ElementType, TypeOfCriticalSectionToUse> values;
-
-    void removeInternal (int indexToRemove)
-    {
-        values.removeElements (indexToRemove, 1);
-        minimiseStorageAfterRemoval();
-    }
-
-    void minimiseStorageAfterRemoval()
-    {
-        if (values.capacity() > jmax (minimumAllocatedSize, values.size() * 2))
-            values.shrinkToNoMoreThan (jmax (values.size(), jmax (minimumAllocatedSize, 64 / (int) sizeof (ElementType))));
-    }
 };
 
 //==============================================================================

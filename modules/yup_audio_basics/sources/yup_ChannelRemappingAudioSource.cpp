@@ -54,13 +54,13 @@ ChannelRemappingAudioSource::~ChannelRemappingAudioSource() {}
 //==============================================================================
 void ChannelRemappingAudioSource::setNumberOfChannelsToProduce (const int requiredNumberOfChannels_)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     requiredNumberOfChannels = requiredNumberOfChannels_;
 }
 
 void ChannelRemappingAudioSource::clearAllMappings()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     remappedInputs.clear();
     remappedOutputs.clear();
@@ -68,7 +68,7 @@ void ChannelRemappingAudioSource::clearAllMappings()
 
 void ChannelRemappingAudioSource::setInputChannelMapping (const int destIndex, const int sourceIndex)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     while (remappedInputs.size() < destIndex)
         remappedInputs.add (-1);
@@ -78,7 +78,7 @@ void ChannelRemappingAudioSource::setInputChannelMapping (const int destIndex, c
 
 void ChannelRemappingAudioSource::setOutputChannelMapping (const int sourceIndex, const int destIndex)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     while (remappedOutputs.size() < sourceIndex)
         remappedOutputs.add (-1);
@@ -88,7 +88,7 @@ void ChannelRemappingAudioSource::setOutputChannelMapping (const int sourceIndex
 
 int ChannelRemappingAudioSource::getRemappedInputChannel (const int inputChannelIndex) const
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (inputChannelIndex >= 0 && inputChannelIndex < remappedInputs.size())
         return remappedInputs.getUnchecked (inputChannelIndex);
@@ -98,7 +98,7 @@ int ChannelRemappingAudioSource::getRemappedInputChannel (const int inputChannel
 
 int ChannelRemappingAudioSource::getRemappedOutputChannel (const int outputChannelIndex) const
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (outputChannelIndex >= 0 && outputChannelIndex < remappedOutputs.size())
         return remappedOutputs.getUnchecked (outputChannelIndex);
@@ -119,7 +119,7 @@ void ChannelRemappingAudioSource::releaseResources()
 
 void ChannelRemappingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     buffer.setSize (requiredNumberOfChannels, bufferToFill.numSamples, false, false, true);
 
@@ -162,7 +162,7 @@ std::unique_ptr<XmlElement> ChannelRemappingAudioSource::createXml() const
     auto e = std::make_unique<XmlElement> ("MAPPINGS");
     String ins, outs;
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (int i = 0; i < remappedInputs.size(); ++i)
         ins << remappedInputs.getUnchecked (i) << ' ';
@@ -180,7 +180,7 @@ void ChannelRemappingAudioSource::restoreFromXml (const XmlElement& e)
 {
     if (e.hasTagName ("MAPPINGS"))
     {
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
 
         clearAllMappings();
 

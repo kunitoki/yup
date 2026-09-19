@@ -21,6 +21,8 @@ cmake_minimum_required(VERSION 3.31)
 
 enable_testing()
 
+option (YUP_TEST_ALLOCATION_HOOKS "Enable allocation-count assertions in realtime tests" OFF)
+
 # ==== Setup googletests
 if (YUP_PLATFORM_EMSCRIPTEN)
     set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
@@ -89,10 +91,15 @@ set (target_gtest_modules
     GTest::gtest
     GTest::gmock)
 
-if (YUP_PLATFORM_DESKTOP)
+if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules
-        yup_audio_plugin_host
-        yup_audio_plugin_client)
+        yup_dsp_jit)
+
+    if (YUP_PLATFORM_DESKTOP)
+        list (APPEND target_modules
+            yup_audio_plugin_host
+            yup_audio_plugin_client)
+    endif()
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
@@ -142,6 +149,7 @@ yup_standalone_app (
         $<$<CONFIG:Debug>:-sWASM_BIGINT>
         $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
+        YUP_ENABLE_ALLOCATION_HOOKS=$<BOOL:${YUP_TEST_ALLOCATION_HOOKS}>
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
     PRELOAD_FILES

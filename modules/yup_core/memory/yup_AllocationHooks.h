@@ -45,6 +45,12 @@ namespace yup
 class AllocationHooks
 {
 public:
+    /** Returns the calling thread's allocation observers.
+        Register/unregister listeners outside the measured region. Notifications
+        cover ordinary C++ new/delete and HeapBlock growth, not arbitrary C
+        allocator calls or over-aligned C++ allocation. Callbacks must not allocate. */
+    static YUP_API AllocationHooks& getForCurrentThread();
+
     struct Listener
     {
         virtual ~Listener() noexcept = default;

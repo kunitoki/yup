@@ -1,0 +1,62 @@
+/*
+  The Crazy Frog (Axel F) riff.
+
+  '-' holds the previous note, each phrase is one line, durations are in
+  sixteenth notes at roughly 138 BPM. Pitches below are one plausible octave
+  registration of those letters; the two tables are the whole tune, so nudging
+  any entry retunes that note.
+*/
+
+declare name "Hello World";
+declare description "The Crazy Frog (Axel F) riff on a sine instrument.";
+
+processor Melody {
+    output stream out;
+
+    state float phase;
+    state float phaseInc;
+    state int remaining;
+    state int step;
+
+    state float melodyPitch[] = {
+        77.0, 80.0, 77.0, 77.0, 82.0, 77.0, 75.0,
+        77.0, 84.0, 77.0, 77.0, 85.0, 84.0, 80.0,
+        77.0, 84.0, 89.0, 77.0, 75.0, 75.0, 72.0, 79.0, 77.0
+    };
+
+    state int melodyLength[] = {
+        4, 2, 2, 2, 2, 2, 2,
+        4, 2, 2, 2, 2, 2, 2,
+        4, 2, 2, 2, 2, 2, 2, 3, 8
+    };
+
+    process {
+        if (remaining <= 0) {
+            phaseInc = (440.0 * pow (2.0, (melodyPitch[step] - 69.0) / 12.0)) * samplePeriod;
+
+            remaining = int (sampleRate * 0.1087) * melodyLength[step];
+
+            step = step + 1;
+            if (step >= size (melodyPitch)) { step = 0; }
+
+            phase = 0.0;
+        }
+
+        out = 0.2 * sin (phase * 2.0 * pi);
+
+        phase = phase + phaseInc;
+        if (phase >= 1.0) { phase = phase - 1.0; }
+
+        remaining = remaining - 1;
+    }
+}
+
+graph HelloWorld {
+    output stream out;
+
+    node melody = Melody;
+
+    connection {
+        melody.out -> out;
+    }
+}
