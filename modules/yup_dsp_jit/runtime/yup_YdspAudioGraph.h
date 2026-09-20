@@ -247,6 +247,13 @@ public:
     */
     uint64_t getDroppedOutputEventCount() const noexcept;
 
+    /** Returns a conservative byte capacity for a host MidiBuffer receiving one
+        process() call's output. Call after prepare(), on the control thread,
+        and reserve this many bytes before processing to avoid reallocations.
+        The host must clear the buffer before each process() call.
+    */
+    size_t getMidiOutputBufferSizeBytes() const noexcept;
+
     //==============================================================================
     /** Returns the number of input streams declared by the graph. */
     int getInputStreamCount() const noexcept;

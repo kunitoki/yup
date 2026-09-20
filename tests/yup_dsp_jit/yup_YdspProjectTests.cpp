@@ -284,3 +284,74 @@ TEST_F (YdspProjectTests, NestedLibraryFunctionsGainOuterPrefixWithoutCapturingL
     ASSERT_TRUE (direct.wasOk()) << compiler.getDiagnostics().toString();
     expectOutput (direct.getReference(), 1.25f);
 }
+
+TEST_F (YdspProjectTests, BundlesPreserveMainOverrideAndNestedImportsWithoutSourceFiles)
+{
+    project ("Main", "[Main.ydsp, lib/Gain.ydsp, lib/Math.ydsp]");
+    write ("lib/Math.ydsp", "func twice (x: float) : float { return x * 2.0; }");
+    write ("lib/Gain.ydsp", "import Math as math; processor Gain { input stream in; output stream out; process { out = math.twice (in); } }");
+    write ("Main.ydsp", "import lib.Gain as lib; processor Main { input stream in; output stream out; process { out = in; } } "
+                       "graph Alternative [[ main ]] { input stream in; output stream out; node p = lib.Gain; connection { in -> p.in; p.out -> out; } }");
+    YdspBundleCompileOptions options;
+    for (const auto os : { YdspTargetOperatingSystem::macosTarget, YdspTargetOperatingSystem::linuxTarget, YdspTargetOperatingSystem::windowsTarget })
+        for (const auto arch : { YdspTargetArchitecture::arm64, YdspTargetArchitecture::x64 })
+            options.nativeTargets.push_back ({ os, arch });
+    std::array<MemoryBlock, 2> bytes;
+    for (int i = 0; i < 2; ++i)
+    {
+        YdspCompiler compiler;
+        auto bundle = compiler.compileProjectBundle (manifest, options, i == 0 ? "" : "Alternative");
+        ASSERT_TRUE (bundle.wasOk()) << compiler.getDiagnostics().toString();
+        ASSERT_EQ (3u, bundle.getReference().getSources().size());
+        ASSERT_TRUE (bundle.getReference().saveToMemoryBlock (bytes[static_cast<size_t> (i)]).wasOk());
+    }
+    ASSERT_TRUE (directory.deleteRecursively());
+    for (int i = 0; i < 2; ++i)
+    {
+        auto loaded = YdspBundle::loadFromMemoryBlock (bytes[static_cast<size_t> (i)]);
+        ASSERT_TRUE (loaded.wasOk()) << loaded.getErrorMessage();
+        auto graph = loaded.getReference().instantiate();
+        ASSERT_TRUE (graph.wasOk()) << graph.getErrorMessage();
+        expectOutput (graph.getReference(), i == 0 ? 0.25f : 0.5f);
+    }
+}
+
+TEST_F (YdspProjectTests, EditorOverridesIncludeManifestAndImportedSources)
+{
+    project ("WrongMain", "[Main.ydsp, lib/Gain.ydsp]");
+    write ("Main.ydsp", "import lib.Gain as lib; graph Main { input stream in; output stream out; node p = lib.Gain; connection { in -> p.in; p.out -> out; } }");
+    write ("lib/Gain.ydsp", "invalid on disk");
+    YdspCompileOptions options;
+    options.sourceOverrides[manifest.getFullPathName()] = "formatVersion: 1\nmain: Main\nsources: [Main.ydsp, lib/Gain.ydsp]\n";
+    const auto importedPath = directory.getChildFile ("lib/Gain.ydsp").getFullPathName();
+    options.sourceOverrides[importedPath] = "processor Gain { input stream in; output stream out; process { out = in * 2.0; } }";
+    YdspCompiler compiler;
+    auto graph = compiler.compileProject (manifest, options);
+    ASSERT_TRUE (graph.wasOk()) << compiler.getDiagnostics().toString();
+    expectOutput (graph.getReference(), 0.5f);
+    options.sourceOverrides[importedPath] = "processor Gain { input stream in; output stream out; process { out = missing; } }";
+    EXPECT_FALSE (compiler.compileProject (manifest, options).wasOk());
+    EXPECT_TRUE (compiler.getDiagnostics().toString().contains (importedPath + ":"));
+}
+
+TEST_F (YdspProjectTests, ProjectBundlesRequireTheirEntryPointChunkAndVersion)
+{
+    project ("Main", "[Main.ydsp]");
+    write ("Main.ydsp", "processor Main { output stream out; process { out = 0.0; } }");
+    YdspCompiler compiler;
+    auto bundle = compiler.compileProjectBundle (manifest, {});
+    ASSERT_TRUE (bundle.wasOk()) << compiler.getDiagnostics().toString();
+    MemoryBlock bytes;
+    ASSERT_TRUE (bundle.getReference().saveToMemoryBlock (bytes).wasOk());
+    // RIFF header (12 bytes), VERS header (8 bytes), then the version word.
+    ASSERT_GT (bytes.getSize(), 28u);
+    auto* data = static_cast<uint8_t*> (bytes.getData());
+    ASSERT_EQ (3, data[20]);
+    data[20] = 2;
+    EXPECT_FALSE (YdspBundle::loadFromMemoryBlock (bytes).wasOk());
+    data[20] = 3;
+    // Hide PROJ as an unknown chunk: a version 3 reader must still reject it.
+    ASSERT_EQ ('P', data[24]);
+    data[24] = 'X';
+    EXPECT_FALSE (YdspBundle::loadFromMemoryBlock (bytes).wasOk());
+}

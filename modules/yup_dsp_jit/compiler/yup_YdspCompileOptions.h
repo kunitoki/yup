@@ -91,6 +91,12 @@ struct YdspCompileOptions
     /** Emit bounded trace recording. False removes all trace work from kernels.
         Trace strings and names are checked even when recording is disabled. */
     bool enableTracing = false;
+
+    /** Unsaved editor contents keyed by absolute source or manifest path.
+        Overrides disk reads during compilation, including explicit imports.
+        The map must not be modified while compilation is in progress.
+    */
+    std::unordered_map<String, String> sourceOverrides;
 };
 
 //==============================================================================

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- YDSP tooling: compile project bundles, validate unsaved project imports in VS Code, and add audio/MIDI device selection and project hot reload to the command-line player.
+
 - YDSP: add YAML .ydsp-project manifests with patch metadata, explicit-import source inventories, and overridable processor or graph entry points.
 
 - YDSP: preserve qualified function calls when nesting library imports, including calls from processors and other library functions.

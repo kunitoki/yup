@@ -28,6 +28,7 @@ namespace
 {
 
 constexpr int ydspBundleFormatVersion = 2;
+constexpr int ydspProjectBundleFormatVersion = 3;
 constexpr int ydspBundleLanguageVersion = 4;
 constexpr int ydspBundleRuntimeAbiVersion = 2;
 constexpr int ydspBundleNativeAbiVersion = 2;
@@ -45,6 +46,7 @@ constexpr uint32_t fourCC (char a, char b, char c, char d)
 constexpr auto riff = fourCC ('R', 'I', 'F', 'F');
 constexpr auto form = fourCC ('Y', 'D', 'S', 'P');
 constexpr auto vers = fourCC ('V', 'E', 'R', 'S');
+constexpr auto proj = fourCC ('P', 'R', 'O', 'J');
 constexpr auto meta = fourCC ('M', 'E', 'T', 'A');
 constexpr auto list = fourCC ('L', 'I', 'S', 'T');
 constexpr auto sour = fourCC ('S', 'O', 'U', 'R');
@@ -134,8 +136,15 @@ Result YdspBundle::saveToStream (OutputStream& output) const
         data.writeInt (static_cast<int> (form));
         writeChunk (data, vers, [&]
                     {
-            data.writeInt (ydspBundleFormatVersion);
+            data.writeInt (projectMain.isEmpty() ? ydspBundleFormatVersion : ydspProjectBundleFormatVersion);
         });
+
+        if (projectMain.isNotEmpty())
+            writeChunk (data, proj, [&]
+            {
+                writeString (data, projectMain);
+                writeString (data, JSON::toString (projectMetadata));
+            });
 
         writeChunk (data, meta, [&]
                     {
@@ -262,6 +271,8 @@ ResultValue<YdspBundle> YdspBundle::loadFromStream (InputStream& input)
     YdspBundle bundle;
     bool versionFound = false;
     bool metadataFound = false;
+    bool projectFound = false;
+    int formatVersion = 0;
 
     while (stream.getNumBytesRemaining() >= 8)
     {
@@ -283,10 +294,22 @@ ResultValue<YdspBundle> YdspBundle::loadFromStream (InputStream& input)
 
         if (id == vers)
         {
-            if (versionFound || chunkSize != 4 || body.readInt() != ydspBundleFormatVersion)
+            if (versionFound || chunkSize != 4)
+                return makeResultValueFail ("YdspBundle: invalid version chunk");
+            formatVersion = body.readInt();
+            if (formatVersion != ydspBundleFormatVersion && formatVersion != ydspProjectBundleFormatVersion)
                 return makeResultValueFail ("YdspBundle: unsupported format version");
 
             versionFound = true;
+        }
+        else if (id == proj)
+        {
+            String metadata;
+            if (projectFound || ! readString (body, bundle.projectMain) || bundle.projectMain.isEmpty()
+                || ! readString (body, metadata) || body.getNumBytesRemaining() != 0
+                || JSON::parse (metadata, bundle.projectMetadata).failed() || ! bundle.projectMetadata.isObject())
+                return makeResultValueFail ("YdspBundle: invalid project metadata");
+            projectFound = true;
         }
         else if (id == list && chunkSize >= 4 && static_cast<uint32_t> (body.readInt()) == sour)
         {
@@ -481,7 +504,7 @@ ResultValue<YdspBundle> YdspBundle::loadFromStream (InputStream& input)
         }
     }
 
-    if (! versionFound || ! metadataFound || bundle.sources.empty()
+    if (! versionFound || ! metadataFound || (projectFound != (formatVersion == ydspProjectBundleFormatVersion)) || bundle.sources.empty()
         || (bundle.nativeArtifacts.empty() && bundle.wasmModules.empty())
         || bundle.hasWasm != ! bundle.wasmModules.empty())
     {

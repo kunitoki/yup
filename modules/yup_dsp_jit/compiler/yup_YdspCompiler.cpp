@@ -621,11 +621,40 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     return compileInternal (source, options, importBasePath, threadPool, nullptr, nullptr, nullptr);
 }
 
-ResultValue<YdspAudioGraph> YdspCompiler::compileProject (const File& projectFile, const YdspCompileOptions& options, StringRef mainOverride, ThreadPool* threadPool)
+ResultValue<YdspBundle> YdspCompiler::compileProjectBundle (const File& projectFile, const YdspBundleCompileOptions& options, StringRef mainOverride, ThreadPool* threadPool)
 {
     pimpl->diagnostics = YdspDiagnostics();
     pimpl->optimizationReport = YdspOptimizationReport {};
     auto project = YdspProject::load (projectFile, pimpl->diagnostics);
+    if (! project.wasOk())
+        return makeResultValueFail (project.getErrorMessage());
+
+    YdspBundle bundle;
+    bundle.projectMain = String (mainOverride).isNotEmpty() ? String (mainOverride) : project.getReference().getMain();
+    bundle.projectMetadata = project.getReference().getMetadata();
+    YdspCompileOptions compileOptions;
+    compileOptions.fastMath = options.fastMath;
+    compileOptions.enableTracing = options.enableTracing;
+    compileOptions.optimizationTier = YdspOptimizationTier::baseline;
+    compileOptions.targetPolicy = YdspTargetPolicy::baseline;
+    auto result = compileInternal ({}, compileOptions, projectFile.getFullPathName(), threadPool,
+                                   &bundle, nullptr, &options, &project.getReference(), mainOverride);
+    if (! result.wasOk())
+        return makeResultValueFail (pimpl->diagnostics.hasErrors() ? pimpl->diagnostics.toString() : result.getErrorMessage());
+    bundle.fastMath = options.fastMath;
+    bundle.enableTracing = options.enableTracing;
+    bundle.hasWasm = ! bundle.wasmModules.empty();
+    return makeResultValueOk (std::move (bundle));
+}
+
+ResultValue<YdspAudioGraph> YdspCompiler::compileProject (const File& projectFile, const YdspCompileOptions& options, StringRef mainOverride, ThreadPool* threadPool)
+{
+    pimpl->diagnostics = YdspDiagnostics();
+    pimpl->optimizationReport = YdspOptimizationReport {};
+    const auto overlay = options.sourceOverrides.find (projectFile.getFullPathName());
+    auto project = overlay != options.sourceOverrides.end()
+                     ? YdspProject::parse (overlay->second, projectFile, pimpl->diagnostics)
+                     : YdspProject::load (projectFile, pimpl->diagnostics);
     if (! project.wasOk())
         return makeResultValueFail (project.getErrorMessage());
     auto result = compileInternal ({}, options, projectFile.getFullPathName(), threadPool, nullptr, nullptr, nullptr,
@@ -699,6 +728,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         return parser.parseProgram();
     };
 
+    String rootPath = sourceId;
     std::unique_ptr<YdspProgram> program;
     if (project == nullptr)
     {
@@ -710,14 +740,16 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         for (const auto& path : project->getSources())
         {
             const auto file = project->getFile().getParentDirectory().getChildFile (path);
+            const auto overlay = options.sourceOverrides.find (file.getFullPathName());
             FileInputStream stream (file);
-            if (stream.failedToOpen())
+            if (overlay == options.sourceOverrides.end() && stream.failedToOpen())
             {
                 diagnostics.setSource ({}, file.getFullPathName());
                 diagnostics.addError ({}, "Cannot read project source");
                 return makeResultValueFail (diagnostics.toString());
             }
-            auto part = parseSource (stream.readEntireStreamAsString(), file.getFullPathName());
+            const auto text = overlay != options.sourceOverrides.end() ? overlay->second : stream.readEntireStreamAsString();
+            auto part = parseSource (text, file.getFullPathName());
             if (part == nullptr || diagnostics.hasErrors())
                 return makeResultValueFail (diagnostics.toString());
             int matches = 0;
@@ -731,11 +763,19 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
                 return makeResultValueFail (diagnostics.toString());
             }
             if (matches == 1)
+            {
+                rootPath = file.getFullPathName();
+                if (bundleOutput != nullptr)
+                    bundleOutput->sources.front().source = text;
                 program = std::move (part);
+            }
         }
         if (program == nullptr)
         {
-            diagnostics.setSource (project->getFile().loadFileAsString(), project->getFile().getFullPathName());
+            diagnostics.setSource (options.sourceOverrides.contains (project->getFile().getFullPathName())
+                                       ? options.sourceOverrides.at (project->getFile().getFullPathName())
+                                       : project->getFile().loadFileAsString(),
+                                   project->getFile().getFullPathName());
             diagnostics.addError ({ 1, 1, 1, 1 }, "Unknown project main processor or graph '" + main + "'");
             return makeResultValueFail (diagnostics.toString());
         }
@@ -750,7 +790,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
     };
 
     std::unordered_map<String, String> sourceIds;
-    sourceIds.emplace (sourceId, "source-0");
+    sourceIds.emplace (rootPath, "source-0");
 
     // 2b. Resolve imports
     if (! program->imports.empty())
@@ -806,6 +846,11 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
                         parsed.source = file.source;
                         break;
                     }
+            }
+            else if (const auto overlay = options.sourceOverrides.find (resolvedPath); overlay != options.sourceOverrides.end())
+            {
+                parsed.found = true;
+                parsed.source = overlay->second;
             }
             else
             {
@@ -1023,7 +1068,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
                     continue;
                 }
 
-                captureImport (parentPath, importDecl.path, resolvedPath, parsedIt->second);
+                captureImport (importParent (importDecl, parentPath), importDecl.path, resolvedPath, parsedIt->second);
 
                 if (! seenCombos.insert (comboKey).second)
                     continue;
@@ -1048,7 +1093,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         resolveImports (*program, basePath, topLevelSeenCombos);
     }
 
-    if (project != nullptr)
+    if (project != nullptr || (bundleInput != nullptr && bundleInput->projectMain.isNotEmpty()))
     {
         std::unordered_set<String> names;
         const auto checkNames = [&] (const auto& declarations)
@@ -1062,7 +1107,10 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         if (diagnostics.hasErrors())
             return makeResultValueFail (diagnostics.toString());
 
-        const auto main = String (mainOverride).isNotEmpty() ? String (mainOverride) : project->getMain();
+        const auto main = project != nullptr
+                            ? (String (mainOverride).isNotEmpty() ? String (mainOverride) : project->getMain())
+                            : bundleInput->projectMain;
+        const auto& metadata = project != nullptr ? project->getMetadata() : bundleInput->projectMetadata;
         YdspGraphDecl* selected = nullptr;
         for (auto& graph : program->graphs)
         {
@@ -1105,7 +1153,11 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         }
         if (selected == nullptr)
         {
-            diagnostics.setSource (project->getFile().loadFileAsString(), project->getFile().getFullPathName());
+            if (project != nullptr)
+                diagnostics.setSource (options.sourceOverrides.contains (project->getFile().getFullPathName())
+                                       ? options.sourceOverrides.at (project->getFile().getFullPathName())
+                                       : project->getFile().loadFileAsString(),
+                                   project->getFile().getFullPathName());
             diagnostics.addError ({ 1, 1, 1, 1 }, "Unknown project main processor or graph '" + main + "'");
             return makeResultValueFail (diagnostics.toString());
         }
@@ -1114,11 +1166,11 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
         for (const auto* key : { "name", "author", "version", "license", "description" })
         {
-            const auto& value = project->getMetadata()[key];
+            const auto& value = metadata[key];
             if (value.isVoid())
                 continue;
             std::erase_if (program->declares, [&] (const auto& item) { return item.key == key; });
-            program->declares.push_back ({ key, value.toString(), { 1, 1, 1, 1, project->getFile().getFullPathName() } });
+            program->declares.push_back ({ key, value.toString(), { 1, 1, 1, 1, sourceId } });
         }
     }
 

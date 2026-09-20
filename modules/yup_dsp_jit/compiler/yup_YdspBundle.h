@@ -228,6 +228,8 @@ private:
 
     YdspBundle() = default;
 
+    String projectMain;
+    var projectMetadata;
     std::vector<SourceFile> sources;
     std::vector<ImportEdge> importEdges;
     YdspDiagnostics diagnostics;

@@ -12,8 +12,8 @@ export function activate (context: vscode.ExtensionContext): void {
     const executable = configuredPath || path.join (context.extensionPath, "server", `${process.platform}-${process.arch}`, process.platform === "win32" ? "yup_dsp_compiler.exe" : "yup_dsp_compiler");
     const serverOptions: ServerOptions = { command: executable, args: ["--lsp"] };
     const clientOptions: LanguageClientOptions = {
-        documentSelector: [{ scheme: "file", language: "ydsp" }],
-        synchronize: { fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ydsp") }
+        documentSelector: [{ scheme: "file", language: "ydsp" }, { scheme: "file", pattern: "**/*.ydsp-project" }],
+        synchronize: { fileEvents: vscode.workspace.createFileSystemWatcher("**/*.{ydsp,ydsp-project}") }
     };
 
     client = new LanguageClient("ydsp", "YDSP Language Server", serverOptions, clientOptions);

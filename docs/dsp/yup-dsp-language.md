@@ -2198,3 +2198,7 @@ if (project.wasOk())
 Project manifests are source-level entry points to `compileProject()`.
 The existing `compile()` and `compileBundle()` APIs continue to take YDSP
 source text.
+
+Use `compileProjectBundle()` to package a selected project entry point. See the
+[command-line compiler and player](ydsp-command-line.md) for bundle commands,
+audio/MIDI device selection, hot reload, and the proposed VS Code playback workflow.

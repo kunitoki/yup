@@ -89,6 +89,13 @@ public:
     */
     ResultValue<YdspAudioGraph> compileProject (const File& projectFile, const YdspCompileOptions& options = {}, StringRef mainOverride = {}, ThreadPool* threadPool = nullptr);
 
+    /** Compiles a project's selected processor or graph into a self-contained bundle.
+        Explicit imports are resolved relative to their source files. mainOverride,
+        when nonempty, replaces the manifest's main. No source files are needed
+        when instantiating the resulting bundle.
+    */
+    ResultValue<YdspBundle> compileProjectBundle (const File& projectFile, const YdspBundleCompileOptions& options, StringRef mainOverride = {}, ThreadPool* threadPool = nullptr);
+
     /** Packages the source closure and emits every requested target without
         installing or executing kernels. Native targets use baseline scalar
         code so bundles do not depend on the compiling machine's CPU features.

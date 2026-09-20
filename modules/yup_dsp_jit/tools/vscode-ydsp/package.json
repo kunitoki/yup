@@ -42,6 +42,7 @@
       }
     },
     "languages": [
+      { "id": "yaml", "extensions": [".ydsp-project"] },
       {
         "id": "ydsp",
         "aliases": [

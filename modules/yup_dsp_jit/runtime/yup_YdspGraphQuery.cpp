@@ -257,6 +257,21 @@ uint64_t YdspAudioGraph::getDroppedEventCount() const noexcept
     return pimpl != nullptr ? pimpl->droppedEventCount.load (std::memory_order_relaxed) : 0;
 }
 
+size_t YdspAudioGraph::getMidiOutputBufferSizeBytes() const noexcept
+{
+    if (pimpl == nullptr)
+        return 0;
+    size_t events = 0;
+    for (const auto& node : pimpl->nodes)
+    {
+        size_t routes = 0;
+        for (const auto& destinations : node.outputRouting)
+            routes = std::max (routes, destinations.size());
+        events += static_cast<size_t> (node.voiceCount) * (node.carryQueue.capacity() + node.outputEventQueue.entries.capacity() * routes);
+    }
+    return events * 16;
+}
+
 uint64_t YdspAudioGraph::getDroppedOutputEventCount() const noexcept
 {
     if (pimpl == nullptr)

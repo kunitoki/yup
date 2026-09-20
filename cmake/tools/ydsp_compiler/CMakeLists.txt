@@ -32,6 +32,8 @@ include ("${yup_root}/cmake/yup.cmake")
 
 # Only add the modules actually needed by the dsp compiler.
 yup_add_module ("${yup_root}/modules/yup_core" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_events" "" "Modules")
+yup_add_module ("${yup_root}/modules/yup_audio_devices" "" "Modules")
 yup_add_module ("${yup_root}/modules/yup_dsp" "" "Modules")
 yup_add_module ("${yup_root}/modules/yup_audio_basics" "" "Modules")
 yup_add_module ("${yup_root}/modules/yup_dsp_jit" "" "Modules")
@@ -42,6 +44,8 @@ yup_add_module ("${yup_root}/thirdparty/xsimd" "" "Thirdparty")
 yup_add_module ("${yup_root}/thirdparty/zlib" "" "Thirdparty")
 
 add_library (yup::yup_core ALIAS yup_core)
+add_library (yup::yup_events ALIAS yup_events)
+add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
 add_library (yup::yup_dsp ALIAS yup_dsp)
 add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
 add_library (yup::yup_dsp_jit ALIAS yup_dsp_jit)
@@ -57,6 +61,8 @@ yup_standalone_app (
     TARGET_CONSOLE ON
     MODULES
         yup::yup_core
+        yup::yup_events
+        yup::yup_audio_devices
         yup::yup_dsp
         yup::yup_audio_basics
         yup::yup_simd

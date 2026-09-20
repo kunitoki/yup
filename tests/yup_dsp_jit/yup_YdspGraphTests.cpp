@@ -9119,4 +9119,47 @@ TEST_F (YdspRuntimeSchedulingTests, RejectedBlockDoesNotAdvanceCarriedEvents)
         EXPECT_FLOAT_EQ (1.0f, sample);
 }
 
+TEST (YdspJitGraphTests, ReservedHostMidiOutputCapacityCoversDenseOutputWithoutAllocation)
+{
+    EXPECT_EQ (0u, YdspAudioGraph().getMidiOutputBufferSizeBytes());
+    YdspCompiler compiler;
+    auto graph = compilePatch (R"YDSP(
+        processor P {
+            output stream out;
+            output event noteOn;
+            process { out = 0.0; emit noteOn (pitch: 60, velocity: 0.5) -> noteOn; }
+        }
+        graph G {
+            output stream out;
+            output event noteOn;
+            node p = P;
+            connection { p.out -> out; p.noteOn -> noteOn; }
+        }
+    )YDSP", compiler);
+    ASSERT_TRUE (graph.isValid());
+    ASSERT_TRUE (graph.prepare (48000.0, 64, 64, 32, 64).wasOk());
+    graph.prewarmKernels();
+    MidiBuffer midi;
+    midi.ensureSize (graph.getMidiOutputBufferSizeBytes());
+    std::array<float, 64> audio {};
+    YdspOutputBuffer outputs[] { Span<float> (audio) };
+    const YdspProcessRequest request { {}, outputs, 64, {}, {}, &midi };
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    YdspAllocationCounter allocations;
+    allocations.start();
+#endif
+    bool succeeded = true;
+    for (int i = 0; i < 4; ++i)
+    {
+        midi.clear();
+        succeeded &= graph.process (request) == YdspProcessResult::ok;
+    }
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    const auto count = allocations.stop();
+    EXPECT_EQ (0u, count);
+#endif
+    EXPECT_TRUE (succeeded);
+    EXPECT_EQ (64, midi.getNumEvents());
+}
+
 } // namespace yup::test
