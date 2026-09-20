@@ -191,10 +191,23 @@ TEST (YdspJitDiagnosticsTests, CompileRegistersEntryFileAndImports)
     const auto result = compiler.compile (entry.loadFileAsString(), entry.getFullPathName());
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
+    // getSourceIds() returns the closure sorted case-insensitively, so the
+    // imported "lib/..." file sorts before "Main.ydsp".
     const auto ids = compiler.getDiagnostics().getSourceIds();
-    ASSERT_EQ (2, ids.size());
-    EXPECT_TRUE (ids[0].endsWith ("Main.ydsp"));
-    EXPECT_TRUE (ids[1].endsWith ("lib/Gain.ydsp"));
+    std::string found;
+
+    for (const auto& id : ids)
+    {
+        if (! found.empty())
+            found += " | ";
+
+        found += id.toRawUTF8();
+    }
+
+    // ASSERT is fatal, so the indexed reads below only run for the expected count.
+    ASSERT_EQ (2, ids.size()) << found;
+    EXPECT_TRUE (ids[0].endsWith ("lib/Gain.ydsp")) << found;
+    EXPECT_TRUE (ids[1].endsWith ("Main.ydsp")) << found;
 
     directory.deleteRecursively();
 }
