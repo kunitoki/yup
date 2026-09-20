@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- YDSP: add YAML .ydsp-project manifests with patch metadata, explicit-import source inventories, and overridable processor or graph entry points.
+
+- YDSP: preserve qualified function calls when nesting library imports, including calls from processors and other library functions.
+
 - YDSP: preserve source ranges through diagnostics and imports, print path:line:column with five-line context and caret underlines, and improve malformed-number and parser errors.
 
 - YDSP: add integer/boolean `match` statements with scoped arms, single selector evaluation, optional `_` fallback, constant-arm elimination, and invalid-pattern diagnostics; regenerate bundles for language version 4/codegen revision 13.

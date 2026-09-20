@@ -75,6 +75,20 @@ public:
     */
     ResultValue<YdspAudioGraph> compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
 
+    /** Loads a .ydsp-project manifest and compiles its listed source files.
+
+        Files retain separate scopes and require explicit imports. Each file
+        retains its own diagnostic path and relative imports. All imported
+        files must be listed. The selected main name must occur in exactly
+        one listed file.
+        mainOverride, when nonempty, replaces the manifest's main selection.
+        A processor entry point exposes all its endpoints through a generated
+        graph; an existing graph entry point uses its declared interface.
+        All file IO, YAML parsing and compilation happen on the calling control
+        thread, with explicit imports optionally parsed using threadPool.
+    */
+    ResultValue<YdspAudioGraph> compileProject (const File& projectFile, const YdspCompileOptions& options = {}, StringRef mainOverride = {}, ThreadPool* threadPool = nullptr);
+
     /** Packages the source closure and emits every requested target without
         installing or executing kernels. Native targets use baseline scalar
         code so bundles do not depend on the compiling machine's CPU features.
@@ -95,7 +109,7 @@ public:
 private:
     friend class YdspBundle;
 
-    ResultValue<YdspAudioGraph> compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions);
+    ResultValue<YdspAudioGraph> compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project = nullptr, StringRef mainOverride = {});
 
     struct Pimpl;
     std::unique_ptr<Pimpl> pimpl;

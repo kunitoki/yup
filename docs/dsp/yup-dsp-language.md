@@ -2104,3 +2104,97 @@ one-based and whose end is exclusive. The range also carries the source identity
 The bare `line` and `column` fields and positional diagnostic overloads remain
 deprecated compatibility APIs. Use `YdspDiagnostics::setSource(text, path)` and
 `registerSource(path, text)` when collecting diagnostics directly.
+
+
+## Project manifests and reusable libraries
+
+A `.ydsp-project` file describes a patch using YAML. It stores patch metadata,
+the list of source files, and the default main processor or graph:
+
+```yaml
+formatVersion: 1
+id: org.example.gain
+name: Reusable Gain
+version: "1.0"
+description: Gain processor using a reusable math library.
+manufacturer: Example
+isInstrument: false
+main: Gain
+sources:
+  - Main.ydsp
+  - lib/Math.ydsp
+```
+
+`formatVersion`, `main` and `sources` are required. Format version 1 accepts
+a nonempty list of explicit `.ydsp` paths. Paths resolve relative to the
+manifest's directory; duplicate paths and missing files are errors. Wildcards
+are not expanded. Every file reached through imports must appear in the list.
+
+Optional metadata fields `id`, `name`, `version`, `description`,
+`manufacturer`, `author`, `license` and `category` must be strings;
+quote versions such as `"1.0"` so YAML does not interpret them as numbers.
+`isInstrument` must be a boolean. YUP's YAML parser also accepts unquoted
+`yes`/`no`; quoted `"yes"`/`"no"` are strings and are rejected for this field.
+Unknown properties are errors.
+Hosts can inspect these fields through `YdspProject::getMetadata()`.
+
+Each source file has its own scope. **Listing a file does not import its
+definitions.** Use the existing import syntax to reuse constants, functions,
+processors and graphs. For example, `lib/Math.ydsp`:
+
+```ydsp
+func twice (x: float) : float { return x * 2.0; }
+```
+
+And `Main.ydsp`:
+
+```ydsp
+import lib.Math as math;
+
+processor Gain
+{
+    input stream in;
+    output stream out;
+    process { out = math.twice (in); }
+}
+```
+
+Imports resolve relative to the file containing the import, including nested
+library imports. Diagnostics preserve that file's path and source range.
+All listed sources are syntax-checked; semantic analysis and code generation
+use the selected entry file and its import closure.
+
+`main` names a processor or graph declared in exactly one listed file. Missing
+or ambiguous names are errors. For a processor, the compiler generates a graph
+that exposes its streams, parameters, meters and event endpoints, with the
+processor instance named `main`. Parameter defaults and annotations are
+preserved; smoothing remains on the processor. For a graph, its existing
+interface is used. The project selection takes precedence over `[[ main ]]`
+annotations in source files.
+
+Compile on the control thread:
+
+```cpp
+yup::YdspCompiler compiler;
+auto graph = compiler.compileProject (projectFile);
+
+// Select an alternate entry point without editing the manifest:
+auto alternate = compiler.compileProject (projectFile, {}, "AlternateMain");
+```
+
+The second argument accepts the usual `YdspCompileOptions`; the optional fourth
+argument is a `ThreadPool*` for explicit import parsing. Project loading does
+not change the optimizer, vectorizer or audio-thread execution path.
+
+To inspect metadata without compiling:
+
+```cpp
+yup::YdspDiagnostics diagnostics;
+auto project = yup::YdspProject::load (projectFile, diagnostics);
+if (project.wasOk())
+    auto name = project.getReference().getMetadata()["name"].toString();
+```
+
+Project manifests are source-level entry points to `compileProject()`.
+The existing `compile()` and `compileBundle()` APIs continue to take YDSP
+source text.

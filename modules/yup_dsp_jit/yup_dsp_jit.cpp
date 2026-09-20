@@ -130,4 +130,5 @@
 
 // Compiler: the control-thread compiler
 #include "compiler/yup_YdspDiagnostics.cpp"
+#include "compiler/yup_YdspProject.cpp"
 #include "compiler/yup_YdspCompiler.cpp"

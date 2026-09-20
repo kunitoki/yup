@@ -4168,6 +4168,7 @@ TEST_F (YdspBenchmarkTests, MatchAgainstEquivalentIfAcrossOptimizationPolicies)
                 const String selector = constant ? "true" : "v > 0.0";
                 const String ifStatement = "if (" + selector + ") { y = v * 0.5 + dry; } else { y = v * 0.25 - dry; }";
                 const String matchStatement = "match (" + selector + ") { true => { y = v * 0.5 + dry; }, _ => { y = v * 0.25 - dry; } }";
+
                 const auto source = [&] (const String& selection)
                 {
                     return String ("processor P { input stream in; output stream out; state float z[32]; process { let dry = in; ")
@@ -4175,26 +4176,33 @@ TEST_F (YdspBenchmarkTests, MatchAgainstEquivalentIfAcrossOptimizationPolicies)
                          + selection + (bank ? " z[i] = y; } out = z[0]; " : " out = y; ")
                          + "} } graph G { input stream x; output stream y; node p = P; connection { x -> p.in; p.out -> y; } }";
                 };
+
                 YdspCompileOptions options;
                 options.optimizationTier = tier;
+
                 auto ifGraph = compilePatch (source (ifStatement), compiler, options);
                 auto matchGraph = compilePatch (source (matchStatement), compiler, options);
                 ASSERT_TRUE (ifGraph.isValid());
                 ASSERT_TRUE (matchGraph.isValid());
                 ASSERT_TRUE (ifGraph.prepare (benchmarkSampleRate, benchmarkBlockSize).wasOk());
                 ASSERT_TRUE (matchGraph.prepare (benchmarkSampleRate, benchmarkBlockSize).wasOk());
+
                 std::vector<float> matchOutput (static_cast<size_t> (benchmarkTotalSamples));
+
                 const auto ifTiming = benchmarkTimeRepeats ([&]
                 {
                     ifGraph.reset();
                     benchmarkRunGraph (ifGraph, input, jitOutput);
                 });
+
                 const auto matchTiming = benchmarkTimeRepeats ([&]
                 {
                     matchGraph.reset();
                     benchmarkRunGraph (matchGraph, input, matchOutput);
                 });
+
                 EXPECT_EQ (jitOutput, matchOutput);
+
                 const auto label = String (bank ? "match vs if: bank" : "match vs if: scalar")
                                  + (constant ? ", constant" : ", dynamic") + ", tier=" + String (static_cast<int> (tier));
                 benchmarkReportVariants (label.toRawUTF8(), "match", matchTiming, "if", ifTiming);

@@ -92,6 +92,7 @@
 #include "compiler/yup_YdspDiagnostics.h"
 #include "compiler/yup_YdspCompileOptions.h"
 #include "compiler/yup_YdspBundle.h"
+#include "compiler/yup_YdspProject.h"
 #include "compiler/yup_YdspCompiler.h"
 
 #include "language/yup_YdspAst.h"

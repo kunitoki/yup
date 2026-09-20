@@ -30,6 +30,7 @@
 #include "yup_dsp_jit/yup_YdspLatencyTests.cpp"
 #include "yup_dsp_jit/yup_YdspLexerParserTests.cpp"
 #include "yup_dsp_jit/yup_YdspOptimizerTests.cpp"
+#include "yup_dsp_jit/yup_YdspProjectTests.cpp"
 #include "yup_dsp_jit/yup_YdspSemanticAnalyzerTests.cpp"
 #include "yup_dsp_jit/yup_YdspSmokeTests.cpp"
 #include "yup_dsp_jit/yup_YdspSubgraphTests.cpp"

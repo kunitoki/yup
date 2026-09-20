@@ -27,7 +27,7 @@ namespace
 
 void renameLibraryCalls (YdspExpr& expr, const std::unordered_set<String>& names, const String& nsPrefix)
 {
-    if (expr.kind == YdspExprKind::call && ! expr.text.contains (".") && names.find (expr.text) != names.end())
+    if (expr.kind == YdspExprKind::call && names.find (expr.text) != names.end())
         expr.text = nsPrefix + "." + expr.text;
 
     ydspForEachSubExpr (expr, [&] (YdspExpr& child)
@@ -259,7 +259,7 @@ std::unique_ptr<YdspProgram> cloneProgram (const YdspProgram& program)
 }
 
 /** Merges an imported program's constants, functions, processors and graphs
-    into `prog` under the namespace prefix. Plain-name calls inside library
+    into `prog` under the namespace prefix. Calls inside library
     function bodies follow the rename, so `wrap` calling `scale (x)` becomes
     `nsPrefix.scale (x)` once the declarations are prefixed. */
 void mergeImportedDecls (YdspProgram& prog, YdspProgram& importedProg, const String& nsPrefix)
@@ -272,14 +272,12 @@ void mergeImportedDecls (YdspProgram& prog, YdspProgram& importedProg, const Str
         prog.constants.push_back (std::move (importedConstant));
     }
 
-    // Imported program functions, like constants. Only the file's own
-    // non-dotted function names are rewritten, and intrinsic names are left
-    // alone so a library function named like a builtin keeps resolving to the
-    // builtin, matching processor-scope shadowing.
+    // Include functions from nested imports: their qualified calls gain the
+    // same outer prefix as their declarations. Intrinsics remain unchanged.
     std::unordered_set<String> libraryFunctionNames;
 
     for (const auto& importedFunction : importedProg.functions)
-        if (! importedFunction.name.contains (".") && ! isIntrinsicName (importedFunction.name))
+        if (! isIntrinsicName (importedFunction.name))
             libraryFunctionNames.insert (importedFunction.name);
 
     for (auto& importedFunction : importedProg.functions)
@@ -289,7 +287,7 @@ void mergeImportedDecls (YdspProgram& prog, YdspProgram& importedProg, const Str
         prog.functions.push_back (std::move (importedFunction));
     }
 
-    // The same plain-name calls inside imported processor bodies follow the
+    // The same library calls inside imported processor bodies follow the
     // rename, unless a processor-local function of that name shadows them
     // (those keep resolving locally and must stay plain).
     for (auto& importedProcessor : importedProg.processors)
@@ -623,7 +621,21 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     return compileInternal (source, options, importBasePath, threadPool, nullptr, nullptr, nullptr);
 }
 
-ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions)
+ResultValue<YdspAudioGraph> YdspCompiler::compileProject (const File& projectFile, const YdspCompileOptions& options, StringRef mainOverride, ThreadPool* threadPool)
+{
+    pimpl->diagnostics = YdspDiagnostics();
+    pimpl->optimizationReport = YdspOptimizationReport {};
+    auto project = YdspProject::load (projectFile, pimpl->diagnostics);
+    if (! project.wasOk())
+        return makeResultValueFail (project.getErrorMessage());
+    auto result = compileInternal ({}, options, projectFile.getFullPathName(), threadPool, nullptr, nullptr, nullptr,
+                                   &project.getReference(), mainOverride);
+    if (! result.wasOk() && pimpl->diagnostics.hasErrors())
+        return makeResultValueFail (pimpl->diagnostics.toString());
+    return result;
+}
+
+ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project, StringRef mainOverride)
 {
     pimpl->diagnostics = YdspDiagnostics();
     pimpl->optimizationReport = YdspOptimizationReport {};
@@ -676,18 +688,66 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         return resolveImportPath (spelling, parent);
     };
 
-    // 1. Lex
-    YdspLexer lexer (source, diagnostics);
-    auto tokens = lexer.tokenize();
+    const auto parseSource = [&] (const String& text, const String& path)
+    {
+        diagnostics.setSource (text, path);
+        YdspLexer lexer (text, diagnostics);
+        auto tokens = lexer.tokenize();
+        if (diagnostics.hasErrors())
+            return std::unique_ptr<YdspProgram>();
+        YdspParser parser (std::move (tokens), diagnostics);
+        return parser.parseProgram();
+    };
 
-    if (diagnostics.hasErrors())
-        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
+    std::unique_ptr<YdspProgram> program;
+    if (project == nullptr)
+    {
+        program = parseSource (String (source), sourceId);
+    }
+    else
+    {
+        const auto main = String (mainOverride).isNotEmpty() ? String (mainOverride) : project->getMain();
+        for (const auto& path : project->getSources())
+        {
+            const auto file = project->getFile().getParentDirectory().getChildFile (path);
+            FileInputStream stream (file);
+            if (stream.failedToOpen())
+            {
+                diagnostics.setSource ({}, file.getFullPathName());
+                diagnostics.addError ({}, "Cannot read project source");
+                return makeResultValueFail (diagnostics.toString());
+            }
+            auto part = parseSource (stream.readEntireStreamAsString(), file.getFullPathName());
+            if (part == nullptr || diagnostics.hasErrors())
+                return makeResultValueFail (diagnostics.toString());
+            int matches = 0;
+            for (const auto& processor : part->processors)
+                matches += processor.name == main ? 1 : 0;
+            for (const auto& graph : part->graphs)
+                matches += graph.name == main ? 1 : 0;
+            if (matches > 1 || (matches == 1 && program != nullptr))
+            {
+                diagnostics.addError ({ 1, 1, 1, 1 }, "Ambiguous project main '" + main + "'; use a unique processor or graph name");
+                return makeResultValueFail (diagnostics.toString());
+            }
+            if (matches == 1)
+                program = std::move (part);
+        }
+        if (program == nullptr)
+        {
+            diagnostics.setSource (project->getFile().loadFileAsString(), project->getFile().getFullPathName());
+            diagnostics.addError ({ 1, 1, 1, 1 }, "Unknown project main processor or graph '" + main + "'");
+            return makeResultValueFail (diagnostics.toString());
+        }
+    }
 
-    // 2. Parse
-    YdspParser parser (std::move (tokens), diagnostics);
-    auto program = parser.parseProgram();
     if (program == nullptr || diagnostics.hasErrors())
-        return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
+        return makeResultValueFail (project != nullptr ? diagnostics.toString() : diagnostics.getItem (0).message);
+
+    const auto importParent = [&] (const YdspImportDecl& declaration, const String& parent)
+    {
+        return project != nullptr ? declaration.location.sourceId : parent;
+    };
 
     std::unordered_map<String, String> sourceIds;
     sourceIds.emplace (sourceId, "source-0");
@@ -788,7 +848,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
             if (parsed.program != nullptr)
                 for (const auto& importDecl : parsed.program->imports)
-                    nestedPaths.push_back (resolvePath (importDecl.path, resolvedPath));
+                    nestedPaths.push_back (resolvePath (importDecl.path, importParent (importDecl, resolvedPath)));
 
             std::vector<String> toEnqueue;
 
@@ -831,7 +891,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
             for (const auto& importDecl : program->imports)
             {
-                const auto resolvedPath = resolvePath (importDecl.path, basePath);
+                const auto resolvedPath = resolvePath (importDecl.path, importParent (importDecl, basePath));
 
                 if (queuedParses.insert (resolvedPath).second)
                 {
@@ -889,7 +949,20 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         {
             for (const auto& importDecl : prog.imports)
             {
-                const auto resolvedPath = resolvePath (importDecl.path, parentPath);
+                const auto resolvedPath = resolvePath (importDecl.path, importParent (importDecl, parentPath));
+                if (project != nullptr)
+                {
+                    const auto listed = std::any_of (project->getSources().begin(), project->getSources().end(),
+                                                     [&] (const auto& path)
+                                                     {
+                        return project->getFile().getParentDirectory().getChildFile (path).getFullPathName() == resolvedPath;
+                    });
+                    if (! listed)
+                    {
+                        diagnostics.addError (importDecl.location, "Imported file is not listed in project 'sources': '" + resolvedPath + "'");
+                        continue;
+                    }
+                }
 
                 // Detect circular imports: the file is already being merged up
                 // the current import stack.
@@ -973,6 +1046,80 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
         std::unordered_set<String> topLevelSeenCombos;
         resolveImports (*program, basePath, topLevelSeenCombos);
+    }
+
+    if (project != nullptr)
+    {
+        std::unordered_set<String> names;
+        const auto checkNames = [&] (const auto& declarations)
+        {
+            for (const auto& declaration : declarations)
+                if (! names.insert (declaration.name).second)
+                    diagnostics.addError (declaration.location, "Duplicate processor or graph '" + declaration.name + "'");
+        };
+        checkNames (program->processors);
+        checkNames (program->graphs);
+        if (diagnostics.hasErrors())
+            return makeResultValueFail (diagnostics.toString());
+
+        const auto main = String (mainOverride).isNotEmpty() ? String (mainOverride) : project->getMain();
+        YdspGraphDecl* selected = nullptr;
+        for (auto& graph : program->graphs)
+        {
+            std::erase_if (graph.annotations, [] (const auto& item) { return item.first == "main"; });
+            if (graph.name == main)
+                selected = &graph;
+        }
+        if (selected == nullptr)
+        {
+            const auto processor = std::find_if (program->processors.begin(), program->processors.end(),
+                                                  [&] (const auto& item) { return item.name == main; });
+            if (processor != program->processors.end())
+            {
+                YdspGraphDecl graph;
+                graph.name = "$projectMain";
+                graph.location = processor->location;
+                graph.bodyKind = YdspGraphBodyKind::connections;
+                YdspNodeDecl node;
+                node.instanceName = "main";
+                node.processorName = main;
+                node.location = processor->location;
+                graph.nodes.push_back (std::move (node));
+                for (const auto& endpoint : processor->endpoints)
+                {
+                    auto exposed = cloneEndpoint (endpoint);
+                    std::erase_if (exposed.annotations, [] (const auto& item) { return item.first == "smoothing"; });
+                    graph.endpoints.push_back (std::move (exposed));
+                    const bool input = endpoint.kind == YdspEndpointKind::inputStream
+                                    || endpoint.kind == YdspEndpointKind::inputParameter
+                                    || endpoint.kind == YdspEndpointKind::inputEvent;
+                    YdspConnection connection;
+                    connection.location = endpoint.location;
+                    connection.sourcePath = input ? endpoint.name : "main." + endpoint.name;
+                    connection.destPath = input ? "main." + endpoint.name : endpoint.name;
+                    graph.connections.push_back (std::move (connection));
+                }
+                program->graphs.push_back (std::move (graph));
+                selected = &program->graphs.back();
+            }
+        }
+        if (selected == nullptr)
+        {
+            diagnostics.setSource (project->getFile().loadFileAsString(), project->getFile().getFullPathName());
+            diagnostics.addError ({ 1, 1, 1, 1 }, "Unknown project main processor or graph '" + main + "'");
+            return makeResultValueFail (diagnostics.toString());
+        }
+        selected->isImported = false;
+        selected->annotations.emplace_back ("main", "");
+
+        for (const auto* key : { "name", "author", "version", "license", "description" })
+        {
+            const auto& value = project->getMetadata()[key];
+            if (value.isVoid())
+                continue;
+            std::erase_if (program->declares, [&] (const auto& item) { return item.key == key; });
+            program->declares.push_back ({ key, value.toString(), { 1, 1, 1, 1, project->getFile().getFullPathName() } });
+        }
     }
 
     // 3. Analyze

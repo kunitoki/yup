@@ -27,8 +27,8 @@ using namespace yup;
 
 static void printHelp()
 {
-    std::cerr << "yup_dsp_compiler <input.ydsp> --output <output.ydsb> [--target <os>-<arch>]... [--fast-math]\n"
-              << "yup_dsp_compiler --inspect <bundle.ydsb> [--list]\n";
+    std::cerr << "ydsp_compiler <input.ydsp> --output <output.ydsb> [--target <os>-<arch>]... [--fast-math]\n"
+              << "ydsp_compiler --inspect <bundle.ydsb> [--list]\n";
 }
 
 static std::optional<YdspTargetTriple> parseTarget (const String& value)
