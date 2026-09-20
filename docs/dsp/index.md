@@ -3,7 +3,7 @@
 The `yup_dsp` module provides the real-time audio processing building blocks of
 the framework: mathematical utilities, windowing, noise, FFTs and spectral
 analysis, filter design, filter implementations, crossovers, dynamics
-processing, metering, convolution, delay lines, resampling, and
+processing, metering, convolution, delay lines, resampling, oscillators, and
 time-stretching / pitch-shifting.
 
 **Modules covered:** `yup_dsp`.
@@ -45,6 +45,9 @@ available in the build.
   the `CircularBuffer` helper.
 - [Time-stretching & pitch-shifting](time-stretching.md) - the
   `TimeStretchProcessor` with its time-domain and Bungee backends.
+- [Oscillators](oscillators.md) - `FourierSeries`, the alias-free
+  `SyncSpectralResampler`, the `AdditiveOscillator` / `WavetableOscillator`
+  synthesis backends, and the synth-ready `SyncOscillator` facade.
 
 ## Key building blocks
 
@@ -99,4 +102,5 @@ onsets
 convolution-and-delay
 resampling
 time-stretching
+oscillators
 ```

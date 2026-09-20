@@ -20,6 +20,7 @@
 */
 
 #include "yup_dsp/yup_AaIirAntialiaser.cpp"
+#include "yup_dsp/yup_AdditiveOscillator.cpp"
 #include "yup_dsp/yup_AnalogFilters.cpp"
 #include "yup_dsp/yup_BiquadCascade.cpp"
 #include "yup_dsp/yup_BiquadFilter.cpp"
@@ -31,6 +32,7 @@
 #include "yup_dsp/yup_FFTProcessor.cpp"
 #include "yup_dsp/yup_FilterDesigner.cpp"
 #include "yup_dsp/yup_FirstOrderFilter.cpp"
+#include "yup_dsp/yup_FourierSeries.cpp"
 #include "yup_dsp/yup_FractionallyAddressedDelay.cpp"
 #include "yup_dsp/yup_KMeterState.cpp"
 #include "yup_dsp/yup_LevelProcessor.cpp"
@@ -46,5 +48,8 @@
 #include "yup_dsp/yup_SoftClipper.cpp"
 #include "yup_dsp/yup_SpectrumAnalyzerState.cpp"
 #include "yup_dsp/yup_StateVariableFilter.cpp"
+#include "yup_dsp/yup_SyncOscillator.cpp"
+#include "yup_dsp/yup_SyncSpectralResampler.cpp"
 #include "yup_dsp/yup_TimeStretchProcessor.cpp"
+#include "yup_dsp/yup_WavetableOscillator.cpp"
 #include "yup_dsp/yup_WindowFunctions.cpp"

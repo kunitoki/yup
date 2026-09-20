@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Audio
 
+- Fixed the pulsar spectral resampler's alternating coefficient sign and corrected oscillator regression tests for fixed-size copies, startup crossfades, and spectral window leakage.
+
 - Added a `TuningMap` class (`midi/yup_TuningMap.h`): maps MIDI note numbers to frequencies under an arbitrary scale and key map, loading Scala `.scl` scale files and `.kbm` key map files via `loadScale()` / `loadKeyMap()` (which return a `yup::Result` and keep the previous tuning when a file fails to parse). `isNoteActive()` reports the notes a key map asks to retune, taken from the range in its header unless the file carries `< first last` lines, which declare it instead
 
 - `FFTProcessor` is now templated on the sample type - `FFTProcessor<float>` (the default) or `FFTProcessor<double>` - and every backend (PFFFT, Apple vDSP, Intel IPP, FFTW3 and the Ooura fallback, which now ships both a `float` and a `double` implementation) gained a native double-precision path. References to the nested scaling enum need qualifying, e.g. `FFTProcessor<float>::FFTScaling::asymmetric`
@@ -45,6 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fixed the PFFFT-backed `FFTProcessor` requiring its input and output buffers to be SIMD aligned: the transforms are now staged through buffers owned by the PFFFT backend and allocated with PFFFT's own aligned allocator, so the public API accepts buffers with any alignment (the double-precision real transform previously hit PFFFT's `VALIGNED` assertion when handed a plain `std::vector<double>`)
 
 - Fixed the double-precision Ooura FFT translation unit only building on GCC/Clang: it declared every internal helper (`makewt`, `cftfsub`, `bitrv2`, ...) inside the body of the functions that call them, and a block-scope declaration inside `namespace yup` declares a *global* function, so `yup::cdft` referenced a `::makewt` that no one defined and the Windows link failed with 30 unresolved externals. The declarations now sit at namespace scope, matching `yup_OouraFFT8g_float.cpp`
+
+- Added the `yup_dsp` oscillator classes (`oscillators/yup_FourierSeries.h`, `oscillators/yup_SyncSpectralResampler.h`, `oscillators/yup_AdditiveOscillator.h`, `oscillators/yup_WavetableOscillator.h`, `oscillators/yup_SyncOscillator.h`), an alias-free synchronizing oscillator following Roth, Keller, Castaneda and Studer, "Alias-Free Oscillator Synchronization via Additive Synthesis" (DAFx26, paper 49): `FourierSeries` holds the coefficients and the waveform presets, `SyncSpectralResampler` rewrites them from a follower period ratio into hard, mirrored or pulsar sync, `AdditiveOscillator` and `WavetableOscillator` synthesize the result using only the harmonics below Nyquist, and the `SyncOscillator` facade offers both backends and refreshes them from a once-per-block `update()`. `utilities/yup_DspMath.h` also gained `fillHarmonicPhasors`
 
 ### Graphics
 

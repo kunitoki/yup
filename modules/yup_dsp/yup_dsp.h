@@ -140,6 +140,13 @@
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
 
+// Oscillators (need FFTProcessor for the wavetable renderer)
+#include "oscillators/yup_FourierSeries.h"
+#include "oscillators/yup_SyncSpectralResampler.h"
+#include "oscillators/yup_AdditiveOscillator.h"
+#include "oscillators/yup_WavetableOscillator.h"
+#include "oscillators/yup_SyncOscillator.h"
+
 // Onset detection
 #include "onsets/yup_FilterBank.h"
 #include "onsets/yup_Spectrogram.h"

@@ -60,6 +60,57 @@ constexpr FloatType angularToFrequency (FloatType omega, FloatType sampleRate) n
 
 //==============================================================================
 
+/** Number of harmonics generated between two exact trigonometric re-seedings. */
+inline constexpr int harmonicPhasorReseedInterval = 64;
+
+/** Fills two arrays with the cosines and sines of the harmonic angles k * angle.
+
+    Entry i holds the phasor of harmonic i + 1, so cosines[i] is
+    cos ((i + 1) * angle) and sines[i] is sin ((i + 1) * angle). The values are
+    generated with a rotating-phasor recurrence that is re-seeded from
+    std::cos / std::sin every harmonicPhasorReseedInterval harmonics, which costs
+    a couple of transcendental calls per block instead of one per harmonic while
+    keeping the accumulated error bounded.
+
+    @param cosines  Destination array for the cosines, must hold count entries.
+    @param sines    Destination array for the sines, must hold count entries.
+    @param count    Number of harmonics to generate.
+    @param angle    Fundamental angle in radians.
+*/
+template <typename FloatType>
+void fillHarmonicPhasors (FloatType* cosines, FloatType* sines, int count, FloatType angle) noexcept
+{
+    if (count <= 0)
+        return;
+
+    const auto stepCosine = std::cos (angle);
+    const auto stepSine = std::sin (angle);
+
+    FloatType cosine = stepCosine;
+    FloatType sine = stepSine;
+
+    for (int harmonic = 1; harmonic <= count; ++harmonic)
+    {
+        if ((harmonic - 1) % harmonicPhasorReseedInterval == 0)
+        {
+            const auto seedAngle = angle * static_cast<FloatType> (harmonic);
+            cosine = std::cos (seedAngle);
+            sine = std::sin (seedAngle);
+        }
+
+        cosines[harmonic - 1] = cosine;
+        sines[harmonic - 1] = sine;
+
+        const auto nextCosine = cosine * stepCosine - sine * stepSine;
+        const auto nextSine = sine * stepCosine + cosine * stepSine;
+
+        cosine = nextCosine;
+        sine = nextSine;
+    }
+}
+
+//==============================================================================
+
 /** Converts Q factor to bandwidth (octaves) */
 template <typename FloatType>
 constexpr FloatType qToBandwidth (FloatType q) noexcept
