@@ -24,6 +24,7 @@
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_dsp_jit/yup_dsp_jit.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <csignal>
@@ -115,6 +116,84 @@ struct PlaybackState
     std::vector<const MidiBuffer*> events;
     std::vector<float> inputAudio;
     MidiBuffer midiIn, midiOut;
+    StringArray sourceFiles; // files the producing compile read, for hot reload
+};
+
+/** One compiled patch: the graph plus the source closure that produced it. */
+struct CompiledPatch
+{
+    YdspAudioGraph graph;
+    StringArray sourceFiles;
+};
+
+/** Hand-off slot for prepared playback states.
+
+    The control thread publishes a prepared state, the audio callback installs it
+    and retires the state it replaces, and the control thread destroys retired
+    states: freeing generated kernels is not realtime-safe, so the callback never
+    deletes anything. States travel between the two threads as raw pointers in
+    lock-free atomics and leave those slots exactly once, so ownership stays
+    expressed with unique_ptr and no caller writes a bare delete.
+*/
+class PlaybackSlot
+{
+public:
+    /** Hands a prepared state to the slot. Control thread only.
+
+        A state still waiting to be installed is reclaimed rather than
+        overwritten, so a published state the callback never reached is never
+        leaked.
+    */
+    void publish (std::unique_ptr<PlaybackState> state) noexcept
+    {
+        reclaimed.reset (pending.exchange (state.release(), std::memory_order_acq_rel));
+    }
+
+    /** Installs the published state and retires the one it replaces.
+
+        Returns true when a state was installed. While the retired state has not
+        been reclaimed nothing is installed, which keeps at most one state in
+        flight. Audio thread only.
+    */
+    bool install() noexcept
+    {
+        if (retired.load (std::memory_order_acquire) != nullptr)
+            return false;
+
+        auto* next = pending.exchange (nullptr, std::memory_order_acq_rel);
+
+        if (next == nullptr)
+            return false;
+
+        retired.store (installed.load (std::memory_order_relaxed), std::memory_order_release);
+        installed.store (next, std::memory_order_release);
+        return true;
+    }
+
+    /** Returns the installed state, or nullptr before the first install. */
+    PlaybackState* current() const noexcept { return installed.load (std::memory_order_acquire); }
+
+    /** Destroys the state the callback retired, if any. Control thread only. */
+    void reclaim() noexcept
+    {
+        reclaimed.reset (retired.exchange (nullptr, std::memory_order_acq_rel));
+    }
+
+    /** Destroys every state the slot still owns. Call once the callback stopped. */
+    void clear() noexcept
+    {
+        reclaim();
+
+        reclaimed.reset (installed.exchange (nullptr, std::memory_order_acq_rel));
+        reclaimed.reset (pending.exchange (nullptr, std::memory_order_acq_rel));
+    }
+
+private:
+    static_assert (std::atomic<PlaybackState*>::is_always_lock_free);
+    std::atomic<PlaybackState*> installed { nullptr };
+    std::atomic<PlaybackState*> pending { nullptr };
+    std::atomic<PlaybackState*> retired { nullptr };
+    std::unique_ptr<PlaybackState> reclaimed; // owns whatever left the slots above
 };
 
 class Player final : private AudioIODeviceCallback, private MidiInputCallback, private Timer
@@ -134,9 +213,7 @@ public:
         manager.removeAudioCallback (this);
         manager.closeAudioDevice();
 
-        delete active;
-        delete pending.exchange (nullptr);
-        delete retired.exchange (nullptr);
+        playback.clear();
 
         if (midiOutput != nullptr)
             for (int channel = 1; channel <= 16; ++channel)
@@ -149,7 +226,8 @@ public:
         if (! compiled.wasOk())
             return Result::fail (compiled.getErrorMessage());
 
-        const auto& graph = compiled.getReference();
+        const auto& patch = compiled.getReference();
+        const auto& graph = patch.graph;
         inputCount = graph.getInputStreamCount();
         outputCount = graph.getOutputStreamCount();
 
@@ -196,11 +274,13 @@ public:
             || (options.input != "none" && device->getActiveInputChannels().countNumberOfSetBits() < inputCount))
             return Result::fail ("Audio device has fewer channels than the patch requires");
 
-        auto state = prepare (std::move (compiled.getReference()));
+        auto state = prepare (std::move (compiled.getReference().graph), patch.sourceFiles);
         if (! state.wasOk())
             return Result::fail (state.getErrorMessage());
 
-        active = state.getReference().release();
+        const auto eventInputs = state.getReference()->graph.getEventInputCount();
+        playback.publish (std::move (state.getReference()));
+
         if (options.midiInput.isNotEmpty() && options.midiInput != "none")
         {
             const auto id = midiIdentifier (MidiInput::getAvailableDevices(), options.midiInput);
@@ -217,11 +297,10 @@ public:
                 return Result::fail ("Cannot open MIDI output '" + options.midiOutput + "'; use its exact name or identifier from devices");
         }
 
+        watched = watchList (patch.sourceFiles);
+
         if (options.hotreload)
-        {
-            refreshWatchedFiles();
             snapshot = fileSnapshot();
-        }
 
         testNoteRemaining = static_cast<int64_t> (sampleRate * 2.0);
 
@@ -243,10 +322,13 @@ public:
                       << " (" << device->getActiveInputChannels().countNumberOfSetBits() << " channels)\n"
                       << "MIDI input: " << (midiInput != nullptr ? midiInput->getName() + " [" + midiInput->getDeviceInfo().identifier + "]" : String ("none"))
                       << "; MIDI output: " << (midiOutput != nullptr ? midiOutput->getName() + " [" + midiOutput->getDeviceInfo().identifier + "]" : String ("none"))
-                      << "\nPatch streams: " << inputCount << " inputs, " << outputCount << " outputs; event inputs: " << active->graph.getEventInputCount() << "\n";
+                      << "\nPatch streams: " << inputCount << " inputs, " << outputCount << " outputs; event inputs: " << eventInputs << "\n";
+
+            if (options.hotreload)
+                std::cerr << "Watched files: " << watched.size() << "\n";
         }
 
-        if (active->graph.getEventInputCount() > 0 && midiInput == nullptr && options.testNote < 0)
+        if (eventInputs > 0 && midiInput == nullptr && options.testNote < 0)
             std::cerr << "This patch has event inputs but no MIDI input is connected. Use --midi-input NAME or --test-note 60.\n";
 
         if (options.testNote >= 0)
@@ -284,7 +366,7 @@ private:
         return "unknown processing error";
     }
 
-    ResultValue<YdspAudioGraph> compile()
+    ResultValue<CompiledPatch> compile()
     {
         YdspCompiler compiler;
 
@@ -295,10 +377,13 @@ private:
         if (! result.wasOk() && compiler.getDiagnostics().hasErrors())
             return makeResultValueFail (compiler.getDiagnostics().toString());
 
-        return result;
+        if (! result.wasOk())
+            return makeResultValueFail (result.getErrorMessage());
+
+        return makeResultValueOk (CompiledPatch { std::move (result.getReference()), compiler.getDiagnostics().getSourceIds() });
     }
 
-    ResultValue<std::unique_ptr<PlaybackState>> prepare (YdspAudioGraph&& graph)
+    ResultValue<std::unique_ptr<PlaybackState>> prepare (YdspAudioGraph&& graph, const StringArray& sourceFiles)
     {
         if (graph.getInputStreamCount() != inputCount || graph.getOutputStreamCount() != outputCount)
             return makeResultValueFail ("Reload changes audio channel counts; stop and run again");
@@ -324,7 +409,28 @@ private:
         state->events.resize (static_cast<size_t> (state->graph.getEventInputCount()), &state->midiIn);
         state->midiIn.ensureSize (258 * 16);
         state->midiOut.ensureSize (state->graph.getMidiOutputBufferSizeBytes());
+        state->sourceFiles = sourceFiles;
         return makeResultValueOk (std::move (state));
+    }
+
+    /** Files to poll, excluding the entry file, whose text is already hashed. */
+    std::vector<File> watchList (const StringArray& sourceFiles) const
+    {
+        const auto root = options.file.getFullPathName();
+        std::vector<File> result;
+
+        for (const auto& source : sourceFiles)
+        {
+            if (source.isEmpty() || source == root || source == "<memory>")
+                continue;
+
+            const File file (source);
+
+            if (std::find (result.begin(), result.end(), file) == result.end())
+                result.push_back (file);
+        }
+
+        return result;
     }
 
     void audioDeviceIOCallbackWithContext (const float* const* in, int numIn, float* const* out,
@@ -340,28 +446,23 @@ private:
                     std::fill_n (out[i], samples, 0.0f);
         };
 
-        if (retired.load (std::memory_order_acquire) == nullptr)
-        {
-            if (auto* next = pending.exchange (nullptr, std::memory_order_acq_rel))
-            {
-                retired.store (active, std::memory_order_release);
-                active = next;
-                for (int channel = 0; channel < 16; ++channel)
-                    if (! outgoing.push ({ { static_cast<uint8_t> (0xb0 + channel), 120, 0 }, 3 }))
-                        dropped.fetch_add (1, std::memory_order_relaxed);
-            }
-        }
+        if (playback.install())
+            for (int channel = 0; channel < 16; ++channel)
+                if (! outgoing.push ({ { static_cast<uint8_t> (0xb0 + channel), 120, 0 }, 3 }))
+                    dropped.fetch_add (1, std::memory_order_relaxed);
 
         if (samples > blockSize || numOut < outputCount || (options.input != "none" && numIn < inputCount))
             recordFailure (Failure::layoutChanged);
 
-        if (failed() || active == nullptr)
+        auto* const current = playback.current();
+
+        if (failed() || current == nullptr)
         {
             clearOutputs();
             return;
         }
 
-        auto& state = *active;
+        auto& state = *current;
         for (int i = 0; i < inputCount; ++i)
         {
             auto* buffer = state.inputAudio.data() + static_cast<size_t> (i) * static_cast<size_t> (blockSize);
@@ -516,20 +617,6 @@ private:
         }
     }
 
-    void refreshWatchedFiles()
-    {
-        YdspDiagnostics diagnostics;
-
-        auto project = YdspProject::load (options.file, diagnostics);
-        if (! project.wasOk())
-            return;
-
-        watched.clear();
-
-        for (const auto& path : project.getReference().getSources())
-            watched.push_back (options.file.getParentDirectory().getChildFile (path));
-    }
-
     String fileSnapshot() const
     {
         String result = options.file.loadFileAsString();
@@ -540,7 +627,7 @@ private:
 
     void timerCallback() override
     {
-        delete retired.exchange (nullptr, std::memory_order_acq_rel);
+        playback.reclaim();
 
         MidiPacket packet;
         for (int i = 0; i < 2048 && outgoing.pop (packet); ++i)
@@ -590,7 +677,9 @@ private:
                 std::cerr << state.getErrorMessage() << "\nKeeping the previous patch\n";
             else
             {
-                delete pending.exchange (state.getReference().release(), std::memory_order_acq_rel);
+                auto prepared = std::move (state.getReference());
+                watched = watchList (prepared->sourceFiles);
+                playback.publish (std::move (prepared));
 
                 std::cerr << "Reloaded " << options.file.getFileName() << "\n";
             }
@@ -611,8 +700,6 @@ private:
         if (! options.hotreload || ticks % 50 != 0)
             return;
 
-        refreshWatchedFiles();
-
         auto current = fileSnapshot();
         if (current != snapshot)
         {
@@ -629,10 +716,12 @@ private:
 
         reload = std::async (std::launch::async, [this]() -> ResultValue<std::unique_ptr<PlaybackState>>
         {
-            auto graph = compile();
-            if (! graph.wasOk())
-                return makeResultValueFail (graph.getErrorMessage());
-            return prepare (std::move (graph.getReference()));
+            auto patch = compile();
+            if (! patch.wasOk())
+                return makeResultValueFail (patch.getErrorMessage());
+
+            const auto sourceFiles = patch.getReference().sourceFiles;
+            return prepare (std::move (patch.getReference().graph), sourceFiles);
         });
     }
 
@@ -641,11 +730,9 @@ private:
     std::unique_ptr<MidiInput> midiInput;
     std::unique_ptr<MidiOutput> midiOutput;
     MidiQueue incoming, outgoing;
-    static_assert (std::atomic<PlaybackState*>::is_always_lock_free);
+    PlaybackSlot playback;
     static_assert (std::atomic<unsigned>::is_always_lock_free);
     static_assert (std::atomic<bool>::is_always_lock_free);
-    PlaybackState* active = nullptr;
-    std::atomic<PlaybackState*> pending { nullptr }, retired { nullptr };
     static_assert (std::atomic<Failure>::is_always_lock_free);
     static_assert (std::atomic<YdspProcessResult>::is_always_lock_free);
     std::atomic<Failure> failure { Failure::none };
@@ -723,9 +810,9 @@ int runYdspPlayerCommand (int argc, char** argv)
     }
 
     if (! options.file.existsAsFile() || ! options.file.hasFileExtension ("ydsp;ydsp-project")
-        || ((options.hotreload || options.main.isNotEmpty()) && ! options.file.hasFileExtension ("ydsp-project")))
+        || (options.main.isNotEmpty() && ! options.file.hasFileExtension ("ydsp-project")))
     {
-        std::cerr << "run requires a .ydsp or .ydsp-project; --main and --hotreload require a project\n";
+        std::cerr << "run requires a .ydsp or .ydsp-project; --main requires a project\n";
         return 2;
     }
 

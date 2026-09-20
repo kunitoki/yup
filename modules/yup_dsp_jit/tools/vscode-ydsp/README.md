@@ -1,13 +1,13 @@
 # YDSP for Visual Studio Code
 
-Syntax highlighting, snippets and editing support for **YDSP** — the realtime
-JIT-compiled audio DSP language of the [YUP](https://github.com/kunitoki/yup)
-library.
+Syntax highlighting, snippets, editing support and live playback for **YDSP** -
+the realtime JIT-compiled audio DSP language of the
+[YUP](https://github.com/kunitoki/yup) library.
 
-Platform packages launch the bundled `yup_dsp_compiler --lsp` server. During
-development, set `ydsp.server.path` to an absolute compiler path. The server
-currently provides live diagnostics over stdio; syntax highlighting remains
-available if the server cannot be started.
+Platform packages launch the bundled `yup_dsp_compiler`. During development, set
+`ydsp.server.path` to an absolute compiler path. The same binary supplies live
+diagnostics over stdio (`--lsp`) and owns playback (`run`); syntax highlighting
+remains available if the binary cannot be started.
 
 YDSP is a small language for audio signal processing that compiles ahead of the
 audio callback into machine code (AsmJit x86-64/AArch64 or WebAssembly). It
@@ -35,6 +35,12 @@ sample-accurate events and statically bounded loops.
   `for` loops, state arrays, metadata and annotations
 - **Editing conveniences**: comment toggling, bracket matching and
   auto-closing, block folding and indentation rules
+- **Patch Player panel** in the Activity Bar: transport controls, the workspace
+  patch list, audio/MIDI device selects, sample rate, block size and a test note
+- **Playback** of `.ydsp` and `.ydsp-project` patches through
+  `yup_dsp_compiler run`, with hot reload of the entry file and everything it
+  imports, a status-bar control and one pinned player per window
+- **Diagnostics** from `yup_dsp_compiler --lsp` over stdio
 
 ## Installing
 
@@ -69,6 +75,51 @@ Set `YDSP_COMPILER` to override the compiler binary used by the packaging
 script. The generated `server/` directory is release output and is ignored by
 Git.
 
+## Playing patches
+
+The **YDSP** icon in the Activity Bar opens the **Patch Player** panel, which has
+two tabs:
+
+- **Performance** (keyboard icon) holds the transport - **Run**, **Stop** and
+  **Restart** act on the single player - and the workspace patch list.
+- **Settings** (gear icon) holds the audio backend, audio output, audio input and
+  MIDI input and output selects, plus sample rate, block size, a test note,
+  verbose diagnostics and Follow the active patch.
+
+The patch list covers every `.ydsp` and `.ydsp-project` file in the workspace.
+It is ordered naturally by path (`Saw2.ydsp` before `Saw10.ydsp`) and keeps that
+order between refreshes; the playing patch is pinned with a marker and clicking
+another retargets the player. Device selects are filled from
+`yup_dsp_compiler devices --json` and remembered per workspace - use **Refresh**
+after plugging a device in.
+
+The same actions are available as commands, in the editor title, in the explorer
+context menu, and from the status-bar item, which shows the playing patch and
+opens a menu with Run, Stop, Restart, device selection and the panel. Playback
+runs `yup_dsp_compiler run --hotreload`. A project watches its manifest and every
+listed source; a standalone `.ydsp` watches itself and everything it imports, so
+editing a shared library reloads it too. Saving recompiles and swaps the patch in
+at the next audio block. An invalid save keeps the previous patch playing and
+prints its diagnostics to the **YDSP Playback** output channel.
+
+Playback is pinned by default, so switching editors never changes what you hear.
+Enabling **Follow the active patch** retargets the player whenever you switch to
+another patch, after a short debounce. Either way only one player subprocess
+exists, and an identical request is never respawned. Devices and options apply on
+the next run - changing them while a patch plays restarts the player - and MIDI
+defaults to disabled while audio defaults to the system device. Selecting
+`No input (feeds silence)` passes `--audio-input none`.
+
+Because the player compiles from disk, unsaved patch files are listed above the
+patch list and are not heard until you save. The `ydsp.player.verbose` setting
+adds device, channel, watched-file and peak reporting, and
+`ydsp.player.arguments` appends raw arguments such as `--main AlternateMain`.
+
+The player runs wherever the extension host runs, so in a remote, SSH or
+container workspace the audio comes out of that machine. Only one player runs at
+a time; it is asked to stop with `SIGTERM` when playback is stopped and when the
+window closes.
+
 ## Language reference
 
 The full language specification lives in the YUP repository at
@@ -83,6 +134,12 @@ set of real patches to test highlighting against lives in
 vscode-ydsp/
 ├── package.json                      # extension manifest
 ├── language-configuration.json       # comments, brackets, folding, indentation
+├── images/ydsp-activity.svg          # Activity Bar container icon
+├── src/extension.ts                  # activation: language server, commands, panel wiring
+├── src/panel.ts                      # Patch Player sidebar webview
+├── src/compiler.ts                   # compiler path lookup and one-shot invocation
+├── src/devices.ts                    # audio/MIDI device enumeration
+├── src/player.ts                     # `run` subprocess and its lifecycle
 ├── syntaxes/ydsp.tmLanguage.json     # TextMate grammar (source.ydsp)
 └── snippets/ydsp.code-snippets       # code snippets
 ```

@@ -156,6 +156,49 @@ TEST (YdspJitDiagnosticsTests, ErrorsDetectedAmongMixedSeverities)
     EXPECT_EQ (YdspSeverity::info, diagnostics.getItem (3).severity);
 }
 
+TEST (YdspJitDiagnosticsTests, ReportsRegisteredSourceIds)
+{
+    YdspDiagnostics diagnostics;
+
+    EXPECT_TRUE (diagnostics.getSourceIds().isEmpty());
+
+    diagnostics.setSource ("root source", "main.ydsp");
+    diagnostics.registerSource ("lib/filter.ydsp", "filter source");
+    diagnostics.registerSource ("lib/filter.ydsp", "filter source again");
+    diagnostics.setSource ("unnamed source");
+
+    const auto ids = diagnostics.getSourceIds();
+    ASSERT_EQ (2, ids.size());
+    EXPECT_TRUE (ids.contains ("main.ydsp"));
+    EXPECT_TRUE (ids.contains ("lib/filter.ydsp"));
+}
+
+TEST (YdspJitDiagnosticsTests, CompileRegistersEntryFileAndImports)
+{
+    const auto directory = File::getSpecialLocation (File::tempDirectory)
+                               .getChildFile ("yup-ydsp-sources-" + Uuid().toString());
+    ASSERT_TRUE (directory.createDirectory().wasOk());
+    ASSERT_TRUE (directory.getChildFile ("lib").createDirectory().wasOk());
+
+    const auto entry = directory.getChildFile ("Main.ydsp");
+    ASSERT_TRUE (entry.replaceWithText (
+        "import lib.Gain as lib; graph Main { input stream in; output stream out; node p = lib.Gain; connection { in -> p.in; p.out -> out; } }\n"));
+
+    const auto imported = directory.getChildFile ("lib/Gain.ydsp");
+    ASSERT_TRUE (imported.replaceWithText ("processor Gain { input stream in; output stream out; process { out = in * 2.0; } }\n"));
+
+    YdspCompiler compiler;
+    const auto result = compiler.compile (entry.loadFileAsString(), entry.getFullPathName());
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    const auto ids = compiler.getDiagnostics().getSourceIds();
+    ASSERT_EQ (2, ids.size());
+    EXPECT_TRUE (ids[0].endsWith ("Main.ydsp"));
+    EXPECT_TRUE (ids[1].endsWith ("lib/Gain.ydsp"));
+
+    directory.deleteRecursively();
+}
+
 TEST (YdspJitDiagnosticsTests, ToStringWithoutSourceRendersMessages)
 {
     YdspDiagnostics diagnostics;

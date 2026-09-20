@@ -99,6 +99,13 @@ public:
     /** Returns the current file path or virtual source name. */
     const String& getSourceId() const noexcept { return currentSourceId; }
 
+    /** Returns every file path or virtual source name registered through
+        setSource() and registerSource(), sorted and deduplicated. Empty names
+        are omitted. A compiler registers the root source, each project source
+        and every imported file it read, so this is the source closure of the
+        most recent compilation - the files a hot-reload host should watch. */
+    StringArray getSourceIds() const;
+
     /** Adds an error at the given source range. */
     void addError (YdspSourceRange range, StringRef message);
     /** Adds a warning at the given source range. */

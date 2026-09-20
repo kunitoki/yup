@@ -77,6 +77,19 @@ class CompilerCliTests(unittest.TestCase):
         self.assertIn("^", result.stderr)
         self.assertNotIn("Opening audio:", result.stderr)
 
+    def test_run_accepts_hotreload_for_standalone_source(self):
+        (self.root / "Broken.ydsp").write_text("processor P { output stream out; process { out = missing; } } graph G { output stream out; node p = P; connection { p.out -> out; } }")
+        result = self.invoke("run", "Broken.ydsp", "--hotreload")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Playback error:", result.stderr)
+        self.assertIn("missing", result.stderr)
+        self.assertNotIn("require a project", result.stderr)
+
+    def test_run_requires_a_project_for_main(self):
+        result = self.invoke("run", "Main.ydsp", "--main", "Main")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("--main requires a project", result.stderr)
+
     def test_lsp_reports_unsaved_import_and_clears_it(self):
         project_uri = (self.root / "Patch.ydsp-project").as_uri()
         library_uri = (self.root / "lib/Gain.ydsp").as_uri()

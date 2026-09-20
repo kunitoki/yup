@@ -2201,4 +2201,4 @@ source text.
 
 Use `compileProjectBundle()` to package a selected project entry point. See the
 [command-line compiler and player](ydsp-command-line.md) for bundle commands,
-audio/MIDI device selection, hot reload, and the proposed VS Code playback workflow.
+audio/MIDI device selection, hot reload, and the VS Code playback workflow.

@@ -187,7 +187,7 @@ processor SawVoice {
 
         active = select (env < 0.000001, 0, 1);
 
-        out = v2 * env * 1.4;
+        out = v2 * env * 2.4;
     }
 }
 
@@ -196,7 +196,7 @@ graph AnalogSaw {
     output stream out;
 
     node voices = SawVoice[8] [[ mode: poly, stealing: oldest ]];
-    node distortion = fx.Distortion (drive = 1.0, tone = 0.45, mix = 0.45);
+    node distortion = fx.Distortion (drive = 0.0, tone = 1.0, mix = 0.45);
 
     node master = bus.MasterBus (threshold = -24.0, reverbMix = 0.18);
 

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- YDSP VS Code extension: audition the active patch through `yup_dsp_compiler run` from a Patch Player sidebar view (transport, workspace patch list, audio/MIDI device selects, sample rate, block size, test note), with a single pinned player per window, a status bar, a dedicated playback output channel and an opt-in follow-active-patch mode.
+
+- YDSP player: `--hotreload` now works for a standalone `.ydsp` as well as a `.ydsp-project`, driven by `YdspDiagnostics::getSourceIds()`, which reports the source closure of the last compile (root source, project sources and transitively imported files).
+
 - YDSP diagnostics: check unused library and processor function bodies during editor validation, including return expressions.
 
 - YDSP tooling: validate standalone processor/function libraries without a graph; add player error details, verbose device/activity reporting, and a test-note option for diagnosing silent playback.

@@ -1,7 +1,7 @@
 {
   "name": "vscode-ydsp",
   "displayName": "YDSP - YUP DSP Language",
-  "description": "Syntax highlighting, snippets and editing support for YDSP, the realtime JIT-compiled audio DSP language of the YUP library.",
+  "description": "Syntax highlighting, diagnostics and live patch playback for YDSP, the realtime JIT-compiled audio DSP language of the YUP library.",
   "version": "1.0.0",
   "publisher": "yup",
   "license": "ISC",
@@ -32,14 +32,60 @@
       "properties": {
         "ydsp.server.path": {
           "type": "string",
-          "description": "Absolute path to a development yup_dsp_compiler binary."
+          "description": "Absolute path to a development yup_dsp_compiler binary. Used for both the language server and playback."
         },
         "ydsp.server.trace": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
           "default": "off"
+        },
+        "ydsp.player.verbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Print audio/MIDI device details, connected channels and periodic playback totals from the running patch."
+        },
+        "ydsp.player.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments appended to 'yup_dsp_compiler run', for example --main AlternateMain or --test-note 60."
+        },
+        "ydsp.player.followActiveEditor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Retarget the single player to the active patch when switching editors. Off keeps the patch pinned until you run another one."
+        },
+        "ydsp.player.sampleRate": {
+          "type": "number",
+          "default": 0,
+          "description": "Requested sample rate for playback; 0 uses the audio device default."
+        },
+        "ydsp.player.blockSize": {
+          "type": "number",
+          "default": 0,
+          "description": "Requested block size in samples for playback; 0 uses the audio device default."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ydsp",
+          "title": "YDSP",
+          "icon": "images/ydsp-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "ydsp": [
+        {
+          "type": "webview",
+          "id": "ydsp.panel",
+          "name": "Patch Player"
+        }
+      ]
     },
     "languages": [
       { "id": "yaml", "extensions": [".ydsp-project"] },
@@ -71,7 +117,65 @@
         "language": "ydsp",
         "path": "./snippets/ydsp.code-snippets"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "ydsp.run",
+        "title": "YDSP: Run Patch",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ydsp.stop",
+        "title": "YDSP: Stop Playback",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "ydsp.restart",
+        "title": "YDSP: Restart Playback",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "ydsp.selectDevices",
+        "title": "YDSP: Select Audio/MIDI Devices",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "ydsp.openPanel",
+        "title": "YDSP: Open Player Panel",
+        "icon": "$(layout-sidebar-left)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "ydsp.run",
+          "when": "resourceExtname == .ydsp || resourceExtname == .ydsp-project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ydsp.stop",
+          "when": "ydsp.playerActive && (resourceExtname == .ydsp || resourceExtname == .ydsp-project)",
+          "group": "navigation@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ydsp.run",
+          "when": "resourceExtname == .ydsp || resourceExtname == .ydsp-project",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ydsp.stop",
+          "when": "ydsp.playerActive"
+        },
+        {
+          "command": "ydsp.restart",
+          "when": "ydsp.playerActive"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p ./tsconfig.json"

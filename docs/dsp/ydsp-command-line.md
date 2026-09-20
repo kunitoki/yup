@@ -34,6 +34,7 @@ The corresponding library API is
 ```sh
 yup_dsp_compiler devices
 yup_dsp_compiler devices --json
+yup_dsp_compiler run Main.ydsp --hotreload
 yup_dsp_compiler run Patch.ydsp-project --hotreload
 yup_dsp_compiler run Patch.ydsp-project --audio-type CoreAudio --audio-output "External Headphones" --audio-input none --midi-input "DEVICE-ID"
 yup_dsp_compiler run Patch.ydsp-project --midi-output "DEVICE-ID" --sample-rate 48000 --block-size 256
@@ -55,7 +56,8 @@ buffer size are printed after opening the device; the device may negotiate
 values different from those requested.
 
 `--verbose` prints the selected audio backend, connected audio channels, MIDI
-names and identifiers, and patch stream counts. It also prints cumulative audio
+names and identifiers, patch stream counts, and - with `--hotreload` - how many
+files are being watched. It also prints cumulative audio
 callback and MIDI counters, the maximum output peak since startup, and non-finite
 sample counts approximately once per second. If callback counts stay at zero,
 the audio device is not delivering callbacks. If note counts stay at zero while
@@ -79,20 +81,29 @@ all-sound-off messages prevent dropped note-offs from leaving voices held.
 Press Ctrl+C to stop. Device loss or a device format change stops playback with
 a message; restart to use the new configuration.
 
-`run` also accepts an individual `.ydsp` file. `--main` and `--hotreload` require
-a project. Playing `.ydsb` files directly is not currently a CLI mode.
+`run` accepts both an individual `.ydsp` file and a `.ydsp-project`. `--main`
+requires a project; `--hotreload` works for either input. Playing `.ydsb` files
+directly is not currently a CLI mode.
 
 ## Hot reload
 
-The player polls the manifest and every listed source, waits for a stable poll,
-then compiles and prepares a new graph on a worker thread. It swaps graphs at an
-audio block boundary and destroys the old graph on the control thread. Audio
-processing does not load files, compile, allocate host buffers, or print.
+The player polls the entry file and every file the last successful compile read,
+waits for a stable poll, then compiles and prepares a new graph on a worker
+thread. It swaps graphs at an audio block boundary and destroys the old graph on
+the control thread. Audio processing does not load files, compile, allocate host
+buffers, or print.
+
+The watch list comes from the compiler itself, not from a second scan of the
+sources: `YdspCompiler::getDiagnostics().getSourceIds()` returns the source
+closure of the most recent compilation - the root source, every source listed in
+a project manifest, and each transitively imported file that was found. A
+standalone `.ydsp` therefore reloads when an imported library changes, not only
+when the entry file does.
 
 Invalid saves keep the previous graph playing and print diagnostics with
 `path:line:column`, source context, and a caret. Fixing and saving the file
-triggers another attempt. An invalid manifest retains the last valid watch
-list. Changes made while compilation is underway cause that result to be
+triggers another attempt. A failed reload retains the last valid watch list.
+Changes made while compilation is underway cause that result to be
 discarded and the latest files to be compiled.
 
 A successful reload resets processor state, including voices and delay tails.
@@ -119,33 +130,45 @@ Bundle compilation and playback still require an executable entry point.
 Library clients can supply unsaved file contents using
 `YdspCompileOptions::sourceOverrides`, keyed by absolute paths.
 
-## Proposed VS Code playback workflow
+## VS Code playback workflow
 
-Playback commands and device pickers are a next extension change; diagnostics
-support is included now. Use native VS Code controls:
+The VS Code extension plays patches through this command rather than
+reimplementing playback. It contributes a **YDSP** Activity Bar container whose
+**Patch Player** view has two tabs, each with an icon: **Performance** (keyboard)
+holds the transport (Run, Stop, Restart) and the workspace patch list, while
+**Settings** (gear) holds the audio backend, audio output, audio input and MIDI
+input/output selects plus sample rate, block size, a test note, verbose
+diagnostics and following the active patch:
 
-1. **YDSP: Run Project**, also available from a manifest's editor title or context
-   menu. Choose a project if several exist, then start one player subprocess.
-2. **YDSP: Select Devices** uses `devices --json` and successive
-   [Quick Picks](https://code.visualstudio.com/api/ux-guidelines/quick-picks)
-   for the audio backend, audio input/output, and MIDI input/output. Remember
-   choices in local workspace state. Offer Default for audio and None for MIDI.
-3. A status-bar item shows the playing project, with Stop, Restart, and device
-   selection commands. Send SIGTERM for orderly shutdown; ensure the child
-   exits when the extension closes. Device changes restart the player.
-4. Start playback with `--hotreload`. Saving any listed file updates the player
-   only after a successful compile. Unsaved typing updates diagnostics without
-   changing the sound. The player owns file watching, so terminal playback and
-   VS Code behave the same way.
-5. Keep the LSP process separate from the player. Show runtime messages in a
-   YDSP Playback output channel; source diagnostics remain in Problems. A future
-   structured player status channel can report compiling, playing, and failed
-   reload states without interpreting console text.
+1. **YDSP: Run Patch** is also available from a patch's editor title, the
+   explorer context menu and the command palette. Pick a patch if several exist,
+   then start one player subprocess. The patch list is ordered naturally by path
+   (`Saw2.ydsp` before `Saw10.ydsp`) and never reorders between refreshes. Both
+   input kinds start with `--hotreload`.
+2. The panel's device selects and **YDSP: Select Audio/MIDI Devices** share one
+   `devices --json` result, cached and refreshed on demand. Choices are
+   remembered in workspace state. Audio offers Default, MIDI offers Disabled,
+   and the audio input offers None.
+3. A status-bar item shows the playing patch, with Run, Stop, Restart and device
+   selection. Stopping sends SIGTERM; the child also exits when the extension
+   closes. Device changes restart the player.
+4. Playback is pinned: only one player subprocess exists per window, an identical
+   request is never respawned, and switching editors changes nothing unless
+   `ydsp.player.followActiveEditor` is set, which retargets that same player
+   after a debounce.
+5. Playback always starts with `--hotreload`, so saving an entry file or any
+   file it imports updates the player once the compile succeeds. Unsaved typing
+   updates diagnostics without changing the sound, and unsaved patch files are
+   listed in the panel because playback compiles from disk. The player owns file
+   watching, so terminal playback and VS Code behave the same way.
+6. The LSP process stays separate from the player. Runtime messages appear in a
+   YDSP Playback output channel; source diagnostics remain in Problems.
 
-This needs no webview. It also keeps audio playback independent of language
-server restarts. The initial extension playback implementation should run on
-local workspaces; remote/SSH/container workspaces need an explicit decision
-about which machine owns the audio devices.
+The panel keeps audio playback independent of language server restarts. The
+player runs wherever the extension host runs, so in a remote, SSH or container
+workspace the audio comes out of that machine and a note is written to the
+playback channel. A future structured player status channel can report
+compiling, playing, and failed reload states without interpreting console text.
 
 ## Verification
 
@@ -154,12 +177,21 @@ then run:
 
 - `YdspProjectTests.*` and `YdspBundle*` for project selection, nested imports,
   standalone bundles, and source-free round trips.
+- `YdspJitDiagnosticsTests.*` for the registered source ids that drive hot reload.
 - `YdspJitGraphTests.ReservedHostMidiOutputCapacityCoversDenseOutputWithoutAllocation`,
   preferably with allocation hooks enabled.
 - `python3 cmake/tools/ydsp_compiler/tests/test_cli.py /absolute/path/to/yup_dsp_compiler`
-  for bundle CLI, invalid arguments, and LSP framing/ranges/unsaved imports.
+  for bundle CLI, invalid arguments, standalone `--hotreload`, and LSP
+  framing/ranges/unsaved imports.
 - The VS Code extension's TypeScript build, then open a source and manifest,
   introduce an imported-file error, and verify Problems and its caret range.
 - On hardware: enumerate devices, play a generator and an audio-input effect,
   connect MIDI input/output, then test valid reload, invalid save, corrected
-  save, manifest source-list changes, Ctrl+C, and device disconnection.
+  save, manifest source-list changes, Ctrl+C, and device disconnection. Repeat
+  the reload checks for a standalone source with an import.
+- In the extension: run a patch from the panel, the editor title and the context
+  menu; verify the status bar, the patch pin and the YDSP Playback channel; edit
+  a source to trigger hot reload; save an invalid edit and confirm the previous
+  patch keeps playing; change a device mid-playback; toggle Follow the active
+  patch; then Stop and Restart and check that the child exits when the window
+  closes.

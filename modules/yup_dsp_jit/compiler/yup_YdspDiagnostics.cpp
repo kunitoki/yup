@@ -62,6 +62,18 @@ void YdspDiagnostics::registerSource (StringRef sourceId, StringRef source)
     sources[String (sourceId)] = String (source);
 }
 
+StringArray YdspDiagnostics::getSourceIds() const
+{
+    StringArray result;
+
+    for (const auto& entry : sources)
+        if (entry.first.isNotEmpty())
+            result.add (entry.first);
+
+    result.sort (true);
+    return result;
+}
+
 void YdspDiagnostics::setSourceId (StringRef sourceId)
 {
     const auto previous = sources.find (currentSourceId);
