@@ -133,7 +133,10 @@ set of real patches to test highlighting against lives in
 ```
 vscode-ydsp/
 ├── package.json                      # extension manifest
-├── language-configuration.json       # comments, brackets, folding, indentation
+├── language-configuration.json       # YDSP comments, brackets, folding, indentation
+├── language-configuration-project.json # the same for `.ydsp-project` (`#` comments, off-side folding)
+├── images/ydsp-icon.png              # file icon for `.ydsp` patches
+├── images/ydsp-project-icon.png      # file icon for `.ydsp-project` manifests
 ├── images/ydsp-activity.svg          # Activity Bar container icon
 ├── src/extension.ts                  # activation: language server, commands, panel wiring
 ├── src/panel.ts                      # Patch Player sidebar webview
@@ -141,6 +144,7 @@ vscode-ydsp/
 ├── src/devices.ts                    # audio/MIDI device enumeration
 ├── src/player.ts                     # `run` subprocess and its lifecycle
 ├── syntaxes/ydsp.tmLanguage.json     # TextMate grammar (source.ydsp)
+├── syntaxes/ydsp-project.tmLanguage.json # manifest grammar including source.yaml
 └── snippets/ydsp.code-snippets       # code snippets
 ```
 

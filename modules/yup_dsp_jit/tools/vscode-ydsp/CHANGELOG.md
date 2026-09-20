@@ -36,6 +36,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `ydsp.player.blockSize` settings.
 - Unsaved patch files are reported in the panel, since playback compiles from
   disk.
+- `.ydsp-project` manifests use their own language id (`ydsp-project`) with a
+  dedicated icon (`images/ydsp-project-icon.png`), instead of the YAML icon;
+  YAML highlighting is kept through a grammar that includes `source.yaml`, and
+  `#` is the comment token.
 
 - Offline YDSP bundle tooling is now documented alongside the extension.
 

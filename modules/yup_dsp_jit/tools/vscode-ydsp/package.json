@@ -2,7 +2,7 @@
   "name": "vscode-ydsp",
   "displayName": "YDSP - YUP DSP Language",
   "description": "Syntax highlighting, diagnostics and live patch playback for YDSP, the realtime JIT-compiled audio DSP language of the YUP library.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "publisher": "yup",
   "license": "ISC",
   "icon": "images/ydsp-icon.png",
@@ -83,12 +83,12 @@
         {
           "type": "webview",
           "id": "ydsp.panel",
-          "name": "Patch Player"
+          "name": "Patch Player",
+          "icon": "images/ydsp-activity.svg"
         }
       ]
     },
     "languages": [
-      { "id": "yaml", "extensions": [".ydsp-project"] },
       {
         "id": "ydsp",
         "aliases": [
@@ -103,6 +103,21 @@
           "light": "./images/ydsp-icon.png",
           "dark": "./images/ydsp-icon.png"
         }
+      },
+      {
+        "id": "ydsp-project",
+        "aliases": [
+          "YDSP Project",
+          "ydsp-project"
+        ],
+        "extensions": [
+          ".ydsp-project"
+        ],
+        "configuration": "./language-configuration-project.json",
+        "icon": {
+          "light": "./images/ydsp-project-icon.png",
+          "dark": "./images/ydsp-project-icon.png"
+        }
       }
     ],
     "grammars": [
@@ -110,6 +125,11 @@
         "language": "ydsp",
         "scopeName": "source.ydsp",
         "path": "./syntaxes/ydsp.tmLanguage.json"
+      },
+      {
+        "language": "ydsp-project",
+        "scopeName": "source.ydsp-project",
+        "path": "./syntaxes/ydsp-project.tmLanguage.json"
       }
     ],
     "snippets": [

@@ -114,7 +114,8 @@ not stored in the portable project manifest.
 ## Editor diagnostics
 
 `yup_dsp_compiler --lsp` reserves stdout for LSP messages. The VS Code extension
-watches `.ydsp` and `.ydsp-project` files. Project manifests open as YAML.
+watches `.ydsp` and `.ydsp-project` files. Project manifests carry the YDSP icon
+and are highlighted as YAML.
 Diagnostics support unsaved source and manifest contents, explicit imports,
 UTF-16 editor positions, and clearing errors after a fix or document closure.
 Errors in imports are published against their own file URI.
