@@ -192,7 +192,8 @@ TEST (YdspJitDiagnosticsTests, CompileRegistersEntryFileAndImports)
     ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
 
     // getSourceIds() returns the closure sorted case-insensitively, so the
-    // imported "lib/..." file sorts before "Main.ydsp".
+    // imported "lib/..." file sorts before "Main.ydsp". Ids are native paths,
+    // so compare them as full paths instead of by separator-sensitive suffixes.
     const auto ids = compiler.getDiagnostics().getSourceIds();
     std::string found;
 
@@ -206,8 +207,8 @@ TEST (YdspJitDiagnosticsTests, CompileRegistersEntryFileAndImports)
 
     // ASSERT is fatal, so the indexed reads below only run for the expected count.
     ASSERT_EQ (2, ids.size()) << found;
-    EXPECT_TRUE (ids[0].endsWith ("lib/Gain.ydsp")) << found;
-    EXPECT_TRUE (ids[1].endsWith ("Main.ydsp")) << found;
+    EXPECT_EQ (imported.getFullPathName(), ids[0]) << found;
+    EXPECT_EQ (entry.getFullPathName(), ids[1]) << found;
 
     directory.deleteRecursively();
 }

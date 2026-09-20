@@ -58,19 +58,27 @@ void renameLibraryCalls (const std::vector<std::unique_ptr<YdspStmt>>& body, con
 
 /** Maps a dotted import path and the importing file's resolved path to the
     imported file's resolved path: `import X.Y.Z` inside `lib/outer.ydsp`
-    resolves to `lib/X/Y/Z.ydsp`. */
+    resolves to `lib/X/Y/Z.ydsp`.
+
+    The result uses the platform's path separator. Source always spells imports
+    with '.', but a resolved import is compared against - and looked up through -
+    File paths: project source lists, source overrides and diagnostic source ids
+    are all native paths, so a resolved import has to be native too or valid
+    files are reported as missing on Windows. */
 String resolveImportPath (StringRef dottedPath, const String& parentPath)
 {
     String relativePath = String (dottedPath).replaceCharacter ('.', '/');
     relativePath += ".ydsp";
 
-    if (parentPath.isNotEmpty())
-    {
-        const auto lastSlash = jmax (parentPath.lastIndexOfChar ('/'), parentPath.lastIndexOfChar ('\\'));
-        return (lastSlash >= 0 ? parentPath.substring (0, lastSlash + 1) : String()) + relativePath;
-    }
+    if (parentPath.isEmpty())
+        return relativePath;
 
-    return relativePath;
+    const auto lastSlash = jmax (parentPath.lastIndexOfChar ('/'), parentPath.lastIndexOfChar ('\\'));
+
+    if (lastSlash < 0)
+        return relativePath;
+
+    return (parentPath.substring (0, lastSlash + 1) + relativePath).replaceCharacter ('/', File::getSeparatorChar());
 }
 
 //==============================================================================
