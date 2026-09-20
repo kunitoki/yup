@@ -75,6 +75,13 @@ public:
     */
     ResultValue<YdspAudioGraph> compile (StringRef source, const YdspCompileOptions& options, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
 
+    /** Parses, resolves imports, and checks semantics without generating code.
+        Processor and function libraries do not need a graph. Sources containing
+        a root graph still receive graph validation. Unsaved imports may be
+        supplied through options.sourceOverrides. Diagnostics retain file ranges.
+    */
+    Result validate (StringRef source, const YdspCompileOptions& options = {}, StringRef importBasePath = {}, ThreadPool* threadPool = nullptr);
+
     /** Loads a .ydsp-project manifest and compiles its listed source files.
 
         Files retain separate scopes and require explicit imports. Each file
@@ -116,7 +123,7 @@ public:
 private:
     friend class YdspBundle;
 
-    ResultValue<YdspAudioGraph> compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project = nullptr, StringRef mainOverride = {});
+    ResultValue<YdspAudioGraph> compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project = nullptr, StringRef mainOverride = {}, bool validationOnly = false);
 
     struct Pimpl;
     std::unique_ptr<Pimpl> pimpl;

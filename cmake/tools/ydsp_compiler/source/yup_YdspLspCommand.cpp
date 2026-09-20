@@ -103,7 +103,7 @@ int runYdspLspCommand()
             if (project != File())
                 compiler.compileProject (project, options);
             else
-                compiler.compile (source, options, path);
+                compiler.validate (source, options, path);
             const auto& diagnostics = compiler.getDiagnostics();
             for (int i = 0; i < diagnostics.getCount(); ++i)
             {

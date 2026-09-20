@@ -51,9 +51,10 @@ public:
         other semantic information. The returned program is owned by the caller.
 
         @param program The parsed program to analyze. Ownership is transferred to the analyzer.
+        @param requireGraph If false, also accept libraries without a root graph.
         @return A unique pointer to the analyzed program, or nullptr if analysis failed.
     */
-    std::unique_ptr<YdspAnalyzedProgram> analyze (std::unique_ptr<YdspProgram> program);
+    std::unique_ptr<YdspAnalyzedProgram> analyze (std::unique_ptr<YdspProgram> program, bool requireGraph = true);
 
 private:
     //==============================================================================
@@ -129,6 +130,7 @@ private:
 
     void analyzeFunctionBodies (YdspAnalyzedProcessor& proc);
     void analyzeProgramFunctions (YdspProgram& program, std::vector<YdspAnalyzedFunc>& out);
+    void validateFunctionBodies (const std::vector<YdspAnalyzedFunc>& functions, YdspAnalyzedProcessor& proc);
     [[nodiscard]] bool resolveFunctionCall (const String& name, const std::vector<YdspExprPtr>& args, const std::vector<YdspValueType>& argTypes, const YdspLocation& location, YdspValueType& returnType);
 
     void detectRecursiveFunctions (const std::vector<YdspAnalyzedFunc>& functions);
@@ -152,6 +154,7 @@ private:
     bool isBlockMode = false;
     bool isInitMode = false;
     bool isEventHandlerMode = false;
+    bool validationOnly = false;
 
     const YdspEventShapeDesc* currentEventShape = nullptr;
 

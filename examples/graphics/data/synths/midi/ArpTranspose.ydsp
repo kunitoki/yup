@@ -8,8 +8,8 @@
   `arp` alone; `xpose` only ever sees arp's routed, arpeggiated notes.
 */
 
-import midi.Arp as arpLib;
-import midi.Transpose as xposeLib;
+import Arp as arpLib;
+import Transpose as xposeLib;
 
 declare name "Arp Transpose";
 declare description "midi.Arp's arpeggiated notes shifted up by midi.Transpose, with no audio anywhere in the patch.";

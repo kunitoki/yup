@@ -37,6 +37,7 @@ yup_dsp_compiler devices --json
 yup_dsp_compiler run Patch.ydsp-project --hotreload
 yup_dsp_compiler run Patch.ydsp-project --audio-type CoreAudio --audio-output "External Headphones" --audio-input none --midi-input "DEVICE-ID"
 yup_dsp_compiler run Patch.ydsp-project --midi-output "DEVICE-ID" --sample-rate 48000 --block-size 256
+yup_dsp_compiler run Patch.ydsp-project --verbose --test-note 60
 ```
 
 Copy audio type and device names from `devices`. For MIDI, prefer the identifier;
@@ -52,6 +53,23 @@ output channels. Multichannel patches require enough channels on the selected
 device. Other stream element types are rejected. The actual sample rate and
 buffer size are printed after opening the device; the device may negotiate
 values different from those requested.
+
+`--verbose` prints the selected audio backend, connected audio channels, MIDI
+names and identifiers, and patch stream counts. It also prints cumulative audio
+callback and MIDI counters, the maximum output peak since startup, and non-finite
+sample counts approximately once per second. If callback counts stay at zero,
+the audio device is not delivering callbacks. If note counts stay at zero while
+playing a keyboard, check the MIDI selection. A nonzero peak with no audible
+sound points to the output routing or device volume.
+
+Use `--test-note 60` to send middle C on MIDI channel 1 for two seconds without
+a MIDI controller. This requires a patch event input. Synth patches normally
+remain silent until they receive notes.
+
+Startup and runtime errors print to stderr even without `--verbose`. Runtime
+messages distinguish device stops, format/layout changes, and graph processing
+errors, preserving device error text (up to 511 UTF-8 bytes). Callback errors are
+captured in bounded storage; console printing happens on the control thread.
 
 MIDI input is applied at the next block boundary. MIDI output is drained on the
 control thread approximately every 5 ms, without preserving sample offsets.
@@ -94,7 +112,9 @@ For a source document, the server searches its directory and parents for a
 manifest that lists it. If multiple manifests list a file, open the intended
 manifest to validate that project explicitly; diagnostics for a shared source
 can be contributed by multiple open projects. Open manifests are validated even
-when they contain errors. Standalone sources continue to compile independently.
+when they contain errors. Standalone processor and function libraries receive
+semantic validation without requiring a graph or generating executable code.
+Bundle compilation and playback still require an executable entry point.
 
 Library clients can supply unsaved file contents using
 `YdspCompileOptions::sourceOverrides`, keyed by absolute paths.

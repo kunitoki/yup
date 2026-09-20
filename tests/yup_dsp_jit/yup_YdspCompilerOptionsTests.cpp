@@ -163,3 +163,54 @@ TEST (YdspCompilerOptionsTests, ScalarFloat32ExpInlinePathIsUsedUnderFastMathOnA
     EXPECT_TRUE (fastListing.contains ("fmadd")) << "the inline Estrin exp must be present under fastMath";
 #endif
 }
+
+TEST (YdspCompilerOptionsTests, ValidationAcceptsLibrariesWithoutAnExecutableGraph)
+{
+    for (const auto* source : {
+             "func twice (x: float) : float { return x * 2.0; }",
+             "processor Gain { input stream in; output stream out; process { out = in * 2.0; } }",
+             "let scale = 2; func twice (x: float) : float { return x * float (scale); }" })
+    {
+        SCOPED_TRACE (source);
+        YdspCompiler compiler;
+        EXPECT_TRUE (compiler.validate (source).wasOk()) << compiler.getDiagnostics().toString();
+        EXPECT_FALSE (compiler.getDiagnostics().hasErrors());
+        EXPECT_FALSE (compiler.compile (source).wasOk());
+        EXPECT_TRUE (compiler.getDiagnostics().toString().contains ("at least one graph"));
+    }
+}
+
+TEST (YdspCompilerOptionsTests, ValidationStillChecksProcessorAndLibraryBodies)
+{
+    for (const auto* source : {
+             "func twice (x: float) : float { return missing; }",
+             "func twice (x: float) : float { if (x > 0.0) { return missing; } return x; }",
+             "func twice (x: float) : float { let value = missing; return value; }",
+             "processor Gain { output stream out; func unused (x: float) : float { return missing; } process { out = 0.0; } }",
+             "processor Gain { output stream out; process { out = missing; } }" })
+    {
+        SCOPED_TRACE (source);
+        YdspCompiler compiler;
+        ASSERT_FALSE (compiler.validate (source).wasOk());
+        ASSERT_TRUE (compiler.getDiagnostics().hasErrors());
+        EXPECT_TRUE (compiler.getDiagnostics().toString().contains ("missing"));
+        EXPECT_FALSE (compiler.getDiagnostics().toString().contains ("at least one graph"));
+        EXPECT_GT (compiler.getDiagnostics().getItem (0).range.startColumn, 0);
+    }
+}
+
+TEST (YdspCompilerOptionsTests, ValidationScopesFunctionParametersAndLocals)
+{
+    const auto* source = R"(
+        func twice (x: float) : float { let value = x * 2.0; return value; }
+        func half (x: float) : float { let value = x * 0.5; return twice (value); }
+        processor Gain {
+            output stream out;
+            state float x = 1.0;
+            func local (x: float) : float { let value = half (x); return value; }
+            process { let value = x; out = local (value); }
+        }
+    )";
+    YdspCompiler compiler;
+    EXPECT_TRUE (compiler.validate (source).wasOk()) << compiler.getDiagnostics().toString();
+}

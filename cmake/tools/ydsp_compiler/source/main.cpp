@@ -32,7 +32,7 @@ static void printHelp()
               << "yup_dsp_compiler run <input.ydsp|input.ydsp-project> [--main NAME] [--hotreload]\n"
               << "  [--audio-type TYPE] [--audio-input NAME|none] [--audio-output NAME]\n"
               << "  [--midi-input ID|NAME|none] [--midi-output ID|NAME|none]\n"
-              << "  [--sample-rate HZ] [--block-size SAMPLES]\n"
+              << "  [--sample-rate HZ] [--block-size SAMPLES] [--verbose] [--test-note 0..127]\n"
               << "yup_dsp_compiler --lsp\n";
 }
 

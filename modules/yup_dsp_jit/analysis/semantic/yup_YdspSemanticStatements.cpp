@@ -36,6 +36,13 @@ void YdspSemanticAnalyzer::analyzeStatement (const YdspStmt& stmt, YdspAnalyzedP
 
     switch (stmt.kind)
     {
+        case YdspStmtKind::returnStmt:
+        {
+            if (validationOnly && stmt.returnExpr != nullptr)
+                analyzeExpr (*stmt.returnExpr, proc);
+            break;
+        }
+
         case YdspStmtKind::block:
         {
             pushLocalScope();

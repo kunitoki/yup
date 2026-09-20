@@ -621,6 +621,12 @@ ResultValue<YdspAudioGraph> YdspCompiler::compile (StringRef source, const YdspC
     return compileInternal (source, options, importBasePath, threadPool, nullptr, nullptr, nullptr);
 }
 
+Result YdspCompiler::validate (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool)
+{
+    const auto result = compileInternal (source, options, importBasePath, threadPool, nullptr, nullptr, nullptr, nullptr, {}, true);
+    return result.wasOk() ? Result::ok() : Result::fail (pimpl->diagnostics.hasErrors() ? pimpl->diagnostics.toString() : result.getErrorMessage());
+}
+
 ResultValue<YdspBundle> YdspCompiler::compileProjectBundle (const File& projectFile, const YdspBundleCompileOptions& options, StringRef mainOverride, ThreadPool* threadPool)
 {
     pimpl->diagnostics = YdspDiagnostics();
@@ -664,7 +670,7 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileProject (const File& projectFil
     return result;
 }
 
-ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project, StringRef mainOverride)
+ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, const YdspCompileOptions& options, StringRef importBasePath, ThreadPool* threadPool, YdspBundle* bundleOutput, const YdspBundle* bundleInput, const YdspBundleCompileOptions* bundleOptions, const YdspProject* project, StringRef mainOverride, bool validationOnly)
 {
     pimpl->diagnostics = YdspDiagnostics();
     pimpl->optimizationReport = YdspOptimizationReport {};
@@ -1176,9 +1182,12 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
 
     // 3. Analyze
     YdspSemanticAnalyzer analyzer (diagnostics);
-    auto analyzed = analyzer.analyze (std::move (program));
+    auto analyzed = analyzer.analyze (std::move (program), ! validationOnly);
     if (analyzed == nullptr || diagnostics.hasErrors())
         return ResultValue<YdspAudioGraph>::fail (diagnostics.getItem (0).message);
+
+    if (validationOnly)
+        return makeResultValueOk (YdspAudioGraph());
 
     // 4. Build + optimise IR
     YdspOptimizer optimizer (diagnostics);

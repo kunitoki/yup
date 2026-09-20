@@ -355,3 +355,17 @@ TEST_F (YdspProjectTests, ProjectBundlesRequireTheirEntryPointChunkAndVersion)
     data[24] = 'X';
     EXPECT_FALSE (YdspBundle::loadFromMemoryBlock (bytes).wasOk());
 }
+
+TEST_F (YdspProjectTests, LibraryValidationResolvesImportsWithoutChoosingAnImportedGraph)
+{
+    write ("lib/Math.ydsp", "func twice (x: float) : float { return x * 2.0; }");
+    write ("lib/Graph.ydsp", "processor P { output stream out; process { out = 0.0; } } graph G { output stream out; node p = P; connection { p.out -> out; } }");
+    const auto source = String ("import lib.Math as math; import lib.Graph as graphs; processor Gain { input stream in; output stream out; process { out = math.twice (in); } }");
+    YdspCompiler compiler;
+    const auto path = directory.getChildFile ("Library.ydsp").getFullPathName();
+    EXPECT_TRUE (compiler.validate (source, {}, path).wasOk()) << compiler.getDiagnostics().toString();
+    YdspCompileOptions options;
+    options.sourceOverrides[directory.getChildFile ("lib/Math.ydsp").getFullPathName()] = "func twice (x: float) : float { return missing; }";
+    EXPECT_FALSE (compiler.validate (source, options, path).wasOk());
+    EXPECT_TRUE (compiler.getDiagnostics().toString().contains ("Math.ydsp:"));
+}

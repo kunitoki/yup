@@ -556,14 +556,16 @@ bool YdspSemanticAnalyzer::resolveLoopBound (const YdspExpr& expr, YdspLoopBound
 
 //==============================================================================
 
-std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_ptr<YdspProgram> program)
+std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_ptr<YdspProgram> program, bool requireGraph)
 {
     jassert (program != nullptr);
+
+    validationOnly = ! requireGraph;
 
     auto analyzed = std::make_unique<YdspAnalyzedProgram>();
     analyzed->ast = std::move (program);
 
-    if (analyzed->ast->graphs.empty())
+    if (requireGraph && analyzed->ast->graphs.empty())
     {
         diagnostics.addError ({}, "The program must define at least one graph");
         return nullptr;
@@ -602,6 +604,10 @@ std::unique_ptr<YdspAnalyzedProgram> YdspSemanticAnalyzer::analyze (std::unique_
 
     if (diagnostics.hasErrors())
         return nullptr;
+
+    if (! requireGraph && std::none_of (analyzed->ast->graphs.begin(), analyzed->ast->graphs.end(),
+                                        [] (const auto& graph) { return ! graph.isImported; }))
+        return analyzed;
 
     const int mainIndex = selectMainGraph (*analyzed->ast);
 

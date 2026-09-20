@@ -127,6 +127,9 @@ void YdspSemanticAnalyzer::analyzeFunctionBodies (YdspAnalyzedProcessor& proc)
     }
 
     detectRecursiveFunctions (proc.functions);
+
+    if (validationOnly)
+        validateFunctionBodies (proc.functions, proc);
 }
 
 //==============================================================================
@@ -154,6 +157,45 @@ void YdspSemanticAnalyzer::analyzeProgramFunctions (YdspProgram& program, std::v
     }
 
     detectRecursiveFunctions (out);
+
+    if (validationOnly)
+    {
+        YdspAnalyzedProcessor context;
+        for (const auto& [name, type] : builtinConstants)
+        {
+            YdspSymbolInfo info;
+            info.kind = YdspSymbolKind::builtinConstant;
+            info.type = type;
+            symbols[name] = info;
+        }
+        validateFunctionBodies (out, context);
+        symbols.clear();
+    }
+}
+
+//==============================================================================
+
+void YdspSemanticAnalyzer::validateFunctionBodies (const std::vector<YdspAnalyzedFunc>& functions, YdspAnalyzedProcessor& proc)
+{
+    for (const auto& function : functions)
+    {
+        const auto savedSymbols = symbols;
+        pushLocalScope();
+        for (const auto& [name, type] : function.decl->params)
+        {
+            // Function arguments shadow the caller's processor symbols.
+            if (std::find (localScopes.back().begin(), localScopes.back().end(), name) == localScopes.back().end())
+                symbols.erase (name);
+            YdspSymbolInfo info;
+            info.kind = YdspSymbolKind::local;
+            info.type = toValueType (type);
+            addSymbol (name, info, function.decl->location);
+        }
+        for (const auto& statement : function.decl->body)
+            analyzeStatement (*statement, proc);
+        popLocalScope();
+        symbols = savedSymbols;
+    }
 }
 
 //==============================================================================
