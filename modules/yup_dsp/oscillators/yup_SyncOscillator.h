@@ -30,8 +30,9 @@ namespace yup
 
     Owns a follower FourierSeries, the synced series the spectral resampler
     produces from it, and both synthesis backends, so a voice only has to set a
-    frequency, a follower ratio and a sync mode. The output never aliases,
-    because the series being synthesized only ever holds harmonics below Nyquist.
+    frequency, a follower ratio and a sync mode. Stationary additive output is
+    bandlimited. Parameter modulation and wavetable interpolation can introduce
+    additional spectral components.
 
     ```
     yup::SyncOscillator<double> osc;
@@ -44,7 +45,7 @@ namespace yup
     osc.processBlock (buffer, numSamples);
     ```
 
-    Pitch changes are phase-continuous and need no update(); changing the
+    Pitch changes are phase-continuous; call update() to refresh bandwidth. Changing the
     synchronization parameters marks the oscillator dirty and needs one update()
     before the change is heard. update() runs the O (N^2) spectral transform plus,
     for the wavetable backend, one inverse FFT, so it belongs in the block loop,
@@ -119,7 +120,10 @@ public:
     }
 
     //==============================================================================
-    /** Selects the synthesis backend, keeping the phase continuous. */
+    /** Selects the synthesis backend, keeping the phase continuous.
+
+        Call update() before processing to refresh a previously inactive wavetable.
+    */
     void setSynthesis (Synthesis newSynthesis) noexcept
     {
         if (synthesis == newSynthesis)
@@ -140,8 +144,8 @@ public:
         Sets the leader (note) pitch in Hz.
 
         The follower's pitch follows immediately as
-        frequency * getFundamentalScale (syncMode), which needs no update() because
-        both backends are phase-continuous in frequency.
+        frequency * getFundamentalScale (syncMode). Both backends are phase
+        continuous; call update() to restore harmonics when lowering the pitch.
     */
     void setFrequency (CoeffType leaderHz) noexcept
     {
@@ -271,7 +275,9 @@ public:
     /** Returns true when update() would change the output. */
     bool needsUpdate() const noexcept
     {
-        return dirty || wavetable.needsRender();
+        return dirty
+            || (syncMode != SyncMode::none && getOutputHarmonicLimit() > computedHarmonics)
+            || (synthesis == Synthesis::wavetable && wavetable.needsRender());
     }
 
     /**
@@ -284,22 +290,20 @@ public:
     */
     void update() noexcept
     {
-        if (dirty)
+        if (dirty || (syncMode != SyncMode::none && getOutputHarmonicLimit() > computedHarmonics))
         {
-            const auto numOutputHarmonics = jmin (maxHarmonics,
-                                                  SyncSpectralResampler<CoeffType>::getRecommendedOutputHarmonics (follower.getNumHarmonics(),
-                                                                                                                   followerRatio,
-                                                                                                                   syncMode));
+            const auto numOutputHarmonics = getOutputHarmonicLimit();
 
             resampler.transform (follower, followerRatio, syncMode, synced, numOutputHarmonics);
 
             additive.setSeries (synced);
             wavetable.setSeries (synced);
+            computedHarmonics = numOutputHarmonics;
 
             dirty = false;
         }
 
-        if (wavetable.needsRender())
+        if (synthesis == Synthesis::wavetable && wavetable.needsRender())
             wavetable.render();
     }
 
@@ -326,6 +330,11 @@ public:
     //==============================================================================
 private:
     //==============================================================================
+    int getOutputHarmonicLimit() const noexcept
+    {
+        return getNyquistHarmonicLimit (getOutputFrequency(), sampleRate, maxHarmonics);
+    }
+
     SyncSpectralResampler<CoeffType> resampler;
     AdditiveOscillator<SampleType, CoeffType> additive;
     WavetableOscillator<SampleType, CoeffType> wavetable;
@@ -337,6 +346,7 @@ private:
     SyncMode syncMode = SyncMode::none;
     Synthesis synthesis = Synthesis::wavetable;
     int maxHarmonics = 128;
+    int computedHarmonics = 0;
     bool includeDC = false;
     bool dirty = true;
 };

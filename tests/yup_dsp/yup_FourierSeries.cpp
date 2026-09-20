@@ -266,6 +266,13 @@ class NyquistHarmonicLimitTests : public ::testing::Test
 {
 };
 
+TEST_F (NyquistHarmonicLimitTests, ExcludesTheExactNyquistBoundaryAtCapacity)
+{
+    EXPECT_EQ (0, getNyquistHarmonicLimit (24000.0, 48000.0, 1));
+    EXPECT_EQ (7, getNyquistHarmonicLimit (3000.0, 48000.0, 8));
+    EXPECT_EQ (8, getNyquistHarmonicLimit (2999.0, 48000.0, 8));
+}
+
 TEST_F (NyquistHarmonicLimitTests, FollowsSampleRateAndFrequency)
 {
     EXPECT_EQ (2, getNyquistHarmonicLimit (10000.0, 48000.0, 512));

@@ -37,9 +37,10 @@ namespace yup
     Synthesis is band-unlimited on purpose - the caller decides how many harmonics
     the series holds - and each sample costs a phase increment plus one multiply
     accumulate per active harmonic, evaluated laneCount harmonics at a time in
-    SIMDRegister lanes. Two transcendental calls per sample are needed to rotate
-    the harmonic phasors, and no per-harmonic state is kept, so there is no
-    long-term drift.
+    SIMDRegister lanes. The fundamental phasor advances by recurrence and is
+    reseeded every 64 samples and after phase changes to bound drift. Its rotation
+    is recalculated only when the frequency or sample rate changes. No persistent
+    per-harmonic state is kept.
 
     @tparam SampleType  Type for the synthesized samples (float or double).
     @tparam CoeffType   Type for the coefficients and phase math (default double).
@@ -75,6 +76,8 @@ public:
 
         this->sampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
         series.resize (maxHarmonics);
+        updateActiveHarmonics();
+        updatePhaseRotation();
 
         reset();
     }
@@ -83,6 +86,7 @@ public:
     void reset() noexcept
     {
         phase = 0.0;
+        samplesUntilReseed = 0;
     }
 
     //==============================================================================
@@ -95,6 +99,7 @@ public:
         {
             frequency = sanitized;
             updateActiveHarmonics();
+            updatePhaseRotation();
         }
     }
 
@@ -105,6 +110,7 @@ public:
     void setPhase (CoeffType newPhase) noexcept
     {
         phase = static_cast<double> (newPhase - std::floor (newPhase));
+        samplesUntilReseed = 0;
     }
 
     /** Returns the phase, normalized to one period. */
@@ -144,10 +150,24 @@ public:
     /** Synthesizes one sample. */
     SampleType processSample() noexcept
     {
-        const auto value = activeHarmonics > 0 ? synthesizeSample() : CoeffType (0);
+        if (samplesUntilReseed == 0)
+        {
+            const auto angle = MathConstants<double>::twoPi * phase;
+            fundamentalCosine = std::cos (angle);
+            fundamentalSine = std::sin (angle);
+            samplesUntilReseed = 64;
+        }
+
+        const auto value = activeHarmonics > 0 ? synthesizeSample()
+                                             : (includeDC ? series.getDC() : CoeffType (0));
 
         phase += static_cast<double> (frequency) / sampleRate;
         phase -= std::floor (phase);
+
+        const auto nextCosine = fundamentalCosine * rotationCosine - fundamentalSine * rotationSine;
+        fundamentalSine = fundamentalSine * rotationCosine + fundamentalCosine * rotationSine;
+        fundamentalCosine = nextCosine;
+        --samplesUntilReseed;
 
         return static_cast<SampleType> (value);
     }
@@ -169,11 +189,17 @@ private:
         activeHarmonics = getNyquistHarmonicLimit (frequency, sampleRate, series.getNumHarmonics());
     }
 
+    void updatePhaseRotation() noexcept
+    {
+        const auto angle = MathConstants<double>::twoPi * static_cast<double> (frequency) / sampleRate;
+        rotationCosine = std::cos (angle);
+        rotationSine = std::sin (angle);
+    }
+
     CoeffType synthesizeSample() noexcept
     {
-        const auto theta = MathConstants<CoeffType>::twoPi * static_cast<CoeffType> (phase);
-        const auto stepCosine = std::cos (theta);
-        const auto stepSine = std::sin (theta);
+        const auto stepCosine = static_cast<CoeffType> (fundamentalCosine);
+        const auto stepSine = static_cast<CoeffType> (fundamentalSine);
 
         CoeffType laneCosine[laneCount] = {};
         CoeffType laneSine[laneCount] = {};
@@ -245,8 +271,13 @@ private:
     FourierSeries<CoeffType> series;
     double sampleRate = 44100.0;
     double phase = 0.0;
+    double fundamentalCosine = 1.0;
+    double fundamentalSine = 0.0;
+    double rotationCosine = 1.0;
+    double rotationSine = 0.0;
     CoeffType frequency = static_cast<CoeffType> (440);
     int activeHarmonics = 0;
+    int samplesUntilReseed = 0;
     bool includeDC = false;
 };
 

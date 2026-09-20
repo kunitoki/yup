@@ -287,3 +287,45 @@ TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
 }
 
 } // namespace yup::test
+
+namespace yup::test
+{
+
+TEST_F (OversamplerTest, DirectGenerationPreservesDCWithoutInputInterpolation)
+{
+    ASSERT_TRUE (os4x.beginGeneration (1, blockSize));
+    FloatVectorOperations::fill (os4x.getOversampledChannelData (0), 0.25f, blockSize * 4);
+    std::vector<float> output (blockSize);
+    float* channels[] = { output.data() };
+    os4x.downsample (channels, 1, blockSize);
+
+    EXPECT_EQ (8, os4x.getGenerationLatencyInSamples());
+    EXPECT_EQ (0, os4x.getOversampledNumSamples());
+    for (int i = 32; i < blockSize; ++i)
+        EXPECT_NEAR (0.25f, output[static_cast<std::size_t> (i)], 1e-6f);
+}
+
+TEST_F (OversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
+{
+    ASSERT_TRUE (os4x.beginGeneration (1, 16));
+    EXPECT_FALSE (os4x.beginGeneration (0, 16));
+    EXPECT_FALSE (os4x.beginGeneration (1, 0));
+    EXPECT_FALSE (os4x.beginGeneration (maxChannels + 1, 16));
+    EXPECT_FALSE (os4x.beginGeneration (1, blockSize + 1));
+    EXPECT_EQ (64, os4x.getOversampledNumSamples());
+}
+
+TEST_F (OversamplerTest, DirectGenerationImpulseHasTheReportedLatency)
+{
+    ASSERT_TRUE (os4x.beginGeneration (1, blockSize));
+    auto* internal = os4x.getOversampledChannelData (0);
+    FloatVectorOperations::clear (internal, blockSize * 4);
+    internal[0] = 1.0f;
+    std::vector<float> output (blockSize);
+    float* channels[] = { output.data() };
+    os4x.downsample (channels, 1, blockSize);
+    const auto peak = std::max_element (output.begin(), output.end());
+    EXPECT_EQ (os4x.getGenerationLatencyInSamples(), static_cast<int> (peak - output.begin()));
+}
+
+} // namespace yup::test

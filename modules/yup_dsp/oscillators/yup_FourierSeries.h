@@ -66,7 +66,7 @@ int getNyquistHarmonicLimit (FloatType frequency, double sampleRate, int maxHarm
 
     const auto limit = sampleRate / (2.0 * fundamental);
 
-    if (limit >= static_cast<double> (maxHarmonics))
+    if (limit > static_cast<double> (maxHarmonics))
         return maxHarmonics;
 
     return jlimit (0, maxHarmonics, static_cast<int> (std::ceil (limit)) - 1);

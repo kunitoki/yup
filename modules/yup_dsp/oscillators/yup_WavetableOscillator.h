@@ -198,8 +198,12 @@ public:
         with half the coefficients, which makes the result the series itself: the
         complex bin n of a signal a cos (2 pi n t) + b sin (2 pi n t) is a / 2 for
         the real part and -b / 2 for the imaginary one.
+
+        @param crossfade  When false, installs the table immediately. This is useful
+                          for preparing tables before playback. Replacing an audible
+                          table immediately may click.
     */
-    void render() noexcept
+    void render (bool crossfade = true) noexcept
     {
         if (fft == nullptr || tableSize <= 0)
             return;
@@ -240,6 +244,34 @@ public:
         renderedHarmonics = limit;
         seriesChanged = false;
         crossfadePosition = CoeffType (0);
+
+        if (! crossfade)
+        {
+            std::swap (current, next);
+            crossfadePosition = CoeffType (1);
+        }
+    }
+
+    /** Reads the rendered waveform at a phase in periods without advancing state.
+
+        Includes the current render crossfade. Negative phases wrap periodically.
+        For externally driven phases, the caller is responsible for bandwidth;
+        phase modulation can create frequencies beyond the rendered harmonics.
+    */
+    SampleType getValueAtPhase (double normalizedPhase) const noexcept
+    {
+        return readAtPhase (normalizedPhase, false);
+    }
+
+    /** Returns the derivative of the interpolated waveform per phase period.
+
+        Includes the current render crossfade without advancing it. This is the
+        analytic derivative of the Hermite interpolant, useful for calculating
+        slope jumps at fractional sync events.
+    */
+    SampleType getSlopeAtPhase (double normalizedPhase) const noexcept
+    {
+        return readAtPhase (normalizedPhase, true);
     }
 
     //==============================================================================
@@ -261,11 +293,11 @@ public:
     */
     SampleType processSample() noexcept
     {
-        auto value = readTable (current);
+        auto value = readTable (current, phase, false);
 
         if (crossfadePosition < CoeffType (1))
         {
-            const auto target = readTable (next);
+            const auto target = readTable (next, phase, false);
 
             value += (target - value) * static_cast<SampleType> (crossfadePosition);
 
@@ -298,9 +330,23 @@ public:
 
 private:
     //==============================================================================
-    SampleType readTable (const std::vector<SampleType>& table) const noexcept
+    SampleType readAtPhase (double normalizedPhase, bool derivative) const noexcept
     {
-        const auto position = phase * static_cast<double> (tableSize);
+        if (tableSize <= 0 || ! std::isfinite (normalizedPhase))
+            return SampleType (0);
+
+        normalizedPhase -= std::floor (normalizedPhase);
+        auto value = readTable (current, normalizedPhase, derivative);
+
+        if (crossfadePosition < CoeffType (1))
+            value += (readTable (next, normalizedPhase, derivative) - value) * static_cast<SampleType> (crossfadePosition);
+
+        return value;
+    }
+
+    SampleType readTable (const std::vector<SampleType>& table, double normalizedPhase, bool derivative) const noexcept
+    {
+        const auto position = normalizedPhase * static_cast<double> (tableSize);
         const auto index = static_cast<int> (position) & tableMask;
         const auto fraction = static_cast<CoeffType> (position - std::floor (position));
 
@@ -313,6 +359,9 @@ private:
         const auto c1 = static_cast<CoeffType> (0.5) * (y2 - y0);
         const auto c2 = y0 - static_cast<CoeffType> (2.5) * y1 + static_cast<CoeffType> (2) * y2 - static_cast<CoeffType> (0.5) * y3;
         const auto c3 = static_cast<CoeffType> (0.5) * (y3 - y0) + static_cast<CoeffType> (1.5) * (y1 - y2);
+
+        if (derivative)
+            return static_cast<SampleType> ((CoeffType (3) * c3 * fraction * fraction + CoeffType (2) * c2 * fraction + c1) * static_cast<CoeffType> (tableSize));
 
         return static_cast<SampleType> (((c3 * fraction + c2) * fraction + c1) * fraction + c0);
     }

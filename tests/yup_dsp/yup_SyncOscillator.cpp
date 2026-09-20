@@ -236,6 +236,27 @@ TEST_F (SyncOscillatorTests, FollowerFrequencySetsTheRatio)
     EXPECT_NEAR (880.0, oscillator.getOutputFrequency(), 1e-12);
 }
 
+TEST_F (SyncOscillatorTests, LowerPitchRestoresPreviouslyOmittedHarmonics)
+{
+    SyncOscillator<double> oscillator;
+    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
+    oscillator.prepare (testSampleRate, 64);
+    oscillator.setFollowerSeries (FourierSeries<double>::create (Waveform::sine, 1));
+    oscillator.setSyncMode (SyncMode::hard);
+    oscillator.setFollowerRatio (1.375);
+    oscillator.setFrequency (10000.0);
+    oscillator.update();
+
+    EXPECT_EQ (0.0, oscillator.getSyncedSeries().getMagnitude (8));
+    EXPECT_FALSE (oscillator.needsUpdate());
+
+    oscillator.setFrequency (440.0);
+    EXPECT_TRUE (oscillator.needsUpdate());
+    oscillator.update();
+    EXPECT_GT (oscillator.getSyncedSeries().getMagnitude (8), 1e-3);
+    EXPECT_FALSE (oscillator.needsUpdate());
+}
+
 TEST_F (SyncOscillatorTests, NoneModePlaysTheFollowerAtTheLeaderPitch)
 {
     SyncOscillator<double> oscillator;

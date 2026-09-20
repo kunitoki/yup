@@ -215,6 +215,37 @@ public:
         }
     }
 
+    /** Starts a block generated directly at the oversampled rate.
+
+        Call after prepare(), fill every sample obtained through
+        getOversampledChannelData(), then call downsample(). No input upsampling
+        is performed and no memory is allocated. Returns false for nonpositive
+        sizes or sizes exceeding the prepared channel/block capacity; a pending
+        block is left unchanged on failure. The buffer contents are unspecified.
+
+        @param numChannels  Number of generated channels.
+        @param numSamples   Number of samples per channel at the output rate.
+        @see getGenerationLatencyInSamples
+    */
+    bool beginGeneration (int numChannels, int numSamples) noexcept
+    {
+        if (numChannels <= 0 || numSamples <= 0
+            || numChannels > xInterp.getNumChannels()
+            || numSamples > xInterp.getNumSamples() - SincRadius)
+            return false;
+
+        currentOversampledSize = numSamples * OversampleFactor;
+        currentNumChannels = numChannels;
+        oversampledBuffer.setSize (numChannels, currentOversampledSize, false, false, true);
+        return true;
+    }
+
+    /** Returns the latency of generation followed by downsample(), in output samples.
+
+        Unlike getLatencyInSamples(), this excludes the input interpolation stage.
+    */
+    static constexpr int getGenerationLatencyInSamples() noexcept { return SincRadius; }
+
     /**
         Downsample the internal oversampled buffer into an output block.
 
@@ -224,9 +255,9 @@ public:
 
         @param output      Array of write pointers, one per channel.
         @param numChannels Number of channels to write (must match the numChannels
-                           passed to the preceding upsample() call).
+                           passed to the preceding upsample() or beginGeneration() call).
         @param numSamples  Number of output samples per channel (must match the numSamples
-                           passed to the preceding upsample() call).
+                           passed to the preceding upsample() or beginGeneration() call).
     */
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
@@ -293,7 +324,8 @@ public:
         Invokes a callback with the internal oversampled multi-channel buffer.
 
         The callback receives a reference to the internal `AudioBuffer<SampleType>`.
-        The buffer has the same channel count as the most recent upsample() call,
+        The buffer has the channel count of the most recent upsample() or
+        beginGeneration() call,
         and getOversampledNumSamples() samples per channel. Use this to apply
         processing at the elevated sample rate. If there is no pending
         oversampled block, the callback receives an empty buffer.
@@ -321,7 +353,7 @@ public:
         @return         Pointer to getOversampledNumSamples() contiguous samples,
                         or nullptr if the channel index is out of range, prepare()
                         has not been called, or the channel was not processed by
-                        the most recent upsample() call.
+                        the most recent upsample() or beginGeneration() call.
     */
     forcedinline SampleType* getOversampledChannelData (int channel) noexcept
     {
@@ -338,7 +370,7 @@ public:
         @return         Pointer to getOversampledNumSamples() contiguous samples,
                         or nullptr if the channel index is out of range or the
                         channel was not processed by the most recent upsample()
-                        call.
+                        or beginGeneration() call.
     */
     const forcedinline SampleType* getOversampledChannelData (int channel) const noexcept
     {
@@ -351,9 +383,9 @@ public:
     /**
         Returns the number of samples currently in each oversampled channel.
 
-        Equal to the numSamples argument of the most recent pending upsample()
-        call multiplied by OversampleFactor. Returns 0 before the first
-        upsample() call, after downsample(), or after reset().
+        Equal to the numSamples argument of the pending upsample() or
+        beginGeneration() call multiplied by OversampleFactor. Returns 0 before
+        either call, after downsample(), or after reset().
     */
     forcedinline int getOversampledNumSamples() const noexcept
     {

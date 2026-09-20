@@ -146,6 +146,8 @@
 #include "oscillators/yup_AdditiveOscillator.h"
 #include "oscillators/yup_WavetableOscillator.h"
 #include "oscillators/yup_SyncOscillator.h"
+#include "oscillators/yup_WaveformBank.h"
+#include "oscillators/yup_MorphingOscillator.h"
 
 // Onset detection
 #include "onsets/yup_FilterBank.h"
@@ -213,3 +215,6 @@
 #include "resampling/yup_SincTable.h"
 #include "resampling/yup_Oversampler.h"
 #include "resampling/yup_Resampler.h"
+
+// Audio-rate oscillator modulation (needs Oversampler)
+#include "oscillators/yup_ModulatedOscillator.h"

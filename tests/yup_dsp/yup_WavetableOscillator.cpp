@@ -219,3 +219,15 @@ TEST_F (WavetableOscillatorTests, SilenceWithoutRenderedHarmonics)
     EXPECT_EQ (0, oscillator.getNumRenderedHarmonics());
     EXPECT_EQ (0.0, peakMagnitude (oscillator, 64));
 }
+
+TEST_F (WavetableOscillatorTests, DirectPhaseReadsAndDerivativesDoNotAdvancePlayback)
+{
+    WavetableOscillator<double> oscillator;
+    oscillator.prepare (testSampleRate, 16);
+    oscillator.setWaveform (Waveform::sine);
+    oscillator.render (false);
+
+    EXPECT_NEAR (1.0, oscillator.getValueAtPhase (-0.75), 1e-6);
+    EXPECT_NEAR (MathConstants<double>::twoPi, oscillator.getSlopeAtPhase (0.0), 0.005);
+    EXPECT_EQ (0.0, oscillator.getPhase());
+}

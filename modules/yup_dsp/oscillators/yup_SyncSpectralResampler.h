@@ -56,9 +56,9 @@ enum class SyncMode
 
     Both the follower and the output are FourierSeries objects, so the caller
     controls the follower bandwidth and how many output harmonics are wanted
-    (Remark 6 of the paper allows N_out != N_in). The transform cannot create
-    harmonics that the follower does not have: bandlimiting the follower to N
-    harmonics caps the spectrum of the synchronized waveform at N * P (Remark 13).
+    (Remark 6 of the paper allows N_out != N_in). Synchronization can create an
+    infinite output harmonic tail even from a finite follower series. Output
+    bandwidth must therefore be chosen independently of the follower bandwidth.
 
     The transform costs O (N_in * N_out) multiply-accumulates with O (N_in)
     transcendental calls, using FloatVectorOperations and, where helpful,
@@ -103,6 +103,7 @@ public:
         triggerCosine.assign (count, CoeffType (0));
         inverseArgument.assign (count, CoeffType (0));
         weight.assign (count, CoeffType (0));
+        nonResonant.assign (count, CoeffType (1));
 
         resonantIndices.reserve (count);
         resonantHarmonics.reserve (count);
@@ -186,13 +187,15 @@ public:
                                           : static_cast<CoeffType> (-0.5);
     }
 
-    /** Returns how many output harmonics are needed to keep the follower's bandwidth.
+    /** Returns a heuristic output harmonic count based on the follower bandwidth.
 
         The follower's top harmonic sits at N * P times the leader frequency, and
         the output fundamental is the leader frequency scaled by
         getFundamentalScale(), hence ceil (N * P / scale). The caller is expected
         to clamp the result to its own harmonic budget, in which case the upper
-        harmonics of the follower are truncated.
+        harmonics of the follower are truncated. This is not a bound on the
+        synchronized spectrum: reset discontinuities can produce harmonics beyond
+        this count. For full output bandwidth, use the Nyquist harmonic limit.
     */
     static int getRecommendedOutputHarmonics (int numFollowerHarmonics, CoeffType periodRatio, SyncMode mode) noexcept
     {
@@ -219,6 +222,7 @@ private:
 
         resonantIndices.clear();
         resonantHarmonics.clear();
+        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
 
         for (int k = 1; k <= numFollower; ++k)
         {
@@ -235,6 +239,7 @@ private:
 
             if (std::abs (argument - rounded) < getResonanceEpsilon())
             {
+                nonResonant[index] = CoeffType (0);
                 resonantIndices.push_back (static_cast<int> (index));
                 resonantHarmonics.push_back (static_cast<int> (rounded));
             }
@@ -249,17 +254,12 @@ private:
         {
             const auto nSquared = static_cast<CoeffType> (n) * static_cast<CoeffType> (n);
 
-            FloatVectorOperations::fill (weight.data(), nSquared, numFollower);
-            FloatVectorOperations::subtract (weight.data(), argumentSquared.data(), numFollower);
-            FloatVectorOperations::copyWithDividend (weight.data(), weight.data(), CoeffType (1), numFollower);
-
-            for (int i = 0; i < numResonant; ++i)
-                weight[static_cast<std::size_t> (resonantIndices[static_cast<std::size_t> (i)])] = CoeffType (0);
+            const auto sums = accumulateWeights (nSquared, numFollower);
 
             const auto sign = (n % 2 == 0) ? static_cast<CoeffType> (-1) : static_cast<CoeffType> (1);
 
-            auto a = sign * (CoeffType (2) / pi) * FloatVectorOperations::dotProduct (firstWeight.data(), weight.data(), numFollower);
-            auto b = sign * (CoeffType (2 * n) / pi) * FloatVectorOperations::dotProduct (secondWeight.data(), weight.data(), numFollower);
+            auto a = sign * (CoeffType (2) / pi) * sums[0];
+            auto b = sign * (CoeffType (2 * n) / pi) * sums[1];
 
             for (int i = 0; i < numResonant; ++i)
             {
@@ -284,6 +284,7 @@ private:
 
         resonantIndices.clear();
         resonantHarmonics.clear();
+        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
 
         for (int k = 1; k <= numFollower; ++k)
         {
@@ -301,6 +302,7 @@ private:
 
             if (std::abs (argument - rounded) < getResonanceEpsilon())
             {
+                nonResonant[index] = CoeffType (0);
                 resonantIndices.push_back (static_cast<int> (index));
                 resonantHarmonics.push_back (static_cast<int> (rounded));
             }
@@ -314,18 +316,11 @@ private:
         {
             const auto nSquared = static_cast<CoeffType> (n) * static_cast<CoeffType> (n);
 
-            FloatVectorOperations::fill (weight.data(), nSquared, numFollower);
-            FloatVectorOperations::subtract (weight.data(), argumentSquared.data(), numFollower);
-            FloatVectorOperations::copyWithDividend (weight.data(), weight.data(), CoeffType (1), numFollower);
-
-            for (int i = 0; i < numResonant; ++i)
-                weight[static_cast<std::size_t> (resonantIndices[static_cast<std::size_t> (i)])] = CoeffType (0);
+            const auto sums = accumulateWeights (nSquared, numFollower);
 
             const auto alternating = (n % 2 == 0) ? static_cast<CoeffType> (1) : static_cast<CoeffType> (-1);
 
-            auto a = (CoeffType (2) / pi)
-                   * (FloatVectorOperations::dotProduct (firstWeight.data(), weight.data(), numFollower)
-                      + alternating * FloatVectorOperations::dotProduct (secondWeight.data(), weight.data(), numFollower));
+            auto a = (CoeffType (2) / pi) * (sums[0] + alternating * sums[1]);
 
             for (int i = 0; i < numResonant; ++i)
             {
@@ -368,6 +363,8 @@ private:
             secondWeight[index] = sign * static_cast<CoeffType> (k) * followerSine[index];
         }
 
+        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
+
         // The paper's pulsar transform drops the follower's DC term.
         output.setDC (CoeffType (0));
 
@@ -380,17 +377,18 @@ private:
                                  && rounded <= static_cast<CoeffType> (numFollower);
             const auto resonantIndex = isResonant ? static_cast<std::size_t> (rounded) - 1 : 0;
 
-            FloatVectorOperations::fill (weight.data(), q * q, numFollower);
-            FloatVectorOperations::subtract (weight.data(), argumentSquared.data(), numFollower);
-            FloatVectorOperations::copyWithDividend (weight.data(), weight.data(), CoeffType (1), numFollower);
+            if (isResonant)
+                nonResonant[resonantIndex] = CoeffType (0);
+
+            const auto sums = accumulateWeights (q * q, numFollower);
 
             if (isResonant)
-                weight[resonantIndex] = CoeffType (0);
+                nonResonant[resonantIndex] = CoeffType (1);
 
             const auto sine = std::sin (pi * q);
 
-            auto a = (CoeffType (2) * q * sine / (pi * ratio)) * FloatVectorOperations::dotProduct (firstWeight.data(), weight.data(), numFollower);
-            auto b = (CoeffType (2) * sine / (pi * ratio)) * FloatVectorOperations::dotProduct (secondWeight.data(), weight.data(), numFollower);
+            auto a = (CoeffType (2) * q * sine / (pi * ratio)) * sums[0];
+            auto b = (CoeffType (2) * sine / (pi * ratio)) * sums[1];
 
             if (isResonant)
             {
@@ -402,6 +400,42 @@ private:
         }
     }
 
+    std::array<CoeffType, 2> accumulateWeights (CoeffType squared, int count) const noexcept
+    {
+        constexpr int lanes = std::is_same_v<CoeffType, float> ? 8 : 4;
+        using Register = SIMDRegister<CoeffType, lanes>;
+
+        const auto one = Register::broadcast (CoeffType (1));
+        const auto argument = Register::broadcast (squared);
+        auto first = Register::zero();
+        auto second = Register::zero();
+        int k = 0;
+
+        for (; k + lanes <= count; k += lanes)
+        {
+            const auto mask = Register::loadUnaligned (nonResonant.data() + k);
+            const auto denominator = (argument - Register::loadUnaligned (argumentSquared.data() + k)) * mask + (one - mask);
+            const auto reciprocal = mask / denominator;
+            first = first.mulAdd (Register::loadUnaligned (firstWeight.data() + k), reciprocal);
+            second = second.mulAdd (Register::loadUnaligned (secondWeight.data() + k), reciprocal);
+        }
+
+        std::array<CoeffType, 2> result { first.sum(), second.sum() };
+
+        for (; k < count; ++k)
+        {
+            const auto index = static_cast<std::size_t> (k);
+            if (nonResonant[index] == CoeffType (0))
+                continue;
+
+            const auto reciprocal = CoeffType (1) / (squared - argumentSquared[index]);
+            result[0] += firstWeight[index] * reciprocal;
+            result[1] += secondWeight[index] * reciprocal;
+        }
+
+        return result;
+    }
+
     //==============================================================================
     FourierSeries<CoeffType> rotated;
     std::vector<CoeffType> firstWeight;
@@ -411,6 +445,7 @@ private:
     std::vector<CoeffType> triggerCosine;
     std::vector<CoeffType> inverseArgument;
     std::vector<CoeffType> weight;
+    std::vector<CoeffType> nonResonant;
     std::vector<int> resonantIndices;
     std::vector<int> resonantHarmonics;
 };

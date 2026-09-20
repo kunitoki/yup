@@ -116,12 +116,12 @@ protected:
 
         if (mode == SyncMode::hard)
         {
-            for (int k = 1; k <= followerHarmonics; ++k)
+            for (int k = 1; k <= follower.getNumHarmonics(); ++k)
                 dc += rotated.cosine[static_cast<std::size_t> (k)] * normalizedSinc (k * ratio);
         }
         else if (mode == SyncMode::mirrored)
         {
-            for (int k = 1; k <= followerHarmonics; ++k)
+            for (int k = 1; k <= follower.getNumHarmonics(); ++k)
                 dc += rotated.cosine[static_cast<std::size_t> (k)] * normalizedSinc (2.0 * k * ratio)
                     - rotated.sine[static_cast<std::size_t> (k)] * normalizedVersinc (2.0 * k * ratio);
         }
@@ -133,7 +133,7 @@ protected:
             double a = 0.0;
             double b = 0.0;
 
-            for (int k = 1; k <= followerHarmonics; ++k)
+            for (int k = 1; k <= follower.getNumHarmonics(); ++k)
             {
                 const auto index = static_cast<std::size_t> (k);
                 const auto a_k = rotated.cosine[index];
@@ -543,4 +543,29 @@ TEST_F (SyncSpectralResamplerTests, RepeatedTransformsDoNotAccumulateState)
         resampler.transform (follower, 1.375, SyncMode::hard, output, 32);
 
     EXPECT_EQ (first, output.getSine (3));
+}
+
+TEST_F (SyncSpectralResamplerTests, FusedAccumulationMatchesScalarWithPartialSIMDLanes)
+{
+    for (const auto count : { 1, 3, 5, 13 })
+    {
+        FourierSeries<double> follower (count);
+        for (int n = 1; n <= count; ++n)
+            follower.setHarmonic (n, 0.3 / n, (n % 2 == 0 ? -0.7 : 0.7) / n);
+
+        for (const auto mode : { SyncMode::hard, SyncMode::mirrored, SyncMode::pulsar })
+        {
+            for (const auto ratio : { 1.0, 1.375, 2.0 })
+            {
+                const auto expected = scalarReferenceTransform (follower, ratio, mode, 24);
+                const auto actual = runTransform (follower, ratio, mode, 24);
+                EXPECT_NEAR (expected.getDC(), actual.getDC(), 1e-12);
+                for (int n = 1; n <= 24; ++n)
+                {
+                    EXPECT_NEAR (expected.getCosine (n), actual.getCosine (n), 1e-10);
+                    EXPECT_NEAR (expected.getSine (n), actual.getSine (n), 1e-10);
+                }
+            }
+        }
+    }
 }

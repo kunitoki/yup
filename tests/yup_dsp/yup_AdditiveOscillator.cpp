@@ -222,3 +222,29 @@ TEST_F (AdditiveOscillatorTests, FloatInstantiationBehavesLikeDouble)
         EXPECT_NEAR (expected, oscillator.processSample(), 1e-3) << i;
     }
 }
+
+TEST_F (AdditiveOscillatorTests, FrequencyAndPhaseChangesRefreshThePhasorRecurrence)
+{
+    auto oscillator = makeOscillator (13, Waveform::sawtooth, 440.0);
+    for (int i = 0; i < 4096; ++i)
+    {
+        if (i % 127 == 0)
+            oscillator.setFrequency (220.0 + (i % 7) * 113.0);
+        if (i % 191 == 0)
+            oscillator.setPhase (0.173);
+
+        const auto expected = harmonicReference (oscillator.getSeries(), 13, oscillator.getFrequency(), oscillator.getPhase());
+        EXPECT_NEAR (expected, oscillator.processSample(), 1e-10);
+    }
+}
+
+TEST_F (AdditiveOscillatorTests, DCSurvivesWhenNoHarmonicFitsBelowNyquist)
+{
+    auto oscillator = makeOscillator (1, Waveform::sine, 24000.0);
+    FourierSeries<double> series (1);
+    series.setDC (0.25);
+    oscillator.setSeries (series);
+    oscillator.setIncludeDC (true);
+    EXPECT_EQ (0, oscillator.getNumActiveHarmonics());
+    EXPECT_EQ (0.25, oscillator.processSample());
+}
