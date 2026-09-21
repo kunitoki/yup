@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - YDSP: add YAML .ydsp-project manifests with patch metadata, explicit-import source inventories, and overridable processor or graph entry points.
 
+- YDSP: keep the source value of a float literal that adapts to a `float64` context, instead of rounding the constant through `float32` first; regenerate bundles for codegen revision 14.
+
 - YDSP: preserve qualified function calls when nesting library imports, including calls from processors and other library functions.
 
 - YDSP: preserve source ranges through diagnostics and imports, print path:line:column with five-line context and caret underlines, and improve malformed-number and parser errors.

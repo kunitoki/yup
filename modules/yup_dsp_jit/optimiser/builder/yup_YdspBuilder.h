@@ -231,8 +231,11 @@ private:
     void unifyOperands (const YdspExpr& a, int av, const YdspExpr& b, int bv, int& outA, int& outB, YdspValueType& outType, int aBlock = -1, int bBlock = -1);
 
     // Re-emits a literal constant at the target width; returns -1 when the value
-    // is not a constant or the width class differs.
-    int widenConst (int value, YdspValueType targetType);
+    // is not a constant or the width class differs. `adaptableLiteral` marks the
+    // contextual literal adaptation of unifyOperands(), where a float literal
+    // keeps its source value in the wider width; converting a float32 value
+    // instead reproduces what float32 storage holds.
+    int widenConst (int value, YdspValueType targetType, bool adaptableLiteral);
 
     // Coerces a value to the target type: literal constants are re-emitted at
     // the target width, everything else gets an explicit conversion instruction

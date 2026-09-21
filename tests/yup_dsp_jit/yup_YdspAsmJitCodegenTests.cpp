@@ -2081,6 +2081,86 @@ TEST (YdspAsmJitCodegenTests, CompilesFloat64StreamsAndMath)
     dumpAsmOnFailureCodegen (kernel);
 }
 
+TEST (YdspAsmJitCodegenTests, AdaptsFloat64LiteralWithoutRoundingThroughFloat32)
+{
+    YdspDiagnostics diagnostics;
+
+    auto kernel = compileKernel (R"YDSP(
+        processor F64LiteralProc {
+            input stream float64 in;
+            output stream float64 scaled;
+            output stream float64 flipped;
+            process {
+                scaled = in * 0.9999;
+                flipped = in * (-0.9999);
+            }
+        }
+        graph G {
+            input stream float64 x;
+            output stream float64 a;
+            output stream float64 b;
+            node p = F64LiteralProc;
+            connection { x -> p.in; p.scaled -> a; p.flipped -> b; }
+        }
+    )YDSP",
+                                 "F64LiteralProc",
+                                 diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    const std::vector<double> input { 1.0, -0.5, 0.1, 3.14159265358979, -2.718281828459045 };
+    const auto output = runKernel64 (kernel, input, static_cast<int> (input.size()));
+
+    ASSERT_EQ (input.size() * 2, output.size());
+
+    // The literals adapt to the float64 context, so the constants keep the double
+    // precision of the source values instead of being rounded through float32 first.
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        EXPECT_DOUBLE_EQ (input[i] * 0.9999, output[i]) << "at sample " << i;
+        EXPECT_DOUBLE_EQ (input[i] * -0.9999, output[input.size() + i]) << "at sample " << i;
+    }
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
+TEST (YdspAsmJitCodegenTests, KeepsFloat32ValueRoundingWhenWidenedToFloat64)
+{
+    YdspDiagnostics diagnostics;
+
+    auto kernel = compileKernel (R"YDSP(
+        processor F64WidenProc {
+            input stream float64 in;
+            output stream float64 out;
+            process {
+                float narrow = 0.1;
+                out = in + float64 (narrow);
+            }
+        }
+        graph G { input stream float64 x; output stream float64 y; node p = F64WidenProc; connection { x -> p.in; p.out -> y; } }
+    )YDSP",
+                                 "F64WidenProc",
+                                 diagnostics);
+
+    ASSERT_FALSE (diagnostics.hasErrors()) << diagnostics.toString();
+    ASSERT_NE (nullptr, kernel.fn);
+
+    const std::vector<double> input { 1.0, -0.5, 0.1 };
+    const auto output = runKernel64 (kernel, input, static_cast<int> (input.size()));
+
+    ASSERT_EQ (input.size(), output.size());
+
+    // `narrow` is float32, so widening it must reproduce its float32 value - only a
+    // contextual float literal takes the precision of the surrounding expression.
+    const auto narrow = static_cast<double> (static_cast<float> (0.1));
+
+    for (size_t i = 0; i < input.size(); ++i)
+        EXPECT_DOUBLE_EQ (input[i] + narrow, output[i]) << "at sample " << i;
+
+    dumpAsmOnFailureCodegen (kernel);
+}
+
 TEST (YdspAsmJitCodegenTests, CompilesInt64ArithmeticAndConversion)
 {
     YdspDiagnostics diagnostics;

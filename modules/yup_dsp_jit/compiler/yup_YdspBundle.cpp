@@ -32,7 +32,7 @@ constexpr int ydspProjectBundleFormatVersion = 3;
 constexpr int ydspBundleLanguageVersion = 4;
 constexpr int ydspBundleRuntimeAbiVersion = 2;
 constexpr int ydspBundleNativeAbiVersion = 2;
-constexpr int ydspBundleCodegenRevision = 13;
+constexpr int ydspBundleCodegenRevision = 14;
 constexpr int ydspBundleLegacyLanguageVersion = 2;
 
 constexpr uint32_t fourCC (char a, char b, char c, char d)

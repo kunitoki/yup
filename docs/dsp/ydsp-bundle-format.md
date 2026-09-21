@@ -91,7 +91,7 @@ source-only bundles must be regenerated.
 | Language version | int32 | 4 |
 | Graph/runtime ABI | int32 | 2 |
 | Native ABI | int32 | 2 |
-| Codegen revision | int32 | 13 |
+| Codegen revision | int32 | 14 |
 | Fast math | byte | 0 or 1 |
 | Tracing enabled | byte | 0 or 1 |
 | Has WebAssembly | byte | 0 or 1 |
@@ -102,6 +102,10 @@ source-only bundles must be regenerated.
 loader. Target strings must match the actual native artifacts, and
 `hasWasm` must match the presence of WebAssembly modules. Changes to graph
 reconstruction or emitted-code contracts require a revision bump.
+
+Codegen revision 14 keeps the source value of a float literal that adapts to a
+`float64` context, instead of rounding the constant through `float32` on the way.
+Widening an actual `float32` value is unchanged. Regenerate older bundles.
 
 Language version 4 adds integer/boolean match statements. Codegen revision 13
 preserves match arm scopes and folded boolean comparisons. Regenerate older bundles.

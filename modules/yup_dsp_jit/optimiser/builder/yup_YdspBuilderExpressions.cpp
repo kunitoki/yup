@@ -56,6 +56,9 @@ int YdspIrBuilder::lowerExpr (const YdspExpr& expr)
 
         case YdspExprKind::unary:
         {
+            if (expr.op == YdspOperator::neg && expr.children[0]->kind == YdspExprKind::floatLiteral)
+                return emitConstF (-expr.children[0]->number);
+
             const auto operand = lowerExpr (*expr.children[0]);
 
             if (expr.op == YdspOperator::neg)
@@ -828,7 +831,7 @@ void YdspIrBuilder::unifyOperands (const YdspExpr& a, int av, const YdspExpr& b,
         const auto savedBlock = currentBlock;
         if (block >= 0)
             currentBlock = block;
-        const auto converted = literal ? widenConst (value, type) : coerceTo (value, type);
+        const auto converted = literal ? widenConst (value, type, true) : coerceTo (value, type);
         currentBlock = savedBlock;
         return converted;
     };
@@ -909,7 +912,7 @@ void YdspIrBuilder::unifyOperands (const YdspExpr& a, int av, const YdspExpr& b,
 
 //==============================================================================
 
-int YdspIrBuilder::widenConst (int value, YdspValueType targetType)
+int YdspIrBuilder::widenConst (int value, YdspValueType targetType, bool adaptableLiteral)
 {
     const auto sourceType = valueTypes[static_cast<size_t> (value)];
 
@@ -927,9 +930,9 @@ int YdspIrBuilder::widenConst (int value, YdspValueType targetType)
 
     if (const auto it = floatConstPayloads.find (value); it != floatConstPayloads.end() && isFloatValueType (targetType))
     {
-        const auto payload = sourceType == YdspValueType::float32Type
-                                 ? static_cast<double> (static_cast<float> (it->second))
-                                 : it->second;
+        const auto payload = adaptableLiteral || sourceType != YdspValueType::float32Type
+                                 ? it->second
+                                 : static_cast<double> (static_cast<float> (it->second));
 
         return emitConstFFor (payload, targetType);
     }
@@ -946,7 +949,7 @@ int YdspIrBuilder::coerceTo (int value, YdspValueType targetType)
     if (sourceType == targetType)
         return value;
 
-    if (const auto w = widenConst (value, targetType); w >= 0)
+    if (const auto w = widenConst (value, targetType, false); w >= 0)
         return w;
 
     if (isIntValueType (sourceType) && isIntValueType (targetType))
