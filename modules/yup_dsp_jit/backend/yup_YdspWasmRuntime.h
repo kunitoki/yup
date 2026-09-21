@@ -60,6 +60,11 @@ public:
         @param numBytes The number of bytes in `bytes`.
         @param errorMessage On failure, set to a human-readable error message.
 
+        The handle is minted from a module-wide counter, so it stays unique
+        across realms as well as graphs: the realm a graph later runs in looks
+        up exactly this kernel, and can never find another graph's module under
+        the same handle.
+
         @return a handle >= 0 or -1 with `errorMessage` set on failure.
     */
     static YdspWasmKernelHandle registerKernel (const uint8_t* bytes, size_t numBytes, String& errorMessage);
@@ -142,10 +147,11 @@ public:
 #if YUP_WASM
     /** Wraps a wasm kernel registered in the current realm.
 
-        `kernelId` is the unique per-kernel registry key (never reused across
-        graphs, so a worklet realm can never invoke an older graph's kernel
-        with a newer graph's context). `wasmModules` is the owning graph's byte
-        storage and `wasmIndex` the position of this kernel within it; the
+        `kernelId` is the unique per-kernel registry key: it is minted from a
+        counter in the module's own memory, which every pthread worker shares,
+        rather than a per-realm one, so no other graph, on this thread or any
+        other, can be holding the same key. `wasmModules` is the owning graph's
+        byte storage and `wasmIndex` the position of this kernel within it; the
         bytes let other realms (e.g. the audio worklet) lazily instantiate
         their own copy on first use. */
     explicit YdspCompiledKernel (YdspWasmKernelHandle kernelId, const std::vector<std::vector<uint8_t>>* wasmModules, size_t wasmIndex) noexcept

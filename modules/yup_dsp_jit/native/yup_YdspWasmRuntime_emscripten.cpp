@@ -110,15 +110,6 @@ EM_JS (int, yupDspWasmRegisterKernelAt, (int targetHandle, const uint8_t* bytes,
     }
 });
 
-EM_JS (int, yupDspWasmRegisterKernel, (const uint8_t* bytes, int numBytes, char* errorBuffer, int errorBufferSize), {
-    var kernelId = Module.yupDspKernelSeq = (Module.yupDspKernelSeq || 0) + 1;
-
-    if (yupDspWasmRegisterKernelAt (kernelId, bytes, numBytes, errorBuffer, errorBufferSize) != 0)
-        return -1;
-
-    return kernelId;
-});
-
 EM_JS (void, yupDspWasmCallKernel, (int kernelId, const uint8_t* bytes, int numBytes, int ctxPtr), {
     var registry = Module.yupDspKernelRegistry || (Module.yupDspKernelRegistry = []);
     var kernel = registry[kernelId];
@@ -148,14 +139,38 @@ EM_JS (void, yupDspWasmFreeKernel, (int kernelId), {
 
 //==============================================================================
 
+namespace
+{
+    /** Hands out kernel ids that are unique for the whole module, not just for
+        the realm that asks for one.
+
+        Every realm keeps its own `Module.yupDspKernelRegistry`, and a handle
+        minted in one realm is looked up in whichever realm runs the graph. Two
+        realms numbering independently would therefore hand out the same number
+        for different kernels, and since `yupDspWasmRegisterKernelAt` treats an
+        occupied slot as already registered, the second realm would keep the
+        first realm's module and silently run it with its own context. Sitting
+        in the module's static memory, which every pthread worker shares, this
+        counter is the one place the numbers can be made to never repeat.
+
+        @see YdspWasmRuntime::registerKernel
+    */
+    std::atomic<int> ydspNextWasmKernelId { 1 };
+}
+
+//==============================================================================
+
 YdspWasmKernelHandle YdspWasmRuntime::registerKernel (const uint8_t* bytes, size_t numBytes, String& errorMessage)
 {
     char errorBuffer[512] = {};
 
-    const auto handle = yupDspWasmRegisterKernel (bytes, static_cast<int> (numBytes), errorBuffer, static_cast<int> (sizeof (errorBuffer)));
+    const auto handle = ydspNextWasmKernelId.fetch_add (1);
 
-    if (handle < 0)
+    if (yupDspWasmRegisterKernelAt (handle, bytes, static_cast<int> (numBytes), errorBuffer, static_cast<int> (sizeof (errorBuffer))) != 0)
+    {
         errorMessage = errorBuffer;
+        return -1;
+    }
 
     return handle;
 }
