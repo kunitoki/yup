@@ -188,8 +188,14 @@ TEST (YdspJitDiagnosticsTests, CompileRegistersEntryFileAndImports)
     ASSERT_TRUE (imported.replaceWithText ("processor Gain { input stream in; output stream out; process { out = in * 2.0; } }\n"));
 
     YdspCompiler compiler;
-    const auto result = compiler.compile (entry.loadFileAsString(), entry.getFullPathName());
-    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+    // The import base path is the input contract this test rests on: it must be
+    // the entry file's own path on disk, otherwise the compiler cannot resolve
+    // the entry's imports and the failure says nothing about import resolution.
+    const auto entryPath = entry.getFullPathName();
+    ASSERT_TRUE (File (entryPath).existsAsFile()) << entryPath;
+    const auto result = compiler.compile (entry.loadFileAsString(), entryPath);
+    ASSERT_TRUE (result.wasOk()) << entryPath << "\n"
+                                 << compiler.getDiagnostics().toString();
 
     // getSourceIds() returns the closure sorted case-insensitively, so the
     // imported "lib/..." file sorts before "Main.ydsp". Ids are native paths,
