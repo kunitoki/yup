@@ -102,8 +102,11 @@ const YdspIrFunction* fmaKernel (const YdspIrProgram& ir)
     return ir.kernels.empty() ? nullptr : ir.kernels.front().get();
 }
 
-/** Compiles and runs a patch over one block, returning the output. */
-std::vector<float> fmaRun (StringRef source, const std::vector<float>& input)
+/** Compiles and runs a patch over one block, returning the output. `listing`,
+    when given, receives the listing of the kernel that actually ran, taken from
+    the same graph the output came from - a second compile of the same source is
+    not guaranteed to take the same path. */
+std::vector<float> fmaRun (StringRef source, const std::vector<float>& input, String* listing = nullptr)
 {
     YdspCompiler compiler;
 
@@ -115,6 +118,9 @@ std::vector<float> fmaRun (StringRef source, const std::vector<float>& input)
 
     auto graph = std::move (result).getValue();
     graph.prepare (48000.0, static_cast<int> (input.size()));
+
+    if (listing != nullptr)
+        *listing = graph.getDiagnostics().toString();
 
     std::vector<float> output (input.size(), 0.0f);
 
@@ -650,10 +656,13 @@ TEST (YdspFusedMultiplyAddTests, ContractionFusesAProductMinusAnAddend)
     }
 
     const std::vector<float> input { -0.3f, 0.0f, 0.3f, 1.0f };
-    const auto output = fmaRun (source, input);
+    String listing;
+    const auto output = fmaRun (source, input, &listing);
     ASSERT_EQ (input.size(), output.size());
+
     for (size_t i = 0; i < input.size(); ++i)
-        EXPECT_EQ (std::fma (input[i], 0.7f, -0.21f), output[i]);
+        EXPECT_EQ (std::fma (input[i], 0.7f, -0.21f), output[i]) << std::endl
+                                                                << listing.toRawUTF8();
 }
 
 TEST (YdspFusedMultiplyAddTests, FusedProductSubtractPreservesTheOldStateAddend)

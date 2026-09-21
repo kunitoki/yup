@@ -231,10 +231,10 @@ private:
 
             for (const auto operand : { add.a, add.b })
             {
-                // Only `c - a*b` has a fused form; `(a*b) - c` does not.
-                if (add.op == YdspIrOp::subF && operand != add.b)
-                    continue;
-
+                // Both `a*b + c` and `a*b - c` fuse: contractMultiplyAdd turns a
+                // multiply on either side of a subF into fmaF, negating the
+                // addend for `a*b - c`, so a multiply feeding a subF is a fusable
+                // chain from either operand position.
                 if (operand < 0 || ! isF32 (operand)
                     || defsInBody[static_cast<size_t> (operand)] != 1
                     || defsElsewhere[static_cast<size_t> (operand)] != 0

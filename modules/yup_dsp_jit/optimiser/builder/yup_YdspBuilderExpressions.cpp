@@ -926,7 +926,13 @@ int YdspIrBuilder::widenConst (int value, YdspValueType targetType)
     }
 
     if (const auto it = floatConstPayloads.find (value); it != floatConstPayloads.end() && isFloatValueType (targetType))
-        return emitConstFFor (it->second, targetType);
+    {
+        const auto payload = sourceType == YdspValueType::float32Type
+                                 ? static_cast<double> (static_cast<float> (it->second))
+                                 : it->second;
+
+        return emitConstFFor (payload, targetType);
+    }
 
     return -1;
 }
