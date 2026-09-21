@@ -193,9 +193,32 @@ void YdspAsmJitCodegenX64::floatBinary (YdspIrOp op, const YdspFp& dst, const Yd
 
 void YdspAsmJitCodegenX64::emitFusedMultiplyAdd (const YdspFp& dst, const YdspFp& a, const YdspFp& b, const YdspFp& c)
 {
+    const bool is64 = isDoubleFloat (dst);
+
+    // VEX FMA reads every source before writing the destination, so an aliased
+    // destination can be used in place - as long as the form picked does not
+    // need a destructive preload that would clobber a live source.
+    if (dst == b)
+    {
+        if (is64)
+            cc->vfmadd213sd (dst, a, c); // dst = dst * a + c
+        else
+            cc->vfmadd213ss (dst, a, c);
+        return;
+    }
+
+    if (dst == c)
+    {
+        if (is64)
+            cc->vfmadd231sd (dst, a, b); // dst = a * b + dst
+        else
+            cc->vfmadd231ss (dst, a, b);
+        return;
+    }
+
     moveFloat (dst, a);
 
-    if (isDoubleFloat (dst))
+    if (is64)
         cc->vfmadd213sd (dst, b, c);
     else
         cc->vfmadd213ss (dst, b, c);
@@ -226,6 +249,12 @@ void YdspAsmJitCodegenX64::emitVectorFusedMultiplyAdd (const YdspFp& dst, const 
     if (dst == c)
     {
         cc->vfmadd231ps (dst, a, b);
+        return;
+    }
+
+    if (dst == b)
+    {
+        cc->vfmadd213ps (dst, a, c);
         return;
     }
 

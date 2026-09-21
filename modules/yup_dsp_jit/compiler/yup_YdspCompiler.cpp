@@ -1277,6 +1277,21 @@ ResultValue<YdspAudioGraph> YdspCompiler::compileInternal (StringRef source, con
         };
         reportConditionals (ir->kernels);
         reportConditionals (ir->eventHandlers);
+
+        // Report the width the kernels were actually widened to, not the ISA's
+        // capability: a kernel holding a SLEEF transcendental is capped at the
+        // 4-lane vector-math width (see YdspOptimizer::runPasses), so the
+        // selected-ISA width would overstate what a modal/oscillator kernel uses.
+        int widestKernelWidth = 0;
+        for (const auto& function : ir->kernels)
+            if (function->vectorWidth > widestKernelWidth)
+                widestKernelWidth = function->vectorWidth;
+        for (const auto& function : ir->eventHandlers)
+            if (function->vectorWidth > widestKernelWidth)
+                widestKernelWidth = function->vectorWidth;
+
+        if (widestKernelWidth > 0)
+            optimizationReport.vectorWidth = widestKernelWidth;
     }
 
     // Missed-vectorization remarks: "why is this loop scalar?", as info

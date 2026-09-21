@@ -363,6 +363,13 @@ protected:
     bool isEventHandler = false;
     int activeVectorWidth = YdspVectorizer::vectorWidth;
 
+    /** Scratch stack buffer (64 bytes) reused by every 4-lane SLEEF call site.
+        The 8-lane split stages only the operands that must outlive a call
+        through it, so no vector value is left live in a register across a call
+        - the calls do not preserve the vector register file. */
+    YdspMem sleefScratch;
+    bool sleefScratchReady = false;
+
     YdspGp eventCtxReg;
 
     std::vector<int> paramOffsets;

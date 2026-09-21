@@ -305,6 +305,48 @@ void YdspOptimizer::buildReport (const YdspIrProgram& program, YdspExecutionRepo
 
 //==============================================================================
 
+namespace
+{
+
+/** True when the function holds a transcendental that a widened loop would
+    lower through the 4-lane SLEEF set.
+*/
+bool functionUsesSleefVectorMath (const YdspIrFunction& fn)
+{
+    for (const auto& block : fn.blocks)
+        for (const auto& inst : block.insts)
+            switch (inst.op)
+            {
+                case YdspIrOp::sinF:
+                case YdspIrOp::cosF:
+                case YdspIrOp::tanF:
+                case YdspIrOp::asinF:
+                case YdspIrOp::acosF:
+                case YdspIrOp::atanF:
+                case YdspIrOp::sinhF:
+                case YdspIrOp::coshF:
+                case YdspIrOp::tanhF:
+                case YdspIrOp::asinhF:
+                case YdspIrOp::acoshF:
+                case YdspIrOp::atanhF:
+                case YdspIrOp::expF:
+                case YdspIrOp::logF:
+                case YdspIrOp::log10F:
+                case YdspIrOp::powF:
+                case YdspIrOp::atan2F:
+                case YdspIrOp::fmodF:
+                    return true;
+                default:
+                    break;
+            }
+
+    return false;
+}
+
+} // namespace
+
+//==============================================================================
+
 void YdspOptimizer::runPasses (YdspIrFunction& fn)
 {
     // Mirror the compile-mode flags onto the function so the codegen - which
@@ -352,8 +394,14 @@ void YdspOptimizer::runPasses (YdspIrFunction& fn)
     // widened chain would round twice. Constant-bound bank loops are
     // unaffected.
     if (vectorizationEnabled && ! fn.isEventHandler)
-        if (YdspVectorizer::run (fn, vectorWidth, contractionEnabled && ! targetHasPackedFusedMultiplyAdd))
+    {
+        const int effectiveWidth = (fn.vectorMathEnabled && vectorWidth > 4 && functionUsesSleefVectorMath (fn))
+                                     ? 4
+                                     : vectorWidth;
+
+        if (YdspVectorizer::run (fn, effectiveWidth, contractionEnabled && ! targetHasPackedFusedMultiplyAdd))
             deadCodeElimination (fn);
+    }
 
     // After the vectoriser, so a widened loop is unrolled at its widened trip
     // count - four copies of a four-lane body, not sixteen of a scalar one -

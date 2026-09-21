@@ -1451,8 +1451,9 @@ TEST (YdspVectorizerTests, EmitsPackedStreamInstructions)
 #elif ASMJIT_ARCH_X86
     EXPECT_TRUE (listing.contains ("movups"))
         << "expected packed stream loads/stores in the listing";
-    EXPECT_TRUE (listing.contains ("mulps") || listing.contains ("addps"))
-        << "expected packed arithmetic in the listing";
+    EXPECT_TRUE (listing.contains ("mulps") || listing.contains ("addps")
+                 || listing.contains ("vfmadd") || listing.contains ("vfmsub"))
+        << "expected packed arithmetic (or a packed fused multiply-add) in the listing";
 #endif
 
     if (::testing::Test::HasFailure())

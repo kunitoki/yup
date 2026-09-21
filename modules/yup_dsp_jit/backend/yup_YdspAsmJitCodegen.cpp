@@ -1848,9 +1848,24 @@ void YdspAsmJitCodegenImpl<Traits>::emitLibmUnary (float (*f32fn) (float), doubl
 {
     const bool is64 = valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::float64Type;
 
+    // Strict (fastMath off) promises 1-ULP behavior, but a float32 libm call is
+    // only ~1 ULP on some platforms (MSVC's tanhf() is ~1.1). Evaluate the
+    // float32 case in float64 and round once - <=0.5 ULP everywhere - while the
+    // default fastMath path keeps the cheaper float32 libm call.
+    const bool promoteToDouble = ! is64 && activeFn != nullptr && ! activeFn->fastMath;
+    const bool useDouble = is64 || promoteToDouble;
+
+    YdspFp wideIn;
+
+    if (promoteToDouble)
+    {
+        wideIn = newFp64 ("libmIn64");
+        emitExtendFloat (wideIn, fp (inst.a));
+    }
+
     asmjit::InvokeNode* node = nullptr;
 
-    const auto* fnPtr = is64 ? reinterpret_cast<const void*> (f64fn) : reinterpret_cast<const void*> (f32fn);
+    const auto* fnPtr = useDouble ? reinterpret_cast<const void*> (f64fn) : reinterpret_cast<const void*> (f32fn);
 
     YdspGp target;
 
@@ -1862,12 +1877,22 @@ void YdspAsmJitCodegenImpl<Traits>::emitLibmUnary (float (*f32fn) (float), doubl
         loadExternalSymbol (target, fnPtr);
     }
 
-    auto err = cc->invoke (asmjit::Out (node), target, is64 ? asmjit::FuncSignature::build<double, double>() : asmjit::FuncSignature::build<float, float>());
+    auto err = cc->invoke (asmjit::Out (node), target, useDouble ? asmjit::FuncSignature::build<double, double>() : asmjit::FuncSignature::build<float, float>());
 
     if (err == asmjit::kErrorOk && node != nullptr)
     {
-        node->set_arg (0, fp (inst.a));
-        node->set_ret (0, fp (inst.result));
+        if (promoteToDouble)
+        {
+            const auto wideOut = newFp64 ("libmOut64");
+            node->set_arg (0, wideIn);
+            node->set_ret (0, wideOut);
+            emitTruncateFloat (fp (inst.result), wideOut);
+        }
+        else
+        {
+            node->set_arg (0, fp (inst.a));
+            node->set_ret (0, fp (inst.result));
+        }
     }
 }
 
@@ -1876,9 +1901,25 @@ void YdspAsmJitCodegenImpl<Traits>::emitLibmBinary (float (*f32fn) (float, float
 {
     const bool is64 = valueTypes[static_cast<size_t> (inst.a)] == YdspValueType::float64Type;
 
+    // See emitLibmUnary: strict float32 math is evaluated in float64 so the
+    // result is correctly rounded rather than trusting the platform tanhf() etc.
+    const bool promoteToDouble = ! is64 && activeFn != nullptr && ! activeFn->fastMath;
+    const bool useDouble = is64 || promoteToDouble;
+
+    YdspFp wideInA;
+    YdspFp wideInB;
+
+    if (promoteToDouble)
+    {
+        wideInA = newFp64 ("libmInA64");
+        wideInB = newFp64 ("libmInB64");
+        emitExtendFloat (wideInA, fp (inst.a));
+        emitExtendFloat (wideInB, fp (inst.b));
+    }
+
     asmjit::InvokeNode* node = nullptr;
 
-    const auto* fnPtr = is64 ? reinterpret_cast<const void*> (f64fn) : reinterpret_cast<const void*> (f32fn);
+    const auto* fnPtr = useDouble ? reinterpret_cast<const void*> (f64fn) : reinterpret_cast<const void*> (f32fn);
 
     YdspGp target;
 
@@ -1890,13 +1931,24 @@ void YdspAsmJitCodegenImpl<Traits>::emitLibmBinary (float (*f32fn) (float, float
         loadExternalSymbol (target, fnPtr);
     }
 
-    auto err = cc->invoke (asmjit::Out (node), target, is64 ? asmjit::FuncSignature::build<double, double, double>() : asmjit::FuncSignature::build<float, float, float>());
+    auto err = cc->invoke (asmjit::Out (node), target, useDouble ? asmjit::FuncSignature::build<double, double, double>() : asmjit::FuncSignature::build<float, float, float>());
 
     if (err == asmjit::kErrorOk && node != nullptr)
     {
-        node->set_arg (0, fp (inst.a));
-        node->set_arg (1, fp (inst.b));
-        node->set_ret (0, fp (inst.result));
+        if (promoteToDouble)
+        {
+            const auto wideOut = newFp64 ("libmOut64");
+            node->set_arg (0, wideInA);
+            node->set_arg (1, wideInB);
+            node->set_ret (0, wideOut);
+            emitTruncateFloat (fp (inst.result), wideOut);
+        }
+        else
+        {
+            node->set_arg (0, fp (inst.a));
+            node->set_arg (1, fp (inst.b));
+            node->set_ret (0, fp (inst.result));
+        }
     }
 }
 
@@ -2340,33 +2392,71 @@ void YdspAsmJitCodegenImpl<Traits>::emitTranscendentalCall (const YdspIrFunction
     {
         if (activeVectorWidth == 8)
         {
-            // Split the 8-lane value into two 4-lane calls. Everything chunk-sized
-            // is a fresh 128-bit register, so the register allocator can never put
-            // a chunk on a ymm whose xmm half does not exist.
-            YdspFp loA = newFp128 ("sleefLoA");
-            YdspFp hiA = newFp128 ("sleefHiA");
-            cc->vextractf128 (loA, a, asmjit::Imm (0));
-            cc->vextractf128 (hiA, a, asmjit::Imm (1));
+            // Split the 8-lane value into two 4-lane calls - SLEEF ships no
+            // 8-lane single-precision set. Each call clobbers the caller-saved
+            // vector registers, so an operand computed before the other call, or
+            // a result that must outlive it, would be read back from a clobbered
+            // register. Stage both operands and the first result through a small
+            // stack buffer instead, so nothing vector-shaped is left live in a
+            // register across a call.
+            if (! sleefScratchReady)
+            {
+                sleefScratch = cc->new_stack (64, 16, "sleefScratch");
+                sleefScratchReady = true;
+            }
 
-            YdspFp loB;
-            YdspFp hiB;
+            const auto slot = [&] (int32_t byteOffset)
+            {
+                YdspMem mem = sleefScratch;
+                mem.add_offset (byteOffset);
+                return mem;
+            };
 
+            // Only the two operands that must outlive a call touch memory: the
+            // second call's input (staged before the first call) and the first
+            // call's result (staged before the second). Each half used by the
+            // call that is about to run stays in a register, so the per-site
+            // cost is one 16-byte store plus one 16-byte load.
+            YdspFp loIn = newFp128 ("sleefLoIn");
+            YdspFp hiIn = newFp128 ("sleefHiIn");
+            cc->vextractf128 (loIn, a, asmjit::Imm (0));
+            cc->vextractf128 (hiIn, a, asmjit::Imm (1));
+            cc->vmovups (slot (0), hiIn);
+
+            YdspFp loInB;
+            YdspFp hiInB;
             if (isBinary)
             {
-                loB = newFp128 ("sleefLoB");
-                hiB = newFp128 ("sleefHiB");
-                cc->vextractf128 (loB, b, asmjit::Imm (0));
-                cc->vextractf128 (hiB, b, asmjit::Imm (1));
+                loInB = newFp128 ("sleefLoInB");
+                hiInB = newFp128 ("sleefHiInB");
+                cc->vextractf128 (loInB, b, asmjit::Imm (0));
+                cc->vextractf128 (hiInB, b, asmjit::Imm (1));
+                cc->vmovups (slot (16), hiInB);
             }
 
             YdspFp loResult = newFp128 ("sleefLoRes");
+            emitVectorMathInvoke (vectorSymbol, isBinary, loResult, loIn, loInB);
+            cc->vmovups (slot (32), loResult);
+
+            YdspFp hiInReload = newFp128 ("sleefHiInR");
+            cc->vmovups (hiInReload, slot (0));
+
+            YdspFp hiInBReload;
+            if (isBinary)
+            {
+                hiInBReload = newFp128 ("sleefHiInBR");
+                cc->vmovups (hiInBReload, slot (16));
+            }
+
             YdspFp hiResult = newFp128 ("sleefHiRes");
-            emitVectorMathInvoke (vectorSymbol, isBinary, loResult, loA, loB);
-            emitVectorMathInvoke (vectorSymbol, isBinary, hiResult, hiA, hiB);
+            emitVectorMathInvoke (vectorSymbol, isBinary, hiResult, hiInReload, hiInBReload);
+
+            YdspFp loReload = newFp128 ("sleefLoReload");
+            cc->vmovups (loReload, slot (32));
 
             YdspFp dst = newFpVector ("sleefRes");
             cc->vxorps (dst, dst, dst);
-            cc->vinsertf128 (dst, dst, loResult, asmjit::Imm (0));
+            cc->vinsertf128 (dst, dst, loReload, asmjit::Imm (0));
             cc->vinsertf128 (dst, dst, hiResult, asmjit::Imm (1));
             moveVector (fp (inst.result), dst);
             return;
