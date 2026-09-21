@@ -19,4 +19,9 @@
   ==============================================================================
 */
 
-#include "yup_core/yup_ObjCHelpers.mm"
+#include "yup_FloatVectorOperations.cpp"
+#include "yup_ComplexVectorOperations.cpp"
+#include "yup_AffineTransformOperations.cpp"
+#include "yup_ColorVectorOperations.cpp"
+#include "yup_SIMDRegister.cpp"
+#include "yup_Vec.cpp"

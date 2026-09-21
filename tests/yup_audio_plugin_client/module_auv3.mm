@@ -34,11 +34,11 @@
 #define YupPlugin_IsMono 0
 
 // =============================================================================
-#include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
-#include "yup_audio_plugin_client/yup_TestAudioBufferList.h"
+#include "yup_TestPluginProcessor.h"
+#include "yup_TestAudioBufferList.h"
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorAUv3
-#include "yup_audio_plugin_client/auv3/yup_audio_plugin_client_AUv3.mm"
+#include <yup_audio_plugin_client/auv3/yup_audio_plugin_client_AUv3.mm>
 
 // =============================================================================
 #include <yup_audio_processors/yup_audio_processors.h>

@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2026 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,7 +19,4 @@
   ==============================================================================
 */
 
-#include "yup_shading/yup_ShaderCache.cpp"
-#include "yup_shading/yup_ShaderTranspiler.cpp"
-#include "yup_shading/yup_ShaderBundle.cpp"
-#include "yup_shading/yup_WgslTranspiler.cpp"
+#include "yup_ObjCHelpers.mm"

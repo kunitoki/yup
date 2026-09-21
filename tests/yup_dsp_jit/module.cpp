@@ -19,6 +19,28 @@
   ==============================================================================
 */
 
-#include "yup_ai/yup_LLMProviders.cpp"
-#include "yup_ai/yup_LLMTypes.cpp"
-#include "yup_ai/yup_MCPTypes.cpp"
+#include "yup_YdspDiagnosticsTests.cpp"
+#include "yup_YdspBundleTests.cpp"
+#include "yup_YdspCompilerOptionsTests.cpp"
+#include "yup_YdspExamplePatchTests.cpp"
+#include "yup_YdspFusionTests.cpp"
+#include "yup_YdspFusedMultiplyAddTests.cpp"
+#include "yup_YdspGraphTests.cpp"
+#include "yup_YdspRuntimeOptimizationTests.cpp"
+#include "yup_YdspLatencyTests.cpp"
+#include "yup_YdspLexerParserTests.cpp"
+#include "yup_YdspOptimizerTests.cpp"
+#include "yup_YdspProjectTests.cpp"
+#include "yup_YdspSemanticAnalyzerTests.cpp"
+#include "yup_YdspSmokeTests.cpp"
+#include "yup_YdspSubgraphTests.cpp"
+#include "yup_YdspVectorizerTests.cpp"
+#include "yup_YdspWasmBackendTests.cpp"
+#include "yup_YdspWasmTests.cpp"
+
+#if ! YUP_WASM
+#include "yup_YdspAsmJitCodegenTests.cpp"
+#include "yup_SleefLibraryTests.cpp"
+#endif
+
+#include "yup_YdspBenchmarkTests.cpp"

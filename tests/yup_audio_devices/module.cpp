@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2026 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,5 +19,7 @@
   ==============================================================================
 */
 
-//#include "yup_audio_graph/yup_AudioGraphModel.cpp"
-#include "yup_audio_graph/yup_AudioGraphProcessor.cpp"
+#include "../mocks/yup_audio_devices.h"
+
+#include "yup_AudioDeviceManager.cpp"
+#include "yup_UMPPacketCollector.cpp"

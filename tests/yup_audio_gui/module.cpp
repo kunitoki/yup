@@ -19,8 +19,15 @@
   ==============================================================================
 */
 
-#include "yup_audio_plugin_host/yup_AudioPluginDescription.cpp"
-#include "yup_audio_plugin_host/yup_AudioPluginLV2Format.cpp"
-#include "yup_audio_plugin_host/yup_AudioPluginScanner.cpp"
-#include "yup_audio_plugin_host/yup_AudioPluginInstance.cpp"
-#include "yup_audio_plugin_host/yup_AudioPluginState.cpp"
+#include "yup_AudioDeviceManagerWindow.cpp"
+#include "yup_AudioPeakProfile.cpp"
+#include "yup_AudioPeakProfileCache.cpp"
+#include "yup_AudioThumbnail.cpp"
+#include "yup_AudioGraphComponent.cpp"
+#include "yup_AudioViewComponent.cpp"
+#include "yup_CartesianPlane.cpp"
+#include "yup_KMeterComponent.cpp"
+#include "yup_MidiKeyboardComponent.cpp"
+#include "yup_SpectrumAnalyzerComponent.cpp"
+#include "yup_SpectrogramComponent.cpp"
+#include "yup_AudioDeviceManagerPanel.cpp"

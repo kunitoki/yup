@@ -31,13 +31,13 @@
 #define YupPlugin_IsMono 0
 
 // =============================================================================
-#include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
-#include "yup_audio_plugin_client/yup_TestAudioBufferList.h"
+#include "yup_TestPluginProcessor.h"
+#include "yup_TestAudioBufferList.h"
 
 #include <utility>
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorAU
-#include "yup_audio_plugin_client/au/yup_audio_plugin_client_AU.mm"
+#include <yup_audio_plugin_client/au/yup_audio_plugin_client_AU.mm>
 
 // =============================================================================
 // Layout switching for testing different bus configurations, mirroring the AUv3 suite.

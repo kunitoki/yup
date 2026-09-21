@@ -31,26 +31,26 @@
 #include <flac_library/flac_library.h>
 #endif
 
-#include "yup_audio_formats/yup_AudioFormatManager.cpp"
-#include "yup_audio_formats/yup_AudioFormatReader.cpp"
-#include "yup_audio_formats/yup_AudioFormatWriter.cpp"
+#include "yup_AudioFormatManager.cpp"
+#include "yup_AudioFormatReader.cpp"
+#include "yup_AudioFormatWriter.cpp"
 
 #if YUP_MODULE_AVAILABLE_dr_libs && YUP_AUDIO_FORMAT_WAVE
-#include "yup_audio_formats/yup_WaveAudioFormat.cpp"
+#include "yup_WaveAudioFormat.cpp"
 #endif
 
 #if YUP_MODULE_AVAILABLE_dr_libs && YUP_AUDIO_FORMAT_MP3
-#include "yup_audio_formats/yup_Mp3AudioFormat.cpp"
+#include "yup_Mp3AudioFormat.cpp"
 #endif
 
 #if YUP_MODULE_AVAILABLE_opus_library && YUP_AUDIO_FORMAT_OPUS
-#include "yup_audio_formats/yup_OpusAudioFormat.cpp"
+#include "yup_OpusAudioFormat.cpp"
 #endif
 
 #if YUP_MODULE_AVAILABLE_flac_library && YUP_AUDIO_FORMAT_FLAC
-#include "yup_audio_formats/yup_FlacAudioFormat.cpp"
+#include "yup_FlacAudioFormat.cpp"
 #endif
 
 #if YUP_AUDIO_FORMAT_COREAUDIO
-#include "yup_audio_formats/yup_AppleCoreAudioFormat.cpp"
+#include "yup_AppleCoreAudioFormat.cpp"
 #endif

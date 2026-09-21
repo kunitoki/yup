@@ -37,10 +37,11 @@
 
 // =============================================================================
 #include <yup_audio_processors/yup_audio_processors.h>
-#include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
+
+#include "yup_TestPluginProcessor.h"
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorCLAP
-#include "yup_audio_plugin_client/clap/yup_audio_plugin_client_CLAP.cpp"
+#include <yup_audio_plugin_client/clap/yup_audio_plugin_client_CLAP.cpp>
 
 extern "C" yup::AudioProcessor* createPluginProcessorCLAP()
 {

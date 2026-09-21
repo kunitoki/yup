@@ -33,10 +33,10 @@
 
 // =============================================================================
 #include <yup_audio_processors/yup_audio_processors.h>
-#include "yup_audio_plugin_client/yup_TestPluginProcessor.h"
+#include "yup_TestPluginProcessor.h"
 
 #define YUP_AUDIO_PLUGIN_CREATE_FUNCTION createPluginProcessorVST3
-#include "yup_audio_plugin_client/vst3/yup_audio_plugin_client_VST3.cpp"
+#include <yup_audio_plugin_client/vst3/yup_audio_plugin_client_VST3.cpp>
 
 extern "C" yup::AudioProcessor* createPluginProcessorVST3()
 {

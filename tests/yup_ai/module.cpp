@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,9 +19,6 @@
   ==============================================================================
 */
 
-#include "mocks/yup_events.h"
-
-#include "yup_events/yup_Timer.cpp"
-#include "yup_events/yup_MessageManager.cpp"
-#include "yup_events/yup_InterprocessConnection.cpp"
-#include "yup_events/yup_ToastNotification.cpp"
+#include "yup_LLMProviders.cpp"
+#include "yup_LLMTypes.cpp"
+#include "yup_MCPTypes.cpp"

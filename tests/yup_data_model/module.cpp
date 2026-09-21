@@ -19,5 +19,9 @@
   ==============================================================================
 */
 
-#include "yup_python/yup_ScriptEngine.cpp"
-#include "yup_python/yup_ScriptPython.cpp"
+#include "yup_CachedValue.cpp"
+#include "yup_DataTree.cpp"
+#include "yup_DataTreeObjectList.cpp"
+#include "yup_DataTreeQuery.cpp"
+#include "yup_DataTreeSchema.cpp"
+#include "yup_UndoManager.cpp"

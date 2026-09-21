@@ -19,18 +19,18 @@
   ==============================================================================
 */
 
-#include "mocks/rive_gpu.h"
-#include "mocks/rive_ore.h"
-#include "mocks/yup_rhi.h"
-#include "mocks/yup_graphics.h"
+#include "../mocks/rive_gpu.h"
+#include "../mocks/rive_ore.h"
+#include "../mocks/yup_rhi.h"
+#include "../mocks/yup_graphics.h"
 
-#include "yup_rhi/yup_GpuDevice.cpp"
-#include "yup_rhi/yup_GpuTarget.cpp"
-#include "yup_rhi/yup_GpuTexture.cpp"
-#include "yup_rhi/yup_GpuPipeline.cpp"
-#include "yup_rhi/yup_GpuPipelineMocked.cpp"
-#include "yup_rhi/yup_GpuComputePass.cpp"
+#include "yup_GpuDevice.cpp"
+#include "yup_GpuTarget.cpp"
+#include "yup_GpuTexture.cpp"
+#include "yup_GpuPipeline.cpp"
+#include "yup_GpuPipelineMocked.cpp"
+#include "yup_GpuComputePass.cpp"
 
 #if YUP_LINUX
-#include "yup_rhi/native/yup_GpuDevice_linux.cpp"
+#include "native/yup_GpuDevice_linux.cpp"
 #endif

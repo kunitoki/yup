@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,7 +19,12 @@
   ==============================================================================
 */
 
-#include "mocks/yup_audio_devices.h"
+#include "../mocks/yup_audio_processors.h"
 
-#include "yup_audio_devices/yup_AudioDeviceManager.cpp"
-#include "yup_audio_devices/yup_UMPPacketCollector.cpp"
+#include "yup_AudioBus.cpp"
+#include "yup_AudioBusBufferView.cpp"
+#include "yup_AudioBusLayout.cpp"
+#include "yup_AudioParameter.cpp"
+#include "yup_AudioProcessContext.cpp"
+#include "yup_ParameterChangeBuffer.cpp"
+#include "yup_SpectralBridge.cpp"

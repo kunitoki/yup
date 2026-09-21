@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,9 +19,4 @@
   ==============================================================================
 */
 
-#include "yup_simd/yup_FloatVectorOperations.cpp"
-#include "yup_simd/yup_ComplexVectorOperations.cpp"
-#include "yup_simd/yup_AffineTransformOperations.cpp"
-#include "yup_simd/yup_ColorVectorOperations.cpp"
-#include "yup_simd/yup_SIMDRegister.cpp"
-#include "yup_simd/yup_Vec.cpp"
+#include "yup_AudioPluginUtilities.cpp"

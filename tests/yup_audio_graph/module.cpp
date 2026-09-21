@@ -19,4 +19,5 @@
   ==============================================================================
 */
 
-#include "yup_audio_plugin_client/yup_AudioPluginUtilities.cpp"
+//#include "yup_AudioGraphModel.cpp"
+#include "yup_AudioGraphProcessor.cpp"
