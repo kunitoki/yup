@@ -117,6 +117,7 @@
 #include <algorithm>
 #include <functional>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -147,7 +148,6 @@
 #include "oscillators/yup_WavetableOscillator.h"
 #include "oscillators/yup_SyncOscillator.h"
 #include "oscillators/yup_WaveformBank.h"
-#include "oscillators/yup_MorphingOscillator.h"
 
 // Onset detection
 #include "onsets/yup_FilterBank.h"

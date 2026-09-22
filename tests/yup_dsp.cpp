@@ -40,7 +40,6 @@
 #include "yup_dsp/yup_LinkwitzRileyFilter.cpp"
 #include "yup_dsp/yup_LoudnessFilter.cpp"
 #include "yup_dsp/yup_ModulatedOscillator.cpp"
-#include "yup_dsp/yup_MorphingOscillator.cpp"
 #include "yup_dsp/yup_NoiseGenerators.cpp"
 #include "yup_dsp/yup_OnsetDetector.cpp"
 #include "yup_dsp/yup_SincOversampler.cpp"

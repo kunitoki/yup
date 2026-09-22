@@ -11,7 +11,7 @@ Oscillator Synchronization via Additive Synthesis"* (DAFx26, paper 49).
 **Headers:** `yup_dsp/oscillators/` - `yup_FourierSeries.h`,
 `yup_SyncSpectralResampler.h`, `yup_AdditiveOscillator.h`,
 `yup_WavetableOscillator.h`, `yup_SyncOscillator.h`, `yup_WaveformBank.h`,
-`yup_MorphingOscillator.h`, `yup_ModulatedOscillator.h`.
+`yup_ModulatedOscillator.h`.
 
 ## The idea
 
@@ -133,33 +133,6 @@ crossfade length passed to `prepare()` (64 samples by default). When comparing
 it with additive synthesis, let this ramp finish and align the playback phases
 before measuring. Subsequent renders crossfade from the current table.
 
-## Endpoint morphing with spectral synchronization
-
-`MorphingOscillator<SampleType, CoeffType>` composes two `SyncOscillator`s with
-identical phase, pitch, mode and ratio. Set endpoint series once and call `update()`
-after changing the sync parameters. The morph position is supplied per sample or
-as a block of values; changing it never runs a transform or FFT.
-
-```cpp
-auto first = yup::FourierSeries<double>::create (yup::Waveform::sawtooth, 128);
-auto second = yup::FourierSeries<double>::create (yup::Waveform::square, 128);
-yup::MorphingOscillator<float> oscillator;
-oscillator.prepare (48000.0, 128);
-oscillator.setSeries (first, second);
-oscillator.setSyncMode (yup::SyncMode::hard);
-oscillator.setFollowerRatio (1.375);
-oscillator.update();
-auto sample = oscillator.processSample (0.25);
-```
-
-At a fixed ratio the transform is linear: transforming a coefficient blend equals
-blending the transformed endpoints. Morphing uses linear amplitude interpolation,
-not magnitude/phase interpolation or loudness normalization. Align endpoint phases
-when cancellations are undesirable. Table-replacement crossfades remain separate
-from the morph control. Morph changes create amplitude-modulation sidebands, so
-smooth control-rate automation and reserve bandwidth. For audio-rate morphing use
-the oversampled path below.
-
 ## Prepared waveform banks
 
 `WaveformBank<SampleType, CoeffType>` renders any number of Fourier-series frames
@@ -179,9 +152,20 @@ frame/level currently retains its FFT scratch storage as well as its table; shar
 banks across voices to amortize preparation and memory. No bank rebuild is needed
 for pitch, morph, FM, PM or phase-distortion changes.
 
+`refreshFrames(frames)` replaces the coefficients of an already prepared bank
+without allocating, the counterpart of `WavetableOscillator`'s `setSeries`/`render`
+split. Table sizes and the per-level harmonic limits chosen by `prepare()` are
+kept, so each level stays correctly bandlimited; frames with fewer harmonics are
+zero-extended. It returns `false` and changes nothing when the frame count differs
+from `prepare()` or a frame exceeds `getNumHarmonics()`. It is still one inverse FFT
+per frame and level, so it belongs off the audio thread, and it mutates the bank in
+place - refresh a second bank and hand it to `ModulatedOscillator::setBank()` or
+`PrismOscillator::setBank()` (both allocation-free pointer swaps) rather than
+rewriting tables that voices are reading.
+
 ## Oversampled audio-rate modulation
 
-`ModulatedOscillator<SampleType, OversampleFactor = 4, SincRadius = 16, CoeffType = double>`
+`ModulatedOscillator<SampleType, OversampleFactor = 4, CoeffType = double>`
 reads a shared bank and provides signed linear FM, exponential pitch modulation,
 PM, frame morphing, breakpoint phase distortion and fractional hard sync.
 
@@ -219,6 +203,7 @@ interpolate external controls to it. Callbacks must not allocate, block or throw
 | `morph` | Normalized bank position, clamped to [0, 1]. |
 | `phaseDistortion` | Input phase that maps to half a waveform cycle; 0.5 is identity, clamped to [0.01, 0.99]. |
 | `syncFrequency` | Nonnegative leader frequency; zero disables hard sync. |
+| `bandwidthFrequency` | Optional Hz floor compared against the post-FM frequency when picking a bandwidth level; raise it when a modulator will push the carrier above its current pitch. |
 
 Carrier and leader increments are limited to half an internal sample-rate cycle.
 Leader wraps reset the follower at the fractional event time, preserving its
@@ -228,8 +213,11 @@ estimate includes carrier speed, PM differences and the maximum phase-map slope.
 It is a conservative table selection heuristic, not a bound on modulation sidebands.
 
 The entire synthesis/modulation path is generated at the elevated rate, low-pass
-filtered, then decimated. Latency is `SincRadius` output samples; report
-`getLatencyInSamples()` to the owning audio processor. `reset()` clears phase,
+filtered, then decimated through a `HalfbandOversampler`. `prepare()` accepts an
+optional `HalfbandOversamplerDesign` (default: 100 dB linear-phase FIR, flat to
+0.45 of the output rate); the latency follows that design, so read
+`getLatencyInSamples()` after `prepare()` and report it to the owning audio
+processor. `reset()` clears phase,
 residuals and filter history. Processing is allocation-free within the block size
 passed to `prepare()`. Invalid block sizes or null output return false without
 advancing state. All parameter values must be finite.
@@ -237,13 +225,13 @@ advancing state. All parameter values must be finite.
 These are **antialiased**, not unconditionally alias-free, modulation algorithms.
 Finite correction kernels do not correct all higher derivatives of an arbitrary
 waveform. Parameters are treated as constant within each internal sample interval;
-abrupt control changes are not automatically smoothed. Higher oversampling and
-filter radius improve different error sources at increased CPU cost. Extreme
+abrupt control changes are not automatically smoothed. Higher oversampling and a
+stricter decimator design improve different error sources at increased CPU cost. Extreme
 modulation needs explicit bandwidth/depth constraints. Do not upsample an already
 aliased base-rate oscillator and expect its aliases to disappear.
 
-`Oversampler::beginGeneration()` exposes the same allocation-free generation path
-for other sources. Fill its high-rate buffer directly and call `downsample()`;
+`HalfbandOversampler::beginGeneration()` (and its `SincOversampler` twin) exposes
+the same allocation-free generation path for other sources. Fill its high-rate buffer directly and call `downsample()`;
 `getGenerationLatencyInSamples()` reports decimation-only latency, while the
 existing `getLatencyInSamples()` still describes the complete up/down path.
 
