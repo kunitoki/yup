@@ -213,8 +213,9 @@
 // Oversampling and sample-rate conversion
 #include "resampling/yup_CircularBuffer.h"
 #include "resampling/yup_SincTable.h"
-#include "resampling/yup_Oversampler.h"
+#include "resampling/yup_SincOversampler.h"
+#include "resampling/yup_HalfbandOversampler.h"
 #include "resampling/yup_Resampler.h"
 
-// Audio-rate oscillator modulation (needs Oversampler)
+// Audio-rate oscillator modulation (needs HalfbandOversampler)
 #include "oscillators/yup_ModulatedOscillator.h"

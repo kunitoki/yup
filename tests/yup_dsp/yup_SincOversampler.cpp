@@ -30,7 +30,7 @@ namespace yup::test
 {
 
 //==============================================================================
-class OversamplerTest : public ::testing::Test
+class SincOversamplerTest : public ::testing::Test
 {
 protected:
     static constexpr double sampleRate = 44100.0;
@@ -64,20 +64,20 @@ protected:
         std::fill (buf.begin(), buf.end(), value);
     }
 
-    Oversampler<float, 2, 8> os2x;
-    Oversampler<float, 4, 8> os4x;
+    SincOversampler<float, 2, 8> os2x;
+    SincOversampler<float, 4, 8> os4x;
 };
 
 //==============================================================================
-TEST_F (OversamplerTest, DefaultConstructionDoesNotCrash)
+TEST_F (SincOversamplerTest, DefaultConstructionDoesNotCrash)
 {
-    Oversampler<float, 2, 8> os;
+    SincOversampler<float, 2, 8> os;
     EXPECT_EQ (os.getOversampledNumSamples(), 0);
     EXPECT_EQ (os.getLatencyInSamples(), 16);
     EXPECT_EQ (os.getOversampledChannelData (0), nullptr);
 }
 
-TEST_F (OversamplerTest, PrepareAllocatesOversampledBuffer)
+TEST_F (SincOversamplerTest, PrepareAllocatesOversampledBuffer)
 {
     EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
 
@@ -89,13 +89,13 @@ TEST_F (OversamplerTest, PrepareAllocatesOversampledBuffer)
     EXPECT_NE (os2x.getOversampledChannelData (0), nullptr);
 }
 
-TEST_F (OversamplerTest, LatencyReturnsCorrectValue)
+TEST_F (SincOversamplerTest, LatencyReturnsCorrectValue)
 {
     EXPECT_EQ (os2x.getLatencyInSamples(), 16); // 2 * SincRadius = 2 * 8
     EXPECT_EQ (os4x.getLatencyInSamples(), 16);
 }
 
-TEST_F (OversamplerTest, ResetClearsOversampledSize)
+TEST_F (SincOversamplerTest, ResetClearsOversampledSize)
 {
     std::vector<float> ch0 (blockSize, 1.0f);
     const float* inputPtrs[] = { ch0.data() };
@@ -107,7 +107,7 @@ TEST_F (OversamplerTest, ResetClearsOversampledSize)
     EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
 }
 
-TEST_F (OversamplerTest, UpsampleDCSignalHasCorrectMagnitude)
+TEST_F (SincOversamplerTest, UpsampleDCSignalHasCorrectMagnitude)
 {
     constexpr float dcValue = 0.5f;
     std::vector<float> ch0 (blockSize, dcValue);
@@ -126,7 +126,7 @@ TEST_F (OversamplerTest, UpsampleDCSignalHasCorrectMagnitude)
     EXPECT_NEAR (rms, dcValue, 0.05f);
 }
 
-TEST_F (OversamplerTest, ProcessOversampledBlockCallbackReceivesCorrectSize)
+TEST_F (SincOversamplerTest, ProcessOversampledBlockCallbackReceivesCorrectSize)
 {
     constexpr int shortBlockSize = 64;
     std::vector<float> ch0 (shortBlockSize, 0.0f);
@@ -145,7 +145,7 @@ TEST_F (OversamplerTest, ProcessOversampledBlockCallbackReceivesCorrectSize)
     EXPECT_EQ (callbackSamples, shortBlockSize * 2);
 }
 
-TEST_F (OversamplerTest, ProcessOversampledBlockReceivesEmptyBufferWithoutPendingBlock)
+TEST_F (SincOversamplerTest, ProcessOversampledBlockReceivesEmptyBufferWithoutPendingBlock)
 {
     int callbackChannels = -1;
     int callbackSamples = -1;
@@ -160,7 +160,7 @@ TEST_F (OversamplerTest, ProcessOversampledBlockReceivesEmptyBufferWithoutPendin
     EXPECT_EQ (callbackSamples, 0);
 }
 
-TEST_F (OversamplerTest, DownsampleConsumesPendingOversampledBlock)
+TEST_F (SincOversamplerTest, DownsampleConsumesPendingOversampledBlock)
 {
     std::vector<float> ch0 (blockSize, 0.0f);
     std::vector<float> output (blockSize, 0.0f);
@@ -176,7 +176,7 @@ TEST_F (OversamplerTest, DownsampleConsumesPendingOversampledBlock)
     EXPECT_EQ (os2x.getOversampledChannelData (0), nullptr);
 }
 
-TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
+TEST_F (SincOversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
 {
     constexpr float dcValue = 0.5f;
     std::vector<float> input (blockSize, dcValue);
@@ -193,7 +193,7 @@ TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
     EXPECT_NEAR (calculateRMS (output.data(), blockSize), dcValue, 0.02f);
 }
 
-TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesLowFrequencySine)
+TEST_F (SincOversamplerTest, UpsampleThenDownsamplePreservesLowFrequencySine)
 {
     constexpr float frequency = 440.0f; // A4 - well below Nyquist/4
     std::vector<float> input (blockSize);
@@ -216,7 +216,7 @@ TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesLowFrequencySine)
     EXPECT_NEAR (rmsOut, rmsIn, rmsIn * 0.1f); // within 10%
 }
 
-TEST_F (OversamplerTest, DecimationFiltersOversampledDomainHighFrequency)
+TEST_F (SincOversamplerTest, DecimationFiltersOversampledDomainHighFrequency)
 {
     // Upsample silence to get a clean oversampled buffer
     std::vector<float> silence (blockSize, 0.0f);
@@ -247,7 +247,7 @@ TEST_F (OversamplerTest, DecimationFiltersOversampledDomainHighFrequency)
     EXPECT_LT (rmsOut, injectedAmplitude * 0.5f);
 }
 
-TEST_F (OversamplerTest, OversampledChannelDataNotNullAfterUpsample)
+TEST_F (SincOversamplerTest, OversampledChannelDataNotNullAfterUpsample)
 {
     std::vector<float> ch0 (blockSize, 0.0f);
     const float* inputPtrs[] = { ch0.data() };
@@ -258,7 +258,7 @@ TEST_F (OversamplerTest, OversampledChannelDataNotNullAfterUpsample)
     EXPECT_EQ (os2x.getOversampledChannelData (-1), nullptr); // invalid index
 }
 
-TEST_F (OversamplerTest, FourXOversamplerHasCorrectOutputSize)
+TEST_F (SincOversamplerTest, FourXOversamplerHasCorrectOutputSize)
 {
     std::vector<float> ch0 (blockSize, 0.0f);
     const float* inputPtrs[] = { ch0.data() };
@@ -267,35 +267,12 @@ TEST_F (OversamplerTest, FourXOversamplerHasCorrectOutputSize)
     EXPECT_EQ (os4x.getOversampledNumSamples(), blockSize * 4);
 }
 
-//==============================================================================
-TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
-{
-    Oversampler2xFloat a;
-    Oversampler4xFloat b;
-    Oversampler8xFloat c;
-    Oversampler2xDouble d;
-    Oversampler4xDouble e;
-    Oversampler16xFloat f;
-    Oversampler32xDouble g;
-
-    // Prepare briefly to confirm the types are usable
-    a.prepare (44100.0, 1, 64);
-    b.prepare (44100.0, 1, 64);
-    c.prepare (44100.0, 1, 64);
-    d.prepare (44100.0, 1, 64);
-    e.prepare (44100.0, 1, 64);
-    f.prepare (44100.0, 1, 64);
-    g.prepare (44100.0, 1, 64);
-
-    SUCCEED();
-}
-
 } // namespace yup::test
 
 namespace yup::test
 {
 
-TEST_F (OversamplerTest, DirectGenerationPreservesDCWithoutInputInterpolation)
+TEST_F (SincOversamplerTest, DirectGenerationPreservesDCWithoutInputInterpolation)
 {
     ASSERT_TRUE (os4x.beginGeneration (1, blockSize));
     FloatVectorOperations::fill (os4x.getOversampledChannelData (0), 0.25f, blockSize * 4);
@@ -309,7 +286,7 @@ TEST_F (OversamplerTest, DirectGenerationPreservesDCWithoutInputInterpolation)
         EXPECT_NEAR (0.25f, output[static_cast<std::size_t> (i)], 1e-6f);
 }
 
-TEST_F (OversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
+TEST_F (SincOversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
 {
     ASSERT_TRUE (os4x.beginGeneration (1, 16));
     EXPECT_FALSE (os4x.beginGeneration (0, 16));
@@ -319,7 +296,7 @@ TEST_F (OversamplerTest, InvalidGenerationRequestsPreserveThePendingBlock)
     EXPECT_EQ (64, os4x.getOversampledNumSamples());
 }
 
-TEST_F (OversamplerTest, DirectGenerationImpulseHasTheReportedLatency)
+TEST_F (SincOversamplerTest, DirectGenerationImpulseHasTheReportedLatency)
 {
     ASSERT_TRUE (os4x.beginGeneration (1, blockSize));
     auto* internal = os4x.getOversampledChannelData (0);
@@ -418,7 +395,7 @@ protected:
         constexpr int total = 512;
         const auto input = makeNoise<SampleType> (total, 7);
 
-        Oversampler<SampleType, Factor, Radius> wholeBlock, fixedBlocks, irregularBlocks;
+        SincOversampler<SampleType, Factor, Radius> wholeBlock, fixedBlocks, irregularBlocks;
         wholeBlock.prepare (sampleRate, 1, total);
         fixedBlocks.prepare (sampleRate, 1, total);
         irregularBlocks.prepare (sampleRate, 1, total);
@@ -472,7 +449,7 @@ protected:
         constexpr int blockSize = 1024;
         const double frequency = fundamentalBin / static_cast<double> (blockSize);
 
-        Oversampler<float, Factor, Radius> os;
+        SincOversampler<float, Factor, Radius> os;
         os.prepare (sampleRate, 1, blockSize);
 
         std::vector<double> steadyState;
@@ -506,7 +483,7 @@ protected:
     {
         constexpr int blockSize = 512;
 
-        Oversampler<float, Factor, Radius> os;
+        SincOversampler<float, Factor, Radius> os;
         os.prepare (sampleRate, 1, blockSize);
 
         RoundTripAccuracy accuracy;
@@ -567,7 +544,7 @@ TEST_F (OversamplerAccuracyTest, ImpulseLatencyWithTinyBlocks)
     std::vector<float> input (total, 0.0f);
     input[impulsePosition] = 1.0f;
 
-    Oversampler<float, factor, radius> os;
+    SincOversampler<float, factor, radius> os;
     os.prepare (sampleRate, 1, total);
     const auto streams = process (os, input, { 3 });
 
@@ -588,7 +565,7 @@ TEST_F (OversamplerAccuracyTest, UpsampleMatchesScalarSincReference)
     constexpr int total = 256;
     const auto input = makeNoise<float> (total, 3);
 
-    Oversampler<float, factor, radius> os;
+    SincOversampler<float, factor, radius> os;
     os.prepare (sampleRate, 1, total);
     const auto streams = process (os, input, { 64 });
 
@@ -630,7 +607,7 @@ TEST_F (OversamplerAccuracyTest, ChannelsAreIndependent)
     const auto left = makeNoise<float> (total, 1);
     const auto right = makeNoise<float> (total, 2);
 
-    Oversampler<float, 2, 8> stereo, monoLeft, monoRight;
+    SincOversampler<float, 2, 8> stereo, monoLeft, monoRight;
     stereo.prepare (sampleRate, 2, blockSize);
     monoLeft.prepare (sampleRate, 1, blockSize);
     monoRight.prepare (sampleRate, 1, blockSize);
@@ -667,7 +644,7 @@ TEST_F (OversamplerAccuracyTest, ResetMatchesFreshInstance)
 {
     constexpr int blockSize = 128;
 
-    Oversampler<float, 4, 8> reused, fresh;
+    SincOversampler<float, 4, 8> reused, fresh;
     reused.prepare (sampleRate, 1, blockSize);
     fresh.prepare (sampleRate, 1, blockSize);
 
@@ -688,7 +665,7 @@ TEST_F (OversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
     const auto blockA = makeNoise<float> (blockSize, 8);
     const auto blockB = makeNoise<float> (blockSize, 9);
 
-    Oversampler<float, 4, 8> withGeneration, withoutGeneration;
+    SincOversampler<float, 4, 8> withGeneration, withoutGeneration;
     withGeneration.prepare (sampleRate, 1, blockSize);
     withoutGeneration.prepare (sampleRate, 1, blockSize);
 
@@ -734,7 +711,7 @@ TEST_F (OversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadiu
     constexpr int blockSize = 2048;
     constexpr double toneRatio = 0.6; // of the input sample rate, above the input Nyquist
 
-    Oversampler<float, factor, 16> os;
+    SincOversampler<float, factor, 16> os;
     os.prepare (sampleRate, 1, blockSize);
 
     ASSERT_TRUE (os.beginGeneration (1, blockSize));

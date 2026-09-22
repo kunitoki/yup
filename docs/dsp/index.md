@@ -41,8 +41,8 @@ available in the build.
   and the end-to-end `OnsetDetector`.
 - [Convolution & delay](convolution-and-delay.md) - the `PartitionedConvolver`
   and the `FractionallyAddressedDelay` interpolation delay line.
-- [Resampling](resampling.md) - `Oversampler`, `Resampler`, `SincTable`, and
-  the `CircularBuffer` helper.
+- [Resampling](resampling.md) - `HalfbandOversampler`, `SincOversampler`,
+  `Resampler`, `SincTable`, and the `CircularBuffer` helper.
 - [Time-stretching & pitch-shifting](time-stretching.md) - the
   `TimeStretchProcessor` with its time-domain and Bungee backends.
 - [Oscillators](oscillators.md) - `FourierSeries`, the alias-free

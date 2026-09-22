@@ -28,7 +28,7 @@ namespace yup
 /**
     Multi-channel integer-factor oversampler using windowed sinc interpolation.
 
-    Oversampler up- and downsamples audio by an integer factor with
+    SincOversampler up- and downsamples audio by an integer factor with
     bandlimited interpolation and anti-aliasing. Each channel keeps the last
     kernel-length of samples contiguously in front of its staging buffer, so
     every output sample is a single contiguous dot product and multi-block
@@ -43,7 +43,7 @@ namespace yup
 
     Typical usage in an audio effect:
     @code
-    yup::Oversampler<float, 4, 16> os;
+    yup::SincOversampler<float, 4, 16> os;
     os.prepare (44100.0, 2, 512);
 
     // Inside your audio callback:
@@ -55,15 +55,21 @@ namespace yup
     os.downsample (outputPtrs, numChannels, numSamples);
     @endcode
 
+    For power-of-two factors, HalfbandOversampler reaches a deeper stopband and a
+    steeper edge for less work; this single-stage design remains for arbitrary
+    integer factors and for fixed, compile-time kernel sizes.
+
     @tparam SampleType       Audio sample type (float or double).
-    @tparam OversampleFactor Integer upsample ratio (2, 4, 8, …).
+    @tparam OversampleFactor Integer upsample ratio (2, 3, 4, 5, …).
     @tparam SincRadius       Half-width of the sinc kernel in original-rate samples.
                              Higher values give a steeper transition and deeper
                              stopband at the cost of more computation and latency.
     @tparam CoeffType        Precision for filter design and accumulation (default double).
+
+    @see HalfbandOversampler
 */
 template <typename SampleType, int OversampleFactor, int SincRadius, typename CoeffType = double>
-class Oversampler
+class SincOversampler
 {
 public:
     static_assert (OversampleFactor >= 2, "OversampleFactor must be at least 2");
@@ -71,10 +77,10 @@ public:
 
     //==============================================================================
     /** Default constructor. Call prepare() before any processing. */
-    Oversampler() = default;
+    SincOversampler() = default;
 
     /** Destructor. */
-    ~Oversampler() = default;
+    ~SincOversampler() = default;
 
     //==============================================================================
     /**
@@ -393,20 +399,7 @@ private:
     int currentOversampledSize = 0;
     int currentNumChannels = 0;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oversampler)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SincOversampler)
 };
-
-//==============================================================================
-/** @name Convenience type aliases for common oversampling configurations (latency 32 samples) */
-using Oversampler2xFloat = Oversampler<float, 2, 16>;   /**< 2x oversampler, float, 16-tap radius */
-using Oversampler4xFloat = Oversampler<float, 4, 16>;   /**< 4x oversampler, float, 16-tap radius */
-using Oversampler8xFloat = Oversampler<float, 8, 16>;   /**< 8x oversampler, float, 16-tap radius */
-using Oversampler16xFloat = Oversampler<float, 16, 16>; /**< 16x oversampler, float, 16-tap radius */
-using Oversampler32xFloat = Oversampler<float, 32, 16>; /**< 32x oversampler, float, 16-tap radius */
-using Oversampler2xDouble = Oversampler<double, 2, 16>; /**< 2x oversampler, double, 16-tap radius */
-using Oversampler4xDouble = Oversampler<double, 4, 16>; /**< 4x oversampler, double, 16-tap radius */
-using Oversampler8xDouble = Oversampler<double, 8, 16>; /**< 8x oversampler, double, 16-tap radius */
-using Oversampler16xDouble = Oversampler<double, 16, 16>; /**< 16x oversampler, double, 16-tap radius */
-using Oversampler32xDouble = Oversampler<double, 32, 16>; /**< 32x oversampler, double, 16-tap radius */
 
 } // namespace yup

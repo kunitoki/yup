@@ -2,9 +2,10 @@
 
 The resampling stack is built on precomputed windowed-sinc interpolation
 tables with per-channel history buffers, so it operates seamlessly across
-audio blocks (real-time safe). It covers integer-factor oversampling, async
-sample-rate conversion, and the two building blocks: a compile-time circular
-buffer and the sinc lookup table.
+audio blocks (real-time safe). It covers integer-factor oversampling (a
+halfband cascade for power-of-two factors and a single-stage sinc for any
+factor), async sample-rate conversion, and the two building blocks: a
+compile-time circular buffer and the sinc lookup table.
 
 ## Building blocks
 
@@ -49,15 +50,15 @@ by the second half of a Kaiser window spanning exactly the kernel radius
 coefficient; the entries beyond the radius (tap `SincRadius` with a nonzero
 fractional phase) are zeroed, so the kernel decays smoothly to zero at its edge.
 
-## Oversampler
+## SincOversampler
 
-`Oversampler<SampleType, OversampleFactor, SincRadius, CoeffType>` provides
+`SincOversampler<SampleType, OversampleFactor, SincRadius, CoeffType>` provides
 multi-channel integer-factor oversampling (typically 2×/4×/8×) for
 processing chains that need headroom — distortion, nonlinear filters, etc.
 Compile-time constraints: `OversampleFactor >= 2`, `SincRadius >= 1`.
 
 ```cpp
-yup::Oversampler<float, 4, 16> os;            // 4x oversampling, sinc radius 16
+yup::SincOversampler<float, 4, 16> os;        // 4x oversampling, sinc radius 16
 os.prepare (44100.0, 2, 512);
 
 // audio thread:
@@ -95,11 +96,72 @@ os.downsample (outPtrs, numChannels, numSamples);
   generation followed by `downsample`.
 - `reset()` clears history without re-preparing.
 
+This single-stage design remains for arbitrary integer factors and fixed,
+compile-time kernel sizes. For power-of-two factors prefer
+`HalfbandOversampler` below, which is what the `Oversampler2xFloat` …
+`Oversampler32xDouble` aliases refer to.
+
+## HalfbandOversampler
+
+`HalfbandOversampler<SampleType, OversampleFactor, CoeffType>` oversamples by
+a power of two through a cascade of 2× halfband stages. Every other tap of a
+halfband filter is zero, so a stage costs about a quarter of its nominal
+length, and only the stage next to the base rate has to be steep: each further
+stage only rejects what would fold into the passband and shrinks to a handful
+of taps. The result is a deeper stopband and a steeper edge than
+`SincOversampler` for less work, and the advantage grows with the factor.
+
+```cpp
+yup::HalfbandOversampler<float, 4> os;       // 4x, linear-phase FIR, 100 dB, flat to 0.45 fs
+os.prepare (44100.0, 2, 512);
+
+yup::HalfbandOversamplerDesign design;       // shared by every instantiation
+design.filterType = yup::HalfbandFilterType::polyphaseIIR;
+design.stopbandAttenuationDb = 120.0;
+design.passbandEdge = 0.40;                  // fraction of the input rate
+yup::HalfbandOversampler<float, 8> lowLatency;
+lowLatency.prepare (44100.0, 2, 512, design);
+
+// audio thread, identical to SincOversampler:
+os.upsample (inPtrs, numChannels, numSamples);
+os.processOversampledBlock ([] (auto& buffer) { applyDistortion (buffer); });
+os.downsample (outPtrs, numChannels, numSamples);
+```
+
+- `HalfbandOversamplerDesign` (aliased as `Design` inside the class) selects
+  the filter family and the targets every stage must meet:
+  `stopbandAttenuationDb` (default 100) and `passbandEdge` as a fraction of the
+  input rate (default 0.45, i.e. 19.8 kHz at 44.1 kHz). Content between
+  `passbandEdge` and `1 - passbandEdge` of the input Nyquist folds back into
+  the top of the band, as with every halfband design.
+- `HalfbandFilterType::linearPhaseFIR` designs Kaiser-windowed halfbands and
+  verifies each stage's stopband numerically at `prepare()` time, lengthening
+  the filter until the target is met. Phase is exactly linear and both
+  latencies are whole input samples: a small delay at the top rate rounds the
+  cascade's fractional delay up. With the defaults, 4× costs about 94 MACs per
+  input sample to decimate (188 for the round trip) with a 72-sample round-trip
+  latency; 32× costs about 330 / 660 MACs. `SincOversampler` at radius 16
+  needs 128 / 256 and 1024 / 2048 for 90 dB and a passband to 0.36 fs.
+- `HalfbandFilterType::polyphaseIIR` designs elliptic halfbands realised as
+  two allpass branches (Valenzuela & Constantinides). A 100 dB first stage is
+  order 17, eight multiplies per sample, and the whole 32× cascade decimates in
+  about 76 multiplies per input sample. Latency is a few samples but the phase
+  is nonlinear near the passband edge; `getLatencyInSamples()` reports the
+  low-frequency group delay rounded to the nearest sample.
+- `prepare` is **not** realtime-safe. `sampleRate` is accepted for symmetry
+  with `SincOversampler`; the design itself is rate independent.
+- `upsample`, `beginGeneration`, `processOversampledBlock`,
+  `getOversampledChannelData`, `downsample`, `reset`, `getLatencyInSamples`
+  and `getGenerationLatencyInSamples` behave exactly as on `SincOversampler`, so
+  the two classes are drop-in replacements for each other.
+- `getDesign()` returns the applied design; `getStageFilterOrder (stage)`
+  returns the FIR length or the elliptic order of a stage (stage 0 runs next to
+  the input rate) for diagnostics.
+
 Convenience aliases: `Oversampler2xFloat`, `Oversampler4xFloat`,
 `Oversampler8xFloat`, `Oversampler16xFloat`, `Oversampler32xFloat` and the
-`Double` variants (all radius 16, latency 32 input samples). The decimation
-FIR has `2·SincRadius·OversampleFactor + 1` taps per output sample, so 16× and
-32× cost 513 and 1025 taps respectively.
+`Double` variants are `HalfbandOversampler` instantiations with the default
+design.
 
 ## Resampler
 

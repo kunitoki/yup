@@ -271,7 +271,8 @@ including worst-case parameter updates. No timing claims are implied by the API.
   uses for its inverse transform.
 - [Math, windowing & noise](math.md) - `DspMath`, which provides the harmonic
   phasor table used by the transform and the pre-rotation.
-- [Resampling](resampling.md) - `Oversampler` and `Resampler` for sample-rate
+- [Resampling](resampling.md) - `SincOversampler`, `HalfbandOversampler` and
+  `Resampler` for sample-rate
   conversion, as opposed to the spectral resampling done here.
 
 ## Reference
