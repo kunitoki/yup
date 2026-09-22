@@ -97,9 +97,9 @@ os.downsample (outPtrs, numChannels, numSamples);
 - `reset()` clears history without re-preparing.
 
 This single-stage design remains for arbitrary integer factors and fixed,
-compile-time kernel sizes. For power-of-two factors prefer
-`HalfbandOversampler` below, which is what the `Oversampler2xFloat` …
-`Oversampler32xDouble` aliases refer to.
+compile-time kernel sizes, and it is what the spectrum analyzer example uses
+for its oversampled sweeps. For power-of-two factors in effects, see
+`HalfbandOversampler` below.
 
 ## HalfbandOversampler
 
@@ -129,25 +129,35 @@ os.downsample (outPtrs, numChannels, numSamples);
 ```
 
 - `HalfbandOversamplerDesign` (aliased as `Design` inside the class) selects
-  the filter family and the targets every stage must meet:
-  `stopbandAttenuationDb` (default 100) and `passbandEdge` as a fraction of the
-  input rate (default 0.45, i.e. 19.8 kHz at 44.1 kHz). Content between
-  `passbandEdge` and `1 - passbandEdge` of the input Nyquist folds back into
-  the top of the band, as with every halfband design.
-- `HalfbandFilterType::linearPhaseFIR` designs Kaiser-windowed halfbands and
+  the filter family and the targets: `stopbandAttenuationDb` (default 100),
+  `passbandEdge` as a fraction of the input rate (default 0.45, i.e. 19.8 kHz
+  at 44.1 kHz) and `stopbandEdge` (default 0.5). With the default stopband
+  edge the linear-phase FIR rejects everything above the input Nyquist, so
+  nothing folds back into the band; its first stage is then a general
+  polyphase lowpass and dominates the cost. Setting `stopbandEdge` to
+  `1 - passbandEdge` makes the first stage a pure halfband, about a quarter
+  of the cost and half the latency, but content between 0.5 and 0.55 of the
+  input rate folds into the top of the band with only partial attenuation.
+  Every further stage protects the whole band up to Nyquist.
+- `HalfbandFilterType::linearPhaseFIR` designs Kaiser-windowed stages and
   verifies each stage's stopband numerically at `prepare()` time, lengthening
   the filter until the target is met. Phase is exactly linear and both
   latencies are whole input samples: a small delay at the top rate rounds the
-  cascade's fractional delay up. With the defaults, 4× costs about 94 MACs per
-  input sample to decimate (188 for the round trip) with a 72-sample round-trip
-  latency; 32× costs about 330 / 660 MACs. `SincOversampler` at radius 16
-  needs 128 / 256 and 1024 / 2048 for 90 dB and a passband to 0.36 fs.
+  cascade's fractional delay up. With the defaults, 4× decimates in about 300
+  MACs per input sample (600 for the round trip) with a generation latency of
+  about 72 samples; 32× is about 600 / 1200 MACs. With a pure halfband first
+  stage those figures drop to about 100 / 200 and 330 / 660 MACs with a
+  40-sample generation latency. `SincOversampler` at radius 16 needs
+  128 / 256 and 1024 / 2048 for 90 dB and a passband to 0.36 fs, and leaks
+  content between 0.5 and 0.54 fs at 40 to 90 dB below full scale.
 - `HalfbandFilterType::polyphaseIIR` designs elliptic halfbands realised as
   two allpass branches (Valenzuela & Constantinides). A 100 dB first stage is
   order 17, eight multiplies per sample, and the whole 32× cascade decimates in
   about 76 multiplies per input sample. Latency is a few samples but the phase
   is nonlinear near the passband edge; `getLatencyInSamples()` reports the
-  low-frequency group delay rounded to the nearest sample.
+  low-frequency group delay rounded to the nearest sample. Its first stage is
+  always a halfband, so `stopbandEdge` is ignored and content between 0.5 and
+  0.55 of the input rate folds into the top of the band.
 - `prepare` is **not** realtime-safe. `sampleRate` is accepted for symmetry
   with `SincOversampler`; the design itself is rate independent.
 - `upsample`, `beginGeneration`, `processOversampledBlock`,
@@ -158,10 +168,10 @@ os.downsample (outPtrs, numChannels, numSamples);
   returns the FIR length or the elliptic order of a stage (stage 0 runs next to
   the input rate) for diagnostics.
 
-Convenience aliases: `Oversampler2xFloat`, `Oversampler4xFloat`,
-`Oversampler8xFloat`, `Oversampler16xFloat`, `Oversampler32xFloat` and the
-`Double` variants are `HalfbandOversampler` instantiations with the default
-design.
+Convenience aliases: `HalfbandOversampler2xFloat`, `HalfbandOversampler4xFloat`,
+`HalfbandOversampler8xFloat`, `HalfbandOversampler16xFloat`,
+`HalfbandOversampler32xFloat` and the `Double` variants are
+`HalfbandOversampler` instantiations with the default design.
 
 ## Resampler
 

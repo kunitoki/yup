@@ -45,6 +45,18 @@ struct HalfbandOversamplerDesign
 
     /** Passband edge as a fraction of the input sample rate, in (0, 0.5). */
     double passbandEdge = 0.45;
+
+    /** Stopband edge of the stage next to the input rate, as a fraction of the
+        input sample rate, in (passbandEdge, 1 - passbandEdge].
+
+        0.5 (the default) rejects everything above the input Nyquist, so nothing
+        folds back into the band. 1 - passbandEdge makes that stage a pure
+        halfband: about a quarter of the cost and half the latency, but content
+        between 0.5 and 1 - passbandEdge folds into the top of the band with only
+        partial attenuation. Values in between trade one for the other. Only
+        linearPhaseFIR honours this; polyphaseIIR is always a pure halfband.
+    */
+    double stopbandEdge = 0.5;
 };
 
 //==============================================================================
@@ -70,9 +82,14 @@ struct HalfbandOversamplerDesign
 
     The passband extends to Design::passbandEdge times the input rate (0.45 by
     default, 19.8 kHz at 44.1 kHz) with at least Design::stopbandAttenuationDb of
-    rejection (100 dB by default). Content between passbandEdge and
-    1 - passbandEdge of the input Nyquist folds back into the top of the band,
-    as with every halfband design.
+    rejection (100 dB by default) from Design::stopbandEdge upwards. With the
+    default edge of 0.5 the linear-phase FIR rejects everything above the input
+    Nyquist, so nothing folds back into the band; that first stage is then a
+    general polyphase lowpass rather than a halfband and dominates the cost.
+    Setting stopbandEdge to 1 - passbandEdge makes it a pure halfband, about a
+    quarter of the cost and half the latency, at the price of content between
+    0.5 and 0.55 of the input rate folding into the top of the band. The IIR
+    family is always a pure halfband and shows that fold-back.
 
     Typical usage:
     @code
@@ -132,6 +149,7 @@ public:
         design = newDesign;
         design.stopbandAttenuationDb = jlimit (20.0, 200.0, design.stopbandAttenuationDb);
         design.passbandEdge = jlimit (0.05, 0.49, design.passbandEdge);
+        design.stopbandEdge = jlimit (design.passbandEdge + 0.01, 1.0 - design.passbandEdge, design.stopbandEdge);
         maxChannelCount = maxChannels;
         maxInputSamples = maxBlockSize;
 
@@ -141,26 +159,29 @@ public:
         {
             auto& stage = stages[static_cast<std::size_t> (s)];
             const int lowRate = 1 << s;
-            const double transition = 0.5 - 2.0 * design.passbandEdge / (2 * lowRate);
+
+            const double passband = (s == 0 ? design.passbandEdge : 0.5) / (2 * lowRate);
+            const double stopband = (s == 0 && design.filterType == HalfbandFilterType::linearPhaseFIR)
+                                      ? design.stopbandEdge / 2.0
+                                      : 0.5 - passband;
 
             if (design.filterType == HalfbandFilterType::linearPhaseFIR)
             {
-                designFirStage (stage, transition);
-                interpolationDelay += (2.0 * stage.halfLength + 1.0) / (2 * lowRate);
+                designFirStage (stage, passband, stopband);
+                interpolationDelay += static_cast<double> (stage.halfLength) / (2 * lowRate);
             }
             else
             {
-                designIirStage (stage, transition);
+                designIirStage (stage, stopband - passband);
                 interpolationDelay += stage.lowFrequencyDelay / lowRate;
             }
 
             const int lowBlock = maxBlockSize * lowRate;
-            const int branchTaps = static_cast<int> (stage.decimationTaps.size());
 
-            stage.interpolationInput.setSize (maxChannels, lowBlock + jmax (0, branchTaps - 1));
+            stage.interpolationInput.setSize (maxChannels, lowBlock + stage.halfLength);
             stage.interpolationOutput.setSize (maxChannels, 2 * lowBlock);
-            stage.evenInput.setSize (maxChannels, lowBlock + jmax (0, branchTaps - 1));
-            stage.oddInput.setSize (maxChannels, lowBlock + stage.halfLength + 1);
+            stage.evenInput.setSize (maxChannels, lowBlock + stage.halfLength);
+            stage.oddInput.setSize (maxChannels, lowBlock + stage.halfLength);
             stage.decimationOutput.setSize (maxChannels, lowBlock);
 
             const auto numSections = stage.directAllpass.size() + stage.delayedAllpass.size();
@@ -452,7 +473,7 @@ public:
         const auto& s = stages[static_cast<std::size_t> (stage)];
 
         if (design.filterType == HalfbandFilterType::linearPhaseFIR)
-            return 4 * s.halfLength + 3;
+            return 2 * s.halfLength + 1;
 
         return 2 * static_cast<int> (s.directAllpass.size() + s.delayedAllpass.size()) + 1;
     }
@@ -461,9 +482,12 @@ private:
     //==============================================================================
     struct Stage
     {
-        int halfLength = 0;                       // FIR length is 4 * halfLength + 3
-        std::vector<CoeffType> decimationTaps;    // nonzero taps of one polyphase branch, summing to 0.5
-        std::vector<CoeffType> interpolationTaps; // the same taps scaled by 2
+        int halfLength = 0;                         // FIR group delay in high-rate samples; length is 2 * halfLength + 1
+        bool halfband = true;                       // odd branch is the pure delay 0.5 * z^-halfLength
+        std::vector<CoeffType> evenDecimation;      // even polyphase branch (halfLength + 1 taps), summing to 0.5
+        std::vector<CoeffType> evenInterpolation;   // the same taps scaled by 2
+        std::vector<CoeffType> oddDecimation;       // odd polyphase branch (halfLength taps), empty for halfbands
+        std::vector<CoeffType> oddInterpolation;    // the same taps scaled by 2
 
         std::vector<CoeffType> directAllpass;     // IIR sections of the direct branch
         std::vector<CoeffType> delayedAllpass;    // IIR sections of the branch behind the unit delay
@@ -493,42 +517,60 @@ private:
 
     // Builds the nonzero polyphase branch of a Kaiser-windowed halfband of the
     // given length (which must be 3 mod 4), normalized to a DC gain of exactly 1.
-    static void buildHalfbandBranch (int length, double beta, std::vector<double>& branch)
+    // Kaiser-windowed linear-phase lowpass of odd length with the given cutoff (fraction
+    // of the stage rate), split into its even and odd polyphase branches. Each branch is
+    // normalized to a DC gain of exactly 0.5, which also zeroes the response at the stage
+    // Nyquist. A halfband (cutoff 0.25) leaves the odd branch with only its center tap.
+    static void buildLowpassBranches (int length, double cutoff, double beta, std::vector<double>& even, std::vector<double>& odd)
     {
-        const int q = (length - 3) / 4;
-        const int center = 2 * q + 1;
-        branch.resize (static_cast<std::size_t> (2 * q + 2));
-        double sum = 0.0;
+        const int center = (length - 1) / 2;
+        even.assign (static_cast<std::size_t> (center + 1), 0.0);
+        odd.assign (static_cast<std::size_t> (center), 0.0);
 
-        for (int j = 0; j < static_cast<int> (branch.size()); ++j)
+        const auto tap = [&] (int n)
         {
-            const double x = (2 * j - center) / 2.0;
-            const double sinc = std::sin (MathConstants<double>::pi * x) / (MathConstants<double>::pi * x);
-            branch[static_cast<std::size_t> (j)] = 0.5 * sinc * WindowFunctions<double>::kaiser (2 * j, length, beta);
-            sum += branch[static_cast<std::size_t> (j)];
-        }
+            const double x = 2.0 * cutoff * (n - center);
+            const double sinc = (n == center) ? 1.0 : std::sin (MathConstants<double>::pi * x) / (MathConstants<double>::pi * x);
+            return 2.0 * cutoff * sinc * WindowFunctions<double>::kaiser (n, length, beta);
+        };
 
-        for (auto& tap : branch)
-            tap *= 0.5 / sum;
+        for (int j = 0; j <= center; ++j)
+            even[static_cast<std::size_t> (j)] = tap (2 * j);
+
+        for (int j = 0; j < center; ++j)
+            odd[static_cast<std::size_t> (j)] = tap (2 * j + 1);
+
+        for (auto* branch : { &even, &odd })
+        {
+            double sum = 0.0;
+
+            for (const auto value : *branch)
+                sum += value;
+
+            for (auto& value : *branch)
+                value *= 0.5 / sum;
+        }
     }
 
-    // Worst magnitude of the halfband response over its stopband, sampled densely enough
-    // to catch every ripple of a filter of the given length.
-    static double worstStopbandGain (const std::vector<double>& branch, int length, double transition) noexcept
+    // Worst magnitude of the symmetric lowpass over [stopbandEdge, 0.5] of the stage
+    // rate, sampled densely enough to catch every ripple of a filter of this length.
+    static double worstStopbandGain (const std::vector<double>& even, const std::vector<double>& odd, double stopbandEdge) noexcept
     {
-        const int center = length / 2;
-        const double stopbandEdge = 0.5 - (0.5 - transition) / 2.0;
+        const int center = static_cast<int> (odd.size());
+        const int length = 2 * center + 1;
         const int numPoints = 8 * length;
         double worst = 0.0;
 
         for (int p = 0; p <= numPoints; ++p)
         {
-            const double frequency = stopbandEdge + (0.5 - stopbandEdge) * p / numPoints;
-            const double omega = MathConstants<double>::twoPi * frequency;
-            double response = 0.5;
+            const double omega = MathConstants<double>::twoPi * (stopbandEdge + (0.5 - stopbandEdge) * p / numPoints);
+            double response = 0.0;
 
-            for (int j = 0; j < static_cast<int> (branch.size()); ++j)
-                response += branch[static_cast<std::size_t> (j)] * std::cos (omega * (center - 2 * j));
+            for (int j = 0; j <= center; ++j)
+                response += even[static_cast<std::size_t> (j)] * std::cos (omega * (2 * j - center));
+
+            for (int j = 0; j < center; ++j)
+                response += odd[static_cast<std::size_t> (j)] * std::cos (omega * (2 * j + 1 - center));
 
             worst = jmax (worst, std::abs (response));
         }
@@ -536,38 +578,67 @@ private:
         return worst;
     }
 
-    void designFirStage (Stage& stage, double transition) const
+    void designFirStage (Stage& stage, double passband, double stopband) const
     {
         const double attenuation = design.stopbandAttenuationDb;
         const double beta = kaiserBeta (attenuation);
         const double stopbandGain = std::pow (10.0, -attenuation / 20.0);
+        const double transition = stopband - passband;
+        const double cutoff = (passband + stopband) / 2.0;
+        const bool halfband = std::abs (cutoff - 0.25) < 1e-9;
 
         int length = static_cast<int> (std::ceil ((attenuation - 8.0) / (2.285 * MathConstants<double>::twoPi * transition) + 1.0));
         length = jmax (length, 7);
 
-        while (length % 4 != 3)
-            ++length;
+        const auto roundLength = [halfband] (int n)
+        {
+            if (halfband)
+                while (n % 4 != 3)
+                    ++n;
+            else if (n % 2 == 0)
+                ++n;
 
-        std::vector<double> branch;
+            return n;
+        };
+
+        length = roundLength (length);
+        std::vector<double> even, odd;
 
         for (;;)
         {
-            buildHalfbandBranch (length, beta, branch);
+            buildLowpassBranches (length, cutoff, beta, even, odd);
 
-            if (worstStopbandGain (branch, length, transition) <= stopbandGain || length >= maxFirLength)
+            if (worstStopbandGain (even, odd, stopband) <= stopbandGain || length >= maxFirLength)
                 break;
 
-            length += 4;
+            length = roundLength (length + 2);
         }
 
-        stage.halfLength = (length - 3) / 4;
-        stage.decimationTaps.resize (branch.size());
-        stage.interpolationTaps.resize (branch.size());
+        stage.halfLength = (length - 1) / 2;
+        stage.halfband = halfband;
 
-        for (std::size_t j = 0; j < branch.size(); ++j)
+        stage.evenDecimation.resize (even.size());
+        stage.evenInterpolation.resize (even.size());
+
+        for (std::size_t j = 0; j < even.size(); ++j)
         {
-            stage.decimationTaps[j] = static_cast<CoeffType> (branch[j]);
-            stage.interpolationTaps[j] = static_cast<CoeffType> (2.0 * branch[j]);
+            stage.evenDecimation[j] = static_cast<CoeffType> (even[j]);
+            stage.evenInterpolation[j] = static_cast<CoeffType> (2.0 * even[j]);
+        }
+
+        stage.oddDecimation.clear();
+        stage.oddInterpolation.clear();
+
+        if (! halfband)
+        {
+            stage.oddDecimation.resize (odd.size());
+            stage.oddInterpolation.resize (odd.size());
+
+            for (std::size_t j = 0; j < odd.size(); ++j)
+            {
+                stage.oddDecimation[j] = static_cast<CoeffType> (odd[j]);
+                stage.oddInterpolation[j] = static_cast<CoeffType> (2.0 * odd[j]);
+            }
         }
 
         stage.directAllpass.clear();
@@ -642,26 +713,42 @@ private:
         }
 
         stage.halfLength = 0;
-        stage.decimationTaps.clear();
-        stage.interpolationTaps.clear();
+        stage.halfband = true;
+        stage.evenDecimation.clear();
+        stage.evenInterpolation.clear();
+        stage.oddDecimation.clear();
+        stage.oddInterpolation.clear();
     }
 
     //==============================================================================
     void interpolateFir (Stage& stage, int channel, const SampleType* input, SampleType* output, int count) noexcept
     {
-        const auto numTaps = stage.interpolationTaps.size();
-        const int history = static_cast<int> (numTaps) - 1;
+        const int history = stage.halfLength;
         auto* buffer = stage.interpolationInput.getWritePointer (channel);
 
         FloatVectorOperations::copy (buffer + history, input, count);
 
-        const auto* taps = stage.interpolationTaps.data();
-        const int passThrough = stage.halfLength + 1;
+        const auto* evenTaps = stage.evenInterpolation.data();
+        const auto numEven = stage.evenInterpolation.size();
+        const auto* oddTaps = stage.oddInterpolation.data();
+        const auto numOdd = stage.oddInterpolation.size();
+        const int passThrough = (history - 1) / 2 + 1;
 
-        for (int m = 0; m < count; ++m)
+        if (stage.halfband)
         {
-            *output++ = dotProduct (taps, buffer + m, numTaps);
-            *output++ = buffer[m + passThrough];
+            for (int m = 0; m < count; ++m)
+            {
+                *output++ = dotProduct (evenTaps, buffer + m, numEven);
+                *output++ = buffer[m + passThrough];
+            }
+        }
+        else
+        {
+            for (int m = 0; m < count; ++m)
+            {
+                *output++ = dotProduct (evenTaps, buffer + m, numEven);
+                *output++ = dotProduct (oddTaps, buffer + m + 1, numOdd);
+            }
         }
 
         std::copy (buffer + count, buffer + count + history, buffer);
@@ -669,9 +756,7 @@ private:
 
     void decimateFir (Stage& stage, int channel, const SampleType* input, SampleType* output, int count) noexcept
     {
-        const auto numTaps = stage.decimationTaps.size();
-        const int evenHistory = static_cast<int> (numTaps) - 1;
-        const int oddHistory = stage.halfLength + 1;
+        const int history = stage.halfLength;
         const int half = count / 2;
 
         auto* even = stage.evenInput.getWritePointer (channel);
@@ -679,17 +764,29 @@ private:
 
         for (int i = 0; i < half; ++i)
         {
-            even[evenHistory + i] = input[2 * i];
-            odd[oddHistory + i] = input[2 * i + 1];
+            even[history + i] = input[2 * i];
+            odd[history + i] = input[2 * i + 1];
         }
 
-        const auto* taps = stage.decimationTaps.data();
+        const auto* evenTaps = stage.evenDecimation.data();
+        const auto numEven = stage.evenDecimation.size();
+        const auto* oddTaps = stage.oddDecimation.data();
+        const auto numOdd = stage.oddDecimation.size();
+        const int passThrough = (history - 1) / 2;
 
-        for (int m = 0; m < half; ++m)
-            output[m] = dotProduct (taps, even + m, numTaps) + static_cast<SampleType> (0.5) * odd[m];
+        if (stage.halfband)
+        {
+            for (int m = 0; m < half; ++m)
+                output[m] = dotProduct (evenTaps, even + m, numEven) + static_cast<SampleType> (0.5) * odd[m + passThrough];
+        }
+        else
+        {
+            for (int m = 0; m < half; ++m)
+                output[m] = dotProduct (evenTaps, even + m, numEven) + dotProduct (oddTaps, odd + m, numOdd);
+        }
 
-        std::copy (even + half, even + half + evenHistory, even);
-        std::copy (odd + half, odd + half + oddHistory, odd);
+        std::copy (even + half, even + half + history, even);
+        std::copy (odd + half, odd + half + history, odd);
     }
 
     // First-order allpass (alpha + z^-1) / (1 + alpha z^-1) in one multiply.

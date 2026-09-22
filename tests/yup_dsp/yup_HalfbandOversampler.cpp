@@ -284,19 +284,19 @@ TEST_F (HalfbandOversamplerTest, StageCountFollowsTheFactor)
 
 TEST_F (HalfbandOversamplerTest, AliasesUseTheHalfbandDesign)
 {
-    static_assert (std::is_same_v<Oversampler4xFloat, HalfbandOversampler<float, 4>>);
-    static_assert (std::is_same_v<Oversampler32xDouble, HalfbandOversampler<double, 32>>);
+    static_assert (std::is_same_v<HalfbandOversampler4xFloat, HalfbandOversampler<float, 4>>);
+    static_assert (std::is_same_v<HalfbandOversampler32xDouble, HalfbandOversampler<double, 32>>);
 
-    Oversampler2xFloat a;
-    Oversampler4xFloat b;
-    Oversampler8xFloat c;
-    Oversampler16xFloat d;
-    Oversampler32xFloat e;
-    Oversampler2xDouble f;
-    Oversampler4xDouble g;
-    Oversampler8xDouble h;
-    Oversampler16xDouble i;
-    Oversampler32xDouble j;
+    HalfbandOversampler2xFloat a;
+    HalfbandOversampler4xFloat b;
+    HalfbandOversampler8xFloat c;
+    HalfbandOversampler16xFloat d;
+    HalfbandOversampler32xFloat e;
+    HalfbandOversampler2xDouble f;
+    HalfbandOversampler4xDouble g;
+    HalfbandOversampler8xDouble h;
+    HalfbandOversampler16xDouble i;
+    HalfbandOversampler32xDouble j;
 
     for (auto* os : { &a, &b, &c, &d, &e })
         os->prepare (44100.0, 1, 64);
@@ -336,8 +336,35 @@ TEST_F (HalfbandOversamplerTest, FirstStageIsTheLongest)
 
     EXPECT_GT (os.getStageFilterOrder (0), os.getStageFilterOrder (1));
     EXPECT_GE (os.getStageFilterOrder (1), os.getStageFilterOrder (2));
-    EXPECT_EQ (3, os.getStageFilterOrder (0) % 4);
+    EXPECT_EQ (1, os.getStageFilterOrder (0) % 2);
+    EXPECT_EQ (3, os.getStageFilterOrder (1) % 4);
     EXPECT_EQ (0, os.getStageFilterOrder (3));
+}
+
+TEST_F (HalfbandOversamplerTest, HalfbandFirstStageIsCheaperButFoldsBackAboveNyquist)
+{
+    Design halfband;
+    halfband.stopbandEdge = 1.0 - halfband.passbandEdge;
+
+    HalfbandOversampler<float, 4> strict, relaxed;
+    strict.prepare (sampleRate, 1, 256);
+    relaxed.prepare (sampleRate, 1, 256, halfband);
+
+    EXPECT_EQ (3, relaxed.getStageFilterOrder (0) % 4);
+    EXPECT_LT (relaxed.getStageFilterOrder (0), strict.getStageFilterOrder (0));
+    EXPECT_LT (relaxed.getLatencyInSamples(), strict.getLatencyInSamples());
+
+    // A tone just above Nyquist: rejected by the default, folded back by the halfband.
+    EXPECT_LT (decimatedToneLevelDb<2> (firDesign(), 0.52), -95.0);
+    EXPECT_GT (decimatedToneLevelDb<2> (halfband, 0.52), -40.0);
+}
+
+TEST_F (HalfbandOversamplerTest, HigherStagesProtectTheWholeBandUpToNyquist)
+{
+    // 1.52 fs at 4x folds to 0.48 fs at the second stage: inside the base band
+    // but above the passband edge, so only a Nyquist-protecting stage rejects it.
+    EXPECT_LT (decimatedToneLevelDb<4> (firDesign(), 1.52), -95.0);
+    EXPECT_LT (decimatedToneLevelDb<8> (firDesign(), 3.52), -95.0);
 }
 
 TEST_F (HalfbandOversamplerTest, WiderTransitionAndLowerAttenuationShortenTheFilters)
