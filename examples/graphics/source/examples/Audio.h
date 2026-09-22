@@ -48,28 +48,6 @@ constexpr int displayHarmonics = 64;
 constexpr double levelRampSeconds = 0.01;
 } // namespace SynthExample
 
-//==============================================================================
-/** The synthesis algorithm a voice oscillator renders with.
-
-    Every value maps onto one of the bandlimited yup_dsp oscillators, which differ
-    in how they derive their spectrum and in how they can be modulated.
-
-    @see SynthOscillator
-*/
-enum class SynthOscillatorType
-{
-    wavetable, /**< The same series rendered once, then played back */
-    sync,      /**< Alias-free spectral oscillator synchronization */
-    morphing,  /**< Blends two synchronized endpoint spectra       */
-    modulated  /**< Oversampled morph, FM, PM and phase distortion */
-};
-
-/** @internal Item names for SynthOscillatorType, index aligned with the enumeration. */
-inline yup::StringArray getSynthOscillatorTypeNames()
-{
-    return { "Wavetable", "Sync", "Morphing", "Modulated" };
-}
-
 /** @internal Item names for yup::Waveform, index aligned with the enumeration. */
 inline yup::StringArray getSynthWaveformNames()
 {
@@ -179,9 +157,9 @@ public:
 
         delaySamples = toSamples (values.delay);
         holdSamples = toSamples (values.hold);
-        releaseSamples = toSamples (values.release);
+        releaseSamples = toSamples (yup::jmax (0.003f, values.release));
 
-        attackIncrement = 1.0f / static_cast<float> (toSamples (values.attack));
+        attackIncrement = 1.0f / static_cast<float> (toSamples (yup::jmax (0.003f, values.attack)));
         decayIncrement = (1.0f - sustainLevel) / static_cast<float> (toSamples (values.decay));
     }
 
@@ -327,17 +305,22 @@ private:
 */
 struct SynthOscillatorValues
 {
-    SynthOscillatorType type = SynthOscillatorType::wavetable;
     yup::Waveform waveform = yup::Waveform::sawtooth;
-    yup::Waveform shape = yup::Waveform::square;
-    yup::SyncMode syncMode = yup::SyncMode::hard;
+    yup::SyncMode syncMode = yup::SyncMode::none;
+    float syncRatio = 1.5f;
     float level = 0.5f;
+    int octave = 0;
     float detuneSemitones = 0.0f;
-    float followerRatio = 1.5f;
-    float morph = 0.0f;
-    float phaseDistortion = 0.5f;
-    float fmAmount = 0.0f;
-    float fmRatio = 2.0f;
+    float ridgeSpacing = 1.5f;
+    float color = 0.0f;
+    float dispersion = 0.5f;
+    float squeeze = 0.0f;
+    float squash = 1.0f;
+    float tilt = 0.0f;
+    float oddEven = 0.5f;
+    float formant = 0.0f;
+    float formantPosition = 2.0f;
+    float scatter = 0.0f;
     int unisonVoices = 1;
     float unisonDetune = 0.2f;
     float unisonSpread = 0.6f;
@@ -363,17 +346,22 @@ struct SynthOscillatorSettings
             harmonic.store (0.0f);
     }
 
-    std::atomic<int> type { static_cast<int> (SynthOscillatorType::wavetable) };
     std::atomic<int> waveform { static_cast<int> (yup::Waveform::sawtooth) };
-    std::atomic<int> shape { static_cast<int> (yup::Waveform::square) };
-    std::atomic<int> syncMode { static_cast<int> (yup::SyncMode::hard) };
+    std::atomic<int> syncMode { static_cast<int> (yup::SyncMode::none) };
+    std::atomic<float> syncRatio { 1.5f };
     std::atomic<float> level { 0.5f };
+    std::atomic<int> octave { 0 };
     std::atomic<float> detuneSemitones { 0.0f };
-    std::atomic<float> followerRatio { 1.5f };
-    std::atomic<float> morph { 0.0f };
-    std::atomic<float> phaseDistortion { 0.5f };
-    std::atomic<float> fmAmount { 0.0f };
-    std::atomic<float> fmRatio { 2.0f };
+    std::atomic<float> ridgeSpacing { 1.5f };
+    std::atomic<float> color { 0.0f };
+    std::atomic<float> dispersion { 0.5f };
+    std::atomic<float> squeeze { 0.0f };
+    std::atomic<float> squash { 1.0f };
+    std::atomic<float> tilt { 0.0f };
+    std::atomic<float> oddEven { 0.5f };
+    std::atomic<float> formant { 0.0f };
+    std::atomic<float> formantPosition { 2.0f };
+    std::atomic<float> scatter { 0.0f };
     std::atomic<int> unisonVoices { 1 };
     std::atomic<float> unisonDetune { 0.2f };
     std::atomic<float> unisonSpread { 0.6f };
@@ -386,17 +374,22 @@ struct SynthOscillatorSettings
     /** Takes a snapshot for one block of audio. */
     SynthOscillatorValues read() const noexcept
     {
-        return { static_cast<SynthOscillatorType> (type.load()),
-                 static_cast<yup::Waveform> (waveform.load()),
-                 static_cast<yup::Waveform> (shape.load()),
+        return { static_cast<yup::Waveform> (waveform.load()),
                  static_cast<yup::SyncMode> (syncMode.load()),
+                 syncRatio.load(),
                  level.load(),
+                 octave.load(),
                  detuneSemitones.load(),
-                 followerRatio.load(),
-                 morph.load(),
-                 phaseDistortion.load(),
-                 fmAmount.load(),
-                 fmRatio.load(),
+                 ridgeSpacing.load(),
+                 color.load(),
+                 dispersion.load(),
+                 squeeze.load(),
+                 squash.load(),
+                 tilt.load(),
+                 oddEven.load(),
+                 formant.load(),
+                 formantPosition.load(),
+                 scatter.load(),
                  unisonVoices.load(),
                  unisonDetune.load(),
                  unisonSpread.load(),
@@ -450,8 +443,7 @@ struct SynthOscillatorSettings
 //==============================================================================
 /** Immutable waveform data, prepared once and read by every voice.
 
-    Building a FourierSeries allocates, and rendering a WaveformBank runs one inverse
-    FFT per frame and bandwidth level, so both belong at construction time. Once
+    Building a FourierSeries allocates, so it belongs at construction time. Once
     prepared the resources are read-only and safe to share across voices.
 
     @see SynthOscillator
@@ -470,8 +462,6 @@ public:
 
         for (std::size_t index = 0; index < frames.size(); ++index)
             frames[index] = yup::FourierSeries<double>::create (waveforms[index], SynthExample::maxHarmonics);
-
-        bank.prepare ({ frames.data(), frames.size() });
     }
 
     /** Returns the series of one of the Waveform presets. */
@@ -480,59 +470,239 @@ public:
         return frames[static_cast<std::size_t> (waveform)];
     }
 
-    /** Returns the bank of frames the modulated oscillator morphs across. */
-    const yup::WaveformBank<float>& getBank() const noexcept { return bank; }
-
 private:
     std::array<yup::FourierSeries<double>, 6> frames;
-    yup::WaveformBank<float> bank;
 };
 
 //==============================================================================
-/** One of a voice's oscillators, owning every algorithm it can switch between.
+/** Turns a control snapshot into the shape yup::PrismSpectrum reads. */
+inline yup::PrismSpectrum<double>::Shape toPrismShape (const SynthOscillatorValues& values) noexcept
+{
+    return { static_cast<double> (values.ridgeSpacing),
+             static_cast<double> (values.dispersion),
+             static_cast<double> (values.squeeze),
+             static_cast<double> (values.squash),
+             static_cast<double> (values.tilt),
+             static_cast<double> (values.oddEven),
+             static_cast<double> (values.formant),
+             static_cast<double> (values.formantPosition),
+             static_cast<double> (values.scatter) };
+}
 
-    prepare() allocates all the backends; renderBlock() is allocation-free and pushes
-    only the controls that actually moved, so editing a knob is the only thing that
-    pays for a spectral transform or a table render.
+//==============================================================================
+/** Shapes a source through the Prism stages and then through the sync transform.
 
-    Unison is built from bare yup::WavetableOscillator satellites rather than from
-    further copies of this class. A SynthOscillator owns four wavetable oscillators
-    once the sync and morphing backends are counted, each with its own FFT and tables,
-    so replicating it per unison slot would cost several times the memory and startup
-    work that one satellite does. The satellites play the same series as the selected
-    algorithm, detuned and panned around it, which is exact for the wavetable algorithm
-    and is why unison is offered there alone.
+    The audio thread and the waveform display both derive their series here, so the
+    preview cannot drift from what the voices play. yup::PrismSpectrum is stateless
+    and shared; the resampler keeps scratch storage, so every caller brings its own.
 
-    @see SynthOscillatorSettings, SynthOscillatorResources
+    @returns The series to play or draw: the shaped one, or the synced one when a
+             sync mode is selected.
+*/
+inline yup::FourierSeries<double>& derivePrismSeries (const yup::PrismSpectrum<double>& spectrum,
+                                                      yup::SyncSpectralResampler<double>& resampler,
+                                                      const yup::FourierSeries<double>& source,
+                                                      yup::FourierSeries<double>& shaped,
+                                                      yup::FourierSeries<double>& synced,
+                                                      const SynthOscillatorValues& values) noexcept
+{
+    spectrum.process (source, shaped, toPrismShape (values), values.color);
+
+    if (values.syncMode == yup::SyncMode::none)
+        return shaped;
+
+    resampler.transform (shaped, static_cast<double> (values.syncRatio), values.syncMode, synced);
+
+    return synced;
+}
+
+//==============================================================================
+/** The series every voice of one oscillator slot plays, rebuilt once per block.
+
+    A slot's spectrum does not vary per voice: the waveform, the edited partials, the
+    Prism shape and the sync settings are all slot-wide. Deriving them once here rather
+    than inside each voice is what makes every control modulatable - shaping 128
+    harmonics is cheap, the sync transform less so, and neither should run once per
+    voice per block.
+
+    The sync transform is run for every harmonic the slot renders rather than for one
+    voice's Nyquist limit, which is what lets a single derivation serve voices at
+    different pitches: each voice's wavetable drops what its own pitch cannot carry.
+
+    Voices publish nothing back; they compare getGeneration() and re-render their own
+    table when it moves, which keeps yup::WavetableOscillator's crossfade doing the
+    smoothing. Everything here runs on the audio thread at the top of a block, before
+    any voice reads it, so no publication handshake is needed. Nothing allocates.
+
+    @see SynthOscillator, derivePrismSeries
+*/
+class SynthOscillatorSlot
+{
+public:
+    SynthOscillatorSlot()
+    {
+        spectrum.prepare (SynthExample::maxHarmonics);
+        resampler.prepare (SynthExample::maxHarmonics);
+        customSeries.resize (SynthExample::maxHarmonics);
+        shapedSeries.resize (SynthExample::maxHarmonics);
+        syncedSeries.resize (SynthExample::maxHarmonics);
+
+        // The meter is only ever asked for a waveform, never played, and a frequency of
+        // zero keeps every harmonic whatever rate it was prepared at.
+        peakMeter.prepare (48000.0, SynthExample::maxHarmonics);
+        peakMeter.setFrequency (0.0);
+        peakMeter.setIncludeDC (true);
+    }
+
+    /** Rebuilds the slot's series if anything it depends on moved. Audio thread. */
+    void update (const SynthOscillatorValues& values,
+                 const SynthOscillatorSettings& settings,
+                 const SynthOscillatorResources& resources) noexcept
+    {
+        const auto partialsChanged = ! hasApplied
+                                  || applied.usesCustomSeries != values.usesCustomSeries
+                                  || applied.harmonicGeneration != values.harmonicGeneration
+                                  || applied.harmonicScale != values.harmonicScale;
+
+        if (partialsChanged && values.usesCustomSeries)
+            settings.copyHarmonicsInto (customSeries, values.harmonicScale);
+
+        const auto& source = values.usesCustomSeries ? customSeries : resources.getFrame (values.waveform);
+        const auto sourceChanged = partialsChanged || applied.waveform != values.waveform;
+
+        const auto shapeChanged = applied.syncMode != values.syncMode
+                               || applied.syncRatio != values.syncRatio
+                               || applied.ridgeSpacing != values.ridgeSpacing
+                               || applied.color != values.color
+                               || applied.dispersion != values.dispersion
+                               || applied.squeeze != values.squeeze
+                               || applied.squash != values.squash
+                               || applied.tilt != values.tilt
+                               || applied.oddEven != values.oddEven
+                               || applied.formant != values.formant
+                               || applied.formantPosition != values.formantPosition
+                               || applied.scatter != values.scatter;
+
+        if (sourceChanged)
+            sourcePeak = measurePeak (source);
+
+        if (sourceChanged || shapeChanged)
+        {
+            auto& derived = derivePrismSeries (spectrum, resampler, source, shapedSeries, syncedSeries, values);
+
+            matchSourcePeak (derived);
+            published = &derived;
+            ++generation;
+        }
+
+        applied = values;
+        hasApplied = true;
+    }
+
+    /** Returns the series the voices of this slot should be playing. */
+    const yup::FourierSeries<double>& getSeries() const noexcept { return *published; }
+
+    /** Bumped whenever getSeries() changed, so a voice knows to re-render its table. */
+    int getGeneration() const noexcept { return generation; }
+
+    /** The shaper, which the waveform display reuses for its preview. */
+    const yup::PrismSpectrum<double>& getSpectrum() const noexcept { return spectrum; }
+
+private:
+    /** Points the display samples the peak search walks. Twice the harmonic count
+        resolves the highest harmonic; this is four times it, for a little margin. */
+    static constexpr int peakResolution = 512;
+
+    /** Returns the largest absolute value one period of a series reaches.
+
+        The series is rendered with the same inverse FFT the voices use rather than
+        summed harmonic by harmonic, which would cost a transcendental per harmonic per
+        point. One transform per slot per block is nothing beside the one each sounding
+        voice already pays.
+    */
+    double measurePeak (const yup::FourierSeries<double>& series) noexcept
+    {
+        peakMeter.setSeries (series);
+        peakMeter.render (false);
+
+        auto peak = 0.0;
+
+        for (int index = 0; index < peakResolution; ++index)
+        {
+            const auto phase = static_cast<double> (index) / static_cast<double> (peakResolution);
+
+            peak = yup::jmax (peak, std::abs (static_cast<double> (peakMeter.getValueAtPhase (phase))));
+        }
+
+        return peak;
+    }
+
+    /** Rescales a derived series so its waveform peaks where the source's does.
+
+        yup::PrismSpectrum preserves the coefficient sum, which bounds a peak from well
+        above - three times over for a sawtooth - and how close the waveform comes to
+        that bound depends on how aligned the harmonic phases are. Dispersion, scatter
+        and the sync reset all move exactly that, so without this they would swing the
+        output level as they are swept rather than only recolouring it.
+    */
+    void matchSourcePeak (yup::FourierSeries<double>& series) noexcept
+    {
+        const auto derivedPeak = measurePeak (series);
+
+        if (derivedPeak <= 1.0e-9 || sourcePeak <= 1.0e-9)
+            return;
+
+        const auto scale = sourcePeak / derivedPeak;
+
+        for (int harmonic = 1; harmonic <= series.getNumHarmonics(); ++harmonic)
+            series.setHarmonic (harmonic,
+                                series.getCosine (harmonic) * scale,
+                                series.getSine (harmonic) * scale);
+    }
+
+    yup::PrismSpectrum<double> spectrum;
+    yup::SyncSpectralResampler<double> resampler;
+    yup::WavetableOscillator<float> peakMeter;
+    double sourcePeak = 0.0;
+    yup::FourierSeries<double> customSeries;
+    yup::FourierSeries<double> shapedSeries;
+    yup::FourierSeries<double> syncedSeries;
+    const yup::FourierSeries<double>* published = &shapedSeries;
+    SynthOscillatorValues applied;
+    int generation = 0;
+    bool hasApplied = false;
+};
+
+//==============================================================================
+/** One of a voice's oscillators: a wavetable playing the slot's series, plus unison.
+
+    prepare() allocates the backends; renderBlock() is allocation-free and only
+    re-renders a table when the slot's series moved, so editing a control is the only
+    thing that pays for an inverse FFT.
+
+    Unison is built from bare yup::WavetableOscillator satellites playing the same
+    series as the center, detuned and panned around it.
+
+    @see SynthOscillatorSettings, SynthOscillatorSlot
 */
 class SynthOscillator
 {
 public:
-    /** Returns true if the algorithm can be widened with unison satellites. */
-    static bool supportsUnison (SynthOscillatorType type) noexcept
+    /** Allocates every backend and attaches the shared slot. */
+    void prepare (double newSampleRate, int maxBlockSize, const SynthOscillatorSlot& sharedSlot)
     {
-        return type == SynthOscillatorType::wavetable;
-    }
+        const auto sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
 
-    /** Allocates every backend and attaches the shared waveform resources. */
-    void prepare (double newSampleRate, int maxBlockSize, const SynthOscillatorResources& oscillatorResources)
-    {
-        sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
-        resources = &oscillatorResources;
+        slot = &sharedSlot;
 
         wavetable.prepare (sampleRate, SynthExample::maxHarmonics);
-        sync.prepare (sampleRate, SynthExample::maxHarmonics);
-        morphing.prepare (sampleRate, SynthExample::maxHarmonics);
-        modulated.prepare (sampleRate, maxBlockSize, resources->getBank());
 
         for (auto& satellite : satellites)
             satellite.prepare (sampleRate, SynthExample::maxHarmonics);
 
-        customSeries.resize (SynthExample::maxHarmonics);
         slotBuffer.assign (static_cast<std::size_t> (yup::jmax (1, maxBlockSize)), 0.0f);
 
-        applied = {};
-        hasAppliedValues = false;
+        appliedSeriesGeneration = -1;
     }
 
     /** Restarts every backend, spreading the satellites so they do not stack in phase. */
@@ -541,9 +711,6 @@ public:
         const auto phase = static_cast<float> (initialPhase);
 
         wavetable.setPhase (phase);
-        sync.setPhase (phase);
-        morphing.setPhase (phase);
-        modulated.reset (initialPhase);
 
         for (std::size_t index = 0; index < satellites.size(); ++index)
         {
@@ -551,11 +718,9 @@ public:
 
             satellites[index].setPhase (phase + offset - std::floor (phase + offset));
         }
-
-        modulatorPhase = 0.0;
     }
 
-    /** Applies the pending changes and writes one stereo block of the selected algorithm.
+    /** Applies the pending changes and writes one stereo block.
 
         The buffers are overwritten rather than added to, so the caller does not have to
         clear them first.
@@ -564,22 +729,22 @@ public:
                       float* right,
                       int numSamples,
                       const SynthOscillatorValues& values,
-                      const SynthOscillatorSettings& settings,
                       double frequency) noexcept
     {
         yup::FloatVectorOperations::clear (left, numSamples);
         yup::FloatVectorOperations::clear (right, numSamples);
 
-        const auto slotCount = supportsUnison (values.type)
-                                 ? yup::jlimit (1, SynthExample::maxUnisonVoices, values.unisonVoices)
-                                 : 1;
+        // The table holds one period of the synced waveform, which for mirrored sync is
+        // two leader periods, so it is played at the fundamental the transform produced.
+        const auto played = frequency * yup::SyncSpectralResampler<double>::getFundamentalScale (values.syncMode);
 
+        const auto slotCount = yup::jlimit (1, SynthExample::maxUnisonVoices, values.unisonVoices);
         const auto centreIndex = (slotCount - 1) / 2;
-        const auto slotGain = 1.0f / std::sqrt (static_cast<float> (slotCount));
+        const auto slotGain = 1.0f / static_cast<float> (slotCount);
 
-        applyParameters (values, settings, detunedFrequency (frequency, values, centreIndex, slotCount));
+        applySeries();
 
-        renderAlgorithm (slotBuffer.data(), numSamples, values, frequency);
+        renderSatellite (wavetable, numSamples, detunedFrequency (played, values, centreIndex, slotCount));
         accumulateSlot (left, right, numSamples, slotOffset (centreIndex, slotCount) * values.unisonSpread, slotGain);
 
         for (int index = 0, satellite = 0; index < slotCount; ++index)
@@ -589,7 +754,7 @@ public:
 
             renderSatellite (satellites[static_cast<std::size_t> (satellite++)],
                              numSamples,
-                             detunedFrequency (frequency, values, index, slotCount));
+                             detunedFrequency (played, values, index, slotCount));
 
             accumulateSlot (left, right, numSamples, slotOffset (index, slotCount) * values.unisonSpread, slotGain);
         }
@@ -630,7 +795,8 @@ private:
         }
     }
 
-    /** Renders one unison satellite, which always plays the wavetable algorithm. */
+    /** Renders one unison slot; render() crossfades into a new table, which is what
+        keeps a modulated shape from stepping. */
     void renderSatellite (yup::WavetableOscillator<float>& satellite, int numSamples, double frequency) noexcept
     {
         satellite.setFrequency (frequency);
@@ -641,142 +807,31 @@ private:
         satellite.processBlock (slotBuffer.data(), numSamples);
     }
 
-    /** Writes the block of whichever algorithm is selected. */
-    void renderAlgorithm (float* output, int numSamples, const SynthOscillatorValues& values, double frequency) noexcept
+    /** Hands the slot's series to every table when it moved since the last block. */
+    void applySeries() noexcept
     {
-        switch (values.type)
-        {
-            case SynthOscillatorType::wavetable:
-                if (wavetable.needsRender())
-                    wavetable.render();
+        const auto generation = slot->getGeneration();
 
-                wavetable.processBlock (output, numSamples);
-                break;
+        if (generation == appliedSeriesGeneration)
+            return;
 
-            case SynthOscillatorType::sync:
-                sync.update();
-                sync.processBlock (output, numSamples);
-                break;
+        appliedSeriesGeneration = generation;
 
-            case SynthOscillatorType::morphing:
-                morphing.update();
-                morphing.processBlock (output, numSamples, static_cast<double> (values.morph));
-                break;
+        const auto& series = slot->getSeries();
 
-            case SynthOscillatorType::modulated:
-                renderModulatedBlock (output, numSamples, values, frequency);
-                break;
-        }
-    }
+        wavetable.setSeries (series);
 
-    //==============================================================================
-    /** Renders the oversampled modulation path, driving its FM from an internal sine. */
-    void renderModulatedBlock (float* output, int numSamples, const SynthOscillatorValues& values, double frequency) noexcept
-    {
-        yup::ModulatedOscillator<float>::Parameters parameters;
-        parameters.frequency = frequency;
-        parameters.morph = static_cast<double> (values.morph);
-        parameters.phaseDistortion = static_cast<double> (values.phaseDistortion);
-        parameters.syncFrequency = values.syncMode == yup::SyncMode::none
-                                     ? 0.0
-                                     : frequency * static_cast<double> (values.followerRatio);
-
-        const auto internalSampleRate = modulated.getInternalSampleRate();
-        const auto modulatorIncrement = static_cast<double> (values.fmRatio) * frequency / internalSampleRate;
-        const auto modulatorDepth = static_cast<double> (values.fmAmount) * frequency;
-
-        // Unlike the other backends this one can decline to write anything, which would
-        // otherwise leave the previous unison slot's samples in the shared buffer.
-        const auto rendered = modulated.processModulatedBlock (output, numSamples, [this, &parameters, modulatorIncrement, modulatorDepth] (int)
-        {
-            parameters.linearFM = modulatorDepth * std::sin (yup::MathConstants<double>::twoPi * modulatorPhase);
-
-            modulatorPhase += modulatorIncrement;
-            modulatorPhase -= std::floor (modulatorPhase);
-
-            return parameters;
-        });
-
-        if (! rendered)
-            yup::FloatVectorOperations::clear (output, numSamples);
-    }
-
-    //==============================================================================
-    /** Pushes only the controls whose value changed since the last block. */
-    void applyParameters (const SynthOscillatorValues& values, const SynthOscillatorSettings& settings, double frequency) noexcept
-    {
-        const auto typeChanged = ! hasAppliedValues || applied.type != values.type;
-        const auto waveformChanged = typeChanged || applied.waveform != values.waveform;
-        const auto shapeChanged = typeChanged || applied.shape != values.shape;
-        const auto syncModeChanged = typeChanged || applied.syncMode != values.syncMode;
-        const auto ratioChanged = typeChanged || applied.followerRatio != values.followerRatio;
-
-        const auto partialsChanged = ! hasAppliedValues
-                                  || applied.usesCustomSeries != values.usesCustomSeries
-                                  || applied.harmonicGeneration != values.harmonicGeneration;
-
-        if (partialsChanged && values.usesCustomSeries)
-            settings.copyHarmonicsInto (customSeries, values.harmonicScale);
-
-        const auto seriesChanged = waveformChanged || partialsChanged;
-        const auto& series = values.usesCustomSeries ? customSeries : resources->getFrame (values.waveform);
-
-        if (seriesChanged)
-            for (auto& satellite : satellites)
-                satellite.setSeries (series);
-
-        switch (values.type)
-        {
-            case SynthOscillatorType::wavetable:
-                if (seriesChanged)
-                    wavetable.setSeries (series);
-                break;
-
-            case SynthOscillatorType::sync:
-                if (seriesChanged)
-                    sync.setFollowerSeries (series);
-                if (syncModeChanged)
-                    sync.setSyncMode (values.syncMode);
-                if (ratioChanged)
-                    sync.setFollowerRatio (values.followerRatio);
-                break;
-
-            case SynthOscillatorType::morphing:
-                if (seriesChanged || shapeChanged)
-                    morphing.setSeries (series, resources->getFrame (values.shape));
-                if (syncModeChanged)
-                    morphing.setSyncMode (values.syncMode);
-                if (ratioChanged)
-                    morphing.setFollowerRatio (values.followerRatio);
-                break;
-
-            case SynthOscillatorType::modulated:
-                break;
-        }
-
-        wavetable.setFrequency (frequency);
-        sync.setFrequency (frequency);
-        morphing.setFrequency (frequency);
-
-        applied = values;
-        hasAppliedValues = true;
+        for (auto& satellite : satellites)
+            satellite.setSeries (series);
     }
 
     //==============================================================================
     yup::WavetableOscillator<float> wavetable;
-    yup::SyncOscillator<float> sync;
-    yup::MorphingOscillator<float> morphing;
-    yup::ModulatedOscillator<float> modulated;
-
     std::array<yup::WavetableOscillator<float>, SynthExample::maxUnisonVoices - 1> satellites;
 
-    const SynthOscillatorResources* resources = nullptr;
-    SynthOscillatorValues applied;
-    yup::FourierSeries<double> customSeries;
+    const SynthOscillatorSlot* slot = nullptr;
     std::vector<float> slotBuffer;
-    double sampleRate = 44100.0;
-    double modulatorPhase = 0.0;
-    bool hasAppliedValues = false;
+    int appliedSeriesGeneration = -1;
 };
 
 //==============================================================================
@@ -795,23 +850,35 @@ class SynthVoice : public yup::SynthesiserVoice
 public:
     SynthVoice (const std::array<SynthOscillatorSettings, SynthExample::oscillatorCount>& oscillatorSettings,
                 const SynthEnvelopeSettings& sharedEnvelopeSettings,
-                const SynthOscillatorResources& oscillatorResources)
+                const std::array<SynthOscillatorSlot, SynthExample::oscillatorCount>& sharedSlots)
         : settings (oscillatorSettings)
         , envelopeSettings (sharedEnvelopeSettings)
-        , resources (oscillatorResources)
+        , slots (sharedSlots)
     {
     }
 
     /** Allocates every oscillator backend. Must run outside the audio callback. */
     void prepare (double sampleRate, int maxBlockSize)
     {
-        for (auto& oscillator : oscillators)
-            oscillator.prepare (sampleRate, maxBlockSize, resources);
+        for (std::size_t slot = 0; slot < oscillators.size(); ++slot)
+            oscillators[slot].prepare (sampleRate, maxBlockSize, slots[slot]);
 
         for (auto& level : levels)
             level.reset (sampleRate, SynthExample::levelRampSeconds);
 
         envelope.prepare (sampleRate);
+        playbackRate = sampleRate;
+        hasPlayed = false;
+        preserveNote = false;
+        glideSeconds = 0.0;
+        pitch.setCurrentAndTargetValue (69.0);
+        bend.reset (sampleRate, SynthExample::levelRampSeconds);
+        bend.setCurrentAndTargetValue (0.0);
+        tailLength = yup::jlimit (2, yup::jmax (2, maxBlockSize), static_cast<int> (sampleRate * 0.006));
+        tailBuffer.setSize (2, tailLength);
+        tailScratch.setSize (2, tailLength);
+        tailPosition = tailLength;
+        clearCurrentNote();
 
         const auto blockSize = static_cast<std::size_t> (yup::jmax (1, maxBlockSize));
 
@@ -827,18 +894,39 @@ public:
         return dynamic_cast<SynthSound*> (sound) != nullptr;
     }
 
+    /** Configures the next mono transition. Legato retains the envelope and phases.
+        Glide is measured in seconds and interpolates pitch in semitones. */
+    void setTransition (double seconds, bool legato) noexcept
+    {
+        glideSeconds = yup::jlimit (0.0, 2.0, seconds);
+        preserveNote = legato && envelope.isActive();
+    }
+
     void startNote (int midiNoteNumber, float velocity, yup::SynthesiserSound*, int currentPitchWheelPosition) override
     {
-        noteFrequency = midiNoteToFrequency (midiNoteNumber);
-        velocityGain = yup::jmax (0.05f, velocity);
+        const auto currentPitch = pitch.getCurrentValue();
+        pitch.reset (playbackRate, glideSeconds);
+        pitch.setCurrentAndTargetValue (currentPitch);
+        if (glideSeconds > 0.0 && hasPlayed)
+            pitch.setTargetValue (static_cast<double> (midiNoteNumber));
+        else
+            pitch.setCurrentAndTargetValue (static_cast<double> (midiNoteNumber));
 
         pitchWheelMoved (currentPitchWheelPosition);
 
-        for (auto& oscillator : oscillators)
-            oscillator.reset (0.0);
+        if (! preserveNote)
+        {
+            velocityGain = yup::jlimit (0.0f, 1.0f, velocity);
+            for (auto& oscillator : oscillators)
+                oscillator.reset (0.0);
 
-        envelope.setParameters (envelopeSettings.read());
-        envelope.noteOn();
+            envelope.setParameters (envelopeSettings.read());
+            envelope.noteOn();
+        }
+
+        preserveNote = false;
+        hasPlayed = true;
+        glideSeconds = 0.0;
     }
 
     void stopNote (float, bool allowTailOff) override
@@ -849,77 +937,103 @@ public:
             return;
         }
 
-        envelope.noteOffImmediate();
+        if (! preserveNote)
+        {
+            if (envelope.isActive())
+            {
+                tailScratch.clear();
+                renderNextBlock (tailScratch, 0, tailLength);
+                for (int channel = 0; channel < 2; ++channel)
+                    for (int sample = 0; sample < tailLength; ++sample)
+                    {
+                        const auto fade = 0.5 + 0.5 * std::cos (yup::MathConstants<double>::pi
+                                                              * sample / (tailLength - 1));
+                        tailBuffer.setSample (channel, sample, tailScratch.getSample (channel, sample) * static_cast<float> (fade));
+                    }
+                tailPosition = 0;
+            }
+            envelope.noteOffImmediate();
+        }
         clearCurrentNote();
     }
 
     void pitchWheelMoved (int newPitchWheelValue) override
     {
         const auto normalized = (static_cast<double> (newPitchWheelValue) - 8192.0) / 8192.0;
-        pitchWheelRatio = std::pow (2.0, normalized * pitchWheelRangeSemitones / 12.0);
+        bend.setTargetValue (normalized * pitchWheelRangeSemitones);
     }
+
+    /** Includes a recycled voice's short continuation in the activity meter. */
+    bool isSounding() const noexcept { return isVoiceActive() || tailPosition < tailLength; }
 
     void controllerMoved (int, int) override {}
 
     //==============================================================================
     void renderNextBlock (yup::AudioBuffer<float>& outputBuffer, int startSample, int numSamples) override
     {
-        if (! isVoiceActive() || numSamples <= 0)
+        if (! isSounding() || numSamples <= 0 || outputBuffer.getNumChannels() == 0)
             return;
 
-        jassert (numSamples <= static_cast<int> (mixLeft.size()));
+        for (std::size_t index = 0; index < blockValues.size(); ++index)
+            blockValues[index] = settings[index].read();
+        envelope.setParameters (envelopeSettings.read());
 
-        const auto frequency = noteFrequency * pitchWheelRatio;
-        const auto numChannelsToWrite = yup::jmin (outputBuffer.getNumChannels(), 2);
+        for (int offset = 0; offset < numSamples;)
+        {
+            const auto controlBlock = pitch.isSmoothing() || bend.isSmoothing() ? 128 : numSamples;
+            const auto count = yup::jmin (numSamples - offset, static_cast<int> (mixLeft.size()), controlBlock);
+            if (count <= 0)
+                return;
+            renderChunk (outputBuffer, startSample + offset, count);
+            offset += count;
+        }
+    }
 
-        float* channels[2] = {};
-
-        for (int channel = 0; channel < numChannelsToWrite; ++channel)
-            channels[channel] = outputBuffer.getWritePointer (channel, startSample);
-
+private:
+    //==============================================================================
+    void renderChunk (yup::AudioBuffer<float>& outputBuffer, int startSample, int numSamples) noexcept
+    {
         yup::FloatVectorOperations::clear (mixLeft.data(), numSamples);
         yup::FloatVectorOperations::clear (mixRight.data(), numSamples);
 
-        for (int index = 0; index < SynthExample::oscillatorCount; ++index)
+        if (isVoiceActive())
         {
-            const auto& oscillatorSettings = settings[static_cast<std::size_t> (index)];
-            const auto values = oscillatorSettings.read();
-            auto& level = levels[static_cast<std::size_t> (index)];
-
-            // The oscillator's own detune is what makes the two of them beat against each
-            // other, so it has to reach the frequency the backends are driven with.
-            const auto detuned = frequency * std::pow (2.0, static_cast<double> (values.detuneSemitones) / 12.0);
-
-            oscillators[static_cast<std::size_t> (index)]
-                .renderBlock (oscLeft.data(), oscRight.data(), numSamples, values, oscillatorSettings, detuned);
-
-            level.setTargetValue (values.level);
-
-            for (int sample = 0; sample < numSamples; ++sample)
+            const auto frequency = midiNoteToFrequency (pitch.skip (numSamples) + bend.skip (numSamples));
+            for (int index = 0; index < SynthExample::oscillatorCount; ++index)
             {
-                const auto gain = level.getNextValue();
+                const auto slot = static_cast<std::size_t> (index);
+                const auto& values = blockValues[slot];
+                auto& level = levels[slot];
+                const auto detuned = frequency * std::exp2 (values.octave + values.detuneSemitones / 12.0);
+                oscillators[slot].renderBlock (oscLeft.data(), oscRight.data(), numSamples, values, detuned);
+                level.setTargetValue (values.level);
 
-                mixLeft[static_cast<std::size_t> (sample)] += oscLeft[static_cast<std::size_t> (sample)] * gain;
-                mixRight[static_cast<std::size_t> (sample)] += oscRight[static_cast<std::size_t> (sample)] * gain;
+                for (int sample = 0; sample < numSamples; ++sample)
+                {
+                    const auto gain = level.getNextValue();
+                    mixLeft[static_cast<std::size_t> (sample)] += oscLeft[static_cast<std::size_t> (sample)] * gain;
+                    mixRight[static_cast<std::size_t> (sample)] += oscRight[static_cast<std::size_t> (sample)] * gain;
+                }
             }
         }
-
-        envelope.setParameters (envelopeSettings.read());
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
             const auto gain = envelope.getNextValue() * velocityGain;
-            const auto left = mixLeft[static_cast<std::size_t> (sample)] * gain;
-            const auto right = mixRight[static_cast<std::size_t> (sample)] * gain;
-
-            if (numChannelsToWrite == 1)
+            auto left = mixLeft[static_cast<std::size_t> (sample)] * gain;
+            auto right = mixRight[static_cast<std::size_t> (sample)] * gain;
+            if (tailPosition < tailLength)
             {
-                channels[0][sample] += (left + right) * 0.5f;
+                left += tailBuffer.getSample (0, tailPosition);
+                right += tailBuffer.getSample (1, tailPosition++);
             }
+
+            if (outputBuffer.getNumChannels() == 1)
+                outputBuffer.addSample (0, startSample + sample, (left + right) * 0.5f);
             else
             {
-                channels[0][sample] += left;
-                channels[1][sample] += right;
+                outputBuffer.addSample (0, startSample + sample, left);
+                outputBuffer.addSample (1, startSample + sample, right);
             }
         }
 
@@ -927,9 +1041,7 @@ public:
             clearCurrentNote();
     }
 
-private:
-    //==============================================================================
-    static double midiNoteToFrequency (int midiNoteNumber) noexcept
+    static double midiNoteToFrequency (double midiNoteNumber) noexcept
     {
         return 440.0 * std::pow (2.0, (midiNoteNumber - 69) / 12.0);
     }
@@ -939,9 +1051,10 @@ private:
 
     const std::array<SynthOscillatorSettings, SynthExample::oscillatorCount>& settings;
     const SynthEnvelopeSettings& envelopeSettings;
-    const SynthOscillatorResources& resources;
+    const std::array<SynthOscillatorSlot, SynthExample::oscillatorCount>& slots;
 
     std::array<SynthOscillator, SynthExample::oscillatorCount> oscillators;
+    std::array<SynthOscillatorValues, SynthExample::oscillatorCount> blockValues;
     std::array<yup::SmoothedValue<float>, SynthExample::oscillatorCount> levels;
 
     SynthEnvelope envelope;
@@ -951,36 +1064,150 @@ private:
     std::vector<float> mixLeft;
     std::vector<float> mixRight;
 
-    double noteFrequency = 440.0;
-    double pitchWheelRatio = 1.0;
+    yup::SmoothedValue<double> pitch;
+    yup::SmoothedValue<double> bend;
+    yup::AudioBuffer<float> tailBuffer;
+    yup::AudioBuffer<float> tailScratch;
+    double playbackRate = 44100.0;
+    double glideSeconds = 0.0;
+    int tailLength = 0;
+    int tailPosition = 0;
+    bool preserveNote = false;
+    bool hasPlayed = false;
     float velocityGain = 1.0f;
 };
 
 //==============================================================================
-/** Polyphonic synthesiser rendering the two oscillators of every voice. */
+/** Keyboard allocation and envelope behavior. */
+enum class SynthPlayMode
+{
+    poly,   /**< Eight voices with rendered release tails when recycled. */
+    mono,   /**< Last-note priority, retriggering the envelope on each note. */
+    legato  /**< Overlapping notes preserve phases and envelope; glide is optional. */
+};
+
+/** Polyphonic synthesiser rendering the two oscillators of every voice.
+    MIDI and rendering methods belong to the audio thread; the UI edits atomic controls. */
 class HarmonicSynthEngine : public yup::Synthesiser
 {
 public:
     HarmonicSynthEngine()
     {
         addSound (new SynthSound());
+        setMinimumRenderingSubdivisionSize (1, true);
+        settings[0].color = 0.2f;
+        settings[1].waveform = static_cast<int> (yup::Waveform::triangle);
+        settings[1].syncMode = static_cast<int> (yup::SyncMode::hard);
+        settings[1].octave = -1;
+        settings[1].level = 0.3f;
 
         for (int index = 0; index < SynthExample::voiceCount; ++index)
         {
-            auto voice = yup::ReferenceCountedObjectPtr<SynthVoice> (new SynthVoice (settings, envelopeSettings, resources));
+            auto voice = yup::ReferenceCountedObjectPtr<SynthVoice> (new SynthVoice (settings, envelopeSettings, oscillatorSlots));
 
             addVoice (voice);
             ownedVoices.add (voice);
         }
     }
 
-    /** Prepares every voice, including the oscillators of the modulated algorithm. */
+    /** Prepares every voice. Must run outside the audio callback. */
     void prepare (double sampleRate, int maxBlockSize)
     {
+        allNotesOff (0, false);
         setCurrentPlaybackSampleRate (sampleRate);
+        activeVoices.store (0);
 
         for (int index = 0; index < ownedVoices.size(); ++index)
             ownedVoices[index]->prepare (sampleRate, maxBlockSize);
+    }
+
+    /** UI-facing performance controls, sampled at the next render boundary. */
+    std::atomic<int> playMode { static_cast<int> (SynthPlayMode::poly) };
+    std::atomic<float> portamento { 0.12f };
+
+    /** Requests a release of all keys without taking the synthesiser lock on the UI thread. */
+    void requestAllNotesOff() noexcept { releaseRequested.store (true); }
+
+    /** Renders MIDI with sample-accurate note boundaries and publishes the voice meter. */
+    void renderNextBlock (yup::AudioBuffer<float>& output, const yup::MidiBuffer& midi, int start, int count)
+    {
+        const auto requestedMode = static_cast<SynthPlayMode> (playMode.load());
+        const auto release = releaseRequested.exchange (false);
+        if (requestedMode != mode || release)
+        {
+            allNotesOff (0, true);
+            mode = requestedMode;
+        }
+        // Every voice of a slot plays the same spectrum, so it is derived once here
+        // rather than once per voice: that is what lets the Prism and sync controls be
+        // modulated without paying for the shaping eight times over.
+        for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
+            oscillatorSlots[slot].update (settings[slot].read(), settings[slot], resources);
+
+        yup::Synthesiser::renderNextBlock (output, midi, start, count);
+        int active = 0;
+        for (auto* voice : ownedVoices)
+            active += voice->isSounding() ? 1 : 0;
+        activeVoices.store (active);
+    }
+
+    void noteOn (int channel, int note, float velocity) override
+    {
+        if (mode == SynthPlayMode::poly)
+        {
+            yup::Synthesiser::noteOn (channel, note, velocity);
+            return;
+        }
+        auto& held = heldNotes[static_cast<std::size_t> ((channel - 1) * 128 + note)];
+        held = { ++noteOrder, velocity, true };
+        playMonoNote (channel, note, velocity);
+    }
+
+    void noteOff (int channel, int note, float velocity, bool tailOff) override
+    {
+        if (mode == SynthPlayMode::poly)
+        {
+            yup::Synthesiser::noteOff (channel, note, velocity, tailOff);
+            return;
+        }
+        auto& held = heldNotes[static_cast<std::size_t> ((channel - 1) * 128 + note)];
+        held.down = false;
+        if (! sustain[static_cast<std::size_t> (channel - 1)] || ! tailOff)
+            held.order = 0;
+        selectMonoNote (tailOff);
+    }
+
+    void allNotesOff (int channel, bool tailOff) override
+    {
+        for (int index = 0; index < static_cast<int> (heldNotes.size()); ++index)
+            if (channel <= 0 || index / 128 == channel - 1)
+                heldNotes[static_cast<std::size_t> (index)] = {};
+        for (int index = 0; index < 16; ++index)
+            if (channel <= 0 || index == channel - 1)
+                sustain[static_cast<std::size_t> (index)] = false;
+        yup::Synthesiser::allNotesOff (channel, tailOff);
+        if (mode != SynthPlayMode::poly)
+            selectMonoNote (tailOff);
+    }
+
+    void handleController (int channel, int controller, int value) override
+    {
+        if (mode != SynthPlayMode::poly && controller == 64)
+        {
+            sustain[static_cast<std::size_t> (channel - 1)] = value >= 64;
+            if (value < 64)
+            {
+                for (int note = 0; note < 128; ++note)
+                {
+                    auto& held = heldNotes[static_cast<std::size_t> ((channel - 1) * 128 + note)];
+                    if (! held.down)
+                        held.order = 0;
+                }
+                selectMonoNote (true);
+            }
+            return;
+        }
+        yup::Synthesiser::handleController (channel, controller, value);
     }
 
     /** Returns the settings edited by one of the user interface panels. */
@@ -995,6 +1222,12 @@ public:
     /** Returns the shared waveform presets, which the waveform displays also read. */
     const SynthOscillatorResources& getResources() const noexcept { return resources; }
 
+    /** Returns the shared series derivation of one oscillator slot. */
+    SynthOscillatorSlot& getOscillatorSlot (int oscillatorIndex) noexcept
+    {
+        return oscillatorSlots[static_cast<std::size_t> (oscillatorIndex)];
+    }
+
     /** Returns the note of a sounding voice, or -1 when the synthesiser is silent. */
     int getCurrentlyPlayingNote() const noexcept
     {
@@ -1006,19 +1239,58 @@ public:
     }
 
     /** Returns how many voices are currently sounding. */
-    int getNumActiveVoices() const noexcept
-    {
-        int count = 0;
-
-        for (int index = 0; index < ownedVoices.size(); ++index)
-            if (ownedVoices[index] != nullptr && ownedVoices[index]->isVoiceActive())
-                ++count;
-
-        return count;
-    }
+    int getNumActiveVoices() const noexcept { return activeVoices.load(); }
 
 private:
+    void playMonoNote (int channel, int note, float velocity)
+    {
+        auto* voice = ownedVoices[0].get();
+        const auto overlapping = voice->isVoiceActive() && monoKeyActive;
+        voice->setTransition (overlapping ? portamento.load() : 0.0,
+                              overlapping && mode == SynthPlayMode::legato);
+        startVoice (voice, getSound (0).get(), channel, note, velocity);
+        monoKeyActive = true;
+    }
+
+    void selectMonoNote (bool tailOff)
+    {
+        int latest = -1;
+        for (int index = 0; index < static_cast<int> (heldNotes.size()); ++index)
+            if (heldNotes[static_cast<std::size_t> (index)].order != 0
+                && (latest < 0 || heldNotes[static_cast<std::size_t> (index)].order > heldNotes[static_cast<std::size_t> (latest)].order))
+                latest = index;
+
+        auto* voice = ownedVoices[0].get();
+        if (latest < 0)
+        {
+            if (monoKeyActive)
+                voice->stopNote (0.0f, tailOff);
+            monoKeyActive = false;
+            return;
+        }
+        const auto channel = latest / 128 + 1;
+        const auto note = latest % 128;
+        if (! voice->isVoiceActive() || voice->getCurrentlyPlayingNote() != note || ! voice->isPlayingChannel (channel))
+            playMonoNote (channel, note, heldNotes[static_cast<std::size_t> (latest)].velocity);
+    }
+
+    struct HeldNote
+    {
+        yup::uint64 order = 0;
+        float velocity = 0.0f;
+        bool down = false;
+    };
+
+    std::array<HeldNote, 16 * 128> heldNotes {};
+    std::array<bool, 16> sustain {};
+    yup::uint64 noteOrder = 0;
+    SynthPlayMode mode = SynthPlayMode::poly;
+    bool monoKeyActive = false;
+    std::atomic<bool> releaseRequested { false };
+    std::atomic<int> activeVoices { 0 };
+
     SynthOscillatorResources resources;
+    std::array<SynthOscillatorSlot, SynthExample::oscillatorCount> oscillatorSlots;
     std::array<SynthOscillatorSettings, SynthExample::oscillatorCount> settings;
     SynthEnvelopeSettings envelopeSettings;
     yup::ReferenceCountedArray<SynthVoice> ownedVoices;
@@ -1038,8 +1310,8 @@ inline constexpr yup::Color windowBackground { 0xff16191d };
 inline constexpr yup::Color panelBackground { 0xff21262c };
 inline constexpr yup::Color panelBorder { 0xff2e353d };
 inline constexpr yup::Color displayBackground { 0xff0e1114 };
-inline constexpr yup::Color accent { 0xff4dc3ff };
-inline constexpr yup::Color accentDim { 0xff2b6f8f };
+inline constexpr yup::Color accent { 0xff72ead2 };
+inline constexpr yup::Color accentDim { 0xff287f78 };
 inline constexpr yup::Color textPrimary { 0xffe6ebf0 };
 inline constexpr yup::Color textSecondary { 0xff8b96a0 };
 
@@ -1181,11 +1453,17 @@ private:
 class WaveformEditor : public yup::Component
 {
 public:
-    WaveformEditor (SynthOscillatorSettings& settingsToEdit, const SynthOscillatorResources& sharedResources)
+    WaveformEditor (SynthOscillatorSettings& settingsToEdit,
+                    const SynthOscillatorResources& sharedResources,
+                    const SynthOscillatorSlot& sharedSlot)
         : settings (settingsToEdit)
         , resources (sharedResources)
+        , slot (sharedSlot)
     {
+        resampler.prepare (SynthExample::maxHarmonics);
         displaySeries.resize (SynthExample::maxHarmonics);
+        shapedSeries.resize (SynthExample::maxHarmonics);
+        syncedSeries.resize (SynthExample::maxHarmonics);
         displaySamples.assign (displayResolution, 0.0f);
 
         refresh();
@@ -1213,36 +1491,61 @@ public:
         else
             displaySeries.copyFrom (resources.getFrame (static_cast<yup::Waveform> (settings.waveform.load())));
 
+        reconstruct (displaySeries);
+
+        // The reconstruction is measured here, on the message thread, so the audio thread
+        // never has to work out how loud an edited spectrum turned out to be. This is the
+        // source's peak, which is a different quantity from the drawn waveform's below.
+        if (usesCustomSeries)
+        {
+            const auto sourcePeak = measurePeak();
+
+            if (sourcePeak > 1.0e-6f)
+                settings.harmonicScale.store (1.0f / sourcePeak);
+        }
+
+        // Shaping and sync have no inverse FFT behind them, so the preview follows every
+        // control live, derived exactly as the voices derive theirs once per block.
+        reconstruct (derivePrismSeries (slot.getSpectrum(), resampler, displaySeries, shapedSeries, syncedSeries, settings.read()));
+
+        // Normalize whatever is actually drawn. The shaper preserves the coefficient sum
+        // rather than the peak, and a sum bounds a peak from well above - three times over
+        // for a sawtooth - so scaling the derived waveform by the source's peak would draw
+        // it clean outside the display.
+        const auto peak = measurePeak();
+
+        if (peak > 1.0e-6f)
+        {
+            const auto scale = 1.0f / peak;
+
+            for (auto& sample : displaySamples)
+                sample *= scale;
+        }
+
+        repaint();
+    }
+
+    /** Sums a series into the display buffer at the display's resolution. */
+    void reconstruct (const yup::FourierSeries<double>& series) noexcept
+    {
         for (int index = 0; index < displayResolution; ++index)
         {
             const auto phase = static_cast<double> (index) / static_cast<double> (displayResolution - 1);
 
             displaySamples[static_cast<std::size_t> (index)] =
-                evaluateFourierSeries (displaySeries, phase, SynthExample::displayHarmonics);
+                evaluateFourierSeries (series, phase, SynthExample::displayHarmonics);
         }
+    }
 
+    /** Returns the largest magnitude currently in the display buffer. */
+    float measurePeak() const noexcept
+    {
         auto peak = 0.0f;
 
         for (auto sample : displaySamples)
             peak = yup::jmax (peak, std::abs (sample));
 
-        if (peak <= 1.0e-6f)
-        {
-            repaint();
-            return;
-        }
-
-        // The reconstruction is measured here, on the message thread, so the audio thread
-        // never has to work out how loud an edited spectrum turned out to be.
-        if (usesCustomSeries)
-            settings.harmonicScale.store (1.0f / peak);
-
-        const auto scale = 1.0f / peak;
-
-        for (auto& sample : displaySamples)
-            sample *= scale;
-
-        repaint();
+        return peak;
     }
 
     /** Publishes a pending drag to the audio thread, coalescing a frame's worth of edits. */
@@ -1332,7 +1635,7 @@ private:
 
         for (int index = 0; index < SynthExample::editableHarmonics; ++index)
         {
-            const auto magnitude = yup::jlimit (0.0f, 1.0f, settings.harmonics[static_cast<std::size_t> (index)].load());
+            const auto magnitude = yup::jlimit (0.0f, 1.0f, static_cast<float> (displaySeries.getMagnitude (index + 1)));
             const auto height = yup::jmax (1.0f, magnitude * bounds.getHeight());
             const auto x = bounds.getX() + barWidth * static_cast<float> (index);
 
@@ -1387,8 +1690,12 @@ private:
 
     SynthOscillatorSettings& settings;
     const SynthOscillatorResources& resources;
+    const SynthOscillatorSlot& slot;
 
+    yup::SyncSpectralResampler<double> resampler;
     yup::FourierSeries<double> displaySeries;
+    yup::FourierSeries<double> shapedSeries;
+    yup::FourierSeries<double> syncedSeries;
     std::vector<float> displaySamples;
     yup::Path path;
 
@@ -1427,15 +1734,19 @@ public:
         if (renderData.empty())
             return;
 
-        const auto xSize = bounds.getWidth() / static_cast<float> (renderData.size());
+        const auto pointCount = yup::jmin (512, static_cast<int> (renderData.size()));
+        const auto xSize = bounds.getWidth() / static_cast<float> (yup::jmax (1, pointCount - 1));
 
         path.clear();
-        path.reserveSpace (static_cast<int> (renderData.size()));
+        path.reserveSpace (pointCount);
         path.moveTo (bounds.getX(), bounds.getCenterY() - renderData[0] * bounds.getHeight() * 0.45f);
 
-        for (std::size_t i = 1; i < renderData.size(); ++i)
+        for (int i = 1; i < pointCount; ++i)
+        {
+            const auto sample = static_cast<std::size_t> (i) * (renderData.size() - 1) / static_cast<std::size_t> (pointCount - 1);
             path.lineTo (bounds.getX() + static_cast<float> (i) * xSize,
-                         bounds.getCenterY() - renderData[i] * bounds.getHeight() * 0.45f);
+                         bounds.getCenterY() - renderData[sample] * bounds.getHeight() * 0.45f);
+        }
 
         filledPath = path.createStrokePolygon (4.0f);
 
@@ -1657,20 +1968,26 @@ public:
     SynthOscillatorPanel (const yup::String& panelTitle,
                           SynthOscillatorSettings& settingsToEdit,
                           const SynthOscillatorResources& resources,
+                          const SynthOscillatorSlot& sharedSlot,
                           const yup::Font& font)
         : settings (settingsToEdit)
-        , editor (settingsToEdit, resources)
-        , algorithmChoice ("ALGORITHM", getSynthOscillatorTypeNames(), font)
+        , editor (settingsToEdit, resources, sharedSlot)
         , waveformChoice ("WAVEFORM", getSynthWaveformNames(), font)
-        , shapeChoice ("SHAPE B", getSynthWaveformNames(), font)
         , syncModeChoice ("SYNC", getSynthSyncModeNames(), font)
         , levelKnob ("LEVEL", 0.0, 1.0, 0.001, 0.5, font)
-        , detuneKnob ("DETUNE", -24.0, 24.0, 0.01, 0.0, font)
-        , ratioKnob ("RATIO", 0.25, 8.0, 0.01, 1.5, font)
-        , morphKnob ("MORPH", 0.0, 1.0, 0.001, 0.0, font)
-        , distortionKnob ("DIST", 0.01, 0.99, 0.001, 0.5, font)
-        , fmAmountKnob ("FM AMT", 0.0, 4.0, 0.001, 0.0, font)
-        , fmRatioKnob ("FM RATIO", 0.25, 8.0, 0.01, 2.0, font)
+        , octaveKnob ("OCTAVE", -3.0, 3.0, 1.0, 0.0, font)
+        , detuneKnob ("CENTS", -100.0, 100.0, 1.0, 0.0, font)
+        , ridgesKnob ("RIDGES", 0.25, 8.0, 0.01, 1.5, font)
+        , colorKnob ("COLOR", 0.0, 1.0, 0.001, 0.0, font)
+        , dispersionKnob ("DISPERSION", 0.01, 0.99, 0.001, 0.5, font)
+        , squeezeKnob ("SQUEEZE", 0.0, 0.5, 0.001, 0.0, font)
+        , squashKnob ("SQUASH", 0.1, 4.0, 0.01, 1.0, font)
+        , tiltKnob ("TILT", -4.0, 4.0, 0.01, 0.0, font)
+        , oddEvenKnob ("ODD/EVEN", 0.0, 1.0, 0.001, 0.5, font)
+        , formantKnob ("FORMANT", -4.0, 4.0, 0.01, 0.0, font)
+        , formantPositionKnob ("F.POS", 0.0, 7.0, 0.01, 2.0, font)
+        , scatterKnob ("SCATTER", 0.0, 1.0, 0.001, 0.0, font)
+        , syncRatioKnob ("SYNC RATIO", 1.0, 8.0, 0.01, 1.5, font)
         , unisonKnob ("UNISON", 1.0, static_cast<double> (SynthExample::maxUnisonVoices), 1.0, 1.0, font)
         , unisonDetuneKnob ("U.DETUNE", 0.0, 1.0, 0.001, 0.2, font)
         , spreadKnob ("SPREAD", 0.0, 1.0, 0.001, 0.6, font)
@@ -1698,18 +2015,14 @@ public:
 
         addAndMakeVisible (editor);
 
-        for (auto* choice : { &algorithmChoice, &waveformChoice, &shapeChoice, &syncModeChoice })
+        for (auto* choice : { &waveformChoice, &syncModeChoice })
             addAndMakeVisible (*choice);
 
-        for (auto* knob : { &levelKnob, &detuneKnob, &ratioKnob, &morphKnob, &distortionKnob,
-                            &fmAmountKnob, &fmRatioKnob, &unisonKnob, &unisonDetuneKnob, &spreadKnob })
+        for (auto* knob : { &levelKnob, &octaveKnob, &detuneKnob, &ridgesKnob, &colorKnob, &dispersionKnob,
+                            &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob,
+                            &formantPositionKnob, &scatterKnob, &syncRatioKnob,
+                            &unisonKnob, &unisonDetuneKnob, &spreadKnob })
             addAndMakeVisible (*knob);
-
-        algorithmChoice.onChange = [this] (int id)
-        {
-            settings.type = id - 1;
-            updateUnisonAvailability();
-        };
 
         // Picking a preset drops any edited partials, otherwise the oscillator would keep
         // playing the edited shape while the combo box claims something else.
@@ -1719,15 +2032,27 @@ public:
             editor.revertToPreset();
         };
 
-        shapeChoice.onChange = [this] (int id) { settings.shape = id - 1; };
-        syncModeChoice.onChange = [this] (int id) { settings.syncMode = id - 1; };
+        syncModeChoice.onChange = [this] (int id)
+        {
+            settings.syncMode = id - 1;
+            updateSyncAvailability();
+            editor.refresh();
+        };
+
         levelKnob.onChange = [this] (double value) { settings.level = static_cast<float> (value); };
-        detuneKnob.onChange = [this] (double value) { settings.detuneSemitones = static_cast<float> (value); };
-        ratioKnob.onChange = [this] (double value) { settings.followerRatio = static_cast<float> (value); };
-        morphKnob.onChange = [this] (double value) { settings.morph = static_cast<float> (value); };
-        distortionKnob.onChange = [this] (double value) { settings.phaseDistortion = static_cast<float> (value); };
-        fmAmountKnob.onChange = [this] (double value) { settings.fmAmount = static_cast<float> (value); };
-        fmRatioKnob.onChange = [this] (double value) { settings.fmRatio = static_cast<float> (value); };
+        octaveKnob.onChange = [this] (double value) { settings.octave = static_cast<int> (value); };
+        detuneKnob.onChange = [this] (double value) { settings.detuneSemitones = static_cast<float> (value * 0.01); };
+        ridgesKnob.onChange = [this] (double value) { settings.ridgeSpacing = static_cast<float> (value); editor.refresh(); };
+        colorKnob.onChange = [this] (double value) { settings.color = static_cast<float> (value); editor.refresh(); };
+        dispersionKnob.onChange = [this] (double value) { settings.dispersion = static_cast<float> (value); editor.refresh(); };
+        squeezeKnob.onChange = [this] (double value) { settings.squeeze = static_cast<float> (value); editor.refresh(); };
+        squashKnob.onChange = [this] (double value) { settings.squash = static_cast<float> (value); editor.refresh(); };
+        tiltKnob.onChange = [this] (double value) { settings.tilt = static_cast<float> (value); editor.refresh(); };
+        oddEvenKnob.onChange = [this] (double value) { settings.oddEven = static_cast<float> (value); editor.refresh(); };
+        formantKnob.onChange = [this] (double value) { settings.formant = static_cast<float> (value); editor.refresh(); };
+        formantPositionKnob.onChange = [this] (double value) { settings.formantPosition = static_cast<float> (value); editor.refresh(); };
+        scatterKnob.onChange = [this] (double value) { settings.scatter = static_cast<float> (value); editor.refresh(); };
+        syncRatioKnob.onChange = [this] (double value) { settings.syncRatio = static_cast<float> (value); editor.refresh(); };
         unisonKnob.onChange = [this] (double value) { settings.unisonVoices = static_cast<int> (value); };
         unisonDetuneKnob.onChange = [this] (double value) { settings.unisonDetune = static_cast<float> (value); };
         spreadKnob.onChange = [this] (double value) { settings.unisonSpread = static_cast<float> (value); };
@@ -1738,23 +2063,28 @@ public:
     /** Reads the settings back into the widgets. */
     void refresh()
     {
-        algorithmChoice.getComboBox().setSelectedId (settings.type.load() + 1, yup::dontSendNotification);
         waveformChoice.getComboBox().setSelectedId (settings.waveform.load() + 1, yup::dontSendNotification);
-        shapeChoice.getComboBox().setSelectedId (settings.shape.load() + 1, yup::dontSendNotification);
         syncModeChoice.getComboBox().setSelectedId (settings.syncMode.load() + 1, yup::dontSendNotification);
 
         levelKnob.getSlider().setValue (settings.level.load(), yup::dontSendNotification);
-        detuneKnob.getSlider().setValue (settings.detuneSemitones.load(), yup::dontSendNotification);
-        ratioKnob.getSlider().setValue (settings.followerRatio.load(), yup::dontSendNotification);
-        morphKnob.getSlider().setValue (settings.morph.load(), yup::dontSendNotification);
-        distortionKnob.getSlider().setValue (settings.phaseDistortion.load(), yup::dontSendNotification);
-        fmAmountKnob.getSlider().setValue (settings.fmAmount.load(), yup::dontSendNotification);
-        fmRatioKnob.getSlider().setValue (settings.fmRatio.load(), yup::dontSendNotification);
+        octaveKnob.getSlider().setValue (settings.octave.load(), yup::dontSendNotification);
+        detuneKnob.getSlider().setValue (settings.detuneSemitones.load() * 100.0, yup::dontSendNotification);
+        ridgesKnob.getSlider().setValue (settings.ridgeSpacing.load(), yup::dontSendNotification);
+        colorKnob.getSlider().setValue (settings.color.load(), yup::dontSendNotification);
+        dispersionKnob.getSlider().setValue (settings.dispersion.load(), yup::dontSendNotification);
+        squeezeKnob.getSlider().setValue (settings.squeeze.load(), yup::dontSendNotification);
+        squashKnob.getSlider().setValue (settings.squash.load(), yup::dontSendNotification);
+        tiltKnob.getSlider().setValue (settings.tilt.load(), yup::dontSendNotification);
+        oddEvenKnob.getSlider().setValue (settings.oddEven.load(), yup::dontSendNotification);
+        formantKnob.getSlider().setValue (settings.formant.load(), yup::dontSendNotification);
+        formantPositionKnob.getSlider().setValue (settings.formantPosition.load(), yup::dontSendNotification);
+        scatterKnob.getSlider().setValue (settings.scatter.load(), yup::dontSendNotification);
+        syncRatioKnob.getSlider().setValue (settings.syncRatio.load(), yup::dontSendNotification);
         unisonKnob.getSlider().setValue (settings.unisonVoices.load(), yup::dontSendNotification);
         unisonDetuneKnob.getSlider().setValue (settings.unisonDetune.load(), yup::dontSendNotification);
         spreadKnob.getSlider().setValue (settings.unisonSpread.load(), yup::dontSendNotification);
 
-        updateUnisonAvailability();
+        updateSyncAvailability();
 
         editor.refresh();
     }
@@ -1774,7 +2104,7 @@ public:
 
         bounds.removeFromTop (spacing);
 
-        auto knobArea = bounds.removeFromBottom (knobRowHeight * 2.0f + spacing);
+        auto knobArea = bounds.removeFromBottom (knobRowHeight * 3.0f + spacing * 2.0f);
         bounds.removeFromBottom (spacing);
 
         auto choiceArea = bounds.removeFromBottom (choiceRowHeight);
@@ -1782,15 +2112,20 @@ public:
 
         editor.setBounds (bounds);
 
-        layoutControlsInRow (choiceArea, { &algorithmChoice, &waveformChoice, &shapeChoice, &syncModeChoice });
+        layoutControlsInRow (choiceArea, { &waveformChoice, &syncModeChoice });
 
         layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
-                             { &levelKnob, &detuneKnob, &ratioKnob, &morphKnob, &distortionKnob });
+                             { &levelKnob, &octaveKnob, &detuneKnob, &ridgesKnob, &colorKnob, &dispersionKnob });
+
+        knobArea.removeFromTop (spacing);
+
+        layoutControlsInRow (knobArea.removeFromTop (knobRowHeight),
+                             { &squeezeKnob, &squashKnob, &tiltKnob, &oddEvenKnob, &formantKnob, &formantPositionKnob });
 
         knobArea.removeFromTop (spacing);
 
         layoutControlsInRow (knobArea,
-                             { &fmAmountKnob, &fmRatioKnob, &unisonKnob, &unisonDetuneKnob, &spreadKnob });
+                             { &scatterKnob, &syncRatioKnob, &unisonKnob, &unisonDetuneKnob, &spreadKnob });
     }
 
     void paint (yup::Graphics& g) override
@@ -1800,14 +2135,10 @@ public:
 
 private:
     //==============================================================================
-    /** Greys out the unison knobs for the algorithms the satellites cannot reproduce. */
-    void updateUnisonAvailability()
+    /** Greys out the ratio knob while no sync mode reads it. */
+    void updateSyncAvailability()
     {
-        const auto supported = SynthOscillator::supportsUnison (static_cast<SynthOscillatorType> (settings.type.load()));
-
-        unisonKnob.setEnabled (supported);
-        unisonDetuneKnob.setEnabled (supported);
-        spreadKnob.setEnabled (supported);
+        syncRatioKnob.setEnabled (static_cast<yup::SyncMode> (settings.syncMode.load()) != yup::SyncMode::none);
     }
 
     //==============================================================================
@@ -1825,18 +2156,23 @@ private:
     yup::TextButton resetButton { "RESET" };
     WaveformEditor editor;
 
-    ChoiceControl algorithmChoice;
     ChoiceControl waveformChoice;
-    ChoiceControl shapeChoice;
     ChoiceControl syncModeChoice;
 
     KnobControl levelKnob;
+    KnobControl octaveKnob;
     KnobControl detuneKnob;
-    KnobControl ratioKnob;
-    KnobControl morphKnob;
-    KnobControl distortionKnob;
-    KnobControl fmAmountKnob;
-    KnobControl fmRatioKnob;
+    KnobControl ridgesKnob;
+    KnobControl colorKnob;
+    KnobControl dispersionKnob;
+    KnobControl squeezeKnob;
+    KnobControl squashKnob;
+    KnobControl tiltKnob;
+    KnobControl oddEvenKnob;
+    KnobControl formantKnob;
+    KnobControl formantPositionKnob;
+    KnobControl scatterKnob;
+    KnobControl syncRatioKnob;
     KnobControl unisonKnob;
     KnobControl unisonDetuneKnob;
     KnobControl spreadKnob;
@@ -1852,7 +2188,7 @@ public:
         : Component ("AudioExample")
         , keyboardComponent (keyboardState, yup::MidiKeyboardComponent::horizontalKeyboard)
     {
-        deviceManager.initialiseWithDefaultDevices (0, 2);
+        audioDeviceError = deviceManager.initialiseWithDefaultDevices (0, 2);
 
         // The keyboard state is pumped into the synth by processNextMidiBuffer(), so no note
         // listener is registered here: listening as well would trigger every note twice.
@@ -1866,18 +2202,23 @@ public:
         keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyPressedColorId, SynthTheme::accentDim);
         keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder);
         addAndMakeVisible (keyboardComponent);
+        keyboardComponent.setVisible (false);
 
         const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-        titleLabel.setText ("YUP POLYPHONIC SYNTHESIZER", yup::dontSendNotification);
+        titleLabel.setText ("P R I S M   /   SPECTRAL SYNTH", yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (17.0f));
         titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
         addAndMakeVisible (titleLabel);
 
-        subtitleLabel.setText ("Two unison oscillators per voice - draw the waveform or edit its partials", yup::dontSendNotification);
+        subtitleLabel.setText ("Sculpt harmonics. Scatter phases. Play the spectrum.", yup::dontSendNotification);
         subtitleLabel.setFont (font.withHeight (11.0f));
         subtitleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
         addAndMakeVisible (subtitleLabel);
+
+        loadLabel.setFont (font.withHeight (11.0f));
+        loadLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        addAndMakeVisible (loadLabel);
 
         voiceLabel.setText ("", yup::dontSendNotification);
         voiceLabel.setFont (font.withHeight (11.0f));
@@ -1890,6 +2231,7 @@ public:
                 yup::String ("OSC ") + yup::String (index + 1),
                 synth.getOscillatorSettings (index),
                 synth.getResources(),
+                synth.getOscillatorSlot (index),
                 font.withHeight (10.0f));
 
             addAndMakeVisible (*panel);
@@ -1911,7 +2253,7 @@ public:
         clearButton.onClick = [this]
         {
             keyboardState.allNotesOff (0); // Turn off all notes on all channels
-            synth.allNotesOff (0, true);
+            synth.requestAllNotesOff();
         };
         addAndMakeVisible (clearButton);
 
@@ -1919,11 +2261,40 @@ public:
         volumeKnob->onChange = [this] (double value) { masterVolume = static_cast<float> (value); };
         addAndMakeVisible (*volumeKnob);
 
+        modeChoice = std::make_unique<ChoiceControl> ("VOICE MODE", yup::StringArray { "Poly / 8 voices", "Mono / retrigger", "Legato / glide" }, font.withHeight (10.0f));
+        modeChoice->getComboBox().setSelectedId (1, yup::dontSendNotification);
+        modeChoice->onChange = [this] (int id)
+        {
+            synth.playMode = id - 1;
+            glideKnob->setEnabled (id != 1);
+        };
+        addAndMakeVisible (*modeChoice);
+        glideKnob = std::make_unique<KnobControl> ("GLIDE / ms", 0.0, 2000.0, 1.0, 120.0, font.withHeight (10.0f));
+        glideKnob->onChange = [this] (double value) { synth.portamento = static_cast<float> (value * 0.001); };
+        glideKnob->setEnabled (false);
+        addAndMakeVisible (*glideKnob);
+        midiDevices = yup::MidiInput::getAvailableDevices();
+        yup::StringArray midiNames { "No MIDI input" };
+        for (const auto& device : midiDevices)
+            midiNames.add (device.name);
+        midiChoice = std::make_unique<ChoiceControl> ("MIDI INPUT", midiNames, font.withHeight (10.0f));
+        midiChoice->getComboBox().setSelectedId (midiDevices.isEmpty() ? 1 : 2, yup::dontSendNotification);
+        midiChoice->onChange = [this] (int)
+        {
+            closeMidiInput();
+            synth.requestAllNotesOff();
+            if (isVisible())
+                openMidiInput();
+        };
+        addAndMakeVisible (*midiChoice);
+        renderData.resize (SynthExample::maxBlockSize);
         addAndMakeVisible (oscilloscope);
     }
 
     ~AudioExample() override
     {
+        closeMidiInput();
+
         deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
@@ -1951,22 +2322,26 @@ public:
 
         bounds.removeFromBottom (spacing);
 
-        auto rightColumn = bounds.removeFromRight (bounds.getWidth() * 0.42f);
-        bounds.removeFromRight (spacing);
+        auto performance = bounds.removeFromBottom (58.0f);
+        modeChoice->setBounds (performance.removeFromLeft (190.0f).reduced (4.0f, 9.0f));
+        glideKnob->setBounds (performance.removeFromLeft (78.0f));
+        performance.removeFromLeft (spacing);
+        midiChoice->setBounds (performance.removeFromLeft (210.0f).reduced (4.0f, 9.0f));
+        performance.removeFromLeft (spacing);
+        loadLabel.setBounds (performance);
+        bounds.removeFromBottom (spacing);
 
-        envelopePanel->setBounds (rightColumn.removeFromTop (rightColumn.getHeight() * 0.5f));
-        rightColumn.removeFromTop (spacing);
-        oscilloscope.setBounds (rightColumn);
+        auto modulation = bounds.removeFromBottom (yup::jmin (150.0f, bounds.getHeight() * 0.32f));
+        envelopePanel->setBounds (modulation.removeFromLeft (modulation.getWidth() * 0.62f));
+        modulation.removeFromLeft (spacing);
+        oscilloscope.setBounds (modulation);
+        bounds.removeFromBottom (spacing);
 
-        const auto panelHeight = (bounds.getHeight() - spacing) / static_cast<float> (SynthExample::oscillatorCount);
-
+        const auto panelWidth = (bounds.getWidth() - spacing) / static_cast<float> (SynthExample::oscillatorCount);
         for (auto& panel : oscillatorPanels)
         {
-            if (panel == nullptr)
-                continue;
-
-            panel->setBounds (bounds.removeFromTop (panelHeight));
-            bounds.removeFromTop (spacing);
+            panel->setBounds (bounds.removeFromLeft (panelWidth));
+            bounds.removeFromLeft (spacing);
         }
     }
 
@@ -1983,8 +2358,10 @@ public:
 
     void refreshDisplay (double) override
     {
+        if (scopeReady.load (std::memory_order_acquire))
         {
-            const yup::CriticalSection::ScopedLockType sl (renderMutex);
+            renderData.assign (scopeSamples.begin(), scopeSamples.begin() + scopeCount);
+            scopeReady.store (false, std::memory_order_release);
             oscilloscope.setRenderData (renderData);
         }
 
@@ -1998,7 +2375,13 @@ public:
 
         const auto activeVoices = synth.getNumActiveVoices();
 
-        voiceLabel.setText (activeVoices > 0 ? yup::String (activeVoices) + " VOICES" : yup::String(),
+        const auto status = audioDeviceError.isNotEmpty() ? audioDeviceError
+                          : midiInputError.isNotEmpty() ? midiInputError
+                          : yup::String (loadMeasurer.getLoadAsPercentage(), 1) + "% AUDIO / "
+                                + yup::String (loadMeasurer.getXRunCount()) + " OVERRUNS / "
+                                + yup::String (receivedNoteOns.load()) + " NOTES IN";
+        loadLabel.setText (status, yup::dontSendNotification);
+        voiceLabel.setText (yup::String (activeVoices) + " / 8 VOICES",
                             yup::dontSendNotification);
     }
 
@@ -2009,8 +2392,13 @@ public:
         synth.prepare (device->getCurrentSampleRate(), maxBlockSize);
 
         renderBuffer.setSize (2, maxBlockSize, false, true, true);
-        inputData.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
-        renderData.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
+        loadMeasurer.reset (device->getCurrentSampleRate(), device->getDefaultBufferSize());
+        midiBuffer.ensureSize (16384);
+        outputGain.reset (device->getCurrentSampleRate(), 0.02);
+        outputGain.setCurrentAndTargetValue (masterVolume.load());
+
+        midiCollector.reset (device->getCurrentSampleRate());
+        midiCollector.ensureStorageAllocated (midiQueueBytes);
     }
 
     void audioDeviceStopped() override
@@ -2024,10 +2412,15 @@ public:
                                            int numSamples,
                                            const yup::AudioIODeviceCallbackContext&) override
     {
-        if (numSamples > renderBuffer.getNumSamples())
+        if (numSamples <= 0)
+            return;
+        const yup::ScopedNoDenormals noDenormals;
+        const yup::AudioProcessLoadMeasurer::ScopedTimer renderTimer (loadMeasurer, numSamples);
+        if (numSamples <= 0 || numSamples > renderBuffer.getNumSamples())
         {
             for (int channel = 0; channel < numOutputChannels; ++channel)
-                yup::FloatVectorOperations::clear (outputChannelData[channel], numSamples);
+                if (outputChannelData[channel] != nullptr)
+                    yup::FloatVectorOperations::clear (outputChannelData[channel], numSamples);
 
             return;
         }
@@ -2036,40 +2429,89 @@ public:
             yup::FloatVectorOperations::clear (renderBuffer.getWritePointer (channel), numSamples);
 
         midiBuffer.clear();
+
+        // processNextMidiBuffer() reads whatever is already in the buffer before injecting
+        // the on-screen keyboard's own events, so collecting the hardware input first is
+        // what lights up the drawn keys as well as playing the notes.
+        midiCollector.removeNextBlockOfMessages (midiBuffer, numSamples);
         keyboardState.processNextMidiBuffer (midiBuffer, 0, numSamples, true);
+        for (const auto metadata : midiBuffer)
+            if (metadata.getMessage().isNoteOn())
+                receivedNoteOns.fetch_add (1, std::memory_order_relaxed);
         synth.renderNextBlock (renderBuffer, midiBuffer, 0, numSamples);
 
-        const auto gain = masterVolume.load();
-        const auto* display = renderBuffer.getReadPointer (0);
-
-        for (int channel = 0; channel < numOutputChannels; ++channel)
+        outputGain.setTargetValue (masterVolume.load());
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            const auto* source = renderBuffer.getReadPointer (yup::jmin (channel, renderBuffer.getNumChannels() - 1));
-            auto* destination = outputChannelData[channel];
-
-            for (int sample = 0; sample < numSamples; ++sample)
-                destination[sample] = std::tanh (source[sample] * gain);
+            const auto gain = outputGain.getNextValue();
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+            {
+                const auto sourceChannel = yup::jmin (channel, renderBuffer.getNumChannels() - 1);
+                if (outputChannelData[channel] != nullptr)
+                    outputChannelData[channel][sample] = renderBuffer.getSample (sourceChannel, sample) * gain;
+            }
+            renderBuffer.setSample (0, sample, renderBuffer.getSample (0, sample) * gain);
         }
 
+        if (! scopeReady.load (std::memory_order_acquire))
         {
-            const yup::CriticalSection::ScopedLockType sl (renderMutex);
-
-            for (int sample = 0; sample < numSamples; ++sample)
-                inputData[static_cast<std::size_t> (sample)] = std::tanh (display[sample] * gain);
-
-            std::swap (inputData, renderData);
+            scopeCount = yup::jmin (numSamples, SynthExample::maxBlockSize);
+            std::copy_n (renderBuffer.getReadPointer (0), scopeCount, scopeSamples.begin());
+            scopeReady.store (true, std::memory_order_release);
         }
     }
 
     void visibilityChanged() override
     {
         if (! isVisible())
+        {
+            closeMidiInput();
             deviceManager.removeAudioCallback (this);
+        }
         else
+        {
             deviceManager.addAudioCallback (this);
+            openMidiInput();
+        }
     }
 
 private:
+    //==============================================================================
+    /** Opens the selected hardware input and reports device-open failures in the UI. */
+    void openMidiInput()
+    {
+        if (midiInputIdentifier.isNotEmpty() || midiChoice == nullptr)
+            return;
+
+        midiInputError.clear();
+        const auto index = midiChoice->getComboBox().getSelectedId() - 2;
+        if (! yup::isPositiveAndBelow (index, midiDevices.size()))
+            return;
+
+        const auto identifier = midiDevices[index].identifier;
+        deviceManager.setMidiInputDeviceEnabled (identifier, true);
+        if (! deviceManager.isMidiInputDeviceEnabled (identifier))
+        {
+            midiInputError = "Cannot open MIDI input: " + midiDevices[index].name;
+            return;
+        }
+        midiInputIdentifier = identifier;
+        deviceManager.addMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+    }
+
+    /** Releases the input again, so a hidden demo does not hold the device open. */
+    void closeMidiInput()
+    {
+        if (midiInputIdentifier.isEmpty())
+            return;
+
+        deviceManager.removeMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+        deviceManager.setMidiInputDeviceEnabled (midiInputIdentifier, false);
+
+        midiInputIdentifier.clear();
+    }
+
+    //==============================================================================
     void randomizeOscillators()
     {
         auto& random = yup::Random::getSystemRandom();
@@ -2078,19 +2520,22 @@ private:
         {
             auto& settings = synth.getOscillatorSettings (index);
 
-            settings.type = random.nextInt (4);
             settings.waveform = random.nextInt (6);
-            settings.shape = random.nextInt (6);
             settings.syncMode = random.nextInt (4);
+            settings.syncRatio = 1.0f + random.nextFloat() * 3.0f;
             settings.level = 0.2f + random.nextFloat() * 0.8f;
-            // The knob still reaches two octaves for deliberate stacking, but randomizing
-            // that far apart just sounds out of tune, so this stays within a beating range.
-            settings.detuneSemitones = random.nextFloat() - 0.5f;
-            settings.followerRatio = 0.5f + random.nextFloat() * 3.0f;
-            settings.morph = random.nextFloat();
-            settings.phaseDistortion = 0.1f + random.nextFloat() * 0.8f;
-            settings.fmAmount = random.nextFloat() * 2.0f;
-            settings.fmRatio = 0.5f + random.nextFloat() * 3.0f;
+            settings.octave = random.nextInt (3) - 1;
+            settings.detuneSemitones = (random.nextFloat() - 0.5f) * 0.3f;
+            settings.ridgeSpacing = 0.5f + random.nextFloat() * 3.0f;
+            settings.color = random.nextFloat();
+            settings.dispersion = 0.1f + random.nextFloat() * 0.8f;
+            settings.squeeze = random.nextBool() ? 0.0f : random.nextFloat() * 0.5f;
+            settings.squash = 0.4f + random.nextFloat() * 1.6f;
+            settings.tilt = (random.nextFloat() - 0.5f) * 3.0f;
+            settings.oddEven = 0.2f + random.nextFloat() * 0.6f;
+            settings.formant = (random.nextFloat() - 0.4f) * 5.0f;
+            settings.formantPosition = random.nextFloat() * 6.0f;
+            settings.scatter = random.nextBool() ? 0.0f : random.nextFloat() * 0.6f;
             settings.unisonVoices = 1 + random.nextInt (SynthExample::maxUnisonVoices);
             settings.unisonDetune = random.nextFloat() * 0.5f;
             settings.unisonSpread = random.nextFloat();
@@ -2105,6 +2550,8 @@ private:
     }
 
     //==============================================================================
+    static constexpr std::size_t midiQueueBytes = 2048;
+
     static constexpr float outerInset = 10.0f;
     static constexpr float headerHeight = 44.0f;
     static constexpr float spacing = 8.0f;
@@ -2116,17 +2563,27 @@ private:
     // MIDI keyboard components
     yup::MidiKeyboardState keyboardState;
     yup::MidiKeyboardComponent keyboardComponent;
+    yup::MidiMessageCollector midiCollector;
+    yup::String midiInputIdentifier;
+    yup::String audioDeviceError;
+    yup::String midiInputError;
+    yup::Array<yup::MidiDeviceInfo> midiDevices;
+    std::atomic<int> receivedNoteOns { 0 };
 
     yup::AudioBuffer<float> renderBuffer;
     yup::MidiBuffer midiBuffer;
     std::vector<float> renderData;
-    std::vector<float> inputData;
-    yup::CriticalSection renderMutex;
+    std::array<float, SynthExample::maxBlockSize> scopeSamples {};
+    std::atomic<bool> scopeReady { false };
+    int scopeCount = 0;
+    yup::SmoothedValue<float> outputGain;
+    yup::AudioProcessLoadMeasurer loadMeasurer;
 
     // UI Components
     yup::Label titleLabel;
     yup::Label subtitleLabel;
     yup::Label voiceLabel;
+    yup::Label loadLabel;
 
     std::array<std::unique_ptr<SynthOscillatorPanel>, SynthExample::oscillatorCount> oscillatorPanels;
     std::unique_ptr<SynthEnvelopePanel> envelopePanel;
@@ -2134,6 +2591,9 @@ private:
     yup::TextButton randomizeButton { "RANDOMIZE" };
     yup::TextButton clearButton { "ALL NOTES OFF" };
     std::unique_ptr<KnobControl> volumeKnob;
+    std::unique_ptr<ChoiceControl> modeChoice;
+    std::unique_ptr<ChoiceControl> midiChoice;
+    std::unique_ptr<KnobControl> glideKnob;
     Oscilloscope oscilloscope;
 
     std::atomic<float> masterVolume { 0.5f };

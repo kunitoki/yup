@@ -144,15 +144,6 @@ public:
         waveform = newWaveform;
     }
 
-    void setOversamplerFilterType (yup::HalfbandFilterType type)
-    {
-        if (oversamplerFilterType == type)
-            return;
-
-        oversamplerFilterType = type;
-        prepareResampling (maxOutputBlockSize);
-    }
-
     void setSweepParameters (double startFreq, double endFreq, double durationSeconds)
     {
         sweepStartFreq = startFreq;
@@ -266,14 +257,11 @@ private:
 
         // The oversampled sweeps decimate straight to the device rate, so the
         // resampler's alias floor never enters their chain.
-        yup::HalfbandOversamplerDesign design;
-        design.filterType = oversamplerFilterType;
-
-        oversampler2x.prepare (sampleRate, 1, maxOutputBlockSize, design);
-        oversampler4x.prepare (sampleRate, 1, maxOutputBlockSize, design);
-        oversampler8x.prepare (sampleRate, 1, maxOutputBlockSize, design);
-        oversampler16x.prepare (sampleRate, 1, maxOutputBlockSize, design);
-        oversampler32x.prepare (sampleRate, 1, maxOutputBlockSize, design);
+        oversampler2x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler4x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler8x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler16x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler32x.prepare (sampleRate, 1, maxOutputBlockSize);
 
         resetSweepPlaybackState();
     }
@@ -486,7 +474,6 @@ private:
     SignalType signalType;
     SweepPlaybackMode sweepPlaybackMode;
     Waveform waveform = Waveform::sine;
-    yup::HalfbandFilterType oversamplerFilterType = yup::HalfbandFilterType::linearPhaseFIR;
 
     // Sweep parameters
     double sweepStartFreq, sweepEndFreq, sweepDurationSeconds;
@@ -503,11 +490,11 @@ private:
 
     // Resampling state
     yup::ResamplerFloat resampler;
-    yup::Oversampler2xFloat oversampler2x;
-    yup::Oversampler4xFloat oversampler4x;
-    yup::Oversampler8xFloat oversampler8x;
-    yup::Oversampler16xFloat oversampler16x;
-    yup::Oversampler32xFloat oversampler32x;
+    yup::SincOversampler<float, 2, 16> oversampler2x;
+    yup::SincOversampler<float, 4, 16> oversampler4x;
+    yup::SincOversampler<float, 8, 16> oversampler8x;
+    yup::SincOversampler<float, 16, 16> oversampler16x;
+    yup::SincOversampler<float, 32, 16> oversampler32x;
     std::vector<float> sourceBuffer;
     std::vector<float> resampledBuffer;
     int maxOutputBlockSize = 0;
@@ -536,8 +523,6 @@ public:
         if (numFrames <= 0)
             return false;
 
-        // Decode the whole file into an AudioBuffer, then downmix to mono
-        // floats so playback is an indexed read.
         yup::AudioBuffer<float> decoded (numChannels, static_cast<int> (numFrames));
         if (! newReader->read (&decoded, 0, static_cast<int> (numFrames), 0, true, numChannels > 1))
             return false;
@@ -820,17 +805,6 @@ private:
         };
         addAndMakeVisible (*waveformCombo);
 
-        // Halfband filter family used by the oversampled sweep modes
-        oversamplerFilterCombo = std::make_unique<yup::ComboBox> ("OversamplerFilter");
-        oversamplerFilterCombo->addItem ("Linear-phase FIR", 1);
-        oversamplerFilterCombo->addItem ("Polyphase IIR", 2);
-        oversamplerFilterCombo->setSelectedId (1);
-        oversamplerFilterCombo->onSelectedItemChanged = [this]
-        {
-            updateOversamplerFilter();
-        };
-        addAndMakeVisible (*oversamplerFilterCombo);
-
         // Frequency control
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency");
         frequencySlider->setRange ({ 20.0, 22000.0 });
@@ -1031,7 +1005,7 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:", "OS Filter:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -1116,7 +1090,6 @@ private:
         auto overlapSection = row3.removeFromLeft (colWidth);
         auto levelModeSection = row3.removeFromLeft (colWidth);
         auto waveformSection = row3.removeFromLeft (colWidth);
-        auto oversamplerFilterSection = row3.removeFromLeft (colWidth);
 
         parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
@@ -1129,9 +1102,6 @@ private:
 
         parameterLabels[13]->setBounds (waveformSection.removeFromTop (labelHeight));
         waveformCombo->setBounds (waveformSection.removeFromTop (controlHeight));
-
-        parameterLabels[14]->setBounds (oversamplerFilterSection.removeFromTop (labelHeight));
-        oversamplerFilterCombo->setBounds (oversamplerFilterSection.removeFromTop (controlHeight));
 
         // Fourth row: Status labels
         auto row4 = bounds.removeFromTop (30);
@@ -1226,9 +1196,6 @@ private:
         sweepDurationSlider->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep);
         waveformCombo->setEnabled (signalType == SignalGenerator::SignalType::singleTone
                                    || signalType == SignalGenerator::SignalType::frequencySweep);
-        oversamplerFilterCombo->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep
-                                            && sweepPlaybackMode != SignalGenerator::SweepPlaybackMode::direct
-                                            && sweepPlaybackMode != SignalGenerator::SweepPlaybackMode::resampled);
     }
 
     void updateWaveform()
@@ -1253,18 +1220,6 @@ private:
         updateSignalGenerator ([waveform] (SignalGenerator& generator)
         {
             generator.setWaveform (waveform);
-        });
-    }
-
-    void updateOversamplerFilter()
-    {
-        const auto type = oversamplerFilterCombo->getSelectedId() == 2
-                            ? yup::HalfbandFilterType::polyphaseIIR
-                            : yup::HalfbandFilterType::linearPhaseFIR;
-
-        updateSignalGenerator ([type] (SignalGenerator& generator)
-        {
-            generator.setOversamplerFilterType (type);
         });
     }
 
@@ -1439,7 +1394,6 @@ private:
     // Signal controls
     std::unique_ptr<yup::ComboBox> signalTypeCombo;
     std::unique_ptr<yup::ComboBox> waveformCombo;
-    std::unique_ptr<yup::ComboBox> oversamplerFilterCombo;
     std::unique_ptr<yup::Slider> frequencySlider;
     std::unique_ptr<yup::Slider> amplitudeSlider;
     std::unique_ptr<yup::Slider> sweepDurationSlider;

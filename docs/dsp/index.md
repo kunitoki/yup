@@ -48,7 +48,8 @@ available in the build.
 - [Oscillators](oscillators.md) - `FourierSeries`, the alias-free
   `SyncSpectralResampler`, the `AdditiveOscillator` / `WavetableOscillator`
   synthesis backends, the `SyncOscillator` facade, shared `WaveformBank` frames,
-  and `MorphingOscillator` / `ModulatedOscillator` for morphing, FM, PM and sync.
+  `ModulatedOscillator` for morphing, FM, PM and sync, and
+  `PrismSpectrum` for modulatable ridge, dispersion and exact-PWM shaping.
 
 ## Key building blocks
 

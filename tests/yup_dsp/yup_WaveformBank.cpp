@@ -87,3 +87,81 @@ TEST_F (WaveformBankTests, EmptyBankIsSilent)
     EXPECT_EQ (0.0, bank.getValue (0.3, 0.5, 32.0));
     EXPECT_EQ (0.0, bank.getSlope (0.3, 0.5, 32.0));
 }
+
+TEST_F (WaveformBankTests, RefreshedFramesReadLikeAFreshlyPreparedBank)
+{
+    std::array<FourierSeries<double>, 2> replacements {
+        FourierSeries<double>::create (Waveform::sawtooth, 16),
+        FourierSeries<double>::create (Waveform::triangle, 16)
+    };
+    replacements[0].setDC (0.125);
+
+    WaveformBank<double> reference;
+    reference.prepare ({ replacements.data(), replacements.size() });
+
+    ASSERT_TRUE (bank.refreshFrames ({ replacements.data(), replacements.size() }));
+    EXPECT_EQ (reference.getNumFrames(), bank.getNumFrames());
+    EXPECT_EQ (reference.getNumHarmonics(), bank.getNumHarmonics());
+
+    for (const auto position : { 0.0, 0.3, 0.5, 1.0 })
+    {
+        for (const auto bandwidth : { 0.0, 1.0, 4.0, 16.0, 32.0 })
+        {
+            for (int i = 0; i < 37; ++i)
+            {
+                const auto phase = i / 37.0;
+                EXPECT_DOUBLE_EQ (reference.getValue (phase, position, bandwidth),
+                                  bank.getValue (phase, position, bandwidth));
+                EXPECT_DOUBLE_EQ (reference.getSlope (phase, position, bandwidth),
+                                  bank.getSlope (phase, position, bandwidth));
+            }
+        }
+    }
+}
+
+TEST_F (WaveformBankTests, RefreshZeroExtendsShorterFrames)
+{
+    std::array<FourierSeries<double>, 2> shorter {
+        FourierSeries<double>::create (Waveform::sine, 4),
+        FourierSeries<double>::create (Waveform::sine, 4)
+    };
+
+    ASSERT_TRUE (bank.refreshFrames ({ shorter.data(), shorter.size() }));
+    EXPECT_EQ (16, bank.getNumHarmonics());
+
+    for (int i = 0; i < 37; ++i)
+    {
+        const auto phase = i / 37.0;
+        EXPECT_NEAR (std::sin (MathConstants<double>::twoPi * phase),
+                     bank.getValue (phase, 1.0, 32.0), 2e-5);
+    }
+}
+
+TEST_F (WaveformBankTests, RejectsMismatchedRefreshesAndLeavesTheBankUnchanged)
+{
+    const auto before = bank.getValue (0.173, 0.25, 32.0);
+
+    std::array<FourierSeries<double>, 3> tooManyFrames {
+        FourierSeries<double>::create (Waveform::sawtooth, 16),
+        FourierSeries<double>::create (Waveform::sawtooth, 16),
+        FourierSeries<double>::create (Waveform::sawtooth, 16)
+    };
+    EXPECT_FALSE (bank.refreshFrames ({ tooManyFrames.data(), tooManyFrames.size() }));
+
+    std::array<FourierSeries<double>, 2> tooManyHarmonics {
+        FourierSeries<double>::create (Waveform::sawtooth, 16),
+        FourierSeries<double>::create (Waveform::sawtooth, 32)
+    };
+    EXPECT_FALSE (bank.refreshFrames ({ tooManyHarmonics.data(), tooManyHarmonics.size() }));
+
+    EXPECT_EQ (2, bank.getNumFrames());
+    EXPECT_EQ (16, bank.getNumHarmonics());
+    EXPECT_DOUBLE_EQ (before, bank.getValue (0.173, 0.25, 32.0));
+}
+
+TEST_F (WaveformBankTests, RefreshingAnEmptyBankSucceedsWithNoFrames)
+{
+    bank.prepare ({});
+    EXPECT_TRUE (bank.refreshFrames ({}));
+    EXPECT_EQ (0, bank.getNumFrames());
+}

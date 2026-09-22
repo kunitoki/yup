@@ -58,20 +58,12 @@ namespace yup
     @tparam SampleType  Type for the synthesized samples (float or double).
     @tparam CoeffType   Type for the coefficients and phase math (default double).
 
-    @see FourierSeries, SyncSpectralResampler, AdditiveOscillator, WavetableOscillator
+    @see FourierSeries, SyncSpectralResampler, WavetableOscillator
 */
 template <typename SampleType, typename CoeffType = double>
 class SyncOscillator
 {
 public:
-    //==============================================================================
-    /** Synthesis backend. */
-    enum class Synthesis
-    {
-        wavetable, /**< Inverse FFT into a table, cheap per sample */
-        additive   /**< Exact additive synthesis, one multiply accumulate per harmonic and sample */
-    };
-
     //==============================================================================
     /** Default constructor. Call prepare() before processing. */
     SyncOscillator() = default;
@@ -97,7 +89,6 @@ public:
         synced.resize (this->maxHarmonics);
 
         resampler.prepare (this->maxHarmonics);
-        additive.prepare (sampleRate, this->maxHarmonics);
         wavetable.prepare (sampleRate, this->maxHarmonics, crossfadeLengthInSamples);
 
         followerRatio = CoeffType (1);
@@ -106,7 +97,6 @@ public:
         setFrequency (leaderFrequency);
         setPhase (CoeffType (0));
 
-        additive.setIncludeDC (includeDC);
         wavetable.setIncludeDC (includeDC);
 
         update();
@@ -115,29 +105,8 @@ public:
     /** Resets the playback phase of both backends. */
     void reset() noexcept
     {
-        additive.reset();
         wavetable.reset();
     }
-
-    //==============================================================================
-    /** Selects the synthesis backend, keeping the phase continuous.
-
-        Call update() before processing to refresh a previously inactive wavetable.
-    */
-    void setSynthesis (Synthesis newSynthesis) noexcept
-    {
-        if (synthesis == newSynthesis)
-            return;
-
-        const auto currentPhase = getPhase();
-
-        synthesis = newSynthesis;
-
-        setPhase (currentPhase);
-    }
-
-    /** Returns the active synthesis backend. */
-    Synthesis getSynthesis() const noexcept { return synthesis; }
 
     //==============================================================================
     /**
@@ -153,7 +122,6 @@ public:
 
         const auto outputFrequency = getOutputFrequency();
 
-        additive.setFrequency (outputFrequency);
         wavetable.setFrequency (outputFrequency);
     }
 
@@ -246,14 +214,13 @@ public:
     /** Sets the phase of both backends, normalized to one period. */
     void setPhase (CoeffType newPhase) noexcept
     {
-        additive.setPhase (newPhase);
         wavetable.setPhase (newPhase);
     }
 
     /** Returns the phase of the active backend, normalized to one period. */
     CoeffType getPhase() const noexcept
     {
-        return synthesis == Synthesis::additive ? additive.getPhase() : wavetable.getPhase();
+        return wavetable.getPhase();
     }
 
     /** Selects whether the synthesized series includes its DC coefficient. */
@@ -264,7 +231,6 @@ public:
 
         includeDC = shouldIncludeDC;
 
-        additive.setIncludeDC (shouldIncludeDC);
         wavetable.setIncludeDC (shouldIncludeDC);
     }
 
@@ -276,8 +242,7 @@ public:
     bool needsUpdate() const noexcept
     {
         return dirty
-            || (syncMode != SyncMode::none && getOutputHarmonicLimit() > computedHarmonics)
-            || (synthesis == Synthesis::wavetable && wavetable.needsRender());
+            || (syncMode != SyncMode::none && getOutputHarmonicLimit() > computedHarmonics);
     }
 
     /**
@@ -296,14 +261,13 @@ public:
 
             resampler.transform (follower, followerRatio, syncMode, synced, numOutputHarmonics);
 
-            additive.setSeries (synced);
             wavetable.setSeries (synced);
             computedHarmonics = numOutputHarmonics;
 
             dirty = false;
         }
 
-        if (synthesis == Synthesis::wavetable && wavetable.needsRender())
+        if (wavetable.needsRender())
             wavetable.render();
     }
 
@@ -311,8 +275,7 @@ public:
     /** Produces one sample with the active backend. */
     SampleType processSample() noexcept
     {
-        return synthesis == Synthesis::additive ? additive.processSample()
-                                                : wavetable.processSample();
+        return wavetable.processSample();
     }
 
     /** Produces a block of samples with the active backend. */
@@ -321,13 +284,9 @@ public:
         if (output == nullptr)
             return;
 
-        if (synthesis == Synthesis::additive)
-            additive.processBlock (output, numSamples);
-        else
-            wavetable.processBlock (output, numSamples);
+        wavetable.processBlock (output, numSamples);
     }
 
-    //==============================================================================
 private:
     //==============================================================================
     int getOutputHarmonicLimit() const noexcept
@@ -336,7 +295,6 @@ private:
     }
 
     SyncSpectralResampler<CoeffType> resampler;
-    AdditiveOscillator<SampleType, CoeffType> additive;
     WavetableOscillator<SampleType, CoeffType> wavetable;
     FourierSeries<CoeffType> follower;
     FourierSeries<CoeffType> synced;
@@ -344,7 +302,6 @@ private:
     CoeffType leaderFrequency = static_cast<CoeffType> (440);
     CoeffType followerRatio = CoeffType (1);
     SyncMode syncMode = SyncMode::none;
-    Synthesis synthesis = Synthesis::wavetable;
     int maxHarmonics = 128;
     int computedHarmonics = 0;
     bool includeDC = false;

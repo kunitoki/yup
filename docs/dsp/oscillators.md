@@ -235,6 +235,107 @@ the same allocation-free generation path for other sources. Fill its high-rate b
 `getGenerationLatencyInSamples()` reports decimation-only latency, while the
 existing `getLatencyInSamples()` still describes the complete up/down path.
 
+## Prism spectral shaping
+
+`PrismSpectrum<CoeffType = double>` shapes one `FourierSeries` into another. It is a
+pure spectral transform with no DSP state and no transform behind it, so it composes
+in front of whichever synthesis backend you were already going to use.
+
+Applied to harmonic `h`, writing `u = log2 (h)` and `c` for the harmonic's complex
+coefficient (`cosine + i sine`), the pipeline runs in this order:
+
+| Stage | Operation | Control |
+|---|---|---|
+| Ridge | `gain = 0.15 + 0.85 * ridge^2`, `ridge = 0.5 + 0.5 * cos (2 pi (u / ridgeSpacing - color))` | `ridgeSpacing` in octaves, clamped to [0.25, 8]; `color` slides the comb and is periodic. |
+| Tilt | `gain *= 2^(-tilt * u)` | `tilt` in gain octaves per harmonic octave, clamped to +/-4; 0 is flat. The ridge is periodic in `u`, so it cannot express an overall slope. |
+| Odd/even | odd and even harmonics scaled against each other | `oddEven` clamped to [0, 1]; 0 keeps only odd, 1 only even, 0.5 is neutral. No transcendentals at all. |
+| Formant | `gain *= 2^(formant * exp (-((u - formantPosition) / formantWidth)^2))` | `formant` is a signed depth in gain octaves, clamped to +/-4, 0 is bypass; `formantPosition` is the center in harmonic octaves, clamped to [0, 12]. One movable resonance against the ridge's periodic comb. |
+| Squash | `\|c\|` becomes `\|c\|^squash`, phase kept | `squash` clamped to [0.1, 4]; 1 is bypass. |
+| Squeeze | `c` multiplied by `1 - d * cis (-2 pi h w)` | `squeeze` is a pulse width in periods, clamped to [0, 0.5]; the depth `d` opens from 0 to 1 over the first `squeezeFadeWidth`, so 0 is a true bypass. |
+| Dispersion + scatter | `c` multiplied by `cis ((dispersion - 0.5) * u^2 + scatter * angle[h])` | `dispersion` clamped to [0, 1], 0.5 is flat; `scatter` clamped to [0, 1], 0 is bypass. Both are rotations, so their angles add and one `sincos` serves both - scatter is free on top of dispersion. `angle[h]` is fixed per harmonic, so a shape stays a timbre instead of re-scattering every block. |
+| Normalize | whole series scaled so `sum \|c\|` matches the source's | - |
+
+Every stage is a per-harmonic scale or rotation, so **no stage can produce a
+frequency the source did not already contain**. That is the whole antialiasing
+argument: shaping cannot alias, and whatever plays the result still bandlimits per
+pitch. It is also the rule any further stage must obey: `c[h]` may be multiplied by
+anything, but a harmonic's frequency is pinned at `h` times the fundamental and cannot
+be moved - stretched or inharmonic partials are not expressible in a periodic series at
+all, and need a different oscillator rather than another stage here. Squeeze deserves the emphasis because it looks like it should alias -
+pulse-width modulation normally does - but subtracting a phase-shifted copy of a
+bandlimited signal is still bandlimited, so this is exact PWM. At `w = 0.5` the factor
+is zero for even `h` and two for odd, the square-from-sawtooth identity.
+
+The faded depth is not cosmetic. The raw factor tends to `i * h * 2 pi w` as the width
+falls, and renormalizing that leaves a differentiator rather than the source spectrum,
+so the stage has no bypass width - a knob stepping off zero would jump. Fading `d` in
+over `squeezeFadeWidth` is what makes zero continuous with its neighbourhood, and it
+costs one multiply. The factor stays a per-harmonic complex scale either way, so the
+antialiasing argument is untouched.
+
+Normalization preserves `sum |c|` rather than the waveform's peak, and the two are not
+the same: `sum |c|` bounds a peak from well above (about three times over for a
+sawtooth), and how close the waveform comes to that bound depends on how aligned its
+harmonic phases are. `dispersion` and `scatter` control exactly that, so if constant
+output level matters, measure the shaped waveform's peak and rescale - once per patch
+alongside the shaping, not per voice.
+
+Normalization is what makes the controls level-safe. The ridge gain, the companding
+and the pulse-width factor (whose magnitude reaches 2) all change level, and
+`sum |c|` is an upper bound on the waveform's peak, so preserving it guarantees the
+output can never be louder than the source's worst case. The sum runs over harmonics
+only; DC is not carried across and the destination's DC is always zero.
+
+```cpp
+constexpr int numHarmonics = 128;
+
+yup::PrismSpectrum<double> spectrum;
+spectrum.prepare (numHarmonics);
+
+const auto source = yup::FourierSeries<double>::create (yup::Waveform::sawtooth, numHarmonics);
+yup::FourierSeries<double> shaped (numHarmonics);
+
+yup::PrismSpectrum<double>::Shape shape;
+shape.ridgeSpacing = 1.5;
+shape.dispersion = 0.65;
+spectrum.process (source, shaped, shape, 0.3 /* color */);
+
+// Either backend will do; this one trades an inverse FFT per update for cheap samples.
+yup::WavetableOscillator<float> oscillator;
+oscillator.prepare (48000.0, numHarmonics);
+oscillator.setSeries (shaped);
+oscillator.setFrequency (220.0);
+oscillator.render();   // crossfades into the new table
+```
+
+### Modulating the shape
+
+`prepare (maxHarmonics)` precomputes `log2 (h)` and `log2 (h)^2`, which deletes a
+`log2` per harmonic outright. What remains is a handful of transcendentals per
+harmonic and **no transform**, which is cheap enough to re-run once per audio block -
+so the shape controls are modulatable, not just settable.
+
+Two rules make that affordable:
+
+- **Shape once, not once per voice.** The shape belongs to a patch, not to a note. One
+  `process()` per block feeding every voice costs the same at one voice as at sixteen;
+  calling it inside each voice is what makes it expensive.
+- **Let the backend absorb the update rate.** `WavetableOscillator::render()`
+  crossfades into the new table, so a per-block update sounds continuous, and nothing
+  is rendered at all while the controls are still. Note the cost is one inverse FFT per
+  *sounding table* per block, so it scales linearly with unison width as well as with
+  polyphony: a few percent of a core at one table per voice, several times that at five.
+  Where that matters, refresh a single-frame `WaveformBank` once per patch instead - it
+  is a fixed cost in voices, which is exactly what `refreshFrames()` is for. `AdditiveOscillator` removes the transform entirely and takes new
+  coefficients with zero latency, at the price of a multiply-accumulate per harmonic
+  per sample.
+
+Pre-rendering a sweep of `color` positions into a `WaveformBank` is the other obvious
+move, and it is a trap unless `color` is the only control you modulate: it buys
+audio-rate `color` but multiplies the cost of every *other* shape control by the number
+of frames times the number of bandwidth levels, which is precisely the work you were
+trying to avoid.
+
 ## Verification and performance
 
 The tests include scalar spectral references, exact Nyquist boundaries, phasor

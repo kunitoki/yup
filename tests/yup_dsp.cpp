@@ -44,6 +44,7 @@
 #include "yup_dsp/yup_OnsetDetector.cpp"
 #include "yup_dsp/yup_SincOversampler.cpp"
 #include "yup_dsp/yup_PartitionedConvolver.cpp"
+#include "yup_dsp/yup_PrismSpectrum.cpp"
 #include "yup_dsp/yup_RbjFilter.cpp"
 #include "yup_dsp/yup_Resampler.cpp"
 #include "yup_dsp/yup_SincTable.cpp"

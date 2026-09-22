@@ -148,6 +148,7 @@
 #include "oscillators/yup_WavetableOscillator.h"
 #include "oscillators/yup_SyncOscillator.h"
 #include "oscillators/yup_WaveformBank.h"
+#include "oscillators/yup_PrismSpectrum.h"
 
 // Onset detection
 #include "onsets/yup_FilterBank.h"

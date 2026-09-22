@@ -41,7 +41,7 @@ namespace yup
 
     @tparam SampleType  Table sample precision.
     @tparam CoeffType   Fourier coefficient precision.
-    @see MorphingOscillator, ModulatedOscillator
+    @see ModulatedOscillator
 */
 template <typename SampleType, typename CoeffType = double>
 class WaveformBank
@@ -83,6 +83,41 @@ public:
                 table.render (false);
             }
         }
+    }
+
+    /** Replaces the contents of every prepared frame without allocating.
+
+        The counterpart of WavetableOscillator's setSeries/render split: the tables,
+        their sizes and the per-level harmonic limits chosen by prepare() are kept,
+        and only the coefficients are re-rendered. Frames carrying fewer harmonics
+        than the bank was prepared for are zero-extended.
+
+        Rendering is still one inverse FFT per frame and level, so this belongs off
+        the audio thread, and the bank must not be read while it runs.
+
+        @param frames  Replacement series, one per prepared frame, each with at most
+                       getNumHarmonics() harmonics.
+
+        @returns false, leaving the bank untouched and readable, when the frame count
+                 differs from prepare() or a frame carries too many harmonics.
+    */
+    bool refreshFrames (Span<const FourierSeries<CoeffType>> frames) noexcept
+    {
+        if (static_cast<int> (frames.size()) != frameCount)
+            return false;
+
+        for (const auto& frame : frames)
+            if (frame.getNumHarmonics() > getNumHarmonics())
+                return false;
+
+        for (std::size_t index = 0; index < tables.size(); ++index)
+        {
+            auto& table = tables[index];
+            table.setSeries (frames[index / harmonicLimits.size()]);
+            table.render (false);
+        }
+
+        return true;
     }
 
     /** Returns the number of prepared frames. */

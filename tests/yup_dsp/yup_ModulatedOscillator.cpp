@@ -62,7 +62,7 @@ TEST_F (ModulatedOscillatorTests, SignedFrequencyMatchesAnalyticSineAfterLatency
         std::array<double, 512> output {};
         ASSERT_TRUE (oscillator.processBlock (output.data(), 512, p));
 
-        for (int i = 64; i < 512; ++i)
+        for (int i = 2 * oscillator.getLatencyInSamples(); i < 512; ++i)
             EXPECT_NEAR (std::sin (MathConstants<double>::twoPi * frequency * (i - oscillator.getLatencyInSamples()) / sampleRate),
                          output[static_cast<std::size_t> (i)], 0.002);
     }
@@ -71,12 +71,12 @@ TEST_F (ModulatedOscillatorTests, SignedFrequencyMatchesAnalyticSineAfterLatency
 TEST_F (ModulatedOscillatorTests, PhaseModulationDoesNotChangeTheAccumulator)
 {
     Oscillator oscillator;
-    oscillator.prepare (sampleRate, 64, bank);
+    oscillator.prepare (sampleRate, 256, bank);
     Oscillator::Parameters p;
     p.frequency = 0.0;
     p.phaseModulation = 0.25;
-    std::array<double, 64> output {};
-    ASSERT_TRUE (oscillator.processBlock (output.data(), 64, p));
+    std::array<double, 256> output {};
+    ASSERT_TRUE (oscillator.processBlock (output.data(), 256, p));
     EXPECT_EQ (0.0, oscillator.getPhase());
     EXPECT_NEAR (1.0, output.back(), 1e-5);
 }
@@ -150,7 +150,7 @@ TEST_F (ModulatedOscillatorTests, FloatCoefficientsAndOutputRemainFiniteAtExtrem
     std::array<FourierSeries<float>, 1> source { FourierSeries<float>::create (Waveform::sawtooth, 32) };
     WaveformBank<float, float> floatBank;
     floatBank.prepare ({ source.data(), source.size() });
-    ModulatedOscillator<float, 2, 8, float> oscillator;
+    ModulatedOscillator<float, 2, float> oscillator;
     oscillator.prepare (sampleRate, 128, floatBank);
     std::array<float, 128> output {};
     for (const auto breakpoint : { 0.0, 0.5, 1.0 })
@@ -169,13 +169,12 @@ TEST_F (ModulatedOscillatorTests, FloatCoefficientsAndOutputRemainFiniteAtExtrem
 TEST_F (ModulatedOscillatorTests, SyncAndPhaseDistortionApproachAnIndependentHighRateReference)
 {
     constexpr int count = 1024;
-    constexpr int radius = 32;
     constexpr double carrier = 3000.0;
     constexpr double leader = 1700.0;
     constexpr double breakpoint = 0.2;
     constexpr double morph = 0.3;
 
-    ModulatedOscillator<double, 4, radius> oscillator;
+    ModulatedOscillator<double, 4> oscillator;
     oscillator.prepare (sampleRate, count, bank);
     decltype (oscillator)::Parameters p;
     p.frequency = carrier;
@@ -196,40 +195,53 @@ TEST_F (ModulatedOscillatorTests, SyncAndPhaseDistortionApproachAnIndependentHig
         return (1.0 - morph) * std::sin (angle) + morph * std::cos (angle);
     };
 
+    // Every rendering carries its own decimator latency, so the comparison is
+    // made in continuous time: sample t of the waveform sits at index t + latency.
+    struct Rendering
+    {
+        std::array<double, count> samples {};
+        int latency = 0;
+    };
+
     const auto renderReference = [&]<int factor>()
     {
-        Oversampler<double, factor, radius> decimator;
+        HalfbandOversampler<double, factor> decimator;
         decimator.prepare (sampleRate, 1, count);
         decimator.beginGeneration (1, count);
         auto* internal = decimator.getOversampledChannelData (0);
         for (int i = 0; i < count * factor; ++i)
             internal[i] = continuousWaveform (i / (sampleRate * factor));
 
-        std::array<double, count> result {};
-        double* channels[] = { result.data() };
+        Rendering rendering;
+        rendering.latency = decimator.getGenerationLatencyInSamples();
+        double* channels[] = { rendering.samples.data() };
         decimator.downsample (channels, 1, count);
-        return result;
+        return rendering;
     };
 
     const auto reference = renderReference.template operator()<64>();
     const auto coarserReference = renderReference.template operator()<32>();
-    double convergenceError = 0.0;
+    const int actualLatency = oscillator.getLatencyInSamples();
+    const int settle = std::max ({ reference.latency, coarserReference.latency, actualLatency });
+    const int compared = count - 2 * settle;
+    ASSERT_GT (compared, count / 2);
 
+    double convergenceError = 0.0;
     double correctedError = 0.0;
     double naiveError = 0.0;
-    for (int i = 2 * radius; i < count; ++i)
+    for (int t = settle; t < count - settle; ++t)
     {
-        const auto expected = reference[static_cast<std::size_t> (i)];
-        const auto convergence = coarserReference[static_cast<std::size_t> (i)] - expected;
+        const auto expected = reference.samples[static_cast<std::size_t> (t + reference.latency)];
+        const auto convergence = coarserReference.samples[static_cast<std::size_t> (t + coarserReference.latency)] - expected;
         convergenceError += convergence * convergence;
-        const auto corrected = actual[static_cast<std::size_t> (i)] - expected;
-        const auto naive = continuousWaveform ((i - radius) / sampleRate) - expected;
+        const auto corrected = actual[static_cast<std::size_t> (t + actualLatency)] - expected;
+        const auto naive = continuousWaveform (t / sampleRate) - expected;
         correctedError += corrected * corrected;
         naiveError += naive * naive;
     }
 
-    EXPECT_LT (std::sqrt (convergenceError / (count - 2 * radius)), 0.01);
-    EXPECT_LT (std::sqrt (correctedError / (count - 2 * radius)), 0.04);
+    EXPECT_LT (std::sqrt (convergenceError / compared), 0.01);
+    EXPECT_LT (std::sqrt (correctedError / compared), 0.04);
     EXPECT_LT (correctedError, naiveError);
 }
 
@@ -247,7 +259,7 @@ TEST_F (ModulatedOscillatorTests, AudioRatePhaseModulationMatchesAnalyticReferen
         return p;
     }));
 
-    for (int i = 64; i < count; ++i)
+    for (int i = 2 * oscillator.getLatencyInSamples(); i < count; ++i)
     {
         const auto time = (i - oscillator.getLatencyInSamples()) / sampleRate;
         const auto phase = 2000.0 * time + 0.1 * std::sin (MathConstants<double>::twoPi * 1000.0 * time);
@@ -269,11 +281,84 @@ TEST_F (ModulatedOscillatorTests, ThroughZeroFMApproachesTheIntegratedFrequencyR
         return p;
     }));
 
-    for (int i = 64; i < count; ++i)
+    for (int i = 2 * oscillator.getLatencyInSamples(); i < count; ++i)
     {
         const auto time = (i - oscillator.getLatencyInSamples()) / sampleRate;
         const auto phase = 200.0 * time + 400.0 * (1.0 - std::cos (MathConstants<double>::twoPi * 137.0 * time))
                                                    / (MathConstants<double>::twoPi * 137.0);
         EXPECT_NEAR (std::sin (MathConstants<double>::twoPi * phase), output[static_cast<std::size_t> (i)], 0.01);
     }
+}
+
+TEST_F (ModulatedOscillatorTests, BandwidthHintDoesNotChangeCarrierPhase)
+{
+    Oscillator automatic;
+    Oscillator bounded;
+    automatic.prepare (sampleRate, 256, bank);
+    bounded.prepare (sampleRate, 256, bank);
+    std::array<double, 256> first {};
+    std::array<double, 256> second {};
+    auto parameters = modulation (0);
+    parameters.syncFrequency = 0.0;
+    ASSERT_TRUE (automatic.processBlock (first.data(), 256, parameters));
+    parameters.bandwidthFrequency = 12000.0;
+    ASSERT_TRUE (bounded.processBlock (second.data(), 256, parameters));
+    EXPECT_DOUBLE_EQ (automatic.getPhase(), bounded.getPhase());
+}
+
+TEST_F (ModulatedOscillatorTests, ConservativeBandwidthMatchesAnIndependentlyFilteredCarrier)
+{
+    constexpr int count = 1024;
+    constexpr double bandwidthFrequency = 18000.0;
+    constexpr double bandwidth = 0.45 * sampleRate * 4 / bandwidthFrequency;
+    auto source = FourierSeries<double>::create (Waveform::sawtooth, 16);
+    auto filtered = source;
+    for (int harmonic = 1; harmonic <= 16; ++harmonic)
+    {
+        // At bandwidth 4.8 the bank blends its 2- and 4-harmonic tables by 0.2.
+        const auto gain = harmonic <= 2 ? 1.0 : harmonic <= 4 ? (bandwidth - 4.0) / 4.0 : 0.0;
+        filtered.setHarmonic (harmonic, source.getCosine (harmonic) * gain, source.getSine (harmonic) * gain);
+    }
+    WaveformBank<double> fullBank;
+    WaveformBank<double> filteredBank;
+    fullBank.prepare ({ &source, 1 });
+    filteredBank.prepare ({ &filtered, 1 });
+    Oscillator bounded;
+    Oscillator reference;
+    bounded.prepare (sampleRate, count, fullBank);
+    reference.prepare (sampleRate, count, filteredBank);
+    std::array<double, count> actual {};
+    std::array<double, count> expected {};
+    const auto controls = [] (int i)
+    {
+        Oscillator::Parameters p;
+        p.frequency = 200.0;
+        p.linearFM = 400.0 * std::sin (MathConstants<double>::twoPi * 137.0 * i / (sampleRate * 4));
+        return p;
+    };
+    ASSERT_TRUE (bounded.processModulatedBlock (actual.data(), count, [&] (int i)
+    {
+        auto p = controls (i);
+        p.bandwidthFrequency = bandwidthFrequency;
+        return p;
+    }));
+    ASSERT_TRUE (reference.processModulatedBlock (expected.data(), count, controls));
+    for (int i = 2 * oscillator.getLatencyInSamples(); i < count; ++i)
+        EXPECT_NEAR (expected[static_cast<std::size_t> (i)], actual[static_cast<std::size_t> (i)], 1.0e-5);
+}
+
+TEST_F (ModulatedOscillatorTests, BandwidthHintCannotOverrideFasterInstantaneousMotion)
+{
+    Oscillator automatic;
+    Oscillator bounded;
+    automatic.prepare (sampleRate, 256, bank);
+    bounded.prepare (sampleRate, 256, bank);
+    std::array<double, 256> first {};
+    std::array<double, 256> second {};
+    Oscillator::Parameters parameters;
+    parameters.frequency = -5000.0;
+    ASSERT_TRUE (automatic.processBlock (first.data(), 256, parameters));
+    parameters.bandwidthFrequency = 100.0;
+    ASSERT_TRUE (bounded.processBlock (second.data(), 256, parameters));
+    EXPECT_EQ (first, second);
 }
