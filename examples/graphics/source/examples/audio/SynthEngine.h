@@ -409,11 +409,11 @@ private:
 //==============================================================================
 /** The series every voice of one oscillator slot plays, rebuilt once per block.
 
-    A slot's spectrum does not vary per voice unless an envelope is routed into it,
-    so it is derived once here from the LFO-modulated values rather than inside each
-    voice. Voices publish nothing back; they compare getGeneration() and re-render
-    their own table when it moves, which keeps yup::WavetableOscillator's crossfade
-    doing the smoothing. Runs on the audio thread before any voice reads it.
+    A slot's spectrum does not vary per voice unless something is routed into it, so
+    it is derived once here rather than inside each voice. Voices publish nothing back;
+    they compare getGeneration() and re-render their own table when it moves, which
+    keeps yup::WavetableOscillator's crossfade doing the smoothing. Runs on the audio
+    thread before any voice reads it.
 
     @see SynthSpectrumDerivation, SynthOscillator
 */
@@ -447,7 +447,7 @@ private:
 
     prepare() allocates the backends; renderBlock() is allocation-free and only
     re-renders a table when its series moved. The series normally comes from the
-    shared slot; while an envelope is routed into this oscillator's spectrum it is
+    shared slot; while a modulation is routed into this oscillator's spectrum it is
     derived here instead, from the voice's own values.
 
     Unison is built from bare yup::WavetableOscillator satellites playing the same
@@ -503,7 +503,7 @@ public:
         The buffers are overwritten rather than added to, so the caller does not have to
         clear them first.
 
-        @param deriveLocally  True while an envelope modulates this oscillator's spectrum,
+        @param deriveLocally  True while a modulation reaches this oscillator's spectrum,
                               in which case the series is derived here from these values
                               rather than taken from the slot.
     */
@@ -725,16 +725,17 @@ private:
 };
 
 //==============================================================================
-/** What the engine derived for this block, read by every voice while it renders.
+/** The settings snapshot for this block, read by every voice while it renders.
 
     Written at the top of HarmonicSynthEngine::renderNextBlock, before any voice runs,
     on the same thread, so no publication handshake is needed.
 */
 struct SynthBlockContext
 {
-    SynthPatchValues patch;                                                     /**< Settings with the LFO routings applied. */
-    SynthModulationValues modulation;                                           /**< The routes, for the voice's envelope layer. */
+    SynthPatchValues patch;
+    SynthModulationValues modulation;
     std::array<SynthEnvelopeValues, SynthExample::envelopeCount> envelopes;
+    std::array<SynthLFOValues, SynthExample::lfoCount> lfos;
 };
 
 //==============================================================================
@@ -747,7 +748,7 @@ public:
 };
 
 //==============================================================================
-/** A polyphonic voice: two oscillators into a filter, shaped by two envelopes. */
+/** A polyphonic voice: two oscillators into a filter, with its own envelopes and LFOs. */
 class SynthVoice : public yup::SynthesiserVoice
 {
 public:
@@ -774,6 +775,9 @@ public:
         filter.prepare (sampleRate);
         envelope.prepare (sampleRate);
         modulationEnvelope.prepare (sampleRate);
+
+        for (auto& lfo : lfos)
+            lfo.prepare (sampleRate);
         playbackRate = sampleRate;
         hasPlayed = false;
         preserveNote = false;
@@ -832,6 +836,10 @@ public:
             modulationEnvelope.setParameters (context.envelopes[1]);
             modulationEnvelope.noteOn();
             filter.reset();
+
+            for (std::size_t index = 0; index < lfos.size(); ++index)
+                if (context.lfos[index].retrigger)
+                    lfos[index].reset();
         }
 
         preserveNote = false;
@@ -878,6 +886,9 @@ public:
     /** Includes a recycled voice's short continuation in the activity meter. */
     bool isSounding() const noexcept { return isVoiceActive() || tailPosition < tailLength; }
 
+    /** Returns the phase of one of this voice's LFOs, for the display. */
+    float getLFOPhase (int lfoIndex) const noexcept { return lfos[static_cast<std::size_t> (lfoIndex)].getPhase(); }
+
     void controllerMoved (int, int) override {}
 
     //==============================================================================
@@ -908,11 +919,21 @@ private:
 
         if (isVoiceActive())
         {
-            // The engine applied the LFO routings for this block; the envelopes are per
-            // voice, so their routings are applied here on top, once per control chunk.
+            // Every source is per voice, so the routings are applied here, once per
+            // control chunk, from the values each source holds at the top of the chunk.
+            for (std::size_t index = 0; index < lfos.size(); ++index)
+            {
+                lfos[index].setShape (context.lfos[index].shape);
+                lfos[index].setFrequency (context.lfos[index].rate);
+                lfos[index].setPhaseOffset (context.lfos[index].phase);
+            }
+
             auto patch = context.patch;
-            const std::array<float, 4> sources { envelope.getLevel(), modulationEnvelope.getLevel(), 0.0f, 0.0f };
+            const std::array<float, 4> sources { envelope.getLevel(), modulationEnvelope.getLevel(), lfos[0].getValue(), lfos[1].getValue() };
             applyModulation (patch, context.modulation, sources);
+
+            for (auto& lfo : lfos)
+                lfo.skip (numSamples);
 
             const auto note = pitch.skip (numSamples) + bend.skip (numSamples);
             const auto frequency = midiNoteToFrequency (note);
@@ -923,7 +944,7 @@ private:
                 auto& level = levels[slot];
                 const auto detuned = frequency * std::exp2 (values.octave + values.detuneSemitones / 12.0);
                 oscillators[slot].renderBlock (oscLeft.data(), oscRight.data(), numSamples, values, detuned,
-                                               context.modulation.hasVoiceSpectrumRoute (index));
+                                               context.modulation.hasSpectrumRoute (index));
                 level.setTargetValue (values.level);
 
                 for (int sample = 0; sample < numSamples; ++sample)
@@ -980,6 +1001,7 @@ private:
 
     SynthEnvelope envelope;
     SynthEnvelope modulationEnvelope;
+    std::array<yup::LFO<float>, SynthExample::lfoCount> lfos;
     SynthFilterStage filter;
 
     std::vector<float> oscLeft;
@@ -1044,9 +1066,6 @@ public:
         setCurrentPlaybackSampleRate (sampleRate);
         activeVoices.store (0);
 
-        for (auto& lfo : lfos)
-            lfo.prepare (sampleRate);
-
         for (int index = 0; index < ownedVoices.size(); ++index)
             ownedVoices[index]->prepare (sampleRate, maxBlockSize);
     }
@@ -1068,25 +1087,6 @@ public:
             allNotesOff (0, true);
             mode = requestedMode;
         }
-        // The LFOs are global, so their routings are applied once here and every voice
-        // of a slot plays the same spectrum; the envelope routings are per voice and are
-        // applied by each voice on top of this.
-        std::array<float, 4> sources { 0.0f, 0.0f, 0.0f, 0.0f };
-
-        for (std::size_t index = 0; index < lfos.size(); ++index)
-        {
-            const auto values = lfoSettings[index].read();
-            auto& lfo = lfos[index];
-
-            lfo.setShape (values.shape);
-            lfo.setFrequency (values.rate);
-            lfo.setPhaseOffset (values.phase);
-
-            sources[2 + index] = lfo.getValue();
-            lfoPhases[index].store (lfo.getPhase());
-            lfo.skip (count);
-        }
-
         for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
             context.patch.oscillators[slot] = settings[slot].read();
 
@@ -1096,16 +1096,33 @@ public:
         for (std::size_t index = 0; index < envelopeSettings.size(); ++index)
             context.envelopes[index] = envelopeSettings[index].read();
 
-        applyModulation (context.patch, context.modulation, sources);
+        for (std::size_t index = 0; index < lfoSettings.size(); ++index)
+            context.lfos[index] = lfoSettings[index].read();
 
+        // Every voice of a slot plays the same spectrum unless a modulation is routed
+        // into it, so it is derived once here rather than once per voice.
         for (std::size_t slot = 0; slot < oscillatorSlots.size(); ++slot)
             oscillatorSlots[slot].update (context.patch.oscillators[slot], settings[slot], resources);
 
         yup::Synthesiser::renderNextBlock (output, midi, start, count);
+
         int active = 0;
+        const SynthVoice* newest = nullptr;
+
         for (auto* voice : ownedVoices)
+        {
             active += voice->isSounding() ? 1 : 0;
+
+            if (voice->isVoiceActive() && (newest == nullptr || newest->wasStartedBefore (*voice)))
+                newest = voice;
+        }
+
         activeVoices.store (active);
+
+        // The displays follow the LFOs of the most recent note.
+        if (newest != nullptr)
+            for (int index = 0; index < SynthExample::lfoCount; ++index)
+                lfoPhases[static_cast<std::size_t> (index)].store (newest->getLFOPhase (index));
     }
 
     void noteOn (int channel, int note, float velocity) override
@@ -1191,7 +1208,7 @@ public:
     /** Returns the routings edited by the modulation page. */
     SynthModulationSettings& getModulationSettings() noexcept { return modulationSettings; }
 
-    /** Returns the phase of an LFO at the top of the last block, for its display. */
+    /** Returns the phase of an LFO in the most recently started voice, for its display. */
     float getLFOPhase (int lfoIndex) const noexcept
     {
         return lfoPhases[static_cast<std::size_t> (lfoIndex)].load();
@@ -1268,7 +1285,6 @@ private:
     SynthFilterSettings filterSettings;
     std::array<SynthLFOSettings, SynthExample::lfoCount> lfoSettings;
     SynthModulationSettings modulationSettings;
-    std::array<yup::LFO<float>, SynthExample::lfoCount> lfos;
     std::array<std::atomic<float>, SynthExample::lfoCount> lfoPhases {};
     SynthBlockContext context;
     yup::ReferenceCountedArray<SynthVoice> ownedVoices;

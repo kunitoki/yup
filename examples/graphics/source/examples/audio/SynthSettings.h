@@ -316,6 +316,7 @@ struct SynthLFOValues
     yup::LFO<float>::Shape shape = yup::LFO<float>::Shape::sine;
     float rate = 1.0f;
     float phase = 0.0f;
+    bool retrigger = true; /**< Restart from the phase offset on every note, or run freely. */
 };
 
 /** The same controls, edited from the message thread while the audio thread reads them. */
@@ -324,11 +325,12 @@ struct SynthLFOSettings
     std::atomic<int> shape { static_cast<int> (yup::LFO<float>::Shape::sine) };
     std::atomic<float> rate { 1.0f };
     std::atomic<float> phase { 0.0f };
+    std::atomic<bool> retrigger { true };
 
     /** Takes a snapshot for one block of audio. */
     SynthLFOValues read() const noexcept
     {
-        return { static_cast<yup::LFO<float>::Shape> (shape.load()), rate.load(), phase.load() };
+        return { static_cast<yup::LFO<float>::Shape> (shape.load()), rate.load(), phase.load(), retrigger.load() };
     }
 };
 
@@ -336,9 +338,9 @@ struct SynthLFOSettings
 /** What can drive a modulation route. */
 enum class SynthModulationSource
 {
-    env1, /**< The amplitude envelope, unipolar and per voice. */
-    env2, /**< The free envelope, unipolar and per voice. */
-    lfo1, /**< Global and bipolar. */
+    env1, /**< The amplitude envelope, unipolar. */
+    env2, /**< The free envelope, unipolar. */
+    lfo1, /**< Bipolar. */
     lfo2
 };
 
@@ -470,14 +472,12 @@ struct SynthModulationValues
 {
     std::array<SynthModulationRoute, SynthExample::modulationSlots> routes;
 
-    /** True when an envelope is routed with depth into a spectrum parameter of this oscillator. */
-    bool hasVoiceSpectrumRoute (int oscillator) const noexcept
+    /** True when something is routed with depth into a spectrum parameter of this oscillator. */
+    bool hasSpectrumRoute (int oscillator) const noexcept
     {
         for (const auto& route : routes)
         {
-            const auto perVoice = route.source == SynthModulationSource::env1 || route.source == SynthModulationSource::env2;
-
-            if (perVoice && route.depth != 0.0f && isSpectrumDestination (route.destination)
+            if (route.depth != 0.0f && isSpectrumDestination (route.destination)
                 && getDestinationOscillator (route.destination) == oscillator)
                 return true;
         }
@@ -513,7 +513,7 @@ struct SynthModulationSettings
 };
 
 //==============================================================================
-/** Everything a voice plays from, after a modulation layer has been applied. */
+/** Everything a voice plays from, before or after modulation has been applied. */
 struct SynthPatchValues
 {
     std::array<SynthOscillatorValues, SynthExample::oscillatorCount> oscillators;

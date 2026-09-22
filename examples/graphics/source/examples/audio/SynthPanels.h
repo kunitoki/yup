@@ -843,7 +843,7 @@ private:
 };
 
 //==============================================================================
-/** Shape, rate and phase of one LFO, with its display.
+/** Shape, rate, phase and retrigger of one LFO, with its display.
 
     @see SynthLFOSettings
 */
@@ -860,6 +860,16 @@ public:
         titleLabel.setFont (font.withHeight (12.0f));
         titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
         addAndMakeVisible (titleLabel);
+
+        retriggerButton.setButtonText ("RETRIG");
+        retriggerButton.setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::displayBackground);
+        retriggerButton.setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim);
+        retriggerButton.setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary);
+        retriggerButton.setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary);
+        retriggerButton.setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder);
+        retriggerButton.setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent);
+        retriggerButton.onClick = [this] { settings.retrigger = retriggerButton.getToggleState(); };
+        addAndMakeVisible (retriggerButton);
 
         addAndMakeVisible (display);
         addAndMakeVisible (shapeChoice);
@@ -883,6 +893,7 @@ public:
         shapeChoice.getComboBox().setSelectedId (settings.shape.load() + 1, yup::dontSendNotification);
         rateKnob.getSlider().setValue (settings.rate.load(), yup::dontSendNotification);
         phaseKnob.getSlider().setValue (settings.phase.load(), yup::dontSendNotification);
+        retriggerButton.setToggleState (settings.retrigger.load(), yup::dontSendNotification);
 
         refreshDisplay();
     }
@@ -894,16 +905,20 @@ public:
     {
         auto bounds = getLocalBounds().reduced (panelInset);
 
-        titleLabel.setBounds (bounds.removeFromTop (headerHeight));
+        auto header = bounds.removeFromTop (headerHeight);
+        retriggerButton.setBounds (header.removeFromRight (buttonWidth));
+        titleLabel.setBounds (header);
         bounds.removeFromTop (spacing);
 
-        auto controls = bounds.removeFromRight (controlWidth);
+        // Everything sits in one row so the panel stays short: display, shape, rate, phase.
+        auto knobs = bounds.removeFromRight (knobWidth * 2.0f);
+        bounds.removeFromRight (spacing);
+        auto choice = bounds.removeFromRight (choiceWidth);
         bounds.removeFromRight (spacing);
         display.setBounds (bounds);
 
-        shapeChoice.setBounds (controls.removeFromTop (choiceHeight));
-        controls.removeFromTop (spacing);
-        layoutControlsInRow (controls, { &rateKnob, &phaseKnob });
+        shapeChoice.setBounds (choice.withSizeKeepingCenter (choice.getWidth(), yup::jmin (choice.getHeight(), choiceHeight)));
+        layoutControlsInRow (knobs, { &rateKnob, &phaseKnob });
     }
 
     void paint (yup::Graphics& g) override
@@ -913,9 +928,11 @@ public:
 
 private:
     static constexpr float panelInset = 8.0f;
-    static constexpr float headerHeight = 16.0f;
+    static constexpr float headerHeight = 18.0f;
     static constexpr float choiceHeight = 36.0f;
-    static constexpr float controlWidth = 130.0f;
+    static constexpr float choiceWidth = 90.0f;
+    static constexpr float knobWidth = 58.0f;
+    static constexpr float buttonWidth = 68.0f;
     static constexpr float spacing = 6.0f;
 
     void refreshDisplay() { display.setValues (settings.read()); }
@@ -923,6 +940,7 @@ private:
     SynthLFOSettings& settings;
 
     yup::Label titleLabel;
+    yup::ToggleButton retriggerButton;
     LFODisplay display;
     ChoiceControl shapeChoice;
     KnobControl rateKnob;

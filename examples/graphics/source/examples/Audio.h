@@ -154,7 +154,7 @@ public:
         randomizeButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
         randomizeButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary);
         randomizeButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
-        randomizeButton.onClick = [this] { randomizeOscillators(); };
+        randomizeButton.onClick = [this] { randomizeVoice(); };
         addAndMakeVisible (randomizeButton);
 
         clearButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
@@ -245,7 +245,7 @@ public:
     {
         auto bounds = mainPage.getLocalBounds();
 
-        keyboardComponent.setBounds (bounds.removeFromBottom (mainPage.proportionOfHeight (0.19f)));
+        keyboardComponent.setBounds (bounds.removeFromBottom (yup::jmin (keyboardHeight, mainPage.proportionOfHeight (0.12f))));
         bounds.removeFromBottom (spacing);
 
         auto performance = bounds.removeFromBottom (58.0f);
@@ -257,9 +257,9 @@ public:
         loadLabel.setBounds (performance);
         bounds.removeFromBottom (spacing);
 
-        const auto rowHeight = yup::jmin (150.0f, bounds.getHeight() * 0.26f);
-
-        auto lfoRow = bounds.removeFromBottom (rowHeight);
+        // The oscillator panels take whatever the fixed-height rows below leave, and
+        // their waveform editors need most of it.
+        auto lfoRow = bounds.removeFromBottom (lfoRowHeight);
         const auto lfoWidth = (lfoRow.getWidth() - spacing * 2.0f) * 0.3f;
         lfoPanels[0]->setBounds (lfoRow.removeFromLeft (lfoWidth));
         lfoRow.removeFromLeft (spacing);
@@ -268,7 +268,7 @@ public:
         oscilloscope.setBounds (lfoRow);
         bounds.removeFromBottom (spacing);
 
-        auto shapingRow = bounds.removeFromBottom (rowHeight);
+        auto shapingRow = bounds.removeFromBottom (yup::jmin (shapingRowHeight, bounds.getHeight() * 0.3f));
         const auto shapingWidth = (shapingRow.getWidth() - spacing * 2.0f) / 3.0f;
         filterPanel->setBounds (shapingRow.removeFromLeft (shapingWidth));
         shapingRow.removeFromLeft (spacing);
@@ -464,7 +464,8 @@ private:
     }
 
     //==============================================================================
-    void randomizeOscillators()
+    /** Randomizes everything a voice is made of; volume, voice mode, glide and MIDI input stay. */
+    void randomizeVoice()
     {
         auto& random = yup::Random::getSystemRandom();
 
@@ -507,6 +508,65 @@ private:
         filter.drive = random.nextBool() ? 0.0f : random.nextFloat() * 0.6f;
         filter.keytrack = random.nextBool() ? 0.0f : 1.0f;
         filterPanel->refresh();
+
+        // The amplitude envelope keeps a short attack more often than not, so the patch
+        // still speaks when played; the modulation envelope is free to be slow.
+        for (int index = 0; index < SynthExample::envelopeCount; ++index)
+        {
+            auto& envelope = synth.getEnvelopeSettings (index);
+            const auto slow = index > 0 || random.nextInt (4) == 0;
+
+            envelope.delay = random.nextInt (4) == 0 ? random.nextFloat() * 0.3f : 0.0f;
+            envelope.attack = 0.003f + random.nextFloat() * (slow ? 1.5f : 0.15f);
+            envelope.hold = random.nextBool() ? 0.0f : random.nextFloat() * 0.3f;
+            envelope.decay = 0.05f + random.nextFloat() * 1.5f;
+            envelope.sustain = random.nextFloat();
+            envelope.release = 0.05f + random.nextFloat() * 1.5f;
+
+            envelopePanels[static_cast<std::size_t> (index)]->refresh();
+        }
+
+        for (int index = 0; index < SynthExample::lfoCount; ++index)
+        {
+            auto& lfo = synth.getLFOSettings (index);
+
+            lfo.shape = random.nextInt (5);
+            lfo.rate = 0.1f * std::exp2 (random.nextFloat() * 6.0f);
+            lfo.phase = random.nextBool() ? 0.0f : random.nextFloat();
+            lfo.retrigger = random.nextBool();
+
+            lfoPanels[static_cast<std::size_t> (index)]->refresh();
+        }
+
+        // A few live routes, never to the oscillator levels, so a random patch cannot
+        // fall silent; the rest of the slots are cleared.
+        auto& modulation = synth.getModulationSettings();
+        const auto liveRoutes = 1 + random.nextInt (4);
+
+        for (int index = 0; index < SynthExample::modulationSlots; ++index)
+        {
+            auto& slot = modulation.slots[static_cast<std::size_t> (index)];
+
+            if (index >= liveRoutes)
+            {
+                slot.destination = static_cast<int> (SynthModulationDestination::none);
+                slot.depth = 0.0f;
+                continue;
+            }
+
+            auto destination = SynthModulationDestination::none;
+
+            do
+            {
+                destination = static_cast<SynthModulationDestination> (1 + random.nextInt (static_cast<int> (SynthModulationDestination::count) - 1));
+            } while (destination == SynthModulationDestination::osc1Level || destination == SynthModulationDestination::osc2Level);
+
+            slot.source = random.nextInt (4);
+            slot.destination = static_cast<int> (destination);
+            slot.depth = (random.nextFloat() - 0.5f) * (random.nextBool() ? 2.0f : 1.0f);
+        }
+
+        modulationPage->refresh();
     }
 
     //==============================================================================
@@ -516,6 +576,9 @@ private:
     static constexpr float headerHeight = 44.0f;
     static constexpr float spacing = 8.0f;
     static constexpr float pageButtonWidth = 68.0f;
+    static constexpr float keyboardHeight = 72.0f;
+    static constexpr float lfoRowHeight = 104.0f;
+    static constexpr float shapingRowHeight = 150.0f;
 
     //==============================================================================
     yup::AudioDeviceManager deviceManager;
