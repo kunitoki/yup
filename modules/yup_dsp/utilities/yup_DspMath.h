@@ -177,6 +177,10 @@ SampleType dotProduct (const CoeffType* __restrict a, const SampleType* __restri
 template <>
 float dotProduct (const float* __restrict a, const float* __restrict b, std::size_t length) noexcept;
 
+/** Fast specialization for dotProduct using SIMD */
+template <>
+double dotProduct (const double* __restrict a, const double* __restrict b, std::size_t length) noexcept;
+
 //==============================================================================
 
 /** Bilinear transform from s-plane to z-plane with frequency warping */

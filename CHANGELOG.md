@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Audio
 
+- Added a waveform selector (sine, triangle, saw, square) and 16× / 32× sweep oversampling modes to the spectrum analyzer example; the non-sine shapes are naive, so the sweep oversampling modes show their aliasing suppression. The oversampled sweeps now generate at a multiple of the device rate and decimate straight to it through `Oversampler::beginGeneration()` instead of passing through the radius-8 resampler, whose 54 dB stopband was setting the alias floor regardless of the oversampling factor
 - Added shared `WaveformBank`, spectral `MorphingOscillator`, and oversampled `ModulatedOscillator` with through-zero FM, PM, phase distortion and fractional hard sync. Added direct generation to `Oversampler`; fused spectral SIMD accumulation, amortized additive phasor trigonometry, and corrected sync bandwidth refresh and Nyquist boundaries.
 
 - Fixed the pulsar spectral resampler's alternating coefficient sign and corrected oscillator regression tests for fixed-size copies, startup crossfades, and spectral window leakage.

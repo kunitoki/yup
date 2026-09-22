@@ -29,12 +29,21 @@ namespace yup
     Multi-channel integer-factor oversampler using windowed sinc interpolation.
 
     Oversampler up- and downsamples audio by an integer factor with
-    bandlimited interpolation and anti-aliasing.  Internal per-channel history
-    buffers allow seamless multi-block (real-time) operation.
+    bandlimited interpolation and anti-aliasing. Each channel keeps the last
+    kernel-length of samples contiguously in front of its staging buffer, so
+    every output sample is a single contiguous dot product and multi-block
+    (real-time) operation is seamless.
+
+    Both kernels are Kaiser-windowed sincs (beta = 9, roughly 90 dB of
+    stopband rejection when the radius allows it) designed in CoeffType and
+    applied to SampleType data, accumulating in CoeffType. The interpolator
+    cuts off at the input Nyquist frequency, the decimator at 0.45 times the
+    input sample rate. The total round-trip latency is 2 * SincRadius input
+    samples; generation followed by downsample() costs SincRadius.
 
     Typical usage in an audio effect:
     @code
-    yup::Oversampler<float, 4, 8> os;
+    yup::Oversampler<float, 4, 16> os;
     os.prepare (44100.0, 2, 512);
 
     // Inside your audio callback:
@@ -49,9 +58,9 @@ namespace yup
     @tparam SampleType       Audio sample type (float or double).
     @tparam OversampleFactor Integer upsample ratio (2, 4, 8, …).
     @tparam SincRadius       Half-width of the sinc kernel in original-rate samples.
-                             Higher values give better stopband rejection at the
-                             cost of more computation.
-    @tparam CoeffType        Precision for internal filter coefficients (default double).
+                             Higher values give a steeper transition and deeper
+                             stopband at the cost of more computation and latency.
+    @tparam CoeffType        Precision for filter design and accumulation (default double).
 */
 template <typename SampleType, int OversampleFactor, int SincRadius, typename CoeffType = double>
 class Oversampler
@@ -71,8 +80,8 @@ public:
     /**
         Prepares the oversampler for processing.
 
-        Configures the internal windowed sinc tables and allocates per-channel
-        history and staging buffers. Must be called before upsample() or downsample().
+        Designs the interpolation and decimation kernels and allocates the
+        per-channel staging buffers. Must be called before upsample() or downsample().
 
         @param sampleRate    Input sample rate in Hz.
         @param maxChannels   Maximum number of audio channels.
@@ -82,56 +91,27 @@ public:
     {
         jassert (sampleRate > 0.0 && maxChannels > 0 && maxBlockSize > 0);
 
-        interpolationTable.configure (static_cast<CoeffType> (sampleRate));
-        interpolationTable.applyKaiserWindow (CoeffType (5));
+        buildInterpolationTaps (static_cast<CoeffType> (sampleRate));
+        buildDecimationTaps (static_cast<CoeffType> (sampleRate));
 
-        decimationTable.configureWithCutoff (static_cast<CoeffType> (sampleRate) * antiAliasCutoffRatio,
-                                             static_cast<CoeffType> (sampleRate));
-        decimationTable.applyKaiserWindow (CoeffType (5));
+        maxInputSamples = maxBlockSize;
 
-        normalizeFilterGains();
+        xInterp.setSize (maxChannels, maxBlockSize + interpolationHistory);
+        xDecim.setSize (maxChannels, maxBlockSize * OversampleFactor + decimationHistory);
+        oversampledBuffer.setSize (maxChannels, maxBlockSize * OversampleFactor, false, false, true);
 
-        const int maxInterpolated = maxBlockSize * OversampleFactor;
-
-        interpolBeginBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
-        interpolEndBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
-        decimBeginBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius * OversampleFactor> {});
-        decimEndBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius * OversampleFactor> {});
-
-        xInterp.setSize (maxChannels, maxBlockSize + SincRadius);
-        xInterp.clear();
-
-        xDecim.setSize (maxChannels, maxInterpolated + SincRadius * OversampleFactor);
-        xDecim.clear();
-
-        oversampledBuffer.setSize (maxChannels, maxInterpolated, false, false, true);
-        oversampledBuffer.clear();
-
-        currentOversampledSize = 0;
-        currentNumChannels = 0;
+        reset();
     }
 
     /**
         Resets all internal processing state.
 
-        Clears all history buffers so that a fresh processing session can begin
+        Clears all history so that a fresh processing session can begin
         without artifacts from a previous session. Filter coefficients are
         preserved; there is no need to call prepare() again.
     */
     void reset() noexcept
     {
-        for (auto& b : interpolBeginBufs)
-            b.clear();
-
-        for (auto& b : interpolEndBufs)
-            b.clear();
-
-        for (auto& b : decimBeginBufs)
-            b.clear();
-
-        for (auto& b : decimEndBufs)
-            b.clear();
-
         xInterp.clear();
         xDecim.clear();
         oversampledBuffer.clear();
@@ -158,18 +138,7 @@ public:
 
         jassert (numChannels > 0 && numSamples > 0);
         jassert (numChannels <= xInterp.getNumChannels());
-        jassert (numSamples + SincRadius <= xInterp.getNumSamples());
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            const auto* inputData = input[ch];
-
-            auto* xBuf = xInterp.getWritePointer (ch);
-            auto& endBuf = interpolEndBufs[static_cast<std::size_t> (ch)];
-
-            for (int i = 0; i < numSamples + SincRadius; ++i)
-                *xBuf++ = (i >= SincRadius) ? inputData[i - SincRadius] : endBuf[i];
-        }
+        jassert (numSamples <= maxInputSamples);
 
         currentOversampledSize = numSamples * OversampleFactor;
         currentNumChannels = numChannels;
@@ -177,41 +146,21 @@ public:
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto* xBuf = xInterp.getReadPointer (ch);
-            auto& beginBuf = interpolBeginBufs[static_cast<std::size_t> (ch)];
-            auto& endBuf = interpolEndBufs[static_cast<std::size_t> (ch)];
+            auto* history = xInterp.getWritePointer (ch);
+            FloatVectorOperations::copy (history + interpolationHistory, input[ch], numSamples);
 
-            auto* outBuf = oversampledBuffer.getWritePointer (ch);
-            *outBuf++ = *xBuf;
+            auto* out = oversampledBuffer.getWritePointer (ch);
 
-            for (int k = 1; k < currentOversampledSize; ++k)
+            for (int i = 0; i < numSamples; ++i)
             {
-                const int delta = k % OversampleFactor;
-                const int index = k / OversampleFactor;
+                const auto* window = history + i;
+                *out++ = window[SincRadius];
 
-                if (delta != 0)
-                {
-                    CoeffType acc = CoeffType (0);
-
-                    for (int n = -SincRadius; n <= 0; ++n)
-                        acc += interpolationTable (n, delta) * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
-
-                    for (int n = 1; n <= SincRadius; ++n)
-                        acc += interpolationTable (n, delta) * static_cast<CoeffType> (beginBuf[SincRadius - n]);
-
-                    *outBuf++ = static_cast<SampleType> (acc * interpolationGains[static_cast<std::size_t> (delta)]);
-                }
-                else
-                {
-                    *outBuf++ = xBuf[static_cast<std::size_t> (index)];
-                    beginBuf.push (xBuf[static_cast<std::size_t> (index - 1)]);
-                }
+                for (int delta = 1; delta < OversampleFactor; ++delta)
+                    *out++ = dotProduct (interpolationTaps.data() + delta * interpolationTapCount, window, static_cast<std::size_t> (interpolationTapCount));
             }
 
-            beginBuf.push (xBuf[static_cast<std::size_t> (numSamples - 1)]);
-
-            for (int i = 0; i < SincRadius; ++i)
-                endBuf.push (xBuf[static_cast<std::size_t> (numSamples + i)]);
+            std::copy (history + numSamples, history + numSamples + interpolationHistory, history);
         }
     }
 
@@ -231,7 +180,7 @@ public:
     {
         if (numChannels <= 0 || numSamples <= 0
             || numChannels > xInterp.getNumChannels()
-            || numSamples > xInterp.getNumSamples() - SincRadius)
+            || numSamples > maxInputSamples)
             return false;
 
         currentOversampledSize = numSamples * OversampleFactor;
@@ -269,50 +218,17 @@ public:
         jassert (currentOversampledSize > 0);
         jassert (numSamples * OversampleFactor == currentOversampledSize);
 
-        const int interpolatedSize = currentOversampledSize;
-
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            auto* inBuf = oversampledBuffer.getReadPointer (ch);
+            auto* history = xDecim.getWritePointer (ch);
+            FloatVectorOperations::copy (history + decimationHistory, oversampledBuffer.getReadPointer (ch), currentOversampledSize);
 
-            auto* xBuf = xDecim.getWritePointer (ch);
-            auto& dEndBuf = decimEndBufs[static_cast<std::size_t> (ch)];
-
-            for (int i = 0; i < interpolatedSize + SincRadius * OversampleFactor; ++i)
-            {
-                *xBuf++ = (i >= SincRadius * OversampleFactor)
-                            ? inBuf[static_cast<std::size_t> (i - SincRadius * OversampleFactor)]
-                            : dEndBuf[i];
-            }
-        }
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            auto* outputData = output[ch];
-
-            auto* xBuf = xDecim.getReadPointer (ch);
-            auto& beginBuf = decimBeginBufs[static_cast<std::size_t> (ch)];
-            auto& dEndBuf = decimEndBufs[static_cast<std::size_t> (ch)];
+            auto* out = output[ch];
 
             for (int k = 0; k < numSamples; ++k)
-            {
-                const int index = OversampleFactor * k;
-                CoeffType acc = CoeffType (0);
+                out[k] = dotProduct (decimationTaps.data(), history + k * OversampleFactor, static_cast<std::size_t> (decimationTapCount));
 
-                for (int n = 1; n <= SincRadius * OversampleFactor; ++n)
-                    acc += decimationTable[n] * static_cast<CoeffType> (beginBuf[SincRadius * OversampleFactor - n]);
-
-                for (int n = 0; n >= -(SincRadius * OversampleFactor); --n)
-                    acc += decimationTable[n] * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
-
-                for (int i = 0; i < OversampleFactor; ++i)
-                    beginBuf.push (xBuf[static_cast<std::size_t> (index + i)]);
-
-                outputData[k] = static_cast<SampleType> (acc * decimationGain);
-            }
-
-            for (int i = 0; i < SincRadius * OversampleFactor; ++i)
-                dEndBuf.push (xBuf[static_cast<std::size_t> (interpolatedSize + i)]);
+            std::copy (history + currentOversampledSize, history + currentOversampledSize + decimationHistory, history);
         }
 
         currentOversampledSize = 0;
@@ -404,44 +320,76 @@ public:
 
 private:
     //==============================================================================
-    void normalizeFilterGains() noexcept
-    {
-        for (int delta = 0; delta < OversampleFactor; ++delta)
-        {
-            CoeffType sum = CoeffType (0);
+    static constexpr int interpolationTapCount = 2 * SincRadius + 1;
+    static constexpr int interpolationHistory = 2 * SincRadius;
+    static constexpr int decimationTapCount = 2 * SincRadius * OversampleFactor + 1;
+    static constexpr int decimationHistory = 2 * SincRadius * OversampleFactor;
 
-            for (int n = -SincRadius; n <= SincRadius; ++n)
-                sum += interpolationTable (n, delta);
-
-            jassert (sum != CoeffType (0));
-            interpolationGains[static_cast<std::size_t> (delta)] = CoeffType (1) / sum;
-        }
-
-        CoeffType decimationSum = decimationTable[0];
-
-        for (int n = 1; n <= SincRadius * OversampleFactor; ++n)
-            decimationSum += CoeffType (2) * decimationTable[n];
-
-        jassert (decimationSum != CoeffType (0));
-        decimationGain = CoeffType (1) / decimationSum;
-    }
+    static constexpr CoeffType kaiserBeta = CoeffType (9);
 
     // Leave transition width before the original Nyquist frequency for decimation.
     static constexpr CoeffType antiAliasCutoffRatio = CoeffType (0.45);
 
-    SincTable<CoeffType, OversampleFactor, SincRadius> interpolationTable;
-    SincTable<CoeffType, OversampleFactor, SincRadius> decimationTable;
-    std::array<CoeffType, static_cast<std::size_t> (OversampleFactor)> interpolationGains {};
-    CoeffType decimationGain = CoeffType (1);
+    //==============================================================================
+    // Phase-major taps, each phase normalized to unity DC gain. Phase 0 is the
+    // pass-through sample and is never read.
+    void buildInterpolationTaps (CoeffType sampleRate)
+    {
+        SincTable<CoeffType, OversampleFactor, SincRadius> table;
+        table.configure (sampleRate);
+        table.applyKaiserWindow (kaiserBeta);
 
-    std::vector<CircularBuffer<SampleType, SincRadius>> interpolBeginBufs;
-    std::vector<CircularBuffer<SampleType, SincRadius>> interpolEndBufs;
-    std::vector<CircularBuffer<SampleType, SincRadius * OversampleFactor>> decimBeginBufs;
-    std::vector<CircularBuffer<SampleType, SincRadius * OversampleFactor>> decimEndBufs;
+        interpolationTaps.assign (static_cast<std::size_t> (OversampleFactor * interpolationTapCount), CoeffType (0));
+
+        for (int delta = 1; delta < OversampleFactor; ++delta)
+        {
+            auto* taps = interpolationTaps.data() + delta * interpolationTapCount;
+            CoeffType sum = CoeffType (0);
+
+            for (int j = 0; j < interpolationTapCount; ++j)
+            {
+                taps[j] = table (SincRadius - j, delta);
+                sum += taps[j];
+            }
+
+            jassert (sum != CoeffType (0));
+            const CoeffType gain = CoeffType (1) / sum;
+
+            for (int j = 0; j < interpolationTapCount; ++j)
+                taps[j] *= gain;
+        }
+    }
+
+    void buildDecimationTaps (CoeffType sampleRate)
+    {
+        SincTable<CoeffType, OversampleFactor, SincRadius> table;
+        table.configureWithCutoff (sampleRate * antiAliasCutoffRatio, sampleRate);
+        table.applyKaiserWindow (kaiserBeta);
+
+        decimationTaps.resize (static_cast<std::size_t> (decimationTapCount));
+        CoeffType sum = CoeffType (0);
+
+        for (int j = 0; j < decimationTapCount; ++j)
+        {
+            decimationTaps[static_cast<std::size_t> (j)] = table[j - SincRadius * OversampleFactor];
+            sum += decimationTaps[static_cast<std::size_t> (j)];
+        }
+
+        jassert (sum != CoeffType (0));
+        const CoeffType gain = CoeffType (1) / sum;
+
+        for (auto& tap : decimationTaps)
+            tap *= gain;
+    }
+
+    //==============================================================================
+    std::vector<CoeffType> interpolationTaps;
+    std::vector<CoeffType> decimationTaps;
 
     AudioBuffer<SampleType> xInterp;
     AudioBuffer<SampleType> xDecim;
     AudioBuffer<SampleType> oversampledBuffer;
+    int maxInputSamples = 0;
     int currentOversampledSize = 0;
     int currentNumChannels = 0;
 
@@ -449,12 +397,16 @@ private:
 };
 
 //==============================================================================
-/** @name Convenience type aliases for common oversampling configurations */
-using Oversampler2xFloat = Oversampler<float, 2, 8>;   /**< 2x oversampler, float, 8-tap radius */
-using Oversampler4xFloat = Oversampler<float, 4, 8>;   /**< 4x oversampler, float, 8-tap radius */
-using Oversampler8xFloat = Oversampler<float, 8, 8>;   /**< 8x oversampler, float, 8-tap radius */
-using Oversampler2xDouble = Oversampler<double, 2, 8>; /**< 2x oversampler, double, 8-tap radius */
-using Oversampler4xDouble = Oversampler<double, 4, 8>; /**< 4x oversampler, double, 8-tap radius */
-using Oversampler8xDouble = Oversampler<double, 8, 8>; /**< 8x oversampler, double, 8-tap radius */
+/** @name Convenience type aliases for common oversampling configurations (latency 32 samples) */
+using Oversampler2xFloat = Oversampler<float, 2, 16>;   /**< 2x oversampler, float, 16-tap radius */
+using Oversampler4xFloat = Oversampler<float, 4, 16>;   /**< 4x oversampler, float, 16-tap radius */
+using Oversampler8xFloat = Oversampler<float, 8, 16>;   /**< 8x oversampler, float, 16-tap radius */
+using Oversampler16xFloat = Oversampler<float, 16, 16>; /**< 16x oversampler, float, 16-tap radius */
+using Oversampler32xFloat = Oversampler<float, 32, 16>; /**< 32x oversampler, float, 16-tap radius */
+using Oversampler2xDouble = Oversampler<double, 2, 16>; /**< 2x oversampler, double, 16-tap radius */
+using Oversampler4xDouble = Oversampler<double, 4, 16>; /**< 4x oversampler, double, 16-tap radius */
+using Oversampler8xDouble = Oversampler<double, 8, 16>; /**< 8x oversampler, double, 16-tap radius */
+using Oversampler16xDouble = Oversampler<double, 16, 16>; /**< 16x oversampler, double, 16-tap radius */
+using Oversampler32xDouble = Oversampler<double, 32, 16>; /**< 32x oversampler, double, 16-tap radius */
 
 } // namespace yup

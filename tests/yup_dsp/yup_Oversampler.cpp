@@ -275,6 +275,8 @@ TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
     Oversampler8xFloat c;
     Oversampler2xDouble d;
     Oversampler4xDouble e;
+    Oversampler16xFloat f;
+    Oversampler32xDouble g;
 
     // Prepare briefly to confirm the types are usable
     a.prepare (44100.0, 1, 64);
@@ -282,6 +284,8 @@ TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
     c.prepare (44100.0, 1, 64);
     d.prepare (44100.0, 1, 64);
     e.prepare (44100.0, 1, 64);
+    f.prepare (44100.0, 1, 64);
+    g.prepare (44100.0, 1, 64);
 
     SUCCEED();
 }
@@ -326,6 +330,438 @@ TEST_F (OversamplerTest, DirectGenerationImpulseHasTheReportedLatency)
     os4x.downsample (channels, 1, blockSize);
     const auto peak = std::max_element (output.begin(), output.end());
     EXPECT_EQ (os4x.getGenerationLatencyInSamples(), static_cast<int> (peak - output.begin()));
+}
+
+} // namespace yup::test
+
+namespace yup::test
+{
+
+//==============================================================================
+class OversamplerAccuracyTest : public ::testing::Test
+{
+protected:
+    static constexpr double sampleRate = 48000.0;
+    static constexpr double kaiserBeta = 9.0;
+
+    template <typename SampleType>
+    struct Streams
+    {
+        std::vector<SampleType> upsampled;
+        std::vector<SampleType> roundTrip;
+    };
+
+    template <typename SampleType>
+    static std::vector<SampleType> makeNoise (int numSamples, int64 seed)
+    {
+        Random random (seed);
+        std::vector<SampleType> result (static_cast<std::size_t> (numSamples));
+
+        for (auto& value : result)
+            value = static_cast<SampleType> (random.nextDouble() * 2.0 - 1.0);
+
+        return result;
+    }
+
+    template <typename SampleType>
+    static std::vector<SampleType> makeSine (int numSamples, double normalizedFrequency, int offset = 0)
+    {
+        std::vector<SampleType> result (static_cast<std::size_t> (numSamples));
+
+        for (int i = 0; i < numSamples; ++i)
+            result[static_cast<std::size_t> (i)] = static_cast<SampleType> (std::sin (MathConstants<double>::twoPi * normalizedFrequency * (i + offset)));
+
+        return result;
+    }
+
+    /** Streams the input through upsample/downsample using the block sizes in schedule (cycled). */
+    template <typename Os, typename SampleType>
+    static Streams<SampleType> process (Os& os, const std::vector<SampleType>& input, const std::vector<int>& schedule)
+    {
+        Streams<SampleType> streams;
+        const auto total = static_cast<int> (input.size());
+        std::size_t step = 0;
+
+        for (int position = 0; position < total;)
+        {
+            const int numSamples = jmin (schedule[step++ % schedule.size()], total - position);
+
+            const SampleType* inputPtrs[] = { input.data() + position };
+            os.upsample (inputPtrs, 1, numSamples);
+
+            const auto* up = os.getOversampledChannelData (0);
+            streams.upsampled.insert (streams.upsampled.end(), up, up + os.getOversampledNumSamples());
+
+            std::vector<SampleType> output (static_cast<std::size_t> (numSamples));
+            SampleType* outputPtrs[] = { output.data() };
+            os.downsample (outputPtrs, 1, numSamples);
+            streams.roundTrip.insert (streams.roundTrip.end(), output.begin(), output.end());
+
+            position += numSamples;
+        }
+
+        return streams;
+    }
+
+    template <typename SampleType>
+    static void expectNear (const std::vector<SampleType>& actual, const std::vector<SampleType>& expected, double tolerance)
+    {
+        ASSERT_EQ (expected.size(), actual.size());
+
+        for (std::size_t i = 0; i < actual.size(); ++i)
+            ASSERT_NEAR (expected[i], actual[i], tolerance) << "at index " << i;
+    }
+
+    template <typename SampleType, int Factor, int Radius>
+    static void checkBlockSizeIndependence (double tolerance)
+    {
+        constexpr int total = 512;
+        const auto input = makeNoise<SampleType> (total, 7);
+
+        Oversampler<SampleType, Factor, Radius> wholeBlock, fixedBlocks, irregularBlocks;
+        wholeBlock.prepare (sampleRate, 1, total);
+        fixedBlocks.prepare (sampleRate, 1, total);
+        irregularBlocks.prepare (sampleRate, 1, total);
+
+        const auto reference = process (wholeBlock, input, { total });
+        const auto fixedResult = process (fixedBlocks, input, { 256 });
+        const auto irregularResult = process (irregularBlocks, input, { 1, 3, 7, 5, 2, 13, 64, 17, 31, 9, 128 });
+
+        expectNear (fixedResult.upsampled, reference.upsampled, tolerance);
+        expectNear (fixedResult.roundTrip, reference.roundTrip, tolerance);
+        expectNear (irregularResult.upsampled, reference.upsampled, tolerance);
+        expectNear (irregularResult.roundTrip, reference.roundTrip, tolerance);
+    }
+
+    static std::vector<double> magnitudeSpectrum (const std::vector<double>& signal)
+    {
+        const auto size = static_cast<int> (signal.size());
+        FFTProcessor<double> fft (size);
+
+        std::vector<double> spectrum (static_cast<std::size_t> (size) * 2);
+        fft.performRealFFTForward (signal.data(), spectrum.data());
+
+        std::vector<double> magnitude (static_cast<std::size_t> (size) / 2 + 1);
+
+        for (int k = 0; k <= size / 2; ++k)
+            magnitude[static_cast<std::size_t> (k)] = std::hypot (spectrum[static_cast<std::size_t> (2 * k)], spectrum[static_cast<std::size_t> (2 * k + 1)]);
+
+        return magnitude;
+    }
+
+    /** Level of the strongest bin outside the fundamental's guard band, relative to the fundamental. */
+    static double worstSpuriousDb (const std::vector<double>& magnitude, int fundamentalBin, int guardBins)
+    {
+        const auto fundamental = magnitude[static_cast<std::size_t> (fundamentalBin)];
+        double worst = 0.0;
+
+        for (std::size_t k = 0; k < magnitude.size(); ++k)
+        {
+            if (std::abs (static_cast<int> (k) - fundamentalBin) <= guardBins)
+                continue;
+
+            worst = jmax (worst, magnitude[k]);
+        }
+
+        return 20.0 * std::log10 (jmax (worst, 1e-12 * fundamental) / fundamental);
+    }
+
+    template <int Factor, int Radius>
+    static double upsampledWorstImageDb (int fundamentalBin)
+    {
+        constexpr int blockSize = 1024;
+        const double frequency = fundamentalBin / static_cast<double> (blockSize);
+
+        Oversampler<float, Factor, Radius> os;
+        os.prepare (sampleRate, 1, blockSize);
+
+        std::vector<double> steadyState;
+
+        for (int block = 0; block < 2; ++block)
+        {
+            const auto input = makeSine<float> (blockSize, frequency, block * blockSize);
+            const float* inputPtrs[] = { input.data() };
+            os.upsample (inputPtrs, 1, blockSize);
+
+            const auto* up = os.getOversampledChannelData (0);
+            steadyState.assign (up, up + os.getOversampledNumSamples());
+
+            std::vector<float> output (blockSize);
+            float* outputPtrs[] = { output.data() };
+            os.downsample (outputPtrs, 1, blockSize);
+        }
+
+        return worstSpuriousDb (magnitudeSpectrum (steadyState), fundamentalBin, 2);
+    }
+
+    struct RoundTripAccuracy
+    {
+        double maxError = 0.0;
+        double snrDb = 0.0;
+    };
+
+    /** Compares the round trip of a unit sine against the input delayed by the reported latency. */
+    template <int Factor, int Radius>
+    static RoundTripAccuracy roundTripAccuracy (double normalizedFrequency)
+    {
+        constexpr int blockSize = 512;
+
+        Oversampler<float, Factor, Radius> os;
+        os.prepare (sampleRate, 1, blockSize);
+
+        RoundTripAccuracy accuracy;
+        double signalEnergy = 0.0;
+        double errorEnergy = 0.0;
+
+        for (int block = 0; block < 4; ++block)
+        {
+            const auto input = makeSine<float> (blockSize, normalizedFrequency, block * blockSize);
+            const float* inputPtrs[] = { input.data() };
+            os.upsample (inputPtrs, 1, blockSize);
+
+            std::vector<float> output (blockSize);
+            float* outputPtrs[] = { output.data() };
+            os.downsample (outputPtrs, 1, blockSize);
+
+            if (block == 0)
+                continue;
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto expected = std::sin (MathConstants<double>::twoPi * normalizedFrequency * (block * blockSize + i - os.getLatencyInSamples()));
+                const auto error = output[static_cast<std::size_t> (i)] - expected;
+                accuracy.maxError = jmax (accuracy.maxError, std::abs (error));
+                signalEnergy += expected * expected;
+                errorEnergy += error * error;
+            }
+        }
+
+        accuracy.snrDb = 10.0 * std::log10 (signalEnergy / jmax (errorEnergy, 1e-30));
+        return accuracy;
+    }
+};
+
+//==============================================================================
+TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceFloat2x)
+{
+    checkBlockSizeIndependence<float, 2, 8> (1e-6);
+}
+
+TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceFloat4x)
+{
+    checkBlockSizeIndependence<float, 4, 8> (1e-6);
+}
+
+TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceDouble4x)
+{
+    checkBlockSizeIndependence<double, 4, 8> (1e-12);
+}
+
+TEST_F (OversamplerAccuracyTest, ImpulseLatencyWithTinyBlocks)
+{
+    constexpr int radius = 8;
+    constexpr int factor = 4;
+    constexpr int total = 96;
+    constexpr int impulsePosition = 11;
+
+    std::vector<float> input (total, 0.0f);
+    input[impulsePosition] = 1.0f;
+
+    Oversampler<float, factor, radius> os;
+    os.prepare (sampleRate, 1, total);
+    const auto streams = process (os, input, { 3 });
+
+    for (int i = 0; i < total; ++i)
+    {
+        const float expected = (i == impulsePosition + radius) ? 1.0f : 0.0f;
+        EXPECT_EQ (expected, streams.upsampled[static_cast<std::size_t> (i * factor)]) << "input index " << i;
+    }
+
+    const auto peak = std::max_element (streams.roundTrip.begin(), streams.roundTrip.end());
+    EXPECT_EQ (impulsePosition + 2 * radius, static_cast<int> (peak - streams.roundTrip.begin()));
+}
+
+TEST_F (OversamplerAccuracyTest, UpsampleMatchesScalarSincReference)
+{
+    constexpr int radius = 8;
+    constexpr int factor = 4;
+    constexpr int total = 256;
+    const auto input = makeNoise<float> (total, 3);
+
+    Oversampler<float, factor, radius> os;
+    os.prepare (sampleRate, 1, total);
+    const auto streams = process (os, input, { 64 });
+
+    SincTable<double, factor, radius> table;
+    table.configure (sampleRate);
+    table.applyKaiserWindow (kaiserBeta);
+
+    const auto sampleAt = [&] (int index)
+    {
+        return (index >= 0 && index < total) ? static_cast<double> (input[static_cast<std::size_t> (index)]) : 0.0;
+    };
+
+    for (int i = 0; i < total; ++i)
+    {
+        const int center = i - radius;
+        EXPECT_NEAR (sampleAt (center), streams.upsampled[static_cast<std::size_t> (i * factor)], 1e-6);
+
+        for (int delta = 1; delta < factor; ++delta)
+        {
+            double acc = 0.0;
+            double sum = 0.0;
+
+            for (int n = -radius; n <= radius; ++n)
+            {
+                const auto tap = table (n, delta);
+                acc += tap * sampleAt (center - n);
+                sum += tap;
+            }
+
+            EXPECT_NEAR (acc / sum, streams.upsampled[static_cast<std::size_t> (i * factor + delta)], 1e-6) << "sample " << i << " phase " << delta;
+        }
+    }
+}
+
+TEST_F (OversamplerAccuracyTest, ChannelsAreIndependent)
+{
+    constexpr int blockSize = 100;
+    constexpr int total = 300;
+    const auto left = makeNoise<float> (total, 1);
+    const auto right = makeNoise<float> (total, 2);
+
+    Oversampler<float, 2, 8> stereo, monoLeft, monoRight;
+    stereo.prepare (sampleRate, 2, blockSize);
+    monoLeft.prepare (sampleRate, 1, blockSize);
+    monoRight.prepare (sampleRate, 1, blockSize);
+
+    Streams<float> stereoLeft, stereoRight;
+
+    for (int position = 0; position < total; position += blockSize)
+    {
+        const float* inputPtrs[] = { left.data() + position, right.data() + position };
+        stereo.upsample (inputPtrs, 2, blockSize);
+
+        const auto* upLeft = stereo.getOversampledChannelData (0);
+        const auto* upRight = stereo.getOversampledChannelData (1);
+        stereoLeft.upsampled.insert (stereoLeft.upsampled.end(), upLeft, upLeft + stereo.getOversampledNumSamples());
+        stereoRight.upsampled.insert (stereoRight.upsampled.end(), upRight, upRight + stereo.getOversampledNumSamples());
+
+        std::vector<float> outLeft (blockSize), outRight (blockSize);
+        float* outputPtrs[] = { outLeft.data(), outRight.data() };
+        stereo.downsample (outputPtrs, 2, blockSize);
+        stereoLeft.roundTrip.insert (stereoLeft.roundTrip.end(), outLeft.begin(), outLeft.end());
+        stereoRight.roundTrip.insert (stereoRight.roundTrip.end(), outRight.begin(), outRight.end());
+    }
+
+    const auto expectedLeft = process (monoLeft, left, { blockSize });
+    const auto expectedRight = process (monoRight, right, { blockSize });
+
+    expectNear (stereoLeft.upsampled, expectedLeft.upsampled, 1e-7);
+    expectNear (stereoLeft.roundTrip, expectedLeft.roundTrip, 1e-7);
+    expectNear (stereoRight.upsampled, expectedRight.upsampled, 1e-7);
+    expectNear (stereoRight.roundTrip, expectedRight.roundTrip, 1e-7);
+}
+
+TEST_F (OversamplerAccuracyTest, ResetMatchesFreshInstance)
+{
+    constexpr int blockSize = 128;
+
+    Oversampler<float, 4, 8> reused, fresh;
+    reused.prepare (sampleRate, 1, blockSize);
+    fresh.prepare (sampleRate, 1, blockSize);
+
+    process (reused, makeNoise<float> (512, 5), { blockSize });
+    reused.reset();
+
+    const auto input = makeNoise<float> (256, 6);
+    const auto reusedResult = process (reused, input, { blockSize });
+    const auto freshResult = process (fresh, input, { blockSize });
+
+    expectNear (reusedResult.upsampled, freshResult.upsampled, 1e-7);
+    expectNear (reusedResult.roundTrip, freshResult.roundTrip, 1e-7);
+}
+
+TEST_F (OversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
+{
+    constexpr int blockSize = 128;
+    const auto blockA = makeNoise<float> (blockSize, 8);
+    const auto blockB = makeNoise<float> (blockSize, 9);
+
+    Oversampler<float, 4, 8> withGeneration, withoutGeneration;
+    withGeneration.prepare (sampleRate, 1, blockSize);
+    withoutGeneration.prepare (sampleRate, 1, blockSize);
+
+    const auto roundTrip = [] (auto& os, const std::vector<float>& input)
+    {
+        const float* inputPtrs[] = { input.data() };
+        os.upsample (inputPtrs, 1, blockSize);
+
+        const auto* up = os.getOversampledChannelData (0);
+        std::vector<float> upsampled (up, up + os.getOversampledNumSamples());
+
+        std::vector<float> output (blockSize);
+        float* outputPtrs[] = { output.data() };
+        os.downsample (outputPtrs, 1, blockSize);
+        return upsampled;
+    };
+
+    roundTrip (withGeneration, blockA);
+    roundTrip (withoutGeneration, blockA);
+
+    ASSERT_TRUE (withGeneration.beginGeneration (1, blockSize));
+    FloatVectorOperations::fill (withGeneration.getOversampledChannelData (0), 0.7f, withGeneration.getOversampledNumSamples());
+    std::vector<float> generated (blockSize);
+    float* generatedPtrs[] = { generated.data() };
+    withGeneration.downsample (generatedPtrs, 1, blockSize);
+
+    expectNear (roundTrip (withGeneration, blockB), roundTrip (withoutGeneration, blockB), 1e-7);
+}
+
+//==============================================================================
+TEST_F (OversamplerAccuracyTest, UpsampledImageIsRejected)
+{
+    // 0.25 fs tone: image at 0.75 fs sits deep in the interpolator's stopband.
+    EXPECT_LT (upsampledWorstImageDb<4, 16> (256), -80.0);
+
+    // 0.4 fs tone: image at 0.6 fs sits at the edge of the transition band.
+    EXPECT_LT (upsampledWorstImageDb<4, 16> (410), -70.0);
+}
+
+TEST_F (OversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadius16)
+{
+    constexpr int factor = 2;
+    constexpr int blockSize = 2048;
+    constexpr double toneRatio = 0.6; // of the input sample rate, above the input Nyquist
+
+    Oversampler<float, factor, 16> os;
+    os.prepare (sampleRate, 1, blockSize);
+
+    ASSERT_TRUE (os.beginGeneration (1, blockSize));
+    auto* internal = os.getOversampledChannelData (0);
+
+    for (int i = 0; i < os.getOversampledNumSamples(); ++i)
+        internal[i] = static_cast<float> (std::sin (MathConstants<double>::twoPi * toneRatio * i / factor));
+
+    std::vector<float> output (blockSize);
+    float* outputPtrs[] = { output.data() };
+    os.downsample (outputPtrs, 1, blockSize);
+
+    constexpr int measured = blockSize / 2;
+    const auto rms = FloatVectorOperations::rms (output.data() + blockSize - measured, measured);
+    const auto levelDb = 20.0 * std::log10 (jmax (static_cast<double> (rms), 1e-12) * MathConstants<double>::sqrt2);
+    EXPECT_LT (levelDb, -70.0);
+}
+
+TEST_F (OversamplerAccuracyTest, RoundTripPassbandIsFlat)
+{
+    EXPECT_LT (roundTripAccuracy<4, 16> (1000.0 / sampleRate).maxError, 0.005);
+    EXPECT_LT (roundTripAccuracy<4, 16> (0.3).maxError, 0.005);
+}
+
+TEST_F (OversamplerAccuracyTest, RoundTripSineSNR)
+{
+    EXPECT_GT (roundTripAccuracy<4, 16> (0.1).snrDb, 80.0);
 }
 
 } // namespace yup::test

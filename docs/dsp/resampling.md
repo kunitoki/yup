@@ -12,7 +12,7 @@ buffer and the sinc lookup table.
 
 `CircularBuffer<SampleType, BufferSize>` is a fixed-size compile-time ring
 buffer for O(1) push plus random-access sample history — the per-channel
-history primitive used by the resamplers:
+history primitive used by `Resampler`:
 
 ```cpp
 yup::CircularBuffer<float, 512> history;
@@ -35,7 +35,7 @@ OversampleFactor` entries.
 yup::SincTable<double, 256, 8> table;
 table.configureWithCutoff (20000.0, 44100.0);  // explicit cutoff (downsampling)
 table.configure (44100.0);                     // or cutoff = sampleRate/2 (upsampling)
-table.applyKaiserWindow (5.0);                 // optional Kaiser windowing, beta = 5
+table.applyKaiserWindow (9.0);                 // optional Kaiser windowing, beta = 9
 
 double v = table (tap, delta);   // fractional-phase access; negative taps mirrored
 ```
@@ -44,7 +44,10 @@ double v = table (tap, delta);   // fractional-phase access; negative taps mirro
 upsampling); `configureWithCutoff` takes an explicit cutoff in
 `(0, sampleRate/2]` (correct for downsampling, where the anti-aliasing cutoff
 is the target Nyquist). `applyKaiserWindow` multiplies the stored half-kernel
-by the second half of a Kaiser window without touching the center coefficient.
+by the second half of a Kaiser window spanning exactly the kernel radius
+(`2 · SincRadius · OversampleFactor + 1` samples) without touching the center
+coefficient; the entries beyond the radius (tap `SincRadius` with a nonzero
+fractional phase) are zeroed, so the kernel decays smoothly to zero at its edge.
 
 ## Oversampler
 
@@ -54,7 +57,7 @@ processing chains that need headroom — distortion, nonlinear filters, etc.
 Compile-time constraints: `OversampleFactor >= 2`, `SincRadius >= 1`.
 
 ```cpp
-yup::Oversampler<float, 4, 8> os;             // 4x oversampling, sinc radius 8
+yup::Oversampler<float, 4, 16> os;            // 4x oversampling, sinc radius 16
 os.prepare (44100.0, 2, 512);
 
 // audio thread:
@@ -63,22 +66,40 @@ os.processOversampledBlock ([] (auto& buffer) { applyDistortion (buffer); });
 os.downsample (outPtrs, numChannels, numSamples);
 ```
 
-- `prepare` builds the interpolation table (Kaiser β = 5), the decimation
-  table (cutoff at `0.45 × input Nyquist`, leaving transition bandwidth), and
-  allocates the per-channel history and staging buffers. **Not** realtime-safe.
+- `prepare` designs the interpolation kernel (cutoff at the input Nyquist) and
+  the decimation kernel (cutoff at `0.45 × input sample rate`, leaving
+  transition bandwidth), both Kaiser-windowed with β = 9 (~90 dB stopband when
+  the radius allows), normalized to unity DC gain per phase and stored with the
+  gain baked in, and allocates the per-channel staging buffers. The kernels are
+  designed in `CoeffType` (default `double`) and accumulate in `CoeffType`
+  regardless of `SampleType`. **Not** realtime-safe.
 - `upsample` writes `numSamples × OversampleFactor` bandlimited samples per
   channel into an internal buffer; exact phase multiples pass through
-  directly, fractional phases use the `2·SincRadius + 1`-tap sinc.
+  directly, fractional phases use the `2·SincRadius + 1`-tap sinc. Each
+  channel keeps the previous `2·SincRadius` input samples contiguously in
+  front of its staging buffer, so every output sample is one contiguous
+  `dotProduct` (SIMD for `float`/`float` and `double`/`double`) and any block
+  size up to `maxBlockSize` produces identical results.
 - `processOversampledBlock (callback)` hands the internal oversampled
   `AudioBuffer` to your callback for the nonlinear processing.
-- `downsample` applies the anti-aliasing FIR and decimates back; it must be
-  called after the oversampled block was processed, with matching channel and
-  sample counts.
-- `getLatencyInSamples()` returns `2 × SincRadius` (input-rate samples).
+- `beginGeneration (numChannels, numSamples)` starts a block generated directly
+  at the oversampled rate (an oscillator, for example) without any input
+  interpolation; fill `getOversampledChannelData()` and call `downsample`.
+  Returns `false` for nonpositive sizes or sizes beyond the prepared capacity.
+- `downsample` applies the anti-aliasing FIR (`2·SincRadius·OversampleFactor + 1`
+  taps, `2·SincRadius·OversampleFactor` samples of contiguous history) and
+  decimates back; it must be called after the oversampled block was processed,
+  with matching channel and sample counts.
+- `getLatencyInSamples()` returns `2 × SincRadius` (input-rate samples);
+  `getGenerationLatencyInSamples()` returns `SincRadius`, the latency of
+  generation followed by `downsample`.
 - `reset()` clears history without re-preparing.
 
 Convenience aliases: `Oversampler2xFloat`, `Oversampler4xFloat`,
-`Oversampler8xFloat` and the `Double` variants (all radius 8).
+`Oversampler8xFloat`, `Oversampler16xFloat`, `Oversampler32xFloat` and the
+`Double` variants (all radius 16, latency 32 input samples). The decimation
+FIR has `2·SincRadius·OversampleFactor + 1` taps per output sample, so 16× and
+32× cost 513 and 1025 taps respectively.
 
 ## Resampler
 
