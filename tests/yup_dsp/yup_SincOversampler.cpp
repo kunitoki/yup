@@ -315,7 +315,7 @@ namespace yup::test
 {
 
 //==============================================================================
-class OversamplerAccuracyTest : public ::testing::Test
+class SincOversamplerAccuracyTest : public ::testing::Test
 {
 protected:
     static constexpr double sampleRate = 48000.0;
@@ -519,22 +519,22 @@ protected:
 };
 
 //==============================================================================
-TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceFloat2x)
+TEST_F (SincOversamplerAccuracyTest, BlockSizeIndependenceFloat2x)
 {
     checkBlockSizeIndependence<float, 2, 8> (1e-6);
 }
 
-TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceFloat4x)
+TEST_F (SincOversamplerAccuracyTest, BlockSizeIndependenceFloat4x)
 {
     checkBlockSizeIndependence<float, 4, 8> (1e-6);
 }
 
-TEST_F (OversamplerAccuracyTest, BlockSizeIndependenceDouble4x)
+TEST_F (SincOversamplerAccuracyTest, BlockSizeIndependenceDouble4x)
 {
     checkBlockSizeIndependence<double, 4, 8> (1e-12);
 }
 
-TEST_F (OversamplerAccuracyTest, ImpulseLatencyWithTinyBlocks)
+TEST_F (SincOversamplerAccuracyTest, ImpulseLatencyWithTinyBlocks)
 {
     constexpr int radius = 8;
     constexpr int factor = 4;
@@ -558,7 +558,7 @@ TEST_F (OversamplerAccuracyTest, ImpulseLatencyWithTinyBlocks)
     EXPECT_EQ (impulsePosition + 2 * radius, static_cast<int> (peak - streams.roundTrip.begin()));
 }
 
-TEST_F (OversamplerAccuracyTest, UpsampleMatchesScalarSincReference)
+TEST_F (SincOversamplerAccuracyTest, UpsampleMatchesScalarSincReference)
 {
     constexpr int radius = 8;
     constexpr int factor = 4;
@@ -600,7 +600,7 @@ TEST_F (OversamplerAccuracyTest, UpsampleMatchesScalarSincReference)
     }
 }
 
-TEST_F (OversamplerAccuracyTest, ChannelsAreIndependent)
+TEST_F (SincOversamplerAccuracyTest, ChannelsAreIndependent)
 {
     constexpr int blockSize = 100;
     constexpr int total = 300;
@@ -640,7 +640,7 @@ TEST_F (OversamplerAccuracyTest, ChannelsAreIndependent)
     expectNear (stereoRight.roundTrip, expectedRight.roundTrip, 1e-7);
 }
 
-TEST_F (OversamplerAccuracyTest, ResetMatchesFreshInstance)
+TEST_F (SincOversamplerAccuracyTest, ResetMatchesFreshInstance)
 {
     constexpr int blockSize = 128;
 
@@ -659,7 +659,7 @@ TEST_F (OversamplerAccuracyTest, ResetMatchesFreshInstance)
     expectNear (reusedResult.roundTrip, freshResult.roundTrip, 1e-7);
 }
 
-TEST_F (OversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
+TEST_F (SincOversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
 {
     constexpr int blockSize = 128;
     const auto blockA = makeNoise<float> (blockSize, 8);
@@ -696,7 +696,7 @@ TEST_F (OversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
 }
 
 //==============================================================================
-TEST_F (OversamplerAccuracyTest, UpsampledImageIsRejected)
+TEST_F (SincOversamplerAccuracyTest, UpsampledImageIsRejected)
 {
     // 0.25 fs tone: image at 0.75 fs sits deep in the interpolator's stopband.
     EXPECT_LT (upsampledWorstImageDb<4, 16> (256), -80.0);
@@ -705,7 +705,7 @@ TEST_F (OversamplerAccuracyTest, UpsampledImageIsRejected)
     EXPECT_LT (upsampledWorstImageDb<4, 16> (410), -70.0);
 }
 
-TEST_F (OversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadius16)
+TEST_F (SincOversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadius16)
 {
     constexpr int factor = 2;
     constexpr int blockSize = 2048;
@@ -730,13 +730,13 @@ TEST_F (OversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadiu
     EXPECT_LT (levelDb, -70.0);
 }
 
-TEST_F (OversamplerAccuracyTest, RoundTripPassbandIsFlat)
+TEST_F (SincOversamplerAccuracyTest, RoundTripPassbandIsFlat)
 {
     EXPECT_LT (roundTripAccuracy<4, 16> (1000.0 / sampleRate).maxError, 0.005);
     EXPECT_LT (roundTripAccuracy<4, 16> (0.3).maxError, 0.005);
 }
 
-TEST_F (OversamplerAccuracyTest, RoundTripSineSNR)
+TEST_F (SincOversamplerAccuracyTest, RoundTripSineSNR)
 {
     EXPECT_GT (roundTripAccuracy<4, 16> (0.1).snrDb, 80.0);
 }
