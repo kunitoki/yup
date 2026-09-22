@@ -11,7 +11,7 @@ Oscillator Synchronization via Additive Synthesis"* (DAFx26, paper 49).
 **Headers:** `yup_dsp/oscillators/` - `yup_FourierSeries.h`,
 `yup_SyncSpectralResampler.h`, `yup_AdditiveOscillator.h`,
 `yup_WavetableOscillator.h`, `yup_SyncOscillator.h`, `yup_WaveformBank.h`,
-`yup_ModulatedOscillator.h`.
+`yup_ModulatedOscillator.h`, `yup_PrismSpectrum.h`, `yup_LFO.h`.
 
 ## The idea
 
@@ -378,3 +378,24 @@ Additional algorithm references:
   describes breakpoint phase maps and modulation.
 - [Practical Linear and Exponential Frequency Modulation for Digital Music Synthesis](https://www.dafx.de/paper-archive/2020/proceedings/papers/DAFx2020_paper_61.pdf)
   discusses FM semantics, sideband bandwidth and oversampling.
+
+## LFO
+
+`LFO<FloatType>` is a control-rate oscillator: a plain phase accumulator read as a
+sine, triangle, rising sawtooth, square or sample-and-hold, bipolar in `[-1, 1]`.
+It is deliberately not bandlimited and never allocates.
+
+```cpp
+yup::LFO<float> lfo;
+lfo.prepare (48000.0);
+lfo.setShape (yup::LFO<float>::Shape::sampleAndHold);
+lfo.setFrequency (3.0f);
+lfo.setPhaseOffset (0.25f);          // read a quarter period ahead
+
+float now = lfo.getValue();          // value at the top of the block
+lfo.skip (numSamples);               // advance by one block
+lfo.processBlock (out, numSamples);  // or audio-rate
+```
+
+Sample-and-hold draws from a seeded linear congruential generator every time the
+phase wraps, so `setSeed()` plus `reset()` makes a modulation reproducible.

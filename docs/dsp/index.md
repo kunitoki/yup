@@ -29,7 +29,7 @@ available in the build.
   `AnalogFilterCoefficients`, `StateVariableCoefficients`).
 - [Filters](filters.md) - the processing primitives (`FirstOrder`, `Biquad`,
   cascades, coefficient structs) and the ready-to-use filter classes:
-  first-order, RBJ biquad, Zoelzer, state-variable, Butterworth,
+  first-order, RBJ biquad, Zoelzer, state-variable (Chamberlin and VA/TPT), Butterworth,
   Linkwitz-Riley crossovers, direct FIR, analog-mapped filters, and comb
   filters.
 - [Dynamics & metering](dynamics.md) - `HardClipper`, `SoftClipper`,

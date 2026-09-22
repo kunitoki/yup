@@ -149,6 +149,7 @@
 #include "oscillators/yup_SyncOscillator.h"
 #include "oscillators/yup_WaveformBank.h"
 #include "oscillators/yup_PrismSpectrum.h"
+#include "oscillators/yup_LFO.h"
 
 // Onset detection
 #include "onsets/yup_FilterBank.h"
@@ -191,6 +192,7 @@
 #include "filters/yup_RbjFilter.h"
 #include "filters/yup_ZoelzerFilter.h"
 #include "filters/yup_StateVariableFilter.h"
+#include "filters/yup_VAStateVariableFilter.h"
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
 #include "filters/yup_DirectFIR.h"

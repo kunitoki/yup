@@ -139,7 +139,7 @@ public:
         // A fixed generator rather than a shared one, so a given harmonic always gets
         // the same offset: scatter has to be a stable property of the shape, otherwise
         // re-deriving it every block would sound like noise rather than like a timbre.
-        std::uint32_t state = 0x9e3779b9u;
+        uint32 state = 0x9e3779b9u;
 
         for (std::size_t index = 0; index < count; ++index)
         {
