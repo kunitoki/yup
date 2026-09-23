@@ -45,7 +45,7 @@ constexpr int controlChunk = 128;
 constexpr int maxUnisonVoices = 5;
 
 /** Harmonics the partial editor exposes, a subset of the maxHarmonics the engine renders. */
-constexpr int editableHarmonics = 32;
+constexpr int editableHarmonics = 64;
 
 /** Harmonics the waveform display sums, capped well below maxHarmonics to keep repaints cheap. */
 constexpr int displayHarmonics = 64;
@@ -132,7 +132,7 @@ struct SynthOscillatorValues
 
 /** The same controls, edited from the message thread while the audio thread reads them.
 
-    The partial editor writes magnitudes continuously while the mouse is down but bumps
+    The waveform editor writes partials continuously while the mouse is down but bumps
     harmonicGeneration at most once per user interface frame. The audio thread rebuilds
     its series only when that counter moves, which keeps a drag from forcing an inverse
     FFT per mouse event on every sounding voice.
@@ -143,8 +143,11 @@ struct SynthOscillatorSettings
 {
     SynthOscillatorSettings()
     {
-        for (auto& harmonic : harmonics)
-            harmonic.store (0.0f);
+        for (auto& cosine : harmonicCosines)
+            cosine.store (0.0f);
+
+        for (auto& sine : harmonicSines)
+            sine.store (0.0f);
     }
 
     std::atomic<int> waveform { static_cast<int> (yup::Waveform::sawtooth) };
@@ -167,7 +170,8 @@ struct SynthOscillatorSettings
     std::atomic<float> unisonDetune { 0.2f };
     std::atomic<float> unisonSpread { 0.6f };
 
-    std::array<std::atomic<float>, SynthExample::editableHarmonics> harmonics;
+    std::array<std::atomic<float>, SynthExample::editableHarmonics> harmonicCosines;
+    std::array<std::atomic<float>, SynthExample::editableHarmonics> harmonicSines;
     std::atomic<float> harmonicScale { 1.0f };
     std::atomic<bool> usesCustomSeries { false };
     std::atomic<int> harmonicGeneration { 0 };
@@ -199,11 +203,10 @@ struct SynthOscillatorSettings
                  harmonicGeneration.load() };
     }
 
-    /** Rebuilds a prepared series from the edited magnitudes, without allocating.
+    /** Rebuilds a prepared series from the edited partials, without allocating.
 
-        The editor works in magnitudes only and writes them as sine coefficients, the
-        same convention yup::FourierSeries::setWaveform uses for its sawtooth, square
-        and triangle presets.
+        Every partial keeps both its cosine and sine coefficient, so a drawn cycle comes
+        back with the phase it was drawn with rather than as a sum of sines.
 
         Nothing stops the editor from asking for every harmonic at once, which would sum
         to many times full scale, so the caller passes the scale that brings the
@@ -222,22 +225,63 @@ struct SynthOscillatorSettings
 
         for (int harmonic = 1; harmonic <= count; ++harmonic)
         {
-            const auto magnitude = harmonics[static_cast<std::size_t> (harmonic - 1)].load() * scale;
+            const auto index = static_cast<std::size_t> (harmonic - 1);
 
-            series.setHarmonic (harmonic, 0.0, static_cast<double> (magnitude));
+            series.setHarmonic (harmonic,
+                                static_cast<double> (harmonicCosines[index].load() * scale),
+                                static_cast<double> (harmonicSines[index].load() * scale));
         }
     }
 
-    /** Seeds the edited magnitudes from a series, so editing starts at the visible shape. */
+    /** Seeds the edited partials from a series, so editing starts at the visible shape. */
     void seedHarmonicsFrom (const yup::FourierSeries<double>& series) noexcept
     {
         const auto count = yup::jmin (SynthExample::editableHarmonics, series.getNumHarmonics());
 
         for (int harmonic = 1; harmonic <= count; ++harmonic)
-            harmonics[static_cast<std::size_t> (harmonic - 1)].store (static_cast<float> (series.getMagnitude (harmonic)));
+        {
+            const auto index = static_cast<std::size_t> (harmonic - 1);
+
+            harmonicCosines[index].store (static_cast<float> (series.getCosine (harmonic)));
+            harmonicSines[index].store (static_cast<float> (series.getSine (harmonic)));
+        }
 
         for (int harmonic = count; harmonic < SynthExample::editableHarmonics; ++harmonic)
-            harmonics[static_cast<std::size_t> (harmonic)].store (0.0f);
+        {
+            harmonicCosines[static_cast<std::size_t> (harmonic)].store (0.0f);
+            harmonicSines[static_cast<std::size_t> (harmonic)].store (0.0f);
+        }
+    }
+
+    /** Sets the magnitude of one partial while keeping its phase.
+
+        A partial that is currently silent has no phase to keep, so it starts as a sine.
+
+        @param index     The zero based partial, 0 being the fundamental
+        @param magnitude The new magnitude
+    */
+    void setHarmonicMagnitude (int index, float magnitude) noexcept
+    {
+        jassert (yup::isPositiveAndBelow (index, SynthExample::editableHarmonics));
+
+        auto& cosine = harmonicCosines[static_cast<std::size_t> (index)];
+        auto& sine = harmonicSines[static_cast<std::size_t> (index)];
+
+        const auto currentCosine = cosine.load();
+        const auto currentSine = sine.load();
+        const auto currentMagnitude = std::hypot (currentCosine, currentSine);
+
+        if (currentMagnitude < 1.0e-6f)
+        {
+            cosine.store (0.0f);
+            sine.store (magnitude);
+            return;
+        }
+
+        const auto scale = magnitude / currentMagnitude;
+
+        cosine.store (currentCosine * scale);
+        sine.store (currentSine * scale);
     }
 };
 

@@ -26,6 +26,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 //==============================================================================
@@ -432,9 +433,10 @@ void main()
 //==============================================================================
 /** The waveform of one oscillator, either drawn or edited a partial at a time.
 
-    In drawing mode the component reconstructs the series and shows one period of it.
-    In editing mode it shows the magnitude of each harmonic as a bar that can be
-    dragged, which is what actually defines the waveform the oscillator renders.
+    In drawing mode the component shows one period of the reconstructed series, and a
+    drag draws that period freehand: the stroke is analyzed back into partials, phase
+    included, which become the oscillator's custom series. In editing mode it shows the
+    magnitude of each harmonic as a bar that can be dragged.
 
     Dragging writes straight into the settings, but the generation counter the audio
     thread watches is only bumped by commitPendingEdits(), once per user interface
@@ -456,6 +458,8 @@ public:
         preview.prepare();
         displaySeries.resize (SynthExample::maxHarmonics);
         displaySamples.assign (displayResolution, 0.0f);
+        drawnCycle.assign (displayResolution, 0.0f);
+        drawnSeries.resize (SynthExample::editableHarmonics);
 
         refresh();
     }
@@ -504,12 +508,13 @@ public:
         // Normalize whatever is actually drawn. The shaper preserves the coefficient sum
         // rather than the peak, and a sum bounds a peak from well above - three times over
         // for a sawtooth - so scaling the derived waveform by the source's peak would draw
-        // it clean outside the display.
+        // it clean outside the display. During a stroke it follows the stroke's own peak
+        // instead, so the curve stays under the pointer.
         const auto peak = measurePeak();
 
         if (peak > 1.0e-6f)
         {
-            const auto scale = 1.0f / peak;
+            const auto scale = (lastDrawnIndex.has_value() ? measurePeak (drawnCycle) : 1.0f) / peak;
 
             for (auto& sample : displaySamples)
                 sample *= scale;
@@ -533,12 +538,7 @@ public:
     /** Returns the largest magnitude currently in the display buffer. */
     float measurePeak() const noexcept
     {
-        auto peak = 0.0f;
-
-        for (auto sample : displaySamples)
-            peak = yup::jmax (peak, std::abs (sample));
-
-        return peak;
+        return measurePeak (displaySamples);
     }
 
     /** Publishes a pending drag to the audio thread, coalescing a frame's worth of edits. */
@@ -555,12 +555,8 @@ public:
     void revertToPreset()
     {
         settings.usesCustomSeries.store (false);
-        pendingEdit = true;
 
-        refresh();
-
-        if (onPartialsChanged != nullptr)
-            onPartialsChanged();
+        publishEdit();
     }
 
     //==============================================================================
@@ -593,6 +589,8 @@ public:
             paintPartials (g, bounds.reduced (contentInset));
         else if (landscape == nullptr)
             paintWaveform (g, bounds.reduced (contentInset));
+        else
+            paintDrawnCycle (g, bounds.reduced (contentInset));
     }
 
     void refreshDisplay (double lastFrameTimeSeconds) override
@@ -604,9 +602,35 @@ public:
         repaint();
     }
 
-    void mouseDown (const yup::MouseEvent& event) override { applyEdit (event); }
+    void mouseDown (const yup::MouseEvent& event) override
+    {
+        if (editingPartials)
+        {
+            applyEdit (event);
+            return;
+        }
 
-    void mouseDrag (const yup::MouseEvent& event) override { applyEdit (event); }
+        seedDrawnCycle();
+        lastDrawnIndex.reset();
+        applyDraw (event);
+    }
+
+    void mouseDrag (const yup::MouseEvent& event) override
+    {
+        if (editingPartials)
+            applyEdit (event);
+        else
+            applyDraw (event);
+    }
+
+    void mouseUp (const yup::MouseEvent&) override
+    {
+        if (! lastDrawnIndex.has_value())
+            return;
+
+        lastDrawnIndex.reset();
+        refresh();
+    }
 
 private:
     //==============================================================================
@@ -621,12 +645,52 @@ private:
                                animationTime);
     }
 
+    /** Returns the largest magnitude in a buffer of samples. */
+    static float measurePeak (const std::vector<float>& samples) noexcept
+    {
+        auto peak = 0.0f;
+
+        for (auto sample : samples)
+            peak = yup::jmax (peak, std::abs (sample));
+
+        return peak;
+    }
+
+    /** Draws the raw stroke while one is in progress, so the pointer always has it underneath. */
+    void paintDrawnCycle (yup::Graphics& g, yup::Rectangle<float> bounds)
+    {
+        if (! lastDrawnIndex.has_value())
+            return;
+
+        drawnPath.clear();
+        drawnPath.reserveSpace (displayResolution);
+
+        for (int index = 0; index < displayResolution; ++index)
+        {
+            const auto x = bounds.getX() + bounds.getWidth() * static_cast<float> (index)
+                                             / static_cast<float> (displayResolution);
+
+            const auto y = bounds.getCenterY() - drawnCycle[static_cast<std::size_t> (index)] * bounds.getHeight() * 0.45f;
+
+            if (index == 0)
+                drawnPath.moveTo (x, y);
+            else
+                drawnPath.lineTo (x, y);
+        }
+
+        g.setStrokeColor (SynthTheme::accent.withAlpha (0.25f));
+        g.setStrokeWidth (1.0f);
+        g.strokePath (drawnPath);
+    }
+
     /** Draws one period of the reconstructed series. */
     void paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds)
     {
         g.setStrokeColor (SynthTheme::panelBorder);
         g.setStrokeWidth (1.0f);
         g.strokeLine (bounds.getX(), bounds.getCenterY(), bounds.getRight(), bounds.getCenterY());
+
+        paintDrawnCycle (g, bounds);
 
         path.clear();
         path.reserveSpace (displayResolution);
@@ -674,24 +738,97 @@ private:
     }
 
     //==============================================================================
-    /** Turns a mouse position into the magnitude of one harmonic. */
-    void applyEdit (const yup::MouseEvent& event)
+    /** Editing a preset copies its partials in first, so the edit starts from the shape on screen. */
+    void beginCustomEdit()
     {
-        if (! editingPartials)
+        if (settings.usesCustomSeries.load())
             return;
 
+        settings.seedHarmonicsFrom (displaySeries);
+        settings.usesCustomSeries.store (true);
+    }
+
+    /** Marks the edit for the next commit and brings the display and the panel along. */
+    void publishEdit()
+    {
+        pendingEdit = true;
+
+        refresh();
+
+        if (onPartialsChanged != nullptr)
+            onPartialsChanged();
+    }
+
+    /** Starts a stroke from the source waveform, normalized as the display shows it. */
+    void seedDrawnCycle()
+    {
+        for (int index = 0; index < displayResolution; ++index)
+        {
+            const auto phase = static_cast<double> (index) / static_cast<double> (displayResolution);
+
+            drawnCycle[static_cast<std::size_t> (index)] =
+                evaluateFourierSeries (displaySeries, phase, SynthExample::displayHarmonics);
+        }
+
+        const auto peak = measurePeak (drawnCycle);
+
+        if (peak <= 1.0e-6f)
+            return;
+
+        for (auto& sample : drawnCycle)
+            sample /= peak;
+    }
+
+    /** Draws the stroke into the cycle and analyzes the cycle into the custom series. */
+    void applyDraw (const yup::MouseEvent& event)
+    {
         const auto bounds = getLocalBounds().reduced (contentInset);
 
         if (bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f)
             return;
 
-        // Editing a preset copies its partials in first, so the drag starts from the
-        // shape that is on screen instead of from silence.
-        if (! settings.usesCustomSeries.load())
+        beginCustomEdit();
+
+        const auto position = event.getPosition();
+        const auto index = yup::jlimit (0,
+                                        displayResolution - 1,
+                                        static_cast<int> (std::floor ((position.getX() - bounds.getX()) / bounds.getWidth()
+                                                                      * static_cast<float> (displayResolution))));
+
+        const auto value = yup::jlimit (-1.0f, 1.0f, (bounds.getCenterY() - position.getY()) / (bounds.getHeight() * 0.45f));
+
+        // Fills every sample the pointer skipped since the last event, so a fast drag leaves no gaps.
+        const auto first = lastDrawnIndex.value_or (index);
+        const auto firstValue = drawnCycle[static_cast<std::size_t> (first)];
+        const auto steps = std::abs (index - first);
+        const auto direction = index >= first ? 1 : -1;
+
+        for (int step = 1; step < steps; ++step)
         {
-            settings.seedHarmonicsFrom (displaySeries);
-            settings.usesCustomSeries.store (true);
+            const auto amount = static_cast<float> (step) / static_cast<float> (steps);
+
+            drawnCycle[static_cast<std::size_t> (first + step * direction)] = firstValue + (value - firstValue) * amount;
         }
+
+        drawnCycle[static_cast<std::size_t> (index)] = value;
+        lastDrawnIndex = index;
+
+        // The custom series has no DC term, so the drawn cycle's offset is simply dropped.
+        drawnSeries.setFromCycle (yup::Span<const float> (drawnCycle));
+        settings.seedHarmonicsFrom (drawnSeries);
+
+        publishEdit();
+    }
+
+    /** Turns a mouse position into the magnitude of one harmonic. */
+    void applyEdit (const yup::MouseEvent& event)
+    {
+        const auto bounds = getLocalBounds().reduced (contentInset);
+
+        if (bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f)
+            return;
+
+        beginCustomEdit();
 
         const auto position = event.getPosition();
         const auto barWidth = bounds.getWidth() / static_cast<float> (SynthExample::editableHarmonics);
@@ -701,13 +838,9 @@ private:
 
         const auto magnitude = yup::jlimit (0.0f, 1.0f, (bounds.getBottom() - position.getY()) / bounds.getHeight());
 
-        settings.harmonics[static_cast<std::size_t> (index)].store (magnitude);
-        pendingEdit = true;
+        settings.setHarmonicMagnitude (index, magnitude);
 
-        refresh();
-
-        if (onPartialsChanged != nullptr)
-            onPartialsChanged();
+        publishEdit();
     }
 
     //==============================================================================
@@ -728,6 +861,11 @@ private:
     yup::FourierSeries<double> displaySeries;
     std::vector<float> displaySamples;
     yup::Path path;
+
+    std::vector<float> drawnCycle;
+    yup::Path drawnPath;
+    yup::FourierSeries<double> drawnSeries;
+    std::optional<int> lastDrawnIndex;
 
     bool editingPartials = false;
     bool pendingEdit = false;
