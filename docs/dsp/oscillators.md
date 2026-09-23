@@ -57,7 +57,7 @@ Three details of the published method are worth knowing before using it:
 | `SyncSpectralResampler<CoeffType>` | The synchronization transform itself: follower coefficients plus a period ratio and a `SyncMode` in, synchronized coefficients out. |
 | `AdditiveOscillator<SampleType, CoeffType>` | Exact additive synthesis of a series at a fundamental, Nyquist limited, evaluated a SIMD width of harmonics at a time. |
 | `WavetableOscillator<SampleType, CoeffType>` | Renders a series into a single-cycle table with an inverse FFT and plays it back with 4-point Hermite interpolation, crossfading between renders. |
-| `SyncOscillator<SampleType, CoeffType>` | The synth-ready facade: a follower series, a mode, a ratio and a pitch in, audio out, with both synthesis backends selectable at runtime. |
+| `SyncOscillator<SampleType, CoeffType>` | The synth-ready facade: a follower series, a mode, a ratio and a pitch in, audio out. |
 
 Both oscillators are usable on their own as plain bandlimited oscillators; the
 resampler is usable on its own for analysis or visualization, and the series can be

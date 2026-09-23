@@ -30,7 +30,7 @@ namespace yup
     All fields must be finite. Shared by ModulatedOscillator and by any oscillator
     composed over detail::ModulatedOscillatorVoice.
 
-    @see ModulatedOscillator, PrismOscillator
+    @see ModulatedOscillator, PrismSpectrum
 */
 struct ModulatedOscillatorParameters
 {
@@ -61,7 +61,7 @@ namespace detail
     @tparam SampleType  Output precision.
     @tparam CoeffType   Waveform coefficient precision.
 
-    @see ModulatedOscillator, PrismOscillator
+    @see ModulatedOscillator, PrismSpectrum
 */
 template <typename SampleType, typename CoeffType = double>
 class ModulatedOscillatorVoice

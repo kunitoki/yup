@@ -101,6 +101,7 @@ public:
                 yup::String ("OSC ") + yup::String (index + 1),
                 synth.getOscillatorSettings (index),
                 synth.getResources(),
+                waveformShader,
                 font.withHeight (10.0f));
 
             mainPage.addAndMakeVisible (*panel);
@@ -610,6 +611,7 @@ private:
     yup::Label loadLabel;
 
     SynthPage mainPage;
+    std::shared_ptr<SynthWaveformShader> waveformShader = std::make_shared<SynthWaveformShader>();
     std::array<std::unique_ptr<SynthOscillatorPanel>, SynthExample::oscillatorCount> oscillatorPanels;
     std::unique_ptr<SynthFilterPanel> filterPanel;
     std::array<std::unique_ptr<SynthEnvelopePanel>, SynthExample::envelopeCount> envelopePanels;

@@ -244,6 +244,192 @@ inline float evaluateFourierSeries (const yup::FourierSeries<double>& series, do
 }
 
 //==============================================================================
+/** Renders a raymarched ridge landscape shaped by one period of a waveform.
+
+    The dominant displacement of the landscape is the waveform itself, so the ridges
+    follow the shape the oscillator plays, with a few faint octaves on top as shimmer.
+
+    Compiling the GLSL costs tens of milliseconds, so one instance is shared by every
+    waveform display and it compiles once. A failed compile is remembered rather than
+    retried, and render() then returns nullptr so the caller can draw without it.
+*/
+class SynthWaveformShader
+{
+public:
+    /** The number of waveform samples render() expects. */
+    static constexpr int sampleCount = 256;
+
+    /** Renders the landscape into a target owned by the caller.
+
+        @param context  The context the display paints with, providing the GPU device
+        @param target   The caller's target, recreated here whenever the size changes
+        @param width    The width of the landscape, in logical units
+        @param height   The height of the landscape, in logical units
+        @param samples  One period of the waveform, sampleCount values in the range -1 to 1
+        @param time     The animation time, in seconds
+
+        @returns The rendered landscape, or nullptr when no GPU path is available.
+    */
+    yup::GpuTexture::Ptr render (yup::GraphicsContext& context,
+                                 yup::GpuTarget::Ptr& target,
+                                 int width,
+                                 int height,
+                                 const std::vector<float>& samples,
+                                 float time)
+    {
+        jassert (samples.size() == static_cast<std::size_t> (sampleCount));
+
+        if (width < 2 || height < 2 || ! ensurePipeline (context))
+            return nullptr;
+
+        if (target == nullptr || target->getWidth() != width || target->getHeight() != height)
+            target = yup::GpuTarget::create (device, width, height);
+
+        if (target == nullptr)
+            return nullptr;
+
+        const Params params { time, static_cast<float> (width), static_cast<float> (height), 0.0f };
+
+        auto frame = yup::GpuFrame::begin (device);
+        if (! frame.isValid())
+            return nullptr;
+
+        auto pass = target->beginRenderPass (frame, { true, SynthTheme::displayBackground });
+        if (! pass.isValid())
+            return nullptr;
+
+        pass.setPipeline (pipeline);
+        pass.setUniformBuffer (0, 0, &params, sizeof (params));
+        pass.setUniformBuffer (0, 1, samples.data(), samples.size() * sizeof (float));
+
+        if (! pass.draw (3) || ! pass.finish() || ! frame.submit())
+            return nullptr;
+
+        return target->asTexture();
+    }
+
+private:
+    struct alignas (16) Params
+    {
+        float time;
+        float width;
+        float height;
+        float pad;
+    };
+
+    bool ensurePipeline (yup::GraphicsContext& context)
+    {
+        if (pipeline != nullptr)
+            return true;
+
+        if (compileAttempted || ! context.isGpuAvailable())
+            return false;
+
+        compileAttempted = true;
+        device = context.getGpuDevice();
+
+        yup::GpuPipelineOptions options;
+        options.colorTargets.emplace_back().blendEnabled = false;
+
+        auto result = yup::GpuPipeline::compileFromGlsl (device, vertexSource, yup::String::fromUTF8 (fragmentSource), options);
+        if (result.failed())
+        {
+            yup::Logger::outputDebugString ("SynthWaveformShader: shader compile failed: " + result.getErrorMessage());
+            return false;
+        }
+
+        pipeline = result.getValue();
+        return true;
+    }
+
+    static constexpr char vertexSource[] = R"glsl(#version 450
+void main() {
+    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
+    float y = float((gl_VertexIndex & 2u) << 1u) - 1.0;
+    gl_Position = vec4(x, y, 0.0, 1.0);
+}
+)glsl";
+
+    // Shadertoy's y-up pixel space, since RHI targets read top-left-origin everywhere.
+    static constexpr char fragmentSource[] = R"glsl(#version 450
+layout(set = 0, binding = 0) uniform Params
+{
+    float time;
+    float width;
+    float height;
+    float pad;
+} u;
+
+layout(set = 0, binding = 1) uniform Samples
+{
+    vec4 samples[64];
+} waveform;
+
+layout(location = 0) out vec4 fragColor;
+
+const vec3 accent = vec3(0.447, 0.918, 0.824);
+const float focal = 2.8;
+const vec3 background = vec3(0.055, 0.067, 0.078);
+
+float fetchSample(int index)
+{
+    return waveform.samples[index >> 2][index & 3];
+}
+
+float wave(float phase)
+{
+    float position = phase * 255.0;
+    int i0 = int(position);
+    int i1 = min(i0 + 1, 255);
+    return mix(fetchSample(i0), fetchSample(i1), position - float(i0));
+}
+
+void main()
+{
+    vec2 resolution = vec2(u.width, u.height);
+    vec2 I = vec2(gl_FragCoord.x, u.height - gl_FragCoord.y);
+
+    // The ridge on the far wall, four units away, spans one period across the width.
+    vec3 direction = normalize(vec3(I + I - resolution, -u.height * focal));
+    float frequency = u.height * focal / (8.0 * u.width);
+
+    float scroll = 0.5 + u.time * 0.01;
+    float hue = u.time * 0.15;
+
+    vec3 color = vec3(0.0);
+    float z = 0.0;
+
+    for (int i = 0; i < 90; ++i)
+    {
+        vec3 p = z * direction + vec3(0.0, 1.0, 1.0);
+
+        float r = max(-p.y, 0.0);
+        p.y += r + r;
+
+        p.y -= wave(fract(p.x * frequency + scroll));
+
+        for (float octave = 2.0; octave < 30.0; octave += octave)
+            p.y += 0.12 * cos(p.x * octave + 0.6 * u.time * cos(octave) + z) / octave;
+
+        float plane = p.z + 3.0;
+        float d = (0.1 * r + abs(p.y - 1.0) / (1.0 + r + r + r * r) + max(plane, -plane * 0.1)) / 8.0;
+        z += d;
+
+        float phase = z * 0.5 + hue;
+        vec3 tone = accent * (cos(phase) + 1.3) + vec3(0.0, 0.15, 0.08) * cos(phase + 2.0);
+        color += tone / max(d * z, 1.0e-4);
+    }
+
+    fragColor = vec4(max(tanh(color / 900.0), background), 1.0);
+}
+)glsl";
+
+    yup::GpuDevice::Ptr device;
+    yup::GpuPipeline::Ptr pipeline;
+    bool compileAttempted = false;
+};
+
+//==============================================================================
 /** The waveform of one oscillator, either drawn or edited a partial at a time.
 
     In drawing mode the component reconstructs the series and shows one period of it.
@@ -261,9 +447,11 @@ class WaveformEditor : public yup::Component
 {
 public:
     WaveformEditor (SynthOscillatorSettings& settingsToEdit,
-                    const SynthOscillatorResources& sharedResources)
+                    const SynthOscillatorResources& sharedResources,
+                    std::shared_ptr<SynthWaveformShader> sharedShader)
         : settings (settingsToEdit)
         , resources (sharedResources)
+        , shader (std::move (sharedShader))
     {
         preview.prepare();
         displaySeries.resize (SynthExample::maxHarmonics);
@@ -379,18 +567,41 @@ public:
     void paint (yup::Graphics& g) override
     {
         const auto bounds = getLocalBounds();
+        const auto landscape = editingPartials ? nullptr : renderLandscape (g);
 
-        g.setFillColor (SynthTheme::displayBackground);
-        g.fillRoundedRect (bounds, 4.0f);
+        if (landscape != nullptr)
+        {
+            const auto state = g.saveState();
+
+            // setClipPath works in top-level coordinates, unlike the drawing calls.
+            yup::Path clip;
+            clip.addRoundedRectangle (getBoundsRelativeToTopLevelComponent(), cornerRadius);
+            g.setClipPath (clip);
+            g.drawTexture (landscape, bounds);
+        }
+        else
+        {
+            g.setFillColor (SynthTheme::displayBackground);
+            g.fillRoundedRect (bounds, cornerRadius);
+        }
 
         g.setStrokeColor (SynthTheme::panelBorder);
         g.setStrokeWidth (1.0f);
-        g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+        g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
 
         if (editingPartials)
             paintPartials (g, bounds.reduced (contentInset));
-        else
+        else if (landscape == nullptr)
             paintWaveform (g, bounds.reduced (contentInset));
+    }
+
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
+        if (editingPartials || ! isShowing())
+            return;
+
+        animationTime += static_cast<float> (lastFrameTimeSeconds);
+        repaint();
     }
 
     void mouseDown (const yup::MouseEvent& event) override { applyEdit (event); }
@@ -399,6 +610,17 @@ public:
 
 private:
     //==============================================================================
+    /** Renders the shader landscape behind the waveform, or returns nullptr without a GPU. */
+    yup::GpuTexture::Ptr renderLandscape (yup::Graphics& g)
+    {
+        return shader->render (g.getGraphicsContext(),
+                               landscapeTarget,
+                               yup::roundToInt (getWidth()),
+                               yup::roundToInt (getHeight()),
+                               displaySamples,
+                               animationTime);
+    }
+
     /** Draws one period of the reconstructed series. */
     void paintWaveform (yup::Graphics& g, yup::Rectangle<float> bounds)
     {
@@ -491,10 +713,16 @@ private:
     //==============================================================================
     static constexpr int displayResolution = 256;
     static constexpr float contentInset = 6.0f;
+    static constexpr float cornerRadius = 4.0f;
     static constexpr float barGap = 1.0f;
+
+    static_assert (displayResolution == SynthWaveformShader::sampleCount);
 
     SynthOscillatorSettings& settings;
     const SynthOscillatorResources& resources;
+    std::shared_ptr<SynthWaveformShader> shader;
+    yup::GpuTarget::Ptr landscapeTarget;
+    float animationTime = 0.0f;
 
     SynthSpectrumDerivation preview;
     yup::FourierSeries<double> displaySeries;
@@ -1047,9 +1275,10 @@ public:
     SynthOscillatorPanel (const yup::String& panelTitle,
                           SynthOscillatorSettings& settingsToEdit,
                           const SynthOscillatorResources& resources,
+                          std::shared_ptr<SynthWaveformShader> waveformShader,
                           const yup::Font& font)
         : settings (settingsToEdit)
-        , editor (settingsToEdit, resources)
+        , editor (settingsToEdit, resources, std::move (waveformShader))
         , waveformChoice ("WAVEFORM", getSynthWaveformNames(), font)
         , syncModeChoice ("SYNC", getSynthSyncModeNames(), font)
         , levelKnob ("LEVEL", 0.0, 1.0, 0.001, 0.5, font)
