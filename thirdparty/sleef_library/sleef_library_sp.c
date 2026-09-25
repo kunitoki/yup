@@ -33,4 +33,18 @@
 #define NDEBUG
 #endif
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+#elif __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 #include "upstream/src/libm/sleefsp.c"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#elif __GNUC__
+ #pragma GCC diagnostic pop
+#endif

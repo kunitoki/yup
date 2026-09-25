@@ -216,10 +216,9 @@ public:
         filters keep separate history, so one instance serves either direction.
 
         @param output      Array of write pointers, one per channel.
-        @param numChannels Number of channels to write (must match the numChannels
-                           passed to the preceding upsample() or beginGeneration() call).
-        @param numSamples  Number of output samples per channel (must match the numSamples
-                           passed to the preceding upsample() or beginGeneration() call).
+        @param numChannels Number of channels to write.
+        @param numSamples  Number of output samples per channel; the oversampled
+                           buffer is read as numSamples * OversampleFactor samples.
     */
     void downsample (SampleType* const* output, int numChannels, int numSamples) noexcept
     {
@@ -231,19 +230,19 @@ public:
         jassert (numChannels <= xDecim.getNumChannels());
         jassert (numChannels <= oversampledBuffer.getNumChannels());
         jassert (interpolatedSize <= oversampledBuffer.getNumSamples());
-        jassert (interpolatedSize + SincRadius * OversampleFactor <= xDecim.getNumSamples());
+        jassert (interpolatedSize + decimationHistory <= xDecim.getNumSamples());
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
             auto* history = xDecim.getWritePointer (ch);
-            FloatVectorOperations::copy (history + decimationHistory, oversampledBuffer.getReadPointer (ch), currentOversampledSize);
+            FloatVectorOperations::copy (history + decimationHistory, oversampledBuffer.getReadPointer (ch), interpolatedSize);
 
             auto* out = output[ch];
 
             for (int k = 0; k < numSamples; ++k)
                 out[k] = dotProduct (decimationTaps.data(), history + k * OversampleFactor, static_cast<std::size_t> (decimationTapCount));
 
-            std::copy (history + currentOversampledSize, history + currentOversampledSize + decimationHistory, history);
+            std::copy (history + interpolatedSize, history + interpolatedSize + decimationHistory, history);
         }
 
         currentOversampledSize = 0;
@@ -285,10 +284,9 @@ public:
         caller hands high-rate audio to downsample() without upsampling first.
 
         @param channel  Zero-based channel index.
-        @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range, prepare()
-                        has not been called, or the channel was not processed by
-                        the most recent upsample() or beginGeneration() call.
+        @return         Pointer to the channel's oversampled samples, or nullptr
+                        if the channel index is out of range or prepare() has not
+                        been called.
     */
     forcedinline SampleType* getOversampledChannelData (int channel) noexcept
     {
@@ -302,10 +300,9 @@ public:
         Returns a read-only pointer to the data for a single oversampled channel.
 
         @param channel  Zero-based channel index.
-        @return         Pointer to getOversampledNumSamples() contiguous samples,
-                        or nullptr if the channel index is out of range or the
-                        channel was not processed by the most recent upsample()
-                        or beginGeneration() call.
+        @return         Pointer to the channel's oversampled samples, or nullptr
+                        if the channel index is out of range or prepare() has not
+                        been called.
     */
     const forcedinline SampleType* getOversampledChannelData (int channel) const noexcept
     {
