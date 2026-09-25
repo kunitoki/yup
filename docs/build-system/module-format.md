@@ -125,6 +125,9 @@ Possible values:
 - optionalDeps
   - (Optional) A list (space or comma-separated) of modules or libraries this module uses **only when they are also present** in the build (guarded by `#if YUP_MODULE_AVAILABLE_<name>`). Advisory metadata: it is parsed but never force-links anything, so optional deps may safely form cycles.
 
+- testDeps
+  - (Optional) A list (space or comma-separated) of modules that the module's **tests** use beyond its own dependencies. They are linked into `yup_tests` only when the module's tests are built, and a change to them reruns those tests in the smart CI.
+
 - website
   - (Optional) A URL linking to useful info about the module.
 
@@ -193,7 +196,8 @@ declared for clarity and tooling via the `optionalDeps:` field.
 `optionalDeps:` is advisory: the build system parses it but does **not** link
 those modules. Enabling an optional feature still requires adding the library to
 your target's `MODULES`. The field exists so the dependency graph is
-self-describing for docs and tooling.
+self-describing for docs and tooling. The only exception is `yup_tests` built
+with `YUP_TEST_MODULES`, which links the selected modules' optional deps.
 ```
 
 ```{tip}

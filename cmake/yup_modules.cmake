@@ -1045,7 +1045,9 @@ function (yup_add_module module_path modules_definitions module_group)
         YUP_MODULE_LIBS_PATHS "${module_libs_paths}"
         YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
-        YUP_MODULE_DEPENDENCIES "${module_dependencies}")
+        YUP_MODULE_DEPENDENCIES "${module_dependencies}"
+        YUP_MODULE_OPTIONAL_DEPENDENCIES "${module_optionalDeps}"
+        YUP_MODULE_TEST_DEPENDENCIES "${module_testDeps}")
 
     # ==== Add Java support for Android if available (after target properties are set)
     if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)

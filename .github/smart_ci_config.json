@@ -1,0 +1,36 @@
+{
+  "modules_root": "modules",
+  "patterns": {
+    "global": [
+      {"pattern": "^\\.github/.*", "targets": ["all"]},
+      {"pattern": "^codecov\\.yml$", "targets": ["all"]},
+      {"pattern": "^CMakeLists\\.txt$", "targets": ["all"]},
+      {"pattern": "^cmake/.*", "targets": ["all"]},
+      {"pattern": "^thirdparty/[^/]+$", "targets": ["all"]}
+    ],
+    "skip": [
+      {"pattern": "^docs/.*", "targets": []},
+      {"pattern": "^\\.vscode/.*", "targets": []},
+      {"pattern": "^[^/]+\\.(md|svg|jpg|png)$", "targets": []},
+      {"pattern": "^(LICENSE|\\.clang-format|\\.editorconfig|\\.gitattributes|\\.gitignore|\\.readthedocs\\.yaml)$", "targets": []}
+    ],
+    "module": [
+      {"pattern": "^modules/yup_audio_plugin_client/.*", "targets": ["module:yup_audio_plugin_client", "examples:plugin"]},
+      {"pattern": "^modules/([^/]+)/.*", "targets": ["module:$1"]},
+      {"pattern": "^python/.*", "targets": ["module:yup_python"]}
+    ],
+    "test": [
+      {"pattern": "^tests/CMakeLists\\.txt$", "targets": ["tests:all"]},
+      {"pattern": "^tests/main\\.cpp$", "targets": ["tests:all"]},
+      {"pattern": "^tests/data/.*", "targets": ["tests:all"]},
+      {"pattern": "^tests/mocks/.*", "targets": ["tests:all"]},
+      {"pattern": "^tests/([^/]+)/.*", "targets": ["tests:$1"]}
+    ],
+    "example": [
+      {"pattern": "^examples/([^/]+)/.*", "targets": ["examples:$1"]}
+    ],
+    "thirdparty": [
+      {"pattern": "^thirdparty/([^/]+)/.*", "targets": ["thirdparty:$1"]}
+    ]
+  }
+}

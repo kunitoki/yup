@@ -92,6 +92,10 @@ Controls whether targets are added for the example projects. OFF by default.
 
 Controls whether targets are added for test projects. OFF by default.
 
+### `YUP_TEST_MODULES`
+
+Semicolon-separated list of modules whose tests are compiled into `yup_tests`. Empty by default, which builds every module's tests. When set, only the listed modules' tests are built, linking just what they need (the test runner, plus each module's `optionalDeps` and `testDeps`), e.g. `-DYUP_TEST_MODULES="yup_core;yup_dsp"`.
+
 ### `YUP_BUILD_BENCHMARKS`
 
 Controls whether targets are added for benchmark projects. OFF by default.

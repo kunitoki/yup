@@ -52,6 +52,7 @@
 
     dependencies:       yup_core xsimd
     optionalDeps:       eigen_library
+    testDeps:           yup_audio_basics
     appleFrameworks:    Accelerate
 
   END_YUP_MODULE_DECLARATION
