@@ -119,12 +119,7 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
         endif()
         set (archive_path "${download_dir}/${archive_name}")
 
-        # SHOW_PROGRESS
-        if (module_sha256)
-            file (DOWNLOAD "${module_upstream}" "${archive_path}" EXPECTED_HASH SHA256=${module_sha256})
-        else()
-            file (DOWNLOAD "${module_upstream}" "${archive_path}")
-        endif()
+        _yup_download_file ("${module_upstream}" "${archive_path}" "${module_sha256}")
 
         set (extract_dir "${CMAKE_BINARY_DIR}/_yup_upstream_extract/${module_name}")
         file (REMOVE_RECURSE "${extract_dir}")
@@ -146,6 +141,8 @@ function (_yup_module_fetch_upstream module_name module_path module_upstream mod
             file (REMOVE_RECURSE "${upstream_target_dir}")
             file (MAKE_DIRECTORY "${upstream_target_dir}")
             file (COPY ${extracted_items} DESTINATION "${upstream_target_dir}")
+        else()
+            _yup_message (FATAL_ERROR "Upstream archive for ${module_name} extracted nothing: ${module_upstream}")
         endif()
     else()
         if (NOT module_branch)

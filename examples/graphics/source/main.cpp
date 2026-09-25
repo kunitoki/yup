@@ -85,6 +85,9 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
 #include "examples/ColorLab.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Component3D
+#include "examples/Component3DDemo.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
 #include "examples/ComponentEffectsDemo.h"
 #endif
@@ -98,8 +101,10 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/CrossoverDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
-#include "examples/DragAndDropDemo.h"
 #include "examples/CodeEditor.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
+#include "examples/DragAndDropDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
@@ -272,6 +277,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
         addDemo ("Color Lab", [] { return std::make_unique<ColorLabDemo>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Component3D
+        addDemo ("Component 3D", [] { return std::make_unique<Component3DDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
         addDemo ("Component Effects", [] { return std::make_unique<ComponentEffectsDemo>(); });
 #endif
@@ -285,8 +293,10 @@ public:
         addDemo ("Crossover Demo", [] { return std::make_unique<CrossoverDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
-        addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
         addDemo ("Code Editor", [] { return std::make_unique<CodeEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
+        addDemo ("Drag and Drop", [] { return std::make_unique<DragAndDropDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });

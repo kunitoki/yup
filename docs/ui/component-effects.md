@@ -23,6 +23,12 @@ When a component has an active effect, the rendering path automatically:
 Nested effects compose naturally: a child's effect completes before the parent's
 effect captures the subtree, so a parent blur will blur an already-edged child.
 
+The input texture is at device-pixel resolution: its size is the destination
+`bounds` multiplied by the display scale (2× on a Retina display). Size
+texel-space parameters such as blur radii or pixel block sizes from the texture,
+not from `bounds`. The subtree is rendered at full opacity and the component's
+opacity is applied once, when the effect draws into `g`.
+
 ---
 
 ## Step 1 — Subclass `ComponentEffect`
@@ -161,10 +167,68 @@ still repaint every frame on top of the cached (un-effected) background.
 
 ---
 
+## Input Mapping for Distorting Effects
+
+An effect that moves pixels (a wave, a lens, a zoom) displays the subtree
+somewhere else than where it was laid out, so pointer input has to be mapped
+back. Override `displayToContent()` with the same per-pixel mapping the shader
+computes for its sample coordinate, and `contentToDisplay()` with its inverse:
+
+```cpp
+class ZoomEffect : public yup::ComponentEffect
+{
+public:
+    void apply (Graphics& g, GpuTexture::Ptr input, Rectangle<float> bounds) override
+    {
+        zoom = currentZoom;  // publish what is drawn for the input mapping
+        // ... draw input zoomed around the center ...
+    }
+
+    std::optional<Point<float>> displayToContent (Point<float> p, Rectangle<float> bounds) const override
+    {
+        const auto center = bounds.getCenter();
+        return center + (p - center) / zoom.load();
+    }
+
+    std::optional<Point<float>> contentToDisplay (Point<float> p, Rectangle<float> bounds) const override
+    {
+        const auto center = bounds.getCenter();
+        return center + (p - center) * zoom.load();
+    }
+
+private:
+    std::atomic<float> zoom { 1.0f };
+    float currentZoom = 2.0f;
+};
+```
+
+- `displayToContent()` routes hit-testing, mouse and drag-and-drop events.
+  `contentToDisplay()` backs `localToScreen()` and what is built on it, like popup
+  placement and the text input caret rectangle. Without it, the identity is used
+  as an approximation.
+- Both run on the message thread while `apply()` runs on the render thread: read
+  the parameters the last `apply()` published through atomics or a lock. This
+  also keeps input consistent with what is on screen.
+- Return a point even when it falls outside the bounds, so a captured drag keeps
+  tracking. Return `std::nullopt` only for degenerate mappings: hit-testing then
+  skips the component, and other conversions fall back to its position.
+- Repainting anything inside a component with an effect repaints the whole
+  component, since the effect can move pixels anywhere inside it.
+- When an animated effect moves content under a pointer that stays still, the
+  window re-checks the pointer after each painted frame and sends the
+  enter / exit, move or drag events the new mapping implies, so hover and
+  captured drags follow the animation.
+
+The `Wave` effect of `ComponentEffectsDemo` mirrors its GLSL sampling on the CPU
+this way.
+
+---
+
 ## Related
 
 - [Component caching](component-caching.md)
 - [Component snapshots](component-snapshots.md)
+- [Components in 3D](component-3d.md) — present a live component on a mesh
 - [RHI pipelines](../graphics/rhi/pipelines.md) — `GpuPipeline` and
   `GpuRenderPass` details
 - [Graphics `drawTexture`](../graphics/graphics-class.md)

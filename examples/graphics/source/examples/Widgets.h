@@ -23,6 +23,13 @@
 
 //==============================================================================
 
+/**
+    Shows the standard widgets inside a panel that can be freely transformed.
+
+    The three circles on the corners of the panel can be dragged: the affine transform that
+    maps the panel corners onto them is applied to the panel, and the widgets keep painting
+    and receiving input correctly through it.
+*/
 class WidgetsDemo : public yup::Component
 {
 public:
@@ -31,8 +38,26 @@ public:
         auto theme = yup::ApplicationTheme::getGlobalTheme();
         exampleFont = theme->getDefaultFont();
 
+        addAndMakeVisible (panel);
+
         setupWidgets();
         setupLayout();
+
+        for (auto* handle : { &topLeftHandle, &topRightHandle, &bottomLeftHandle })
+        {
+            handle->onDrag = [this]
+            {
+                updatePanelTransformFromHandles();
+            };
+
+            addAndMakeVisible (*handle);
+        }
+
+        resetTransformButton.onClick = [this]
+        {
+            setPanelTransform ({});
+        };
+        addAndMakeVisible (resetTransformButton);
     }
 
 private:
@@ -44,7 +69,7 @@ private:
         {
             updateStatus ("Text Button clicked!");
         };
-        addAndMakeVisible (textButton.get());
+        panel.addAndMakeVisible (textButton.get());
 
         // Toggle Button
         toggleButton = std::make_unique<yup::ToggleButton> ("toggleButton");
@@ -53,7 +78,7 @@ private:
         {
             updateStatus ("Toggle Button: " + yup::String (toggleButton->getToggleState() ? "ON" : "OFF"));
         };
-        addAndMakeVisible (toggleButton.get());
+        panel.addAndMakeVisible (toggleButton.get());
 
         // Switch Button
         switchButton = std::make_unique<yup::SwitchButton> ("switchButton");
@@ -61,7 +86,7 @@ private:
         {
             updateStatus ("Switch Button: " + yup::String (switchButton->getToggleState() ? "ON" : "OFF"));
         };
-        addAndMakeVisible (switchButton.get());
+        panel.addAndMakeVisible (switchButton.get());
 
         // Image Button whose clickable area follows the logo's opaque pixels
         imageButton = std::make_unique<ImageHitTestButton>();
@@ -69,22 +94,22 @@ private:
         {
             updateStatus ("Image Button clicked on an opaque pixel!");
         };
-        addAndMakeVisible (imageButton.get());
+        panel.addAndMakeVisible (imageButton.get());
 
         imageButtonLabel = std::make_unique<yup::Label> ("imageButtonLabel");
         imageButtonLabel->setText ("Image Button: only the logo's opaque pixels are clickable",
                                    yup::dontSendNotification);
-        addAndMakeVisible (imageButtonLabel.get());
+        panel.addAndMakeVisible (imageButtonLabel.get());
 
         // Labels
         titleLabel = std::make_unique<yup::Label> ("titleLabel");
         titleLabel->setText ("YUP Widget Examples", yup::dontSendNotification);
         titleLabel->setFont (exampleFont);
-        addAndMakeVisible (titleLabel.get());
+        panel.addAndMakeVisible (titleLabel.get());
 
         statusLabel = std::make_unique<yup::Label> ("statusLabel");
         statusLabel->setText ("Click widgets to see status updates...", yup::dontSendNotification);
-        addAndMakeVisible (statusLabel.get());
+        panel.addAndMakeVisible (statusLabel.get());
 
         // ComboBox with custom callback
         comboBox = std::make_unique<CustomComboBox> ("comboBox", this);
@@ -92,7 +117,7 @@ private:
         comboBox->addItem ("Option 2", 2);
         comboBox->addItem ("Option 3", 3);
         comboBox->setSelectedId (1);
-        addAndMakeVisible (comboBox.get());
+        panel.addAndMakeVisible (comboBox.get());
 
         // Viewport with content
         /*
@@ -106,7 +131,7 @@ private:
         viewportContent->addAndMakeVisible (contentLabel.get());
 
         viewport->setViewedComponent (viewportContent.release(), false);
-        addAndMakeVisible (viewport.get());
+        panel.addAndMakeVisible (viewport.get());
         */
 
         // Slider
@@ -117,13 +142,13 @@ private:
         {
             updateStatus ("Slider value: " + yup::String (value, 1));
         };
-        addAndMakeVisible (slider.get());
+        panel.addAndMakeVisible (slider.get());
 
         // TextEditor
         textEditor = std::make_unique<yup::TextEditor> ("textEditor");
         textEditor->setText ("Type some text here...", yup::dontSendNotification);
         textEditor->setMultiLine (true);
-        addAndMakeVisible (textEditor.get());
+        panel.addAndMakeVisible (textEditor.get());
 
         // Progress Bar (normal mode - linked to slider)
         progressBar = std::make_unique<yup::ProgressBar> ("progressBar");
@@ -133,22 +158,22 @@ private:
             if (value >= 0.0)
                 updateStatus ("Progress: " + yup::String (value * 100.0, 0) + "%");
         };
-        addAndMakeVisible (progressBar.get());
+        panel.addAndMakeVisible (progressBar.get());
 
         // Progress Bar Label
         progressBarLabel = std::make_unique<yup::Label> ("progressBarLabel");
         progressBarLabel->setText ("Progress Bar (linked to slider):", yup::dontSendNotification);
-        addAndMakeVisible (progressBarLabel.get());
+        panel.addAndMakeVisible (progressBarLabel.get());
 
         // Indeterminate Progress Bar
         indeterminateProgressBar = std::make_unique<yup::ProgressBar> ("indeterminateProgressBar");
         indeterminateProgressBar->setProgress (-1.0, yup::dontSendNotification);
-        addAndMakeVisible (indeterminateProgressBar.get());
+        panel.addAndMakeVisible (indeterminateProgressBar.get());
 
         // Indeterminate Progress Bar Label
         indeterminateLabel = std::make_unique<yup::Label> ("indeterminateLabel");
         indeterminateLabel->setText ("Indeterminate Progress Bar:", yup::dontSendNotification);
-        addAndMakeVisible (indeterminateLabel.get());
+        panel.addAndMakeVisible (indeterminateLabel.get());
 
         // Update slider to control progress bar
         slider->onValueChanged = [this] (double value)
@@ -170,7 +195,51 @@ private:
 
     void resized() override
     {
-        auto bounds = getLocalBounds();
+        resetTransformButton.setBounds (getWidth() - 130.0f, 4.0f, 120.0f, 24.0f);
+
+        panel.setBounds (getLocalBounds().reduced (panelMargin));
+        layoutWidgets();
+
+        setPanelTransform (panel.getTransform());
+    }
+
+    /** Applies a transform to the panel and moves the handles onto its corners. */
+    void setPanelTransform (const yup::AffineTransform& transform)
+    {
+        panel.setTransform (transform);
+
+        const auto toParent = transform.translated (panel.getPosition());
+        const auto size = panel.getSize();
+
+        topLeftHandle.setCenter (yup::Point<float> (0.0f, 0.0f).transformed (toParent));
+        topRightHandle.setCenter (yup::Point<float> (size.getWidth(), 0.0f).transformed (toParent));
+        bottomLeftHandle.setCenter (yup::Point<float> (0.0f, size.getHeight()).transformed (toParent));
+
+        repaint();
+    }
+
+    /** Builds the transform that maps the panel corners onto the handles. */
+    void updatePanelTransformFromHandles()
+    {
+        const auto origin = panel.getPosition();
+        const auto topLeft = topLeftHandle.getCenter() - origin;
+        const auto xAxis = (topRightHandle.getCenter() - topLeftHandle.getCenter()) / panel.getWidth();
+        const auto yAxis = (bottomLeftHandle.getCenter() - topLeftHandle.getCenter()) / panel.getHeight();
+
+        const yup::AffineTransform transform (xAxis.getX(), yAxis.getX(), topLeft.getX(),
+                                              xAxis.getY(), yAxis.getY(), topLeft.getY());
+
+        // A degenerate transform would collapse the panel and make it unreachable
+        if (std::abs (transform.getDeterminant()) < 0.01f)
+            return setPanelTransform (panel.getTransform());
+
+        panel.setTransform (transform);
+        repaint();
+    }
+
+    void layoutWidgets()
+    {
+        auto bounds = panel.getLocalBounds();
         auto margin = 20;
         auto componentHeight = 30;
         auto spacing = 10;
@@ -326,6 +395,85 @@ private:
     };
 
     //==============================================================================
+    /** The panel holding the widgets, painted so its transformed shape is visible. */
+    class WidgetsPanel final : public yup::Component
+    {
+    public:
+        WidgetsPanel()
+            : yup::Component ("widgetsPanel")
+        {
+        }
+
+        void paint (yup::Graphics& g) override
+        {
+            g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray).brighter (0.1f));
+            g.fillAll();
+        }
+
+        void paintOverChildren (yup::Graphics& g) override
+        {
+            // Painted in local coordinates: the panel transform maps it onto the handles
+            g.setStrokeColor (yup::Colors::orange.withAlpha (0.8f));
+            g.setStrokeWidth (1.5f);
+            g.strokeRect (getLocalBounds().reduced (0.75f));
+        }
+    };
+
+    //==============================================================================
+    /** A circle that can be dragged around its parent. */
+    class CornerHandle final : public yup::Component
+    {
+    public:
+        CornerHandle()
+        {
+            setSize (handleSize, handleSize);
+            setMouseCursor (yup::MouseCursor::Hand);
+            setOpaque (false);
+        }
+
+        void paint (yup::Graphics& g) override
+        {
+            const auto circle = getLocalBounds().reduced (1.0f);
+
+            g.setFillColor (isDragging ? yup::Colors::orange : yup::Colors::white);
+            g.fillEllipse (circle);
+
+            g.setStrokeColor (yup::Colors::orange);
+            g.setStrokeWidth (2.0f);
+            g.strokeEllipse (circle);
+        }
+
+        void mouseDown (const yup::MouseEvent& event) override
+        {
+            isDragging = true;
+            dragOffset = event.getPosition();
+            repaint();
+        }
+
+        void mouseDrag (const yup::MouseEvent& event) override
+        {
+            setTopLeft (getTopLeft() + event.getPosition() - dragOffset);
+
+            if (onDrag)
+                onDrag();
+        }
+
+        void mouseUp (const yup::MouseEvent&) override
+        {
+            isDragging = false;
+            repaint();
+        }
+
+        std::function<void()> onDrag;
+
+    private:
+        static constexpr float handleSize = 16.0f;
+
+        yup::Point<float> dragOffset;
+        bool isDragging = false;
+    };
+
+    //==============================================================================
     // Custom ComboBox to handle selection changes
     class CustomComboBox : public yup::ComboBox
     {
@@ -347,7 +495,14 @@ private:
     };
 
 private:
+    static constexpr float panelMargin = 30.0f;
+
     yup::Font exampleFont;
+    WidgetsPanel panel;
+    CornerHandle topLeftHandle;
+    CornerHandle topRightHandle;
+    CornerHandle bottomLeftHandle;
+    yup::TextButton resetTransformButton { "Reset Transform" };
     std::unique_ptr<yup::TextButton> textButton;
     std::unique_ptr<yup::ToggleButton> toggleButton;
     std::unique_ptr<yup::SwitchButton> switchButton;

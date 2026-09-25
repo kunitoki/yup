@@ -306,6 +306,16 @@ struct PyComponentEffect : Base
     {
         PYBIND11_OVERRIDE_PURE (void, Base, apply, g, inputTexture, bounds);
     }
+
+    std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override
+    {
+        PYBIND11_OVERRIDE (std::optional<yup::Point<float>>, Base, displayToContent, displayPoint, bounds);
+    }
+
+    std::optional<yup::Point<float>> contentToDisplay (yup::Point<float> contentPoint, yup::Rectangle<float> bounds) const override
+    {
+        PYBIND11_OVERRIDE (std::optional<yup::Point<float>>, Base, contentToDisplay, contentPoint, bounds);
+    }
 };
 
 // =================================================================================================
@@ -403,6 +413,16 @@ struct PyComponent : PyMouseListener<Base>
     bool hitTest (float x, float y) override
     {
         PYBIND11_OVERRIDE (bool, Base, hitTest, x, y);
+    }
+
+    std::optional<yup::Point<float>> getChildPointFromLocal (const yup::Component& child, yup::Point<float> localPoint) const override
+    {
+        PYBIND11_OVERRIDE (std::optional<yup::Point<float>>, Base, getChildPointFromLocal, child, localPoint);
+    }
+
+    std::optional<yup::Point<float>> getLocalPointFromChild (const yup::Component& child, yup::Point<float> childPoint) const override
+    {
+        PYBIND11_OVERRIDE (std::optional<yup::Point<float>>, Base, getLocalPointFromChild, child, childPoint);
     }
 
     //void lookAndFeelChanged() override

@@ -172,6 +172,53 @@ auto movedPoint = myPoint.transformed (t);
 g.setTransform (t);   // applies to subsequent drawing
 ```
 
+## Vector3
+
+`Vector3<T>` is the three dimensional counterpart of `Point`: arithmetic
+operators, `dotProduct`, `crossProduct`, `length`, `normalized`, `to<T>()` and
+`approximatelyEqualTo`.
+
+```cpp
+const Vector3<float> a (1.0f, 0.0f, 0.0f), b (0.0f, 1.0f, 0.0f);
+auto normal = a.crossProduct (b);   // (0, 0, 1)
+```
+
+## Matrix4
+
+`Matrix4` is a single precision 4x4 matrix stored column-major, so `getData()`
+can be uploaded directly as a shader uniform. It composes like `AffineTransform`:
+`a.followedBy (b)` applies `a` first.
+
+```cpp
+auto model = Matrix4::rotationY (angle).followedBy (Matrix4::translation ({ 0.0f, 0.0f, -2.0f }));
+auto view = Matrix4::lookAt ({ 0.0f, 0.0f, 5.0f }, {}, { 0.0f, 1.0f, 0.0f });
+auto projection = Matrix4::perspective (0.8f, aspect, 0.1f, 100.0f); // [0, 1] depth by default
+auto mvp = model.followedBy (view).followedBy (projection);
+
+auto ndc = mvp.transformPoint ({ 1.0f, 1.0f, 0.0f });      // with the perspective divide
+auto clip = mvp.transformPoint4 (1.0f, 1.0f, 0.0f, 1.0f);   // w <= 0 means behind the camera
+```
+
+`inverted()` returns the identity for a singular matrix, like
+`AffineTransform::inverted()`. `fromAffineTransform()` embeds a 2D transform.
+
+## Ray
+
+`Ray` is a half line used for picking. `Ray::fromViewportPoint()` unprojects a
+point of a viewport (y pointing down) through an inverse view-projection matrix,
+independently of the depth convention of the backend.
+
+```cpp
+auto ray = Ray::fromViewportPoint (mousePosition, viewport, mvp.inverted());
+
+if (auto distance = ray.intersectPlane (pointOnPlane, normal))
+    useHitPoint (ray.getPointAt (*distance));
+
+// Counter-clockwise triangles are front facing; u and v weigh b and c
+if (auto hit = ray.intersectTriangle (a, b, c, true))
+    useBarycentrics (hit->u, hit->v);
+```
+
 ## BlendMode
 
 `BlendMode` selects how new drawing is composited over existing pixels:

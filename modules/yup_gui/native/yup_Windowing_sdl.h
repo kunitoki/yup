@@ -151,6 +151,9 @@ public:
 
     //==============================================================================
     void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
+    void revalidateStationaryPointer();
+    void rememberPointerPosition (const Point<float>& position);
+    Component* getPointerTarget() const;
     void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr);
     void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger = nullptr, bool wasCanceled = false);
     void handleTouchDown (SDL_FingerID fingerId, const Point<float>& position, float pressure);
@@ -216,7 +219,6 @@ private:
 
     void updateMouseCapture (bool shouldBeActive);
     void setMouseCaptureReference (bool& isHeld, bool shouldBeHeld);
-    Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);
     Point<float> getTouchPosition (const SDL_TouchFingerEvent& event) const;
@@ -272,6 +274,8 @@ private:
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
+    Point<float> lastPointerLocalPosition;
+    std::atomic_bool framePaintedSincePointerCheck { false };
     std::optional<Point<float>> lastMouseDownPosition;
     std::optional<yup::Time> lastMouseDownTime;
     std::optional<yup::Time> lastMouseUpTime;

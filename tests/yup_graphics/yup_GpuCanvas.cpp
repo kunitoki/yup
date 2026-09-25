@@ -226,3 +226,64 @@ TEST_F (GpuCanvasTests, DoubleCommitReturnsFalse)
 
     EXPECT_FALSE (canvas->commit());
 }
+
+// ---------------------------------------------------------------------------
+// GpuCanvas::beginDraw — scale (needs a real GPU)
+// ---------------------------------------------------------------------------
+
+#if YUP_MAC
+
+class GpuCanvasMetalTests : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+std::unique_ptr<GraphicsContext> GpuCanvasMetalTests::gpuContext;
+
+TEST_F (GpuCanvasMetalTests, BeginDrawDefaultsToOnePixelPerUnit)
+{
+    auto canvas = GpuCanvas::create (*gpuContext, 128, 96);
+    ASSERT_NE (canvas, nullptr);
+
+    auto& g = canvas->beginDraw();
+
+    EXPECT_FLOAT_EQ (1.0f, g.getContextScale());
+    EXPECT_EQ (Rectangle<float> (0.0f, 0.0f, 128.0f, 96.0f), g.getDrawingArea());
+}
+
+TEST_F (GpuCanvasMetalTests, BeginDrawWithScaleSetsContextScaleAndLogicalDrawingArea)
+{
+    auto canvas = GpuCanvas::create (*gpuContext, 128, 96);
+    ASSERT_NE (canvas, nullptr);
+
+    auto& g = canvas->beginDraw ({}, 2.0f);
+
+    EXPECT_EQ (128, canvas->getWidth());
+    EXPECT_EQ (96, canvas->getHeight());
+    EXPECT_FLOAT_EQ (2.0f, g.getContextScale());
+    EXPECT_EQ (Rectangle<float> (0.0f, 0.0f, 64.0f, 48.0f), g.getDrawingArea());
+}
+
+#endif // YUP_MAC
