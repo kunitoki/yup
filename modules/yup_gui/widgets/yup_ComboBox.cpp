@@ -245,7 +245,7 @@ void ComboBox::focusLost()
 void ComboBox::showPopup()
 {
     popupMenu = PopupMenu::create (PopupMenu::Options {}
-                                       .withParentComponent (getTopLevelComponent())
+                                       .withParentComponent (getPopupParentComponent())
                                        .withMinimumWidth (getWidth())
                                        .withRelativePosition (this));
 

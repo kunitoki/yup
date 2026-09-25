@@ -27,17 +27,6 @@ namespace yup
 namespace
 {
 
-/** Converts a top-level (window) position into @a component's local coordinates. */
-Point<float> toComponentLocalPosition (Component& component, const Point<float>& windowPosition)
-{
-    auto local = windowPosition;
-
-    for (Component* current = &component; current != nullptr && current->getParentComponent() != nullptr; current = current->getParentComponent())
-        local = local - current->getBounds().getPosition();
-
-    return local;
-}
-
 /** Runs the virtual first, then the std::function; the two OR together. */
 bool queryInterestedInDragSource (DragAndDropTarget& target, const DragAndDropSourceDetails& details)
 {
@@ -115,24 +104,18 @@ bool DragAndDropTarget::dispatchItemDrop (Component& topmostComponent,
     DragAndDropSourceDetails details;
     details.data = data;
 
-    auto localPosition = toComponentLocalPosition (topmostComponent, windowPosition);
-
     for (Component* current = &topmostComponent; current != nullptr; current = current->getParentComponent())
     {
         if (current->isVisible() && current->isEnabled())
         {
             if (auto* target = dynamic_cast<DragAndDropTarget*> (current))
             {
-                details.localPosition = localPosition;
+                details.localPosition = current->getLocalPointFromTopLevel (windowPosition);
 
                 if (queryInterestedInDragSource (*target, details) && performItemDrop (*target, details))
                     return true;
             }
         }
-
-        // Ascend to the parent: the parent-local position adds back this component's offset.
-        if (current->getParentComponent() != nullptr)
-            localPosition = localPosition + current->getBounds().getPosition();
     }
 
     return false;
@@ -147,23 +130,18 @@ void DragAndDropTarget::dispatchItemDragEnter (Component& topmostComponent,
     DragAndDropSourceDetails details;
     details.data = data;
 
-    auto localPosition = toComponentLocalPosition (topmostComponent, windowPosition);
-
     for (Component* current = &topmostComponent; current != nullptr; current = current->getParentComponent())
     {
         if (current->isVisible() && current->isEnabled())
         {
             if (auto* target = dynamic_cast<DragAndDropTarget*> (current))
             {
-                details.localPosition = localPosition;
+                details.localPosition = current->getLocalPointFromTopLevel (windowPosition);
 
                 if (queryInterestedInDragSource (*target, details))
                     notifyItemDragEnter (*target, details);
             }
         }
-
-        if (current->getParentComponent() != nullptr)
-            localPosition = localPosition + current->getBounds().getPosition();
     }
 }
 
@@ -174,23 +152,18 @@ void DragAndDropTarget::dispatchItemDragMove (Component& topmostComponent,
     DragAndDropSourceDetails details;
     details.data = data;
 
-    auto localPosition = toComponentLocalPosition (topmostComponent, windowPosition);
-
     for (Component* current = &topmostComponent; current != nullptr; current = current->getParentComponent())
     {
         if (current->isVisible() && current->isEnabled())
         {
             if (auto* target = dynamic_cast<DragAndDropTarget*> (current))
             {
-                details.localPosition = localPosition;
+                details.localPosition = current->getLocalPointFromTopLevel (windowPosition);
 
                 if (queryInterestedInDragSource (*target, details))
                     notifyItemDragMove (*target, details);
             }
         }
-
-        if (current->getParentComponent() != nullptr)
-            localPosition = localPosition + current->getBounds().getPosition();
     }
 }
 

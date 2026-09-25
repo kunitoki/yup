@@ -870,4 +870,130 @@ TEST_F (ComponentEffectGpuTest, EffectCanvasIsReusedUntilTheComponentIsResized)
     EXPECT_EQ (64, resizedCanvas->getHeight());
 }
 
+// =============================================================================
+// Effect composite and component transforms
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, EffectCompositeAppliesTheComponentTransformOnce)
+{
+    if (! gpuContext)
+        return;
+
+    struct TransformRecordingEffect : ComponentEffect
+    {
+        void apply (Graphics& g, GpuTexture::Ptr, Rectangle<float>) override
+        {
+            localToTarget = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        }
+
+        AffineTransform localToTarget;
+    };
+
+    struct TransformRecordingComponent : FillComponent
+    {
+        using FillComponent::FillComponent;
+
+        void paint (Graphics& g) override
+        {
+            FillComponent::paint (g);
+            localToTarget = g.getTransform().translated (g.getDrawingArea().getTopLeft());
+        }
+
+        AffineTransform localToTarget;
+    };
+
+    auto root = makeComp ("root", 256, 256);
+    root->setVisible (true);
+
+    FillComponent effected ("effected");
+    effected.enableRenderingUnclipped (true);
+    effected.setBounds (10, 20, 64, 64);
+    effected.setTransform (AffineTransform::scaling (2.0f));
+    root->addAndMakeVisible (effected);
+
+    TransformRecordingComponent probe ("probe");
+    probe.enableRenderingUnclipped (true);
+    probe.setBounds (5, 5, 20, 20);
+    effected.addAndMakeVisible (probe);
+
+    auto effect = ReferenceCountedObjectPtr<TransformRecordingEffect> (new TransformRecordingEffect());
+    effected.setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*root, 256, 256);
+
+    // The subtree is rendered untransformed into the offscreen texture...
+    EXPECT_TRUE (probe.localToTarget.approximatelyEqualTo (AffineTransform::translation (5.0f, 5.0f)));
+
+    // ...and the composite applies the component transform exactly once.
+    EXPECT_TRUE (effect->localToTarget.approximatelyEqualTo (AffineTransform::scaling (2.0f).translated (10.0f, 20.0f)));
+}
+
+// =============================================================================
+// Render to texture
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, RenderToTextureIsReusedUntilTheSubtreeRepaints)
+{
+    if (! gpuContext)
+        return;
+
+    struct CountingFillComponent : FillComponent
+    {
+        using FillComponent::FillComponent;
+
+        void paint (Graphics& g) override
+        {
+            FillComponent::paint (g);
+            ++paintCount;
+        }
+
+        int paintCount = 0;
+    };
+
+    auto panel = makeComp ("panel", 64, 48);
+    panel->setVisible (true);
+
+    CountingFillComponent child ("child");
+    child.enableRenderingUnclipped (true);
+    child.setBounds (4, 4, 16, 16);
+    panel->addAndMakeVisible (child);
+
+    auto texture = panel->renderToTexture (*gpuContext);
+    ASSERT_NE (texture, nullptr);
+    EXPECT_EQ (64, texture->getWidth());
+    EXPECT_EQ (48, texture->getHeight());
+    EXPECT_EQ (1, child.paintCount);
+
+    // Nothing repainted: the texture is returned without rendering again.
+    EXPECT_NE (panel->renderToTexture (*gpuContext), nullptr);
+    EXPECT_EQ (1, child.paintCount);
+
+    // A repaint anywhere in the subtree marks it dirty.
+    child.repaint();
+    EXPECT_NE (panel->renderToTexture (*gpuContext), nullptr);
+    EXPECT_EQ (2, child.paintCount);
+
+    // A resize renders at the new size.
+    panel->setBounds (0, 0, 32, 32);
+    texture = panel->renderToTexture (*gpuContext);
+    ASSERT_NE (texture, nullptr);
+    EXPECT_EQ (32, texture->getWidth());
+    EXPECT_EQ (3, child.paintCount);
+}
+
+TEST_F (ComponentEffectGpuTest, RenderToTextureAppliesTheEffect)
+{
+    if (! gpuContext)
+        return;
+
+    auto panel = makeComp ("panel", 64, 64);
+    panel->setVisible (true);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    panel->setComponentEffect (effect);
+
+    EXPECT_NE (panel->renderToTexture (*gpuContext), nullptr);
+    EXPECT_EQ (1, effect->applyCount);
+}
+
 #endif // YUP_MAC

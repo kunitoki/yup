@@ -44,8 +44,11 @@
 #include "yup_graphics/yup_ImageMetadata.cpp"
 #include "yup_graphics/yup_ImageFormatMetadata.cpp"
 #include "yup_graphics/yup_Line.cpp"
+#include "yup_graphics/yup_Matrix4.cpp"
+#include "yup_graphics/yup_MeshSurfaceMapper.cpp"
 #include "yup_graphics/yup_Path.cpp"
 #include "yup_graphics/yup_Point.cpp"
+#include "yup_graphics/yup_Ray.cpp"
 #include "yup_graphics/yup_Rectangle.cpp"
 #include "yup_graphics/yup_RectangleList.cpp"
 #include "yup_graphics/yup_Size.cpp"
@@ -53,6 +56,7 @@
 #include "yup_graphics/yup_StyledText.cpp"
 #include "yup_graphics/yup_SVGDocument.cpp"
 #include "yup_graphics/yup_SVGParser.cpp"
+#include "yup_graphics/yup_Vector3.cpp"
 
 #if YUP_IMAGE_FORMAT_BMP
 #include "yup_graphics/yup_BmpImageFormat.cpp"

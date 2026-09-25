@@ -605,7 +605,12 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<>())
         .def ("apply", &ComponentEffect::apply, "g"_a, "inputTexture"_a, "bounds"_a,
               "Composites the effect. The component subtree has already been rendered into\n"
-              "inputTexture, and the result must be drawn into g at bounds.");
+              "inputTexture, and the result must be drawn into g at bounds.")
+        .def ("displayToContent", &ComponentEffect::displayToContent, "displayPoint"_a, "bounds"_a,
+              "Maps a displayed point to the content point the effect sampled it from, or None.\n"
+              "Called on the message thread: read the parameters published by the last apply().")
+        .def ("contentToDisplay", &ComponentEffect::contentToDisplay, "contentPoint"_a, "bounds"_a,
+              "Inverse of displayToContent, or None when the mapping is degenerate.");
 
     // ============================================================================================ yup::Component
 
@@ -678,6 +683,11 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getLocalArea", &Component::getLocalArea)
         .def ("getRelativePoint", &Component::getRelativePoint)
         .def ("getRelativeArea", &Component::getRelativeArea)
+        .def ("getChildPointFromLocal", &Component::getChildPointFromLocal, "child"_a, "localPoint"_a)
+        .def ("getLocalPointFromChild", &Component::getLocalPointFromChild, "child"_a, "childPoint"_a)
+        .def ("getLocalPointFromParent", &Component::getLocalPointFromParent, "parentPoint"_a)
+        .def ("getParentPointFromLocal", &Component::getParentPointFromLocal, "localPoint"_a)
+        .def ("getLocalPointFromTopLevel", &Component::getLocalPointFromTopLevel, "topLevelPoint"_a)
 
         // Transform
         .def ("setTransform", &Component::setTransform)
@@ -754,6 +764,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("findComponentAt", &Component::findComponentAt, py::return_value_policy::reference_internal)
         .def ("hitTest", &Component::hitTest, "x"_a, "y"_a)
         .def ("getTopLevelComponent", &Component::getTopLevelComponent, py::return_value_policy::reference_internal)
+        .def ("getPopupParentComponent", &Component::getPopupParentComponent, py::return_value_policy::reference_internal)
 
         // Properties
         .def ("getProperties", py::overload_cast<>(&Component::getProperties), py::return_value_policy::reference_internal)
@@ -787,6 +798,13 @@ void registerYupGuiBindings (py::module_& m)
         // Cached to texture
         .def ("setCachedToTexture", &Component::setCachedToTexture, "shouldCache"_a)
         .def ("isCachedToTexture", &Component::isCachedToTexture)
+
+        // Manual compositing
+        .def ("setManuallyComposited", &Component::setManuallyComposited, "shouldBeManuallyComposited"_a,
+              "When enabled the normal child painting skips this component and its renderToTexture() is composited manually.")
+        .def ("isManuallyComposited", &Component::isManuallyComposited)
+        .def ("renderToTexture", &Component::renderToTexture, "ctx"_a,
+              "Renders the subtree (with its effect) into a reused texture, only when it changed.")
 
         // Component effects
         .def ("setComponentEffect", &Component::setComponentEffect, "effect"_a,

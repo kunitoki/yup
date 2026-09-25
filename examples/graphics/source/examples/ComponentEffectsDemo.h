@@ -118,6 +118,21 @@ public:
         spinner = std::make_unique<AnimatedPattern> ("Spinner");
         background->addAndMakeVisible (spinner.get());
 
+        // Widgets inside the effected component: with a distorting effect like Wave, clicks
+        // and drags land on the widget as it is displayed, not where it was laid out
+        effectButton = std::make_unique<yup::TextButton> ("Click me");
+        effectButton->onClick = [this]
+        {
+            ++effectButtonClicks;
+            effectButton->setButtonText ("Clicked " + yup::String (effectButtonClicks) + "x");
+        };
+        background->addAndMakeVisible (effectButton.get());
+
+        effectSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "effectSlider");
+        effectSlider->setRange (0.0, 1.0);
+        effectSlider->setValue (0.5);
+        background->addAndMakeVisible (effectSlider.get());
+
         snapshotPreview = std::make_unique<SnapshotPreview> ("SnapshotPreview");
         addAndMakeVisible (snapshotPreview.get());
 
@@ -167,6 +182,11 @@ public:
         snapshotPreview->setBounds (bounds);
 
         spinner->setBounds (background->getLocalBounds().to<float>().reduced (20.0f));
+
+        auto controls = background->getLocalBounds().reduced (30.0f).removeFromBottom (32.0f);
+        effectButton->setBounds (controls.removeFromLeft (120.0f));
+        controls.removeFromLeft (10.0f);
+        effectSlider->setBounds (controls.removeFromLeft (200.0f));
     }
 
     void componentPaintCompleted (yup::Component& component,
@@ -479,21 +499,72 @@ void main() {
     };
 
     //==============================================================================
-    /** Sinusoidal wave displacement. Parameter = amplitude (0..64). */
+    /** Sinusoidal wave displacement. Parameter = amplitude (0..64).
+
+        The effect also maps pointer positions the same way the shader samples the texture,
+        so clicks reach the widget displayed under the pointer while it waves.
+    */
     class WaveEffect : public SinglePassEffect
     {
     public:
         WaveEffect() { param = 12.0f; }
+
+        std::optional<yup::Point<float>> displayToContent (yup::Point<float> displayPoint, yup::Rectangle<float> bounds) const override
+        {
+            if (bounds.isEmpty())
+                return std::nullopt;
+
+            const auto uv = (displayPoint - bounds.getTopLeft()) / yup::Point<float> (bounds.getWidth(), bounds.getHeight());
+            return bounds.getTopLeft() + getSampleUV (uv, bounds.getWidth() / bounds.getHeight()) * yup::Point<float> (bounds.getWidth(), bounds.getHeight());
+        }
+
+        std::optional<yup::Point<float>> contentToDisplay (yup::Point<float> contentPoint, yup::Rectangle<float> bounds) const override
+        {
+            // The displacement is small and smooth, so a few fixed point steps invert it
+            auto displayPoint = contentPoint;
+
+            for (int iteration = 0; iteration < 8; ++iteration)
+            {
+                const auto sampled = displayToContent (displayPoint, bounds);
+                if (! sampled)
+                    return std::nullopt;
+
+                displayPoint = contentPoint - (*sampled - displayPoint);
+            }
+
+            return displayPoint;
+        }
 
     protected:
         const char* getFragmentSource() const override { return kWaveFrag; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
-            return { param, 12.0f, (float) yup::Time::getMillisecondCounterHiRes() * 0.002f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0 };
+            // Published for the input mapping, which runs on the message thread
+            publishedAmplitude = param;
+            // The counter runs since boot: wrap the phase in double precision, a float of it
+            // only has a resolution of hundreds of milliseconds after a few days of uptime
+            publishedTime = static_cast<float> (std::fmod (yup::Time::getMillisecondCounterHiRes() * 0.002, yup::MathConstants<double>::twoPi));
+
+            return { publishedAmplitude, frequency, publishedTime, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0 };
         }
 
     private:
+        /** Mirrors the sample coordinate computed by kWaveFrag. */
+        yup::Point<float> getSampleUV (yup::Point<float> uv, float aspect) const
+        {
+            const auto center = uv - yup::Point<float> (0.5f, 0.5f);
+            const auto dist = std::hypot (center.getX() * aspect, center.getY());
+            const auto offset = std::sin (dist * frequency - publishedTime.load()) * publishedAmplitude.load() * 0.003f;
+
+            return uv + (center + yup::Point<float> (0.001f, 0.001f)).normalized() * offset;
+        }
+
+        static constexpr float frequency = 12.0f;
+
+        mutable std::atomic<float> publishedAmplitude { 0.0f };
+        mutable std::atomic<float> publishedTime { 0.0f };
+
         static constexpr char kWaveFrag[] = R"glsl(#version 450
 layout(set=0,binding=0) uniform texture2D u_tex;
 layout(set=0,binding=1) uniform sampler u_samp;
@@ -756,7 +827,7 @@ void main() {
                 case 3:
                     return { new EdgeEffect(), 16.0f };
                 case 4:
-                    return { new WaveEffect(), 16.0f };
+                    return { new WaveEffect(), 32.0f };
                 case 5:
                     return { new SharpenEffect(), 8.0f };
                 case 6:
@@ -828,6 +899,9 @@ void main() {
 
     std::unique_ptr<SlowBackground> background;
     std::unique_ptr<AnimatedPattern> spinner;
+    std::unique_ptr<yup::TextButton> effectButton;
+    std::unique_ptr<yup::Slider> effectSlider;
+    int effectButtonClicks = 0;
     std::unique_ptr<SnapshotPreview> snapshotPreview;
 
     yup::ComponentEffect::Ptr activeEffect;

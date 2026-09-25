@@ -444,23 +444,36 @@ public:
     /**
         Convert a point from local coordinates to screen coordinates.
 
+        The point goes through every ancestor, honoring component transforms, the
+        parents' getLocalPointFromChild() and the effects' ComponentEffect::contentToDisplay().
+
         @param localPoint The point to convert.
 
         @return The point in screen coordinates.
+
+        @see getParentPointFromLocal
      */
     Point<float> localToScreen (const Point<float>& localPoint) const;
 
     /**
         Convert a point from screen coordinates to local coordinates.
 
+        This is the inverse of localToScreen(), and it is the same mapping used to deliver
+        mouse events to this component.
+
         @param screenPoint The point to convert.
 
         @return The point in local coordinates.
+
+        @see getLocalPointFromTopLevel
      */
     Point<float> screenToLocal (const Point<float>& screenPoint) const;
 
     /**
         Convert a rectangle from local coordinates to screen coordinates.
+
+        When transforms or effects are involved, the result is the axis-aligned bounding box
+        of the mapped corners.
 
         @param localRectangle The rectangle to convert.
 
@@ -471,11 +484,104 @@ public:
     /**
         Convert a rectangle from screen coordinates to local coordinates.
 
+        When transforms or effects are involved, the result is the axis-aligned bounding box
+        of the mapped corners.
+
         @param screenRectangle The rectangle to convert.
 
         @return The rectangle in local coordinates.
      */
     Rectangle<float> screenToLocal (const Rectangle<float>& screenRectangle) const;
+
+    //==============================================================================
+    /**
+        Maps a point in this component's local space to the local space of a direct child.
+
+        Every input path (hit testing, mouse events, drag and drop, screenToLocal()) goes
+        through this for each parent to child step, so overriding it lets a component present
+        its children through a custom projection, for example a child composited by the parent
+        onto a 3D surface (see setManuallyComposited()).
+
+        The default implementation removes the child position and applies the inverse of
+        the child transform.
+
+        An override must return a point on the child's plane even when it falls outside the
+        child bounds, so that a captured drag keeps tracking when the pointer leaves the child.
+        Hit testing rejects points outside the child bounds by itself. Return std::nullopt only
+        when the mapping is degenerate: hit testing then skips the child and the other
+        conversions fall back to removing the child position.
+
+        This runs on the message thread, while painting runs on the render thread: read a
+        snapshot of the state that was last drawn (published from paint() through atomics or
+        a lock), which also keeps input consistent with what is on screen.
+
+        @param child       A direct child of this component.
+        @param localPoint  The point in this component's local coordinates.
+
+        @return The point in the child's local coordinates, or std::nullopt if the mapping is degenerate.
+
+        @see getLocalPointFromChild, getLocalPointFromParent
+     */
+    virtual std::optional<Point<float>> getChildPointFromLocal (const Component& child, Point<float> localPoint) const;
+
+    /**
+        Maps a point in the local space of a direct child to this component's local space.
+
+        This is the inverse of getChildPointFromLocal(), used by localToScreen() and everything
+        built on it. Override both together. The same threading rules apply.
+
+        The default implementation applies the child transform and adds the child position.
+
+        @param child       A direct child of this component.
+        @param childPoint  The point in the child's local coordinates.
+
+        @return The point in this component's local coordinates, or std::nullopt if the mapping is degenerate.
+
+        @see getChildPointFromLocal, getParentPointFromLocal
+     */
+    virtual std::optional<Point<float>> getLocalPointFromChild (const Component& child, Point<float> childPoint) const;
+
+    /**
+        Maps a point from the parent's local space to this component's local space.
+
+        This applies the parent's getChildPointFromLocal() and then, if this component has an
+        effect, ComponentEffect::displayToContent().
+
+        @param parentPoint The point in the parent's local coordinates.
+
+        @return The point in this component's local coordinates, or std::nullopt if this
+                component has no parent or one of the mappings is degenerate.
+     */
+    std::optional<Point<float>> getLocalPointFromParent (Point<float> parentPoint) const;
+
+    /**
+        Maps a point from this component's local space to the parent's local space.
+
+        This applies ComponentEffect::contentToDisplay() if this component has an effect,
+        then the parent's getLocalPointFromChild().
+
+        @param localPoint The point in this component's local coordinates.
+
+        @return The point in the parent's local coordinates, or std::nullopt if this
+                component has no parent or one of the mappings is degenerate.
+     */
+    std::optional<Point<float>> getParentPointFromLocal (Point<float> localPoint) const;
+
+    /**
+        Maps a point from the top level component's local space to this component's local space.
+
+        This walks from the top level component down to this one through
+        getLocalPointFromParent(). A step whose mapping is degenerate falls back to removing
+        the component position. Points in the top level space are taken as they are, without
+        applying the top level component's own transform or effect.
+
+        This is how mouse events are made relative to the component receiving them.
+
+        @param topLevelPoint The point in the top level component's local coordinates.
+
+        @return The point in this component's local coordinates.
+     */
+    Point<float> getLocalPointFromTopLevel (Point<float> topLevelPoint) const;
 
     //==============================================================================
 
@@ -526,6 +632,10 @@ public:
     //==============================================================================
     /**
         Set the transform of the component.
+
+        The transform is applied in the component's local coordinates, before its position
+        in the parent. It affects the component and all of its children, both when painting
+        and when routing mouse input, so a transformed parent carries its children with it.
 
         @param transform The new transform of the component.
      */
@@ -1087,6 +1197,18 @@ public:
     */
     Component* getTopLevelComponent();
 
+    /**
+        Returns the component that popups opened by this component should be added to.
+
+        This is the closest ancestor that changes how its subtree is presented, because it is
+        transformed or manually composited (for example onto a 3D surface), so the popup is
+        presented the same way as the component that opened it. Without such an ancestor this
+        is the top level component.
+
+        @see setTransform, setManuallyComposited, PopupMenu::Options::withParentComponent
+    */
+    Component* getPopupParentComponent();
+
     //==============================================================================
     /**
         Get the properties of the component.
@@ -1416,6 +1538,47 @@ public:
     GpuTexture::Ptr snapshotToTexture (GraphicsContext& ctx, bool includeEffects = true);
 
     //==============================================================================
+    /** Takes this component out of the automatic compositing into its parent.
+
+        When enabled, the normal child painting pass no longer draws this component: whoever
+        presents it (usually the parent) calls renderToTexture() and composites the texture
+        itself, for example mapped onto a 3D mesh. The component stays visible, hit-testable
+        and focusable, so keyboard, hover, capture, wheel and drag and drop keep working
+        through the usual dispatch. Override the parent's getChildPointFromLocal() and
+        getLocalPointFromChild() to route input to it.
+
+        Repainting anything inside this component repaints the whole parent, since the texture
+        can end up anywhere in it.
+
+        @param shouldBeManuallyComposited True to composite this component manually.
+
+        @see renderToTexture, getChildPointFromLocal
+     */
+    void setManuallyComposited (bool shouldBeManuallyComposited);
+
+    /** Returns true if this component is composited manually instead of by its parent.
+
+        @see setManuallyComposited
+     */
+    bool isManuallyComposited() const;
+
+    /** Renders this component's subtree, including its effect, into a texture.
+
+        The texture is owned by the component and reused across calls: it is rendered again
+        only when something in the subtree repainted, or the size changed, since the last call.
+        This is meant to be called from the parent's paint() for a component marked with
+        setManuallyComposited().
+
+        @param ctx The GraphicsContext to render with, usually g.getGraphicsContext().
+
+        @return The texture holding the subtree, or nullptr if the component is empty or
+                rendering failed.
+
+        @see setManuallyComposited
+     */
+    GpuTexture::Ptr renderToTexture (GraphicsContext& ctx);
+
+    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {
@@ -1512,13 +1675,15 @@ private:
 
     bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
     AffineTransform getTransformToTopLevelComponent() const;
-    void paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
+    Point<float> getTopLevelScreenOrigin() const;
+    void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
+    void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
     GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);
-    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects);
+    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-    void paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const RectangleList<float>& boundsToRedraw);
+    void paintDebugOverlay (Graphics& g, const RectangleList<float>& boundsToRedraw);
 #endif
 
     friend class ComponentNative;
@@ -1546,10 +1711,12 @@ private:
     ComponentEffect::Ptr componentEffect;
     GpuCanvas::Ptr cachedTextureCanvas;
     GpuCanvas::Ptr effectOffscreenCanvas;
+    GpuCanvas::Ptr presentedCanvas;
     float contentScale = 1.0f;
     uint8 opacity = 255;
     bool suppressChildBoundsChanged = false;
     std::atomic_bool isRepainting { false };
+    std::atomic_bool subtreeDirty { true };
 
     struct Options
     {
@@ -1567,6 +1734,7 @@ private:
         bool paintProfilingDisabled : 1;
         bool cachedToTexture : 1;
         bool paintAsOffscreenRoot : 1;
+        bool manuallyComposited : 1;
     };
 
     union

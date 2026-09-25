@@ -1098,8 +1098,12 @@ void SDLComponentNative::timerCallback()
                                                    mouseY - static_cast<float> (windowY) }
                                   / windowUnitsPerPoint;
 
+        const bool framePainted = framePaintedSincePointerCheck.exchange (false);
+
         if (lastMouseMovePosition != cursorPosition)
             handleMouseMoveOrDrag (cursorPosition);
+        else if (framePainted)
+            revalidateStationaryPointer();
     }
 
     pollCapturedMouseState();
@@ -1256,6 +1260,9 @@ bool SDLComponentNative::renderFrame()
         {
             repaintComponents();
         }
+
+        // What moved on screen may have moved under a stationary pointer too
+        framePaintedSincePointerCheck = true;
 
         return true;
     };
@@ -1531,7 +1538,36 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
             lastComponentUnderMouse->internalMouseMove (event.withRelativePositionTo (lastComponentUnderMouse));
     }
 
+    rememberPointerPosition (position);
+}
+
+void SDLComponentNative::rememberPointerPosition (const Point<float>& position)
+{
     lastMouseMovePosition = position;
+
+    if (auto* target = getPointerTarget())
+        lastPointerLocalPosition = target->getLocalPointFromTopLevel (position);
+}
+
+Component* SDLComponentNative::getPointerTarget() const
+{
+    return lastComponentClicked != nullptr ? lastComponentClicked.get() : lastComponentUnderMouse.get();
+}
+
+void SDLComponentNative::revalidateStationaryPointer()
+{
+    // Animations, effects and 3D projections can move content under a pointer that didn't move:
+    // dispatch a synthetic move (or drag) only when that changed what the pointer is over
+    const auto position = lastMouseMovePosition;
+
+    if (lastComponentClicked == nullptr && findComponentForMouseEvent (position) != lastComponentUnderMouse.get())
+    {
+        handleMouseMoveOrDrag (position);
+        return;
+    }
+
+    if (auto* target = getPointerTarget(); target != nullptr && ! target->getLocalPointFromTopLevel (position).approximatelyEqualTo (lastPointerLocalPosition))
+        handleMouseMoveOrDrag (position);
 }
 
 void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger)
@@ -1600,7 +1636,7 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
 #endif
     }
 
-    lastMouseMovePosition = position;
+    rememberPointerPosition (position);
 }
 
 void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers, TouchFinger* touchFinger, bool wasCanceled)
@@ -1729,7 +1765,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         lastComponentClicked = nullptr;
     }
 
-    lastMouseMovePosition = position;
+    rememberPointerPosition (position);
 
     if (! wasCanceled && ! event.isTouch() && isMouseOutsideWindow (window))
         handleFocusChanged (false);
