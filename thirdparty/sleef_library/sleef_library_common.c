@@ -23,4 +23,18 @@
 // Sleef_currentTimeMicros, Sleef_getCpuIdString), own translation unit as in
 // SLEEF's build, which compiles upstream/src/common/common.c into libsleef.
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+#elif __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 #include "upstream/src/common/common.c"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#elif __GNUC__
+ #pragma GCC diagnostic pop
+#endif

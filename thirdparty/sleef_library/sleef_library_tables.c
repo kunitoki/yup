@@ -32,4 +32,18 @@
 // Sleef_rempitabsp/Sleef_rempitabdp lookup tables shared by the scalar and SIMD
 // translation units (each declares them extern).
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+#elif __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 #include "upstream/src/libm/rempitab.c"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#elif __GNUC__
+ #pragma GCC diagnostic pop
+#endif
