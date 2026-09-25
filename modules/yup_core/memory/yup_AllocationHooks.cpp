@@ -42,15 +42,32 @@
 namespace yup
 {
 
-static AllocationHooks& getAllocationHooksForThread()
+static thread_local bool notifyingAllocationHooks = false;
+
+AllocationHooks& AllocationHooks::getForCurrentThread()
 {
-    thread_local AllocationHooks hooks;
-    return hooks;
+    const auto wasNotifying = notifyingAllocationHooks;
+    notifyingAllocationHooks = true;
+    const ScopeGuard restore { [&] { notifyingAllocationHooks = wasNotifying; } };
+
+    struct ThreadHooks
+    {
+        AllocationHooks hooks;
+        ~ThreadHooks() { notifyingAllocationHooks = true; }
+    };
+
+    thread_local ThreadHooks state;
+    return state.hooks;
 }
 
 void notifyAllocationHooksForThread()
 {
-    getAllocationHooksForThread().listenerList.call ([] (AllocationHooks::Listener& l)
+    if (notifyingAllocationHooks)
+        return;
+
+    notifyingAllocationHooks = true;
+    const ScopeGuard restore { [&] { notifyingAllocationHooks = false; } };
+    AllocationHooks::getForCurrentThread().listenerList.call ([] (AllocationHooks::Listener& l)
     {
         l.newOrDeleteCalled();
     });

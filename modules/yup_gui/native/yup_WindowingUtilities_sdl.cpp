@@ -260,6 +260,10 @@ float getWindowUnitsPerPoint (SDL_Window* window) noexcept
 
 bool isMouseOutsideWindow (SDL_Window* window)
 {
+#if YUP_EMSCRIPTEN
+    ignoreUnused (window);
+    return false;
+#else
     int windowX, windowY, windowW, windowH;
     SDL_GetWindowPosition (window, &windowX, &windowY);
     SDL_GetWindowSize (window, &windowW, &windowH);
@@ -268,6 +272,7 @@ bool isMouseOutsideWindow (SDL_Window* window)
     [[maybe_unused]] auto mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
     return (mouseX < (float) windowX || mouseX > (float) (windowX + windowW) || mouseY < (float) windowY || mouseY > (float) (windowY + windowH));
+#endif
 }
 
 //==============================================================================

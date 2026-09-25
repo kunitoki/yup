@@ -681,27 +681,27 @@ private:
 //==============================================================================
 
 PartitionedConvolver::PartitionedConvolver()
-    : pImpl (std::make_unique<Impl>())
+    : impl (std::make_unique<Impl>())
 {
 }
 
 PartitionedConvolver::~PartitionedConvolver() = default;
 
 PartitionedConvolver::PartitionedConvolver (PartitionedConvolver&& other) noexcept
-    : pImpl (std::move (other.pImpl))
+    : impl (std::move (other.impl))
 {
 }
 
 PartitionedConvolver& PartitionedConvolver::operator= (PartitionedConvolver&& other) noexcept
 {
     if (this != &other)
-        pImpl = std::move (other.pImpl);
+        impl = std::move (other.impl);
     return *this;
 }
 
 void PartitionedConvolver::configureLayers (std::size_t directFIRCoefficients, const std::vector<LayerSpec>& layers)
 {
-    pImpl->configureLayers (directFIRCoefficients, layers);
+    impl->configureLayers (directFIRCoefficients, layers);
 }
 
 void PartitionedConvolver::setTypicalLayout (std::size_t directCoefficients, const std::vector<int>& hops)
@@ -722,7 +722,7 @@ void PartitionedConvolver::setTypicalLayout (std::size_t directCoefficients, con
 
 void PartitionedConvolver::setImpulseResponse (const float* impulseResponse, std::size_t length, const IRLoadOptions& options)
 {
-    pImpl->setImpulseResponse (impulseResponse, length, options);
+    impl->setImpulseResponse (impulseResponse, length, options);
 }
 
 void PartitionedConvolver::setImpulseResponse (const std::vector<float>& impulseResponse, const IRLoadOptions& options)
@@ -732,22 +732,22 @@ void PartitionedConvolver::setImpulseResponse (const std::vector<float>& impulse
 
 std::size_t PartitionedConvolver::getImpulseLength() const
 {
-    return pImpl->getImpulseLength();
+    return impl->getImpulseLength();
 }
 
 void PartitionedConvolver::prepare (std::size_t maxBlockSize)
 {
-    pImpl->prepare (maxBlockSize);
+    impl->prepare (maxBlockSize);
 }
 
 void PartitionedConvolver::reset()
 {
-    pImpl->reset();
+    impl->reset();
 }
 
 void PartitionedConvolver::process (const float* input, float* output, std::size_t numSamples)
 {
-    pImpl->process (input, output, numSamples);
+    impl->process (input, output, numSamples);
 }
 
 } // namespace yup

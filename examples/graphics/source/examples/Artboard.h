@@ -194,15 +194,6 @@ private:
             loadArtboard();
     }
 
-    void visibilityChanged() override
-    {
-        if (isVisible())
-        {
-            if (auto topLevelComponent = getTopLevelComponent(); topLevelComponent != nullptr && topLevelComponent->isOnDesktop())
-                loadArtboard();
-        }
-    }
-
     void setupControls()
     {
         auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
@@ -449,7 +440,7 @@ class ArtboardDemo : public ArtboardDemoBase
 {
 public:
     ArtboardDemo()
-        : ArtboardDemoBase ("data/alien.riv", "Mouth")
+        : ArtboardDemoBase ("data/rive/alien.riv", "Mouth")
     {
     }
 
@@ -530,7 +521,7 @@ class ArtboardLayoutDemo : public ArtboardDemoBase
 {
 public:
     ArtboardLayoutDemo()
-        : ArtboardDemoBase ("data/layout-ui.riv", "keyboard_slot", 8, true)
+        : ArtboardDemoBase ("data/rive/layout-ui.riv", "keyboard_slot", 8, true)
     {
     }
 

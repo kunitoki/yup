@@ -113,7 +113,7 @@ private:
     ump::PacketProtocol protocol;
     uint8_t group = 0;
 
-    CriticalSection lock;
+    AudioLockType lock;
     std::atomic<uint16> noteStates[128];
     UMPPacketBuffer eventsToAdd;
     ListenerList<Listener> listeners;

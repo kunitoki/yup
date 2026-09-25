@@ -81,7 +81,7 @@ public:
 
 private:
     //==============================================================================
-    CriticalSection lock;
+    AudioLockType lock;
     OptionalScopedPointer<AudioSource> input;
     Reverb reverb;
     std::atomic<bool> bypass;

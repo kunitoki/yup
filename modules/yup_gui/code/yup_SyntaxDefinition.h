@@ -31,7 +31,7 @@ namespace yup
     comment delimiters, string rules, number syntax, keyword/type/operator sets,
     preprocessor prefix, and per-token colors. It is loaded from a JSON file
     (see `loadFromData` / `loadFromFile` for the format) or obtained from the
-    built-in C++ / GLSL / Python / XML definitions via `getBuiltIn`.
+    built-in C++ / GLSL / Python / XML / YDSP definitions via `getBuiltIn`.
 
     The JSON format is:
     @code
@@ -177,7 +177,7 @@ public:
     bool isIdentifierPart (yup_wchar character) const;
 
     //==============================================================================
-    /** Returns a built-in definition by language name ("cpp", "glsl", "python" or "xml").
+    /** Returns a built-in definition by language name ("cpp", "glsl", "python", "xml" or "ydsp").
 
         @param languageName The language name.
         @returns The definition (a default inert one if the name is unknown).

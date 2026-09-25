@@ -1,0 +1,351 @@
+// Steady-state YDSP port of the Cmajor ZitaReverb example and the Faust port:
+// https://github.com/cmajor-lang/cmajor/tree/main/examples/patches/ZitaReverb
+// https://github.com/sletz/zita-cmajor-faust/tree/91cb214a591094a7c619ce746543db0aa445f010
+// Original algorithm: Fons Adriaensen. Cmajor rewrite: (C) 2024 Cmajor Software Ltd.
+// SPDX-License-Identifier: GPL-3.0-only
+// This example patch is GPL-3.0; the YUP library remains ISC-licensed.
+// No startup/control ramps; EQs use their steady-state equations.
+// One stereo processor; runtime sample rate and runtime parameters.
+
+declare name "Zita Reverb";
+declare description "Eight-branch stereo feedback reverb with decay shelving and two parametric EQs.";
+
+processor ZitaReverbEffect {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+    input parameter float predelay = 40.0 [[ name: "Pre Delay", min: 20.0, max: 100.0, unit: "ms" ]];
+    input parameter float crossover = 200.0 [[ name: "Crossover", min: 50.0, max: 1000.0, unit: "Hz" ]];
+    input parameter float rtLow = 3.0 [[ name: "Low RT60", min: 1.0, max: 8.0, unit: "s" ]];
+    input parameter float rtMid = 2.0 [[ name: "Mid RT60", min: 1.0, max: 8.0, unit: "s" ]];
+    input parameter float damping = 6.0 [[ name: "HF Damping", min: 1.5, max: 24.0, unit: "kHz" ]];
+    input parameter float eq1Freq = 400.0 [[ name: "EQ1 Freq", min: 40.0, max: 2500.0, unit: "Hz" ]];
+    input parameter float eq1Gain = 0.0 [[ name: "EQ1 Gain", min: -15.0, max: 15.0, unit: "dB" ]];
+    input parameter float eq2Freq = 4000.0 [[ name: "EQ2 Freq", min: 160.0, max: 10000.0, unit: "Hz" ]];
+    input parameter float eq2Gain = 0.0 [[ name: "EQ2 Gain", min: -15.0, max: 15.0, unit: "dB" ]];
+    input parameter float mix = 50.0 [[ name: "Mix", min: 0.0, max: 100.0, unit: "%" ]];
+    state float predelayL[19200];
+    state float predelayR[19200];
+    state int predelayPos;
+    state int pos;
+    state float ap0[16384];
+    state float delay0[16384];
+    state int apOffset0;
+    state int delayOffset0;
+    state float lo0;
+    state float hi0;
+    state float ap1[16384];
+    state float delay1[16384];
+    state int apOffset1;
+    state int delayOffset1;
+    state float lo1;
+    state float hi1;
+    state float ap2[16384];
+    state float delay2[16384];
+    state int apOffset2;
+    state int delayOffset2;
+    state float lo2;
+    state float hi2;
+    state float ap3[16384];
+    state float delay3[16384];
+    state int apOffset3;
+    state int delayOffset3;
+    state float lo3;
+    state float hi3;
+    state float ap4[16384];
+    state float delay4[16384];
+    state int apOffset4;
+    state int delayOffset4;
+    state float lo4;
+    state float hi4;
+    state float ap5[16384];
+    state float delay5[16384];
+    state int apOffset5;
+    state int delayOffset5;
+    state float lo5;
+    state float hi5;
+    state float ap6[16384];
+    state float delay6[16384];
+    state int apOffset6;
+    state int delayOffset6;
+    state float lo6;
+    state float hi6;
+    state float ap7[16384];
+    state float delay7[16384];
+    state int apOffset7;
+    state int delayOffset7;
+    state float lo7;
+    state float hi7;
+    state float eq1z1L;
+    state float eq1z2L;
+    state float eq1z1R;
+    state float eq1z2R;
+    state float eq2z1L;
+    state float eq2z2L;
+    state float eq2z1R;
+    state float eq2z2R;
+
+    init {
+        apOffset0 = int (floor (0.020346 * sampleRate + 0.5));
+        delayOffset0 = int (floor (0.153129 * sampleRate + 0.5)) - apOffset0;
+        apOffset1 = int (floor (0.024421 * sampleRate + 0.5));
+        delayOffset1 = int (floor (0.210389 * sampleRate + 0.5)) - apOffset1;
+        apOffset2 = int (floor (0.031604 * sampleRate + 0.5));
+        delayOffset2 = int (floor (0.127837 * sampleRate + 0.5)) - apOffset2;
+        apOffset3 = int (floor (0.027333 * sampleRate + 0.5));
+        delayOffset3 = int (floor (0.256891 * sampleRate + 0.5)) - apOffset3;
+        apOffset4 = int (floor (0.022904 * sampleRate + 0.5));
+        delayOffset4 = int (floor (0.174713 * sampleRate + 0.5)) - apOffset4;
+        apOffset5 = int (floor (0.029291 * sampleRate + 0.5));
+        delayOffset5 = int (floor (0.192303 * sampleRate + 0.5)) - apOffset5;
+        apOffset6 = int (floor (0.013458 * sampleRate + 0.5));
+        delayOffset6 = int (floor (0.125000 * sampleRate + 0.5)) - apOffset6;
+        apOffset7 = int (floor (0.019123 * sampleRate + 0.5));
+        delayOffset7 = int (floor (0.219991 * sampleRate + 0.5)) - apOffset7;
+    }
+
+    process {
+        let predelaySamples = int (floor ((predelay * 0.001 - 0.020) * sampleRate + 0.5));
+        int readPos = predelayPos - predelaySamples;
+        if (readPos < 0) { readPos = readPos + 19200; }
+        predelayL[predelayPos] = inL;
+        predelayR[predelayPos] = inR;
+        let inputL = 0.3 * predelayL[readPos];
+        let inputR = 0.3 * predelayR[readPos];
+        predelayPos = predelayPos + 1;
+        if (predelayPos >= 19200) { predelayPos = 0; }
+
+        let dampingHz = damping * 1000.0;
+        let wlo = 6.2832 * crossover / sampleRate;
+        float chi = 1.0 - cos (6.2832 * dampingHz / sampleRate);
+        if (dampingHz > 0.49 * sampleRate) { chi = 2.0; }
+
+        let apRead0 = ap0[pos];
+        let apInput0 = (delay0[pos] + inputL) - (0.6) * apRead0;
+        ap0[(pos + apOffset0) & 16383] = apInput0;
+        float y0 = apRead0 + (0.6) * apInput0;
+
+        let apRead1 = ap1[pos];
+        let apInput1 = (delay1[pos] + inputL) - (-0.6) * apRead1;
+        ap1[(pos + apOffset1) & 16383] = apInput1;
+        float y1 = apRead1 + (-0.6) * apInput1;
+
+        let apRead2 = ap2[pos];
+        let apInput2 = (delay2[pos] - inputL) - (0.6) * apRead2;
+        ap2[(pos + apOffset2) & 16383] = apInput2;
+        float y2 = apRead2 + (0.6) * apInput2;
+
+        let apRead3 = ap3[pos];
+        let apInput3 = (delay3[pos] - inputL) - (-0.6) * apRead3;
+        ap3[(pos + apOffset3) & 16383] = apInput3;
+        float y3 = apRead3 + (-0.6) * apInput3;
+
+        let apRead4 = ap4[pos];
+        let apInput4 = (delay4[pos] + inputR) - (0.6) * apRead4;
+        ap4[(pos + apOffset4) & 16383] = apInput4;
+        float y4 = apRead4 + (0.6) * apInput4;
+
+        let apRead5 = ap5[pos];
+        let apInput5 = (delay5[pos] + inputR) - (-0.6) * apRead5;
+        ap5[(pos + apOffset5) & 16383] = apInput5;
+        float y5 = apRead5 + (-0.6) * apInput5;
+
+        let apRead6 = ap6[pos];
+        let apInput6 = (delay6[pos] - inputR) - (0.6) * apRead6;
+        ap6[(pos + apOffset6) & 16383] = apInput6;
+        float y6 = apRead6 + (0.6) * apInput6;
+
+        let apRead7 = ap7[pos];
+        let apInput7 = (delay7[pos] - inputR) - (-0.6) * apRead7;
+        ap7[(pos + apOffset7) & 16383] = apInput7;
+        float y7 = apRead7 + (-0.6) * apInput7;
+        let diff0_0 = y0 - y1;
+        y0 = y0 + y1;
+        y1 = diff0_0;
+        let diff0_2 = y2 - y3;
+        y2 = y2 + y3;
+        y3 = diff0_2;
+        let diff0_4 = y4 - y5;
+        y4 = y4 + y5;
+        y5 = diff0_4;
+        let diff0_6 = y6 - y7;
+        y6 = y6 + y7;
+        y7 = diff0_6;
+        let diff1_0 = y0 - y2;
+        y0 = y0 + y2;
+        y2 = diff1_0;
+        let diff1_1 = y1 - y3;
+        y1 = y1 + y3;
+        y3 = diff1_1;
+        let diff1_4 = y4 - y6;
+        y4 = y4 + y6;
+        y6 = diff1_4;
+        let diff1_5 = y5 - y7;
+        y5 = y5 + y7;
+        y7 = diff1_5;
+        let diff2_0 = y0 - y4;
+        y0 = y0 + y4;
+        y4 = diff2_0;
+        let diff2_1 = y1 - y5;
+        y1 = y1 + y5;
+        y5 = diff2_1;
+        let diff2_2 = y2 - y6;
+        y2 = y2 + y6;
+        y6 = diff2_2;
+        let diff2_3 = y3 - y7;
+        y3 = y3 + y7;
+        y7 = diff2_3;
+
+        let wetLevel = 1.0 / sqrt (rtMid);
+        let wet = mix * 0.01;
+        let dryLevel = (1.0 - wet) * (1.0 + wet);
+        let wetGain = 0.7 * wet * (2.0 - wet);
+        float signalL = dryLevel * inL + wetGain * (wetLevel * (y1 + y2));
+        float signalR = dryLevel * inR + wetGain * (wetLevel * (y1 - y2));
+
+        let gmf0 = pow (0.001, 0.153129 / rtMid);
+        let glo0 = pow (0.001, 0.153129 / rtLow) / gmf0 - 1.0;
+        let g0 = pow (0.001, 0.153129 / (0.5 * rtMid)) / gmf0;
+        let t0 = (1.0 - g0 * g0) / (2.0 * g0 * g0 * chi);
+        let whi0 = (sqrt (1.0 + 4.0 * t0) - 1.0) / (2.0 * t0);
+        let filterIn0 = sqrt (0.125) * y0;
+        lo0 = lo0 + (wlo * (filterIn0 - lo0) + 1e-10);
+        let filterMid0 = filterIn0 + glo0 * lo0;
+        hi0 = hi0 + whi0 * (filterMid0 - hi0);
+        delay0[(pos + delayOffset0) & 16383] = gmf0 * hi0;
+
+        let gmf1 = pow (0.001, 0.210389 / rtMid);
+        let glo1 = pow (0.001, 0.210389 / rtLow) / gmf1 - 1.0;
+        let g1 = pow (0.001, 0.210389 / (0.5 * rtMid)) / gmf1;
+        let t1 = (1.0 - g1 * g1) / (2.0 * g1 * g1 * chi);
+        let whi1 = (sqrt (1.0 + 4.0 * t1) - 1.0) / (2.0 * t1);
+        let filterIn1 = sqrt (0.125) * y1;
+        lo1 = lo1 + (wlo * (filterIn1 - lo1) + 1e-10);
+        let filterMid1 = filterIn1 + glo1 * lo1;
+        hi1 = hi1 + whi1 * (filterMid1 - hi1);
+        delay1[(pos + delayOffset1) & 16383] = gmf1 * hi1;
+
+        let gmf2 = pow (0.001, 0.127837 / rtMid);
+        let glo2 = pow (0.001, 0.127837 / rtLow) / gmf2 - 1.0;
+        let g2 = pow (0.001, 0.127837 / (0.5 * rtMid)) / gmf2;
+        let t2 = (1.0 - g2 * g2) / (2.0 * g2 * g2 * chi);
+        let whi2 = (sqrt (1.0 + 4.0 * t2) - 1.0) / (2.0 * t2);
+        let filterIn2 = sqrt (0.125) * y2;
+        lo2 = lo2 + (wlo * (filterIn2 - lo2) + 1e-10);
+        let filterMid2 = filterIn2 + glo2 * lo2;
+        hi2 = hi2 + whi2 * (filterMid2 - hi2);
+        delay2[(pos + delayOffset2) & 16383] = gmf2 * hi2;
+
+        let gmf3 = pow (0.001, 0.256891 / rtMid);
+        let glo3 = pow (0.001, 0.256891 / rtLow) / gmf3 - 1.0;
+        let g3 = pow (0.001, 0.256891 / (0.5 * rtMid)) / gmf3;
+        let t3 = (1.0 - g3 * g3) / (2.0 * g3 * g3 * chi);
+        let whi3 = (sqrt (1.0 + 4.0 * t3) - 1.0) / (2.0 * t3);
+        let filterIn3 = sqrt (0.125) * y3;
+        lo3 = lo3 + (wlo * (filterIn3 - lo3) + 1e-10);
+        let filterMid3 = filterIn3 + glo3 * lo3;
+        hi3 = hi3 + whi3 * (filterMid3 - hi3);
+        delay3[(pos + delayOffset3) & 16383] = gmf3 * hi3;
+
+        let gmf4 = pow (0.001, 0.174713 / rtMid);
+        let glo4 = pow (0.001, 0.174713 / rtLow) / gmf4 - 1.0;
+        let g4 = pow (0.001, 0.174713 / (0.5 * rtMid)) / gmf4;
+        let t4 = (1.0 - g4 * g4) / (2.0 * g4 * g4 * chi);
+        let whi4 = (sqrt (1.0 + 4.0 * t4) - 1.0) / (2.0 * t4);
+        let filterIn4 = sqrt (0.125) * y4;
+        lo4 = lo4 + (wlo * (filterIn4 - lo4) + 1e-10);
+        let filterMid4 = filterIn4 + glo4 * lo4;
+        hi4 = hi4 + whi4 * (filterMid4 - hi4);
+        delay4[(pos + delayOffset4) & 16383] = gmf4 * hi4;
+
+        let gmf5 = pow (0.001, 0.192303 / rtMid);
+        let glo5 = pow (0.001, 0.192303 / rtLow) / gmf5 - 1.0;
+        let g5 = pow (0.001, 0.192303 / (0.5 * rtMid)) / gmf5;
+        let t5 = (1.0 - g5 * g5) / (2.0 * g5 * g5 * chi);
+        let whi5 = (sqrt (1.0 + 4.0 * t5) - 1.0) / (2.0 * t5);
+        let filterIn5 = sqrt (0.125) * y5;
+        lo5 = lo5 + (wlo * (filterIn5 - lo5) + 1e-10);
+        let filterMid5 = filterIn5 + glo5 * lo5;
+        hi5 = hi5 + whi5 * (filterMid5 - hi5);
+        delay5[(pos + delayOffset5) & 16383] = gmf5 * hi5;
+
+        let gmf6 = pow (0.001, 0.125000 / rtMid);
+        let glo6 = pow (0.001, 0.125000 / rtLow) / gmf6 - 1.0;
+        let g6 = pow (0.001, 0.125000 / (0.5 * rtMid)) / gmf6;
+        let t6 = (1.0 - g6 * g6) / (2.0 * g6 * g6 * chi);
+        let whi6 = (sqrt (1.0 + 4.0 * t6) - 1.0) / (2.0 * t6);
+        let filterIn6 = sqrt (0.125) * y6;
+        lo6 = lo6 + (wlo * (filterIn6 - lo6) + 1e-10);
+        let filterMid6 = filterIn6 + glo6 * lo6;
+        hi6 = hi6 + whi6 * (filterMid6 - hi6);
+        delay6[(pos + delayOffset6) & 16383] = gmf6 * hi6;
+
+        let gmf7 = pow (0.001, 0.219991 / rtMid);
+        let glo7 = pow (0.001, 0.219991 / rtLow) / gmf7 - 1.0;
+        let g7 = pow (0.001, 0.219991 / (0.5 * rtMid)) / gmf7;
+        let t7 = (1.0 - g7 * g7) / (2.0 * g7 * g7 * chi);
+        let whi7 = (sqrt (1.0 + 4.0 * t7) - 1.0) / (2.0 * t7);
+        let filterIn7 = sqrt (0.125) * y7;
+        lo7 = lo7 + (wlo * (filterIn7 - lo7) + 1e-10);
+        let filterMid7 = filterIn7 + glo7 * lo7;
+        hi7 = hi7 + whi7 * (filterMid7 - hi7);
+        delay7[(pos + delayOffset7) & 16383] = gmf7 * hi7;
+
+        pos = (pos + 1) & 16383;
+
+        let eq1g = pow (10.0, 0.05 * eq1Gain);
+        let eq1f = eq1Freq * (pi / sampleRate);
+        let eq1b = 2.0 * eq1f / sqrt (eq1g);
+        let eq1gg = 0.5 * (eq1g - 1.0);
+        let eq1c1 = 0.0 - cos (2.0 * eq1f);
+        let eq1c2 = (1.0 - eq1b) / (1.0 + eq1b);
+        let eq1aL = signalL - eq1c2 * eq1z2L;
+        let eq1outL = signalL - eq1gg * (eq1z2L + eq1c2 * eq1aL - signalL);
+        let eq1bL = eq1aL - eq1c1 * eq1z1L;
+        eq1z2L = eq1z1L + eq1c1 * eq1bL;
+        eq1z1L = eq1bL + 1e-20;
+        signalL = eq1outL;
+        let eq1aR = signalR - eq1c2 * eq1z2R;
+        let eq1outR = signalR - eq1gg * (eq1z2R + eq1c2 * eq1aR - signalR);
+        let eq1bR = eq1aR - eq1c1 * eq1z1R;
+        eq1z2R = eq1z1R + eq1c1 * eq1bR;
+        eq1z1R = eq1bR + 1e-20;
+        signalR = eq1outR;
+
+        let eq2g = pow (10.0, 0.05 * eq2Gain);
+        let eq2f = eq2Freq * (pi / sampleRate);
+        let eq2b = 2.0 * eq2f / sqrt (eq2g);
+        let eq2gg = 0.5 * (eq2g - 1.0);
+        let eq2c1 = 0.0 - cos (2.0 * eq2f);
+        let eq2c2 = (1.0 - eq2b) / (1.0 + eq2b);
+        let eq2aL = signalL - eq2c2 * eq2z2L;
+        let eq2outL = signalL - eq2gg * (eq2z2L + eq2c2 * eq2aL - signalL);
+        let eq2bL = eq2aL - eq2c1 * eq2z1L;
+        eq2z2L = eq2z1L + eq2c1 * eq2bL;
+        eq2z1L = eq2bL + 1e-20;
+        signalL = eq2outL;
+        let eq2aR = signalR - eq2c2 * eq2z2R;
+        let eq2outR = signalR - eq2gg * (eq2z2R + eq2c2 * eq2aR - signalR);
+        let eq2bR = eq2aR - eq2c1 * eq2z1R;
+        eq2z2R = eq2z1R + eq2c1 * eq2bR;
+        eq2z1R = eq2bR + 1e-20;
+        signalR = eq2outR;
+        outL = signalL;
+        outR = signalR;
+    }
+}
+
+graph ZitaReverb {
+    input stream inL;
+    input stream inR;
+    output stream outL;
+    output stream outR;
+    node fx = ZitaReverbEffect;
+    connection {
+        inL -> fx.inL;
+        inR -> fx.inR;
+        fx.outL -> outL;
+        fx.outR -> outR;
+    }
+}

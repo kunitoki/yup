@@ -21,6 +21,8 @@ cmake_minimum_required(VERSION 3.31)
 
 enable_testing()
 
+option (YUP_TEST_ALLOCATION_HOOKS "Enable allocation-count assertions in realtime tests" OFF)
+
 # ==== Setup googletests
 if (YUP_PLATFORM_EMSCRIPTEN)
     set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
@@ -89,10 +91,15 @@ set (target_gtest_modules
     GTest::gtest
     GTest::gmock)
 
-if (YUP_PLATFORM_DESKTOP)
+if (YUP_PLATFORM_DESKTOP OR YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules
-        yup_audio_plugin_host
-        yup_audio_plugin_client)
+        yup_dsp_jit)
+
+    if (YUP_PLATFORM_DESKTOP)
+        list (APPEND target_modules
+            yup_audio_plugin_host
+            yup_audio_plugin_client)
+    endif()
 endif()
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
@@ -142,6 +149,7 @@ yup_standalone_app (
         $<$<CONFIG:Debug>:-sWASM_BIGINT>
         $<$<CONFIG:Debug>:-O1>
     DEFINITIONS
+        YUP_ENABLE_ALLOCATION_HOOKS=$<BOOL:${YUP_TEST_ALLOCATION_HOOKS}>
         YUP_USE_CURL=0
         YUP_MODAL_LOOPS_PERMITTED=1
     PRELOAD_FILES
@@ -157,18 +165,22 @@ yup_standalone_app (
 set (sources "")
 set (imported_sources "")
 foreach (module ${target_modules})
-    file (GLOB module_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.cpp")
+    set (module_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.cpp")
+    file (GLOB module_sources "${module_main}")
     list (APPEND sources ${module_sources})
 
     file (GLOB module_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
     list (APPEND imported_sources ${module_imported_sources})
+    list (REMOVE_ITEM imported_sources "${module_main}")
 
     if (YUP_PLATFORM_APPLE)
-        file (GLOB_RECURSE apple_sources "${CMAKE_CURRENT_LIST_DIR}/${module}.mm")
+        file (GLOB_RECURSE apple_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
         list (APPEND sources ${apple_sources})
 
-        file (GLOB_RECURSE apple_imported_sources "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
+        set (apple_main "${CMAKE_CURRENT_LIST_DIR}/${module}/module.mm")
+        file (GLOB_RECURSE apple_imported_sources "${apple_main}")
         list (APPEND imported_sources ${apple_imported_sources})
+        list (REMOVE_ITEM imported_sources "${apple_main}")
     endif()
 endforeach()
 
@@ -184,13 +196,13 @@ if (YUP_PLATFORM_DESKTOP)
     if (TARGET clap)
         target_link_libraries (${target_name} PRIVATE clap)
         target_sources (${target_name} PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_clap.cpp")
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_clap.cpp")
     endif()
 
     if (TARGET sdk)
         target_link_libraries (${target_name} PRIVATE sdk)
         target_sources (${target_name} PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_vst3.cpp")
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_vst3.cpp")
         if (TARGET sdk_hosting)
             target_link_libraries (${target_name} PRIVATE sdk_hosting)
         endif()
@@ -199,17 +211,17 @@ if (YUP_PLATFORM_DESKTOP)
     if (YUP_PLATFORM_MAC AND TARGET base-sdk-auv2)
         target_link_libraries (${target_name} PRIVATE base-sdk-auv2)
         target_sources (${target_name} PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm")
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_au.mm")
         set_source_files_properties (
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_au.mm"
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_au.mm"
             PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     endif()
 
     if (YUP_PLATFORM_MAC)
         target_sources (${target_name} PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm")
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_auv3.mm")
         set_source_files_properties (
-            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client_auv3.mm"
+            "${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin_client/module_auv3.mm"
             PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries (${target_name} PRIVATE "-framework CoreAudioKit")
     endif()

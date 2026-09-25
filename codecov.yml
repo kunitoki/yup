@@ -27,6 +27,7 @@ coverage:
           - yup_core
           - yup_data_model
           - yup_dsp
+          - yup_dsp_jit
           - yup_events
           - yup_graphics
           - yup_gui
@@ -54,6 +55,7 @@ flags:
   yup_core:                  { paths: [modules/yup_core/], carryforward: true }
   yup_data_model:            { paths: [modules/yup_data_model/], carryforward: true }
   yup_dsp:                   { paths: [modules/yup_dsp/], carryforward: true }
+  yup_dsp_jit:               { paths: [modules/yup_dsp_jit/], carryforward: true }
   yup_events:                { paths: [modules/yup_events/], carryforward: true }
   yup_graphics:              { paths: [modules/yup_graphics/], carryforward: true }
   yup_gui:                   { paths: [modules/yup_gui/], carryforward: true }

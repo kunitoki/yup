@@ -27,6 +27,7 @@ project (${target_name} VERSION ${target_version})
 
 # ==== Bootstrap YUP modules (this is always built as a standalone host tool)
 get_filename_component (yup_root "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set (YUP_FETCH_UPSTREAM_MODULES ON CACHE BOOL "Fetch missing YUP module upstream sources" FORCE)
 include (${yup_root}/cmake/yup.cmake)
 
 # Only add the modules actually needed by the shader bundler tool.

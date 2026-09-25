@@ -120,6 +120,47 @@ public:
     void allNotesOff (int midiChannel);
 
     //==============================================================================
+    /** Tells the object that a pitch-wheel event has occurred.
+
+        This updates the stored pitch-wheel position for the given channel and
+        synchronously notifies listeners via Listener::handlePitchWheelMoved().
+
+        @param midiChannel     the midi channel (1 to 16)
+        @param wheelPosition   the pitch-wheel position (0 to 16383)
+    */
+    void pitchWheel (int midiChannel, int wheelPosition);
+
+    /** Tells the object that a controller event has occurred.
+
+        This updates the stored controller value for the given channel and controller
+        number, and synchronously notifies listeners via Listener::handleControllerMoved().
+
+        @param midiChannel         the midi channel (1 to 16)
+        @param controllerNumber    the controller number (0 to 127)
+        @param controllerValue     the controller value (0 to 127)
+    */
+    void controlChange (int midiChannel, int controllerNumber, int controllerValue);
+
+    /** Returns the current pitch-wheel position for a midi channel.
+
+        The channel number must be between 1 and 16. Returns a value in the
+        range 0 to 16383, or 0 if no pitch-wheel message has been processed yet.
+
+        @see pitchWheel
+    */
+    int getPitchWheelPosition (int midiChannel) const noexcept;
+
+    /** Returns the current value of a controller for a midi channel.
+
+        The channel number must be between 1 and 16. Returns a value in the
+        range 0 to 127, or -1 if no message for that controller has been
+        processed yet.
+
+        @see handleController
+    */
+    int getControllerValue (int midiChannel, int controllerNumber) const noexcept;
+
+    //==============================================================================
     /** Looks at a key-up/down event and uses it to update the state of this object.
 
         To process a buffer full of midi messages, use the processNextMidiBuffer() method
@@ -186,6 +227,33 @@ public:
                                     int midiChannel,
                                     int midiNoteNumber,
                                     float velocity) = 0;
+
+        /** Called when one of the MidiKeyboardState's pitch wheels is moved.
+
+            This will be called synchronously when the state is either processing a
+            buffer in its MidiKeyboardState::processNextMidiBuffer() method, or
+            when a pitch-wheel event is triggered with its MidiKeyboardState::pitchWheel() method.
+
+            Note that this callback could happen from an audio callback thread, so be
+            careful not to block, and avoid any UI activity in the callback.
+        */
+        virtual void handlePitchWheelMoved (MidiKeyboardState* source,
+                                            int midiChannel,
+                                            int wheelPosition) {}
+
+        /** Called when one of the MidiKeyboardState's controllers is moved.
+
+            This will be called synchronously when the state is either processing a
+            buffer in its MidiKeyboardState::processNextMidiBuffer() method, or
+            when a controller event is triggered with its MidiKeyboardState::controlChange() method.
+
+            Note that this callback could happen from an audio callback thread, so be
+            careful not to block, and avoid any UI activity in the callback.
+        */
+        virtual void handleControllerMoved (MidiKeyboardState* source,
+                                            int midiChannel,
+                                            int controllerNumber,
+                                            int newControllerValue) {}
     };
 
     /** Registers a listener for callbacks when keys go up or down.
@@ -200,10 +268,20 @@ public:
 
 private:
     //==============================================================================
-    CriticalSection lock;
+    AudioLockType lock;
     std::atomic<uint16> noteStates[128];
     MidiBuffer eventsToAdd;
     ListenerList<Listener> listeners;
+
+    uint16 pitchWheelPositions[16];
+
+    struct Controller
+    {
+        int number;
+        int value;
+    };
+
+    Array<Controller> controllers[16];
 
     void noteOnInternal (int midiChannel, int midiNoteNumber, float velocity);
     void noteOffInternal (int midiChannel, int midiNoteNumber, float velocity);
