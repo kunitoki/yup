@@ -172,7 +172,7 @@ public:
             playPauseButton->setButtonText ("Play");
         };
 
-        loadFile (getAssetPath ("data/goal.lottie"));
+        loadFile (getAssetPath ("data/lottie/goal.lottie"));
     }
 
     ~LottieDemo() override = default;

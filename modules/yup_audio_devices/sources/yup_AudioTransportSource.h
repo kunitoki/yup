@@ -183,7 +183,7 @@ private:
     PositionableAudioSource* positionableSource = nullptr;
     AudioSource* masterSource = nullptr;
 
-    CriticalSection callbackLock;
+    AudioLockType callbackLock;
     float gain = 1.0f, lastGain = 1.0f;
     std::atomic<bool> playing { false }, stopped { true };
     double sampleRate = 44100.0, sourceSampleRate = 0;

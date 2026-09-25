@@ -51,7 +51,7 @@ ReverbAudioSource::~ReverbAudioSource() {}
 
 void ReverbAudioSource::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     input->prepareToPlay (samplesPerBlockExpected, sampleRate);
     reverb.setSampleRate (sampleRate);
 }
@@ -60,7 +60,7 @@ void ReverbAudioSource::releaseResources() {}
 
 void ReverbAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     input->getNextAudioBlock (bufferToFill);
 
@@ -83,7 +83,7 @@ void ReverbAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& bufferT
 
 void ReverbAudioSource::setParameters (const Reverb::Parameters& newParams)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     reverb.setParameters (newParams);
 }
 
@@ -91,7 +91,7 @@ void ReverbAudioSource::setBypassed (bool b) noexcept
 {
     if (bypass != b)
     {
-        const ScopedLock sl (lock);
+        const AudioLockType::ScopedLockType sl (lock);
         bypass = b;
         reverb.reset();
     }

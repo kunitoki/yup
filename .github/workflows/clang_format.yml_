@@ -11,6 +11,9 @@ on:
       - "**"
       - "!main"
 
+env:
+  ACTION_RUNNER: github-actions
+
 jobs:
   format:
     runs-on: ubuntu-latest

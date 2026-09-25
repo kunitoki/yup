@@ -153,6 +153,11 @@ Component* hit = parent.findComponentAt (clickPoint);
 
 Return value is the deepest visible child under the point, or `nullptr`.
 
+To find the component that would actually receive a mouse event at a point
+(honoring `setWantsMouseEvents()`, see below), use `findComponentAtForMouseEvent()`
+instead — it skips a component or subtree that opted out of mouse events in
+favor of the sibling underneath it.
+
 Each component decides for itself whether a point is inside it, by way of
 `hitTest()`. The default accepts the whole of `getLocalBounds()`; override it to
 carve away the parts that should let events through to whatever is behind them:

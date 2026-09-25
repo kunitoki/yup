@@ -1,0 +1,1283 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2026 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include <gtest/gtest.h>
+
+#include <yup_dsp_jit/yup_dsp_jit.h>
+
+#include <cmath>
+#include <iostream>
+#include <limits>
+#include <vector>
+
+namespace yup::test
+{
+
+namespace
+{
+
+/*
+  The demo patches under examples/graphics/data/synths/ are the corpus that
+  exercises the language's surface - one patch per feature cluster - and until
+  now nothing but a human clicking through the graphics demo's combo box ever
+  compiled them. Every other reference to them in this suite is a hand-copied
+  excerpt, which cannot go stale loudly.
+
+  The tests below reach outside tests/ on purpose: the point is to compile the
+  files that ship, not a copy of them.
+*/
+File exampleSynthsFolder()
+{
+    return File (__FILE__)
+        .getParentDirectory() // tests/yup_dsp_jit
+        .getParentDirectory() // tests
+        .getParentDirectory() // repository root
+        .getChildFile ("examples")
+        .getChildFile ("graphics")
+        .getChildFile ("data")
+        .getChildFile ("synths");
+}
+
+struct ElectricPianoDefaultParam
+{
+    const char* name;
+    double value;
+};
+
+} // namespace
+
+//==============================================================================
+
+class YdspExamplePatchTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        // On wasm the tests run against a preloaded virtual filesystem that
+        // carries tests/data only, so the example folder is not reachable.
+        if (! exampleSynthsFolder().isDirectory())
+            GTEST_SKIP() << "example synth folder not available on this platform";
+    }
+
+    // Compiles one patch with its own path as the import base, which is what the
+    // demo app does, so a patch's relative `import fx.Delay` resolves.
+    YdspAudioGraph compilePatch (const File& patchFile, YdspCompiler& compiler)
+    {
+        auto result = compiler.compile (patchFile.loadFileAsString(), patchFile.getFullPathName());
+
+        EXPECT_TRUE (result.wasOk())
+            << patchFile.getFileName() << ":\n"
+            << compiler.getDiagnostics().toString();
+
+        if (! result.wasOk())
+            return YdspAudioGraph {};
+
+        return std::move (result).getValue();
+    }
+
+    void testPatch (const char* patchName)
+    {
+        const auto patchFile = exampleSynthsFolder().getChildFile (patchName);
+        ASSERT_TRUE (patchFile.existsAsFile()) << patchName;
+
+        YdspCompiler compiler;
+        auto graph = compilePatch (patchFile, compiler);
+
+        EXPECT_TRUE (graph.isValid()) << patchName;
+
+        if (! graph.isValid())
+            return;
+
+        const auto patchFileName = patchFile.getFileName();
+        const auto hasNoParameters = patchFileName == "HelloWorld.ydsp";
+
+        if (! hasNoParameters)
+            EXPECT_GT (graph.getParameterCount(), 0) << patchName;
+
+        EXPECT_LE (graph.getInputStreamCount(), 2) << patchName;
+
+        const auto isMidiOnlyPatch = patchFileName == "ArpTranspose.ydsp";
+
+        if (! isMidiOnlyPatch)
+            EXPECT_GE (graph.getOutputStreamCount(), 1) << patchName;
+
+        EXPECT_LE (graph.getOutputStreamCount(), 2) << patchName;
+
+        constexpr int blockSize = 128;
+        constexpr double sampleRate = 48000.0;
+        graph.prepare (sampleRate, blockSize);
+
+        const auto numOutputs = graph.getOutputStreamCount();
+
+        std::vector<float> left (blockSize, 0.0f);
+        std::vector<float> right (blockSize, 0.0f);
+
+        YdspOutputBuffer outputs[] = {
+            Span<float> (left.data(), left.size()),
+            Span<float> (right.data(), right.size())
+        };
+
+        const auto numInputs = graph.getInputStreamCount();
+
+        std::vector<float> inputA (static_cast<size_t> (blockSize), 0.0f);
+        std::vector<float> inputB (static_cast<size_t> (blockSize), 0.0f);
+
+        if (numInputs > 0)
+        {
+            constexpr double twoPi = 6.283185307179586476925286766559005768;
+            constexpr double freqA = 220.0;
+            constexpr double freqB = 329.6276;
+
+            double phaseA = 0.0;
+            double phaseB = 0.0;
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto sample = static_cast<float> (0.4 * std::sin (phaseA) + 0.22 * std::sin (phaseB));
+                inputA[static_cast<size_t> (i)] = sample;
+                inputB[static_cast<size_t> (i)] = sample;
+
+                phaseA += twoPi * freqA / sampleRate;
+                phaseB += twoPi * freqB / sampleRate;
+            }
+        }
+
+        YdspInputBuffer inputs[] = {
+            Span<const float> (inputA.data(), inputA.size()),
+            Span<const float> (inputB.data(), inputB.size())
+        };
+
+        MidiBuffer midi;
+        midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+        int nonFinite = 0;
+
+        for (int block = 0; block < 8; ++block)
+        {
+            const yup::MidiBuffer* processEventInputs[] { &midi };
+
+            graph.process (yup::YdspProcessRequest {
+                Span<const YdspInputBuffer> (inputs, static_cast<size_t> (numInputs)),
+                Span<YdspOutputBuffer> (outputs, static_cast<size_t> (numOutputs)),
+                blockSize,
+                yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+                {}
+            });
+
+            midi.clear();
+
+            for (int channel = 0; channel < numOutputs; ++channel)
+            {
+                const auto& buffer = channel == 0 ? left : right;
+
+                for (int i = 0; i < blockSize; ++i)
+                    if (! std::isfinite (buffer[static_cast<size_t> (i)]))
+                        ++nonFinite;
+            }
+        }
+
+        EXPECT_EQ (nonFinite, 0) << patchName << " produced non-finite samples";
+    }
+
+    static float measureHeldNote (YdspAudioGraph& graph, std::vector<float>& energy)
+    {
+        constexpr double sampleRate = 44100.0;
+        constexpr int blockSize = 256;
+        constexpr int numBlocks = 96; // 0.56 s of held note at 44100 / 256
+
+        graph.prepare (sampleRate, blockSize);
+
+        std::vector<float> left (blockSize, 0.0f);
+        std::vector<float> right (blockSize, 0.0f);
+
+        YdspOutputBuffer outputs[] = {
+            Span<float> (left.data(), left.size()),
+            Span<float> (right.data(), right.size())
+        };
+
+        MidiBuffer midi;
+        midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+        energy.assign (static_cast<size_t> (numBlocks), 0.0f);
+
+        for (int block = 0; block < numBlocks; ++block)
+        {
+            const yup::MidiBuffer* processEventInputs[] { &midi };
+
+            graph.process (yup::YdspProcessRequest {
+                {},
+                Span<YdspOutputBuffer> (outputs, 2),
+                blockSize,
+                yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+                {}
+            });
+
+            midi.clear();
+
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const auto l = left[static_cast<size_t> (i)];
+                const auto r = right[static_cast<size_t> (i)];
+                energy[static_cast<size_t> (block)] += l * l + r * r;
+            }
+        }
+
+        return energy[0];
+    }
+};
+
+//==============================================================================
+
+TEST_F (YdspExamplePatchTests, ZitaReverbProducesStereoTailAcrossBlockBoundaries)
+{
+    YdspCompiler compiler;
+    auto graph = compilePatch (exampleSynthsFolder().getChildFile ("ZitaReverb.ydsp"), compiler);
+    ASSERT_TRUE (graph.isValid());
+    ASSERT_EQ (2, graph.getInputStreamCount());
+    ASSERT_EQ (2, graph.getOutputStreamCount());
+    ASSERT_TRUE (graph.prepare (48000.0, 512).wasOk());
+
+    constexpr int frames = 48000;
+    std::vector<float> inputL (frames, 0.0f), inputR (frames, 0.0f);
+    inputL[0] = 1.0f;
+    std::vector<float> left (frames), right (frames), splitLeft (frames), splitRight (frames);
+    const auto render = [&] (int blockSize, float lowDecay, std::vector<float>& outL, std::vector<float>& outR)
+    {
+        graph.reset();
+        graph.setParameter ("fx.mix", 100.0f);
+        graph.setParameter ("fx.rtLow", lowDecay);
+        graph.setParameter ("fx.eq1Gain", 6.0f);
+        graph.setParameter ("fx.eq2Gain", -6.0f);
+        for (int offset = 0; offset < frames; offset += blockSize)
+        {
+            const auto count = std::min (blockSize, frames - offset);
+            YdspInputBuffer inputs[] { Span<const float> (inputL.data() + offset, count),
+                                       Span<const float> (inputR.data() + offset, count) };
+            YdspOutputBuffer outputs[] { Span<float> (outL.data() + offset, count),
+                                         Span<float> (outR.data() + offset, count) };
+            ASSERT_EQ (YdspProcessResult::ok, graph.process ({ inputs, outputs, count }));
+        }
+    };
+    render (512, 3.0f, left, right);
+    ASSERT_FALSE (HasFatalFailure());
+    render (127, 3.0f, splitLeft, splitRight);
+    ASSERT_FALSE (HasFatalFailure());
+
+    double lateLeft = 0.0, lateRight = 0.0, stereoDifference = 0.0;
+    for (int i = 0; i < frames; ++i)
+    {
+        const auto index = static_cast<size_t> (i);
+        ASSERT_TRUE (std::isfinite (left[index]));
+        ASSERT_TRUE (std::isfinite (right[index]));
+        EXPECT_NEAR (left[index], splitLeft[index], 1.0e-5f) << i;
+        EXPECT_NEAR (right[index], splitRight[index], 1.0e-5f) << i;
+        if (i < 960)
+        {
+            EXPECT_NEAR (0.0f, left[index], 1.0e-8f) << i;
+            EXPECT_NEAR (0.0f, right[index], 1.0e-8f) << i;
+        }
+        if (i >= 8192)
+        {
+            lateLeft += static_cast<double> (left[index]) * left[index];
+            lateRight += static_cast<double> (right[index]) * right[index];
+            const double difference = left[index] - right[index];
+            stereoDifference += difference * difference;
+        }
+    }
+    EXPECT_GT (lateLeft, 1.0e-8);
+    EXPECT_GT (lateRight, 1.0e-8);
+    EXPECT_GT (stereoDifference, 1.0e-8);
+
+    render (512, 1.0f, splitLeft, splitRight);
+    ASSERT_FALSE (HasFatalFailure());
+    double decayDifference = 0.0;
+    for (int i = 8192; i < frames; ++i)
+    {
+        const auto index = static_cast<size_t> (i);
+        const double difference = left[index] - splitLeft[index];
+        decayDifference += difference * difference;
+    }
+    EXPECT_GT (decayDifference, 1.0e-8);
+}
+
+TEST_F (YdspExamplePatchTests, AnalogSawCompilesAndRenders)
+{
+    testPatch ("AnalogSaw.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, ControlRateWahCompilesAndRenders)
+{
+    testPatch ("ControlRateWah.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, DigitalDrumsCompilesAndRenders)
+{
+    testPatch ("DigitalDrums.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, NoiseGeneratorsPreserveModulo32BitSequence)
+{
+    for (const auto* patchName : { "DigitalDrums.ydsp", "WaveLab.ydsp", "ControlRateWah.ydsp" })
+    {
+        SCOPED_TRACE (patchName);
+        String seedStatement, updateStatement;
+        for (const auto& line : StringArray::fromLines (exampleSynthsFolder().getChildFile (patchName).loadFileAsString()))
+        {
+            if (line.contains ("1103515245"))
+                seedStatement = line.trim();
+            if (line.contains ("1664525"))
+                updateStatement = line.trim();
+        }
+        ASSERT_FALSE (seedStatement.isEmpty());
+        ASSERT_FALSE (updateStatement.isEmpty());
+
+        for (const auto tier : { YdspOptimizationTier::baseline, YdspOptimizationTier::automatic, YdspOptimizationTier::aggressive })
+            for (const bool fastMath : { false, true })
+                for (const int pitch : { 36, 42, 127 })
+                {
+                    SCOPED_TRACE (::testing::Message() << "tier=" << static_cast<int> (tier) << ", fastMath=" << fastMath << ", pitch=" << pitch);
+                    const auto source = String (R"YDSP(
+                        processor Noise {
+                            state int rng;
+                            output stream out;
+                            init { SEED }
+                            process {
+                                UPDATE
+                                out = float (rng >> 8) * 1.1920929e-7;
+                            }
+                        }
+                        graph G { output stream out; node n = Noise; connection { n.out -> out; } }
+                    )YDSP").replace ("SEED", seedStatement.replace ("e.pitch", String (pitch)))
+                               .replace ("UPDATE", updateStatement);
+                    YdspCompileOptions options;
+                    options.optimizationTier = tier;
+                    options.fastMath = fastMath;
+                    YdspCompiler compiler;
+                    auto result = compiler.compile (source, options);
+                    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+                    auto graph = std::move (result).getValue();
+                    constexpr int blockSize = 64;
+                    ASSERT_TRUE (graph.prepare (48000.0, blockSize).wasOk());
+                    float samples[blockSize] {};
+                    YdspOutputBuffer outputs[] { Span<float> (samples, blockSize) };
+                    uint32_t reference = static_cast<uint32_t> (pitch) * 1103515245u;
+                    for (int block = 0; block < 8; ++block)
+                    {
+                        ASSERT_EQ (YdspProcessResult::ok, graph.process ({ {}, outputs, blockSize }));
+                        for (const float sample : samples)
+                        {
+                            reference = reference * 1664525u + 1013904223u;
+                            const int64_t signedHighBits = static_cast<int64_t> (reference >> 8)
+                                                        - ((reference & 0x80000000u) != 0 ? 16777216 : 0);
+                            EXPECT_FLOAT_EQ (static_cast<float> (signedHighBits) * 1.1920929e-7f, sample);
+                        }
+                    }
+                }
+    }
+}
+
+TEST_F (YdspExamplePatchTests, ElectricPianoCompilesAndRenders)
+{
+    testPatch ("ElectricPiano.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, ElectricPianoSustainsAtDeclaredDefaults)
+{
+    // Regression guard for the graphics demo: when every EPVoice envelope
+    // parameter (decayRate, brightness, ...) read 0 at noteOn time, each note
+    // collapsed to a ~0.15 s click, and the suite's short sweeps (~46 ms) could
+    // not tell that from the ~7 s decay the declared defaults should produce.
+    // This renders the shipped patch for over half a second at untouched
+    // defaults and requires the note body to still be sounding.
+
+    const auto patchFile = exampleSynthsFolder().getChildFile ("ElectricPiano.ydsp");
+    ASSERT_TRUE (patchFile.existsAsFile());
+
+    YdspCompiler compiler;
+    auto graph = compilePatch (patchFile, compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+
+    // The graph must already hold its declared defaults - no setParameter call.
+    const ElectricPianoDefaultParam declaredDefaults[] = {
+        { "brightness", 30.0 },
+        { "velocitySensitivity", 60.0 },
+        { "decayRate", 50.0 },
+        { "harmonicDecayRate", 50.0 },
+        { "keyScaling", 50.0 },
+        { "releaseRate", 40.0 },
+        { "vibratoRate", 4.0 },
+        { "vibratoDepth", 0.5 }
+    };
+
+    for (const auto& param : declaredDefaults)
+        EXPECT_DOUBLE_EQ (param.value, graph.getParameter (param.name)) << param.name;
+
+    std::vector<float> energy;
+    const auto attackEnergy = measureHeldNote (graph, energy);
+
+    EXPECT_GT (attackEnergy, 0.0f) << "The note's attack is silent";
+
+    // Block 24 sits at t ~0.14 s, far past where a 0.15 s click has died.
+    EXPECT_GT (energy[24], attackEnergy * 0.1f) << "The note died within its attack";
+
+    // The tail window (0.28-0.56 s) must still carry a clearly sounding body.
+    // A correct patch is quieter there by design: the per-partial envelope
+    // (harmonicDecayRate = 50) sends each partial to -60 dB within ~0.1-0.7 s,
+    // so by half a second only the fundamental region is left ringing, at
+    // roughly a tenth of the full-attack energy. A zeroed decayRate instead
+    // collapses everything to ~1e-12 (and puts the voice to sleep) well before
+    // 0.2 s.
+    float sustainedEnergy = 0.0f;
+    for (int block = 48; block < static_cast<int> (energy.size()); ++block)
+        sustainedEnergy += energy[static_cast<size_t> (block)];
+
+    sustainedEnergy /= static_cast<float> (energy.size() - 48);
+
+    EXPECT_GT (sustainedEnergy, attackEnergy * 0.05f) << "The held note died instead of sustaining";
+}
+
+TEST_F (YdspExamplePatchTests, ElectricPianoSustainsWhenDefaultsAreExplicitlySet)
+{
+    // Diagnostic twin of the test above: pushes the declared EPVoice defaults
+    // through the host setParameter/ring path before the note. If this one
+    // sustains while the untouched-defaults one dies, the compile-time seed
+    // never reaches the slot the noteOn kernel reads; if both die, the kernel
+    // binds its parameters to a slot that is never written at all.
+
+    const auto patchFile = exampleSynthsFolder().getChildFile ("ElectricPiano.ydsp");
+
+    YdspCompiler compiler;
+    auto graph = compilePatch (patchFile, compiler);
+
+    ASSERT_TRUE (graph.isValid()) << compiler.getDiagnostics().toString();
+
+    // Only the EPVoice envelope params shape the note body.
+    const ElectricPianoDefaultParam voiceDefaults[] = {
+        { "brightness", 30.0 },
+        { "velocitySensitivity", 60.0 },
+        { "decayRate", 50.0 },
+        { "harmonicDecayRate", 50.0 },
+        { "keyScaling", 50.0 },
+        { "releaseRate", 40.0 }
+    };
+
+    for (const auto& param : voiceDefaults)
+        graph.setParameter (param.name, static_cast<float> (param.value));
+
+    std::vector<float> energy;
+    const auto attackEnergy = measureHeldNote (graph, energy);
+
+    EXPECT_GT (attackEnergy, 0.0f) << "The note's attack is silent";
+    EXPECT_GT (energy[24], attackEnergy * 0.1f) << "The note died within its attack";
+
+    // Same tail-window rationale as ElectricPianoSustainsAtDeclaredDefaults:
+    // the per-partial decay leaves the fundamental-only body at roughly a
+    // tenth of the full-attack energy by 0.3-0.56 s, far above the ~1e-12 a
+    // collapsed click leaves behind.
+    float sustainedEnergy = 0.0f;
+    for (int block = 48; block < static_cast<int> (energy.size()); ++block)
+        sustainedEnergy += energy[static_cast<size_t> (block)];
+
+    sustainedEnergy /= static_cast<float> (energy.size() - 48);
+
+    EXPECT_GT (sustainedEnergy, attackEnergy * 0.05f) << "The held note died instead of sustaining";
+}
+
+TEST_F (YdspExamplePatchTests, FMBellCompilesAndRenders)
+{
+    testPatch ("FMBell.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, FormantsCompilesAndRenders)
+{
+    testPatch ("Formants.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, HaasWidenerCompilesAndRenders)
+{
+    testPatch ("HaasWidener.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, HelloWorldCompilesAndRenders)
+{
+    testPatch ("HelloWorld.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PolySineCompilesAndRenders)
+{
+    testPatch ("PolySine.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PolySineArpCompilesAndRenders)
+{
+    testPatch ("PolySineArp.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PulseBassCompilesAndRenders)
+{
+    testPatch ("PulseBass.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, StereoDelayCompilesAndRenders)
+{
+    testPatch ("StereoDelay.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, SubtractOneCompilesAndRenders)
+{
+    testPatch ("SubtractOne.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, TX81ZCompilesAndRenders)
+{
+    testPatch ("TX81Z.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, TremoloCompilesAndRenders)
+{
+    testPatch ("Tremolo.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, FreeverbCompilesAndRenders)
+{
+    testPatch ("Freeverb.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, WaveLabCompilesAndRenders)
+{
+    testPatch ("WaveLab.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, WobbleLeadCompilesAndRenders)
+{
+    testPatch ("WobbleLead.ydsp");
+}
+
+TEST_F (YdspExamplePatchTests, PerVoiceEchoCompilesAndRenders)
+{
+    testPatch ("PerVoiceEcho.ydsp");
+}
+
+//==============================================================================
+// Minimal probe for the ElectricPiano regression: does a voice-bank noteOn
+// handler actually read its processor's `input parameter` parameter? EPVoice reads
+// all six envelope params (decayRate etc.) only inside noteOn, so a broken
+// event-handler param load collapses every note to the same silent click and
+// no host setParameter can fix it (both scenarios were bit-identical above).
+
+TEST (YdspParamProbeTests, VoiceBankNoteOnReadsItsValueParam)
+{
+    YdspCompiler compiler;
+
+    auto result = compiler.compile (R"YDSP(
+        processor ParamVoice
+        {
+            output stream out;
+            input parameter float level = 1.0;
+            input event midi;
+            state float heldLevel;
+            event midi (e: noteOn) { heldLevel = level; }
+            process { out = heldLevel; }
+        }
+        graph Probe
+        {
+            input event midi;
+            output stream y;
+            node v = ParamVoice[4] [[ mode: poly, stealing: oldest ]];
+            connection { midi -> v.midi; v.out -> y; }
+        }
+    )YDSP");
+
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 128;
+    graph.prepare (44100.0, blockSize);
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    YdspOutputBuffer outputs[] = {
+        Span<float> (output.data(), output.size())
+    };
+
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    for (int block = 0; block < 4; ++block)
+    {
+        const yup::MidiBuffer* processEventInputs[] { &midi };
+
+        graph.process (yup::YdspProcessRequest {
+            {},
+            Span<YdspOutputBuffer> (outputs, 1),
+            blockSize,
+            yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+            {}
+        });
+
+        midi.clear();
+
+        float energy = 0.0f;
+        for (int i = 0; i < blockSize; ++i)
+            energy += output[static_cast<size_t> (i)] * output[static_cast<size_t> (i)];
+
+        // heldLevel = level = 1.0 makes out a constant 1.0 -> energy ~= 128.
+        EXPECT_GT (energy, 10.0f) << "noteOn handler did not read its level param (block " << block << ")";
+    }
+}
+
+TEST (YdspParamProbeTests, VoiceBankNoteOnReadsAliasedValueParam)
+{
+    // Same probe, but with the param driven through a graph `input parameter`
+    // endpoint and an explicit `level -> v.level` wire - the shape ElectricPiano
+    // uses for all six EPVoice params (brightness -> voices.brightness, etc.).
+
+    YdspCompiler compiler;
+
+    auto result = compiler.compile (R"YDSP(
+        processor ParamVoice
+        {
+            output stream out;
+            input parameter float level = 1.0;
+            input event midi;
+            state float heldLevel;
+            event midi (e: noteOn) { heldLevel = level; }
+            process { out = heldLevel; }
+        }
+        graph ProbeAliased
+        {
+            input event midi;
+            input parameter float level = 1.0;
+            output stream y;
+            node v = ParamVoice[4] [[ mode: poly, stealing: oldest ]];
+            connection { midi -> v.midi; level -> v.level; v.out -> y; }
+        }
+    )YDSP");
+
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 128;
+    graph.prepare (44100.0, blockSize);
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    YdspOutputBuffer outputs[] = {
+        Span<float> (output.data(), output.size())
+    };
+
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    for (int block = 0; block < 4; ++block)
+    {
+        const yup::MidiBuffer* processEventInputs[] { &midi };
+
+        graph.process (yup::YdspProcessRequest {
+            {},
+            Span<YdspOutputBuffer> (outputs, 1),
+            blockSize,
+            yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+            {}
+        });
+
+        midi.clear();
+
+        float energy = 0.0f;
+        for (int i = 0; i < blockSize; ++i)
+            energy += output[static_cast<size_t> (i)] * output[static_cast<size_t> (i)];
+
+        // heldLevel = level = 1.0 makes out a constant 1.0 -> energy ~= 128.
+        EXPECT_GT (energy, 10.0f) << "noteOn handler did not read its aliased level param (block " << block << ")";
+    }
+}
+
+TEST (YdspParamProbeTests, VoiceBankNoteOnHonorsUpdatedValueParam)
+{
+    // Control for the two probes above: they cannot tell a *dynamic* param
+    // read from a compile-time fold of the declared default (both yield 1.0).
+    // Here the aliased param is rewritten to 0.25 via setParameter before the
+    // note: a dynamic read outputs 0.25 (energy ~= 8), while a fold of the
+    // declared default keeps outputting 1.0 (energy ~= 128) regardless.
+
+    YdspCompiler compiler;
+
+    auto result = compiler.compile (R"YDSP(
+        processor ParamVoice
+        {
+            output stream out;
+            input parameter float level = 1.0;
+            input event midi;
+            state float heldLevel;
+            event midi (e: noteOn) { heldLevel = level; }
+            process { out = heldLevel; }
+        }
+        graph ProbeUpdated
+        {
+            input event midi;
+            input parameter float level = 1.0;
+            output stream y;
+            node v = ParamVoice[4] [[ mode: poly, stealing: oldest ]];
+            connection { midi -> v.midi; level -> v.level; v.out -> y; }
+        }
+    )YDSP");
+
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 128;
+    graph.prepare (44100.0, blockSize);
+
+    graph.setParameter ("level", 0.25f);
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    YdspOutputBuffer outputs[] = {
+        Span<float> (output.data(), output.size())
+    };
+
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    for (int block = 0; block < 2; ++block)
+    {
+        const yup::MidiBuffer* processEventInputs[] { &midi };
+
+        graph.process (yup::YdspProcessRequest {
+            {},
+            Span<YdspOutputBuffer> (outputs, 1),
+            blockSize,
+            yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+            {}
+        });
+
+        midi.clear();
+
+        float energy = 0.0f;
+        for (int i = 0; i < blockSize; ++i)
+            energy += output[static_cast<size_t> (i)] * output[static_cast<size_t> (i)];
+
+        // out = heldLevel = 0.25 constantly -> energy = 128 * 0.0625 = 8.
+        EXPECT_NEAR (8.0f, energy, 1.0f)
+            << "noteOn ignored the setParameter update; param read is not dynamic (block " << block << ")";
+    }
+}
+
+TEST (YdspParamProbeTests, VoiceBankNoteOnReadsEventFields)
+{
+    // The ElectricPiano noteOn reads e.velocity / e.pitch; the probes above
+    // never touched an `e.*` field. A noteOn that stores the incoming velocity
+    // into the held output pins down whether event-field delivery is intact:
+    // velocity 0.8 -> out 0.8 constantly -> energy = 128 * 0.64 ~= 82.
+
+    YdspCompiler compiler;
+
+    auto result = compiler.compile (R"YDSP(
+        processor ParamVoice
+        {
+            output stream out;
+            input event midi;
+            state float heldValue;
+            event midi (e: noteOn) { heldValue = e.velocity; }
+            process { out = heldValue; }
+        }
+        graph ProbeFields
+        {
+            input event midi;
+            output stream y;
+            node v = ParamVoice[4] [[ mode: poly, stealing: oldest ]];
+            connection { midi -> v.midi; v.out -> y; }
+        }
+    )YDSP");
+
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 128;
+    graph.prepare (44100.0, blockSize);
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    YdspOutputBuffer outputs[] = {
+        Span<float> (output.data(), output.size())
+    };
+
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    for (int block = 0; block < 2; ++block)
+    {
+        const yup::MidiBuffer* processEventInputs[] { &midi };
+
+        graph.process (yup::YdspProcessRequest {
+            {},
+            Span<YdspOutputBuffer> (outputs, 1),
+            blockSize,
+            yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+            {}
+        });
+
+        midi.clear();
+
+        float energy = 0.0f;
+        for (int i = 0; i < blockSize; ++i)
+            energy += output[static_cast<size_t> (i)] * output[static_cast<size_t> (i)];
+
+        // out = e.velocity = 0.8 constantly -> energy = 128 * 0.64 = 81.92.
+        EXPECT_NEAR (81.92f, energy, 2.0f)
+            << "noteOn misread e.velocity (block " << block << ")";
+    }
+}
+
+TEST (YdspParamProbeTests, VoiceBankNoteOnReadsEventPitch)
+{
+    // Same idea for e.pitch: note 60 -> out 60.0 constantly -> energy = 128 * 3600.
+
+    YdspCompiler compiler;
+
+    auto result = compiler.compile (R"YDSP(
+        processor ParamVoice
+        {
+            output stream out;
+            input event midi;
+            state float heldValue;
+            event midi (e: noteOn) { heldValue = e.pitch; }
+            process { out = heldValue; }
+        }
+        graph ProbePitch
+        {
+            input event midi;
+            output stream y;
+            node v = ParamVoice[4] [[ mode: poly, stealing: oldest ]];
+            connection { midi -> v.midi; v.out -> y; }
+        }
+    )YDSP");
+
+    ASSERT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 128;
+    graph.prepare (44100.0, blockSize);
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    YdspOutputBuffer outputs[] = {
+        Span<float> (output.data(), output.size())
+    };
+
+    MidiBuffer midi;
+    midi.addEvent (MidiMessage::noteOn (1, 60, 0.8f), 0);
+
+    for (int block = 0; block < 2; ++block)
+    {
+        const yup::MidiBuffer* processEventInputs[] { &midi };
+
+        graph.process (yup::YdspProcessRequest {
+            {},
+            Span<YdspOutputBuffer> (outputs, 1),
+            blockSize,
+            yup::Span<const yup::MidiBuffer*> (processEventInputs, graph.getEventInputCount() > 0 ? 1 : 0),
+            {}
+        });
+
+        midi.clear();
+
+        float energy = 0.0f;
+        for (int i = 0; i < blockSize; ++i)
+            energy += output[static_cast<size_t> (i)] * output[static_cast<size_t> (i)];
+
+        // out = e.pitch = 60.0 constantly -> energy = 128 * 3600 = 460800.
+        EXPECT_NEAR (460800.0f, energy, 1000.0f)
+            << "noteOn misread e.pitch (block " << block << ")";
+    }
+}
+
+//==============================================================================
+// Regression: a `return` inside an inlined function used to be lowered as a
+// plain value record, so the linear fall-through of later statements/returns
+// overwrote the result - every branch returned the last value. This exercises
+// a chained `if { return A; } ... return B;` function against four parameter
+// values and asserts the chosen branch actually reaches the output.
+TEST (YdspFunctionReturnTests, BranchReturnsFollowTheParameter)
+{
+    const char* patch = R"YDSP(
+processor BranchProbe {
+    output stream out;
+
+    input parameter float shape = 0.0;
+
+    func branchOut (shapeValue: float) : float {
+        if (shapeValue < 0.5) { return 0.2; }
+        if (shapeValue < 1.5) { return 0.6; }
+        if (shapeValue < 2.5) { return 1.0; }
+        return 0.4;
+    }
+
+    process {
+        out = branchOut (shape);
+    }
+}
+
+graph BranchProbe {
+    output stream out;
+
+    node probe = BranchProbe;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    YdspCompiler compiler;
+    auto result = compiler.compile (patch);
+    ASSERT_TRUE (result.wasOk())
+        << compiler.getDiagnostics().toString();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 8;
+    constexpr double sampleRate = 48000.0;
+    graph.prepare (sampleRate, blockSize);
+
+    ASSERT_GE (graph.getParameterCount(), 1);
+
+    const auto& paramInfo = graph.getParameterInfo (0);
+
+    const float shapeValues[] = { 0.0f, 1.0f, 2.0f, 3.0f };
+    const float expected[] = { 0.2f, 0.6f, 1.0f, 0.4f };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        std::vector<float> out (blockSize, 0.0f);
+        YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+        graph.setParameter (paramInfo.name, shapeValues[i]);
+
+        graph.process (yup::YdspProcessRequest { Span<const YdspInputBuffer> (), Span<YdspOutputBuffer> (outputs, 1), blockSize });
+
+        EXPECT_NEAR (expected[i], out[static_cast<size_t> (blockSize - 1)], 1.0e-5f)
+            << "branchOut did not return the branch for shape " << shapeValues[i];
+    }
+}
+
+// The same chain driven by literal arguments: if literals select correctly but
+// the parameter-driven case above does not, the fault is in how a parameter
+// value reaches the function argument rather than in the chain lowering.
+TEST (YdspFunctionReturnTests, LiteralArgumentsSelectTheirBranch)
+{
+    auto runWithLiteral = [] (double literal)
+    {
+        const std::string source = R"YDSP(
+processor BranchProbe {
+    output stream out;
+
+    func branchOut (shapeValue: float) : float {
+        if (shapeValue < 0.5) { return 0.2; }
+        if (shapeValue < 1.5) { return 0.6; }
+        if (shapeValue < 2.5) { return 1.0; }
+        return 0.4;
+    }
+
+    process {
+        out = branchOut ()YDSP" + std::to_string (literal) + R"YDSP();
+    }
+}
+
+graph BranchProbe {
+    output stream out;
+
+    node probe = BranchProbe;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+        YdspCompiler compiler;
+        auto result = compiler.compile (source);
+        EXPECT_TRUE (result.wasOk()) << compiler.getDiagnostics().toString();
+
+        if (! result.wasOk())
+            return 0.0;
+
+        auto graph = std::move (result).getValue();
+
+        constexpr int blockSize = 8;
+        constexpr double sampleRate = 48000.0;
+        graph.prepare (sampleRate, blockSize);
+
+        std::vector<float> out (blockSize, 0.0f);
+        YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+        graph.process (yup::YdspProcessRequest { Span<const YdspInputBuffer> (), Span<YdspOutputBuffer> (outputs, 1), blockSize });
+
+        return static_cast<double> (out[static_cast<size_t> (blockSize - 1)]);
+    };
+
+    EXPECT_NEAR (0.2, runWithLiteral (0.0), 1.0e-5);
+    EXPECT_NEAR (0.6, runWithLiteral (1.0), 1.0e-5);
+    EXPECT_NEAR (1.0, runWithLiteral (2.0), 1.0e-5);
+    EXPECT_NEAR (0.4, runWithLiteral (3.0), 1.0e-5);
+}
+
+//==============================================================================
+// Nested if/else cascades. An `else if` chain and a two-level if/else go
+// through the branch-terminator path when their arms hold early returns, and
+// through if-conversion/selectB when they hold local writes in the process
+// body. Every branch is driven explicitly so a single mis-lowered arm fails.
+//==============================================================================
+
+namespace
+{
+
+double compileAndRender (const char* patch, const std::vector<double>& params)
+{
+    YdspCompiler compiler;
+    auto result = compiler.compile (patch);
+
+    if (! result.wasOk())
+        return std::numeric_limits<double>::quiet_NaN();
+
+    auto graph = std::move (result).getValue();
+
+    constexpr int blockSize = 8;
+    constexpr double sampleRate = 48000.0;
+    graph.prepare (sampleRate, blockSize);
+
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+        if (i >= static_cast<size_t> (graph.getParameterCount()))
+            break;
+
+        graph.setParameter (graph.getParameterInfo (static_cast<int> (i)).name, static_cast<float> (params[i]));
+    }
+
+    std::vector<float> out (static_cast<size_t> (blockSize), 0.0f);
+    YdspOutputBuffer outputs[] = { Span<float> (out.data(), out.size()) };
+
+    graph.process (yup::YdspProcessRequest { Span<const YdspInputBuffer> (), Span<YdspOutputBuffer> (outputs, 1), blockSize });
+
+    return static_cast<double> (out[static_cast<size_t> (blockSize - 1)]);
+}
+
+} // namespace
+
+TEST (YdspNestedIfElseTests, ElseIfCascadeInFunctionReturnsCorrectBranch)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input parameter float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.2; }
+        else if (v < 1.5) { return 0.6; }
+        else if (v < 2.5) { return 1.0; }
+        else { return 0.4; }
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.6, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (1.0, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, ElseIfCascadeWithTrailingReturn)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input parameter float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.2; }
+        else if (v < 1.5) { return 0.6; }
+        return 0.4;
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.6, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, TwoLevelNestedIfElseInFunctionReturnsCorrectQuadrant)
+{
+    const char* patch = R"YDSP(
+processor Nest {
+    output stream out;
+
+    input parameter float a = 0.0;
+    input parameter float b = 0.0;
+
+    func nest (a: float, b: float) : float {
+        if (a < 0.5) {
+            if (b < 0.5) { return 0.1; }
+            else { return 0.2; }
+        } else {
+            if (b < 0.5) { return 0.3; }
+            else { return 0.4; }
+        }
+    }
+
+    process {
+        out = nest (a, b);
+    }
+}
+
+graph Nest {
+    output stream out;
+
+    node probe = Nest;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0, 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 1.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 1.0, 1.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, TwoLevelNestedIfElseInProcessBodySelectsCorrectly)
+{
+    const char* patch = R"YDSP(
+processor Nest {
+    output stream out;
+
+    input parameter float a = 0.0;
+    input parameter float b = 0.0;
+
+    process {
+        float v = 0.0;
+        if (a < 0.5) {
+            if (b < 0.5) { v = 0.1; } else { v = 0.2; }
+        } else {
+            if (b < 0.5) { v = 0.3; } else { v = 0.4; }
+        }
+        out = v;
+    }
+}
+
+graph Nest {
+    output stream out;
+
+    node probe = Nest;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 0.0, 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 1.0, 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 1.0, 1.0 }), 1.0e-5);
+}
+
+TEST (YdspNestedIfElseTests, DeepElseIfCascadeInFunctionReturnsCorrectBranch)
+{
+    const char* patch = R"YDSP(
+processor Cascade {
+    output stream out;
+
+    input parameter float x = 0.0;
+
+    func cascade (v: float) : float {
+        if (v < 0.5) { return 0.1; }
+        else if (v < 1.5) { return 0.2; }
+        else if (v < 2.5) { return 0.3; }
+        else if (v < 3.5) { return 0.4; }
+        else if (v < 4.5) { return 0.5; }
+        else { return 0.9; }
+    }
+
+    process {
+        out = cascade (x);
+    }
+}
+
+graph Cascade {
+    output stream out;
+
+    node probe = Cascade;
+
+    connection {
+        probe.out -> out;
+    }
+}
+)YDSP";
+
+    EXPECT_NEAR (0.1, compileAndRender (patch, { 0.0 }), 1.0e-5);
+    EXPECT_NEAR (0.2, compileAndRender (patch, { 1.0 }), 1.0e-5);
+    EXPECT_NEAR (0.3, compileAndRender (patch, { 2.0 }), 1.0e-5);
+    EXPECT_NEAR (0.4, compileAndRender (patch, { 3.0 }), 1.0e-5);
+    EXPECT_NEAR (0.5, compileAndRender (patch, { 4.0 }), 1.0e-5);
+    EXPECT_NEAR (0.9, compileAndRender (patch, { 5.0 }), 1.0e-5);
+}
+
+} // namespace yup::test

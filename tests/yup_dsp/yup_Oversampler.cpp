@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -173,7 +174,7 @@ TEST_F (OversamplerTest, DownsampleConsumesPendingOversampledBlock)
     os2x.downsample (outputPtrs, 1, blockSize);
 
     EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
-    EXPECT_EQ (os2x.getOversampledChannelData (0), nullptr);
+    EXPECT_NE (os2x.getOversampledChannelData (0), nullptr);
 }
 
 TEST_F (OversamplerTest, UpsampleThenDownsamplePreservesDCMagnitude)
@@ -225,9 +226,6 @@ TEST_F (OversamplerTest, DecimationFiltersOversampledDomainHighFrequency)
     for (int b = 0; b < 5; ++b)
         os2x.upsample (silPtrs, 1, blockSize);
 
-    // Inject a tone ABOVE original Nyquist directly into the oversampled buffer.
-    // This simulates distortion harmonics created at the elevated sample rate.
-    // The decimation filter should attenuate this before downsampling.
     const double oversampledRate = sampleRate * 2.0;
     const double highFreq = sampleRate * 0.6; // above original Nyquist (22050 Hz)
     float* oversampledData = os2x.getOversampledChannelData (0);
@@ -267,6 +265,148 @@ TEST_F (OversamplerTest, FourXOversamplerHasCorrectOutputSize)
     EXPECT_EQ (os4x.getOversampledNumSamples(), blockSize * 4);
 }
 
+TEST_F (OversamplerTest, OversampledChannelDataIsAvailableAfterPrepare)
+{
+    EXPECT_NE (os2x.getOversampledChannelData (0), nullptr);
+    EXPECT_NE (os2x.getOversampledChannelData (1), nullptr);
+
+    EXPECT_EQ (os2x.getOversampledChannelData (maxChannels), nullptr);
+    EXPECT_EQ (os2x.getOversampledChannelData (-1), nullptr);
+
+    EXPECT_EQ (os2x.getOversampledNumSamples(), 0);
+}
+
+TEST_F (OversamplerTest, DownsampleWithoutAPrecedingUpsampleFiltersHighFrequencies)
+{
+    Oversampler<float, 2, 8> decimator;
+    decimator.prepare (sampleRate, 1, blockSize);
+
+    const double highRate = sampleRate * 2.0;
+    const double aboveNyquist = sampleRate * 0.6; // above the decimated Nyquist
+    constexpr float amplitude = 0.5f;
+
+    std::vector<float> decimated (blockSize, 0.0f);
+    float* outPtrs[] = { decimated.data() };
+
+    // A few blocks so the filter history settles past its start-up transient.
+    for (int block = 0; block < 5; ++block)
+    {
+        auto* buffer = decimator.getOversampledChannelData (0);
+        ASSERT_NE (buffer, nullptr);
+
+        for (int i = 0; i < blockSize * 2; ++i)
+        {
+            const auto n = static_cast<double> (block * blockSize * 2 + i);
+            buffer[i] = amplitude * static_cast<float> (std::sin (MathConstants<double>::twoPi * aboveNyquist * n / highRate));
+        }
+
+        decimator.downsample (outPtrs, 1, blockSize);
+    }
+
+    EXPECT_LT (calculateRMS (decimated.data(), blockSize), amplitude * 0.5f);
+}
+
+TEST_F (OversamplerTest, DecimateThenInterpolateRoundTripPreservesLowFrequency)
+{
+    constexpr int factor = 2;
+    constexpr int baseBlock = blockSize / factor;
+
+    Oversampler<float, factor, 8> decimator;
+    Oversampler<float, factor, 8> interpolator;
+
+    decimator.prepare (sampleRate / factor, 1, baseBlock);
+    interpolator.prepare (sampleRate / factor, 1, baseBlock);
+
+    constexpr int blockCount = 6;
+    constexpr float frequency = 300.0f; // well inside the decimated passband
+
+    std::vector<float> input (static_cast<std::size_t> (blockSize * blockCount));
+    fillSine (input, frequency);
+
+    std::vector<float> decimated (baseBlock, 0.0f);
+    float* decimatedPtrs[] = { decimated.data() };
+    const float* interpolatedIn[] = { decimated.data() };
+
+    std::vector<float> output (blockSize, 0.0f);
+
+    for (int block = 0; block < blockCount; ++block)
+    {
+        auto* highRate = decimator.getOversampledChannelData (0);
+        ASSERT_NE (highRate, nullptr);
+
+        std::copy (input.data() + block * blockSize, input.data() + (block + 1) * blockSize, highRate);
+
+        decimator.downsample (decimatedPtrs, 1, baseBlock);
+        interpolator.upsample (interpolatedIn, 1, baseBlock);
+
+        const auto* interpolated = interpolator.getOversampledChannelData (0);
+        ASSERT_NE (interpolated, nullptr);
+
+        std::copy (interpolated, interpolated + blockSize, output.data());
+    }
+
+    const auto latency = decimator.getLatencyInSamples() * factor;
+    const auto* expected = input.data() + (blockCount - 1) * blockSize - latency;
+
+    double error = 0.0;
+    double reference = 0.0;
+
+    for (int i = 0; i < blockSize; ++i)
+    {
+        const auto diff = static_cast<double> (output[static_cast<std::size_t> (i)]) - static_cast<double> (expected[i]);
+        error += diff * diff;
+        reference += static_cast<double> (expected[i]) * static_cast<double> (expected[i]);
+    }
+
+    ASSERT_GT (reference, 1.0); // would pass vacuously on silence
+    EXPECT_LT (std::sqrt (error / reference), 0.1);
+}
+
+TEST_F (OversamplerTest, DecimateFirstIsContinuousAcrossBlockBoundaries)
+{
+    constexpr int factor = 2;
+    constexpr int baseBlock = blockSize / factor;
+    constexpr int blockCount = 6;
+    constexpr float frequency = 500.0f;
+
+    Oversampler<float, factor, 8> decimator;
+    decimator.prepare (sampleRate / factor, 1, baseBlock);
+
+    std::vector<float> input (static_cast<std::size_t> (blockSize * blockCount));
+    fillSine (input, frequency);
+
+    std::vector<float> decimated (static_cast<std::size_t> (baseBlock * blockCount), 0.0f);
+
+    for (int block = 0; block < blockCount; ++block)
+    {
+        auto* highRate = decimator.getOversampledChannelData (0);
+        ASSERT_NE (highRate, nullptr);
+
+        std::copy (input.data() + block * blockSize, input.data() + (block + 1) * blockSize, highRate);
+
+        float* outPtrs[] = { decimated.data() + block * baseBlock };
+        decimator.downsample (outPtrs, 1, baseBlock);
+    }
+
+    // Skip the first two blocks: the filter is still ramping up from silence.
+    float largestInterior = 0.0f;
+    float largestAtBoundary = 0.0f;
+
+    for (int i = 2 * baseBlock + 1; i < baseBlock * blockCount; ++i)
+    {
+        const auto step = std::fabs (decimated[static_cast<std::size_t> (i)] - decimated[static_cast<std::size_t> (i - 1)]);
+
+        if (i % baseBlock == 0)
+            largestAtBoundary = std::max (largestAtBoundary, step);
+        else
+            largestInterior = std::max (largestInterior, step);
+    }
+
+    ASSERT_GT (largestInterior, 0.0f); // would pass vacuously on silence
+    EXPECT_LT (largestAtBoundary, largestInterior * 1.5f)
+        << "boundary step " << largestAtBoundary << " against interior " << largestInterior;
+}
+
 //==============================================================================
 TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
 {
@@ -276,7 +416,6 @@ TEST (OversamplerTypeAliasTest, TypeAliasesCompile)
     Oversampler2xDouble d;
     Oversampler4xDouble e;
 
-    // Prepare briefly to confirm the types are usable
     a.prepare (44100.0, 1, 64);
     b.prepare (44100.0, 1, 64);
     c.prepare (44100.0, 1, 64);

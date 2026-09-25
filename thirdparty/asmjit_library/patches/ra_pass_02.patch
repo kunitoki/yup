@@ -1,0 +1,40 @@
+diff --git a/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp b/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
+index 0483bd81..f331bba5 100644
+--- a/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
++++ b/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
+@@ -1661,8 +1661,35 @@ ASMJIT_FAVOR_SPEED Error BaseRAPass::bin_pack(RegGroup group) noexcept {
+       }
+     }
+   }
+ 
++  // Pack the call-crossing values (their clobber_survival_mask was set from
++  // live-span containment over the call sites above) before any call-free
++  // value: they need a preserved home, and a long-lived call-free value can
++  // otherwise take the last preserved register as a fallback while a value
++  // that must survive every per-sample call is left in a caller-saved one -
++  // which then parks on the stack at each call. The order inside each group
++  // stays priority-sorted, so this only changes which values claim the
++  // preserved pool, not how the pool is shared. Local change over upstream
++  // AsmJit.
++  if (num_work_regs > 1) {
++    size_t first = 0;
++
++    for (size_t index = 0; index < num_work_regs; index++) {
++      if (!work_regs[index]->clobber_survival_mask()) {
++        continue;
++      }
++
++      if (first != index) {
++        RAWorkReg* crossing = work_regs[first];
++        work_regs[first] = work_regs[index];
++        work_regs[index] = crossing;
++      }
++
++      first++;
++    }
++  }
++
+   // Try to pack the rest.
+   if (!work_regs.is_empty()) {
+     size_t dst_index = 0;
+ 

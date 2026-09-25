@@ -1,0 +1,14 @@
+formatVersion: 1
+id: org.yup.analog_saw
+name: Analog Saw
+version: "1.0"
+description: Analog Saw synthesizer.
+manufacturer: YUP!
+isInstrument: true
+main: AnalogSaw
+sources:
+  - AnalogSaw.ydsp
+  - fx/Distortion.ydsp
+  - fx/Compressor.ydsp
+  - fx/Reverb.ydsp
+  - fx/MasterBus.ydsp

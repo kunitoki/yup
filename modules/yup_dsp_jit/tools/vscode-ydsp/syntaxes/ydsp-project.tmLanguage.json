@@ -1,0 +1,7 @@
+{
+  "name": "YDSP Project",
+  "scopeName": "source.ydsp-project",
+  "patterns": [
+    { "include": "source.yaml" }
+  ]
+}

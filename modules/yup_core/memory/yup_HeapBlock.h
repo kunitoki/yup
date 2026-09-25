@@ -40,6 +40,10 @@
 namespace yup
 {
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+YUP_API void notifyAllocationHooksForThread();
+#endif
+
 #if ! (DOXYGEN || YUP_EXCEPTIONS_DISABLED)
 namespace HeapBlockHelper
 {
@@ -358,6 +362,10 @@ private:
     {
         if (size == 0)
             return nullptr;
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+        notifyAllocationHooksForThread();
+#endif
 
         auto* memory = static_cast<ElementType*> (f());
 

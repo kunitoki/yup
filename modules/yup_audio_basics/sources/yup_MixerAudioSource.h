@@ -104,7 +104,7 @@ private:
     //==============================================================================
     Array<AudioSource*> inputs;
     BigInteger inputsToDelete;
-    CriticalSection lock;
+    AudioLockType lock;
     AudioBuffer<float> tempBuffer;
     double currentSampleRate;
     int bufferSizeExpected;

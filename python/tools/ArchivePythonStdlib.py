@@ -1,4 +1,5 @@
 import os
+import sys
 import stat
 import shutil
 import hashlib
@@ -35,6 +36,81 @@ def should_exclude(path, name, exclude_patterns):
                 return True
 
     return False
+
+
+def collect_source_fingerprint(base_python, version_major, version_minor, exclude_patterns):
+    """Collect (path, size, mtime) of every source file that ends up in the archive."""
+    version = f"{version_major}.{version_minor}"
+    python_folder_name = f"python{version}"
+    entries = []
+
+    def add_file(path, relative_to):
+        st = os.stat(path)
+        entries.append((os.path.relpath(path, relative_to), st.st_size, st.st_mtime_ns))
+
+    def add_tree(root, relative_to, filtered=False):
+        for dirname, dirnames, filenames in os.walk(root, followlinks=True):
+            if filtered:
+                dirnames[:] = [d for d in dirnames if not should_exclude(os.path.join(dirname, d), d, exclude_patterns)]
+
+            for filename in filenames:
+                path = os.path.join(dirname, filename)
+                if filtered and should_exclude(path, filename, exclude_patterns):
+                    continue
+
+                add_file(path, relative_to)
+
+    lib_src = base_python / "lib"
+    if lib_src.exists():
+        python_lib_src = lib_src / python_folder_name
+        if python_lib_src.exists():
+            add_tree(python_lib_src, python_lib_src, filtered=True)
+
+        for item in lib_src.iterdir():
+            if item.is_file() and any(ext in item.name for ext in ['.dylib', '.dll', '.so', '.a', '.lib']):
+                if not should_exclude(str(item), item.name, exclude_patterns):
+                    add_file(item, lib_src)
+
+    bin_src = base_python / "bin"
+    if bin_src.exists():
+        executables = sorted(set([
+            "python3",
+            "python",
+            f"python{version}",
+            f"python{version_major}",
+            f"python{version_major}.{version_minor}",
+        ]))
+
+        for executable in executables:
+            exe_path = bin_src / executable
+            if exe_path.exists():
+                add_file(exe_path, bin_src)
+
+    include_src = base_python / "include"
+    python_include_src = include_src / python_folder_name
+    if python_include_src.exists():
+        add_tree(python_include_src, python_include_src)
+    elif include_src.exists():
+        for item in include_src.iterdir():
+            if item.is_dir():
+                add_tree(item, include_src)
+            elif item.is_file():
+                add_file(item, include_src)
+
+    entries.sort()
+    return entries
+
+
+def compute_bundle_fingerprint(base_python, version_major, version_minor, exclude_patterns):
+    """Fingerprint of the tool, its patterns and every source file feeding the archive."""
+    h = hashlib.md5()
+    h.update(Path(__file__).resolve().read_bytes())
+    h.update("\n".join(exclude_patterns).encode())
+
+    for rel_path, size, mtime_ns in collect_source_fingerprint(base_python, version_major, version_minor, exclude_patterns):
+        h.update(f"{rel_path}|{size}|{mtime_ns}\n".encode())
+
+    return h.hexdigest()
 
 
 def copy_filtered_tree(src, dst, exclude_patterns):
@@ -145,6 +221,13 @@ if __name__ == "__main__":
     if args.exclude_patterns:
         custom_patterns = [x.strip() for x in args.exclude_patterns.replace('"', '').split(";")]
         base_patterns += custom_patterns
+
+    fingerprint_file = args.output_folder / f"python{version_nodot}.zip.fingerprint"
+    bundle_fingerprint = compute_bundle_fingerprint(base_python, args.version_major, args.version_minor, base_patterns)
+
+    if final_archive.exists() and fingerprint_file.exists() and fingerprint_file.read_text().strip() == bundle_fingerprint:
+        print(f"-- YUP -- Bundle unchanged, skipping archive regeneration")
+        sys.exit(0)
 
     print(f"-- YUP -- Cleaning up {final_location}...")
     if final_location.exists():
@@ -257,6 +340,8 @@ if __name__ == "__main__":
     else:
         make_archive(final_archive, final_location)
         print("-- YUP -- Archive created")
+
+    fingerprint_file.write_text(bundle_fingerprint)
 
     # Clean up temporary directory
     print(f"-- YUP -- Cleaning up {final_location}...")

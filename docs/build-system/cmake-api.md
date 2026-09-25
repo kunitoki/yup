@@ -53,6 +53,11 @@ cmake -G "Xcode" . -B build
 cmake --build build --config Release
 ```
 
+Xcode builds do not re-run CMake automatically (`CMAKE_SUPPRESS_REGENERATION` is set),
+which keeps Xcode from cancelling builds when the project file would be rewritten
+mid-build. Re-run `cmake -G "Xcode" . -B build` after editing any `CMakeLists.txt` or
+`.cmake` file, otherwise the generated project stays stale.
+
 **Windows:**
 ```bash
 cmake -G "Visual Studio 17 2022" -A x64 . -B build

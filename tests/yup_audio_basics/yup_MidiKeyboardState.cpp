@@ -41,10 +41,22 @@ public:
         noteOffCalls.push_back ({ midiChannel, midiNoteNumber, velocity });
     }
 
+    void handlePitchWheelMoved (MidiKeyboardState*, int midiChannel, int wheelPosition) override
+    {
+        pitchWheelCalls.push_back ({ midiChannel, wheelPosition });
+    }
+
+    void handleControllerMoved (MidiKeyboardState*, int midiChannel, int controllerNumber, int controllerValue) override
+    {
+        controllerCalls.push_back ({ midiChannel, controllerNumber, controllerValue });
+    }
+
     void reset()
     {
         noteOnCalls.clear();
         noteOffCalls.clear();
+        pitchWheelCalls.clear();
+        controllerCalls.clear();
     }
 
     struct NoteEvent
@@ -54,8 +66,23 @@ public:
         float velocity;
     };
 
+    struct PitchWheelEvent
+    {
+        int channel;
+        int position;
+    };
+
+    struct ControllerEvent
+    {
+        int channel;
+        int number;
+        int value;
+    };
+
     std::vector<NoteEvent> noteOnCalls;
     std::vector<NoteEvent> noteOffCalls;
+    std::vector<PitchWheelEvent> pitchWheelCalls;
+    std::vector<ControllerEvent> controllerCalls;
 };
 } // namespace
 
@@ -372,6 +399,151 @@ TEST_F (MidiKeyboardStateTests, AllNotesOffEmptyState)
     state->allNotesOff (1);
 
     EXPECT_EQ (listener->noteOffCalls.size(), 0);
+}
+
+//==============================================================================
+// Pitch Wheel Tests
+//==============================================================================
+TEST_F (MidiKeyboardStateTests, PitchWheelPositionInitiallyZero)
+{
+    for (int ch = 1; ch <= 16; ++ch)
+        EXPECT_EQ (0, state->getPitchWheelPosition (ch));
+}
+
+TEST_F (MidiKeyboardStateTests, HandlePitchWheelUpdatesPosition)
+{
+    state->pitchWheel (1, 1000);
+
+    EXPECT_EQ (1000, state->getPitchWheelPosition (1));
+}
+
+TEST_F (MidiKeyboardStateTests, HandlePitchWheelNotifiesListener)
+{
+    state->addListener (listener.get());
+
+    state->pitchWheel (3, 8192);
+
+    ASSERT_EQ (1, (int) listener->pitchWheelCalls.size());
+    EXPECT_EQ (3, listener->pitchWheelCalls[0].channel);
+    EXPECT_EQ (8192, listener->pitchWheelCalls[0].position);
+}
+
+TEST_F (MidiKeyboardStateTests, HandlePitchWheelIgnoresUnchangedPosition)
+{
+    state->addListener (listener.get());
+
+    state->pitchWheel (1, 5000);
+    listener->reset();
+
+    state->pitchWheel (1, 5000);
+
+    EXPECT_EQ (0, (int) listener->pitchWheelCalls.size());
+}
+
+TEST_F (MidiKeyboardStateTests, HandlePitchWheelIsPerChannel)
+{
+    state->addListener (listener.get());
+
+    state->pitchWheel (1, 2000);
+
+    EXPECT_EQ (2000, state->getPitchWheelPosition (1));
+    EXPECT_EQ (0, state->getPitchWheelPosition (2));
+
+    ASSERT_EQ (1, (int) listener->pitchWheelCalls.size());
+    EXPECT_EQ (1, listener->pitchWheelCalls[0].channel);
+}
+
+TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventPitchWheel)
+{
+    state->addListener (listener.get());
+
+    state->processNextMidiEvent (MidiMessage::pitchWheel (1, 12000));
+
+    EXPECT_EQ (12000, state->getPitchWheelPosition (1));
+    ASSERT_EQ (1, (int) listener->pitchWheelCalls.size());
+    EXPECT_EQ (12000, listener->pitchWheelCalls[0].position);
+}
+
+//==============================================================================
+// Controller Tests
+//==============================================================================
+TEST_F (MidiKeyboardStateTests, ControllerValueInitiallyMinusOne)
+{
+    for (int ch = 1; ch <= 16; ++ch)
+        EXPECT_EQ (-1, state->getControllerValue (ch, 1));
+}
+
+TEST_F (MidiKeyboardStateTests, HandleControllerUpdatesValue)
+{
+    state->controlChange (1, 1, 64);
+
+    EXPECT_EQ (64, state->getControllerValue (1, 1));
+}
+
+TEST_F (MidiKeyboardStateTests, HandleControllerNotifiesListener)
+{
+    state->addListener (listener.get());
+
+    state->controlChange (2, 1, 100);
+
+    ASSERT_EQ (1, (int) listener->controllerCalls.size());
+    EXPECT_EQ (2, listener->controllerCalls[0].channel);
+    EXPECT_EQ (1, listener->controllerCalls[0].number);
+    EXPECT_EQ (100, listener->controllerCalls[0].value);
+}
+
+TEST_F (MidiKeyboardStateTests, HandleControllerIgnoresUnchangedValue)
+{
+    state->addListener (listener.get());
+
+    state->controlChange (1, 1, 64);
+    listener->reset();
+
+    state->controlChange (1, 1, 64);
+
+    EXPECT_EQ (0, (int) listener->controllerCalls.size());
+}
+
+TEST_F (MidiKeyboardStateTests, HandleControllerTracksMultipleControllers)
+{
+    state->controlChange (1, 1, 10);
+    state->controlChange (1, 74, 20);
+
+    EXPECT_EQ (10, state->getControllerValue (1, 1));
+    EXPECT_EQ (20, state->getControllerValue (1, 74));
+}
+
+TEST_F (MidiKeyboardStateTests, HandleControllerIsPerChannel)
+{
+    state->controlChange (1, 1, 50);
+    state->controlChange (2, 1, 100);
+
+    EXPECT_EQ (50, state->getControllerValue (1, 1));
+    EXPECT_EQ (100, state->getControllerValue (2, 1));
+}
+
+TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventController)
+{
+    state->addListener (listener.get());
+
+    state->processNextMidiEvent (MidiMessage::controllerEvent (1, 1, 127));
+
+    EXPECT_EQ (127, state->getControllerValue (1, 1));
+    ASSERT_EQ (1, (int) listener->controllerCalls.size());
+    EXPECT_EQ (127, listener->controllerCalls[0].value);
+}
+
+TEST_F (MidiKeyboardStateTests, ResetClearsPitchWheelAndControllers)
+{
+    state->pitchWheel (1, 8192);
+    state->controlChange (1, 1, 64);
+    state->controlChange (1, 74, 32);
+
+    state->reset();
+
+    EXPECT_EQ (0, state->getPitchWheelPosition (1));
+    EXPECT_EQ (-1, state->getControllerValue (1, 1));
+    EXPECT_EQ (-1, state->getControllerValue (1, 74));
 }
 
 //==============================================================================

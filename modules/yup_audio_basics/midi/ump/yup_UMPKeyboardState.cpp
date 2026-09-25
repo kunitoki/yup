@@ -59,7 +59,7 @@ UMPKeyboardState::UMPKeyboardState (ump::PacketProtocol protocolIn)
 //==============================================================================
 void UMPKeyboardState::reset()
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     zerostruct (noteStates);
     eventsToAdd.clear();
 }
@@ -83,7 +83,7 @@ void UMPKeyboardState::noteOn (const int midiChannel, const int midiNoteNumber, 
     jassert (midiChannel > 0 && midiChannel <= 16);
     jassert (isPositiveAndBelow (midiNoteNumber, 128));
 
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (isPositiveAndBelow (midiNoteNumber, 128))
     {
@@ -128,7 +128,7 @@ void UMPKeyboardState::noteOnInternal (const int midiChannel, const int midiNote
 
 void UMPKeyboardState::noteOff (const int midiChannel, const int midiNoteNumber, const float velocity)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (isNoteOn (midiChannel, midiNoteNumber))
     {
@@ -173,7 +173,7 @@ void UMPKeyboardState::noteOffInternal (const int midiChannel, const int midiNot
 
 void UMPKeyboardState::allNotesOff (const int midiChannel)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     if (midiChannel <= 0)
     {
@@ -241,7 +241,7 @@ void UMPKeyboardState::processNextUMPBuffer (UMPPacketBuffer& buffer,
                                              const int numSamples,
                                              const bool injectIndirectEvents)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
 
     for (const auto metadata : buffer)
         processNextUMPPacket (metadata.getView());
@@ -264,13 +264,13 @@ void UMPKeyboardState::processNextUMPBuffer (UMPPacketBuffer& buffer,
 //==============================================================================
 void UMPKeyboardState::addListener (Listener* listener)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     listeners.add (listener);
 }
 
 void UMPKeyboardState::removeListener (Listener* listener)
 {
-    const ScopedLock sl (lock);
+    const AudioLockType::ScopedLockType sl (lock);
     listeners.remove (listener);
 }
 
