@@ -377,6 +377,7 @@ bool SystemStats::isOperatingSystem64Bit()
     return true;
 #else
     typedef BOOL (WINAPI * LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+    typedef BOOL (WINAPI * LPFN_ISWOW64PROCESS2) (HANDLE, USHORT*, USHORT*);
 
     const auto moduleHandle = GetModuleHandleA ("kernel32");
 
@@ -384,6 +385,17 @@ bool SystemStats::isOperatingSystem64Bit()
     {
         jassertfalse;
         return false;
+    }
+
+    // IsWow64Process2 (Windows 10 1511+) also detects x86/ARM32 processes on ARM64,
+    // where IsWow64Process returns FALSE
+    if (auto fnIsWow64Process2 = (LPFN_ISWOW64PROCESS2) GetProcAddress (moduleHandle, "IsWow64Process2"))
+    {
+        USHORT processMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+        USHORT nativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+
+        return fnIsWow64Process2 (GetCurrentProcess(), &processMachine, &nativeMachine)
+            && processMachine != IMAGE_FILE_MACHINE_UNKNOWN;
     }
 
     LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress (moduleHandle, "IsWow64Process");
