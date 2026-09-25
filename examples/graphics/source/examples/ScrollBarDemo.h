@@ -123,7 +123,7 @@ public:
 
             // Clip path ?
             auto bounds = getBounds();
-            g.setClipPath (yup::Rectangle<float> (getLeft() + visibleLeft, getTop() + visibleTop, viewportWidth, viewportHeight));
+            g.setClipPath (yup::Rectangle<float> (visibleLeft, visibleTop, viewportWidth, viewportHeight));
 
             // Draw canvas background (only visible portion)
             g.setFillColor (yup::Color (0xff2a2a2a));

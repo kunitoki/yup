@@ -574,10 +574,9 @@ public:
         {
             const auto state = g.saveState();
 
-            // setClipPath works in top-level coordinates, unlike the drawing calls. The clip
-            // follows the border's centerline so the texture's antialiased edge stays under it.
+            // The clip follows the border's centerline so the texture's antialiased edge stays under it.
             yup::Path clip;
-            clip.addRoundedRectangle (getBoundsRelativeToTopLevelComponent().reduced (0.5f), cornerRadius);
+            clip.addRoundedRectangle (bounds.reduced (0.5f), cornerRadius);
             g.setClipPath (clip);
             g.drawTexture (landscape, bounds);
         }
