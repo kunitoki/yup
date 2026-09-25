@@ -525,11 +525,11 @@ protected:
         return comp;
     }
 
-    void triggerPaintOnCanvas (Component& comp, int w, int h)
+    void triggerPaintOnCanvas (Component& comp, int w, int h, float scale = 1.0f)
     {
-        auto canvas = GpuCanvas::create (*gpuContext, w, h);
+        auto canvas = GpuCanvas::create (*gpuContext, roundToInt (w * scale), roundToInt (h * scale));
         ASSERT_NE (canvas, nullptr);
-        auto& g = canvas->beginDraw();
+        auto& g = canvas->beginDraw ({}, scale);
         ComponentHelper::triggerPaint (comp, g, comp.getLocalBounds(), false);
         canvas->commit();
     }
@@ -929,6 +929,136 @@ TEST_F (ComponentEffectGpuTest, EffectCompositeAppliesTheComponentTransformOnce)
 }
 
 // =============================================================================
+// Opacity is applied once when compositing offscreen content
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, EffectSubtreeIsRenderedOpaqueAndCompositedWithOpacity)
+{
+    if (! gpuContext)
+        return;
+
+    struct OpacityRecordingEffect : ComponentEffect
+    {
+        void apply (Graphics& g, GpuTexture::Ptr, Rectangle<float>) override
+        {
+            compositeOpacity = g.getOpacity();
+        }
+
+        float compositeOpacity = -1.0f;
+    };
+
+    struct OpacityRecordingComponent : FillComponent
+    {
+        using FillComponent::FillComponent;
+
+        void paint (Graphics& g) override
+        {
+            FillComponent::paint (g);
+            paintOpacity = g.getOpacity();
+        }
+
+        float paintOpacity = -1.0f;
+    };
+
+    auto comp = makeComp ("effected", 64, 64);
+    comp->setVisible (true);
+    comp->setOpacity (0.5f);
+
+    OpacityRecordingComponent probe ("probe");
+    probe.enableRenderingUnclipped (true);
+    probe.setBounds (4, 4, 16, 16);
+    comp->addAndMakeVisible (probe);
+
+    auto effect = ReferenceCountedObjectPtr<OpacityRecordingEffect> (new OpacityRecordingEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 64, 64);
+
+    EXPECT_NEAR (1.0f, probe.paintOpacity, 0.01f);
+    EXPECT_NEAR (0.5f, effect->compositeOpacity, 0.01f); // stored as uint8, 127/255
+}
+
+TEST_F (ComponentEffectGpuTest, CachedTextureIsPaintedAtFullOpacity)
+{
+    if (! gpuContext)
+        return;
+
+    struct OpacityRecordingComponent : FillComponent
+    {
+        using FillComponent::FillComponent;
+
+        void paint (Graphics& g) override
+        {
+            FillComponent::paint (g);
+            paintOpacity = g.getOpacity();
+        }
+
+        float paintOpacity = -1.0f;
+    };
+
+    OpacityRecordingComponent comp ("cached");
+    comp.enableRenderingUnclipped (true);
+    comp.setBounds (0, 0, 64, 64);
+    comp.setVisible (true);
+    comp.setOpacity (0.5f);
+    comp.setCachedToTexture (true);
+
+    triggerPaintOnCanvas (comp, 64, 64);
+
+    ASSERT_NE (ComponentHelper::getCachedTextureCanvas (comp), nullptr);
+    EXPECT_NEAR (1.0f, comp.paintOpacity, 0.01f);
+}
+
+// =============================================================================
+// Offscreen canvases follow the target scale
+// =============================================================================
+
+TEST_F (ComponentEffectGpuTest, EffectCanvasMatchesTheTargetScale)
+{
+    if (! gpuContext)
+        return;
+
+    auto comp = makeComp ("effected", 64, 48);
+    comp->setVisible (true);
+
+    auto effect = ReferenceCountedObjectPtr<CountingEffect> (new CountingEffect());
+    comp->setComponentEffect (effect);
+
+    triggerPaintOnCanvas (*comp, 64, 48, 2.0f);
+
+    auto canvas = ComponentHelper::getEffectOffscreenCanvas (*comp);
+    ASSERT_NE (canvas, nullptr);
+    EXPECT_EQ (128, canvas->getWidth());
+    EXPECT_EQ (96, canvas->getHeight());
+}
+
+TEST_F (ComponentEffectGpuTest, CachedCanvasIsRecreatedWhenTheScaleChanges)
+{
+    if (! gpuContext)
+        return;
+
+    auto comp = makeComp ("cached", 64, 48);
+    comp->setVisible (true);
+    comp->setCachedToTexture (true);
+
+    triggerPaintOnCanvas (*comp, 64, 48, 1.0f);
+
+    auto firstCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (firstCanvas, nullptr);
+    EXPECT_EQ (64, firstCanvas->getWidth());
+    EXPECT_EQ (48, firstCanvas->getHeight());
+
+    // No repaint(): the scale change alone must invalidate the cached texture.
+    triggerPaintOnCanvas (*comp, 64, 48, 2.0f);
+
+    auto scaledCanvas = ComponentHelper::getCachedTextureCanvas (*comp);
+    ASSERT_NE (scaledCanvas, nullptr);
+    EXPECT_NE (firstCanvas.get(), scaledCanvas.get());
+    EXPECT_EQ (128, scaledCanvas->getWidth());
+    EXPECT_EQ (96, scaledCanvas->getHeight());
+}
+
+// =============================================================================
 // Render to texture
 // =============================================================================
 
@@ -994,6 +1124,26 @@ TEST_F (ComponentEffectGpuTest, RenderToTextureAppliesTheEffect)
 
     EXPECT_NE (panel->renderToTexture (*gpuContext), nullptr);
     EXPECT_EQ (1, effect->applyCount);
+}
+
+TEST_F (ComponentEffectGpuTest, RenderToTextureHonorsScale)
+{
+    if (! gpuContext)
+        return;
+
+    auto panel = makeComp ("panel", 64, 48);
+    panel->setVisible (true);
+
+    auto texture = panel->renderToTexture (*gpuContext, 2.0f);
+    ASSERT_NE (texture, nullptr);
+    EXPECT_EQ (128, texture->getWidth());
+    EXPECT_EQ (96, texture->getHeight());
+
+    // No repaint(): a different scale alone renders again at the new size.
+    texture = panel->renderToTexture (*gpuContext, 1.0f);
+    ASSERT_NE (texture, nullptr);
+    EXPECT_EQ (64, texture->getWidth());
+    EXPECT_EQ (48, texture->getHeight());
 }
 
 #endif // YUP_MAC

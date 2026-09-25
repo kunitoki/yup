@@ -278,12 +278,12 @@ private:
             }
 
             const auto viewport = getLocalBounds();
-            const auto width = static_cast<int> (viewport.getWidth());
-            const auto height = static_cast<int> (viewport.getHeight());
+            const auto width = yup::roundToInt (viewport.getWidth() * g.getContextScale());
+            const auto height = yup::roundToInt (viewport.getHeight() * g.getContextScale());
             if (width < 2 || height < 2)
                 return;
 
-            auto panelTexture = panel.renderToTexture (context);
+            auto panelTexture = panel.renderToTexture (context, g.getContextScale());
             if (panelTexture == nullptr)
                 return;
 

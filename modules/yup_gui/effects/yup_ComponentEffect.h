@@ -60,8 +60,13 @@ public:
         The component subtree has been rendered into inputTexture. The effect
         must draw its result into g at the given bounds (in g's coordinate space).
 
+        The texture is at device-pixel resolution, i.e. bounds scaled by the display scale,
+        so derive texel-space parameters (blur radii, pixel sizes) from the texture size and
+        not from bounds.
+
         @param g             The main Graphics context where the result is drawn.
-        @param inputTexture  The GPU texture containing the rendered component subtree.
+        @param inputTexture  The GPU texture containing the rendered component subtree,
+                             sized in device pixels.
         @param bounds        The destination rectangle in g's coordinate space.
     */
     virtual void apply (Graphics& g, GpuTexture::Ptr inputTexture, Rectangle<float> bounds) = 0;

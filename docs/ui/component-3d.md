@@ -26,15 +26,15 @@ host composites it in its own `paint()`:
 ```cpp
 void paint (yup::Graphics& g) override
 {
-    auto texture = panel.renderToTexture (g.getGraphicsContext());
+    auto texture = panel.renderToTexture (g.getGraphicsContext(), g.getContextScale());
     // ... draw the mesh sampling texture, with your GpuPipeline ...
 }
 ```
 
 `renderToTexture()` renders the subtree, including its component effect, into a
 texture owned by the component and reused across calls. It only renders again
-when something in the subtree repainted, or the size changed, since the last
-call, so an idle panel costs nothing.
+when something in the subtree repainted, or the size or scale changed, since the
+last call, so an idle panel costs nothing.
 
 Repainting anything inside a manually composited component repaints the whole host,
 since the host decides where the texture ends up.
@@ -142,8 +142,10 @@ auto viewportPoint = mapper.uvToViewport (uv); // inverse, for localToScreen
    dragged.
 
 ```{note}
-`renderToTexture()` renders at one pixel per point, so a panel viewed up close
-on a high density display looks soft. Size the panel accordingly.
+The `scale` argument of `renderToTexture()` is the number of texture pixels per
+point, and defaults to 1. Pass `g.getContextScale()` to match the display density,
+or a larger value when the panel is magnified on screen, e.g. viewed up close.
+Changing the scale renders the texture again at the new size.
 ```
 
 ---

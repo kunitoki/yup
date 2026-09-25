@@ -23,6 +23,12 @@ When a component has an active effect, the rendering path automatically:
 Nested effects compose naturally: a child's effect completes before the parent's
 effect captures the subtree, so a parent blur will blur an already-edged child.
 
+The input texture is at device-pixel resolution: its size is the destination
+`bounds` multiplied by the display scale (2× on a Retina display). Size
+texel-space parameters such as blur radii or pixel block sizes from the texture,
+not from `bounds`. The subtree is rendered at full opacity and the component's
+opacity is applied once, when the effect draws into `g`.
+
 ---
 
 ## Step 1 — Subclass `ComponentEffect`

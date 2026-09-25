@@ -684,6 +684,7 @@ public:
     /**
         Get the transform from this component's coordinate system to screen coordinates.
         This calculates the combined transform needed to convert coordinates from this component to screen space.
+        Being affine, it can't express ComponentEffect::contentToDisplay() warps, which localToScreen() does include.
 
         @return The combined transform from this component to screen coordinates
      */
@@ -1565,18 +1566,23 @@ public:
     /** Renders this component's subtree, including its effect, into a texture.
 
         The texture is owned by the component and reused across calls: it is rendered again
-        only when something in the subtree repainted, or the size changed, since the last call.
-        This is meant to be called from the parent's paint() for a component marked with
-        setManuallyComposited().
+        only when something in the subtree repainted, or the size or scale changed, since the
+        last call. This is meant to be called from the parent's paint() for a component marked
+        with setManuallyComposited().
 
-        @param ctx The GraphicsContext to render with, usually g.getGraphicsContext().
+        The texture is sized in device pixels, i.e. the component size multiplied by @p scale.
+        Pass g.getContextScale() to keep the result sharp on high-density displays, or a larger
+        value when the surface it is mapped onto is magnified on screen.
+
+        @param ctx   The GraphicsContext to render with, usually g.getGraphicsContext().
+        @param scale The number of texture pixels per logical unit of the component.
 
         @return The texture holding the subtree, or nullptr if the component is empty or
                 rendering failed.
 
         @see setManuallyComposited
      */
-    GpuTexture::Ptr renderToTexture (GraphicsContext& ctx);
+    GpuTexture::Ptr renderToTexture (GraphicsContext& ctx, float scale = 1.0f);
 
     //==============================================================================
     /** A bail out checker for the component. */
@@ -1679,8 +1685,8 @@ private:
     void applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const;
     void paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous);
     void paintChildrenAndOverChildren (Graphics& g, const RectangleList<float>& clipRegion, bool renderContinuous);
-    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas = nullptr);
-    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, GpuCanvas::Ptr reuseCanvas = nullptr);
+    GpuCanvas::Ptr renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
+    GpuCanvas::Ptr renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas = nullptr);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
     void paintDebugOverlay (Graphics& g, const RectangleList<float>& boundsToRedraw);

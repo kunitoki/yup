@@ -2539,6 +2539,25 @@ TEST_F (ComponentTest, DesktopNativeDelegationSetters)
     EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
 }
 
+TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)
+{
+    // The mock native sits at the screen origin, so the root bounds position must not be added again.
+    ComponentHelper::attachMockNative (*root);
+    ComponentHelper::setOnDesktop (*root, true);
+    root->setBounds (10, 20, 400, 300);
+
+    const Point<float> point (3.0f, 4.0f);
+
+    for (const Component* component : { root.get(), child.get() })
+    {
+        const auto viaTransform = point.transformed (component->getTransformToScreen());
+        const auto viaPoint = component->localToScreen (point);
+
+        EXPECT_NEAR (viaPoint.getX(), viaTransform.getX(), 0.001f) << component->getComponentID();
+        EXPECT_NEAR (viaPoint.getY(), viaTransform.getY(), 0.001f) << component->getComponentID();
+    }
+}
+
 TEST_F (ComponentTest, ChildResolvesNativeThroughParent)
 {
     // Child has no native; parent does → getNativeComponent walks up (both overloads).

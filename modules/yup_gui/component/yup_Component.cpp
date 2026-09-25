@@ -97,6 +97,21 @@ void setClipRegion (Graphics& g, const RectangleList<float>& region)
     g.setClipPath (path);
 }
 
+/** Returns the device-pixel size of an offscreen canvas covering @a logicalSize at @a scale. */
+Size<int> getCanvasPixelSize (const Size<float>& logicalSize, float scale)
+{
+    return { jmax (1, roundToInt (logicalSize.getWidth() * scale)),
+             jmax (1, roundToInt (logicalSize.getHeight() * scale)) };
+}
+
+/** Returns true if @a canvas exists and has exactly @a pixelSize. */
+bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
+{
+    return canvas != nullptr
+        && canvas->getWidth() == pixelSize.getWidth()
+        && canvas->getHeight() == pixelSize.getHeight();
+}
+
 } // namespace
 
 //==============================================================================
@@ -1438,16 +1453,14 @@ bool Component::isManuallyComposited() const
     return options.manuallyComposited;
 }
 
-GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx)
+GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
 {
-    const bool sizeChanged = presentedCanvas == nullptr
-                          || presentedCanvas->getWidth() != static_cast<int> (getWidth())
-                          || presentedCanvas->getHeight() != static_cast<int> (getHeight());
+    const bool sizeChanged = ! hasPixelSize (presentedCanvas, getCanvasPixelSize (getSize(), scale));
 
     if (! subtreeDirty.exchange (false) && ! sizeChanged)
         return presentedCanvas->asTexture();
 
-    presentedCanvas = renderSnapshotOffscreen (ctx, true, std::move (presentedCanvas));
+    presentedCanvas = renderSnapshotOffscreen (ctx, true, scale, std::move (presentedCanvas));
     if (presentedCanvas == nullptr)
     {
         subtreeDirty = true;
@@ -1459,7 +1472,7 @@ GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx)
 
 //==============================================================================
 
-GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
@@ -1468,7 +1481,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
     {
         const bool applyEffect = includeEffects && componentEffect != nullptr;
 
-        auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false, applyEffect ? nullptr : std::move (reuseCanvas));
+        auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false, scale, applyEffect ? nullptr : std::move (reuseCanvas));
         if (canvas == nullptr)
             return nullptr;
 
@@ -1484,7 +1497,7 @@ GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool in
         if (effectCanvas == nullptr)
             return canvas;
 
-        auto& g = effectCanvas->beginDraw();
+        auto& g = effectCanvas->beginDraw ({}, scale);
         auto localBounds = getLocalBounds();
         g.setDrawingArea (localBounds);
         componentEffect->apply (g, texture, localBounds);
@@ -1507,7 +1520,7 @@ Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
     Image result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
         if (canvas == nullptr)
             return;
 
@@ -1527,7 +1540,7 @@ GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool include
     GpuTexture::Ptr result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
         if (canvas == nullptr)
             return;
 
@@ -1621,31 +1634,30 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<f
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
-        const auto w = static_cast<int> (getWidth());
-        const auto h = static_cast<int> (getHeight());
+        const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 
         GpuCanvas::Ptr canvas;
-        if (reuseCanvas != nullptr && reuseCanvas->getWidth() == w && reuseCanvas->getHeight() == h)
+        if (hasPixelSize (reuseCanvas, pixelSize))
         {
             canvas = std::move (reuseCanvas);
         }
         else
         {
             reuseCanvas = nullptr;
-            canvas = GpuCanvas::create (ctx, w, h);
+            canvas = GpuCanvas::create (ctx, pixelSize.getWidth(), pixelSize.getHeight());
         }
 
         if (canvas == nullptr)
             return nullptr;
 
-        auto& offscreenG = canvas->beginDraw();
+        auto& offscreenG = canvas->beginDraw ({}, scale);
 
         options.paintAsOffscreenRoot = true;
 
@@ -1794,7 +1806,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous, std::move (effectOffscreenCanvas));
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), 1.0f, renderContinuous, g.getContextScale(), std::move (effectOffscreenCanvas));
         if (canvas == nullptr)
             return;
 
@@ -1818,15 +1830,17 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (options.cachedToTexture)
     {
-        if (cachedTextureCanvas == nullptr)
+        const auto scale = g.getContextScale();
+        const auto pixelSize = getCanvasPixelSize (getSize(), scale);
+
+        if (! hasPixelSize (cachedTextureCanvas, pixelSize))
         {
-            auto canvas = GpuCanvas::create (g.getGraphicsContext(),
-                                             static_cast<int> (getWidth()),
-                                             static_cast<int> (getHeight()));
+            cachedTextureCanvas = nullptr;
+
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
             if (canvas != nullptr)
             {
-                auto& offscreenG = canvas->beginDraw();
-                offscreenG.setOpacity (opacity);
+                auto& offscreenG = canvas->beginDraw ({}, scale);
                 offscreenG.setDrawingArea (getLocalBounds());
 
                 options.paintAsOffscreenRoot = true;
@@ -2449,30 +2463,16 @@ AffineTransform Component::getTransformFromComponent (const Component* sourceCom
 AffineTransform Component::getTransformToScreen() const
 {
     AffineTransform transform;
-    const Component* comp = this;
 
-    while (comp != nullptr)
+    for (auto comp = this; comp->parentComponent != nullptr; comp = comp->parentComponent)
     {
         if (comp->isTransformed())
             transform = transform.followedBy (comp->getTransform());
 
         transform = transform.translated (comp->getPosition());
-
-        if (comp->options.onDesktop)
-        {
-            if (comp->native != nullptr)
-            {
-                auto nativePos = comp->native->getPosition().to<float>();
-                transform = transform.translated (nativePos);
-            }
-
-            break;
-        }
-
-        comp = comp->getParentComponent();
     }
 
-    return transform;
+    return transform.translated (getTopLevelScreenOrigin());
 }
 
 } // namespace yup

@@ -803,7 +803,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setManuallyComposited", &Component::setManuallyComposited, "shouldBeManuallyComposited"_a,
               "When enabled the normal child painting skips this component and its renderToTexture() is composited manually.")
         .def ("isManuallyComposited", &Component::isManuallyComposited)
-        .def ("renderToTexture", &Component::renderToTexture, "ctx"_a,
+        .def ("renderToTexture", &Component::renderToTexture, "ctx"_a, "scale"_a = 1.0f,
               "Renders the subtree (with its effect) into a reused texture, only when it changed.")
 
         // Component effects
