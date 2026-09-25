@@ -219,7 +219,6 @@ private:
 
     void updateMouseCapture (bool shouldBeActive);
     void setMouseCaptureReference (bool& isHeld, bool shouldBeHeld);
-    Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     WeakReference<Component> updateComponentUnderMouse (const MouseEvent& event, const WeakReference<Component>& previousComponent);
     Point<float> getTouchPosition (const SDL_TouchFingerEvent& event) const;

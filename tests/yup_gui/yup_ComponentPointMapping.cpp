@@ -311,6 +311,56 @@ TEST_F (ComponentPointMappingTests, ParentHookRoutesInputToManuallyCompositedChi
     expectNear (child.localToScreen (Point<float> (5.0f, 5.0f)), { 190.0f, 10.0f });
 }
 
+TEST_F (ComponentPointMappingTests, MouseEventHitTestFollowsTransforms)
+{
+    Component rotated ("rotated");
+
+    addVisible (root, parent, { 100.0f, 100.0f, 100.0f, 100.0f });
+    addVisible (parent, child, { 10.0f, 10.0f, 20.0f, 20.0f });
+    parent.setTransform (AffineTransform::scaling (2.0f));
+
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 130.0f, 130.0f }), &child);
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 250.0f, 250.0f }), &parent);
+
+    addVisible (root, rotated, { 50.0f, 300.0f, 100.0f, 20.0f });
+    rotated.setTransform (AffineTransform::rotation (MathConstants<float>::halfPi));
+
+    // Local (50, 10) is displayed at (-10, 50) + (50, 300)
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 40.0f, 350.0f }), &rotated);
+
+    // Inside the untransformed bounds, but not where the component is displayed
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 100.0f, 310.0f }), &root);
+}
+
+TEST_F (ComponentPointMappingTests, MouseEventHitTestFollowsEffectMapping)
+{
+    addVisible (root, parent, { 0.0f, 0.0f, 200.0f, 200.0f });
+    addVisible (parent, child, { 100.0f, 100.0f, 50.0f, 50.0f });
+    parent.setComponentEffect (new ZoomEffect());
+
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 180.0f, 180.0f }), &child);
+}
+
+TEST_F (ComponentPointMappingTests, MouseEventHitTestExcludesChildWithDegenerateMapping)
+{
+    addVisible (root, parent, { 0.0f, 0.0f, 200.0f, 200.0f });
+    addVisible (parent, child, { 20.0f, 20.0f, 50.0f, 50.0f });
+    child.setComponentEffect (new DegenerateEffect());
+
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 30.0f, 30.0f }), &parent);
+}
+
+TEST_F (ComponentPointMappingTests, MouseEventHitTestFollowsParentHook)
+{
+    MirroringHost host;
+
+    addVisible (root, host, { 0.0f, 0.0f, 200.0f, 100.0f });
+    addVisible (host, child, { 0.0f, 0.0f, 100.0f, 50.0f });
+    child.setManuallyComposited (true);
+
+    EXPECT_EQ (root.findComponentAtForMouseEvent ({ 190.0f, 10.0f }), &child);
+}
+
 TEST_F (ComponentPointMappingTests, PopupParentIsTheClosestPresentingAncestor)
 {
     addVisible (root, parent, { 10.0f, 10.0f, 200.0f, 200.0f });

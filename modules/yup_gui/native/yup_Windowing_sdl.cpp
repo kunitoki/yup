@@ -1560,7 +1560,7 @@ void SDLComponentNative::revalidateStationaryPointer()
     // dispatch a synthetic move (or drag) only when that changed what the pointer is over
     const auto position = lastMouseMovePosition;
 
-    if (lastComponentClicked == nullptr && findComponentForMouseEvent (position) != lastComponentUnderMouse.get())
+    if (lastComponentClicked == nullptr && component.findComponentAtForMouseEvent (position) != lastComponentUnderMouse.get())
     {
         handleMouseMoveOrDrag (position);
         return;
@@ -1620,9 +1620,6 @@ void SDLComponentNative::handleMouseDown (const Point<float>& position, MouseEve
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
                      .withPosition (position);
-
-    if (currentMouseButtons == button)
-        lastComponentClicked = component.findComponentAtForMouseEvent (position);
 
     if (auto* clickedComponent = lastComponentClicked.get())
     {

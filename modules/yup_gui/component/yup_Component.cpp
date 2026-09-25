@@ -1107,10 +1107,14 @@ Component* Component::findComponentAtForMouseEvent (const Point<float>& p)
         for (int index = children.size(); --index >= 0;)
         {
             auto child = children.getUnchecked (index);
-            if (! child->isVisible() || ! child->boundsInParent.contains (p))
+            if (! child->isVisible())
                 continue;
 
-            if (auto* hit = child->findComponentAtForMouseEvent (p - child->boundsInParent.getPosition()))
+            const auto childPoint = child->getLocalPointFromParent (p);
+            if (! childPoint)
+                continue;
+
+            if (auto* hit = child->findComponentAtForMouseEvent (*childPoint))
                 return hit;
         }
     }

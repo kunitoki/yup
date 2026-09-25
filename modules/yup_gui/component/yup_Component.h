@@ -1201,7 +1201,8 @@ public:
         accepts it, but a component that has opted out of mouse events via
         setWantsMouseEvents() is skipped in favor of the next sibling underneath it,
         and the search bubbles up to this component itself (or returns nullptr) when
-        nothing in a given subtree wants the event.
+        nothing in a given subtree wants the event. Points are mapped into each child the
+        same way, through its transform, effect and the parent's getChildPointFromLocal().
 
         @param p The point to find the component at, in this component's local coordinates.
 
