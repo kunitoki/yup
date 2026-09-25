@@ -298,11 +298,12 @@ TEST_F (HalfbandOversamplerTest, AliasesUseTheHalfbandDesign)
     HalfbandOversampler16xDouble i;
     HalfbandOversampler32xDouble j;
 
-    for (auto* os : { &a, &b, &c, &d, &e })
-        os->prepare (44100.0, 1, 64);
+    const auto prepareAll = [] (auto&... oversamplers)
+    {
+        (oversamplers.prepare (44100.0, 1, 64), ...);
+    };
 
-    for (auto* os : { &f, &g, &h, &i, &j })
-        os->prepare (44100.0, 1, 64);
+    prepareAll (a, b, c, d, e, f, g, h, i, j);
 
     EXPECT_EQ (HalfbandFilterType::linearPhaseFIR, a.getDesign().filterType);
     EXPECT_GT (e.getLatencyInSamples(), 0);

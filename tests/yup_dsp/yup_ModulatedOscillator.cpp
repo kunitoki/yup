@@ -343,7 +343,7 @@ TEST_F (ModulatedOscillatorTests, ConservativeBandwidthMatchesAnIndependentlyFil
         return p;
     }));
     ASSERT_TRUE (reference.processModulatedBlock (expected.data(), count, controls));
-    for (int i = 2 * oscillator.getLatencyInSamples(); i < count; ++i)
+    for (int i = 2 * bounded.getLatencyInSamples(); i < count; ++i)
         EXPECT_NEAR (expected[static_cast<std::size_t> (i)], actual[static_cast<std::size_t> (i)], 1.0e-5);
 }
 

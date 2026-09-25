@@ -699,10 +699,10 @@ TEST_F (SincOversamplerAccuracyTest, GenerationDoesNotDisturbUpsampleHistory)
 TEST_F (SincOversamplerAccuracyTest, UpsampledImageIsRejected)
 {
     // 0.25 fs tone: image at 0.75 fs sits deep in the interpolator's stopband.
-    EXPECT_LT (upsampledWorstImageDb<4, 16> (256), -80.0);
+    EXPECT_LT ((upsampledWorstImageDb<4, 16> (256)), -80.0);
 
     // 0.4 fs tone: image at 0.6 fs sits at the edge of the transition band.
-    EXPECT_LT (upsampledWorstImageDb<4, 16> (410), -70.0);
+    EXPECT_LT ((upsampledWorstImageDb<4, 16> (410)), -70.0);
 }
 
 TEST_F (SincOversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithRadius16)
@@ -732,13 +732,13 @@ TEST_F (SincOversamplerAccuracyTest, DecimationRejectsOversampledDomainToneWithR
 
 TEST_F (SincOversamplerAccuracyTest, RoundTripPassbandIsFlat)
 {
-    EXPECT_LT (roundTripAccuracy<4, 16> (1000.0 / sampleRate).maxError, 0.005);
-    EXPECT_LT (roundTripAccuracy<4, 16> (0.3).maxError, 0.005);
+    EXPECT_LT ((roundTripAccuracy<4, 16> (1000.0 / sampleRate).maxError), 0.005);
+    EXPECT_LT ((roundTripAccuracy<4, 16> (0.3).maxError), 0.005);
 }
 
 TEST_F (SincOversamplerAccuracyTest, RoundTripSineSNR)
 {
-    EXPECT_GT (roundTripAccuracy<4, 16> (0.1).snrDb, 80.0);
+    EXPECT_GT ((roundTripAccuracy<4, 16> (0.1).snrDb), 80.0);
 }
 
 } // namespace yup::test

@@ -89,15 +89,22 @@ protected:
         oscillator.update();
     }
 
+    static void completeRenderCrossfade (SyncOscillator<double>& oscillator)
+    {
+        std::vector<double> scratch (512);
+        oscillator.processBlock (scratch.data(), 512);
+        oscillator.setPhase (0.0);
+    }
+
     static constexpr double testSampleRate = 48000.0;
     static constexpr int testMaxHarmonics = 256;
 };
 
-TEST_F (SyncOscillatorTests, AdditiveBackendMatchesManualPipeline)
+TEST_F (SyncOscillatorTests, ApproximatesTheManualAdditivePipeline)
 {
     SyncOscillator<double> oscillator;
     configureSyncedSawtooth (oscillator, SyncMode::hard, 1.375);
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
+    completeRenderCrossfade (oscillator);
 
     FourierSeries<double> follower (testMaxHarmonics);
     follower.setWaveform (Waveform::sawtooth);
@@ -119,27 +126,7 @@ TEST_F (SyncOscillatorTests, AdditiveBackendMatchesManualPipeline)
     reference.setFrequency (440.0);
 
     for (int i = 0; i < 512; ++i)
-        EXPECT_NEAR (reference.processSample(), oscillator.processSample(), 1e-12) << i;
-}
-
-TEST_F (SyncOscillatorTests, WavetableBackendApproximatesTheAdditiveOne)
-{
-    SyncOscillator<double> oscillator;
-    configureSyncedSawtooth (oscillator, SyncMode::hard, 1.375);
-
-    std::vector<double> wavetableBuffer (512);
-    oscillator.processBlock (wavetableBuffer.data(), 512);
-    oscillator.setPhase (0.0);
-    oscillator.processBlock (wavetableBuffer.data(), 512);
-
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
-    oscillator.setPhase (0.0);
-
-    std::vector<double> additiveBuffer (512);
-    oscillator.processBlock (additiveBuffer.data(), 512);
-
-    for (int i = 0; i < 512; ++i)
-        EXPECT_NEAR (additiveBuffer[static_cast<std::size_t> (i)], wavetableBuffer[static_cast<std::size_t> (i)], 1e-3) << i;
+        EXPECT_NEAR (reference.processSample(), oscillator.processSample(), 1e-3) << i;
 }
 
 TEST_F (SyncOscillatorTests, MirroredRunsAtHalfTheLeaderFrequency)
@@ -156,8 +143,8 @@ TEST_F (SyncOscillatorTests, MirroredRunsAtHalfTheLeaderFrequency)
     reference.setSyncMode (SyncMode::mirrored);
     reference.setFollowerRatio (1.375);
     reference.setFrequency (440.0);
-    reference.setSynthesis (SyncOscillator<double>::Synthesis::additive);
     reference.update();
+    completeRenderCrossfade (reference);
 
     // The mirrored output is periodic with twice the leader period, so it equals an
     // additive oscillator running the synced series at half the leader pitch.
@@ -181,7 +168,7 @@ TEST_F (SyncOscillatorTests, MirroredRunsAtHalfTheLeaderFrequency)
     additive.setFrequency (220.0);
 
     for (int i = 0; i < 512; ++i)
-        EXPECT_NEAR (additive.processSample(), reference.processSample(), 1e-12) << i;
+        EXPECT_NEAR (additive.processSample(), reference.processSample(), 1e-3) << i;
 }
 
 TEST_F (SyncOscillatorTests, UpdateWithNothingDirtyLeavesTheOutputUnchanged)
@@ -198,27 +185,6 @@ TEST_F (SyncOscillatorTests, UpdateWithNothingDirtyLeavesTheOutputUnchanged)
 
     for (int i = 0; i < 256; ++i)
         EXPECT_EQ (updatedOnce.processSample(), updatedTwice.processSample()) << i;
-}
-
-TEST_F (SyncOscillatorTests, SwitchingSynthesisKeepsThePhase)
-{
-    SyncOscillator<double> oscillator;
-    configureSyncedSawtooth (oscillator, SyncMode::hard, 1.375);
-
-    for (int i = 0; i < 100; ++i)
-        oscillator.processSample();
-
-    const auto phase = oscillator.getPhase();
-
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
-    EXPECT_NEAR (phase, oscillator.getPhase(), 1e-12);
-
-    oscillator.processSample();
-
-    const auto additivePhase = oscillator.getPhase();
-
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::wavetable);
-    EXPECT_NEAR (additivePhase, oscillator.getPhase(), 1e-12);
 }
 
 TEST_F (SyncOscillatorTests, FollowerFrequencySetsTheRatio)
@@ -239,7 +205,6 @@ TEST_F (SyncOscillatorTests, FollowerFrequencySetsTheRatio)
 TEST_F (SyncOscillatorTests, LowerPitchRestoresPreviouslyOmittedHarmonics)
 {
     SyncOscillator<double> oscillator;
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
     oscillator.prepare (testSampleRate, 64);
     oscillator.setFollowerSeries (FourierSeries<double>::create (Waveform::sine, 1));
     oscillator.setSyncMode (SyncMode::hard);
@@ -300,11 +265,6 @@ TEST_F (SyncOscillatorTests, HardSyncedSawtoothIsAliasFree)
     oscillator.processBlock (buffer.data(), fftSize);
     const auto wavetableEnergy = offHarmonicEnergyDb (buffer, harmonicBin, guardBins);
 
-    oscillator.setSynthesis (SyncOscillator<double>::Synthesis::additive);
-    oscillator.setPhase (0.0);
-    oscillator.processBlock (buffer.data(), fftSize);
-    const auto additiveEnergy = offHarmonicEnergyDb (buffer, harmonicBin, guardBins);
-
     // A naive phase-reset sawtooth at the follower pitch is not alias free, and the
     // same measurement catches it.
     std::vector<double> naive (fftSize);
@@ -320,7 +280,6 @@ TEST_F (SyncOscillatorTests, HardSyncedSawtoothIsAliasFree)
 
     const auto naiveEnergy = offHarmonicEnergyDb (naive, harmonicBin, guardBins);
 
-    EXPECT_LT (additiveEnergy, -80.0) << "additive backend";
-    EXPECT_LT (wavetableEnergy, -60.0) << "wavetable backend";
+    EXPECT_LT (wavetableEnergy, -60.0) << "wavetable";
     EXPECT_GT (naiveEnergy, -40.0) << "naive reference";
 }
