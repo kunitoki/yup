@@ -126,7 +126,7 @@ void MPESynthesiserBase::renderNextBlock (AudioBuffer<floatType>& outputAudio,
     // you must set the sample rate before using this!
     jassert (! approximatelyEqual (sampleRate, 0.0));
 
-    const ScopedLock sl (noteStateLock);
+    const AudioLockType::ScopedLockType sl (noteStateLock);
 
     auto prevSample = startSample;
     const auto endSample = startSample + numSamples;
@@ -163,7 +163,7 @@ void MPESynthesiserBase::setCurrentPlaybackSampleRate (const double newRate)
 {
     if (! approximatelyEqual (sampleRate, newRate))
     {
-        const ScopedLock sl (noteStateLock);
+        const AudioLockType::ScopedLockType sl (noteStateLock);
         instrument.releaseAllNotes();
         sampleRate = newRate;
     }

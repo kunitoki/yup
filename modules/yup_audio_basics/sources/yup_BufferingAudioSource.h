@@ -131,7 +131,7 @@ private:
     TimeSliceThread& backgroundThread;
     int numberOfSamplesToBuffer, numberOfChannels;
     AudioBuffer<float> buffer;
-    CriticalSection callbackLock, bufferRangeLock;
+    AudioLockType callbackLock, bufferRangeLock;
     WaitableEvent bufferReadyEvent;
     int64 bufferValidStart = 0, bufferValidEnd = 0;
     uint64 bufferRangeGeneration = 0;

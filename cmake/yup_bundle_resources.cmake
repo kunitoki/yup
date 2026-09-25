@@ -26,7 +26,23 @@ function (yup_add_bundled_resources target_name)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
+    set (expanded_resources "")
     foreach (resource_pair IN LISTS YUP_ARG_RESOURCES)
+        string (REPLACE "@" ";" resource_pair_parts "${resource_pair}")
+        list (GET resource_pair_parts 0 source_file)
+        list (GET resource_pair_parts 1 dest_path)
+
+        if (IS_DIRECTORY "${source_file}")
+            file (GLOB_RECURSE source_sub_files RELATIVE "${source_file}" "${source_file}/*")
+            foreach (source_sub_file IN LISTS source_sub_files)
+                list (APPEND expanded_resources "${source_file}/${source_sub_file}@${dest_path}/${source_sub_file}")
+            endforeach()
+        else()
+            list (APPEND expanded_resources "${resource_pair}")
+        endif()
+    endforeach()
+
+    foreach (resource_pair IN LISTS expanded_resources)
         string (REPLACE "@" ";" resource_pair_parts "${resource_pair}")
         list (GET resource_pair_parts 0 source_file)
         list (GET resource_pair_parts 1 dest_path)

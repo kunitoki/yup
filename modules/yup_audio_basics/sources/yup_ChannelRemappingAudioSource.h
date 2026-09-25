@@ -148,7 +148,7 @@ private:
 
     AudioBuffer<float> buffer;
     AudioSourceChannelInfo remappedInfo;
-    CriticalSection lock;
+    AudioLockType lock;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChannelRemappingAudioSource)
 };

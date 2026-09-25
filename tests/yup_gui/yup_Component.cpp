@@ -3218,6 +3218,44 @@ TEST (ComponentHitTestTests, AHitTestOverrideCannotClaimPointsOutsideItsOwnBound
     EXPECT_EQ (&parent, parent.findComponentAt (Point<float> (50.0f, 50.0f)));
 }
 
+TEST (ComponentHitTestTests, FindComponentAtForMouseEventFallsThroughAComponentThatRejectsThePoint)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.setVisible (true);
+
+    RightHalfOnlyComponent child;
+    child.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_EQ (&child, parent.findComponentAtForMouseEvent (Point<float> (75.0f, 50.0f)));
+    EXPECT_EQ (&parent, parent.findComponentAtForMouseEvent (Point<float> (25.0f, 50.0f)));
+}
+
+TEST (ComponentHitTestTests, FindComponentAtForMouseEventReturnsNothingWhenTheRootRejectsThePoint)
+{
+    RightHalfOnlyComponent root;
+    root.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    root.setVisible (true);
+
+    EXPECT_EQ (&root, root.findComponentAtForMouseEvent (Point<float> (75.0f, 50.0f)));
+    EXPECT_EQ (nullptr, root.findComponentAtForMouseEvent (Point<float> (25.0f, 50.0f)));
+}
+
+TEST (ComponentHitTestTests, FindComponentAtForMouseEventKeepsAHitTestOverrideInsideItsOwnBounds)
+{
+    Component parent;
+    parent.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    parent.setVisible (true);
+
+    AlwaysHitComponent child;
+    child.setBounds (0.0f, 0.0f, 10.0f, 10.0f);
+    parent.addAndMakeVisible (child);
+
+    EXPECT_EQ (&child, parent.findComponentAtForMouseEvent (Point<float> (5.0f, 5.0f)));
+    EXPECT_EQ (&parent, parent.findComponentAtForMouseEvent (Point<float> (50.0f, 50.0f)));
+}
+
 // =============================================================================
 // childBoundsChanged
 // =============================================================================

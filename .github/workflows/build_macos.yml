@@ -26,6 +26,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  ACTION_RUNNER: github-actions
+
 jobs:
   configure:
     runs-on: macos-latest

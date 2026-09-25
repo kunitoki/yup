@@ -48,12 +48,13 @@ struct Listener : public yup::CodeDocument::Listener
 ## SyntaxDefinition
 
 A `SyntaxDefinition` is loaded from JSON or obtained from the built-in
-languages (`"cpp"`, `"glsl"`, `"python"`, `"xml"`):
+languages (`"cpp"`, `"glsl"`, `"python"`, `"xml"`, `"ydsp"`):
 
 ```cpp
 auto definition = yup::SyntaxDefinition::getBuiltIn ("cpp");
-yup::SyntaxDefinition::getBuiltInForExtension ("py");    // the Python definition
-yup::SyntaxDefinition::getBuiltInForExtension ("svg");   // the XML definition
+yup::SyntaxDefinition::getBuiltInForExtension ("py");     // the Python definition
+yup::SyntaxDefinition::getBuiltInForExtension ("svg");    // the XML definition
+yup::SyntaxDefinition::getBuiltInForExtension ("ydsp");   // the YDSP definition
 ```
 
 ### JSON format

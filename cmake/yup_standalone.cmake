@@ -183,6 +183,10 @@ function (yup_standalone_app)
 
         endif()
 
+        target_compile_options (${target_name} PRIVATE
+            -fno-unwind-tables
+            -fno-asynchronous-unwind-tables)
+
         set_target_properties (${target_name} PROPERTIES
             #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
             XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
@@ -207,16 +211,18 @@ function (yup_standalone_app)
             $<$<CONFIG:RELEASE>:-O3>
             -fexceptions
             -pthread
+            -msimd128
             -Wno-nontrivial-memcall
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
-            $<$<CONFIG:DEBUG>:-gsource-map -g>
+            $<$<CONFIG:DEBUG>:-O0 -gsource-map -g>
+            $<$<CONFIG:RELEASE>:-O2 -flto>
             -fexceptions
             -pthread
             -Wno-pthreads-mem-growth
             -sWASM=1
-            #-sASYNCIFY=1
+            -sWASM_BIGINT=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
             -sSHARED_MEMORY=1
@@ -234,7 +240,7 @@ function (yup_standalone_app)
             -sNODERAWFS=$<IF:$<BOOL:${YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS}>,1,0>
             -sWASMFS=1
             -sFETCH=1
-            -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
+            -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,wasmMemory
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file=${YUP_ARG_CUSTOM_SHELL})
 

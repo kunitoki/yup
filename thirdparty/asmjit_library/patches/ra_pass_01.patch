@@ -1,0 +1,145 @@
+diff --git a/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp b/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
+index f72e0577..0483bd81 100644
+--- a/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
++++ b/thirdparty/asmjit_library/upstream/asmjit/core/ra_pass.cpp
+@@ -1470,8 +1470,75 @@ ASMJIT_FAVOR_SPEED Error BaseRAPass::bin_pack(RegGroup group) noexcept {
+   size_t num_work_regs = work_regs.size();
+   RegMask available_regs = _available_regs[group];
+   RegMask preserved_regs = func()->frame().preserved_regs(group);
+ 
++  // A value that lives across a call must survive it in a preserved register.
++  // `clobber_survival_mask` is normally fed only by values tied to a call (its
++  // arguments and returns); a loop-carried value - scalar state, a stream
++  // pointer, a coefficient - that merely crosses the call is never tied to it,
++  // so it gets no mask and keeps a caller-saved home here. The local allocator
++  // then has to park such a value in a preserved register at every call and
++  // move it back home afterwards (see the ra_local.cpp STEP 7 change), a
++  // shuffle paid on every sample of a loop containing a libm call. Detect
++  // call-crossing values here, by live-span containment over the calls' node
++  // positions, so their homes are preserved from the start and the loop never
++  // moves them. Local change over upstream AsmJit.
++  struct InvokeSite {
++    NodePosition pos;
++    RegMask clobbered;
++  };
++
++  axl::ArenaVector<InvokeSite> invoke_sites;
++  ASMJIT_PROPAGATE(invoke_sites.reserve_fit(arena(), 4));
++
++  for (RABlock* block : _blocks) {
++    if (!block->is_reachable()) {
++      continue;
++    }
++
++    BaseNode* node = block->first();
++    const BaseNode* stop = block->last();
++    for (;;) {
++      if (node->is_invoke()) {
++        auto* ra_inst = node->as<InstNode>()->pass_data<RAInst>();
++        if (ra_inst && ra_inst->_clobbered_regs[group]) {
++          ASMJIT_PROPAGATE(invoke_sites.append(arena(), InvokeSite{node->position(), ra_inst->_clobbered_regs[group]}));
++        }
++      }
++
++      if (node == stop) {
++        break;
++      }
++
++      node = node->next();
++    }
++  }
++
++  if (!invoke_sites.is_empty()) {
++    for (RAWorkReg* work_reg : group_regs) {
++      const RALiveSpans& spans = work_reg->live_spans();
++      RegMask clobbered = 0;
++
++      for (const InvokeSite& site : invoke_sites) {
++        if ((clobbered & site.clobbered) == site.clobbered) {
++          continue;
++        }
++
++        for (size_t i = 0; i < spans.size(); i++) {
++          const RALiveSpan& span = spans[i];
++          if (span.a <= site.pos && (site.pos < span.b || span.b == RALiveSpan::kInf)) {
++            clobbered |= site.clobbered;
++            break;
++          }
++        }
++      }
++
++      if (clobbered) {
++        work_reg->add_clobber_survival_mask(clobbered);
++      }
++    }
++  }
++
+   // First try to pack everything that provides register-id hint as these are most likely function arguments and fixed
+   // (pre-colored) virtual registers.
+   if (!work_regs.is_empty()) {
+     uint32_t dst_index = 0;
+@@ -1609,32 +1676,38 @@ ASMJIT_FAVOR_SPEED Error BaseRAPass::bin_pack(RegGroup group) noexcept {
+       if (remaining_phys_regs & work_reg->preferred_mask()) {
+         remaining_phys_regs &= work_reg->preferred_mask();
+       }
+ 
+-      RegMask phys_regs = remaining_phys_regs & ~preserved_regs;
+-      remaining_phys_regs &= preserved_regs;
++      // A value that lives across a call (its clobber_survival_mask was set
++      // above from live-span containment over the call sites) has to survive it
++      // in a preserved register, so take the preserved pool first for it and
++      // fall back to scratch registers only when the pool is exhausted.
++      // Everything else keeps the scratch-first order, which leaves call-free
++      // kernels and short-lived values allocating exactly as upstream does.
++      // Local change over upstream AsmJit.
++      RegMask phys_regs;
++      RegMask fallback_regs;
++
++      if (work_reg->clobber_survival_mask()) {
++        phys_regs = remaining_phys_regs & preserved_regs;
++        fallback_regs = remaining_phys_regs & ~preserved_regs;
++      }
++      else {
++        phys_regs = remaining_phys_regs & ~preserved_regs;
++        fallback_regs = remaining_phys_regs & preserved_regs;
++      }
+ 
+       for (;;) {
+         if (!phys_regs) {
+-          if (!remaining_phys_regs) {
++          if (!fallback_regs) {
+             break;
+           }
+-          phys_regs = remaining_phys_regs;
+-          remaining_phys_regs = 0;
++          phys_regs = fallback_regs;
++          fallback_regs = 0;
+         }
+ 
+         uint32_t phys_id = axl::ctz(phys_regs);
+ 
+-        if (work_reg->clobber_survival_mask()) {
+-          RegMask preferred_mask = (phys_regs | remaining_phys_regs) & work_reg->clobber_survival_mask();
+-          if (preferred_mask) {
+-            if (preferred_mask & ~remaining_phys_regs) {
+-              preferred_mask &= ~remaining_phys_regs;
+-            }
+-            phys_id = axl::ctz(preferred_mask);
+-          }
+-        }
+-
+         RALiveSpans& live = _global_live_spans[group][phys_id];
+         Error err = tmp_spans.non_overlapping_union_of(arena(), live, work_reg->live_spans());
+ 
+         if (err == Error::kOk) {
+@@ -1648,9 +1721,9 @@ ASMJIT_FAVOR_SPEED Error BaseRAPass::bin_pack(RegGroup group) noexcept {
+           return err;
+         }
+ 
+         phys_regs &= ~axl::bit_mask<RegMask>(phys_id);
+-        remaining_phys_regs &= ~axl::bit_mask<RegMask>(phys_id);
++        fallback_regs &= ~axl::bit_mask<RegMask>(phys_id);
+       }
+ 
+       // Keep it in `work_regs` if it was not allocated.
+       if (!phys_regs) {

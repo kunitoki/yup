@@ -433,7 +433,9 @@ void Slider::mouseDown (const MouseEvent& event)
         maxValueOnMouseDown = maxValue;
     }
 
-    takeKeyboardFocus();
+    if (getClickingGrabFocus())
+        takeKeyboardFocus();
+
     repaint();
 }
 

@@ -82,7 +82,7 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
         buffer.setSize (numberOfChannels, bufferSizeNeeded);
         buffer.clear();
 
-        const ScopedLock sl (bufferRangeLock);
+        const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
         invalidateBufferRange();
 
@@ -90,7 +90,7 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
 
         do
         {
-            const ScopedUnlock ul (bufferRangeLock);
+            const AudioLockType::ScopedUnlockType ul (bufferRangeLock);
 
             backgroundThread.moveToFrontOfQueue (this);
             Thread::sleep (5);
@@ -123,7 +123,7 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
     const auto validStart = bufferRange.getStart();
     const auto validEnd = bufferRange.getEnd();
 
-    const ScopedLock sl (callbackLock);
+    const AudioLockType::ScopedLockType sl (callbackLock);
 
     if (validStart > 0)
         info.buffer->clear (info.startSample, validStart); // partial cache miss at start
@@ -212,7 +212,7 @@ int64 BufferingAudioSource::getNextReadPosition() const
 void BufferingAudioSource::setLooping (bool shouldLoop)
 {
     {
-        const ScopedLock sl (bufferRangeLock);
+        const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
         source->setLooping (shouldLoop);
 
@@ -230,7 +230,7 @@ void BufferingAudioSource::setLooping (bool shouldLoop)
 
 void BufferingAudioSource::setNextReadPosition (int64 newPosition)
 {
-    const ScopedLock sl (bufferRangeLock);
+    const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
     nextPlayPos = newPosition;
     backgroundThread.moveToFrontOfQueue (this);
@@ -238,7 +238,7 @@ void BufferingAudioSource::setNextReadPosition (int64 newPosition)
 
 Range<int> BufferingAudioSource::getValidBufferRange (int numSamples) const
 {
-    const ScopedLock sl (bufferRangeLock);
+    const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
     const auto pos = nextPlayPos.load();
 
@@ -248,7 +248,7 @@ Range<int> BufferingAudioSource::getValidBufferRange (int numSamples) const
 
 std::tuple<int64, Range<int>> BufferingAudioSource::getValidBufferRangeAndAdvance (int numSamples)
 {
-    const ScopedLock sl (bufferRangeLock);
+    const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
     const auto pos = nextPlayPos.load();
 
@@ -271,7 +271,7 @@ bool BufferingAudioSource::readNextBufferChunk()
     uint64 readGeneration;
 
     {
-        const ScopedLock sl (bufferRangeLock);
+        const AudioLockType::ScopedLockType sl (bufferRangeLock);
 
         if (wasSourceLooping != isLooping())
         {
@@ -338,7 +338,7 @@ bool BufferingAudioSource::readNextBufferChunk()
     }
 
     {
-        const ScopedLock sl2 (bufferRangeLock);
+        const AudioLockType::ScopedLockType sl2 (bufferRangeLock);
 
         if (readGeneration != bufferRangeGeneration)
             return true;
@@ -358,7 +358,7 @@ void BufferingAudioSource::readBufferSection (int64 start, int length, int buffe
 
     AudioSourceChannelInfo info (&buffer, bufferOffset, length);
 
-    const ScopedLock sl (callbackLock);
+    const AudioLockType::ScopedLockType sl (callbackLock);
     source->getNextAudioBlock (info);
 }
 

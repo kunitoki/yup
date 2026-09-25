@@ -50,6 +50,14 @@ available in the build.
   synthesis backends, the `SyncOscillator` facade, shared `WaveformBank` frames,
   `ModulatedOscillator` for morphing, FM, PM and sync, and
   `PrismSpectrum` for modulatable ridge, dispersion and exact-PWM shaping.
+- [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
+  JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
+  realtime contract, and the public C++ API.
+- [YDSP optimization](ydsp-optimization.md) - fastMath and SLEEF accuracy
+  tiers, vectorized transcendentals, the optimizer passes and register-
+  allocation choices, and how to read the optimization report.
+- [YDSP bundle format](ydsp-bundle-format.md) - the RIFF `YDSP` container that
+  carries a patch's editable source closure, metadata, and diagnostics.
 
 ## Key building blocks
 
@@ -105,4 +113,6 @@ convolution-and-delay
 resampling
 time-stretching
 oscillators
+yup-dsp-language
+ydsp-bundle-format
 ```
