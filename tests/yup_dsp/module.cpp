@@ -42,7 +42,6 @@
 #include "yup_ModulatedOscillator.cpp"
 #include "yup_NoiseGenerators.cpp"
 #include "yup_OnsetDetector.cpp"
-#include "yup_Oversampler.cpp"
 #include "yup_PartitionedConvolver.cpp"
 #include "yup_PrismSpectrum.cpp"
 #include "yup_RbjFilter.cpp"
