@@ -122,6 +122,7 @@ public:
         label.setText (caption, yup::dontSendNotification);
         label.setFont (font);
         label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        label.setJustification (yup::Justification::center);
         addAndMakeVisible (label);
     }
 
@@ -135,13 +136,13 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds();
+        const auto bounds = getLocalBounds();
+        const auto size = yup::jmax (0.0f, yup::jmin (bounds.getWidth(), bounds.getHeight() - captionHeight));
 
-        label.setBounds (bounds.removeFromBottom (captionHeight));
-
-        const auto size = yup::jmin (bounds.getWidth(), bounds.getHeight());
-
-        slider.setBounds (bounds.withSizeKeepingCenter (size, size));
+        // The knob and its caption are centered as one block, so the caption sits right under the knob.
+        auto block = bounds.withSizeKeepingCenter (bounds.getWidth(), size + captionHeight);
+        slider.setBounds (block.removeFromTop (size).withSizeKeepingCenter (size, size));
+        label.setBounds (block);
     }
 
 private:

@@ -31,13 +31,39 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <vector>
+
+//==============================================================================
+/** The PRISM logo, with the viewBox cropped to the drawing so it fills the header slot. */
+inline constexpr const char* synthLogoSvg = R"svg(
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="122" viewBox="10 66 236 122" fill="none">
+  <g stroke="#FFFFFF" stroke-linejoin="miter" stroke-linecap="square" transform="translate(0 37)">
+    <path d="M14 100 q4 -7 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 L91 100" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M128 36 L191.5 146 L64.5 146 Z" stroke-width="3"/>
+    <path d="M91 100 L160.3 92" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g stroke-linecap="butt">
+      <path d="M160.3 92 L242 66"  stroke-width="2.5" stroke-opacity="1"/>
+      <path d="M160.3 92 L242 80"  stroke-width="2.2" stroke-opacity="0.8"/>
+      <path d="M160.3 92 L242 94"  stroke-width="2"   stroke-opacity="0.6"/>
+      <path d="M160.3 92 L242 108" stroke-width="1.7" stroke-opacity="0.42"/>
+      <path d="M160.3 92 L242 122" stroke-width="1.5" stroke-opacity="0.26"/>
+    </g>
+  </g>
+</svg>
+)svg";
 
 //==============================================================================
 /** A page of the instrument: paints nothing and hands clicks on its background back. */
 class SynthPage : public yup::Component
 {
 public:
+    /** Construct a page. */
+    SynthPage()
+    {
+        setOpaque (false);
+    }
+
     /** Called when the page itself, not one of its children, is clicked. */
     std::function<void()> onMouseDown;
 
@@ -57,6 +83,8 @@ public:
     AudioExample()
         : Component ("AudioExample")
         , keyboardComponent (keyboardState, yup::MidiKeyboardComponent::horizontalKeyboard)
+        , pitchWheelComponent (keyboardState, "PitchWheel")
+        , modWheelComponent (keyboardState, "ModWheel")
     {
         audioDeviceError = deviceManager.initialiseWithDefaultDevices (0, 2);
 
@@ -72,17 +100,45 @@ public:
         keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyPressedColorId, SynthTheme::accentDim);
         keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder);
         mainPage.addAndMakeVisible (keyboardComponent);
-        keyboardComponent.setVisible (false);
+
+        // Like the keyboard, the wheels follow keyboardState, which the audio callback
+        // updates from the hardware input too; their own moves go in through the collector.
+        pitchWheelComponent.onValueChanged = [this] (double value)
+        {
+            sendWheelMessage (yup::MidiMessage::pitchWheel (1, 8192 + static_cast<int> (value * 8191.0)));
+        };
+        modWheelComponent.onValueChanged = [this] (double value)
+        {
+            sendWheelMessage (yup::MidiMessage::controllerEvent (1, 1, static_cast<int> (value * 127.0)));
+        };
+
+        const auto addWheel = [this] (auto& wheel)
+        {
+            using Style = typename std::decay_t<decltype (wheel)>::Style;
+
+            wheel.setColor (Style::bodyTopColorId, SynthTheme::panelBackground);
+            wheel.setColor (Style::bodyBottomColorId, SynthTheme::displayBackground);
+            wheel.setColor (Style::outlineColorId, SynthTheme::panelBorder);
+            wheel.setColor (Style::gripColorId, SynthTheme::accentDim);
+            wheel.setColor (Style::gripOverColorId, SynthTheme::accent);
+            wheel.setColor (Style::gripDownColorId, SynthTheme::accent);
+            wheel.setClickingGrabFocus (false);
+            mainPage.addAndMakeVisible (wheel);
+        };
+        addWheel (pitchWheelComponent);
+        addWheel (modWheelComponent);
+
+        logo.parseSVG (synthLogoSvg);
 
         const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         titleLabel.setText ("P R I S M   /   SPECTRAL SYNTH", yup::dontSendNotification);
-        titleLabel.setFont (font.withHeight (17.0f));
+        titleLabel.setFont (font.withHeight (20.0f));
         titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
         addAndMakeVisible (titleLabel);
 
         subtitleLabel.setText ("Sculpt harmonics. Scatter phases. Play the spectrum.", yup::dontSendNotification);
-        subtitleLabel.setFont (font.withHeight (11.0f));
+        subtitleLabel.setFont (font.withHeight (12.0f));
         subtitleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
         addAndMakeVisible (subtitleLabel);
 
@@ -220,18 +276,23 @@ public:
 
         volumeKnob->setBounds (header.removeFromRight (64.0f));
         header.removeFromRight (spacing);
-        clearButton.setBounds (header.removeFromRight (110.0f).reduced (0.0f, 14.0f));
+        clearButton.setBounds (header.removeFromRight (actionButtonWidth).reduced (0.0f, buttonInset));
         header.removeFromRight (spacing);
-        randomizeButton.setBounds (header.removeFromRight (110.0f).reduced (0.0f, 14.0f));
+        randomizeButton.setBounds (header.removeFromRight (actionButtonWidth).reduced (0.0f, buttonInset));
         header.removeFromRight (spacing * 2.0f);
         voiceLabel.setBounds (header.removeFromRight (110.0f));
         header.removeFromRight (spacing);
-        modulationPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, 14.0f));
+        modulationPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
         header.removeFromRight (spacing);
-        mainPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, 14.0f));
+        mainPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
 
-        titleLabel.setBounds (header.removeFromTop (header.getHeight() * 0.5f));
-        subtitleLabel.setBounds (header);
+        const auto logoHeight = header.getHeight() - 8.0f;
+        logoArea = header.removeFromLeft (logoHeight * logoAspect).withSizeKeepingCenter (logoHeight * logoAspect, logoHeight);
+        header.removeFromLeft (spacing * 1.5f);
+
+        const auto textArea = header.reduced (0.0f, 6.0f);
+        titleLabel.setBounds (textArea.withHeight (textArea.getHeight() * 0.55f));
+        subtitleLabel.setBounds (textArea.withTrimmedTop (textArea.getHeight() * 0.55f));
 
         bounds.removeFromTop (spacing);
 
@@ -246,7 +307,12 @@ public:
     {
         auto bounds = mainPage.getLocalBounds();
 
-        keyboardComponent.setBounds (bounds.removeFromBottom (yup::jmin (keyboardHeight, mainPage.proportionOfHeight (0.12f))));
+        auto keyboardRow = bounds.removeFromBottom (yup::jmin (keyboardHeight, mainPage.proportionOfHeight (0.12f)));
+        pitchWheelComponent.setBounds (keyboardRow.removeFromLeft (wheelWidth).reduced (0.0f, 4.0f));
+        keyboardRow.removeFromLeft (spacing);
+        modWheelComponent.setBounds (keyboardRow.removeFromLeft (wheelWidth).reduced (0.0f, 4.0f));
+        keyboardRow.removeFromLeft (spacing * 2.0f);
+        keyboardComponent.setBounds (keyboardRow);
         bounds.removeFromBottom (spacing);
 
         auto performance = bounds.removeFromBottom (58.0f);
@@ -259,21 +325,21 @@ public:
         bounds.removeFromBottom (spacing);
 
         // The oscillator panels take whatever the fixed-height rows below leave, and
-        // their waveform editors need most of it.
+        // their waveform editors need most of it. The LFO and shaping rows share columns.
+        const auto columnWidth = (bounds.getWidth() - spacing * 2.0f) / 3.0f;
+
         auto lfoRow = bounds.removeFromBottom (lfoRowHeight);
-        const auto lfoWidth = (lfoRow.getWidth() - spacing * 2.0f) * 0.3f;
-        lfoPanels[0]->setBounds (lfoRow.removeFromLeft (lfoWidth));
+        lfoPanels[0]->setBounds (lfoRow.removeFromLeft (columnWidth));
         lfoRow.removeFromLeft (spacing);
-        lfoPanels[1]->setBounds (lfoRow.removeFromLeft (lfoWidth));
+        lfoPanels[1]->setBounds (lfoRow.removeFromLeft (columnWidth));
         lfoRow.removeFromLeft (spacing);
         oscilloscope.setBounds (lfoRow);
         bounds.removeFromBottom (spacing);
 
         auto shapingRow = bounds.removeFromBottom (yup::jmin (shapingRowHeight, bounds.getHeight() * 0.3f));
-        const auto shapingWidth = (shapingRow.getWidth() - spacing * 2.0f) / 3.0f;
-        filterPanel->setBounds (shapingRow.removeFromLeft (shapingWidth));
+        filterPanel->setBounds (shapingRow.removeFromLeft (columnWidth));
         shapingRow.removeFromLeft (spacing);
-        envelopePanels[0]->setBounds (shapingRow.removeFromLeft (shapingWidth));
+        envelopePanels[0]->setBounds (shapingRow.removeFromLeft (columnWidth));
         shapingRow.removeFromLeft (spacing);
         envelopePanels[1]->setBounds (shapingRow);
         bounds.removeFromBottom (spacing);
@@ -299,6 +365,8 @@ public:
     {
         g.setFillColor (SynthTheme::windowBackground);
         g.fillAll();
+
+        logo.paint (g, logoArea);
     }
 
     void mouseDown (const yup::MouseEvent&) override
@@ -464,6 +532,17 @@ private:
         midiInputIdentifier.clear();
     }
 
+    /** Queues a message from one of the on-screen wheels, timestamped as the collector expects. */
+    void sendWheelMessage (yup::MidiMessage message)
+    {
+        // The collector is only reset, and so only ready, once an audio device has started.
+        if (deviceManager.getCurrentAudioDevice() == nullptr)
+            return;
+
+        message.setTimeStamp (yup::Time::getMillisecondCounterHiRes() * 0.001);
+        midiCollector.addMessageToQueue (message);
+    }
+
     //==============================================================================
     /** Randomizes everything a voice is made of; volume, voice mode, glide and MIDI input stay. */
     void randomizeVoice()
@@ -574,9 +653,13 @@ private:
     static constexpr std::size_t midiQueueBytes = 2048;
 
     static constexpr float outerInset = 10.0f;
-    static constexpr float headerHeight = 44.0f;
+    static constexpr float headerHeight = 60.0f;
     static constexpr float spacing = 8.0f;
-    static constexpr float pageButtonWidth = 68.0f;
+    static constexpr float buttonInset = 12.0f;
+    static constexpr float pageButtonWidth = 76.0f;
+    static constexpr float actionButtonWidth = 120.0f;
+    static constexpr float logoAspect = 236.0f / 122.0f;
+    static constexpr float wheelWidth = 28.0f;
     static constexpr float keyboardHeight = 72.0f;
     static constexpr float lfoRowHeight = 104.0f;
     static constexpr float shapingRowHeight = 150.0f;
@@ -588,6 +671,8 @@ private:
     // MIDI keyboard components
     yup::MidiKeyboardState keyboardState;
     yup::MidiKeyboardComponent keyboardComponent;
+    yup::PitchWheelComponent pitchWheelComponent;
+    yup::ModWheelComponent modWheelComponent;
     yup::MidiMessageCollector midiCollector;
     yup::String midiInputIdentifier;
     yup::String audioDeviceError;
@@ -605,6 +690,8 @@ private:
     yup::AudioProcessLoadMeasurer loadMeasurer;
 
     // UI Components
+    yup::Drawable logo;
+    yup::Rectangle<float> logoArea;
     yup::Label titleLabel;
     yup::Label subtitleLabel;
     yup::Label voiceLabel;

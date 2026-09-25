@@ -385,13 +385,14 @@ enum class SynthModulationSource
     env1, /**< The amplitude envelope, unipolar. */
     env2, /**< The free envelope, unipolar. */
     lfo1, /**< Bipolar. */
-    lfo2
+    lfo2,
+    modWheel /**< MIDI controller 1, unipolar. */
 };
 
 /** @internal Item names for SynthModulationSource, index aligned with the enumeration. */
 inline yup::StringArray getSynthModulationSourceNames()
 {
-    return { "ENV 1", "ENV 2", "LFO 1", "LFO 2" };
+    return { "ENV 1", "ENV 2", "LFO 1", "LFO 2", "MOD WHEEL" };
 }
 
 /** Every parameter the matrix can reach; the oscillator block repeats per oscillator. */
@@ -606,7 +607,7 @@ inline float* getDestinationField (SynthPatchValues& patch, SynthModulationDesti
 /** Adds every route whose source has a value to the patch: one full knob range per unit of depth times source. */
 inline void applyModulation (SynthPatchValues& patch,
                              const SynthModulationValues& modulation,
-                             const std::array<float, 4>& sourceValues) noexcept
+                             const std::array<float, 5>& sourceValues) noexcept
 {
     for (const auto& route : modulation.routes)
     {

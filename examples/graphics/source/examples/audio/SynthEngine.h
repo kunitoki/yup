@@ -736,6 +736,7 @@ struct SynthBlockContext
     SynthModulationValues modulation;
     std::array<SynthEnvelopeValues, SynthExample::envelopeCount> envelopes;
     std::array<SynthLFOValues, SynthExample::lfoCount> lfos;
+    float modWheel = 0.0f; /**< The last controller 1 value, 0 to 1, kept across blocks. */
 };
 
 //==============================================================================
@@ -919,7 +920,7 @@ private:
 
         if (isVoiceActive())
         {
-            // Every source is per voice, so the routings are applied here, once per
+            // The envelopes and LFOs are per voice, so the routings are applied here, once per
             // control chunk, from the values each source holds at the top of the chunk.
             for (std::size_t index = 0; index < lfos.size(); ++index)
             {
@@ -929,7 +930,7 @@ private:
             }
 
             auto patch = context.patch;
-            const std::array<float, 4> sources { envelope.getLevel(), modulationEnvelope.getLevel(), lfos[0].getValue(), lfos[1].getValue() };
+            const std::array<float, 5> sources { envelope.getLevel(), modulationEnvelope.getLevel(), lfos[0].getValue(), lfos[1].getValue(), context.modWheel };
             applyModulation (patch, context.modulation, sources);
 
             for (auto& lfo : lfos)
@@ -1166,6 +1167,10 @@ public:
 
     void handleController (int channel, int controller, int value) override
     {
+        // Kept on the engine rather than per voice, so notes started after the wheel moved see it too.
+        if (controller == 1)
+            context.modWheel = static_cast<float> (value) / 127.0f;
+
         if (mode != SynthPlayMode::poly && controller == 64)
         {
             sustain[static_cast<std::size_t> (channel - 1)] = value >= 64;

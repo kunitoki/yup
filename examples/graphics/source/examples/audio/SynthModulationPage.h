@@ -37,6 +37,8 @@ public:
         , destinationChoice ("DESTINATION", getSynthModulationDestinationNames(), font)
         , depthKnob ("DEPTH", -1.0, 1.0, 0.01, 0.0, font)
     {
+        setOpaque (false);
+    
         addAndMakeVisible (sourceChoice);
         addAndMakeVisible (destinationChoice);
         addAndMakeVisible (depthKnob);
