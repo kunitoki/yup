@@ -29,10 +29,11 @@ project (${target_name} VERSION ${target_version})
 # Set to "ALL" (default) to build the full demo browser with every example. Set to a single demo:
 #   cmake -DYUP_EXAMPLE_GRAPHICS_DEMO=SpinningCube ...
 set (all_demo_ids
-     AI Artboard Audio AudioFile Clipboard ColorLab ComponentEffects ComputeParticles
-     Convolution Crossover CodeEditor FileChooser FilterDemo GpuAudio Images LayoutFonts
-     Lottie OffscreenRender OpaqueDemo PaintProfiler Paths PopupMenu ScrollBar Sliders
-     SpectrumAnalyzer SpinningCube Svg TextEditor VariableFonts Widgets YdspSynths Python)
+     AI Artboard ArtboardLayout Audio AudioFile Clipboard ColorLab Component3D ComponentEffects ComputeParticles
+     Convolution Crossover CodeEditor DragAndDrop FileChooser Filter FluidSimulation GpuAudio Images
+     Layout LayoutFonts Lottie OffscreenRender Opaque PaintProfiler Paths Pbr PopupMenu ScrollBar Sliders
+     SpectrumAnalyzer SpinningCube Svg TextEditor ToastNotification TouchTrails VariableFonts
+     Widgets YdspSynths Python)
 
 set (YUP_EXAMPLE_GRAPHICS_DEMO "ALL" CACHE STRING "Graphics demo to build: ALL, or one of ${all_demo_ids}")
 
@@ -58,12 +59,13 @@ endforeach()
 # Which of the resources/modules below are actually needed by the selected demo(s).
 set (need_rive_files OFF)
 set (need_lottie_files OFF)
+set (need_svg_files OFF)
 set (need_audio_files OFF)
 set (need_synth_files OFF)
 set (need_shader_bundle OFF)
 set (need_shader_transpiler OFF)
 
-set (rive_demos "ALL;Artboard")
+set (rive_demos "ALL;Artboard;ArtboardLayout")
 if (YUP_EXAMPLE_GRAPHICS_DEMO IN_LIST rive_demos)
   set (need_rive_files ON)
 endif()
@@ -71,6 +73,11 @@ endif()
 set (lottie_demos "ALL;Lottie;SpinningCube")
 if (YUP_EXAMPLE_GRAPHICS_DEMO IN_LIST lottie_demos)
   set (need_lottie_files ON)
+endif()
+
+set (svg_demos "ALL;Svg")
+if (YUP_EXAMPLE_GRAPHICS_DEMO IN_LIST svg_demos)
+  set (need_svg_files ON)
 endif()
 
 set (audio_demos "ALL;ConvolutionDemo;CrossoverDemo;GpuAudio;SpectrumAnalyzer;YdspSynths")
@@ -110,6 +117,9 @@ if (YUP_PLATFORM_MOBILE OR YUP_PLATFORM_EMSCRIPTEN)
     endif()
     if (need_lottie_files)
         list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/data/lottie@data/lottie")
+    endif()
+    if (need_svg_files)
+        list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/data/svg@data/svg")
     endif()
     if (need_audio_files)
         list (APPEND bundle_resources "${CMAKE_CURRENT_LIST_DIR}/data/audio@data/audio")

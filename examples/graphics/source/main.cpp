@@ -67,11 +67,11 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 
 //==============================================================================
 
-#if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
-#include "examples/Artboard.h"
-#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AI
 #include "examples/AI.h"
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard || YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
+#include "examples/Artboard.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
 #include "examples/Audio.h"
@@ -109,7 +109,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Filter
 #include "examples/FilterDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
@@ -133,7 +133,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
 #include "examples/OffscreenRenderDemo.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
 #include "examples/OpaqueDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
@@ -142,7 +142,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
 #include "examples/Paths.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Pbr
 #include "examples/PbrDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
@@ -166,7 +166,7 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
 #include "examples/ToastNotificationDemo.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
@@ -263,6 +263,8 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
         addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
         addDemo ("Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
@@ -301,7 +303,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Filter
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
@@ -325,7 +327,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
         addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
         addDemo ("Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
@@ -334,7 +336,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
         addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Pbr
         addDemo ("PBR IBL", [] { return std::make_unique<PbrDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
@@ -358,7 +360,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
