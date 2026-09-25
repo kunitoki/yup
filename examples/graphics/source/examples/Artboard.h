@@ -514,23 +514,3 @@ private:
 
     bool dropHighlighted = false;
 };
-
-//==============================================================================
-
-class ArtboardLayoutDemo : public ArtboardDemoBase
-{
-public:
-    ArtboardLayoutDemo()
-        : ArtboardDemoBase ("data/rive/layout-ui.riv", "keyboard_slot", 8, true)
-    {
-    }
-
-private:
-    std::unique_ptr<yup::Component> createTrackedComponent() override
-    {
-        auto keyboardArtboard = std::make_unique<yup::Artboard> ("keyboardArtboard");
-        keyboardArtboard->setFile (loadedArtboardFile, "Keyboard");
-        keyboardArtboard->setFitting (yup::Fitting::fill);
-        return keyboardArtboard;
-    }
-};
