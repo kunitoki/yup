@@ -61,10 +61,9 @@ enum class SyncMode
     bandwidth must therefore be chosen independently of the follower bandwidth.
 
     The transform costs O (N_in * N_out) multiply-accumulates with O (N_in)
-    transcendental calls, using FloatVectorOperations and, where helpful,
-    SIMDRegister. It is allocation-free once prepare() has been called, so it can
-    run on the audio thread, but a synthesizer normally calls it once per block
-    instead of once per sample.
+    transcendental calls, using FloatVectorOperations. It is allocation-free once
+    prepare() has been called, so it can run on the audio thread, but a
+    synthesizer normally calls it once per block instead of once per sample.
 
     The absolute phase of the output follows the paper's pre-rotation: relative to
     the raw time-domain definitions above, the output is the same waveform delayed
@@ -103,7 +102,6 @@ public:
         triggerCosine.assign (count, CoeffType (0));
         inverseArgument.assign (count, CoeffType (0));
         weight.assign (count, CoeffType (0));
-        nonResonant.assign (count, CoeffType (1));
 
         resonantIndices.reserve (count);
         resonantHarmonics.reserve (count);
@@ -222,7 +220,6 @@ private:
 
         resonantIndices.clear();
         resonantHarmonics.clear();
-        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
 
         for (int k = 1; k <= numFollower; ++k)
         {
@@ -239,7 +236,6 @@ private:
 
             if (std::abs (argument - rounded) < getResonanceEpsilon())
             {
-                nonResonant[index] = CoeffType (0);
                 resonantIndices.push_back (static_cast<int> (index));
                 resonantHarmonics.push_back (static_cast<int> (rounded));
             }
@@ -284,7 +280,6 @@ private:
 
         resonantIndices.clear();
         resonantHarmonics.clear();
-        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
 
         for (int k = 1; k <= numFollower; ++k)
         {
@@ -302,7 +297,6 @@ private:
 
             if (std::abs (argument - rounded) < getResonanceEpsilon())
             {
-                nonResonant[index] = CoeffType (0);
                 resonantIndices.push_back (static_cast<int> (index));
                 resonantHarmonics.push_back (static_cast<int> (rounded));
             }
@@ -363,8 +357,6 @@ private:
             secondWeight[index] = sign * static_cast<CoeffType> (k) * followerSine[index];
         }
 
-        FloatVectorOperations::fill (nonResonant.data(), CoeffType (1), numFollower);
-
         // The paper's pulsar transform drops the follower's DC term.
         output.setDC (CoeffType (0));
 
@@ -377,13 +369,12 @@ private:
                                  && rounded <= static_cast<CoeffType> (numFollower);
             const auto resonantIndex = isResonant ? static_cast<std::size_t> (rounded) - 1 : 0;
 
+            resonantIndices.clear();
+
             if (isResonant)
-                nonResonant[resonantIndex] = CoeffType (0);
+                resonantIndices.push_back (static_cast<int> (resonantIndex));
 
             const auto sums = accumulateWeights (q * q, numFollower);
-
-            if (isResonant)
-                nonResonant[resonantIndex] = CoeffType (1);
 
             const auto sine = std::sin (pi * q);
 
@@ -400,40 +391,18 @@ private:
         }
     }
 
-    std::array<CoeffType, 2> accumulateWeights (CoeffType squared, int count) const noexcept
+    /** Returns the dot products of both weight vectors with 1 / (squared - argumentSquared), skipping resonantIndices. */
+    std::array<CoeffType, 2> accumulateWeights (CoeffType squared, int count) noexcept
     {
-        constexpr int lanes = std::is_same_v<CoeffType, float> ? 8 : 4;
-        using Register = SIMDRegister<CoeffType, lanes>;
+        FloatVectorOperations::fill (weight.data(), squared, count);
+        FloatVectorOperations::subtract (weight.data(), argumentSquared.data(), count);
+        FloatVectorOperations::copyWithDividend (weight.data(), weight.data(), CoeffType (1), count);
 
-        const auto one = Register::broadcast (CoeffType (1));
-        const auto argument = Register::broadcast (squared);
-        auto first = Register::zero();
-        auto second = Register::zero();
-        int k = 0;
+        for (const auto index : resonantIndices)
+            weight[static_cast<std::size_t> (index)] = CoeffType (0);
 
-        for (; k + lanes <= count; k += lanes)
-        {
-            const auto mask = Register::loadUnaligned (nonResonant.data() + k);
-            const auto denominator = (argument - Register::loadUnaligned (argumentSquared.data() + k)) * mask + (one - mask);
-            const auto reciprocal = mask / denominator;
-            first = first.mulAdd (Register::loadUnaligned (firstWeight.data() + k), reciprocal);
-            second = second.mulAdd (Register::loadUnaligned (secondWeight.data() + k), reciprocal);
-        }
-
-        std::array<CoeffType, 2> result { first.sum(), second.sum() };
-
-        for (; k < count; ++k)
-        {
-            const auto index = static_cast<std::size_t> (k);
-            if (nonResonant[index] == CoeffType (0))
-                continue;
-
-            const auto reciprocal = CoeffType (1) / (squared - argumentSquared[index]);
-            result[0] += firstWeight[index] * reciprocal;
-            result[1] += secondWeight[index] * reciprocal;
-        }
-
-        return result;
+        return { FloatVectorOperations::dotProduct (firstWeight.data(), weight.data(), count),
+                 FloatVectorOperations::dotProduct (secondWeight.data(), weight.data(), count) };
     }
 
     //==============================================================================
@@ -445,7 +414,6 @@ private:
     std::vector<CoeffType> triggerCosine;
     std::vector<CoeffType> inverseArgument;
     std::vector<CoeffType> weight;
-    std::vector<CoeffType> nonResonant;
     std::vector<int> resonantIndices;
     std::vector<int> resonantHarmonics;
 };

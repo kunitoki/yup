@@ -168,7 +168,7 @@ private:
 };
 
 //==============================================================================
-/** A combo box with its caption above it. */
+/** A combo box with its caption above it; an empty caption leaves the whole height to the box. */
 class ChoiceControl : public yup::Component
 {
 public:
@@ -179,7 +179,9 @@ public:
         label.setText (caption, yup::dontSendNotification);
         label.setFont (font);
         label.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
-        addAndMakeVisible (label);
+
+        if (caption.isNotEmpty())
+            addAndMakeVisible (label);
 
         comboBox.addItemList (items, 1);
         comboBox.setTextWhenNothingSelected ("-");
@@ -204,7 +206,9 @@ public:
     {
         auto bounds = getLocalBounds();
 
-        label.setBounds (bounds.removeFromTop (captionHeight));
+        if (label.getText().isNotEmpty())
+            label.setBounds (bounds.removeFromTop (captionHeight));
+
         comboBox.setBounds (bounds);
     }
 

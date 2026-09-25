@@ -36,7 +36,7 @@ constexpr int maxHarmonics = 128;
 constexpr int maxBlockSize = 2048;
 constexpr int envelopeCount = 2;
 constexpr int lfoCount = 2;
-constexpr int modulationSlots = 8;
+constexpr int modulationSlots = 16;
 
 /** Samples between control updates: modulation, filter targets and local spectra. */
 constexpr int controlChunk = 128;

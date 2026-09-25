@@ -33,8 +33,8 @@ class SynthModulationRow : public yup::Component
 public:
     SynthModulationRow (SynthModulationSettings::Slot& slotToEdit, const yup::Font& font)
         : slot (slotToEdit)
-        , sourceChoice ("SOURCE", getSynthModulationSourceNames(), font)
-        , destinationChoice ("DESTINATION", getSynthModulationDestinationNames(), font)
+        , sourceChoice ({}, getSynthModulationSourceNames(), font)
+        , destinationChoice ({}, getSynthModulationDestinationNames(), font)
         , depthKnob ("DEPTH", -1.0, 1.0, 0.01, 0.0, font)
     {
         setOpaque (false);
@@ -66,9 +66,9 @@ public:
 
         depthKnob.setBounds (bounds.removeFromRight (knobWidth));
         bounds.removeFromRight (spacing);
-        sourceChoice.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.35f).reduced (0.0f, 8.0f));
+        sourceChoice.setBounds (bounds.removeFromLeft (bounds.getWidth() * 0.35f).reduced (0.0f, 4.0f));
         bounds.removeFromLeft (spacing);
-        destinationChoice.setBounds (bounds.reduced (0.0f, 8.0f));
+        destinationChoice.setBounds (bounds.reduced (0.0f, 4.0f));
     }
 
 private:
@@ -83,7 +83,7 @@ private:
 };
 
 //==============================================================================
-/** The modulation matrix: eight routings in a panel.
+/** The modulation matrix: sixteen routings in a panel.
 
     @see SynthModulationSettings
 */

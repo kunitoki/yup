@@ -107,7 +107,7 @@ void processBlock (double* output, int numSamples)
 
 | operation | cost |
 |---|---|
-| `SyncSpectralResampler::transform` | `O (N_in * N_out)` SIMD multiply-accumulates, `O (N_in)` transcendental calls. |
+| `SyncSpectralResampler::transform` | `O (N_in * N_out)` vectorized multiply-accumulates (`FloatVectorOperations`), `O (N_in)` transcendental calls. |
 | `AdditiveOscillator::processSample` | SIMD harmonic accumulation; two fundamental-phasor trig calls every 64 samples and two rotation trig calls per frequency change. |
 | `WavetableOscillator::render` | One inverse FFT of the oversampled table. |
 | `WavetableOscillator::processSample` | One Hermite table read (two while crossfading). |

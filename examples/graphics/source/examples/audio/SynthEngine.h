@@ -291,11 +291,22 @@ public:
         hasApplied = false;
     }
 
-    /** Rebuilds the series if anything it depends on moved. Returns true when it did. */
+    /** Rebuilds the series if anything it depends on moved. Returns true when it did.
+
+        @param numOutputHarmonics  How many harmonics of the synced series are needed, -1 for
+                                   all of them. Only a growing count forces a rebuild: a table
+                                   played higher drops the extra harmonics by itself. An eighth
+                                   more is computed, like WavetableOscillator::needsRender(), so a
+                                   falling pitch does not rebuild on every block.
+    */
     bool update (const SynthOscillatorValues& values,
                  const SynthOscillatorSettings& settings,
-                 const SynthOscillatorResources& resources) noexcept
+                 const SynthOscillatorResources& resources,
+                 int numOutputHarmonics = -1) noexcept
     {
+        const auto neededHarmonics = numOutputHarmonics < 0 ? SynthExample::maxHarmonics
+                                                            : yup::jmin (numOutputHarmonics, SynthExample::maxHarmonics);
+
         const auto partialsChanged = ! hasApplied
                                   || applied.usesCustomSeries != values.usesCustomSeries
                                   || applied.harmonicGeneration != values.harmonicGeneration
@@ -320,13 +331,15 @@ public:
                                || applied.formantPosition != values.formantPosition
                                || applied.scatter != values.scatter;
 
+        const auto bandwidthGrew = values.syncMode != yup::SyncMode::none && neededHarmonics > appliedOutputHarmonics;
+
         applied = values;
         hasApplied = true;
 
         if (sourceChanged)
             sourcePeak = measurePeak (source);
 
-        if (! (sourceChanged || shapeChanged))
+        if (! (sourceChanged || shapeChanged || bandwidthGrew))
             return false;
 
         spectrum.process (source, shapedSeries, toPrismShape (values), values.color);
@@ -337,7 +350,10 @@ public:
         }
         else
         {
-            resampler.transform (shapedSeries, static_cast<double> (values.syncRatio), values.syncMode, syncedSeries);
+            const auto outputHarmonics = yup::jmin (SynthExample::maxHarmonics, neededHarmonics + yup::jmax (1, neededHarmonics / 8));
+
+            resampler.transform (shapedSeries, static_cast<double> (values.syncRatio), values.syncMode, syncedSeries, outputHarmonics);
+            appliedOutputHarmonics = outputHarmonics;
             derived = &syncedSeries;
         }
 
@@ -403,6 +419,7 @@ private:
     yup::FourierSeries<double> syncedSeries;
     yup::FourierSeries<double>* derived = &shapedSeries;
     SynthOscillatorValues applied;
+    int appliedOutputHarmonics = 0;
     bool hasApplied = false;
 };
 
@@ -465,7 +482,7 @@ public:
                   const SynthOscillatorSettings& oscillatorSettings,
                   const SynthOscillatorResources& oscillatorResources)
     {
-        const auto sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
+        sampleRate = newSampleRate > 0.0 ? newSampleRate : 44100.0;
 
         slot = &sharedSlot;
         settings = &oscillatorSettings;
@@ -525,7 +542,11 @@ public:
         const auto centreIndex = (slotCount - 1) / 2;
         const auto slotGain = 1.0f / static_cast<float> (slotCount);
 
-        applySeries (values, deriveLocally);
+        // A locally synced series only needs what the lowest unison slot can play below Nyquist.
+        const auto lowest = yup::jmin (detunedFrequency (played, values, 0, slotCount),
+                                       detunedFrequency (played, values, slotCount - 1, slotCount));
+
+        applySeries (values, deriveLocally, yup::getNyquistHarmonicLimit (lowest, sampleRate, SynthExample::maxHarmonics));
 
         renderTable (wavetable, numSamples, detunedFrequency (played, values, centreIndex, slotCount));
         accumulateSlot (left, right, numSamples, slotOffset (centreIndex, slotCount) * values.unisonSpread, slotGain);
@@ -591,7 +612,7 @@ private:
     }
 
     /** Hands the right series to every table when it moved since the last block. */
-    void applySeries (const SynthOscillatorValues& values, bool deriveLocally) noexcept
+    void applySeries (const SynthOscillatorValues& values, bool deriveLocally, int numLocalHarmonics) noexcept
     {
         if (deriveLocally)
         {
@@ -601,7 +622,7 @@ private:
                 usingLocalSeries = true;
             }
 
-            if (localDerivation.update (values, *settings, *resources))
+            if (localDerivation.update (values, *settings, *resources, numLocalHarmonics))
                 setSeries (localDerivation.getSeries());
 
             return;
@@ -634,6 +655,7 @@ private:
     const SynthOscillatorSettings* settings = nullptr;
     const SynthOscillatorResources* resources = nullptr;
     std::vector<float> slotBuffer;
+    double sampleRate = 44100.0;
     int appliedSeriesGeneration = -1;
     bool usingLocalSeries = false;
 };

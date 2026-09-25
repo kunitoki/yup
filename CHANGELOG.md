@@ -8,7 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
-- Graphics synthesizer example: PRISM logo and larger buttons in the header, LFO / scope columns aligned with filter / envelopes, and pitch bend and mod wheels beside the keyboard. The mod wheel is a new `MOD WHEEL` source in the modulation matrix.
+- `SyncSpectralResampler`: the per-harmonic accumulation goes through `FloatVectorOperations` again instead of a hand-written `SIMDRegister` loop, which was many times slower in debug builds. The graphics synthesizer example caps a per-voice synced series at the note's Nyquist harmonic count.
+- Graphics synthesizer example: PRISM logo and larger buttons in the header, LFO / scope columns aligned with filter / envelopes, and pitch bend and mod wheels beside the keyboard. The mod wheel is a new `MOD WHEEL` source in the modulation matrix. The matrix now has 16 slots.
 - CMake: retry failed upstream module and validation tool downloads, verify `sha256` after download, and fail at configure time when an upstream archive extracts nothing instead of later with missing headers.
 
 - YDSP backend (emscripten): mint kernel handles from a module-wide counter instead of a JS-realm-local one, so a realm that runs a graph can no longer find another realm's kernel under the same key and silently invoke the wrong module.

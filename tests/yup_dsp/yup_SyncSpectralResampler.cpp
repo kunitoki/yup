@@ -545,7 +545,7 @@ TEST_F (SyncSpectralResamplerTests, RepeatedTransformsDoNotAccumulateState)
     EXPECT_EQ (first, output.getSine (3));
 }
 
-TEST_F (SyncSpectralResamplerTests, FusedAccumulationMatchesScalarWithPartialSIMDLanes)
+TEST_F (SyncSpectralResamplerTests, MatchesTheScalarReferenceForShortFollowers)
 {
     for (const auto count : { 1, 3, 5, 13 })
     {
