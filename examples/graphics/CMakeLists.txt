@@ -95,7 +95,7 @@ if (YUP_EXAMPLE_GRAPHICS_DEMO IN_LIST shader_bundle_demos)
   set (need_shader_bundle ON)
 endif()
 
-set (shader_transpiler_demos "ALL;SpinningCube;GpuAudio;ComputeParticles")
+set (shader_transpiler_demos "ALL;Audio;Component3D;SpinningCube;GpuAudio;ComputeParticles")
 if (YUP_EXAMPLE_GRAPHICS_DEMO IN_LIST shader_transpiler_demos)
   set (need_shader_transpiler ON)
 endif()
