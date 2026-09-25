@@ -288,16 +288,16 @@ Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, uint32_t
     beginOffscreenFrame ({ .clearColor = GpuColor (clearColor) });
 }
 
-Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc) noexcept
+Graphics::Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc, float scale) noexcept
     : context (context)
     , offscreenTarget (std::addressof (target))
     , factory (*getOffscreenFactory (context, offscreenTarget))
     , ownedRenderer (makeOffscreenRenderer (context, offscreenTarget, target.getWidth(), target.getHeight()))
     , renderer (*ownedRenderer)
-    , contextScale (1.0f)
+    , contextScale (scale)
 {
     renderOptions.emplace_back();
-    currentRenderOptions().scale = 1.0f;
+    currentRenderOptions().scale = scale;
 
     beginOffscreenFrame (frameDesc);
 }
@@ -313,7 +313,10 @@ void Graphics::beginOffscreenFrame (const GpuFrameDescriptor& frameDesc)
 
     context.getGpuDevice()->beginOffscreen (*offscreenTarget, desc);
 
-    currentRenderOptions().drawingArea = { 0.0f, 0.0f, static_cast<float> (offscreenTarget->getWidth()), static_cast<float> (offscreenTarget->getHeight()) };
+    currentRenderOptions().drawingArea = { 0.0f,
+                                           0.0f,
+                                           static_cast<float> (offscreenTarget->getWidth()) / contextScale,
+                                           static_cast<float> (offscreenTarget->getHeight()) / contextScale };
 }
 
 Graphics::~Graphics()

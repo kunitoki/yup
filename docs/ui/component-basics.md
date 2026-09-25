@@ -300,12 +300,19 @@ To react to a *parent* being resized rather than this component, override
 Point<float> screenPt = comp.localToScreen ({ 0, 0 });
 Point<float> localPt  = comp.screenToLocal (screenPt);
 
-// Between components (handles all transforms in the hierarchy)
+// Between components (follows transforms, effects and parent projections)
 Point<float> p = compA.getLocalPoint (compB, pointInB);
 Point<float> p = compA.getRelativePoint (compB, localInA);
 Rectangle<float> r = compA.getLocalArea (compB, rectInB);
 Rectangle<float> r = compA.getRelativeArea (compB, localInA);
+
+// One step at a time
+std::optional<Point<float>> inChild  = child.getLocalPointFromParent (pointInParent);
+std::optional<Point<float>> inParent = child.getParentPointFromLocal (pointInChild);
+Point<float> inComp = comp.getLocalPointFromTopLevel (pointInWindow);
 ```
+
+Rectangles are converted as the bounding box of their mapped corners.
 
 ---
 
@@ -423,8 +430,26 @@ AffineTransform t = comp.getTransform();
 bool isXformed = comp.isTransformed(); // true if transform is not identity
 ```
 
-Transforms affect the component's painting and its children recursively. Mouse
-hit-testing accounts for the transform automatically.
+Transforms are applied in the component's local coordinates, before its position
+in the parent, and they compose down the hierarchy: a transformed parent carries
+its children with it. Painting, hit-testing, mouse and drag-and-drop events, and
+the coordinate conversions all follow the composed transform, so a click lands on
+the child that is displayed under the pointer.
+
+Inside `paint()` the mapping from local coordinates to the render target is
+`g.getTransform().translated (g.getDrawingArea().getTopLeft())`: the linear part
+of the composed transform lives in the transform and the translation in the
+drawing area, so untransformed components see an identity transform exactly as
+before. Keep this in mind when clipping: `Graphics::setClipPath()` applies only
+the transform, not the drawing area offset.
+
+A parent can also present its children through a custom projection by overriding
+`getChildPointFromLocal()` / `getLocalPointFromChild()`, which every input path
+uses for each parent to child step. See [Components in 3D](component-3d.md).
+
+Popups should be added to `getPopupParentComponent()`, the closest transformed
+(or manually composited) ancestor, so they are presented with the same transform
+as the component that opened them; `ComboBox` does this.
 
 To get the cumulative transform between two components:
 

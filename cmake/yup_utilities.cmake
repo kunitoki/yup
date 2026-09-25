@@ -335,6 +335,42 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_download_file url file_path expected_sha256)
+    set (max_attempts 4)
+    string (TOLOWER "${expected_sha256}" expected_sha256)
+
+    foreach (attempt RANGE 1 ${max_attempts})
+        if (attempt GREATER 1)
+            math (EXPR retry_delay "(${attempt} - 1) * 5")
+            message (STATUS "Download of ${url} failed (${error_message}), retrying in ${retry_delay}s (attempt ${attempt}/${max_attempts})")
+            execute_process (COMMAND "${CMAKE_COMMAND}" -E sleep ${retry_delay})
+        endif()
+
+        # EXPECTED_HASH is verified manually, as file (DOWNLOAD) hard-fails on it when the transfer itself fails
+        file (DOWNLOAD "${url}" "${file_path}" STATUS download_status INACTIVITY_TIMEOUT 60)
+        list (GET download_status 0 download_error)
+        list (GET download_status 1 error_message)
+
+        if (download_error EQUAL 0 AND expected_sha256)
+            file (SHA256 "${file_path}" actual_sha256)
+            if (NOT actual_sha256 STREQUAL expected_sha256)
+                set (download_error 1)
+                set (error_message "SHA256 mismatch, expected ${expected_sha256} but got ${actual_sha256}")
+            endif()
+        endif()
+
+        if (download_error EQUAL 0)
+            return()
+        endif()
+
+        file (REMOVE "${file_path}")
+    endforeach()
+
+    message (FATAL_ERROR "Failed to download ${url} after ${max_attempts} attempts: ${error_message}")
+endfunction()
+
+#==============================================================================
+
 function (_yup_convert_png_to_icns png_path icons_path output_variable)
     set (temp_iconset_path "${icons_path}.iconset")
     set (output_iconset_path "${icons_path}.icns")

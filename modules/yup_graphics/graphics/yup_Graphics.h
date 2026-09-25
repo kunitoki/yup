@@ -162,12 +162,16 @@ public:
         The target is not owned by this Graphics and must outlive it. Begins the
         offscreen GPU frame immediately. Used by GpuCanvas, which owns the target.
 
+        The target stays sized in pixels: @p scale maps logical drawing units to target pixels,
+        so the default drawing area covers the target size divided by @p scale.
+
         @param context    Reference to the GraphicsContext to use for offscreen rendering.
         @param target     Reference to the externally-owned renderable target.
         @param frameDesc  Frame descriptor for the offscreen frame. Its renderTargetWidth/
                           renderTargetHeight are ignored and overwritten from @p target.
+        @param scale      The number of target pixels per logical drawing unit.
     */
-    Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc) noexcept;
+    Graphics (GraphicsContext& context, RenderableTarget& target, const GpuFrameDescriptor& frameDesc, float scale = 1.0f) noexcept;
 
     /** Finalizes an uncommitted offscreen frame without retaining its result. */
     ~Graphics();

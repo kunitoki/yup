@@ -26,40 +26,30 @@ namespace yup
 namespace
 {
 
+/** Returns the axis-aligned bounding box of the corners of a rectangle mapped through @a mapPoint. */
+template <class MapPoint>
+Rectangle<float> getMappedBounds (const Rectangle<float>& bounds, MapPoint&& mapPoint)
+{
+    const auto p1 = mapPoint (bounds.getTopLeft());
+    const auto p2 = mapPoint (bounds.getTopRight());
+    const auto p3 = mapPoint (bounds.getBottomLeft());
+    const auto p4 = mapPoint (bounds.getBottomRight());
+
+    const auto minX = jmin (p1.getX(), p2.getX(), p3.getX(), p4.getX());
+    const auto maxX = jmax (p1.getX(), p2.getX(), p3.getX(), p4.getX());
+    const auto minY = jmin (p1.getY(), p2.getY(), p3.getY(), p4.getY());
+    const auto maxY = jmax (p1.getY(), p2.getY(), p3.getY(), p4.getY());
+
+    return { minX, minY, maxX - minX, maxY - minY };
+}
+
 /** Returns the axis-aligned bounding box of a rectangle mapped through a transform. */
 Rectangle<float> getTransformedBounds (const Rectangle<float>& bounds, const AffineTransform& transform)
 {
-    const auto x1 = bounds.getX();
-    const auto y1 = bounds.getY();
-    const auto x2 = bounds.getRight();
-    const auto y2 = bounds.getBottom();
-
-    float px1 = x1, py1 = y1;
-    float px2 = x2, py2 = y1;
-    float px3 = x1, py3 = y2;
-    float px4 = x2, py4 = y2;
-
-    transform.transformPoint (px1, py1);
-    transform.transformPoint (px2, py2);
-    transform.transformPoint (px3, py3);
-    transform.transformPoint (px4, py4);
-
-    auto minX = px1, maxX = px1;
-    auto minY = py1, maxY = py1;
-
-    const auto updateMinMax = [&] (float x, float y)
+    return getMappedBounds (bounds, [&transform] (Point<float> p)
     {
-        minX = jmin (minX, x);
-        maxX = jmax (maxX, x);
-        minY = jmin (minY, y);
-        maxY = jmax (maxY, y);
-    };
-
-    updateMinMax (px2, py2);
-    updateMinMax (px3, py3);
-    updateMinMax (px4, py4);
-
-    return { minX, minY, maxX - minX, maxY - minY };
+        return p.transformed (transform);
+    });
 }
 
 /** Returns the rectangles of @a region that lie inside @a localBounds mapped through @a toTopLevel,
@@ -105,6 +95,21 @@ void setClipRegion (Graphics& g, const RectangleList<float>& region)
         path.addRectangle (rect);
 
     g.setClipPath (path);
+}
+
+/** Returns the device-pixel size of an offscreen canvas covering @a logicalSize at @a scale. */
+Size<int> getCanvasPixelSize (const Size<float>& logicalSize, float scale)
+{
+    return { jmax (1, roundToInt (logicalSize.getWidth() * scale)),
+             jmax (1, roundToInt (logicalSize.getHeight() * scale)) };
+}
+
+/** Returns true if @a canvas exists and has exactly @a pixelSize. */
+bool hasPixelSize (const GpuCanvas::Ptr& canvas, const Size<int>& pixelSize)
+{
+    return canvas != nullptr
+        && canvas->getWidth() == pixelSize.getWidth()
+        && canvas->getHeight() == pixelSize.getHeight();
 }
 
 } // namespace
@@ -1078,12 +1083,15 @@ Component* Component::findComponentAt (const Point<float>& p)
     for (int index = children.size(); --index >= 0;)
     {
         auto child = children.getUnchecked (index);
-        if (! child->isVisible() || ! child->boundsInParent.contains (p))
+        if (! child->isVisible())
             continue;
 
-        child = child->findComponentAt (p - child->boundsInParent.getPosition());
-        if (child != nullptr)
-            return child;
+        const auto childPoint = child->getLocalPointFromParent (p);
+        if (! childPoint || ! child->getLocalBounds().contains (*childPoint))
+            continue;
+
+        if (auto found = child->findComponentAt (*childPoint))
+            return found;
     }
 
     return this;
@@ -1099,10 +1107,14 @@ Component* Component::findComponentAtForMouseEvent (const Point<float>& p)
         for (int index = children.size(); --index >= 0;)
         {
             auto child = children.getUnchecked (index);
-            if (! child->isVisible() || ! child->boundsInParent.contains (p))
+            if (! child->isVisible())
                 continue;
 
-            if (auto* hit = child->findComponentAtForMouseEvent (p - child->boundsInParent.getPosition()))
+            const auto childPoint = child->getLocalPointFromParent (p);
+            if (! childPoint)
+                continue;
+
+            if (auto* hit = child->findComponentAtForMouseEvent (*childPoint))
                 return hit;
         }
     }
@@ -1122,6 +1134,21 @@ Component* Component::getTopLevelComponent()
     }
 
     return currentComponent;
+}
+
+Component* Component::getPopupParentComponent()
+{
+    auto* popupParent = this;
+
+    for (auto* ancestor = parentComponent; ancestor != nullptr; ancestor = ancestor->parentComponent)
+    {
+        popupParent = ancestor;
+
+        if (ancestor->isTransformed() || ancestor->options.manuallyComposited)
+            break;
+    }
+
+    return popupParent;
 }
 
 //==============================================================================
@@ -1431,27 +1458,71 @@ bool Component::isCachedToTexture() const
     return options.cachedToTexture;
 }
 
-GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects)
+//==============================================================================
+
+void Component::setManuallyComposited (bool shouldBeManuallyComposited)
+{
+    if (options.manuallyComposited == shouldBeManuallyComposited)
+        return;
+
+    options.manuallyComposited = shouldBeManuallyComposited;
+
+    if (! shouldBeManuallyComposited)
+        presentedCanvas = nullptr;
+
+    repaint();
+}
+
+bool Component::isManuallyComposited() const
+{
+    return options.manuallyComposited;
+}
+
+GpuTexture::Ptr Component::renderToTexture (GraphicsContext& ctx, float scale)
+{
+    const bool sizeChanged = ! hasPixelSize (presentedCanvas, getCanvasPixelSize (getSize(), scale));
+
+    if (! subtreeDirty.exchange (false) && ! sizeChanged)
+        return presentedCanvas->asTexture();
+
+    presentedCanvas = renderSnapshotOffscreen (ctx, true, scale, std::move (presentedCanvas));
+    if (presentedCanvas == nullptr)
+    {
+        subtreeDirty = true;
+        return nullptr;
+    }
+
+    return presentedCanvas->asTexture();
+}
+
+//==============================================================================
+
+GpuCanvas::Ptr Component::renderSnapshotOffscreen (GraphicsContext& ctx, bool includeEffects, float scale, GpuCanvas::Ptr reuseCanvas)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
     const auto renderSnapshot = [&] () -> GpuCanvas::Ptr
     {
-        auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false);
+        const bool applyEffect = includeEffects && componentEffect != nullptr;
+
+        auto canvas = renderSubtreeOffscreen (ctx, getOpacity(), false, scale, applyEffect ? nullptr : std::move (reuseCanvas));
         if (canvas == nullptr)
             return nullptr;
 
-        if (! includeEffects || componentEffect == nullptr)
+        if (! applyEffect)
             return canvas;
 
         auto texture = canvas->asTexture();
 
-        auto effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+        auto effectCanvas = std::move (reuseCanvas);
+        if (effectCanvas == nullptr || effectCanvas->getWidth() != canvas->getWidth() || effectCanvas->getHeight() != canvas->getHeight())
+            effectCanvas = GpuCanvas::create (ctx, canvas->getWidth(), canvas->getHeight());
+
         if (effectCanvas == nullptr)
             return canvas;
 
-        auto& g = effectCanvas->beginDraw();
+        auto& g = effectCanvas->beginDraw ({}, scale);
         auto localBounds = getLocalBounds();
         g.setDrawingArea (localBounds);
         componentEffect->apply (g, texture, localBounds);
@@ -1474,7 +1545,7 @@ Image Component::snapshotToImage (GraphicsContext& ctx, bool includeEffects)
     Image result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
         if (canvas == nullptr)
             return;
 
@@ -1494,7 +1565,7 @@ GpuTexture::Ptr Component::snapshotToTexture (GraphicsContext& ctx, bool include
     GpuTexture::Ptr result;
     const auto takeSnapshot = [&]
     {
-        auto canvas = renderSnapshotOffscreen (ctx, includeEffects);
+        auto canvas = renderSnapshotOffscreen (ctx, includeEffects, 1.0f);
         if (canvas == nullptr)
             return;
 
@@ -1520,7 +1591,7 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     for (int childIndex = children.size(); --childIndex >= 0;)
     {
         auto child = children.getUnchecked (childIndex);
-        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->options.manuallyComposited || child->isTransformed())
             continue;
 
         auto childBounds = child->getBoundsRelativeToTopLevelComponent();
@@ -1551,8 +1622,31 @@ void Component::internalRepaint (const Rectangle<float>& rect)
     if (rect.isEmpty())
         return;
 
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    auto dirtyArea = rect;
+
+    for (auto* component = this;; component = component->parentComponent)
+    {
+        component->subtreeDirty = true;
+
+        // A warp can move pixels anywhere inside the component
+        if (component->componentEffect != nullptr)
+            dirtyArea = component->getLocalBounds();
+
+        auto* parent = component->parentComponent;
+
+        if (parent != nullptr && component->options.manuallyComposited)
+            dirtyArea = parent->getLocalBounds();
+        else if (! component->options.onDesktop)
+            dirtyArea = getTransformedBounds (dirtyArea, component->transform.translated (component->getPosition()));
+
+        if (parent == nullptr)
+        {
+            if (component->native != nullptr)
+                component->native->repaint (dirtyArea);
+
+            return;
+        }
+    }
 }
 
 //==============================================================================
@@ -1565,36 +1659,34 @@ void Component::paintChildrenAndOverChildren (Graphics& g, const RectangleList<f
     paintOverChildren (g);
 }
 
-GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, GpuCanvas::Ptr reuseCanvas)
+GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float opacity, bool renderContinuous, float scale, GpuCanvas::Ptr reuseCanvas)
 {
     if (getWidth() <= 0.0f || getHeight() <= 0.0f)
         return nullptr;
 
     const auto renderOffscreen = [&] () -> GpuCanvas::Ptr
     {
-        const auto w = static_cast<int> (getWidth());
-        const auto h = static_cast<int> (getHeight());
+        const auto pixelSize = getCanvasPixelSize (getSize(), scale);
 
         GpuCanvas::Ptr canvas;
-        if (reuseCanvas != nullptr && reuseCanvas->getWidth() == w && reuseCanvas->getHeight() == h)
+        if (hasPixelSize (reuseCanvas, pixelSize))
         {
             canvas = std::move (reuseCanvas);
         }
         else
         {
             reuseCanvas = nullptr;
-            canvas = GpuCanvas::create (ctx, w, h);
+            canvas = GpuCanvas::create (ctx, pixelSize.getWidth(), pixelSize.getHeight());
         }
 
         if (canvas == nullptr)
             return nullptr;
 
-        auto& offscreenG = canvas->beginDraw();
+        auto& offscreenG = canvas->beginDraw ({}, scale);
 
         options.paintAsOffscreenRoot = true;
 
-        auto localBounds = getLocalBounds();
-        paintSubtree (offscreenG, localBounds, RectangleList<float> { localBounds }, opacity, renderContinuous);
+        paintSubtree (offscreenG, RectangleList<float> { getLocalBounds() }, opacity, renderContinuous);
 
         options.paintAsOffscreenRoot = false;
 
@@ -1614,7 +1706,22 @@ GpuCanvas::Ptr Component::renderSubtreeOffscreen (GraphicsContext& ctx, float op
 
 //==============================================================================
 
-void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
+void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRegion) const
+{
+    const auto toTopLevel = getTransformToTopLevelComponent();
+
+    g.setTransform (AffineTransform::identity());
+
+    if (! options.unclippedRendering)
+        setClipRegion (g, clipRegion);
+
+    // The translation goes in the drawing area and only the linear part in the transform, so an
+    // untransformed hierarchy keeps painting in exactly the same state it always had
+    g.setDrawingArea (getLocalBounds().withPosition (toTopLevel.getTranslation()));
+    g.setTransform (toTopLevel.withAbsoluteTranslation (0.0f, 0.0f));
+}
+
+void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)
 {
     isRepainting.store (true, std::memory_order_relaxed);
 
@@ -1625,6 +1732,7 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 
     {
         const bool shouldMeasurePaint = ! options.paintProfilingDisabled && ! componentListeners.isEmpty();
+        const auto toTopLevel = getTransformToTopLevelComponent();
 
         ComponentPaintMetrics metrics;
         int64 totalStartTicks = 0;
@@ -1632,22 +1740,21 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 
         if (shouldMeasurePaint)
         {
+            const auto topLevelBounds = getTransformedBounds (getLocalBounds(), toTopLevel);
+
             totalStartTicks = Time::getHighResolutionTicks();
-            metrics.repaintArea = drawingArea;
-            metrics.componentBounds = drawingArea;
+            metrics.repaintArea = topLevelBounds;
+            metrics.componentBounds = topLevelBounds;
             metrics.renderContinuous = renderContinuous;
         }
 
         const auto globalState = g.saveState();
 
         g.setOpacity (opacity);
-        g.setDrawingArea (drawingArea);
-        if (! options.unclippedRendering)
-            setClipRegion (g, clipRegion);
-        g.setTransform (transform);
+        applyPaintState (g, clipRegion);
 
         bool canSkipPaint = false;
-        if (! options.unclippedRendering && ! isTransformed() && clipRegion.getNumRectangles() == 1)
+        if (! options.unclippedRendering && toTopLevel.isOnlyTranslation() && clipRegion.getNumRectangles() == 1)
             canSkipPaint = hasOpaqueChildCoveringArea (clipRegion.getRectangles()[0]);
 
         if (! canSkipPaint)
@@ -1702,10 +1809,8 @@ void Component::paintSubtree (Graphics& g, const Rectangle<float>& drawingArea, 
 
 void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintRegions, bool renderContinuous)
 {
-    if (! isVisible() || getWidth() <= 0.0f || getHeight() <= 0.0f)
+    if (! isVisible() || options.manuallyComposited || getWidth() <= 0.0f || getHeight() <= 0.0f)
         return;
-
-    const auto bounds = getBoundsRelativeToTopLevelComponent();
 
     const auto toTopLevel = getTransformToTopLevelComponent();
 
@@ -1726,7 +1831,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (componentEffect != nullptr)
     {
-        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), opacity, renderContinuous, std::move (effectOffscreenCanvas));
+        auto canvas = renderSubtreeOffscreen (g.getGraphicsContext(), 1.0f, renderContinuous, g.getContextScale(), std::move (effectOffscreenCanvas));
         if (canvas == nullptr)
             return;
 
@@ -1735,10 +1840,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            g.setDrawingArea (bounds);
-            if (! options.unclippedRendering)
-                setClipRegion (g, boundsToRedraw);
-            g.setTransform (transform);
+            applyPaintState (g, boundsToRedraw);
 
             componentEffect->apply (g, texture, getLocalBounds());
         }
@@ -1753,19 +1855,23 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
 
     if (options.cachedToTexture)
     {
-        if (cachedTextureCanvas == nullptr)
+        const auto scale = g.getContextScale();
+        const auto pixelSize = getCanvasPixelSize (getSize(), scale);
+
+        if (! hasPixelSize (cachedTextureCanvas, pixelSize))
         {
-            auto canvas = GpuCanvas::create (g.getGraphicsContext(),
-                                             static_cast<int> (getWidth()),
-                                             static_cast<int> (getHeight()));
+            cachedTextureCanvas = nullptr;
+
+            auto canvas = GpuCanvas::create (g.getGraphicsContext(), pixelSize.getWidth(), pixelSize.getHeight());
             if (canvas != nullptr)
             {
-                auto& offscreenG = canvas->beginDraw();
-                auto localBounds = getLocalBounds();
-                offscreenG.setOpacity (opacity);
-                offscreenG.setDrawingArea (localBounds);
-                offscreenG.setTransform (transform);
+                auto& offscreenG = canvas->beginDraw ({}, scale);
+                offscreenG.setDrawingArea (getLocalBounds());
+
+                options.paintAsOffscreenRoot = true;
                 paint (offscreenG);
+                options.paintAsOffscreenRoot = false;
+
                 canvas->commit();
                 cachedTextureCanvas = canvas;
             }
@@ -1776,10 +1882,7 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         {
             const auto saved = g.saveState();
             g.setOpacity (opacity);
-            g.setDrawingArea (bounds);
-            if (! options.unclippedRendering)
-                setClipRegion (g, boundsToRedraw);
-            g.setTransform (transform);
+            applyPaintState (g, boundsToRedraw);
 
             if (cachedTextureCanvas != nullptr)
                 g.drawTexture (cachedTextureCanvas->asTexture(), getLocalBounds());
@@ -1793,22 +1896,19 @@ void Component::internalPaint (Graphics& g, const RectangleList<float>& repaintR
         return;
     }
 
-    paintSubtree (g, bounds, boundsToRedraw, opacity, renderContinuous);
+    paintSubtree (g, boundsToRedraw, opacity, renderContinuous);
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-    paintDebugOverlay (g, bounds, boundsToRedraw);
+    paintDebugOverlay (g, boundsToRedraw);
 #endif
 }
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING
-void Component::paintDebugOverlay (Graphics& g, const Rectangle<float>& bounds, const RectangleList<float>& boundsToRedraw)
+void Component::paintDebugOverlay (Graphics& g, const RectangleList<float>& boundsToRedraw)
 {
     const auto saved = g.saveState();
 
-    g.setDrawingArea (bounds);
-    if (! options.unclippedRendering)
-        setClipRegion (g, boundsToRedraw);
-    g.setTransform (transform);
+    applyPaintState (g, boundsToRedraw);
     g.setFillColor (debugColor.withMultipliedAlpha (0.2f));
     g.fillRect (getLocalBounds());
 
@@ -2223,45 +2323,105 @@ void Component::safeAreaChanged() {}
 
 //==============================================================================
 
+std::optional<Point<float>> Component::getChildPointFromLocal (const Component& child, Point<float> localPoint) const
+{
+    jassert (child.parentComponent == this);
+
+    const auto childPoint = localPoint - child.getPosition();
+    if (! child.isTransformed())
+        return childPoint;
+
+    if (approximatelyEqual (child.transform.getDeterminant(), 0.0f))
+        return std::nullopt;
+
+    return childPoint.transformed (child.transform.inverted());
+}
+
+std::optional<Point<float>> Component::getLocalPointFromChild (const Component& child, Point<float> childPoint) const
+{
+    jassert (child.parentComponent == this);
+
+    return childPoint.transformed (child.transform) + child.getPosition();
+}
+
+std::optional<Point<float>> Component::getLocalPointFromParent (Point<float> parentPoint) const
+{
+    if (parentComponent == nullptr)
+        return std::nullopt;
+
+    auto localPoint = parentComponent->getChildPointFromLocal (*this, parentPoint);
+    if (localPoint && componentEffect != nullptr)
+        localPoint = componentEffect->displayToContent (*localPoint, getLocalBounds());
+
+    return localPoint;
+}
+
+std::optional<Point<float>> Component::getParentPointFromLocal (Point<float> localPoint) const
+{
+    if (parentComponent == nullptr)
+        return std::nullopt;
+
+    std::optional<Point<float>> displayPoint = localPoint;
+    if (componentEffect != nullptr)
+        displayPoint = componentEffect->contentToDisplay (localPoint, getLocalBounds());
+
+    if (! displayPoint)
+        return std::nullopt;
+
+    return parentComponent->getLocalPointFromChild (*this, *displayPoint);
+}
+
+Point<float> Component::getLocalPointFromTopLevel (Point<float> topLevelPoint) const
+{
+    if (parentComponent == nullptr)
+        return topLevelPoint;
+
+    const auto parentPoint = parentComponent->getLocalPointFromTopLevel (topLevelPoint);
+
+    return getLocalPointFromParent (parentPoint).value_or (parentPoint - getPosition());
+}
+
+Point<float> Component::getTopLevelScreenOrigin() const
+{
+    auto topLevel = this;
+    while (topLevel->parentComponent != nullptr)
+        topLevel = topLevel->parentComponent;
+
+    if (topLevel->options.onDesktop && topLevel->native != nullptr)
+        return topLevel->native->getPosition().to<float>();
+
+    return topLevel->getPosition();
+}
+
 Point<float> Component::localToScreen (const Point<float>& localPoint) const
 {
-    if (options.onDesktop && native != nullptr)
-        return native->getPosition().to<float>() + localPoint;
+    auto point = localPoint;
 
-    auto screenPos = localPoint + getPosition();
-    auto parent = getParentComponent();
+    for (auto component = this; component->parentComponent != nullptr; component = component->parentComponent)
+        point = component->getParentPointFromLocal (point).value_or (point + component->getPosition());
 
-    while (parent != nullptr)
-    {
-        if (parent->options.onDesktop && parent->native != nullptr)
-        {
-            screenPos += parent->native->getPosition().to<float>();
-            break;
-        }
-        else
-        {
-            screenPos += parent->getPosition();
-        }
-
-        parent = parent->getParentComponent();
-    }
-
-    return screenPos;
+    return point + getTopLevelScreenOrigin();
 }
 
 Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
 {
-    return screenPoint - localToScreen (Point<float> (0.0f, 0.0f));
+    return getLocalPointFromTopLevel (screenPoint - getTopLevelScreenOrigin());
 }
 
 Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
 {
-    return Rectangle<float> (localToScreen (localRectangle.getPosition()), localRectangle.getSize());
+    return getMappedBounds (localRectangle, [this] (Point<float> p)
+    {
+        return localToScreen (p);
+    });
 }
 
 Rectangle<float> Component::screenToLocal (const Rectangle<float>& screenRectangle) const
 {
-    return Rectangle<float> (screenToLocal (screenRectangle.getPosition()), screenRectangle.getSize());
+    return getMappedBounds (screenRectangle, [this] (Point<float> p)
+    {
+        return screenToLocal (p);
+    });
 }
 
 //==============================================================================
@@ -2328,30 +2488,16 @@ AffineTransform Component::getTransformFromComponent (const Component* sourceCom
 AffineTransform Component::getTransformToScreen() const
 {
     AffineTransform transform;
-    const Component* comp = this;
 
-    while (comp != nullptr)
+    for (auto comp = this; comp->parentComponent != nullptr; comp = comp->parentComponent)
     {
         if (comp->isTransformed())
             transform = transform.followedBy (comp->getTransform());
 
         transform = transform.translated (comp->getPosition());
-
-        if (comp->options.onDesktop)
-        {
-            if (comp->native != nullptr)
-            {
-                auto nativePos = comp->native->getPosition().to<float>();
-                transform = transform.translated (nativePos);
-            }
-
-            break;
-        }
-
-        comp = comp->getParentComponent();
     }
 
-    return transform;
+    return transform.translated (getTopLevelScreenOrigin());
 }
 
 } // namespace yup

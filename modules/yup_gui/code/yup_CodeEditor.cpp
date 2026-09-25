@@ -118,7 +118,9 @@ public:
 
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
     {
-        editor.mouseWheel (event.withRelativePositionTo (&editor), wheelData);
+        editor.mouseWheel (event.withPosition (editor.getLocalPoint (this, event.getPosition()))
+                               .withSourceComponent (&editor),
+                           wheelData);
     }
 
 private:
