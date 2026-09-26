@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- @head -->
+        <title>Modules - YUP!</title>
+        <meta name="description" content="The YUP module catalog: core, events, AI, graphics, data, UI, audio and scripting." />
+    </head>
+    <body>
+        <!-- @header -->
+
+        <main>
+            <section class="relative overflow-hidden pt-16 pb-12 sm:pt-24">
+                <div class="bg-grid"></div>
+                <div class="container-site relative text-center">
+                    <p class="eyebrow">Modules</p>
+                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Take only what you need</h1>
+                    <p class="lead mx-auto mt-5 max-w-2xl">Each <code class="font-mono text-ink">yup_*</code> module is a self-contained unity build with its own declaration. List the ones you use and the CMake API resolves the rest.</p>
+                    <div class="mx-auto mt-9 max-w-md">
+                        <label class="sr-only" for="module-filter">Filter modules</label>
+                        <input id="module-filter" type="search" placeholder="Filter modules, e.g. midi, gpu, plugin" autocomplete="off"
+                               class="w-full rounded-xl border border-edge bg-surface px-4 py-3 font-mono text-sm text-ink placeholder:text-muted/70 focus:border-glow/60 focus:outline-none" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="pb-24">
+                <div class="container-site">
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Core</h2>
+                        <p class="hidden text-sm text-muted sm:block">Foundations used across the whole framework.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_core</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Strings, containers, files and streams, memory, math, time, threading, networking and data interchange. No YUP dependencies.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">zlib</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_core" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_core" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_simd</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Vectorized math across SSE, AVX, FMA, NEON and Accelerate, wrapping xsimd behind a YUP-friendly API.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">xsimd</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_simd" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_simd" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Events</h2>
+                        <p class="hidden text-sm text-muted sm:block">The event loop and messaging layer.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_events</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">The message thread, timers, async callbacks and inter-object notifications behind every interactive app.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_events" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_events" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">AI</h2>
+                        <p class="hidden text-sm text-muted sm:block">LLM clients, embeddings and the Model Context Protocol.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_ai</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Chat-completion clients for OpenAI, Anthropic and Gemini, function-calling tools, embeddings and an MCP client and server.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_events</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_ai" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_ai" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Graphics</h2>
+                        <p class="hidden text-sm text-muted sm:block">The rendering stack, from GPU abstraction to 2D drawing and animation.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_rhi</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Low-level GPU abstraction: devices, compute and render pipelines, buffers, textures and offscreen targets. Use it for GPU compute without the 2D stack.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_shading</span><span class="chip">yup_simd</span><span class="chip">rive</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_rhi" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_rhi" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_shading</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Shader-source containers, transpilation and the .ysl shader-bundle format consumed by the RHI for offline compilation.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_shading" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_shading" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_graphics</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">2D drawing and windowed rendering on the RHI and Rive: paths, fonts, SVG, imaging and offscreen GPU canvases.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_simd</span><span class="chip">yup_rhi</span><span class="chip">yup_shading</span><span class="chip">rive</span><span class="chip">libclipper2</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_graphics" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_graphics" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_animation</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">A Lottie-compatible animation model with playback, rendering and export.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_graphics</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_animation" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_animation" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Data</h2>
+                        <p class="hidden text-sm text-muted sm:block">Observable application state.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_data_model</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">The DataTree model: hierarchical, observable, transactional and schema-validatable data with an XPath-like query engine.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_events</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_data_model" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_data_model" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">UI</h2>
+                        <p class="hidden text-sm text-muted sm:block">Components and widgets painted on the GPU.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_gui</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Components, windowing, events, layout and widgets that paint through the graphics stack and bind to the data model.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_events</span><span class="chip">yup_data_model</span><span class="chip">yup_graphics</span><span class="chip">rive</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_gui" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_gui" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_gui</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Waveforms, meters, spectrum analyzers and audio-graph editor views bridging the UI and audio stacks.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_basics</span><span class="chip">yup_audio_devices</span><span class="chip">yup_audio_formats</span><span class="chip">yup_audio_processors</span><span class="chip">yup_audio_graph</span><span class="chip">yup_dsp</span><span class="chip">yup_gui</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_gui" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_gui" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Audio</h2>
+                        <p class="hidden text-sm text-muted sm:block">Devices, formats, DSP, processing graphs and plugins.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_basics</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Audio buffers, MIDI messages, synthesis helpers and processing utilities.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_simd</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_basics" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_basics" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_devices</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Realtime audio and MIDI I/O: enumerate, open and stream from platform devices.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_basics</span><span class="chip">yup_events</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_devices" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_devices" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_formats</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Read and write Wav, Mp3, OGG, Flac, Opus and more, enabling each codec by linking its library.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_basics</span><span class="chip">yup_simd</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_formats" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_formats" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_dsp</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Filters and filter designers, crossovers and spectral analysis, with optional fast FFTs and time-stretching.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_audio_basics</span><span class="chip">yup_simd</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_dsp" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_dsp" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_dsp_jit</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">YDSP: a realtime JIT-compiled DSP language compiling patches to native x86-64 and AArch64 code that runs allocation-free in the audio callback.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span><span class="chip">yup_dsp</span><span class="chip">yup_audio_basics</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_dsp_jit" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_dsp_jit" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_processors</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">The AudioProcessor model that plugins and the audio graph are built from, plus parameter handling.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_basics</span><span class="chip">yup_data_model</span><span class="chip">yup_dsp</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_processors" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_processors" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_graph</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">A node-based graph of AudioProcessors for routing audio and MIDI, backed by the data model.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_processors</span><span class="chip">yup_data_model</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_graph" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_graph" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_plugin_client</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Wrap your own AudioProcessor as a CLAP, VST3 or AU plugin, or as a standalone app.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_processors</span><span class="chip">yup_gui</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_plugin_client" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_plugin_client" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_audio_plugin_host</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">In-process hosting of third-party VST3, CLAP, LV2 and AU plugins.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_audio_processors</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_audio_plugin_host" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_audio_plugin_host" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <section data-group class="mt-14 first:mt-0">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-xl font-semibold">Scripting</h2>
+                        <p class="hidden text-sm text-muted sm:block">Drive YUP from Python.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <article data-module class="card spotlight flex flex-col p-6">
+                            <h3 class="font-mono text-sm text-glow-soft">yup_python</h3>
+                            <p class="mt-3 flex-1 text-sm leading-relaxed text-muted">Python bindings for creating and driving YUP applications, generated for every supported module present in the build.</p>
+                            <div class="mt-4 flex flex-wrap gap-1.5"><span class="chip">yup_core</span></div>
+                            <div class="mt-5 flex gap-4 text-sm">
+                                <a class="text-ink hover:text-glow-soft" href="https://yup.readthedocs.io/en/latest/modules.html#yup_python" target="_blank" rel="noopener">Docs</a>
+                                <a class="text-muted hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/modules/yup_python" target="_blank" rel="noopener">Source</a>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <p class="mt-14 text-center text-sm text-muted">Chips list each module's required dependencies. See the <a class="text-glow-soft hover:text-ink" href="https://yup.readthedocs.io/en/latest/modules.html" target="_blank" rel="noopener">module documentation</a> for the full dependency graph and optional integrations.</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- @footer -->
+    </body>
+</html>

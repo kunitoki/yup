@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- @head -->
+        <title>YUP! The modern framework for realtime audio and GPU-native creative software</title>
+        <meta name="description" content="YUP is an ISC licensed C++20 framework for native applications, audio tools and audio plugins across desktop, mobile and the web." />
+    </head>
+    <body>
+        <!-- @header -->
+
+        <main>
+            <!-- Hero -->
+            <section class="relative overflow-hidden pt-16 sm:pt-24">
+                <div class="bg-grid"></div>
+                <div class="container-site relative text-center">
+                    <span class="chip chip-on">Early-stage and moving fast</span>
+                    <h1 class="mx-auto mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
+                        Realtime audio and GPU-native graphics, <span class="bg-gradient-to-r from-glow-soft to-glow bg-clip-text text-transparent">one C++20 codebase</span>
+                    </h1>
+                    <p class="lead mx-auto mt-6 max-w-2xl">
+                        YUP builds native applications, audio tools and audio plugins for desktop, mobile and the web. Permissively licensed foundations meet modern vector rendering through the open source Rive renderer.
+                    </p>
+                    <div class="mt-9 flex flex-wrap items-center justify-center gap-3">
+                        <a class="btn btn-primary" href="./get-started.html">
+                            Get started
+                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                        </a>
+                        <a class="btn btn-ghost" href="./showcase.html">See the showcase</a>
+                    </div>
+
+                    <div class="stage-frame mx-auto mt-16 max-w-3xl text-left">
+                        <div class="flex h-12 items-center justify-between gap-4 border-b border-edge bg-gradient-to-b from-surface to-surface/60 px-4">
+                            <div class="flex items-center gap-2.5">
+                                <svg class="brand-mark size-5" viewBox="0 0 24 24" aria-hidden="true">
+                                    <ellipse cx="12" cy="11" rx="10.2" ry="5.4" transform="rotate(-24 12 11)" fill="none" stroke="#0A84FF" stroke-width="1.6" opacity="0.65" />
+                                    <path d="M12 2 21 21 12 16.4 3 21Z" fill="#0A84FF" />
+                                </svg>
+                                <b class="text-sm font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i> <span class="font-normal text-muted">audio graph</span></b>
+                            </div>
+                            <div class="hidden gap-2 sm:flex">
+                                <span class="chip chip-on">yup_audio_graph</span>
+                                <span class="chip chip-on">yup_gui</span>
+                            </div>
+                        </div>
+                        <a href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener" title="Open the audio graph example">
+                            <img class="block w-full" src="../../docs/_static/images/yup_audio_graph.png" alt="The YUP audio graph editor" />
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Platforms -->
+            <section class="py-16">
+                <div class="container-site">
+                    <p class="text-center font-mono text-xs uppercase tracking-[0.14em] text-muted">One codebase, every CI platform</p>
+                    <ul class="mt-8 grid grid-cols-3 gap-y-6 text-center text-lg font-semibold tracking-tight text-ink/70 sm:grid-cols-6">
+                        <li>Windows</li>
+                        <li>macOS</li>
+                        <li>Linux</li>
+                        <li>iOS</li>
+                        <li>Android</li>
+                        <li>Wasm</li>
+                    </ul>
+                    <dl class="mx-auto mt-14 grid max-w-4xl grid-cols-2 gap-px overflow-hidden rounded-2xl border border-edge bg-edge sm:grid-cols-4">
+                        <div class="bg-surface p-6 text-center">
+                            <dt class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">Platforms</dt>
+                            <dd class="mt-2 text-3xl font-semibold">6</dd>
+                        </div>
+                        <div class="bg-surface p-6 text-center">
+                            <dt class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">Modules</dt>
+                            <dd class="mt-2 text-3xl font-semibold">21</dd>
+                        </div>
+                        <div class="bg-surface p-6 text-center">
+                            <dt class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">GPU backends</dt>
+                            <dd class="mt-2 text-3xl font-semibold">6</dd>
+                        </div>
+                        <div class="bg-surface p-6 text-center">
+                            <dt class="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">Plugin formats</dt>
+                            <dd class="mt-2 text-3xl font-semibold">4</dd>
+                        </div>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- Why -->
+            <section class="section">
+                <div class="container-site">
+                    <div class="mx-auto max-w-2xl text-center">
+                        <p class="eyebrow">Why YUP</p>
+                        <h2 class="heading mt-3">Built for software that has to sound and look right, in realtime</h2>
+                    </div>
+                    <div class="mt-14 grid gap-5 md:grid-cols-3">
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0L7 7Zm10 0-3 7a3 3 0 0 0 6 0l-3-7ZM8 21h8" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">Permissive by default</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">ISC licensed project code, with dependencies chosen for liberal licensing or public-domain availability. Ship closed or open, no fees.</p>
+                        </article>
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">GPU-native rendering</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Vector graphics on the Rive renderer over Metal, Direct3D, OpenGL, WebGL and WebGPU, plus a low-level RHI for compute and custom shaders.</p>
+                        </article>
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h2l2-6 3 12 3-9 2 6 2-3h4" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">Audio-first stack</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Devices, MIDI, file formats, DSP, an audio graph, plugin hosting and plugin client wrappers all live in the same framework.</p>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Features -->
+            <section class="section">
+                <div class="container-site">
+                    <div class="grid items-end gap-6 md:grid-cols-2">
+                        <div>
+                            <p class="eyebrow">What's inside</p>
+                            <h2 class="heading mt-3">Everything from pixels to plugins</h2>
+                        </div>
+                        <p class="lead md:text-right">Depend on exactly the modules you need. Transitive dependencies are pulled in by the CMake API.</p>
+                    </div>
+
+                    <div class="mt-12 grid gap-5 md:grid-cols-6">
+                        <article class="card spotlight p-7 md:col-span-4">
+                            <p class="chip">yup_graphics · yup_rhi · yup_shading</p>
+                            <h3 class="mt-5 text-xl font-semibold">Graphics, RHI and shaders</h3>
+                            <p class="mt-2 max-w-lg text-sm leading-relaxed text-muted">2D drawing, fonts with variable axes, SVG and Lottie on top of Rive. Drop down to the RHI for compute, render pipelines, PBR and fluid simulations.</p>
+                            <div class="mt-6 grid grid-cols-3 gap-3">
+                                <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="PBR rendering through the YUP RHI" loading="lazy" />
+                                <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation" loading="lazy" />
+                                <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="SVG tiger rendered by YUP" loading="lazy" />
+                            </div>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-2">
+                            <p class="chip">yup_gui</p>
+                            <h3 class="mt-5 text-xl font-semibold">GUI toolkit</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Components, windowing, layout, text editing, popup menus, drag and drop, multitouch and 3D components, all painted on the GPU.</p>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-2">
+                            <p class="chip">yup_dsp · yup_dsp_jit</p>
+                            <h3 class="mt-5 text-xl font-semibold">DSP and YDSP</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Filters and designers, crossovers, FFTs, dynamics, convolution and resampling. YDSP adds a realtime JIT-compiled DSP language.</p>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-2">
+                            <p class="chip">yup_audio_graph</p>
+                            <h3 class="mt-5 text-xl font-semibold">Audio graph</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">A node-based graph of audio processors for routing audio and MIDI, with an editor you can see in the examples.</p>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-2">
+                            <p class="chip">yup_audio_plugin_*</p>
+                            <h3 class="mt-5 text-xl font-semibold">Plugins, both ways</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Wrap your processor as CLAP, VST3, AU or a standalone app, and host third-party plugins in-process.</p>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-3">
+                            <p class="chip">yup_python</p>
+                            <h3 class="mt-5 text-xl font-semibold">Python bindings</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Create and drive YUP applications from scripts, install the wheel and iterate without recompiling.</p>
+                        </article>
+                        <article class="card spotlight p-7 md:col-span-3">
+                            <p class="chip">yup_ai</p>
+                            <h3 class="mt-5 text-xl font-semibold">AI and MCP</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Chat-completion clients for OpenAI, Anthropic and Gemini, function-calling tools, embeddings and an MCP client and server.</p>
+                        </article>
+                    </div>
+                    <div class="mt-8 text-center">
+                        <a class="btn btn-ghost" href="./modules.html">Browse all modules</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Backends -->
+            <section class="section">
+                <div class="container-site">
+                    <div class="mx-auto max-w-2xl text-center">
+                        <p class="eyebrow">Backends</p>
+                        <h2 class="heading mt-3">Native where it matters</h2>
+                        <p class="lead mt-4">Each platform uses its own graphics and audio APIs. Dashed items are in progress.</p>
+                    </div>
+                    <div class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                        <article class="card p-6">
+                            <h3 class="font-semibold">Rendering</h3>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <span class="chip chip-on">Metal</span>
+                                <span class="chip chip-on">Direct3D 11</span>
+                                <span class="chip chip-on">OpenGL 4.2</span>
+                                <span class="chip chip-on">OpenGL ES 3.1</span>
+                                <span class="chip chip-on">WebGL2</span>
+                                <span class="chip chip-on">WebGPU</span>
+                                <span class="chip chip-wip">Vulkan</span>
+                            </div>
+                        </article>
+                        <article class="card p-6">
+                            <h3 class="font-semibold">Audio I/O</h3>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <span class="chip chip-on">CoreAudio</span>
+                                <span class="chip chip-on">WASAPI</span>
+                                <span class="chip chip-on">ASIO</span>
+                                <span class="chip chip-on">DirectSound</span>
+                                <span class="chip chip-on">ALSA</span>
+                                <span class="chip chip-on">JACK</span>
+                                <span class="chip chip-on">Oboe</span>
+                                <span class="chip chip-on">OpenSL</span>
+                                <span class="chip chip-on">AudioWorklet</span>
+                            </div>
+                        </article>
+                        <article class="card p-6">
+                            <h3 class="font-semibold">Plugin formats</h3>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <span class="chip chip-on">CLAP</span>
+                                <span class="chip chip-on">VST3</span>
+                                <span class="chip chip-on">AUv2</span>
+                                <span class="chip chip-on">AUv3</span>
+                                <span class="chip chip-wip">AAX</span>
+                                <span class="chip chip-wip">LV2</span>
+                            </div>
+                        </article>
+                        <article class="card p-6">
+                            <h3 class="font-semibold">Sound formats</h3>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <span class="chip chip-on">Wav</span>
+                                <span class="chip chip-on">Wav64</span>
+                                <span class="chip chip-on">Mp3</span>
+                                <span class="chip chip-on">OGG</span>
+                                <span class="chip chip-on">Flac</span>
+                                <span class="chip chip-on">Opus</span>
+                                <span class="chip chip-on">AAC</span>
+                                <span class="chip chip-on">WMF</span>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Code -->
+            <section class="section">
+                <div class="container-site grid items-center gap-12 lg:grid-cols-5">
+                    <div class="lg:col-span-2">
+                        <p class="eyebrow">Developer experience</p>
+                        <h2 class="heading mt-3">A whole app in a screenful of code</h2>
+                        <p class="lead mt-4">Fetch YUP with CMake, pick your modules, write your application class. The same target builds for desktop, mobile and the browser.</p>
+                        <ul class="mt-6 space-y-3 text-sm text-muted">
+                            <li class="flex gap-3"><svg class="mt-0.5 size-4 shrink-0 text-glow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>Unity-built modules, no separate library install</li>
+                            <li class="flex gap-3"><svg class="mt-0.5 size-4 shrink-0 text-glow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>Works standalone or through <code class="font-mono text-ink">FetchContent</code></li>
+                            <li class="flex gap-3"><svg class="mt-0.5 size-4 shrink-0 text-glow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10" /></svg>Taken from <a class="text-glow-soft hover:text-ink" href="https://github.com/kunitoki/yup/tree/main/examples/app" target="_blank" rel="noopener">examples/app</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="stage-frame lg:col-span-3" data-tabs>
+                        <div class="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5">
+                            <div class="segmented" role="tablist" aria-label="Source files">
+                                <button class="seg" type="button" role="tab" aria-pressed="true" data-tab="cpp">main.cpp</button>
+                                <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="cmake">CMakeLists.txt</button>
+                            </div>
+                            <button class="seg" type="button" data-copy>copy</button>
+                        </div>
+                        <div data-panel="cpp"><!-- @code snippets/app.cpp --></div>
+                        <div data-panel="cmake" class="hidden"><!-- @code snippets/app.cmake --></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Paths -->
+            <section class="section">
+                <div class="container-site">
+                    <div class="mx-auto max-w-2xl text-center">
+                        <p class="eyebrow">Pick your path</p>
+                        <h2 class="heading mt-3">Free for every kind of project</h2>
+                        <p class="lead mt-4">No tiers, no seats, no revenue caps. The same ISC license covers apps, plugins and the web.</p>
+                    </div>
+
+                    <div class="mt-14 grid gap-5 lg:grid-cols-3">
+                        <article class="card spotlight flex flex-col p-8">
+                            <h3 class="text-lg font-semibold">Application</h3>
+                            <p class="mt-1 text-sm text-muted">Native desktop and mobile apps.</p>
+                            <p class="mt-6 text-4xl font-semibold">Free <span class="font-mono text-xs font-normal tracking-[0.1em] text-muted uppercase">ISC</span></p>
+                            <ul class="mt-6 flex-1 space-y-3 text-sm text-muted">
+                                <li class="flex gap-3"><span class="text-glow">+</span><code class="font-mono text-ink">yup_standalone_app</code> CMake target</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>Windows, macOS, Linux, iOS, Android</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>GPU UI with Rive, SVG and Lottie</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>Audio and MIDI device I/O</li>
+                            </ul>
+                            <a class="btn btn-ghost mt-8" href="https://yup.readthedocs.io/en/latest/build-system/building-standalone.html" target="_blank" rel="noopener">Build an app</a>
+                        </article>
+                        <article class="card spotlight flex flex-col border-glow/50 p-8 shadow-[0_30px_80px_-40px_rgb(10_132_255/0.8)]">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-lg font-semibold">Plugin</h3>
+                                <span class="chip chip-on">audio</span>
+                            </div>
+                            <p class="mt-1 text-sm text-muted">Instruments and effects for any DAW.</p>
+                            <p class="mt-6 text-4xl font-semibold">Free <span class="font-mono text-xs font-normal tracking-[0.1em] text-muted uppercase">ISC</span></p>
+                            <ul class="mt-6 flex-1 space-y-3 text-sm text-muted">
+                                <li class="flex gap-3"><span class="text-glow">+</span><code class="font-mono text-ink">yup_audio_plugin</code> CMake target</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>CLAP and VST3 on Windows and macOS</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>AUv2 and AUv3 on macOS</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>Standalone build from the same target</li>
+                            </ul>
+                            <a class="btn btn-primary mt-8" href="https://yup.readthedocs.io/en/latest/build-system/building-plugins.html" target="_blank" rel="noopener">Build a plugin</a>
+                        </article>
+                        <article class="card spotlight flex flex-col p-8">
+                            <h3 class="text-lg font-semibold">Web</h3>
+                            <p class="mt-1 text-sm text-muted">The same app, running in the browser.</p>
+                            <p class="mt-6 text-4xl font-semibold">Free <span class="font-mono text-xs font-normal tracking-[0.1em] text-muted uppercase">ISC</span></p>
+                            <ul class="mt-6 flex-1 space-y-3 text-sm text-muted">
+                                <li class="flex gap-3"><span class="text-glow">+</span>Emscripten build of your app target</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>WebGPU and WebGL2 rendering</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>AudioWorklet audio and Web MIDI</li>
+                                <li class="flex gap-3"><span class="text-glow">+</span>Threads through cross-origin isolation</li>
+                            </ul>
+                            <a class="btn btn-ghost mt-8" href="./get-started.html">Build for the web</a>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <!-- FAQ -->
+            <section class="section">
+                <div class="container-site grid gap-12 lg:grid-cols-3">
+                    <div>
+                        <p class="eyebrow">FAQ</p>
+                        <h2 class="heading mt-3">Questions, answered</h2>
+                        <p class="lead mt-4">Anything else? Ask on <a class="text-glow-soft hover:text-ink" href="https://discord.gg/E6pSdcj4R" target="_blank" rel="noopener">Discord</a> or open an issue on GitHub.</p>
+                    </div>
+                    <div class="divide-y divide-edge rounded-2xl border border-edge bg-surface/60 lg:col-span-2">
+                        <details class="faq group p-6" open>
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Is YUP ready for production?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP is under active early-stage development and APIs may change. It is usable for experimentation, examples, prototypes and contributors comfortable with a fast-moving framework. Graphics and GUI, DSP, the audio graph and CLAP/VST3 plugins are the areas most ready for feedback.</p>
+                        </details>
+                        <details class="faq group p-6">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">How does YUP relate to JUCE?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP started from the ISC licensed JUCE7 modules and has evolved since, with its own rendering, GUI, DSP, audio graph and plugin layers. Some APIs look familiar, but do not assume they are identical.</p>
+                        </details>
+                        <details class="faq group p-6">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">What does the license allow?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">Project code is ISC licensed: use, copy, modify and distribute for any purpose, commercial or not, keeping the copyright notice. Dependencies are chosen for liberal licensing or public-domain availability.</p>
+                        </details>
+                        <details class="faq group p-6">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Which plugin formats can I build and host?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">You can build CLAP and VST3 on Windows and macOS, plus AUv2 and AUv3 on macOS. Hosting supports CLAP and VST3 on Windows and macOS, and AUv2 on macOS. AAX, LV2 and Linux support are in progress.</p>
+                        </details>
+                        <details class="faq group p-6">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Can it really run in the browser?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">Yes. Wasm builds through Emscripten render with WebGPU or WebGL2 and play audio through AudioWorklet.</p>
+                        </details>
+                        <details class="faq group p-6">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Can I use it from Python?<span class="faq-plus text-xl text-glow transition">+</span></summary>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">The <code class="font-mono text-ink">yup_python</code> module provides bindings for creating and driving YUP applications from scripts. Run <code class="font-mono text-ink">just python_install</code> to install the Python wheel.</p>
+                        </details>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CTA -->
+            <section class="pb-24">
+                <div class="container-site">
+                    <div class="stage-frame relative overflow-hidden px-6 py-16 text-center sm:px-16">
+                        <div class="bg-grid"></div>
+                        <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_0%,rgb(10_132_255/0.25),transparent_70%)]"></div>
+                        <div class="relative">
+                            <h2 class="heading mx-auto max-w-2xl">Turn your next idea into realtime software</h2>
+                            <p class="lead mx-auto mt-4 max-w-xl">Clone the repository, build the examples, and have a GPU-rendered audio app running in minutes.</p>
+                            <div class="mt-8 flex flex-wrap justify-center gap-3">
+                                <a class="btn btn-primary" href="./get-started.html">Get started</a>
+                                <a class="btn btn-ghost" href="https://github.com/kunitoki/yup" target="_blank" rel="noopener">Star on GitHub</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- @footer -->
+    </body>
+</html>
