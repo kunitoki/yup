@@ -35,7 +35,7 @@
 
     Requirements:
     - A GpuDevice with compute shader support (Metal, D3D11, WebGPU, GL 4.3+)
-    - YUP_ENABLE_SHADER_TRANSPILER for online GLSL → native compilation
+    - The particles_update and particles_draw shader bundles, precompiled from data/shaders
 
     @see GpuComputePipeline, GpuComputePass, GpuPipeline, GpuRenderPass
 */
@@ -186,177 +186,6 @@ private:
     };
 
     //==============================================================================
-    /** GLSL 450 compute shader: particle physics simulation.
-
-        Particle data is stored as a flat float array in an SSBO to avoid
-        struct-based layouts that can confuse the Metal transpiler's
-        binding reflection. Each particle occupies 12 floats (48 bytes):
-          offset  0: posX, posY
-          offset  2: velX, velY
-          offset  4: colR, colG, colB, colA
-          offset  8: lifetime
-          offset  9: age
-          offset 10-11: padding (unused)
-    */
-    /** GLSL 450 compute shader: particle physics simulation.
-
-        Each particle occupies 12 floats (48 bytes in std430):
-          offset  0: posX, posY
-          offset  2: velX, velY
-          offset  4: colR, colG, colB, colA
-          offset  8: lifetime
-          offset  9: age
-          offset 10-11: padding (unused)
-
-        Bindings: UBO at (0,0), SSBO at (0,1) — matching Metal's
-        declaration-order buffer indexing.
-    */
-    static constexpr const char kComputeSource[] = R"glsl(#version 450
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
-
-layout(std140, set = 0, binding = 0) uniform Params {
-    float deltaTime;
-    float gravity;
-    float restitution;
-    float particleCountF;
-    float simLeft;
-    float simRight;
-    float simBottom;
-    float simTop;
-} params;
-
-layout(std430, set = 0, binding = 1) buffer ParticleBuffer {
-    float data[];
-};
-
-// Simple hash function for pseudo-random numbers per particle.
-uint wangHash(uint seed) {
-    seed = (seed ^ 61u) ^ (seed >> 16u);
-    seed *= 9u;
-    seed = seed ^ (seed >> 4u);
-    seed *= 0x27d4eb2du;
-    seed = seed ^ (seed >> 15u);
-    return seed;
-}
-
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    uint particleCount = uint(params.particleCountF);
-    if (idx >= particleCount)
-        return;
-
-    uint base = idx * 12u;
-
-    // Read particle state from the flat array.
-    vec2 pos       = vec2(data[base + 0u], data[base + 1u]);
-    vec2 vel       = vec2(data[base + 2u], data[base + 3u]);
-    vec4 col       = vec4(data[base + 4u], data[base + 5u], data[base + 6u], data[base + 7u]);
-    float lifetime = data[base + 8u];
-    float age      = data[base + 9u];
-
-    // Age the particle.
-    age += params.deltaTime;
-
-    // Respawn when lifetime expires — explode outward from the centre.
-    if (age >= lifetime) {
-        float angle = float(wangHash(idx * 2u + uint(age * 1000.0))) / float(0xFFFFFFFFu) * 6.283185307;
-        float speed = float(wangHash(idx * 3u)) / float(0xFFFFFFFFu) * 1.8 + 0.2;
-
-        pos = vec2(0.0, params.simBottom + 1.4);
-        vel = vec2(cos(angle), sin(angle)) * speed;
-        age = 0.0;
-        lifetime = float(wangHash(idx * 5u)) / float(0xFFFFFFFFu) * 1.5 + 0.3;
-
-        // Random saturated color.
-        uint cr = wangHash(idx * 7u);
-        uint cg = wangHash(idx * 11u);
-        uint cb = wangHash(idx * 13u);
-        col = vec4(
-            float(cr & 0xFFu) / 255.0,
-            float(cg & 0xFFu) / 255.0,
-            float(cb & 0xFFu) / 255.0,
-            1.0
-        );
-    }
-
-    // Apply gravity.
-    vel.y -= params.gravity * params.deltaTime;
-
-    // Integrate position.
-    pos += vel * params.deltaTime;
-
-    // Bounce off ground.
-    if (pos.y < params.simBottom) {
-        pos.y = params.simBottom;
-        vel.y = abs(vel.y) * params.restitution;
-        vel.x *= 0.92;
-    }
-
-    // Bounce off side walls (viewport edges).
-    if (pos.x < params.simLeft) {
-        vel.x = abs(vel.x) * 0.7;
-        pos.x = params.simLeft;
-    }
-    if (pos.x > params.simRight) {
-        vel.x = -abs(vel.x) * 0.7;
-        pos.x = params.simRight;
-    }
-
-    // Write back to the flat array.
-    data[base + 0u] = pos.x;
-    data[base + 1u] = pos.y;
-    data[base + 2u] = vel.x;
-    data[base + 3u] = vel.y;
-    data[base + 4u] = col.r;
-    data[base + 5u] = col.g;
-    data[base + 6u] = col.b;
-    data[base + 7u] = col.a;
-    data[base + 8u] = lifetime;
-    data[base + 9u] = age;
-}
-)glsl";
-
-    //==============================================================================
-    /** GLSL 450 vertex shader: expands each vertex into a clip-space quad corner. */
-    static constexpr const char kRenderVertSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 aCenter;
-layout(location = 1) in vec2 aOffset;
-layout(location = 2) in vec4 aColor;
-layout(location = 3) in vec2 aSize;
-
-layout(location = 0) out vec4 vColor;
-layout(location = 1) out vec2 vOffset;
-
-void main() {
-    gl_Position = vec4(aCenter + aOffset * aSize, 0.0, 1.0);
-    vColor = aColor;
-    vOffset = aOffset;
-}
-)glsl";
-
-    //==============================================================================
-    /** GLSL 450 fragment shader: hard opaque circle, no blending.
-
-        vOffset is the raw quad corner offset in [-0.5, 0.5].
-        Multiply by 2 to normalise to [-1, 1] for a correct
-        unit-circle distance test that works with any viewport aspect. */
-    static constexpr const char kRenderFragSource[] = R"glsl(#version 450
-layout(location = 0) in vec4 vColor;
-layout(location = 1) in vec2 vOffset;
-
-layout(location = 0) out vec4 outColor;
-
-void main() {
-    // Raw offset is always [-0.5, 0.5] on both axes regardless of
-    // viewport aspect compensation. Normalise to [-1, 1] for a true circle.
-    float dist = length(vOffset * 2.0);
-    if (dist > 1.0)
-        discard;
-    outColor = vColor;
-}
-)glsl";
-
-    //==============================================================================
     void initGpu()
     {
         if (capturedContext == nullptr)
@@ -371,12 +200,17 @@ void main() {
             return;
         }
 
-        // Compile the compute pipeline from GLSL.
-        yup::String glslSource = yup::String::fromUTF8 (kComputeSource, sizeof (kComputeSource) - 1);
+        auto computeBundle = loadShaderBundle ("particles_update");
+        if (computeBundle.failed())
+        {
+            statusLabel->setText ("Compute shader load failed: " + computeBundle.getErrorMessage().substring (0, 60),
+                                  yup::dontSendNotification);
+            YUP_DBG ("Compute shader load failed: " << computeBundle.getErrorMessage());
+            return;
+        }
 
-#if YUP_ENABLE_SHADER_TRANSPILER
         yup::GpuWorkgroupSize wgs { (uint32_t) kWorkgroupSize, 1, 1 };
-        auto computeResult = yup::GpuComputePipeline::compileFromGlsl (device, glslSource, wgs);
+        auto computeResult = yup::GpuComputePipeline::compileFromBundle (device, computeBundle.getReference(), wgs);
 
         if (computeResult.failed())
         {
@@ -387,16 +221,8 @@ void main() {
         }
 
         computePipeline = computeResult.getValue();
-#else
-        statusLabel->setText ("Shader transpiler not available (YUP_ENABLE_SHADER_TRANSPILER).", yup::dontSendNotification);
-        YUP_DBG ("Shader transpiler not available (YUP_ENABLE_SHADER_TRANSPILER).");
-        return;
-#endif
 
         // Compile the render pipeline.
-        yup::String vertSource = yup::String::fromUTF8 (kRenderVertSource, sizeof (kRenderVertSource) - 1);
-        yup::String fragSource = yup::String::fromUTF8 (kRenderFragSource, sizeof (kRenderFragSource) - 1);
-
         yup::GpuPipelineOptions pipelineOpts;
 
         // Vertex buffer layout: 4 attributes, 40-byte stride.
@@ -414,7 +240,7 @@ void main() {
         pipelineOpts.cullMode = yup::GpuCullMode::none;
         pipelineOpts.colorTargets.emplace_back().blendEnabled = false;
 
-        auto renderResult = yup::GpuPipeline::compileFromGlsl (device, vertSource, fragSource, pipelineOpts);
+        auto renderResult = compilePipelineFromBundle (device, "particles_draw", pipelineOpts);
         if (renderResult.failed())
         {
             statusLabel->setText ("Render shader compile failed: " + renderResult.getErrorMessage().substring (0, 60),

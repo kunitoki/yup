@@ -327,30 +327,6 @@ private:
 
     private:
         //==============================================================================
-        // The vertex shader only applies the MVP matrix, so the CPU picking in the
-        // MeshSurfaceMapper matches the GPU rasterization exactly. Texture coordinates
-        // have v pointing down, like the panel, and are sampled as they are.
-        static constexpr char vertexSource[] = R"glsl(#version 450
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec2 a_uv;
-layout(set = 0, binding = 0) uniform Uniforms { mat4 modelViewProjection; } u;
-layout(location = 0) out vec2 v_uv;
-void main() {
-    gl_Position = u.modelViewProjection * vec4(a_position, 1.0);
-    v_uv = a_uv;
-}
-)glsl";
-
-        static constexpr char fragmentSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 v_uv;
-layout(set = 0, binding = 1) uniform texture2D u_tex;
-layout(set = 0, binding = 2) uniform sampler u_samp;
-layout(location = 0) out vec4 fragColor;
-void main() {
-    fragColor = vec4(texture(sampler2D(u_tex, u_samp), v_uv).rgb, 1.0);
-}
-)glsl";
-
         static constexpr float panelWidth = 480.0f;
         static constexpr float panelHeight = 300.0f;
         static constexpr float surfaceWidth = 3.0f;
@@ -448,7 +424,7 @@ void main() {
             options.depthStencil.depthCompare = yup::GpuCompareFunction::less;
             options.depthStencil.depthWriteEnabled = true;
 
-            auto result = yup::GpuPipeline::compileFromGlsl (context.getGpuDevice(), vertexSource, fragmentSource, options);
+            auto result = compilePipelineFromBundle (context.getGpuDevice(), "component3d", options);
             if (result.failed())
             {
                 pipelineError = "Pipeline compile failed: " + result.getErrorMessage();

@@ -20,13 +20,24 @@
 */
 
 #include <yup_core/yup_core.h>
-#include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
-#include <yup_animation/yup_animation.h>
 #include <yup_gui/yup_gui.h>
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
+#include <yup_audio_devices/yup_audio_devices.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_dsp
+#include <yup_dsp/yup_dsp.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
 #include <yup_audio_gui/yup_audio_gui.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_animation
+#include <yup_animation/yup_animation.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_ai
 #include <yup_ai/yup_ai.h>
+#endif
 #if YUP_MODULE_AVAILABLE_yup_python
 #include <yup_python/yup_python.h>
 #endif
@@ -63,6 +74,30 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
         basePath = basePath.getChildFile (subPath);
 
     return basePath;
+}
+
+/** Loads a shader bundle precompiled by the SHADERS of a demo in CMakeLists.txt. */
+inline yup::ResultValue<yup::ShaderBundle> loadShaderBundle (yup::StringRef name)
+{
+#if YUP_WASM || YUP_MOBILE
+    const auto shadersPath = getAssetPath ("data/shaders");
+#else
+    const auto shadersPath = yup::File (YUP_EXAMPLE_GRAPHICS_SHADERS_PATH);
+#endif
+
+    return yup::ShaderBundle::loadFromFile (shadersPath.getChildFile (yup::String (name) + ".ysl"));
+}
+
+/** Compiles a render pipeline from a shader bundle loaded with loadShaderBundle(). */
+inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::GpuDevice::Ptr device,
+                                                                          yup::StringRef name,
+                                                                          const yup::GpuPipelineOptions& options = {})
+{
+    auto bundle = loadShaderBundle (name);
+    if (bundle.failed())
+        return yup::makeResultValueFail ("Shader bundle " + yup::String (name) + " failed to load: " + bundle.getErrorMessage());
+
+    return yup::GpuPipeline::compileFromBundle (std::move (device), bundle.getReference(), options);
 }
 
 //==============================================================================

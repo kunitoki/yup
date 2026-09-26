@@ -325,514 +325,9 @@ private:
     Config config;
 
     //==============================================================================
-    // ---- Fullscreen-triangle vertex shader (shared by every pass) -------------
-    // No vertex buffers: 3 vertices generated from gl_VertexIndex (the same
-    // pattern used by the blur pass in SpinningCubeDemo). vUv is the logical
-    // (0..1)^2 coordinate of each pixel.
-
-    static constexpr char kFullscreenVertSource[] = R"glsl(#version 450
-layout(location = 0) out vec2 vUv;
-void main() {
-    uint idx = gl_VertexIndex;
-    vec2 pos = vec2(float((idx & 1u) << 2u) - 1.0,
-                    float((idx & 2u) << 1u) - 1.0);
-    vUv = pos * 0.5 + 0.5;
-    gl_Position = vec4(pos, 0.0, 1.0);
-}
-)glsl";
-
-    //==============================================================================
-    // ---- Shared GLSL snippets ----------------------------------------------------
-    // kEncodeVelGlsl / kEncodeScalarGlsl pack the sim fields into the 8-bit
-    // channels of the surfaces (see the class doc). kSuvGlsl maps a logical
-    // sample coordinate to the backend's texture space. Each fragment source
-    // is assembled at compile time as head + codec(s) + kSuvGlsl + body.
-
-    static constexpr char kEncodeVelGlsl[] = R"glsl(
-vec4 encodeVel(vec2 v) {
-    vec2 t = clamp((v + vec2(1000.0)) * vec2(0.0005), vec2(0.0), vec2(1.0));
-    vec2 x = floor(t * vec2(65535.0) + vec2(0.5));
-    vec2 hi = floor(x / vec2(256.0));
-    vec2 lo = x - hi * vec2(256.0);
-    return vec4(lo.x, hi.x, lo.y, hi.y) / 255.0;
-}
-vec2 decodeVel(vec4 c) {
-    vec2 lo = floor(vec2(c.r, c.b) * vec2(255.0) + vec2(0.5));
-    vec2 hi = floor(vec2(c.g, c.a) * vec2(255.0) + vec2(0.5));
-    vec2 x = hi * vec2(256.0) + lo;
-    return x * vec2(2000.0 / 65535.0) - vec2(1000.0);
-}
-)glsl";
-
-    static constexpr char kEncodeScalarGlsl[] = R"glsl(
-vec3 encodeScalar(float v) {
-    float t = clamp((v + 2048.0) * (1.0 / 4096.0), 0.0, 1.0);
-    float x = floor(t * 16777215.0 + 0.5);
-    float b0 = mod(x, 256.0);
-    float b1 = mod(floor(x / 256.0), 256.0);
-    float b2 = floor(x / 65536.0);
-    return vec3(b0, b1, b2) / 255.0;
-}
-float decodeScalar(vec3 c) {
-    vec3 b = floor(c * vec3(255.0) + vec3(0.5));
-    float x = b.x + b.y * 256.0 + b.z * 65536.0;
-    return x * (4096.0 / 16777215.0) - 2048.0;
-}
-)glsl";
-
-    static constexpr char kSuvGlsl[] = R"glsl(
-vec2 suv(vec2 uv) {
-    return vec2(uv.x, mix(uv.y, 1.0 - uv.y, u.flipY));
-}
-)glsl";
-
-    //==============================================================================
-    // ---- Pass fragment shaders (ported from the original) -----------------------
-
-    /** Clears a surface to a flat color (initialisation only). */
-    static constexpr char kClearFragSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float colorR; float colorG; float colorB; float colorA;
-    float pad0; float pad1; float pad2; float pad3;
-    float pad4; float pad5; float pad6; float pad7;
-    float pad8; float pad9; float pad10; float pad11;
-} u;
-layout(location = 0) out vec4 fragColor;
-void main() {
-    fragColor = vec4(u.colorR, u.colorG, u.colorB, u.colorA);
-}
-)glsl";
-
-    // Velocity splat: adds a radial velocity impulse to the (encoded) velocity field.
-    static constexpr char kSplatVelocityFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float aspectRatio;
-    float radius;
-    float pointX; float pointY;
-    float colorR; float colorG;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5; float pad6;
-    float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kSplatVelocityFragBody[] = R"glsl(
-void main() {
-    vec2 p = vUv - vec2(u.pointX, u.pointY);
-    p.x *= u.aspectRatio;
-    float falloff = exp(-dot(p, p) / max(u.radius, 0.000001));
-
-    vec2 vel = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv)));
-    vel += falloff * vec2(u.colorR, u.colorG);
-    fragColor = encodeVel(vel);
-}
-)glsl";
-
-    /** Dye splat: adds a radial color blob to the dye field. */
-    static constexpr char kSplatDyeFragSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float aspectRatio;
-    float radius;
-    float pointX; float pointY;
-    float colorR; float colorG; float colorB;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-
-vec2 suv(vec2 uv) {
-    return vec2(uv.x, mix(uv.y, 1.0 - uv.y, u.flipY));
-}
-void main() {
-    vec2 p = vUv - vec2(u.pointX, u.pointY);
-    p.x *= u.aspectRatio;
-    float falloff = exp(-dot(p, p) / max(u.radius, 0.000001));
-
-    vec3 base = texture(sampler2D(uTex0, uSamp0), suv(vUv)).rgb;
-    fragColor = vec4(base + falloff * vec3(u.colorR, u.colorG, u.colorB), 1.0);
-}
-)glsl";
-
-    /** Curl of the velocity field (vorticity magnitude), stored as a scalar. */
-    static constexpr char kCurlFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float pad11;
-    float pad12; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kCurlFragBody[] = R"glsl(
-void main() {
-    vec2 texel = vec2(1.0 / u.sizeX, 1.0 / u.sizeY);
-
-    float L = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(texel.x, 0.0)))).y;
-    float R = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(texel.x, 0.0)))).y;
-    float T = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(0.0, texel.y)))).x;
-    float B = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(0.0, texel.y)))).x;
-
-    float vorticity = R - L - T + B;
-    fragColor = vec4(encodeScalar(0.5 * vorticity), 1.0);
-}
-)glsl";
-
-    /** Vorticity confinement: sharpens swirls by adding force along the curl gradient. */
-    static constexpr char kVorticityFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float curlStrength;
-    float dt;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(set = 0, binding = 3) uniform texture2D uTex1;
-layout(set = 0, binding = 4) uniform sampler uSamp1;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kVorticityFragBody[] = R"glsl(
-void main() {
-    vec2 texel = vec2(1.0 / u.sizeX, 1.0 / u.sizeY);
-
-    float L = decodeScalar(texture(sampler2D(uTex1, uSamp1), suv(vUv - vec2(texel.x, 0.0))).rgb);
-    float R = decodeScalar(texture(sampler2D(uTex1, uSamp1), suv(vUv + vec2(texel.x, 0.0))).rgb);
-    float T = decodeScalar(texture(sampler2D(uTex1, uSamp1), suv(vUv + vec2(0.0, texel.y))).rgb);
-    float B = decodeScalar(texture(sampler2D(uTex1, uSamp1), suv(vUv - vec2(0.0, texel.y))).rgb);
-    float C = decodeScalar(texture(sampler2D(uTex1, uSamp1), suv(vUv)).rgb);
-
-    vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
-    force /= length(force) + 0.0001;
-    force *= u.curlStrength * C;
-    force.y *= -1.0;
-
-    vec2 velocity = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(vUv)));
-    velocity += force * u.dt;
-    velocity = clamp(velocity, vec2(-1000.0), vec2(1000.0));
-    fragColor = encodeVel(velocity);
-}
-)glsl";
-
-    /** One Jacobi pressure iteration.
-        The divergence is computed inline from the velocity field (which is
-        unchanged during the solve), and an inputScale folds the per-frame
-        PRESSURE damping (the original's separate "clear" pass) into the first
-        iteration, so the whole pressure stage is a single shader. */
-    static constexpr char kPressureFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float inputScale;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float pad11;
-    float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(set = 0, binding = 3) uniform texture2D uTex1;
-layout(set = 0, binding = 4) uniform sampler uSamp1;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kPressureFragBody[] = R"glsl(
-void main() {
-    vec2 texel = vec2(1.0 / u.sizeX, 1.0 / u.sizeY);
-
-    // Divergence of the velocity field at this texel (mirror boundaries).
-    vec2 vL = vUv - vec2(texel.x, 0.0);
-    vec2 vR = vUv + vec2(texel.x, 0.0);
-    vec2 vT = vUv + vec2(0.0, texel.y);
-    vec2 vB = vUv - vec2(0.0, texel.y);
-
-    vec2 Cv = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vUv)));
-
-    float Lv = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vL))).x;
-    float Rv = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vR))).x;
-    float Tv = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vT))).y;
-    float Bv = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vB))).y;
-
-    if (vL.x < 0.0) Lv = -Cv.x;
-    if (vR.x > 1.0) Rv = -Cv.x;
-    if (vT.y > 1.0) Tv = -Cv.y;
-    if (vB.y < 0.0) Bv = -Cv.y;
-
-    float divergence = 0.5 * (Rv - Lv + Tv - Bv);
-
-    // Pressure neighbours, damped by inputScale (PRESSURE on the first
-    // iteration, 1 afterwards).
-    float s = u.inputScale;
-    float L = s * decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(texel.x, 0.0))).rgb);
-    float R = s * decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(texel.x, 0.0))).rgb);
-    float T = s * decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(0.0, texel.y))).rgb);
-    float B = s * decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(0.0, texel.y))).rgb);
-
-    float pressure = (L + R + B + T - divergence) * 0.25;
-    fragColor = vec4(encodeScalar(pressure), 1.0);
-}
-)glsl";
-
-    /** Gradient subtraction: projects the velocity onto a divergence-free field. */
-    static constexpr char kGradientSubtractFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float pad11;
-    float pad12; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(set = 0, binding = 3) uniform texture2D uTex1;
-layout(set = 0, binding = 4) uniform sampler uSamp1;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kGradientSubtractFragBody[] = R"glsl(
-void main() {
-    vec2 texel = vec2(1.0 / u.sizeX, 1.0 / u.sizeY);
-
-    float L = decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(texel.x, 0.0))).rgb);
-    float R = decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(texel.x, 0.0))).rgb);
-    float T = decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(0.0, texel.y))).rgb);
-    float B = decodeScalar(texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(0.0, texel.y))).rgb);
-
-    vec2 velocity = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(vUv)));
-    velocity -= vec2(R - L, T - B);
-    fragColor = encodeVel(velocity);
-}
-)glsl";
-
-    /** Semi-Lagrangian advection of an encoded field (velocity self-advection). */
-    static constexpr char kAdvectVelocityFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float sizeX; float sizeY;
-    float dt; float dissipation;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kAdvectVelocityFragBody[] = R"glsl(
-vec2 sampleEncoded(vec2 uv) {
-    vec2 dims = vec2(u.sizeX, u.sizeY);
-    vec2 st = uv * dims - 0.5;
-    vec2 b = floor(st);
-    vec2 f = st - b;
-    vec2 t00 = (clamp(b, vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t10 = (clamp(b + vec2(1.0, 0.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t01 = (clamp(b + vec2(0.0, 1.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t11 = (clamp(b + vec2(1.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 v00 = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(t00)));
-    vec2 v10 = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(t10)));
-    vec2 v01 = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(t01)));
-    vec2 v11 = decodeVel(texture(sampler2D(uTex0, uSamp0), suv(t11)));
-    return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
-}
-void main() {
-    vec2 uv = vUv;
-    vec2 vel = sampleEncoded(uv);
-    vec2 coord = uv - u.dt * vel * vec2(1.0 / u.sizeX, 1.0 / u.sizeY);
-    vec2 result = sampleEncoded(coord);
-    result /= 1.0 + u.dissipation * u.dt;
-    fragColor = encodeVel(result);
-}
-)glsl";
-
-    /** Semi-Lagrangian advection of the dye field (velocity sampled encoded). */
-    static constexpr char kAdvectDyeFragHead[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float velSizeX; float velSizeY;
-    float srcSizeX; float srcSizeY;
-    float dt; float dissipation;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(set = 0, binding = 3) uniform texture2D uTex1;
-layout(set = 0, binding = 4) uniform sampler uSamp1;
-layout(location = 0) out vec4 fragColor;
-)glsl";
-
-    static constexpr char kAdvectDyeFragBody[] = R"glsl(
-vec2 sampleVel(vec2 uv) {
-    vec2 dims = vec2(u.velSizeX, u.velSizeY);
-    vec2 st = uv * dims - 0.5;
-    vec2 b = floor(st);
-    vec2 f = st - b;
-    vec2 t00 = (clamp(b, vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t10 = (clamp(b + vec2(1.0, 0.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t01 = (clamp(b + vec2(0.0, 1.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 t11 = (clamp(b + vec2(1.0), vec2(0.0), dims - 1.0) + vec2(0.5)) / dims;
-    vec2 v00 = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(t00)));
-    vec2 v10 = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(t10)));
-    vec2 v01 = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(t01)));
-    vec2 v11 = decodeVel(texture(sampler2D(uTex1, uSamp1), suv(t11)));
-    return mix(mix(v00, v10, f.x), mix(v01, v11, f.x), f.y);
-}
-void main() {
-    vec2 uv = vUv;
-    vec2 vel = sampleVel(uv);
-    vec2 coord = uv - u.dt * vel * vec2(1.0 / u.velSizeX, 1.0 / u.velSizeY);
-    vec4 result = texture(sampler2D(uTex0, uSamp0), suv(coord));
-    result /= 1.0 + u.dissipation * u.dt;
-    fragColor = vec4(result.rgb, 1.0);
-}
-)glsl";
-
-    /** Bloom prefilter - keeps only the bright parts of the dye (original curve). */
-    static constexpr char kBloomPrefilterFragSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float threshold;
-    float curve0; float curve1; float curve2;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10;
-    float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-
-vec2 suv(vec2 uv) {
-    return vec2(uv.x, mix(uv.y, 1.0 - uv.y, u.flipY));
-}
-void main() {
-    vec3 c = texture(sampler2D(uTex0, uSamp0), suv(vUv)).rgb;
-    float br = max(c.r, max(c.g, c.b));
-    float rq = clamp(br - u.curve0, 0.0, u.curve1);
-    rq = u.curve2 * rq * rq;
-    c *= max(rq, br - u.threshold) / max(br, 0.0001);
-    fragColor = vec4(c, 1.0);
-}
-)glsl";
-
-    /** 4-tap blur - smooths the small bloom surface between two ping-pong buffers. */
-    static constexpr char kBlur4FragSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float srcSizeX; float srcSizeY;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float pad7; float pad8; float pad9; float pad10; float pad11;
-    float pad12; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(location = 0) out vec4 fragColor;
-
-vec2 suv(vec2 uv) {
-    return vec2(uv.x, mix(uv.y, 1.0 - uv.y, u.flipY));
-}
-void main() {
-    vec2 texel = vec2(1.0 / u.srcSizeX, 1.0 / u.srcSizeY);
-
-    vec4 sum = vec4(0.0);
-    sum += texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(texel.x, 0.0)));
-    sum += texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(texel.x, 0.0)));
-    sum += texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(0.0, texel.y)));
-    sum += texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(0.0, texel.y)));
-    sum *= 0.25;
-    fragColor = sum;
-}
-)glsl";
-
-    /** Final composite: shading, bloom add (gamma'd), ordered dither. */
-    static constexpr char kDisplayFragSource[] = R"glsl(#version 450
-layout(location = 0) in vec2 vUv;
-layout(set = 0, binding = 0) uniform Params {
-    float dyeSizeX; float dyeSizeY;
-    float shadingF; float bloomF;
-    float bloomIntensity;
-    float backR; float backG; float backB;
-    float pad0; float pad1; float pad2; float pad3; float pad4; float pad5;
-    float pad6; float flipY;
-} u;
-layout(set = 0, binding = 1) uniform texture2D uTex0;
-layout(set = 0, binding = 2) uniform sampler uSamp0;
-layout(set = 0, binding = 3) uniform texture2D uTex1;
-layout(set = 0, binding = 4) uniform sampler uSamp1;
-layout(location = 0) out vec4 fragColor;
-
-vec3 linearToGamma(vec3 color) {
-    color = max(color, vec3(0.0));
-    return max(1.055 * pow(color, vec3(0.416666667)) - 0.055, vec3(0.0));
-}
-
-const float kDither[16] = float[16](
-    0.0,  8.0,  2.0,  10.0,
-    12.0, 4.0,  14.0, 6.0,
-    3.0,  11.0, 1.0,  9.0,
-    15.0, 7.0,  13.0, 5.0
-);
-
-vec2 suv(vec2 uv) {
-    return vec2(uv.x, mix(uv.y, 1.0 - uv.y, u.flipY));
-}
-void main() {
-    vec3 c = texture(sampler2D(uTex0, uSamp0), suv(vUv)).rgb;
-
-    if (u.shadingF > 0.5)
-    {
-        vec2 texel = vec2(1.0 / u.dyeSizeX, 1.0 / u.dyeSizeY);
-
-        vec3 lc = texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(texel.x, 0.0))).rgb;
-        vec3 rc = texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(texel.x, 0.0))).rgb;
-        vec3 tc = texture(sampler2D(uTex0, uSamp0), suv(vUv + vec2(0.0, texel.y))).rgb;
-        vec3 bc = texture(sampler2D(uTex0, uSamp0), suv(vUv - vec2(0.0, texel.y))).rgb;
-
-        float dx = length(rc) - length(lc);
-        float dy = length(tc) - length(bc);
-
-        vec3 n = normalize(vec3(dx, dy, length(texel)));
-        vec3 l = vec3(0.0, 0.0, 1.0);
-
-        float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
-        c *= diffuse;
-    }
-
-    if (u.bloomF > 0.5)
-    {
-        // Sample the small bloom surface with hardware linear filtering: the
-        // smooth upscale hides the 8-bit steps of the bloom buffer.
-        vec3 bloom = texture(sampler2D(uTex1, uSamp1), suv(vUv)).rgb * u.bloomIntensity;
-        bloom = linearToGamma(bloom);
-        c += bloom;
-    }
-
-    float alpha = max(c.r, max(c.g, c.b));
-    vec3 outC = c + vec3(u.backR, u.backG, u.backB) * (1.0 - alpha);
-
-    // Ordered (Bayer) dithering hides the 8-bit quantization of the surfaces on
-    // slow fades, where gamma-expanded steps would otherwise band. Amplitude is
-    // half an LSB, so no visible grain.
-    ivec2 pc = ivec2(vUv * vec2(u.dyeSizeX, u.dyeSizeY)) & ivec2(3);
-    float dither = (kDither[pc.y * 4 + pc.x] + 0.5) / 16.0 - 0.5;
-    outC += vec3(dither) / 255.0;
-
-    fragColor = vec4(outC, 1.0);
-}
-)glsl";
+    // ---- Shaders ------------------------------------------------------------------
+    // Every pass is a fluid_*.frag bundle precompiled from data/shaders, drawn with
+    // the fullscreen triangle of fluid_fullscreen.vert.
 
     //==============================================================================
     // ---- Resource bookkeeping ----------------------------------------------------
@@ -899,7 +394,6 @@ void main() {
     struct CompileJob
     {
         yup::String name;
-        std::vector<const char*> parts;
         yup::GpuPipeline::Ptr* target = nullptr;
     };
 
@@ -920,10 +414,6 @@ void main() {
             return;
         }
 
-#if ! YUP_ENABLE_SHADER_TRANSPILER
-        statusLabel->setText ("Shader transpiler not available (YUP_ENABLE_SHADER_TRANSPILER).", yup::dontSendNotification);
-        return;
-#else
         if (! capturedContext->isGpuAvailable())
         {
             statusLabel->setText ("GPU context unavailable.", yup::dontSendNotification);
@@ -932,51 +422,38 @@ void main() {
         }
 
         // Queue all pipeline compiles; they run a few per frame in pumpCompilation().
-        auto addJob = [this] (yup::StringRef name, std::initializer_list<const char*> parts, yup::GpuPipeline::Ptr& target)
+        auto addJob = [this] (yup::StringRef name, yup::GpuPipeline::Ptr& target)
         {
-            CompileJob job;
-            job.name = name;
-            job.parts.assign (parts.begin(), parts.end());
-            job.target = &target;
-            compileJobs.push_back (std::move (job));
+            compileJobs.push_back ({ name, &target });
         };
 
-        addJob ("clear", { kClearFragSource }, clearPipeline);
-        addJob ("splatVelocity", { kSplatVelocityFragHead, kEncodeVelGlsl, kSuvGlsl, kSplatVelocityFragBody }, splatVelocityPipeline);
-        addJob ("splatDye", { kSplatDyeFragSource }, splatDyePipeline);
-        addJob ("curl", { kCurlFragHead, kEncodeVelGlsl, kEncodeScalarGlsl, kSuvGlsl, kCurlFragBody }, curlPipeline);
-        addJob ("vorticity", { kVorticityFragHead, kEncodeVelGlsl, kEncodeScalarGlsl, kSuvGlsl, kVorticityFragBody }, vorticityPipeline);
-        addJob ("pressure", { kPressureFragHead, kEncodeVelGlsl, kEncodeScalarGlsl, kSuvGlsl, kPressureFragBody }, pressurePipeline);
-        addJob ("gradientSubtract", { kGradientSubtractFragHead, kEncodeVelGlsl, kEncodeScalarGlsl, kSuvGlsl, kGradientSubtractFragBody }, gradientSubtractPipeline);
-        addJob ("advectVelocity", { kAdvectVelocityFragHead, kEncodeVelGlsl, kSuvGlsl, kAdvectVelocityFragBody }, advectVelocityPipeline);
-        addJob ("advectDye", { kAdvectDyeFragHead, kEncodeVelGlsl, kSuvGlsl, kAdvectDyeFragBody }, advectDyePipeline);
-        addJob ("bloomPrefilter", { kBloomPrefilterFragSource }, bloomPrefilterPipeline);
-        addJob ("blur4", { kBlur4FragSource }, blur4Pipeline);
-        addJob ("display", { kDisplayFragSource }, displayPipeline);
+        addJob ("fluid_clear", clearPipeline);
+        addJob ("fluid_splat_velocity", splatVelocityPipeline);
+        addJob ("fluid_splat_dye", splatDyePipeline);
+        addJob ("fluid_curl", curlPipeline);
+        addJob ("fluid_vorticity", vorticityPipeline);
+        addJob ("fluid_pressure", pressurePipeline);
+        addJob ("fluid_gradient_subtract", gradientSubtractPipeline);
+        addJob ("fluid_advect_velocity", advectVelocityPipeline);
+        addJob ("fluid_advect_dye", advectDyePipeline);
+        addJob ("fluid_bloom_prefilter", bloomPrefilterPipeline);
+        addJob ("fluid_blur4", blur4Pipeline);
+        addJob ("fluid_display", displayPipeline);
 
         compileCursor = 0;
         compiling = true;
         statusLabel->setText ("Compiling shaders...", yup::dontSendNotification);
-#endif
     }
 
     /** Compiles one queued job into its target pipeline member. */
     void compileJob (const CompileJob& job)
     {
-        yup::String fragmentSource;
-        for (const char* part : job.parts)
-            fragmentSource += yup::String::fromUTF8 (part);
-
         yup::GpuPipelineOptions options;
         options.topology = yup::GpuPrimitiveTopology::triangleList;
         options.cullMode = yup::GpuCullMode::none;
         options.colorTargets.emplace_back().blendEnabled = false; // passes overwrite every pixel
 
-        auto result = yup::GpuPipeline::compileFromGlsl (
-            device,
-            yup::String::fromUTF8 (kFullscreenVertSource),
-            fragmentSource,
-            options);
+        auto result = compilePipelineFromBundle (device, job.name, options);
 
         if (result.failed())
         {

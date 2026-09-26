@@ -130,7 +130,8 @@ myComponent.setComponentEffect (nullptr);
 
 The [graphics example](../../examples/graphics/) demonstrates several reusable
 effect patterns implemented as `ComponentEffect` subclasses. Each lives in
-`examples/graphics/source/examples/ComponentEffectsDemo.h`:
+`examples/graphics/source/examples/ComponentEffects.h`, with its fragment shader
+precompiled from `examples/graphics/data/shaders/effect_*.frag`:
 
 | Effect | Shader | Parameter |
 |---|---|---|

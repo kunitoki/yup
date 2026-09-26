@@ -221,15 +221,6 @@ public:
 
 private:
     //==============================================================================
-    /** Fullscreen-triangle vertex shader, shared by all effects. */
-    static constexpr char kVertSource[] = R"glsl(#version 450
-void main() {
-    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
-    float y = float((gl_VertexIndex & 2u) << 1u) - 1.0;
-    gl_Position = vec4(x, y, 0.0, 1.0);
-}
-)glsl";
-
     /** Uniform block shared by all effects (layout matches std140). */
     struct EffectParams
     {
@@ -239,11 +230,9 @@ void main() {
     //==============================================================================
     /** Base for the demo's shader effects.
 
-        Owns the pipeline and compiles it at most once. Compiling GLSL runs the
-        shader transpiler - and, on WebGPU, the GLSL→WGSL lowering on top of that -
-        which costs tens of milliseconds, so a failed compile is remembered
-        instead of retried: retrying every frame would silently cap the frame rate
-        rather than just falling back to an unfiltered draw.
+        Owns the pipeline and compiles it at most once. A failed compile is
+        remembered instead of retried: retrying every frame would silently cap the
+        frame rate rather than just falling back to an unfiltered draw.
 
         Also records the CPU time spent inside apply(), so the demo can show
         whether a slow frame is spent on the CPU or waiting on the GPU.
@@ -275,8 +264,8 @@ void main() {
         }
 
     protected:
-        /** Returns this effect's fragment shader source. */
-        virtual const char* getFragmentSource() const = 0;
+        /** Returns the name of this effect's shader bundle. */
+        virtual const char* getShaderName() const = 0;
 
         /** Renders the effect. Only called once the pipeline compiled successfully. */
         virtual void applyEffect (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) = 0;
@@ -295,10 +284,7 @@ void main() {
 
             compileAttempted = true;
 
-            auto result = yup::GpuPipeline::compileFromGlsl (ctx.getGpuDevice(),
-                                                             kVertSource,
-                                                             yup::String::fromUTF8 (getFragmentSource()),
-                                                             {});
+            auto result = compilePipelineFromBundle (ctx.getGpuDevice(), getShaderName());
             if (result.wasOk())
             {
                 pipeline = result.getValue();
@@ -320,7 +306,7 @@ void main() {
     class BlurEffect : public ShaderEffect
     {
     protected:
-        const char* getFragmentSource() const override { return kBlurFrag; }
+        const char* getShaderName() const override { return "effect_blur"; }
 
         void applyEffect (yup::Graphics& g, yup::GpuTexture::Ptr input, yup::Rectangle<float> bounds) override
         {
@@ -364,30 +350,6 @@ void main() {
                 targetB = yup::GpuTarget::create (ctx.getGpuDevice(), w, h);
             return targetA != nullptr && targetB != nullptr;
         }
-
-        static constexpr char kBlurFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float s,r,rx,ry,dx,dy,pad0,pad1; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.rx, p.ry);
-    if (p.s <= 0.0001) { fragColor = texture(sampler2D(u_tex,u_samp), uv); return; }
-    int   r = int(clamp(p.r, 1.0, 128.0));
-    vec2  step = vec2(p.dx, p.dy) / vec2(p.rx, p.ry);
-    float inv2s2 = 0.5 / (p.s * p.s);
-    vec4  sum = texture(sampler2D(u_tex,u_samp), uv);
-    float wsum = 1.0;
-    for (int i = 1; i <= r; ++i) {
-        float w = exp(-float(i*i) * inv2s2);
-        vec2  off = step * float(i);
-        sum += texture(sampler2D(u_tex,u_samp), uv + off) * w;
-        sum += texture(sampler2D(u_tex,u_samp), uv - off) * w;
-        wsum += 2.0 * w;
-    }
-    fragColor = sum / wsum;
-}
-)glsl";
     };
 
     //==============================================================================
@@ -438,27 +400,12 @@ void main() {
     class PixelateEffect : public SinglePassEffect
     {
     protected:
-        const char* getFragmentSource() const override { return kPixelateFrag; }
+        const char* getShaderName() const override { return "effect_pixelate"; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
             return { param, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
-
-    private:
-        static constexpr char kPixelateFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float bs,resX,resY,pad0,pad1,pad2,pad3,pad4; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    float bs = max(1.0, p.bs);
-    vec2 block = floor(uv * vec2(p.resX, p.resY) / bs) * bs;
-    vec2 sampleUV = (block + 0.5 * bs) / vec2(p.resX, p.resY);
-    fragColor = texture(sampler2D(u_tex, u_samp), sampleUV);
-}
-)glsl";
     };
 
     //==============================================================================
@@ -466,36 +413,12 @@ void main() {
     class EdgeEffect : public SinglePassEffect
     {
     protected:
-        const char* getFragmentSource() const override { return kEdgeFrag; }
+        const char* getShaderName() const override { return "effect_edge"; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
             return { param * 0.05f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
-
-    private:
-        static constexpr char kEdgeFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float thr,resX,resY,pad0,pad1,pad2,pad3,pad4; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    vec2 t = 1.0 / vec2(p.resX, p.resY);
-    vec4 tl = texture(sampler2D(u_tex,u_samp), uv + vec2(-1,-1)*t);
-    vec4 top = texture(sampler2D(u_tex,u_samp), uv + vec2(0,-1)*t);
-    vec4 tr = texture(sampler2D(u_tex,u_samp), uv + vec2(1,-1)*t);
-    vec4 lf = texture(sampler2D(u_tex,u_samp), uv + vec2(-1,0)*t);
-    vec4 rt = texture(sampler2D(u_tex,u_samp), uv + vec2(1,0)*t);
-    vec4 bl = texture(sampler2D(u_tex,u_samp), uv + vec2(-1,1)*t);
-    vec4 bm = texture(sampler2D(u_tex,u_samp), uv + vec2(0,1)*t);
-    vec4 br = texture(sampler2D(u_tex,u_samp), uv + vec2(1,1)*t);
-    vec3 h = -tl.rgb - 2.0*top.rgb - tr.rgb + bl.rgb + 2.0*bm.rgb + br.rgb;
-    vec3 v = -tl.rgb - 2.0*lf.rgb + tr.rgb - bl.rgb + 2.0*rt.rgb + br.rgb;
-    float edge = length(h) + length(v) > p.thr ? 1.0 : 0.0;
-    fragColor = vec4(vec3(edge), 1.0);
-}
-)glsl";
     };
 
     //==============================================================================
@@ -536,7 +459,7 @@ void main() {
         }
 
     protected:
-        const char* getFragmentSource() const override { return kWaveFrag; }
+        const char* getShaderName() const override { return "effect_wave"; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
@@ -550,7 +473,7 @@ void main() {
         }
 
     private:
-        /** Mirrors the sample coordinate computed by kWaveFrag. */
+        /** Mirrors the sample coordinate computed by effect_wave.frag. */
         yup::Point<float> getSampleUV (yup::Point<float> uv, float aspect) const
         {
             const auto center = uv - yup::Point<float> (0.5f, 0.5f);
@@ -564,22 +487,6 @@ void main() {
 
         mutable std::atomic<float> publishedAmplitude { 0.0f };
         mutable std::atomic<float> publishedTime { 0.0f };
-
-        static constexpr char kWaveFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float amp,freq,time,resX,resY,pad0,pad1,pad2; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    float aspect = p.resX / p.resY;
-    vec2 center = uv - 0.5;
-    float dist = length(center * vec2(aspect, 1.0));
-    float offset = sin(dist * p.freq - p.time) * p.amp * 0.003;
-    vec2 sampleUV = uv + normalize(center + 0.001) * offset;
-    fragColor = texture(sampler2D(u_tex, u_samp), sampleUV);
-}
-)glsl";
     };
 
     //==============================================================================
@@ -590,35 +497,12 @@ void main() {
         SharpenEffect() { param = 4.0f; }
 
     protected:
-        const char* getFragmentSource() const override { return kSharpenFrag; }
+        const char* getShaderName() const override { return "effect_sharpen"; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
             return { param * 0.1f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
-
-    private:
-        static constexpr char kSharpenFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float str,resX,resY,pad0,pad1,pad2,pad3,pad4; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    vec2 t = 1.0 / vec2(p.resX, p.resY);
-    vec4 c  = texture(sampler2D(u_tex,u_samp), uv);
-    vec4 bl = c - 0.25 * (
-        texture(sampler2D(u_tex,u_samp), uv + vec2(-1,-1)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2( 0,-1)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2( 1,-1)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2(-1, 0)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2( 1, 0)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2(-1, 1)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2( 0, 1)*t) +
-        texture(sampler2D(u_tex,u_samp), uv + vec2( 1, 1)*t)) * 0.125;
-    fragColor = mix(c, c + bl * p.str, 0.8);
-}
-)glsl";
     };
 
     //==============================================================================
@@ -629,33 +513,12 @@ void main() {
         CRTScanEffect() { param = 12.0f; }
 
     protected:
-        const char* getFragmentSource() const override { return kCRTFrag; }
+        const char* getShaderName() const override { return "effect_crt"; }
 
         EffectParams getEffectParams (const yup::GpuTexture& input) const override
         {
             return { param * 0.02f, (float) input.getWidth(), (float) input.getHeight(), 0, 0, 0, 0, 0 };
         }
-
-    private:
-        static constexpr char kCRTFrag[] = R"glsl(#version 450
-layout(set=0,binding=0) uniform texture2D u_tex;
-layout(set=0,binding=1) uniform sampler u_samp;
-layout(set=0,binding=2) uniform Params { float intensity,resX,resY,pad0,pad1,pad2,pad3,pad4; } p;
-layout(location=0) out vec4 fragColor;
-void main() {
-    vec2 uv = gl_FragCoord.xy / vec2(p.resX, p.resY);
-    vec4 col = texture(sampler2D(u_tex, u_samp), uv);
-    // Scanlines
-    float scanline = sin(uv.y * p.resY * 1.2) * 0.5 + 0.5;
-    col.rgb *= 1.0 - (1.0 - scanline) * p.intensity * 0.6;
-    // Vignette
-    vec2 v = uv - 0.5;
-    col.rgb *= 1.0 - dot(v, v) * p.intensity * 0.8;
-    // Slight green tint
-    col.rgb *= vec3(0.95, 1.05, 0.9);
-    fragColor = col;
-}
-)glsl";
     };
 
     //==============================================================================
