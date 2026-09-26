@@ -78,7 +78,7 @@ private:
     Requirements:
     - A GpuDevice with compute shader support (Metal, D3D11, WebGPU, GL 4.3+)
     - YUP_ENABLE_SHADER_TRANSPILER for online GLSL→native compilation
-    - An audio file at examples/graphics/data/break_boomblastic_92bpm.mp3
+    - An audio file at examples/graphics/data/audio/break_boomblastic_92bpm.mp3
 */
 class GpuAudioProcessingDemo : public yup::Component
     , public yup::AudioIODeviceCallback
@@ -379,9 +379,7 @@ private:
 
     void loadAudioFile()
     {
-        auto dataDir = yup::File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory().getChildFile ("data");
-
-        yup::File audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.mp3");
+        yup::File audioFile = getAssetPath ("data/audio/break_boomblastic_92bpm.mp3");
         if (! audioFile.existsAsFile())
             return;
 

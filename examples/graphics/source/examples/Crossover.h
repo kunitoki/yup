@@ -239,15 +239,7 @@ private:
     void loadAudioFile()
     {
         // Create the path to the audio file
-        auto dataDir = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getChildFile ("data");
-
-        yup::File audioFile = dataDir
-                                  .getChildFile ("audio")
-                                  .getChildFile ("break_boomblastic_92bpm.mp3");
+        yup::File audioFile = getAssetPath ("data/audio/break_boomblastic_92bpm.mp3");
         if (! audioFile.existsAsFile())
         {
             std::cerr << "Could not find audio/break_boomblastic_92bpm.mp3" << std::endl;

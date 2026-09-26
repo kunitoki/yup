@@ -214,15 +214,7 @@ private:
     void loadAudioFile()
     {
         // Create the path to the audio file
-        auto dataDir = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getChildFile ("data");
-
-        yup::File audioFile = dataDir
-                                  .getChildFile ("audio")
-                                  .getChildFile ("break_boomblastic_92bpm.flac");
+        yup::File audioFile = getAssetPath ("data/audio/break_boomblastic_92bpm.flac");
         if (! audioFile.existsAsFile())
         {
             std::cerr << "Could not find audio/break_boomblastic_92bpm.flac" << std::endl;
@@ -252,16 +244,7 @@ private:
     void loadDefaultImpulseResponse()
     {
         // Create the path to the default impulse response file
-        auto dataDir = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getChildFile ("data");
-
-        yup::File irFile = dataDir
-                               .getChildFile ("audio")
-                               .getChildFile ("ir_e112_g12_dyn_us_6v6.wav");
-        loadImpulseResponseFromFile (irFile);
+        loadImpulseResponseFromFile (getAssetPath ("data/audio/ir_e112_g12_dyn_us_6v6.wav"));
     }
 
     void loadImpulseResponseFromFile (const yup::File& file)

@@ -1120,13 +1120,7 @@ private:
     {
         formatManager.registerDefaultFormats();
 
-        auto dataDir = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getChildFile ("data");
-
-        auto audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.mp3");
+        auto audioFile = getAssetPath ("data/audio/break_boomblastic_92bpm.mp3");
         if (audioFile.existsAsFile())
             filePlayer.load (formatManager, audioFile);
     }

@@ -282,13 +282,7 @@ public:
 private:
     void loadImageAsset()
     {
-        auto basePath = yup::File (__FILE__)
-                            .getParentDirectory()
-                            .getParentDirectory()
-                            .getChildFile ("data")
-                            .getChildFile ("logo.png");
-
-        if (basePath.loadFileAsData (rawPngData))
+        if (getAssetPath ("data/logo.png").loadFileAsData (rawPngData))
             updateStatus ("Logo image loaded from disk.");
         else
             updateStatus ("Could not load logo.png.");

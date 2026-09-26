@@ -27,7 +27,7 @@ project (${target_name} VERSION ${target_version})
 
 # ==== Declare the demos and what each one brings on top of the base modules:
 #   MODULES       extra modules to link (their dependencies are resolved automatically)
-#   RESOURCES     folders of data/ to bundle on mobile and WebAssembly
+#   RESOURCES     folders or files of data/ to bundle on mobile and WebAssembly
 #   SHADERS       bundles precompiled from data/shaders: <name>.comp, or <name>.vert + <name>.frag;
 #                 <name>:<vertex> takes the vertex stage from <vertex>.vert instead, and
 #                 data/shaders/*.glsl can be #included
@@ -85,7 +85,7 @@ graphics_demo (ScrollBar)
 graphics_demo (Sliders)
 graphics_demo (SpectrumAnalyzer MODULES ${audio_modules} dr_libs RESOURCES audio)
 graphics_demo (SpinningCube MODULES yup::yup_animation RESOURCES lottie LIVE_SHADERS)
-graphics_demo (Svg RESOURCES svg)
+graphics_demo (Svg RESOURCES svg RobotoFlex-VariableFont.ttf)
 graphics_demo (TextEditor)
 graphics_demo (ToastNotification)
 graphics_demo (TouchTrails)
