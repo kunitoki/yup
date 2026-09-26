@@ -558,7 +558,7 @@ PathDraw::PathDraw(IAABB pixelBounds,
     assert(!m_pathRef->getRawPath().empty());
     assert(paint != nullptr);
 
-    if (paint->getIsOpaque())
+    if (paint->getIsOpaque() && modulatedOpacity >= 1.0f)
     {
         m_drawContents |= gpu::DrawContents::opaquePaint;
     }

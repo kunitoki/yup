@@ -261,6 +261,23 @@
               "    for (uint32_t i = 0; i < desc.colorCount; ++i)"
             ]
           }
+        },
+        {
+          "path": "source/renderer/draw.cpp",
+          "note": "PathDraw: a paint faded through modulateOpacity is not opaque - otherwise MSAA mode (WebGL2 without PLS) moves it into the unblended opaque prepass and it replaces the pixels below instead of blending",
+          "already_contains": "paint->getIsOpaque() && modulatedOpacity >= 1.0f",
+          "replace": {
+            "from": [
+              "    if (paint->getIsOpaque())",
+              "    {",
+              "        m_drawContents |= gpu::DrawContents::opaquePaint;"
+            ],
+            "to": [
+              "    if (paint->getIsOpaque() && modulatedOpacity >= 1.0f)",
+              "    {",
+              "        m_drawContents |= gpu::DrawContents::opaquePaint;"
+            ]
+          }
         }
       ],
       "shader_generation": {
