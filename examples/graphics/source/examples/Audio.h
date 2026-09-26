@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2025 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -21,615 +21,699 @@
 
 #pragma once
 
+#include "audio/SynthSettings.h"
+#include "audio/SynthEngine.h"
+#include "audio/SynthPanels.h"
+#include "audio/SynthModulationPage.h"
+
+#include <array>
+#include <atomic>
+#include <cmath>
+#include <functional>
 #include <memory>
-#include <cmath> // For sine wave generation
+#include <type_traits>
+#include <vector>
 
 //==============================================================================
+/** The PRISM logo, with the viewBox cropped to the drawing so it fills the header slot. */
+inline constexpr const char* synthLogoSvg = R"svg(
+<svg xmlns="http://www.w3.org/2000/svg" width="236" height="122" viewBox="10 66 236 122" fill="none">
+  <g stroke="#FFFFFF" stroke-linejoin="miter" stroke-linecap="square" transform="translate(0 37)">
+    <path d="M14 100 q4 -7 8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 t8 0 L91 100" stroke-width="2.2" stroke-linecap="round"/>
+    <path d="M128 36 L191.5 146 L64.5 146 Z" stroke-width="3"/>
+    <path d="M91 100 L160.3 92" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g stroke-linecap="butt">
+      <path d="M160.3 92 L242 66"  stroke-width="2.5" stroke-opacity="1"/>
+      <path d="M160.3 92 L242 80"  stroke-width="2.2" stroke-opacity="0.8"/>
+      <path d="M160.3 92 L242 94"  stroke-width="2"   stroke-opacity="0.6"/>
+      <path d="M160.3 92 L242 108" stroke-width="1.7" stroke-opacity="0.42"/>
+      <path d="M160.3 92 L242 122" stroke-width="1.5" stroke-opacity="0.26"/>
+    </g>
+  </g>
+</svg>
+)svg";
 
-class HarmonicSineGenerator
+//==============================================================================
+/** A page of the instrument: paints nothing and hands clicks on its background back. */
+class SynthPage : public yup::Component
 {
 public:
-    HarmonicSineGenerator()
-        : sampleRate (44100.0)
-        , currentAngle (0.0)
-        , frequency (0.0)
-        , amplitude (0.0)
+    /** Construct a page. */
+    SynthPage()
     {
+        setOpaque (false);
     }
 
-    void setSampleRate (double newSampleRate)
+    /** Called when the page itself, not one of its children, is clicked. */
+    std::function<void()> onMouseDown;
+
+    void mouseDown (const yup::MouseEvent&) override
     {
-        sampleRate = newSampleRate;
-        frequency.reset (newSampleRate, 0.05);
-        amplitude.reset (newSampleRate, 0.02);
+        if (onMouseDown != nullptr)
+            onMouseDown();
     }
-
-    void setFrequency (double newFrequency)
-    {
-        frequency.setTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
-    }
-
-    void setAmplitude (float newAmplitude)
-    {
-        amplitude.setTargetValue (newAmplitude);
-    }
-
-    float getCurrentAmplitude() const
-    {
-        return amplitude.getCurrentValue();
-    }
-
-    float getNextSample()
-    {
-        auto sample = std::sin (currentAngle) * amplitude.getNextValue();
-
-        currentAngle += frequency.getNextValue();
-        if (currentAngle >= yup::MathConstants<double>::twoPi)
-            currentAngle -= yup::MathConstants<double>::twoPi;
-
-        return static_cast<float> (sample);
-    }
-
-private:
-    double sampleRate;
-    double currentAngle;
-    yup::SmoothedValue<float> frequency;
-    yup::SmoothedValue<float> amplitude;
 };
 
 //==============================================================================
-
-class HarmonicSynth
-{
-public:
-    HarmonicSynth()
-        : isNoteOn (false)
-        , currentNote (-1)
-        , fundamentalFrequency (0.0)
-        , masterAmplitude (0.5f)
-    {
-        // Initialize harmonic generators
-        const int numHarmonics = 16; // 4x4 grid
-        harmonicGenerators.resize (numHarmonics);
-        harmonicMultipliers.resize (numHarmonics);
-        harmonicAmplitudes.resize (numHarmonics);
-
-        for (int i = 0; i < numHarmonics; ++i)
-        {
-            harmonicGenerators[i] = std::make_unique<HarmonicSineGenerator>();
-
-            // Set up harmonic relationships (1st, 2nd, 3rd harmonic, etc., plus some non-integer ratios)
-            if (i < 8)
-                harmonicMultipliers[i] = (i + 1); // 1x, 2x, 3x, 4x, 5x, 6x, 7x, 8x
-            else
-                harmonicMultipliers[i] = (i - 7) * 0.5 + 0.5; // 0.5x, 1x, 1.5x, 2x, 2.5x, 3x, 3.5x, 4x
-
-            harmonicAmplitudes[i] = 0.0f; // Start silent
-        }
-    }
-
-    void setSampleRate (double newSampleRate)
-    {
-        for (auto& generator : harmonicGenerators)
-            generator->setSampleRate (newSampleRate);
-    }
-
-    void noteOn (int midiNoteNumber, float velocity)
-    {
-        currentNote = midiNoteNumber;
-        isNoteOn = true;
-
-        // Convert MIDI note to frequency: f = 440 * 2^((n-69)/12)
-        fundamentalFrequency = 440.0 * std::pow (2.0, (midiNoteNumber - 69) / 12.0);
-
-        updateHarmonicFrequencies();
-        updateHarmonicAmplitudes (velocity);
-    }
-
-    void noteOff (int midiNoteNumber)
-    {
-        if (currentNote == midiNoteNumber)
-        {
-            isNoteOn = false;
-            for (auto& generator : harmonicGenerators)
-                generator->setAmplitude (0.0f);
-        }
-    }
-
-    void allNotesOff()
-    {
-        isNoteOn = false;
-        currentNote = -1;
-        for (auto& generator : harmonicGenerators)
-            generator->setAmplitude (0.0f);
-    }
-
-    void setHarmonicAmplitude (int harmonicIndex, float amplitude)
-    {
-        if (harmonicIndex >= 0 && harmonicIndex < harmonicAmplitudes.size())
-        {
-            harmonicAmplitudes[harmonicIndex] = amplitude;
-            if (isNoteOn)
-                updateHarmonicAmplitudes (1.0f); // Use current velocity
-        }
-    }
-
-    void setMasterAmplitude (float newAmplitude)
-    {
-        masterAmplitude = newAmplitude;
-        if (isNoteOn)
-            updateHarmonicAmplitudes (1.0f);
-    }
-
-    float getMasterAmplitude() const
-    {
-        return masterAmplitude;
-    }
-
-    bool isPlaying() const
-    {
-        if (! isNoteOn)
-            return false;
-
-        for (const auto& generator : harmonicGenerators)
-        {
-            if (generator->getCurrentAmplitude() > 0.001f)
-                return true;
-        }
-        return false;
-    }
-
-    int getCurrentNote() const
-    {
-        return currentNote;
-    }
-
-    float getNextSample()
-    {
-        float mixedSample = 0.0f;
-
-        for (auto& generator : harmonicGenerators)
-        {
-            mixedSample += generator->getNextSample();
-        }
-
-        return mixedSample * masterAmplitude;
-    }
-
-    double getHarmonicMultiplier (int index) const
-    {
-        if (index >= 0 && index < harmonicMultipliers.size())
-            return harmonicMultipliers[index];
-        return 1.0;
-    }
-
-private:
-    void updateHarmonicFrequencies()
-    {
-        for (size_t i = 0; i < harmonicGenerators.size(); ++i)
-        {
-            double harmonicFreq = fundamentalFrequency * harmonicMultipliers[i];
-            harmonicGenerators[i]->setFrequency (harmonicFreq);
-        }
-    }
-
-    void updateHarmonicAmplitudes (float velocity)
-    {
-        for (size_t i = 0; i < harmonicGenerators.size(); ++i)
-        {
-            float amplitude = harmonicAmplitudes[i] * velocity * masterAmplitude;
-            harmonicGenerators[i]->setAmplitude (amplitude);
-        }
-    }
-
-    std::vector<std::unique_ptr<HarmonicSineGenerator>> harmonicGenerators;
-    std::vector<double> harmonicMultipliers;
-    std::vector<float> harmonicAmplitudes;
-
-    bool isNoteOn;
-    int currentNote;
-    double fundamentalFrequency;
-    float masterAmplitude;
-};
-
-//==============================================================================
-
-class Oscilloscope : public yup::Component
-{
-public:
-    Oscilloscope()
-        : Component ("Oscilloscope")
-    {
-    }
-
-    void setRenderData (const std::vector<float>& data, int newReadPos)
-    {
-        renderData.resize (data.size());
-
-        for (std::size_t i = 0; i < data.size(); ++i)
-            renderData[i] = data[i];
-    }
-
-    void paint (yup::Graphics& g) override
-    {
-        auto bounds = getLocalBounds();
-
-        auto backgroundColor = yup::Color (0xff101010);
-        g.setFillColor (backgroundColor);
-        g.fillAll();
-
-        auto lineColor = yup::Color (0xff4b4bff);
-        if (renderData.empty())
-            return;
-
-        float xSize = getWidth() / float (renderData.size());
-        float centerY = getHeight() * 0.5f;
-
-        // Build the main waveform path
-        path.clear();
-        path.reserveSpace ((int) renderData.size());
-        path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
-
-        for (std::size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
-
-        filledPath = path.createStrokePolygon (4.0f);
-
-        g.setFillColor (lineColor);
-        g.setFeather (8.0f);
-        g.fillPath (filledPath);
-
-        g.setFillColor (lineColor.brighter (0.2f));
-        g.setFeather (4.0f);
-        g.fillPath (filledPath);
-
-        g.setStrokeColor (lineColor.withAlpha (0.8f));
-        g.setStrokeWidth (2.0f);
-        g.strokePath (path);
-
-        g.setStrokeColor (lineColor.brighter (0.3f));
-        g.setStrokeWidth (1.0f);
-        g.strokePath (path);
-
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
-        g.setStrokeWidth (0.5f);
-        g.strokePath (path);
-    }
-
-private:
-    std::vector<float> renderData;
-    yup::Path path;
-    yup::Path filledPath;
-};
-
-//==============================================================================
-
 class AudioExample
     : public yup::Component
     , public yup::AudioIODeviceCallback
-    , public yup::MidiKeyboardState::Listener
 {
 public:
     AudioExample()
         : Component ("AudioExample")
         , keyboardComponent (keyboardState, yup::MidiKeyboardComponent::horizontalKeyboard)
+        , pitchWheelComponent (keyboardState, "PitchWheel")
+        , modWheelComponent (keyboardState, "ModWheel")
     {
-        // Initialize the audio device
-        deviceManager.initialiseWithDefaultDevices (0, 2);
+        audioDeviceError = deviceManager.initialiseWithDefaultDevices (0, 2);
 
-        // Initialize harmonic synthesizer
-        double sampleRate = deviceManager.getAudioDeviceSetup().sampleRate;
-        harmonicSynth.setSampleRate (sampleRate);
-
-        // Set up MIDI keyboard
-        keyboardState.addListener (this);
+        // The keyboard state is pumped into the synth by processNextMidiBuffer(), so no note
+        // listener is registered here: listening as well would trigger every note twice.
         keyboardComponent.setAvailableRange (36, 84); // C2 to C6
         keyboardComponent.setLowestVisibleKey (48);   // Start from C3
         keyboardComponent.setMidiChannel (1);
         keyboardComponent.setVelocity (0.7f);
-        addAndMakeVisible (keyboardComponent);
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::whiteKeyColorId, yup::Color (0xffd7dde3));
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::whiteKeyPressedColorId, SynthTheme::accent);
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyColorId, yup::Color (0xff191d21));
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyPressedColorId, SynthTheme::accentDim);
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder);
+        mainPage.addAndMakeVisible (keyboardComponent);
 
-        // Create title and subtitle labels
-        titleLabel = std::make_unique<yup::Label> ("Title");
-        titleLabel->setText ("YUP Harmonic Synthesizer");
-        //titleLabel->setJustification (yup::Justification::centred);
-        //titleLabel->setFont (16.0f);
-        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
-        addAndMakeVisible (*titleLabel);
-
-        subtitleLabel = std::make_unique<yup::Label> ("Subtitle");
-        subtitleLabel->setText ("Each knob controls a harmonic of the played note - experiment to create rich tones!");
-        //subtitleLabel->setJustification (yup::Justification::centred);
-        //subtitleLabel->setFont (12.0f);
-        subtitleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
-        addAndMakeVisible (*subtitleLabel);
-
-        // Create note indicator label
-        noteIndicatorLabel = std::make_unique<yup::Label> ("NoteIndicator");
-        noteIndicatorLabel->setText ("");
-        //noteIndicatorLabel->setJustification (yup::Justification::centred);
-        //noteIndicatorLabel->setFont (12.0f);
-        noteIndicatorLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::black);
-        noteIndicatorLabel->setColor (yup::Label::Style::backgroundColorId, yup::Colors::yellow.withAlpha (0.8f));
-        addChildComponent (*noteIndicatorLabel);
-
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
-
-        // Add harmonic control sliders (4x4 grid)
-        for (int i = 0; i < totalRows * totalColumns; ++i)
+        // Like the keyboard, the wheels follow keyboardState, which the audio callback
+        // updates from the hardware input too; their own moves go in through the collector.
+        pitchWheelComponent.onValueChanged = [this] (double value)
         {
-            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::RotaryVerticalDrag));
+            sendWheelMessage (yup::MidiMessage::pitchWheel (1, 8192 + static_cast<int> (value * 8191.0)));
+        };
+        modWheelComponent.onValueChanged = [this] (double value)
+        {
+            sendWheelMessage (yup::MidiMessage::controllerEvent (1, 1, static_cast<int> (value * 127.0)));
+        };
 
-            // Configure slider range and default value
-            slider->setRange (0.0f, 1.0f);
-            slider->setDefaultValue (0.0f);
+        const auto addWheel = [this] (auto& wheel)
+        {
+            using Style = typename std::decay_t<decltype (wheel)>::Style;
 
-            slider->onValueChanged = [this, i] (double value)
-            {
-                harmonicSynth.setHarmonicAmplitude (i, (float) value * 0.4f); // Scale down to prevent clipping
-            };
+            wheel.setColor (Style::bodyTopColorId, SynthTheme::panelBackground);
+            wheel.setColor (Style::bodyBottomColorId, SynthTheme::displayBackground);
+            wheel.setColor (Style::outlineColorId, SynthTheme::panelBorder);
+            wheel.setColor (Style::gripColorId, SynthTheme::accentDim);
+            wheel.setColor (Style::gripOverColorId, SynthTheme::accent);
+            wheel.setColor (Style::gripDownColorId, SynthTheme::accent);
+            wheel.setClickingGrabFocus (false);
+            mainPage.addAndMakeVisible (wheel);
+        };
+        addWheel (pitchWheelComponent);
+        addWheel (modWheelComponent);
 
-            addAndMakeVisible (slider);
+        logo.parseSVG (synthLogoSvg);
 
-            // Create harmonic labels for each slider
-            auto label = harmonicLabels.add (std::make_unique<yup::Label> (yup::String ("HarmonicLabel") + yup::String (i)));
-            //label->setJustificationType (yup::Justification::centred);
-            //label->setFont (10.0f);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
-            label->setFont (font.withHeight (8.0f));
+        const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-            // Set the harmonic multiplier text
-            auto multiplier = harmonicSynth.getHarmonicMultiplier (i);
-            label->setText (yup::String (multiplier, 1) + "x", yup::dontSendNotification);
+        titleLabel.setText ("P R I S M   /   SPECTRAL SYNTH", yup::dontSendNotification);
+        titleLabel.setFont (font.withHeight (20.0f));
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        addAndMakeVisible (titleLabel);
 
-            addAndMakeVisible (*label);
+        subtitleLabel.setText ("Sculpt harmonics. Scatter phases. Play the spectrum.", yup::dontSendNotification);
+        subtitleLabel.setFont (font.withHeight (12.0f));
+        subtitleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        addAndMakeVisible (subtitleLabel);
+
+        loadLabel.setFont (font.withHeight (11.0f));
+        loadLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        mainPage.addAndMakeVisible (loadLabel);
+
+        voiceLabel.setText ("", yup::dontSendNotification);
+        voiceLabel.setFont (font.withHeight (11.0f));
+        voiceLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::accent);
+        addAndMakeVisible (voiceLabel);
+
+        for (int index = 0; index < SynthExample::oscillatorCount; ++index)
+        {
+            auto panel = std::make_unique<SynthOscillatorPanel> (
+                yup::String ("OSC ") + yup::String (index + 1),
+                synth.getOscillatorSettings (index),
+                synth.getResources(),
+                waveformShader,
+                font.withHeight (10.0f));
+
+            mainPage.addAndMakeVisible (*panel);
+            oscillatorPanels[static_cast<std::size_t> (index)] = std::move (panel);
         }
 
-        // Add buttons
-        randomizeButton = std::make_unique<yup::TextButton> ("Randomize");
-        randomizeButton->onClick = [this]
-        {
-            for (int i = 0; i < sliders.size(); ++i)
-                sliders[i]->setValue (yup::Random::getSystemRandom().nextFloat());
-        };
-        addAndMakeVisible (*randomizeButton);
+        filterPanel = std::make_unique<SynthFilterPanel> (synth.getFilterSettings(), font.withHeight (10.0f));
+        mainPage.addAndMakeVisible (*filterPanel);
 
-        // Add clear all notes button
-        clearButton = std::make_unique<yup::TextButton> ("All Notes Off");
-        clearButton->onClick = [this]
+        for (int index = 0; index < SynthExample::envelopeCount; ++index)
+        {
+            auto& panel = envelopePanels[static_cast<std::size_t> (index)];
+            panel = std::make_unique<SynthEnvelopePanel> (yup::String ("ENV ") + yup::String (index + 1),
+                                                          synth.getEnvelopeSettings (index),
+                                                          font.withHeight (10.0f));
+            mainPage.addAndMakeVisible (*panel);
+        }
+
+        for (int index = 0; index < SynthExample::lfoCount; ++index)
+        {
+            auto& panel = lfoPanels[static_cast<std::size_t> (index)];
+            panel = std::make_unique<SynthLFOPanel> (yup::String ("LFO ") + yup::String (index + 1),
+                                                     synth.getLFOSettings (index),
+                                                     font.withHeight (10.0f));
+            mainPage.addAndMakeVisible (*panel);
+        }
+
+        modulationPage = std::make_unique<SynthModulationPage> (synth.getModulationSettings(), font.withHeight (10.0f));
+        addChildComponent (*modulationPage);
+
+        mainPage.onMouseDown = [this] { takeKeyboardFocus(); };
+        addAndMakeVisible (mainPage);
+
+        for (auto* button : { &mainPageButton, &modulationPageButton })
+        {
+            button->setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::panelBackground);
+            button->setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim);
+            button->setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary);
+            button->setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary);
+            button->setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder);
+            button->setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent);
+            addAndMakeVisible (*button);
+        }
+
+        mainPageButton.setButtonText ("MAIN");
+        modulationPageButton.setButtonText ("MOD");
+        mainPageButton.onClick = [this] { showModulationPage (false); };
+        modulationPageButton.onClick = [this] { showModulationPage (true); };
+        showModulationPage (false);
+
+        randomizeButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
+        randomizeButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary);
+        randomizeButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
+        randomizeButton.onClick = [this] { randomizeVoice(); };
+        addAndMakeVisible (randomizeButton);
+
+        clearButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
+        clearButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary);
+        clearButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
+        clearButton.onClick = [this]
         {
             keyboardState.allNotesOff (0); // Turn off all notes on all channels
-            harmonicSynth.allNotesOff();
+            synth.requestAllNotesOff();
         };
-        addAndMakeVisible (*clearButton);
+        addAndMakeVisible (clearButton);
 
-        // Add volume control
-        volumeSlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Volume");
+        volumeKnob = std::make_unique<KnobControl> ("VOLUME", 0.0, 1.0, 0.001, 0.5, font.withHeight (10.0f));
+        volumeKnob->formatValue = SynthFormat::percent;
+        volumeKnob->onChange = [this] (double value) { masterVolume = static_cast<float> (value); };
+        addAndMakeVisible (*volumeKnob);
 
-        // Configure slider range and default value
-        volumeSlider->setRange ({ 0.0f, 1.0f });
-        volumeSlider->setDefaultValue (0.5f);
-
-        volumeSlider->onValueChanged = [this] (double value)
+        modeChoice = std::make_unique<ChoiceControl> ("VOICE MODE", yup::StringArray { "Poly / 8 voices", "Mono / retrigger", "Legato / glide" }, font.withHeight (10.0f));
+        modeChoice->getComboBox().setSelectedId (1, yup::dontSendNotification);
+        modeChoice->onChange = [this] (int id)
         {
-            masterVolume = (float) value;
+            synth.playMode = id - 1;
+            glideKnob->setEnabled (id != 1);
         };
-        volumeSlider->setValue (0.5f); // Set initial volume to 50%
-        addAndMakeVisible (*volumeSlider);
-
-        // Add the oscilloscope
-        addAndMakeVisible (oscilloscope);
-
-        // Set some initial harmonic values for a nice sound
-        if (sliders.size() >= 4)
+        mainPage.addAndMakeVisible (*modeChoice);
+        glideKnob = std::make_unique<KnobControl> ("GLIDE", 0.0, 2000.0, 1.0, 120.0, font.withHeight (10.0f));
+        glideKnob->formatValue = [] (double value) { return SynthFormat::milliseconds (value * 0.001); };
+        glideKnob->onChange = [this] (double value) { synth.portamento = static_cast<float> (value * 0.001); };
+        glideKnob->setEnabled (false);
+        mainPage.addAndMakeVisible (*glideKnob);
+        midiDevices = yup::MidiInput::getAvailableDevices();
+        yup::StringArray midiNames { "No MIDI input" };
+        for (const auto& device : midiDevices)
+            midiNames.add (device.name);
+        midiChoice = std::make_unique<ChoiceControl> ("MIDI INPUT", midiNames, font.withHeight (10.0f));
+        midiChoice->getComboBox().setSelectedId (midiDevices.isEmpty() ? 1 : 2, yup::dontSendNotification);
+        midiChoice->onChange = [this] (int)
         {
-            sliders[0]->setValue (0.8f); // Fundamental
-            sliders[1]->setValue (0.4f); // 2nd harmonic
-            sliders[2]->setValue (0.2f); // 3rd harmonic
-            sliders[3]->setValue (0.1f); // 4th harmonic
-        }
+            closeMidiInput();
+            synth.requestAllNotesOff();
+            if (isVisible())
+                openMidiInput();
+        };
+        mainPage.addAndMakeVisible (*midiChoice);
+        renderData.resize (SynthExample::maxBlockSize);
+        mainPage.addAndMakeVisible (oscilloscope);
     }
 
     ~AudioExample() override
     {
-        keyboardState.removeListener (this);
+        closeMidiInput();
+
         deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
 
     void resized() override
     {
-        auto bounds = getLocalBounds();
+        auto bounds = getLocalBounds().reduced (outerInset);
 
-        // Title area at the top
-        auto titleHeight = proportionOfHeight (0.05f);
-        auto titleBounds = bounds.removeFromTop (titleHeight);
-        titleLabel->setBounds (titleBounds);
+        auto header = bounds.removeFromTop (headerHeight);
 
-        // Subtitle area
-        auto subtitleHeight = proportionOfHeight (0.03f);
-        auto subtitleBounds = bounds.removeFromTop (subtitleHeight);
-        subtitleLabel->setBounds (subtitleBounds);
+        volumeKnob->setBounds (header.removeFromRight (64.0f));
+        header.removeFromRight (spacing);
+        clearButton.setBounds (header.removeFromRight (actionButtonWidth).reduced (0.0f, buttonInset));
+        header.removeFromRight (spacing);
+        randomizeButton.setBounds (header.removeFromRight (actionButtonWidth).reduced (0.0f, buttonInset));
+        header.removeFromRight (spacing * 2.0f);
+        voiceLabel.setBounds (header.removeFromRight (110.0f));
+        header.removeFromRight (spacing);
+        modulationPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
+        header.removeFromRight (spacing);
+        mainPageButton.setBounds (header.removeFromRight (pageButtonWidth).reduced (0.0f, buttonInset));
 
-        // Reserve space for MIDI keyboard at the bottom
-        auto keyboardHeight = proportionOfHeight (0.20f);
-        auto keyboardBounds = bounds.removeFromBottom (keyboardHeight);
-        keyboardComponent.setBounds (keyboardBounds.reduced (proportionOfWidth (0.02f), proportionOfHeight (0.01f)));
+        const auto logoHeight = header.getHeight() - 8.0f;
+        logoArea = header.removeFromLeft (logoHeight * logoAspect).withSizeKeepingCenter (logoHeight * logoAspect, logoHeight);
+        header.removeFromLeft (spacing * 1.5f);
 
-        // Reserve space for oscilloscope above the keyboard
-        auto oscilloscopeHeight = proportionOfHeight (0.2f);
-        auto oscilloscopeBounds = bounds.removeFromBottom (oscilloscopeHeight);
-        oscilloscope.setBounds (oscilloscopeBounds.reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+        const auto textArea = header.reduced (0.0f, 6.0f);
+        titleLabel.setBounds (textArea.withHeight (textArea.getHeight() * 0.55f));
+        subtitleLabel.setBounds (textArea.withTrimmedTop (textArea.getHeight() * 0.55f));
 
-        // Reserve space for buttons area
-        auto buttonHeight = proportionOfHeight (0.08f);
-        auto buttonArea = bounds.removeFromBottom (buttonHeight);
+        bounds.removeFromTop (spacing);
 
-        auto buttonWidth = buttonArea.getWidth() / 3;
-        if (randomizeButton != nullptr)
-            randomizeButton->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+        mainPage.setBounds (bounds);
+        modulationPage->setBounds (bounds);
 
-        if (clearButton != nullptr)
-            clearButton->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+        layoutMainPage();
+    }
 
-        if (volumeSlider != nullptr)
-            volumeSlider->setBounds (buttonArea.removeFromLeft (buttonWidth).reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+    /** Lays the main page out from the bottom up: keyboard, performance row, LFOs, shaping, oscillators. */
+    void layoutMainPage()
+    {
+        auto bounds = mainPage.getLocalBounds();
 
-        // Use remaining space for harmonic control sliders with labels
-        auto sliderBounds = bounds.reduced (proportionOfWidth (0.05f), proportionOfHeight (0.02f));
-        auto width = sliderBounds.getWidth() / totalColumns;
-        auto height = sliderBounds.getHeight() / totalRows;
+        auto keyboardRow = bounds.removeFromBottom (yup::jmin (keyboardHeight, mainPage.proportionOfHeight (0.12f)));
+        pitchWheelComponent.setBounds (keyboardRow.removeFromLeft (wheelWidth).reduced (0.0f, 4.0f));
+        keyboardRow.removeFromLeft (spacing);
+        modWheelComponent.setBounds (keyboardRow.removeFromLeft (wheelWidth).reduced (0.0f, 4.0f));
+        keyboardRow.removeFromLeft (spacing * 2.0f);
+        keyboardComponent.setBounds (keyboardRow);
+        bounds.removeFromBottom (spacing);
 
-        for (int i = 0; i < totalRows && i * totalColumns < sliders.size(); ++i)
+        auto performance = bounds.removeFromBottom (58.0f);
+        modeChoice->setBounds (performance.removeFromLeft (190.0f).reduced (4.0f, 9.0f));
+        glideKnob->setBounds (performance.removeFromLeft (78.0f));
+        performance.removeFromLeft (spacing);
+        midiChoice->setBounds (performance.removeFromLeft (210.0f).reduced (4.0f, 9.0f));
+        performance.removeFromLeft (spacing);
+        loadLabel.setBounds (performance);
+        bounds.removeFromBottom (spacing);
+
+        // The oscillator panels take whatever the fixed-height rows below leave, and
+        // their waveform editors need most of it. The LFO and shaping rows share columns.
+        const auto columnWidth = (bounds.getWidth() - spacing * 2.0f) / 3.0f;
+
+        auto lfoRow = bounds.removeFromBottom (lfoRowHeight);
+        lfoPanels[0]->setBounds (lfoRow.removeFromLeft (columnWidth));
+        lfoRow.removeFromLeft (spacing);
+        lfoPanels[1]->setBounds (lfoRow.removeFromLeft (columnWidth));
+        lfoRow.removeFromLeft (spacing);
+        oscilloscope.setBounds (lfoRow);
+        bounds.removeFromBottom (spacing);
+
+        auto shapingRow = bounds.removeFromBottom (yup::jmin (shapingRowHeight, bounds.getHeight() * 0.3f));
+        filterPanel->setBounds (shapingRow.removeFromLeft (columnWidth));
+        shapingRow.removeFromLeft (spacing);
+        envelopePanels[0]->setBounds (shapingRow.removeFromLeft (columnWidth));
+        shapingRow.removeFromLeft (spacing);
+        envelopePanels[1]->setBounds (shapingRow);
+        bounds.removeFromBottom (spacing);
+
+        const auto panelWidth = (bounds.getWidth() - spacing) / static_cast<float> (SynthExample::oscillatorCount);
+        for (auto& panel : oscillatorPanels)
         {
-            auto row = sliderBounds.removeFromTop (height);
-            for (int j = 0; j < totalColumns && i * totalColumns + j < sliders.size(); ++j)
-            {
-                auto col = row.removeFromLeft (width);
-                auto harmonicIndex = i * totalColumns + j;
-
-                // Reserve space for label at bottom of column
-                auto labelHeight = 10;
-                auto labelBounds = col.removeFromBottom (labelHeight);
-                harmonicLabels[harmonicIndex]->setBounds (labelBounds);
-
-                // Use remaining space for slider - make it rectangular for slider appearance
-                auto sliderArea = col.largestFittingSquare();
-                sliders.getUnchecked (harmonicIndex)->setBounds (sliderArea);
-            }
+            panel->setBounds (bounds.removeFromLeft (panelWidth));
+            bounds.removeFromLeft (spacing);
         }
+    }
 
-        // Position note indicator at bottom left
-        auto noteIndicatorBounds = yup::Rectangle<int> (10, getHeight() - 40, 200, 30);
-        noteIndicatorLabel->setBounds (noteIndicatorBounds);
+    /** Switches between the main page and the modulation matrix. */
+    void showModulationPage (bool show)
+    {
+        mainPageButton.setToggleState (! show, yup::dontSendNotification);
+        modulationPageButton.setToggleState (show, yup::dontSendNotification);
+        mainPage.setVisible (! show);
+        modulationPage->setVisible (show);
     }
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (SynthTheme::windowBackground);
         g.fillAll();
+
+        logo.paint (g, logoArea);
     }
 
-    void mouseDown (const yup::MouseEvent& event) override
+    void mouseDown (const yup::MouseEvent&) override
     {
         takeKeyboardFocus();
     }
 
-    void refreshDisplay (double lastFrameTimeSeconds) override
+    void refreshDisplay (double) override
     {
+        if (scopeReady.load (std::memory_order_acquire))
         {
-            const yup::CriticalSection::ScopedLockType sl (renderMutex);
-            oscilloscope.setRenderData (renderData, readPos);
+            renderData.assign (scopeSamples.begin(), scopeSamples.begin() + scopeCount);
+            scopeReady.store (false, std::memory_order_release);
+            oscilloscope.setRenderData (renderData);
         }
 
         if (oscilloscope.isVisible())
             oscilloscope.repaint();
 
-        // Update note indicator
-        if (harmonicSynth.isPlaying())
-        {
-            if (! noteIndicatorLabel->isVisible())
-            {
-                noteIndicatorLabel->setVisible (true);
-            }
-            auto noteText = yup::String ("Playing Note: ") + yup::String (harmonicSynth.getCurrentNote());
-            noteIndicatorLabel->setText (noteText, yup::dontSendNotification);
-        }
-        else
-        {
-            noteIndicatorLabel->setVisible (false);
-        }
-    }
+        // One generation bump per frame, however many mouse events the drag produced.
+        for (auto& panel : oscillatorPanels)
+            if (panel != nullptr)
+                panel->commitPendingEdits();
 
-    // MIDI keyboard event handlers
-    void handleNoteOn (yup::MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override
-    {
-        harmonicSynth.noteOn (midiNoteNumber, velocity);
-    }
+        for (int index = 0; index < SynthExample::lfoCount; ++index)
+            lfoPanels[static_cast<std::size_t> (index)]->setPhase (synth.getLFOPhase (index));
 
-    void handleNoteOff (yup::MidiKeyboardState* source, int midiChannel, int midiNoteNumber, float velocity) override
-    {
-        harmonicSynth.noteOff (midiNoteNumber);
-    }
+        const auto activeVoices = synth.getNumActiveVoices();
 
-    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
-                                           int numInputChannels,
-                                           float* const* outputChannelData,
-                                           int numOutputChannels,
-                                           int numSamples,
-                                           const yup::AudioIODeviceCallbackContext& context) override
-    {
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            // Generate the next sample from the harmonic synth
-            float synthSample = harmonicSynth.getNextSample();
-
-            // Apply master volume
-            synthSample *= masterVolume;
-
-            // Apply soft limiting to prevent clipping
-            synthSample = std::tanh (synthSample);
-
-            // Output to all channels
-            for (int channel = 0; channel < numOutputChannels; ++channel)
-                outputChannelData[channel][sample] = synthSample;
-
-            // Store for oscilloscope display
-            auto pos = readPos.fetch_add (1);
-            inputData[pos] = synthSample;
-            readPos = readPos % inputData.size();
-        }
-
-        const yup::CriticalSection::ScopedLockType sl (renderMutex);
-        std::swap (inputData, renderData);
+        const auto status = audioDeviceError.isNotEmpty() ? audioDeviceError
+                          : midiInputError.isNotEmpty() ? midiInputError
+                          : yup::String (loadMeasurer.getLoadAsPercentage(), 1) + "% AUDIO / "
+                                + yup::String (loadMeasurer.getXRunCount()) + " OVERRUNS / "
+                                + yup::String (receivedNoteOns.load()) + " NOTES IN";
+        loadLabel.setText (status, yup::dontSendNotification);
+        voiceLabel.setText (yup::String (activeVoices) + " / 8 VOICES",
+                            yup::dontSendNotification);
     }
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        inputData.resize (device->getDefaultBufferSize());
-        renderData.resize (device->getDefaultBufferSize());
-        readPos = 0;
+        const auto maxBlockSize = yup::jmax (device->getDefaultBufferSize(), SynthExample::maxBlockSize);
+
+        synth.prepare (device->getCurrentSampleRate(), maxBlockSize);
+
+        renderBuffer.setSize (2, maxBlockSize, false, true, true);
+        loadMeasurer.reset (device->getCurrentSampleRate(), device->getDefaultBufferSize());
+        midiBuffer.ensureSize (16384);
+        outputGain.reset (device->getCurrentSampleRate(), 0.02);
+        outputGain.setCurrentAndTargetValue (masterVolume.load());
+
+        midiCollector.reset (device->getCurrentSampleRate());
+        midiCollector.ensureStorageAllocated (midiQueueBytes);
     }
 
     void audioDeviceStopped() override
     {
     }
 
+    void audioDeviceIOCallbackWithContext (const float* const*,
+                                           int,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const yup::AudioIODeviceCallbackContext&) override
+    {
+        if (numSamples <= 0)
+            return;
+        const yup::ScopedNoDenormals noDenormals;
+        const yup::AudioProcessLoadMeasurer::ScopedTimer renderTimer (loadMeasurer, numSamples);
+        if (numSamples <= 0 || numSamples > renderBuffer.getNumSamples())
+        {
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+                if (outputChannelData[channel] != nullptr)
+                    yup::FloatVectorOperations::clear (outputChannelData[channel], numSamples);
+
+            return;
+        }
+
+        for (int channel = 0; channel < renderBuffer.getNumChannels(); ++channel)
+            yup::FloatVectorOperations::clear (renderBuffer.getWritePointer (channel), numSamples);
+
+        midiBuffer.clear();
+
+        // processNextMidiBuffer() reads whatever is already in the buffer before injecting
+        // the on-screen keyboard's own events, so collecting the hardware input first is
+        // what lights up the drawn keys as well as playing the notes.
+        midiCollector.removeNextBlockOfMessages (midiBuffer, numSamples);
+        keyboardState.processNextMidiBuffer (midiBuffer, 0, numSamples, true);
+        for (const auto metadata : midiBuffer)
+            if (metadata.getMessage().isNoteOn())
+                receivedNoteOns.fetch_add (1, std::memory_order_relaxed);
+        synth.renderNextBlock (renderBuffer, midiBuffer, 0, numSamples);
+
+        outputGain.setTargetValue (masterVolume.load());
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const auto gain = outputGain.getNextValue();
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+            {
+                const auto sourceChannel = yup::jmin (channel, renderBuffer.getNumChannels() - 1);
+                if (outputChannelData[channel] != nullptr)
+                    outputChannelData[channel][sample] = renderBuffer.getSample (sourceChannel, sample) * gain;
+            }
+            renderBuffer.setSample (0, sample, renderBuffer.getSample (0, sample) * gain);
+        }
+
+        if (! scopeReady.load (std::memory_order_acquire))
+        {
+            scopeCount = yup::jmin (numSamples, SynthExample::maxBlockSize);
+            std::copy_n (renderBuffer.getReadPointer (0), scopeCount, scopeSamples.begin());
+            scopeReady.store (true, std::memory_order_release);
+        }
+    }
+
     void visibilityChanged() override
     {
         if (! isVisible())
+        {
+            closeMidiInput();
             deviceManager.removeAudioCallback (this);
+        }
         else
+        {
             deviceManager.addAudioCallback (this);
+            openMidiInput();
+        }
     }
 
 private:
+    //==============================================================================
+    /** Opens the selected hardware input and reports device-open failures in the UI. */
+    void openMidiInput()
+    {
+        if (midiInputIdentifier.isNotEmpty() || midiChoice == nullptr)
+            return;
+
+        midiInputError.clear();
+        const auto index = midiChoice->getComboBox().getSelectedId() - 2;
+        if (! yup::isPositiveAndBelow (index, midiDevices.size()))
+            return;
+
+        const auto identifier = midiDevices[index].identifier;
+        deviceManager.setMidiInputDeviceEnabled (identifier, true);
+        if (! deviceManager.isMidiInputDeviceEnabled (identifier))
+        {
+            midiInputError = "Cannot open MIDI input: " + midiDevices[index].name;
+            return;
+        }
+        midiInputIdentifier = identifier;
+        deviceManager.addMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+    }
+
+    /** Releases the input again, so a hidden demo does not hold the device open. */
+    void closeMidiInput()
+    {
+        if (midiInputIdentifier.isEmpty())
+            return;
+
+        deviceManager.removeMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+        deviceManager.setMidiInputDeviceEnabled (midiInputIdentifier, false);
+
+        midiInputIdentifier.clear();
+    }
+
+    /** Queues a message from one of the on-screen wheels, timestamped as the collector expects. */
+    void sendWheelMessage (yup::MidiMessage message)
+    {
+        // The collector is only reset, and so only ready, once an audio device has started.
+        if (deviceManager.getCurrentAudioDevice() == nullptr)
+            return;
+
+        message.setTimeStamp (yup::Time::getMillisecondCounterHiRes() * 0.001);
+        midiCollector.addMessageToQueue (message);
+    }
+
+    //==============================================================================
+    /** Randomizes everything a voice is made of; volume, voice mode, glide and MIDI input stay. */
+    void randomizeVoice()
+    {
+        auto& random = yup::Random::getSystemRandom();
+
+        for (int index = 0; index < SynthExample::oscillatorCount; ++index)
+        {
+            auto& settings = synth.getOscillatorSettings (index);
+
+            settings.waveform = random.nextInt (6);
+            settings.syncMode = random.nextInt (4);
+            settings.syncRatio = 1.0f + random.nextFloat() * 3.0f;
+            settings.level = 0.2f + random.nextFloat() * 0.8f;
+            settings.octave = random.nextInt (3) - 1;
+            settings.detuneSemitones = (random.nextFloat() - 0.5f) * 0.3f;
+            settings.ridgeSpacing = 0.5f + random.nextFloat() * 3.0f;
+            settings.color = random.nextFloat();
+            settings.dispersion = 0.1f + random.nextFloat() * 0.8f;
+            settings.squeeze = random.nextBool() ? 0.0f : random.nextFloat() * 0.5f;
+            settings.squash = 0.4f + random.nextFloat() * 1.6f;
+            settings.tilt = (random.nextFloat() - 0.5f) * 3.0f;
+            settings.oddEven = 0.2f + random.nextFloat() * 0.6f;
+            settings.formant = (random.nextFloat() - 0.4f) * 5.0f;
+            settings.formantPosition = random.nextFloat() * 6.0f;
+            settings.scatter = random.nextBool() ? 0.0f : random.nextFloat() * 0.6f;
+            settings.unisonVoices = 1 + random.nextInt (SynthExample::maxUnisonVoices);
+            settings.unisonDetune = random.nextFloat() * 0.5f;
+            settings.unisonSpread = random.nextFloat();
+
+            // A randomized waveform is only audible once the edited partials are dropped.
+            settings.usesCustomSeries = false;
+            settings.harmonicGeneration.fetch_add (1);
+
+            if (auto& panel = oscillatorPanels[static_cast<std::size_t> (index)]; panel != nullptr)
+                panel->refresh();
+        }
+
+        auto& filter = synth.getFilterSettings();
+        filter.type = 1 + random.nextInt (6);
+        filter.cutoff = 200.0f * std::exp2 (random.nextFloat() * 6.0f);
+        filter.resonance = random.nextFloat() * 0.8f;
+        filter.drive = random.nextBool() ? 0.0f : random.nextFloat() * 0.6f;
+        filter.keytrack = random.nextBool() ? 0.0f : 1.0f;
+        filterPanel->refresh();
+
+        // The amplitude envelope keeps a short attack more often than not, so the patch
+        // still speaks when played; the modulation envelope is free to be slow.
+        for (int index = 0; index < SynthExample::envelopeCount; ++index)
+        {
+            auto& envelope = synth.getEnvelopeSettings (index);
+            const auto slow = index > 0 || random.nextInt (4) == 0;
+
+            envelope.delay = random.nextInt (4) == 0 ? random.nextFloat() * 0.3f : 0.0f;
+            envelope.attack = 0.003f + random.nextFloat() * (slow ? 1.5f : 0.15f);
+            envelope.hold = random.nextBool() ? 0.0f : random.nextFloat() * 0.3f;
+            envelope.decay = 0.05f + random.nextFloat() * 1.5f;
+            envelope.sustain = random.nextFloat();
+            envelope.release = 0.05f + random.nextFloat() * 1.5f;
+
+            envelopePanels[static_cast<std::size_t> (index)]->refresh();
+        }
+
+        for (int index = 0; index < SynthExample::lfoCount; ++index)
+        {
+            auto& lfo = synth.getLFOSettings (index);
+
+            lfo.shape = random.nextInt (5);
+            lfo.rate = 0.1f * std::exp2 (random.nextFloat() * 6.0f);
+            lfo.phase = random.nextBool() ? 0.0f : random.nextFloat();
+            lfo.retrigger = random.nextBool();
+
+            lfoPanels[static_cast<std::size_t> (index)]->refresh();
+        }
+
+        // A few live routes, never to the oscillator levels, so a random patch cannot
+        // fall silent; the rest of the slots are cleared.
+        auto& modulation = synth.getModulationSettings();
+        const auto liveRoutes = 1 + random.nextInt (4);
+
+        for (int index = 0; index < SynthExample::modulationSlots; ++index)
+        {
+            auto& slot = modulation.slots[static_cast<std::size_t> (index)];
+
+            if (index >= liveRoutes)
+            {
+                slot.destination = static_cast<int> (SynthModulationDestination::none);
+                slot.depth = 0.0f;
+                continue;
+            }
+
+            auto destination = SynthModulationDestination::none;
+
+            do
+            {
+                destination = static_cast<SynthModulationDestination> (1 + random.nextInt (static_cast<int> (SynthModulationDestination::count) - 1));
+            } while (destination == SynthModulationDestination::osc1Level || destination == SynthModulationDestination::osc2Level);
+
+            slot.source = random.nextInt (4);
+            slot.destination = static_cast<int> (destination);
+            slot.depth = (random.nextFloat() - 0.5f) * (random.nextBool() ? 2.0f : 1.0f);
+        }
+
+        modulationPage->refresh();
+    }
+
+    //==============================================================================
+    static constexpr std::size_t midiQueueBytes = 2048;
+
+    static constexpr float outerInset = 10.0f;
+    static constexpr float headerHeight = 60.0f;
+    static constexpr float spacing = 8.0f;
+    static constexpr float buttonInset = 12.0f;
+    static constexpr float pageButtonWidth = 76.0f;
+    static constexpr float actionButtonWidth = 120.0f;
+    static constexpr float logoAspect = 236.0f / 122.0f;
+    static constexpr float wheelWidth = 28.0f;
+    static constexpr float keyboardHeight = 72.0f;
+    static constexpr float lfoRowHeight = 104.0f;
+    static constexpr float shapingRowHeight = 150.0f;
+
+    //==============================================================================
     yup::AudioDeviceManager deviceManager;
-    HarmonicSynth harmonicSynth;
+    HarmonicSynthEngine synth;
 
     // MIDI keyboard components
     yup::MidiKeyboardState keyboardState;
     yup::MidiKeyboardComponent keyboardComponent;
+    yup::PitchWheelComponent pitchWheelComponent;
+    yup::ModWheelComponent modWheelComponent;
+    yup::MidiMessageCollector midiCollector;
+    yup::String midiInputIdentifier;
+    yup::String audioDeviceError;
+    yup::String midiInputError;
+    yup::Array<yup::MidiDeviceInfo> midiDevices;
+    std::atomic<int> receivedNoteOns { 0 };
 
+    yup::AudioBuffer<float> renderBuffer;
+    yup::MidiBuffer midiBuffer;
     std::vector<float> renderData;
-    std::vector<float> inputData;
-    yup::CriticalSection renderMutex;
-    std::atomic_int readPos = 0;
+    std::array<float, SynthExample::maxBlockSize> scopeSamples {};
+    std::atomic<bool> scopeReady { false };
+    int scopeCount = 0;
+    yup::SmoothedValue<float> outputGain;
+    yup::AudioProcessLoadMeasurer loadMeasurer;
 
     // UI Components
-    std::unique_ptr<yup::Label> titleLabel;
-    std::unique_ptr<yup::Label> subtitleLabel;
-    std::unique_ptr<yup::Label> noteIndicatorLabel;
+    yup::Drawable logo;
+    yup::Rectangle<float> logoArea;
+    yup::Label titleLabel;
+    yup::Label subtitleLabel;
+    yup::Label voiceLabel;
+    yup::Label loadLabel;
 
-    yup::OwnedArray<yup::Slider> sliders;
-    yup::OwnedArray<yup::Label> harmonicLabels;
-    int totalRows = 4;
-    int totalColumns = 4;
+    SynthPage mainPage;
+    std::shared_ptr<SynthWaveformShader> waveformShader = std::make_shared<SynthWaveformShader>();
+    std::array<std::unique_ptr<SynthOscillatorPanel>, SynthExample::oscillatorCount> oscillatorPanels;
+    std::unique_ptr<SynthFilterPanel> filterPanel;
+    std::array<std::unique_ptr<SynthEnvelopePanel>, SynthExample::envelopeCount> envelopePanels;
+    std::array<std::unique_ptr<SynthLFOPanel>, SynthExample::lfoCount> lfoPanels;
+    std::unique_ptr<SynthModulationPage> modulationPage;
+    yup::ToggleButton mainPageButton;
+    yup::ToggleButton modulationPageButton;
 
-    std::unique_ptr<yup::TextButton> randomizeButton;
-    std::unique_ptr<yup::TextButton> clearButton;
-    std::unique_ptr<yup::Slider> volumeSlider;
+    yup::TextButton randomizeButton { "RANDOMIZE" };
+    yup::TextButton clearButton { "ALL NOTES OFF" };
+    std::unique_ptr<KnobControl> volumeKnob;
+    std::unique_ptr<ChoiceControl> modeChoice;
+    std::unique_ptr<ChoiceControl> midiChoice;
+    std::unique_ptr<KnobControl> glideKnob;
     Oscilloscope oscilloscope;
 
-    float masterVolume = 0.5f;
+    std::atomic<float> masterVolume { 0.5f };
 };

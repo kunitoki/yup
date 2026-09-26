@@ -2,8 +2,8 @@
 <html lang="en">
     <head>
         <!-- @head -->
-        <title>YUP! The modern framework for realtime audio and GPU-native creative software</title>
-        <meta name="description" content="YUP is an ISC licensed C++20 framework for native applications, audio tools and audio plugins across desktop, mobile and the web." />
+        <title>YUP! The GPU-first framework for realtime audio and graphics</title>
+        <meta name="description" content="YUP is an ISC licensed, GPU-first C++20 framework where realtime audio and graphics meet. Build native applications, audio tools and plugins for desktop, mobile and the web, and ship them on your own terms." />
     </head>
     <body>
         <!-- @header -->
@@ -13,12 +13,12 @@
             <section class="relative overflow-hidden pt-16 sm:pt-24">
                 <div class="bg-grid"></div>
                 <div class="container-site relative text-center">
-                    <span class="chip chip-on">Early-stage and moving fast</span>
+                    <span class="chip chip-on">Moving fast, built in the open</span>
                     <h1 class="mx-auto mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
-                        Realtime audio and GPU-native graphics, <span class="bg-gradient-to-r from-glow-soft to-glow bg-clip-text text-transparent">one C++20 codebase</span>
+                        Realtime audio and graphics, <span class="bg-gradient-to-r from-glow-soft to-glow bg-clip-text text-transparent">GPU-first by design</span>
                     </h1>
                     <p class="lead mx-auto mt-6 max-w-2xl">
-                        YUP builds native applications, audio tools and audio plugins for desktop, mobile and the web. Permissively licensed foundations meet modern vector rendering through the open source Rive renderer.
+                        YUP fuses a complete audio stack with a modern GPU renderer in one C++20 codebase. Build native applications, audio tools and plugins for desktop, mobile and the web, on permissive foundations that keep your work yours.
                     </p>
                     <div class="mt-9 flex flex-wrap items-center justify-center gap-3">
                         <a class="btn btn-primary" href="./get-started.html">
@@ -32,41 +32,53 @@
                         <div class="flex h-12 items-center justify-between gap-4 border-b border-edge bg-gradient-to-b from-surface to-surface/60 px-4">
                             <div class="flex items-center gap-2.5">
                                 <img class="brand-mark size-6" src="../../logo.svg" alt="" />
-                                <b class="text-sm font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i> <span class="font-normal text-muted" data-slide-label>audio graph editor</span></b>
+                                <b class="text-sm font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i> <span class="font-normal text-muted" data-slide-label>prism spectral synth</span></b>
                             </div>
                             <div class="hidden gap-2 sm:flex" data-slide-chips>
-                                <span class="chip chip-on">yup_audio_graph</span>
-                                <span class="chip chip-on">yup_gui</span>
+                                <span class="chip chip-on">yup_dsp</span>
+                                <span class="chip chip-on">yup_audio_gui</span>
                             </div>
                         </div>
                         <div class="relative aspect-[16/10] bg-[#05070b]">
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-active data-label="audio graph editor" data-chips="yup_audio_graph,yup_gui" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
-                                <img class="size-full object-contain" src="../../docs/_static/images/yup_audio_graph.png" alt="The YUP audio graph editor" />
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-active data-label="prism spectral synth" data-chips="yup_dsp,yup_audio_gui" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Audio.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_prism_synth.jpg" alt="The Prism spectral synthesizer" />
                             </a>
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="physically based rendering" data-chips="yup_rhi,yup_shading" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PbrDemo.h" target="_blank" rel="noopener">
-                                <img class="size-full object-contain" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering through the YUP RHI" loading="lazy" />
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="audio graph editor" data-chips="yup_audio_graph,yup_gui" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_audio_graph.png" alt="The YUP audio graph editor" loading="lazy" />
                             </a>
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="spectrum analyzer" data-chips="yup_dsp,yup_audio_gui" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="spectrum analyzer" data-chips="yup_dsp,yup_audio_gui" href="https://kunitoki.github.io/yup-demos/demos/spectrum-analyzer" target="_blank" rel="noopener">
                                 <img class="size-full object-contain" src="../../docs/_static/images/yup_dsp_spectrum_line.png" alt="Realtime spectrum analyzer" loading="lazy" />
                             </a>
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="svg rendering" data-chips="yup_graphics" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
-                                <img class="size-full object-contain" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="The Ghostscript tiger rendered from SVG" loading="lazy" />
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="physically based rendering" data-chips="yup_rhi,yup_shading" href="https://kunitoki.github.io/yup-demos/demos/pbr" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering through the YUP RHI" loading="lazy" />
                             </a>
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="gpu fluid simulation" data-chips="yup_rhi" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FluidSimulationDemo.h" target="_blank" rel="noopener">
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="gpu fluid simulation" data-chips="yup_rhi" href="https://kunitoki.github.io/yup-demos/demos/fluid-simulation" target="_blank" rel="noopener">
                                 <img class="size-full object-contain" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation with compute shaders" loading="lazy" />
                             </a>
-                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="lottie animation" data-chips="yup_animation" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/LottieDemo.h" target="_blank" rel="noopener">
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="components on 3d surfaces" data-chips="yup_gui,yup_shading" href="https://kunitoki.github.io/yup-demos/demos/component-3d" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_3d_components.png" alt="Interactive components mapped onto a curved 3D surface" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="rive integration" data-chips="yup_gui" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_rive_artboard.jpg" alt="Interactive Rive artboard" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="lottie animation" data-chips="yup_animation" href="https://kunitoki.github.io/yup-demos/demos/lottie" target="_blank" rel="noopener">
                                 <img class="size-full object-contain" src="../../docs/_static/images/yup_lottie.png" alt="Lottie animation playback" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="svg rendering" data-chips="yup_graphics" href="https://kunitoki.github.io/yup-demos/demos/svg" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="The Ghostscript tiger rendered from SVG" loading="lazy" />
                             </a>
                         </div>
                         <div class="flex justify-center border-t border-edge bg-gradient-to-b from-surface/60 to-surface px-4 py-2.5">
                             <div class="segmented flex-wrap justify-center" role="group" aria-label="Showcase">
-                                <button class="seg" type="button" data-slide-to="0" aria-pressed="true">Audio graph</button>
-                                <button class="seg" type="button" data-slide-to="1" aria-pressed="false">PBR</button>
+                                <button class="seg" type="button" data-slide-to="0" aria-pressed="true">Synth</button>
+                                <button class="seg" type="button" data-slide-to="1" aria-pressed="false">Audio graph</button>
                                 <button class="seg" type="button" data-slide-to="2" aria-pressed="false">Spectrum</button>
-                                <button class="seg" type="button" data-slide-to="3" aria-pressed="false">SVG</button>
+                                <button class="seg" type="button" data-slide-to="3" aria-pressed="false">PBR</button>
                                 <button class="seg" type="button" data-slide-to="4" aria-pressed="false">Fluid</button>
-                                <button class="seg" type="button" data-slide-to="5" aria-pressed="false">Lottie</button>
+                                <button class="seg" type="button" data-slide-to="5" aria-pressed="false">3D UI</button>
+                                <button class="seg" type="button" data-slide-to="6" aria-pressed="false">Rive</button>
+                                <button class="seg" type="button" data-slide-to="7" aria-pressed="false">Lottie</button>
+                                <button class="seg" type="button" data-slide-to="8" aria-pressed="false">SVG</button>
                             </div>
                         </div>
                     </div>
@@ -118,22 +130,43 @@
                             <div class="icon-tile">
                                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M7 7l-3 7a3 3 0 0 0 6 0L7 7Zm10 0-3 7a3 3 0 0 0 6 0l-3-7ZM8 21h8" /></svg>
                             </div>
-                            <h3 class="mt-6 text-lg font-semibold">Permissive by default</h3>
-                            <p class="mt-2 text-sm leading-relaxed text-muted">ISC licensed project code, with dependencies chosen for liberal licensing or public-domain availability. Ship closed or open, no fees.</p>
+                            <h3 class="mt-6 text-lg font-semibold">Free to create, free to sell</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">ISC licensed code and liberally licensed dependencies. Ship closed or open, sell what you build and keep what you earn. No fees, no royalties, no one to report to.</p>
                         </article>
                         <article class="card spotlight p-7">
                             <div class="icon-tile">
                                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" /></svg>
                             </div>
-                            <h3 class="mt-6 text-lg font-semibold">GPU-native rendering</h3>
-                            <p class="mt-2 text-sm leading-relaxed text-muted">Vector graphics on the Rive renderer over Metal, Direct3D, OpenGL, WebGL and WebGPU, plus a low-level RHI for compute and custom shaders.</p>
+                            <h3 class="mt-6 text-lg font-semibold">GPU-first, not bolted on</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Every pixel goes through the GPU from day one: vector graphics on the Rive renderer over Metal, Direct3D, OpenGL, WebGL and WebGPU, plus a low-level RHI for compute and custom shaders.</p>
                         </article>
                         <article class="card spotlight p-7">
                             <div class="icon-tile">
                                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h2l2-6 3 12 3-9 2 6 2-3h4" /></svg>
                             </div>
                             <h3 class="mt-6 text-lg font-semibold">Audio-first stack</h3>
-                            <p class="mt-2 text-sm leading-relaxed text-muted">Devices, MIDI, file formats, DSP, an audio graph, plugin hosting and plugin client wrappers all live in the same framework.</p>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Devices, MIDI, file formats, DSP, an audio graph, plugin hosting and plugin wrappers, living in the same framework as the graphics they drive.</p>
+                        </article>
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">Modern and moving fast</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">C++20 and the standard library throughout, with frequent iterations and an API that evolves alongside the platforms it runs on.</p>
+                        </article>
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">No lock-in</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">Plain CMake, open plugin standards like CLAP alongside VST3 and AU, and no accounts, license keys or proprietary tooling. Your code goes wherever you take it.</p>
+                        </article>
+                        <article class="card spotlight p-7">
+                            <div class="icon-tile">
+                                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M21 20a6 6 0 0 0-4-5.6" /></svg>
+                            </div>
+                            <h3 class="mt-6 text-lg font-semibold">Built together, in the open</h3>
+                            <p class="mt-2 text-sm leading-relaxed text-muted">The roadmap is planned in public on <a class="text-glow-soft hover:text-ink" href="https://github.com/kunitoki/yup/discussions" target="_blank" rel="noopener">GitHub Discussions</a>. Ideas, issues and pull requests decide what ships next.</p>
                         </article>
                     </div>
                 </div>
@@ -154,17 +187,17 @@
                         <article class="card spotlight p-7 md:col-span-4">
                             <p class="chip">yup_graphics · yup_rhi · yup_shading</p>
                             <h3 class="mt-5 text-xl font-semibold">Graphics, RHI and shaders</h3>
-                            <p class="mt-2 max-w-lg text-sm leading-relaxed text-muted">2D drawing, fonts with variable axes, SVG and Lottie on top of Rive. Drop down to the RHI for compute, render pipelines, PBR and fluid simulations.</p>
-                            <div class="mt-6 grid grid-cols-3 gap-3">
+                            <p class="mt-2 max-w-lg text-sm leading-relaxed text-muted">2D drawing, fonts with variable axes, SVG and Lottie on top of Rive. Drop down to the RHI for compute and render pipelines, render 3D into components or map live components onto 3D surfaces. Write shaders once: a cross-platform transpiler and the .ysl bundle format compile them for every backend, offline or at runtime.</p>
+                            <div class="mt-6 grid grid-cols-2 gap-3">
                                 <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="PBR rendering through the YUP RHI" loading="lazy" />
                                 <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation" loading="lazy" />
-                                <img class="aspect-video w-full rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="SVG tiger rendered by YUP" loading="lazy" />
                             </div>
                         </article>
-                        <article class="card spotlight p-7 md:col-span-2">
-                            <p class="chip">yup_gui</p>
+                        <article class="card spotlight flex flex-col p-7 md:col-span-2">
+                            <p class="chip self-start">yup_gui</p>
                             <h3 class="mt-5 text-xl font-semibold">GUI toolkit</h3>
                             <p class="mt-2 text-sm leading-relaxed text-muted">Components, windowing, layout, text editing, popup menus, drag and drop, multitouch and 3D components, all painted on the GPU.</p>
+                            <img class="mt-6 min-h-40 w-full flex-1 rounded-lg border border-edge object-cover" src="../../docs/_static/images/yup_widgets.png" alt="YUP widgets panel" loading="lazy" />
                         </article>
                         <article class="card spotlight p-7 md:col-span-2">
                             <p class="chip">yup_dsp · yup_dsp_jit</p>
@@ -295,7 +328,7 @@
                     <div class="mx-auto max-w-2xl text-center">
                         <p class="eyebrow">Pick your path</p>
                         <h2 class="heading mt-3">Free for every kind of project</h2>
-                        <p class="lead mt-4">No tiers, no seats, no revenue caps. The same ISC license covers apps, plugins and the web.</p>
+                        <p class="lead mt-4">No tiers, no seats, no revenue caps, no royalties. One ISC license covers apps, plugins and the web, and what you build is yours to sell.</p>
                     </div>
 
                     <div class="mt-14 grid gap-5 lg:grid-cols-3">
@@ -348,20 +381,20 @@
                     <div>
                         <p class="eyebrow">FAQ</p>
                         <h2 class="heading mt-3">Questions, answered</h2>
-                        <p class="lead mt-4">Anything else? Ask on <a class="text-glow-soft hover:text-ink" href="https://discord.gg/E6pSdcj4R" target="_blank" rel="noopener">Discord</a> or open an issue on GitHub.</p>
+                        <p class="lead mt-4">Anything else? Ask on <a class="text-glow-soft hover:text-ink" href="https://discord.gg/UnqExfjhQX" target="_blank" rel="noopener">Discord</a>, start a thread in <a class="text-glow-soft hover:text-ink" href="https://github.com/kunitoki/yup/discussions" target="_blank" rel="noopener">GitHub Discussions</a>, or write to <a class="text-glow-soft hover:text-ink" href="mailto:support@yup.audio">support@yup.audio</a> for dedicated support.</p>
                     </div>
                     <div class="divide-y divide-edge rounded-2xl border border-edge bg-surface/60 lg:col-span-2">
                         <details class="faq group p-6" open>
                             <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Is YUP ready for production?<span class="faq-plus text-xl text-glow transition">+</span></summary>
-                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP is under active early-stage development and APIs may change. It is usable for experimentation, examples, prototypes and contributors comfortable with a fast-moving framework. Graphics and GUI, DSP, the audio graph and CLAP/VST3 plugins are the areas most ready for feedback.</p>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP is early-stage and moving fast, so APIs may still change. It is already usable for experimentation, examples, prototypes and contributors comfortable with a fast-moving framework. Graphics and GUI, DSP, the audio graph and CLAP/VST3 plugins are the areas most ready for feedback.</p>
                         </details>
                         <details class="faq group p-6">
                             <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">How does YUP relate to JUCE?<span class="faq-plus text-xl text-glow transition">+</span></summary>
-                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP started from the ISC licensed JUCE7 modules and has evolved since, with its own rendering, GUI, DSP, audio graph and plugin layers. Some APIs look familiar, but do not assume they are identical.</p>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">YUP started from the ISC licensed JUCE7 modules and has since gone its own way, with its own rendering, GUI, DSP, audio graph and plugin layers. Some APIs look familiar, but do not assume they are identical.</p>
                         </details>
                         <details class="faq group p-6">
                             <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">What does the license allow?<span class="faq-plus text-xl text-glow transition">+</span></summary>
-                            <p class="mt-3 text-sm leading-relaxed text-muted">Project code is ISC licensed: use, copy, modify and distribute for any purpose, commercial or not, keeping the copyright notice. Dependencies are chosen for liberal licensing or public-domain availability.</p>
+                            <p class="mt-3 text-sm leading-relaxed text-muted">Project code is ISC licensed: use, copy, modify, distribute and sell for any purpose, commercial or not, keeping the copyright notice. No fees, no royalties, no revenue thresholds. Dependencies are chosen for liberal licensing or public-domain availability.</p>
                         </details>
                         <details class="faq group p-6">
                             <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">Which plugin formats can I build and host?<span class="faq-plus text-xl text-glow transition">+</span></summary>
@@ -386,11 +419,12 @@
                         <div class="bg-grid"></div>
                         <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_0%,rgb(10_132_255/0.25),transparent_70%)]"></div>
                         <div class="relative">
-                            <h2 class="heading mx-auto max-w-2xl">Turn your next idea into realtime software</h2>
-                            <p class="lead mx-auto mt-4 max-w-xl">Clone the repository, build the examples, and have a GPU-rendered audio app running in minutes.</p>
+                            <h2 class="heading mx-auto max-w-2xl">Build your next idea, shape what comes next</h2>
+                            <p class="lead mx-auto mt-4 max-w-xl">Clone the repository and have a GPU-rendered audio app running in minutes. The roadmap is planned in the open, so bring your ideas, your code and your feedback.</p>
                             <div class="mt-8 flex flex-wrap justify-center gap-3">
                                 <a class="btn btn-primary" href="./get-started.html">Get started</a>
                                 <a class="btn btn-ghost" href="https://github.com/kunitoki/yup" target="_blank" rel="noopener">Star on GitHub</a>
+                                <a class="btn btn-ghost" href="https://github.com/kunitoki/yup/discussions" target="_blank" rel="noopener">Join the discussion</a>
                             </div>
                         </div>
                     </div>

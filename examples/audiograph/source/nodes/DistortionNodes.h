@@ -257,9 +257,9 @@ private:
     yup::AudioParameter::Ptr drive;
     yup::AudioParameter::Ptr oversamplingIndex;
     yup::SmoothedValue<float> smoothedDrive;
-    yup::Oversampler2xFloat oversampler2x;
-    yup::Oversampler4xFloat oversampler4x;
-    yup::Oversampler8xFloat oversampler8x;
+    yup::HalfbandOversampler2xFloat oversampler2x;
+    yup::HalfbandOversampler4xFloat oversampler4x;
+    yup::HalfbandOversampler8xFloat oversampler8x;
     bool oversamplersPrepared = false;
 };
 

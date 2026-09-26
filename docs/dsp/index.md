@@ -3,7 +3,7 @@
 The `yup_dsp` module provides the real-time audio processing building blocks of
 the framework: mathematical utilities, windowing, noise, FFTs and spectral
 analysis, filter design, filter implementations, crossovers, dynamics
-processing, metering, convolution, delay lines, resampling, and
+processing, metering, convolution, delay lines, resampling, oscillators, and
 time-stretching / pitch-shifting.
 
 **Modules covered:** `yup_dsp`.
@@ -29,7 +29,7 @@ available in the build.
   `AnalogFilterCoefficients`, `StateVariableCoefficients`).
 - [Filters](filters.md) - the processing primitives (`FirstOrder`, `Biquad`,
   cascades, coefficient structs) and the ready-to-use filter classes:
-  first-order, RBJ biquad, Zoelzer, state-variable, Butterworth,
+  first-order, RBJ biquad, Zoelzer, state-variable (Chamberlin and VA/TPT), Butterworth,
   Linkwitz-Riley crossovers, direct FIR, analog-mapped filters, and comb
   filters.
 - [Dynamics & metering](dynamics.md) - `HardClipper`, `SoftClipper`,
@@ -41,10 +41,15 @@ available in the build.
   and the end-to-end `OnsetDetector`.
 - [Convolution & delay](convolution-and-delay.md) - the `PartitionedConvolver`
   and the `FractionallyAddressedDelay` interpolation delay line.
-- [Resampling](resampling.md) - `Oversampler`, `Resampler`, `SincTable`, and
-  the `CircularBuffer` helper.
+- [Resampling](resampling.md) - `HalfbandOversampler`, `SincOversampler`,
+  `Resampler`, `SincTable`, and the `CircularBuffer` helper.
 - [Time-stretching & pitch-shifting](time-stretching.md) - the
   `TimeStretchProcessor` with its time-domain and Bungee backends.
+- [Oscillators](oscillators.md) - `FourierSeries`, the alias-free
+  `SyncSpectralResampler`, the `AdditiveOscillator` / `WavetableOscillator`
+  synthesis backends, the `SyncOscillator` facade, shared `WaveformBank` frames,
+  `ModulatedOscillator` for morphing, FM, PM and sync, and
+  `PrismSpectrum` for modulatable ridge, dispersion and exact-PWM shaping.
 - [YDSP language reference](yup-dsp-language.md) - the `yup_dsp_jit` module's
   JIT-compiled DSP language: syntax, intrinsics, the graph algebra, the
   realtime contract, and the public C++ API.
@@ -107,6 +112,7 @@ onsets
 convolution-and-delay
 resampling
 time-stretching
+oscillators
 yup-dsp-language
 ydsp-bundle-format
 ```

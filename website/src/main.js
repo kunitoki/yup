@@ -1,3 +1,9 @@
+import Lenis from "lenis";
+import "lenis/dist/lenis.css";
+
+// Eases wheel ticks into continuous scrolling; touch stays native and code blocks keep their own horizontal scroll.
+new Lenis({ autoRaf: true, anchors: true, allowNestedScroll: true });
+
 const navToggle = document.getElementById("nav-toggle");
 const navMenu = document.getElementById("nav-menu");
 

@@ -30,4 +30,10 @@ float dotProduct (const float* __restrict a, const float* __restrict b, std::siz
     return FloatVectorOperations::dotProduct (a, b, length);
 }
 
+template <>
+double dotProduct (const double* __restrict a, const double* __restrict b, std::size_t length) noexcept
+{
+    return FloatVectorOperations::dotProduct (a, b, length);
+}
+
 } // namespace yup

@@ -84,7 +84,6 @@ extern "C" void EMSCRIPTEN_KEEPALIVE ydspCommitOutputEventWasm (YdspOutputEventQ
 // YdspAudioGraph
 
 YdspAudioGraph::YdspAudioGraph() = default;
-
 YdspAudioGraph::~YdspAudioGraph() = default;
 
 YdspAudioGraph::YdspAudioGraph (YdspAudioGraph&&) noexcept = default;
@@ -314,17 +313,17 @@ Result YdspAudioGraph::prepare (double sampleRate, int maxBlockSize, int maxEven
             switch (factor)
             {
                 case 2:
-                    node.oversampler2x = std::make_unique<yup::Oversampler<float, 2, ydspOversamplerSincRadius>>();
+                    node.oversampler2x = std::make_unique<SincOversampler<float, 2, ydspOversamplerSincRadius>>();
                     node.oversampler2x->prepare (sampleRate, channels, maxBlockSize);
                     break;
 
                 case 4:
-                    node.oversampler4x = std::make_unique<yup::Oversampler<float, 4, ydspOversamplerSincRadius>>();
+                    node.oversampler4x = std::make_unique<SincOversampler<float, 4, ydspOversamplerSincRadius>>();
                     node.oversampler4x->prepare (sampleRate, channels, maxBlockSize);
                     break;
 
                 case 8:
-                    node.oversampler8x = std::make_unique<yup::Oversampler<float, 8, ydspOversamplerSincRadius>>();
+                    node.oversampler8x = std::make_unique<SincOversampler<float, 8, ydspOversamplerSincRadius>>();
                     node.oversampler8x->prepare (sampleRate, channels, maxBlockSize);
                     break;
 
@@ -603,7 +602,7 @@ void YdspAudioGraph::reset()
 
 //==============================================================================
 
-void YdspAudioGraph::setMpeZoneLayout (const yup::MPEZoneLayout& layout)
+void YdspAudioGraph::setMpeZoneLayout (const MPEZoneLayout& layout)
 {
     if (pimpl == nullptr)
         return;
@@ -613,7 +612,7 @@ void YdspAudioGraph::setMpeZoneLayout (const yup::MPEZoneLayout& layout)
     for (auto& instrument : pimpl->mpeInstruments)
         instrument->setZoneLayout (layout);
 
-    pimpl->setExpressionTrackingMode (yup::MPEInstrument::lastNotePlayedOnChannel);
+    pimpl->setExpressionTrackingMode (MPEInstrument::lastNotePlayedOnChannel);
 }
 
 void YdspAudioGraph::setLegacyMidiMode (int pitchbendRangeSemitones)
@@ -629,7 +628,7 @@ void YdspAudioGraph::setLegacyMidiMode (int pitchbendRangeSemitones)
         instrument->setLegacyModePitchbendRange (pitchbendRangeSemitones);
     }
 
-    pimpl->setExpressionTrackingMode (yup::MPEInstrument::allNotesOnChannel);
+    pimpl->setExpressionTrackingMode (MPEInstrument::allNotesOnChannel);
 }
 
 //==============================================================================
@@ -780,7 +779,7 @@ YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
         const auto eventInputIndex = static_cast<int> (s);
         auto& instrument = *pimpl->mpeInstruments[static_cast<size_t> (eventInputIndex)];
 
-        for (const yup::MidiMessageMetadata metadata : *midiIn)
+        for (const MidiMessageMetadata metadata : *midiIn)
         {
             const auto message = metadata.getMessage();
 
@@ -803,6 +802,7 @@ YdspProcessResult YdspAudioGraph::process (const YdspProcessRequest& request)
             const auto right = node.pendingAutomation[b].sampleOffset;
             return left != right ? left < right : a < b;
         });
+
         std::sort (node.pendingAllSoundOffOffsets.begin(), node.pendingAllSoundOffOffsets.end());
     }
 

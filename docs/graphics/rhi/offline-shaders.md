@@ -32,25 +32,42 @@ outer build is cross-compiling (Android, iOS, WebAssembly).
 yup_add_shader_bundle(<library_name>
     VERT           <path to .vert file>
     FRAG           <path to .frag file>
+    | COMPUTE      <path to .comp file>
     [OUTPUT_NAME   <basename>]      # default: <library_name>
     [RESOURCE_NAME <symbol>]        # default: <library_name>
     [NAMESPACE     <namespace>]     # default: yup
     [ENTRY         <entry point>]   # default: main
     [GLSL_VERSION  <version>]       # default: 450
+    [BUNDLE_RESOURCE <variable>]    # ship the .ysl as a file instead of embedding it
+    [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
+    [DEPENDS       <file>...]       # extra inputs, e.g. #included files
     [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 ```
 
 | Argument | Default | Description |
 |---|---|---|
 | `<library_name>` | *(required)* | Name of the generated `OBJECT` library (first positional argument). |
-| `VERT` | *(required)* | Path to the vertex shader source. |
-| `FRAG` | *(required)* | Path to the fragment shader source. |
+| `VERT` | *(required without `COMPUTE`)* | Path to the vertex shader source. |
+| `FRAG` | *(required without `COMPUTE`)* | Path to the fragment shader source. |
+| `COMPUTE` | - | Path to a compute shader source, for a compute-only bundle. |
 | `OUTPUT_NAME` | `<library_name>` | Base name for the `.ysl` bundle and generated header. |
 | `RESOURCE_NAME` | `<library_name>` | Symbol base name of the embedded byte array. |
 | `NAMESPACE` | `yup` | C++ namespace wrapping the generated symbols. |
 | `ENTRY` | `main` | Shader entry-point name. |
 | `GLSL_VERSION` | `450` | GLSL version passed to the compiler. |
+| `BUNDLE_RESOURCE` | - | Don't embed: set this variable to `<ysl path>@<BUNDLE_DESTINATION>` for `BUNDLE_RESOURCES` (see [below](#shipping-the-bundle-as-a-file)). |
+| `BUNDLE_DESTINATION` | `<OUTPUT_NAME>.ysl` | Path of the bundle inside the application bundle. |
+| `DEPENDS` | - | Extra input files, such as the ones pulled in with `#include`. |
 | `OPTIONS` | - | Extra flags forwarded verbatim to `yup_shader_bundler` (see [below](#the-yup_shader_bundler-tool)). |
+
+Editing a stage or `DEPENDS` file re-runs the configure step. The bundle is only
+regenerated when the content of those files, the arguments or the
+`yup_shader_bundler` binary changed: a key of all three is stored next to the
+`.ysl` as `<OUTPUT_NAME>.ysl.sha256`.
+
+Stages can share code with `#include "file.glsl"`: enable
+`#extension GL_GOOGLE_include_directive : require` after `#version`, pass the
+include directory with `OPTIONS -I<dir>` and list the included files in `DEPENDS`.
 
 ### Example
 
@@ -77,6 +94,28 @@ This emits a header (`ShaderBundle.h`) declaring the embedded bytes:
 extern const uint8_t     ShaderBundleFile_data[];
 extern const std::size_t ShaderBundleFile_size;
 ```
+
+### Shipping the bundle as a file
+
+Embedding keeps every bundle in the binary. With `BUNDLE_RESOURCE` no library is
+created: the `.ysl` stays in `CMAKE_CURRENT_BINARY_DIR`, and the variable receives
+a `source@destination` pair ready for the `BUNDLE_RESOURCES` of
+`yup_standalone_app`:
+
+```cmake
+yup_add_shader_bundle(particles
+    COMPUTE ${CMAKE_CURRENT_LIST_DIR}/shaders/particles.comp
+    BUNDLE_RESOURCE particles_resource
+    BUNDLE_DESTINATION data/shaders/particles.ysl)
+
+yup_standalone_app(
+    # ...
+    BUNDLE_RESOURCES
+        ${particles_resource})
+```
+
+Load it with `ShaderBundle::loadFromFile`. Bundled resources aren't copied on
+Windows and Linux, so there read the `.ysl` from the build tree.
 
 ## Loading and compiling at runtime
 

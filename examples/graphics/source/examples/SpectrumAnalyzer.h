@@ -48,9 +48,19 @@ public:
     {
         direct,
         resampled,
-        resampledOversampled2x,
-        resampledOversampled4x,
-        resampledOversampled8x
+        oversampled2x,
+        oversampled4x,
+        oversampled8x,
+        oversampled16x,
+        oversampled32x
+    };
+
+    enum class Waveform
+    {
+        sine,
+        triangle,
+        saw,
+        square
     };
 
     SignalGenerator()
@@ -129,6 +139,11 @@ public:
         resetSweepPlaybackState();
     }
 
+    void setWaveform (Waveform newWaveform)
+    {
+        waveform = newWaveform;
+    }
+
     void setSweepParameters (double startFreq, double endFreq, double durationSeconds)
     {
         sweepStartFreq = startFreq;
@@ -148,10 +163,37 @@ public:
         if (output == nullptr || numSamples <= 0)
             return;
 
-        if (signalType == SignalType::frequencySweep && sweepPlaybackMode != SweepPlaybackMode::direct)
+        if (signalType == SignalType::frequencySweep)
         {
-            renderResampledSweepBlock (output, numSamples);
-            return;
+            switch (sweepPlaybackMode)
+            {
+                case SweepPlaybackMode::direct:
+                    break;
+
+                case SweepPlaybackMode::resampled:
+                    renderResampledSweepBlock (output, numSamples);
+                    return;
+
+                case SweepPlaybackMode::oversampled2x:
+                    renderOversampledSweepBlock (oversampler2x, 2, output, numSamples);
+                    return;
+
+                case SweepPlaybackMode::oversampled4x:
+                    renderOversampledSweepBlock (oversampler4x, 4, output, numSamples);
+                    return;
+
+                case SweepPlaybackMode::oversampled8x:
+                    renderOversampledSweepBlock (oversampler8x, 8, output, numSamples);
+                    return;
+
+                case SweepPlaybackMode::oversampled16x:
+                    renderOversampledSweepBlock (oversampler16x, 16, output, numSamples);
+                    return;
+
+                case SweepPlaybackMode::oversampled32x:
+                    renderOversampledSweepBlock (oversampler32x, 32, output, numSamples);
+                    return;
+            }
         }
 
         for (int sample = 0; sample < numSamples; ++sample)
@@ -209,13 +251,17 @@ private:
         resampledBlockCapacity = maxOutputBlockSize + 64;
 
         sourceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
-        silenceBuffer.assign (static_cast<std::size_t> (sourceBlockCapacity), 0.0f);
         resampledBuffer.assign (static_cast<std::size_t> (resampledBlockCapacity), 0.0f);
 
         resampler.prepare (sourceSampleRate, sampleRate, 1, sourceBlockCapacity);
-        oversampler2x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
-        oversampler4x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
-        oversampler8x.prepare (sourceSampleRate, 1, sourceBlockCapacity);
+
+        // The oversampled sweeps decimate straight to the device rate, so the
+        // resampler's alias floor never enters their chain.
+        oversampler2x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler4x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler8x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler16x.prepare (sampleRate, 1, maxOutputBlockSize);
+        oversampler32x.prepare (sampleRate, 1, maxOutputBlockSize);
 
         resetSweepPlaybackState();
     }
@@ -237,6 +283,8 @@ private:
         oversampler2x.reset();
         oversampler4x.reset();
         oversampler8x.reset();
+        oversampler16x.reset();
+        oversampler32x.reset();
     }
 
     void renderResampledSweepBlock (float* output, int numSamples)
@@ -253,7 +301,7 @@ private:
                 const int sourceSamplesNeeded = yup::jmin (sourceBlockCapacity,
                                                            yup::jmax (1, remainingOutputSamples * static_cast<int> (resamplerSourceRateMultiplier) + 32));
 
-                renderSourceSweepBlock (sourceSamplesNeeded);
+                renderWavetableSweepBlock (sourceBuffer.data(), sourceSamplesNeeded, sourceSampleRate);
 
                 const float* inputPtrs[] = { sourceBuffer.data() };
                 float* outputPtrs[] = { resampledBuffer.data() };
@@ -280,46 +328,53 @@ private:
         }
     }
 
-    void renderSourceSweepBlock (int numSamples)
-    {
-        switch (sweepPlaybackMode)
-        {
-            case SweepPlaybackMode::direct:
-            case SweepPlaybackMode::resampled:
-                renderWavetableSweepBlock (sourceBuffer.data(), numSamples, sourceSampleRate);
-                break;
-
-            case SweepPlaybackMode::resampledOversampled2x:
-                renderOversampledSourceBlock (oversampler2x, 2, numSamples);
-                break;
-
-            case SweepPlaybackMode::resampledOversampled4x:
-                renderOversampledSourceBlock (oversampler4x, 4, numSamples);
-                break;
-
-            case SweepPlaybackMode::resampledOversampled8x:
-                renderOversampledSourceBlock (oversampler8x, 8, numSamples);
-                break;
-        }
-    }
-
     template <typename OversamplerType>
-    void renderOversampledSourceBlock (OversamplerType& oversampler, int oversampleFactor, int numSamples)
+    void renderOversampledSweepBlock (OversamplerType& oversampler, int oversampleFactor, float* output, int numSamples)
     {
-        const float* inputPtrs[] = { silenceBuffer.data() };
-        oversampler.upsample (inputPtrs, 1, numSamples);
+        ensurePreparedForBlock (numSamples);
 
-        auto* oversampledData = oversampler.getOversampledChannelData (0);
-        renderWavetableSweepBlock (oversampledData, oversampler.getOversampledNumSamples(), sourceSampleRate * static_cast<double> (oversampleFactor));
+        if (! oversampler.beginGeneration (1, numSamples))
+        {
+            std::fill_n (output, numSamples, 0.0f);
+            return;
+        }
 
-        float* outputPtrs[] = { sourceBuffer.data() };
+        renderWavetableSweepBlock (oversampler.getOversampledChannelData (0),
+                                   oversampler.getOversampledNumSamples(),
+                                   sampleRate * static_cast<double> (oversampleFactor));
+
+        float* outputPtrs[] = { output };
         oversampler.downsample (outputPtrs, 1, numSamples);
+
+        for (int i = 0; i < numSamples; ++i)
+            output[i] *= smoothedAmplitude.getNextValue();
     }
 
     void renderWavetableSweepBlock (float* output, int numSamples, double generationSampleRate)
     {
         for (int i = 0; i < numSamples; ++i)
             output[i] = generateSweepAtRate (generationSampleRate);
+    }
+
+    // Naive shapes read straight from the phase, so the non-sine waveforms alias
+    // and make the sweep oversampling modes audible and visible.
+    float readWaveform() const
+    {
+        const auto position = static_cast<float> (phase);
+
+        switch (waveform)
+        {
+            case Waveform::triangle:
+                return 1.0f - 4.0f * std::abs (position - 0.5f);
+            case Waveform::saw:
+                return 2.0f * position - 1.0f;
+            case Waveform::square:
+                return position < 0.5f ? 1.0f : -1.0f;
+            case Waveform::sine:
+                break;
+        }
+
+        return readSineTable();
     }
 
     float readSineTable() const
@@ -344,7 +399,7 @@ private:
 
     float generateSine (double freq)
     {
-        float sample = readSineTable();
+        float sample = readWaveform();
         advancePhase (freq, sampleRate);
 
         return sample;
@@ -359,7 +414,7 @@ private:
     {
         // Linear frequency sweep
         double currentFreq = sweepStartFreq + (sweepEndFreq - sweepStartFreq) * sweepProgress;
-        float sample = readSineTable();
+        float sample = readWaveform();
         advancePhase (currentFreq, generationSampleRate);
 
         // Update sweep progress
@@ -418,6 +473,7 @@ private:
 
     SignalType signalType;
     SweepPlaybackMode sweepPlaybackMode;
+    Waveform waveform = Waveform::sine;
 
     // Sweep parameters
     double sweepStartFreq, sweepEndFreq, sweepDurationSeconds;
@@ -434,11 +490,12 @@ private:
 
     // Resampling state
     yup::ResamplerFloat resampler;
-    yup::Oversampler2xFloat oversampler2x;
-    yup::Oversampler4xFloat oversampler4x;
-    yup::Oversampler8xFloat oversampler8x;
+    yup::SincOversampler<float, 2, 16> oversampler2x;
+    yup::SincOversampler<float, 4, 16> oversampler4x;
+    yup::SincOversampler<float, 8, 16> oversampler8x;
+    yup::SincOversampler<float, 16, 16> oversampler16x;
+    yup::SincOversampler<float, 32, 16> oversampler32x;
     std::vector<float> sourceBuffer;
-    std::vector<float> silenceBuffer;
     std::vector<float> resampledBuffer;
     int maxOutputBlockSize = 0;
     int sourceBlockCapacity = 0;
@@ -466,8 +523,6 @@ public:
         if (numFrames <= 0)
             return false;
 
-        // Decode the whole file into an AudioBuffer, then downmix to mono
-        // floats so playback is an indexed read.
         yup::AudioBuffer<float> decoded (numChannels, static_cast<int> (numFrames));
         if (! newReader->read (&decoded, 0, static_cast<int> (numFrames), 0, true, numChannels > 1))
             return false;
@@ -724,16 +779,31 @@ private:
         signalTypeCombo->addItem ("Sweep 2x", 4);
         signalTypeCombo->addItem ("Sweep 4x", 5);
         signalTypeCombo->addItem ("Sweep 8x", 6);
-        signalTypeCombo->addItem ("White Noise", 7);
-        signalTypeCombo->addItem ("Pink Noise", 8);
-        signalTypeCombo->addItem ("Brown Noise", 9);
-        signalTypeCombo->addItem ("Audio File", 10);
+        signalTypeCombo->addItem ("Sweep 16x", 7);
+        signalTypeCombo->addItem ("Sweep 32x", 8);
+        signalTypeCombo->addItem ("White Noise", 9);
+        signalTypeCombo->addItem ("Pink Noise", 10);
+        signalTypeCombo->addItem ("Brown Noise", 11);
+        signalTypeCombo->addItem ("Audio File", 12);
         signalTypeCombo->setSelectedId (3);
         signalTypeCombo->onSelectedItemChanged = [this]
         {
             updateSignalType();
         };
         addAndMakeVisible (*signalTypeCombo);
+
+        // Waveform selector (tone and sweep sources)
+        waveformCombo = std::make_unique<yup::ComboBox> ("Waveform");
+        waveformCombo->addItem ("Sine", 1);
+        waveformCombo->addItem ("Triangle", 2);
+        waveformCombo->addItem ("Saw", 3);
+        waveformCombo->addItem ("Square", 4);
+        waveformCombo->setSelectedId (1);
+        waveformCombo->onSelectedItemChanged = [this]
+        {
+            updateWaveform();
+        };
+        addAndMakeVisible (*waveformCombo);
 
         // Frequency control
         frequencySlider = std::make_unique<yup::Slider> (yup::Slider::LinearHorizontal, "Frequency");
@@ -935,7 +1005,7 @@ private:
         // Create parameter labels with proper font sizing
         auto labelFont = font.withHeight (12.0f);
 
-        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:" })
+        for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
@@ -1019,6 +1089,7 @@ private:
         auto releaseSection = row3.removeFromLeft (colWidth);
         auto overlapSection = row3.removeFromLeft (colWidth);
         auto levelModeSection = row3.removeFromLeft (colWidth);
+        auto waveformSection = row3.removeFromLeft (colWidth);
 
         parameterLabels[9]->setBounds (releaseSection.removeFromTop (labelHeight));
         releaseSlider->setBounds (releaseSection.removeFromTop (controlHeight));
@@ -1028,6 +1099,9 @@ private:
 
         parameterLabels[12]->setBounds (levelModeSection.removeFromTop (labelHeight));
         levelModeCombo->setBounds (levelModeSection.removeFromTop (controlHeight));
+
+        parameterLabels[13]->setBounds (waveformSection.removeFromTop (labelHeight));
+        waveformCombo->setBounds (waveformSection.removeFromTop (controlHeight));
 
         // Fourth row: Status labels
         auto row4 = bounds.removeFromTop (30);
@@ -1046,13 +1120,7 @@ private:
     {
         formatManager.registerDefaultFormats();
 
-        auto dataDir = yup::File (__FILE__)
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getParentDirectory()
-                           .getChildFile ("data");
-
-        auto audioFile = dataDir.getChildFile ("break_boomblastic_92bpm.mp3");
+        auto audioFile = getAssetPath ("data/audio/break_boomblastic_92bpm.mp3");
         if (audioFile.existsAsFile())
             filePlayer.load (formatManager, audioFile);
     }
@@ -1077,23 +1145,31 @@ private:
                 break;
             case 4:
                 signalType = SignalGenerator::SignalType::frequencySweep;
-                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled2x;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::oversampled2x;
                 break;
             case 5:
                 signalType = SignalGenerator::SignalType::frequencySweep;
-                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled4x;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::oversampled4x;
                 break;
             case 6:
                 signalType = SignalGenerator::SignalType::frequencySweep;
-                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::resampledOversampled8x;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::oversampled8x;
                 break;
             case 7:
-                signalType = SignalGenerator::SignalType::whiteNoise;
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::oversampled16x;
                 break;
             case 8:
-                signalType = SignalGenerator::SignalType::pinkNoise;
+                signalType = SignalGenerator::SignalType::frequencySweep;
+                sweepPlaybackMode = SignalGenerator::SweepPlaybackMode::oversampled32x;
                 break;
             case 9:
+                signalType = SignalGenerator::SignalType::whiteNoise;
+                break;
+            case 10:
+                signalType = SignalGenerator::SignalType::pinkNoise;
+                break;
+            case 11:
                 signalType = SignalGenerator::SignalType::brownNoise;
                 break;
         }
@@ -1101,7 +1177,7 @@ private:
         // The "Audio File" source plays the pre-decoded mp3 through the file
         // player instead of the signal generator (loaded in the constructor, so
         // it is immutable while the audio callback reads it).
-        useAudioFile = (signalTypeCombo->getSelectedId() == 10);
+        useAudioFile = (signalTypeCombo->getSelectedId() == 12);
 
         updateSignalGenerator ([signalType, sweepPlaybackMode] (SignalGenerator& generator)
         {
@@ -1112,6 +1188,33 @@ private:
         // Enable/disable frequency and sweep controls based on signal type
         frequencySlider->setEnabled (signalType == SignalGenerator::SignalType::singleTone);
         sweepDurationSlider->setEnabled (signalType == SignalGenerator::SignalType::frequencySweep);
+        waveformCombo->setEnabled (signalType == SignalGenerator::SignalType::singleTone
+                                   || signalType == SignalGenerator::SignalType::frequencySweep);
+    }
+
+    void updateWaveform()
+    {
+        auto waveform = SignalGenerator::Waveform::sine;
+
+        switch (waveformCombo->getSelectedId())
+        {
+            case 2:
+                waveform = SignalGenerator::Waveform::triangle;
+                break;
+            case 3:
+                waveform = SignalGenerator::Waveform::saw;
+                break;
+            case 4:
+                waveform = SignalGenerator::Waveform::square;
+                break;
+            default:
+                break;
+        }
+
+        updateSignalGenerator ([waveform] (SignalGenerator& generator)
+        {
+            generator.setWaveform (waveform);
+        });
     }
 
     void updateFFTSize()
@@ -1284,6 +1387,7 @@ private:
 
     // Signal controls
     std::unique_ptr<yup::ComboBox> signalTypeCombo;
+    std::unique_ptr<yup::ComboBox> waveformCombo;
     std::unique_ptr<yup::Slider> frequencySlider;
     std::unique_ptr<yup::Slider> amplitudeSlider;
     std::unique_ptr<yup::Slider> sweepDurationSlider;

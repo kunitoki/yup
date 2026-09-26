@@ -216,6 +216,7 @@
 #include <sys/sysinfo.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/vfs.h>
 #include <sys/wait.h>
 #include <sys/timerfd.h>
@@ -253,6 +254,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/user.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <utime.h>
 #include <poll.h>

@@ -91,10 +91,10 @@ static String getLocaleValue (bool isRegion)
     return yupString (LocalRef<jstring> ((jstring) stringResult));
 }
 
-static String getAndroidOsBuildValue (const char* fieldName)
+static String getAndroidOsBuildValue (jclass buildClass, const char* fieldName)
 {
     return yupString (LocalRef<jstring> ((jstring) getEnv()->GetStaticObjectField (
-        AndroidBuild, getEnv()->GetStaticFieldID (AndroidBuild, fieldName, "Ljava/lang/String;"))));
+        buildClass, getEnv()->GetStaticFieldID (buildClass, fieldName, "Ljava/lang/String;"))));
 }
 } // namespace AndroidStatsHelpers
 
@@ -111,18 +111,17 @@ String SystemStats::getOperatingSystemName()
 
 String SystemStats::getOperatingSystemVersionString()
 {
-    return AndroidStatsHelpers::getSystemProperty ("os.version");
+    return AndroidStatsHelpers::getAndroidOsBuildValue (AndroidBuildVersion, "RELEASE");
 }
 
 String SystemStats::getDeviceDescription()
 {
-    return AndroidStatsHelpers::getAndroidOsBuildValue ("MODEL")
-         + "-" + AndroidStatsHelpers::getAndroidOsBuildValue ("SERIAL");
+    return AndroidStatsHelpers::getAndroidOsBuildValue (AndroidBuild, "MODEL");
 }
 
 String SystemStats::getDeviceManufacturer()
 {
-    return AndroidStatsHelpers::getAndroidOsBuildValue ("MANUFACTURER");
+    return AndroidStatsHelpers::getAndroidOsBuildValue (AndroidBuild, "MANUFACTURER");
 }
 
 bool SystemStats::isOperatingSystem64Bit()
@@ -130,7 +129,17 @@ bool SystemStats::isOperatingSystem64Bit()
 #if YUP_64BIT
     return true;
 #else
-    return false;
+    // A 64-bit kernel may still run a 32-bit only userland, so ask for the supported ABIs
+    static const bool result = []
+    {
+        auto* env = getEnv();
+        const auto fieldId = env->GetStaticFieldID (AndroidBuild, "SUPPORTED_64_BIT_ABIS", "[Ljava/lang/String;");
+        const LocalRef<jobjectArray> abis ((jobjectArray) env->GetStaticObjectField (AndroidBuild, fieldId));
+
+        return abis != nullptr && env->GetArrayLength (abis.get()) > 0;
+    }();
+
+    return result;
 #endif
 }
 

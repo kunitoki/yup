@@ -115,7 +115,7 @@ ResultValue<GpuComputePipeline::Ptr> GpuComputePipeline::compileFromBundle (GpuD
     GpuShaderSource source;
     source.language = targetLang;
     source.code = gpuShaderSourceBytes (shader->source);
-    source.entryPoint = shader->entryPoint;
+    source.entryPoint = (targetLang == GpuShaderLanguage::msl && shader->entryPoint == "main") ? String ("main0") : shader->entryPoint;
 
     GpuWorkgroupSize wgs = workgroupSize;
     if (wgs.x == 1 && wgs.y == 1 && wgs.z == 1)
