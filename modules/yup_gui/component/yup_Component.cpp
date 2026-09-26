@@ -1710,6 +1710,8 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
 {
     const auto toTopLevel = getTransformToTopLevelComponent();
 
+    // The clip region is in top-level coordinates, while the parent's drawing area is still set
+    g.setDrawingArea ({});
     g.setTransform (AffineTransform::identity());
 
     if (! options.unclippedRendering)

@@ -547,19 +547,6 @@ void Drawable::paintElement (Graphics& g,
         }
     }
 
-    const auto setViewportClip = [&g] (const Rectangle<float>& viewportBounds)
-    {
-        Path viewportClip;
-        viewportClip.addRectangle (viewportBounds);
-        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-        auto transformedViewportClip = viewportClip.transformed (clipTransform);
-
-        const auto savedClipTransform = g.getTransform();
-        g.setTransform (AffineTransform::identity());
-        g.setClipPath (transformedViewportClip);
-        g.setTransform (savedClipTransform);
-    };
-
     if (element.viewBox && (element.viewportBounds || element.viewportSize))
     {
         auto viewport = element.viewportBounds != std::nullopt
@@ -569,7 +556,7 @@ void Drawable::paintElement (Graphics& g,
         auto viewportTransform = calculateTransformForTarget (*element.viewBox, viewport, element.preserveAspectRatioFitting, element.preserveAspectRatioJustification);
         if (element.tagName == "svg" && element.viewportBounds)
         {
-            setViewportClip (*element.viewportBounds);
+            g.setClipPath (*element.viewportBounds);
             viewportTransform = viewportTransform.followedBy (AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY()));
         }
 
@@ -578,7 +565,7 @@ void Drawable::paintElement (Graphics& g,
     }
     else if (element.tagName == "svg" && element.viewportBounds)
     {
-        setViewportClip (*element.viewportBounds);
+        g.setClipPath (*element.viewportBounds);
         auto viewportTransform = AffineTransform::translation (element.viewportBounds->getX(), element.viewportBounds->getY());
         g.setTransform (viewportTransform.followedBy (g.getTransform()));
     }
@@ -653,17 +640,6 @@ void Drawable::paintElement (Graphics& g,
 
             const auto clipBounds = clipObjectBounds.value_or (Rectangle<float>());
 
-            const auto setClipPath = [&] (const Path& shape)
-            {
-                auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-                auto transformedClipPath = shape.transformed (clipTransform);
-
-                const auto savedClipTransform = g.getTransform();
-                g.setTransform (AffineTransform::identity());
-                g.setClipPath (transformedClipPath);
-                g.setTransform (savedClipTransform);
-            };
-
             // If the clipPath itself has a nested clip-path, apply it first (intersection)
             if (clipPath->clipPathUrl)
             {
@@ -672,7 +648,7 @@ void Drawable::paintElement (Graphics& g,
                     auto nestedClipShape = buildClipShape (*nestedClipPath, clipBounds);
                     if (! nestedClipShape.isEmpty())
                     {
-                        setClipPath (nestedClipShape);
+                        g.setClipPath (nestedClipShape);
                         hasClipping = true;
                     }
                 }
@@ -682,7 +658,7 @@ void Drawable::paintElement (Graphics& g,
             auto clipShape = buildClipShape (*clipPath, clipBounds);
             if (! clipShape.isEmpty())
             {
-                setClipPath (clipShape);
+                g.setClipPath (clipShape);
                 hasClipping = true;
             }
         }
@@ -735,15 +711,7 @@ void Drawable::paintElement (Graphics& g,
             }
 
             if (! combinedMaskPath.isEmpty())
-            {
-                auto maskClipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-                auto transformedMaskPath = combinedMaskPath.transformed (maskClipTransform);
-
-                const auto savedMaskTransform = g.getTransform();
-                g.setTransform (AffineTransform::identity());
-                g.setClipPath (transformedMaskPath);
-                g.setTransform (savedMaskTransform);
-            }
+                g.setClipPath (combinedMaskPath);
         }
     }
 
@@ -1216,14 +1184,7 @@ void Drawable::paintPatternFill (Graphics& g,
     const auto savedState = g.saveState();
 
     // Clip rendering to the filled shape
-    {
-        auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-        auto transformedShape = shape.transformed (clipTransform);
-        const auto savedClipTransform = g.getTransform();
-        g.setTransform (AffineTransform::identity());
-        g.setClipPath (transformedShape);
-        g.setTransform (savedClipTransform);
-    }
+    g.setClipPath (shape);
 
     if (! pattern.patternTransform.isIdentity())
         g.addTransform (pattern.patternTransform);

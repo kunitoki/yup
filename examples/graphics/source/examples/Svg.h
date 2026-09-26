@@ -53,14 +53,9 @@ public:
 private:
     void updateListOfSvgFiles()
     {
-        yup::File riveBasePath = yup::File (__FILE__)
-                                     .getParentDirectory()
-                                     .getParentDirectory()
-                                     .getParentDirectory();
+        dataDirectory = getAssetPath ("data");
 
-        dataDirectory = riveBasePath.getChildFile ("data");
-
-        auto files = riveBasePath.getChildFile ("data/svg").findChildFiles (yup::File::findFiles, false, "*.svg");
+        auto files = dataDirectory.getChildFile ("svg").findChildFiles (yup::File::findFiles, false, "*.svg");
         if (files.isEmpty())
             return;
 

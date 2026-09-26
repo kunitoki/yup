@@ -90,6 +90,19 @@ String SystemStats::getOperatingSystemVersionString()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
+#if YUP_EMSCRIPTEN
+    const int hostIs64Bit = EM_ASM_INT ({
+        if ((typeof process !== 'undefined') && process.arch)
+            return /64|s390x/.test (process.arch) ? 1 : 0;
+        if ((typeof navigator !== 'undefined') && navigator.userAgent)
+            return /Win64|WOW64|x86_64|x64|amd64|aarch64|arm64|Macintosh|iPhone|iPad/i.test (navigator.userAgent) ? 1 : -1;
+        return -1;
+    });
+
+    if (hostIs64Bit >= 0)
+        return hostIs64Bit != 0;
+#endif
+
     return sizeof (void*) == 8;
 }
 

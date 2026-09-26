@@ -113,19 +113,9 @@ static String getOSXVersion()
 {
     YUP_AUTORELEASEPOOL
     {
-        const auto* dict = []
-        {
-            const String systemVersionPlist("/System/Library/CoreServices/SystemVersion.plist");
-
-            if (@available(macOS 10.13, *))
-            {
-                NSError* error = nullptr;
-                return [NSDictionary dictionaryWithContentsOfURL:createNSURLFromFile(systemVersionPlist)
-                                                           error:&error];
-            }
-
-            return [NSDictionary dictionaryWithContentsOfFile:yupStringToNS(systemVersionPlist)];
-        }();
+        NSError* error = nullptr;
+        const auto* dict = [NSDictionary dictionaryWithContentsOfURL:createNSURLFromFile("/System/Library/CoreServices/SystemVersion.plist")
+                                                               error:&error];
 
         if (dict != nullptr)
             return nsStringToYup([dict objectForKey:nsStringLiteral("ProductVersion")]);
@@ -163,9 +153,18 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
             return MacOS_13;
         case 14:
             return MacOS_14;
+        case 15:
+            return MacOS_15;
+        case 16: // Tahoe as reported to binaries linked against a pre-26 SDK
+        case 26:
+            return MacOS_26;
+        case 27:
+            return MacOS_27;
     }
 
-    return MacOSX;
+    // Unknown future release: add it to the enum, but keep ordering checks working meanwhile
+    jassert(major < 16);
+    return major >= 16 ? MacOS_27 : MacOSX;
 #endif
 }
 
@@ -174,7 +173,7 @@ String SystemStats::getOperatingSystemName()
 #if YUP_IOS
     return "iOS " + nsStringToYup([[UIDevice currentDevice] systemVersion]);
 #else
-    return "Mac OSX " + getOSXVersion();
+    return "macOS " + getOSXVersion();
 #endif
 }
 
@@ -219,11 +218,7 @@ String SystemStats::getDeviceManufacturer()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-#if YUP_IOS
-    return false;
-#else
     return true;
-#endif
 }
 
 int SystemStats::getMemorySizeInMegabytes()

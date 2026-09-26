@@ -376,19 +376,35 @@ public:
     //==============================================================================
     /** Sets the clip path for subsequent drawing operations.
 
-        @param clipRect The rectangle to clip to.
+        The rectangle is in the current local coordinates, exactly like the coordinates passed to
+        the drawing calls. See setClipPath (const Path&) for the details.
+
+        @param clipRect The rectangle to clip to, in local coordinates.
     */
     void setClipPath (const Rectangle<float>& clipRect);
 
     /** Sets the clip path for subsequent drawing operations.
 
-        @param clipPath The path to clip to.
+        The path is in the current local coordinates, exactly like the coordinates passed to the
+        drawing calls: it is mapped by the current transform, the drawing area offset and the
+        context scale at the time of the call. Changing the transform or the drawing area
+        afterwards does not move the clip.
+
+        The new clip intersects with any clip already in effect, until the state is restored
+        (see saveState()).
+
+        @param clipPath The path to clip to, in local coordinates.
     */
     void setClipPath (const Path& clipPath);
 
-    /** Retrieves the current clip path.
+    /** Retrieves the last clip path set with setClipPath().
 
-        @return The current clip path.
+        The path is returned in the current local coordinates, so if the transform or the drawing
+        area changed since the clip was set, the path is mapped into the new space. It is only the
+        last clip set, not the intersection of all the clips currently in effect.
+
+        @return The last clip path set, or an empty path if the current transform is not
+                invertible.
     */
     Path getClipPath() const;
 
@@ -729,12 +745,6 @@ private:
             return drawingArea;
         }
 
-        AffineTransform getLocalTransform() const noexcept
-        {
-            return transform
-                .scaled (scale);
-        }
-
         AffineTransform getTransform() const noexcept
         {
             return transform
@@ -769,6 +779,7 @@ private:
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;
+        AffineTransform clipTransform;
         BlendMode blendMode = BlendMode::SrcOver;
         float opacity = 1.0f;
         bool isCurrentFillColor = true;

@@ -99,22 +99,10 @@ void countPrecompReferences (const AnimationComposition& comp,
     }
 }
 
-/** Pushes @p clipPath as the clip in effect, interpreting it in the current
-    transform. Callers must have saved the Graphics state, which owns the clip
-    until it is restored. */
-void pushClipPath (Graphics& g, const Path& clipPath)
-{
-    const auto savedTransform = g.getTransform();
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (clipPath);
-    g.setTransform (savedTransform);
-}
-
 /** Culls everything drawn until the caller's saved Graphics state is restored. */
 void pushEmptyClip (Graphics& g)
 {
-    pushClipPath (g, Path());
+    g.setClipPath (Path());
 }
 
 /** Clips @p clipRect, given in composition space, into the current transform and
@@ -130,20 +118,7 @@ void pushEmptyClip (Graphics& g)
 */
 bool applyViewportClip (Graphics& g, Rectangle<float> clipRect)
 {
-    if (clipRect.getWidth() <= 0.0f || clipRect.getHeight() <= 0.0f)
-    {
-        pushEmptyClip (g);
-        return false;
-    }
-
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-
-    Path viewportClip;
-    viewportClip.addRectangle (clipRect);
-    auto transformedViewportClip = viewportClip.transformed (clipTransform);
-
-    const auto viewportBounds = transformedViewportClip.getBounds();
-    if (transformedViewportClip.isEmpty() || viewportBounds.getWidth() <= 0.0f || viewportBounds.getHeight() <= 0.0f)
+    if (clipRect.getWidth() <= 0.0f || clipRect.getHeight() <= 0.0f || g.getTransform().getDeterminant() == 0.0f)
     {
         pushEmptyClip (g);
         return false;
@@ -155,17 +130,17 @@ bool applyViewportClip (Graphics& g, Rectangle<float> clipRect)
         const auto currentBounds = currentClipPath.getBounds();
 
         if (currentBounds.getWidth() <= 0.0f || currentBounds.getHeight() <= 0.0f
-            || ! currentBounds.intersects (viewportBounds))
+            || ! currentBounds.intersects (clipRect))
         {
             pushEmptyClip (g);
             return false;
         }
 
-        if (viewportBounds.contains (currentBounds))
+        if (clipRect.contains (currentBounds))
             return true;
     }
 
-    pushClipPath (g, transformedViewportClip);
+    g.setClipPath (clipRect);
     return true;
 }
 
@@ -181,15 +156,15 @@ bool applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool al
     if (clipPath.isEmpty() && ! allowEmpty)
         return true;
 
-    const auto clipTransform = g.getTransform().translated (g.getDrawingArea().getTopLeft());
-    auto transformedClipPath = clipPath.transformed (clipTransform);
-
-    const auto clipBounds = transformedClipPath.getBounds();
-    if (transformedClipPath.isEmpty() || clipBounds.getWidth() <= 0.0f || clipBounds.getHeight() <= 0.0f)
+    const auto clipBounds = clipPath.getBounds();
+    if (clipPath.isEmpty() || clipBounds.getWidth() <= 0.0f || clipBounds.getHeight() <= 0.0f
+        || g.getTransform().getDeterminant() == 0.0f)
     {
         pushEmptyClip (g);
         return false;
     }
+
+    auto effectiveClipPath = clipPath;
 
     const auto currentClipPath = g.getClipPath();
     if (! currentClipPath.isEmpty())
@@ -203,13 +178,13 @@ bool applyClipPathInCurrentTransform (Graphics& g, const Path& clipPath, bool al
             return false;
         }
 
-        transformedClipPath = currentClipPath.combinedWith (transformedClipPath, Path::BooleanOperation::Intersect);
+        effectiveClipPath = currentClipPath.combinedWith (clipPath, Path::BooleanOperation::Intersect);
     }
 
-    if (transformedClipPath.isEmpty())
+    if (effectiveClipPath.isEmpty())
         return false;
 
-    pushClipPath (g, transformedClipPath);
+    g.setClipPath (effectiveClipPath);
     return true;
 }
 

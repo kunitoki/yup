@@ -65,30 +65,38 @@ function (_yup_build_shader_bundler_tool output_variable)
     list (LENGTH candidate_exes num_candidates)
 
     if (num_candidates EQUAL 0)
-        message (FATAL_ERROR "Failed to locate built shader bundler tool in ${tool_build_dir}")
+        _yup_message (FATAL_ERROR "Failed to locate built shader bundler tool in ${tool_build_dir}")
     endif()
 
     list (GET candidate_exes 0 tool_exe)
 
+    file (SHA256 "${tool_exe}" tool_hash)
     set_property (GLOBAL PROPERTY YUP_SHADER_BUNDLER_EXECUTABLE "${tool_exe}")
+    set_property (GLOBAL PROPERTY YUP_SHADER_BUNDLER_SHA256 "${tool_hash}")
     _yup_message (STATUS " * shader bundler executable: ${tool_exe}")
 
     set (${output_variable} "${tool_exe}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
-# Compiles a vertex/fragment GLSL shader pair into a .ysl bundle (at configure
-# time) and embeds it into an OBJECT library that can be linked into a target.
+# Compiles a vertex/fragment GLSL shader pair, or a compute shader, into a .ysl
+# bundle (at configure time) and embeds it into an OBJECT library that can be
+# linked into a target. The bundle is only regenerated when the tool, the
+# arguments or the content of a stage or DEPENDS file changed.
 #
 # Usage:
 #   yup_add_shader_bundle (<library_name>
 #       VERT           <path to .vert file>
 #       FRAG           <path to .frag file>
+#       | COMPUTE      <path to .comp file>
 #       [OUTPUT_NAME   <basename>]      # default: <library_name>
 #       [RESOURCE_NAME <symbol>]        # default: <library_name>
 #       [NAMESPACE     <namespace>]     # default: yup
 #       [ENTRY         <entry point>]   # default: main
 #       [GLSL_VERSION  <version>]       # default: 450
+#       [BUNDLE_RESOURCE <variable>]    # don't embed, see below
+#       [BUNDLE_DESTINATION <path>]     # default: <OUTPUT_NAME>.ysl
+#       [DEPENDS       <file>...]       # extra inputs, e.g. #included files
 #       [OPTIONS       <flag>...])      # extra flags forwarded to yup_shader_bundler
 #
 # OPTIONS forwards any additional yup_shader_bundler flags verbatim, e.g.
@@ -99,19 +107,24 @@ endfunction()
 #     extern const uint8_t  <RESOURCE_NAME>_data[];
 #     extern const size_t   <RESOURCE_NAME>_size;
 # The bytes can be loaded at runtime with ShaderBundle::loadFromData().
+#
+# With BUNDLE_RESOURCE no library is created: the .ysl is left in
+# CMAKE_CURRENT_BINARY_DIR and <variable> is set to "<ysl path>@<BUNDLE_DESTINATION>",
+# ready to be passed to the BUNDLE_RESOURCES of yup_standalone_app. Load it at
+# runtime with ShaderBundle::loadFromFile().
 
 function (yup_add_shader_bundle library_name)
     set (options "")
-    set (one_value_args VERT FRAG OUTPUT_NAME RESOURCE_NAME NAMESPACE ENTRY GLSL_VERSION)
-    set (multi_value_args OPTIONS)
+    set (one_value_args VERT FRAG COMPUTE OUTPUT_NAME RESOURCE_NAME NAMESPACE ENTRY GLSL_VERSION BUNDLE_RESOURCE BUNDLE_DESTINATION)
+    set (multi_value_args OPTIONS DEPENDS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    if (NOT YUP_ARG_VERT)
-        message (FATAL_ERROR "yup_add_shader_bundle: VERT argument is required")
+    if (YUP_ARG_COMPUTE AND (YUP_ARG_VERT OR YUP_ARG_FRAG))
+        _yup_message (FATAL_ERROR "yup_add_shader_bundle: COMPUTE can't be combined with VERT or FRAG")
     endif()
-    if (NOT YUP_ARG_FRAG)
-        message (FATAL_ERROR "yup_add_shader_bundle: FRAG argument is required")
+    if (NOT YUP_ARG_COMPUTE AND NOT (YUP_ARG_VERT AND YUP_ARG_FRAG))
+        _yup_message (FATAL_ERROR "yup_add_shader_bundle: either VERT and FRAG, or COMPUTE, are required")
     endif()
 
     _yup_set_default (YUP_ARG_OUTPUT_NAME "${library_name}")
@@ -119,32 +132,81 @@ function (yup_add_shader_bundle library_name)
     _yup_set_default (YUP_ARG_NAMESPACE "yup")
     _yup_set_default (YUP_ARG_ENTRY "main")
     _yup_set_default (YUP_ARG_GLSL_VERSION "450")
+    _yup_set_default (YUP_ARG_BUNDLE_DESTINATION "${YUP_ARG_OUTPUT_NAME}.ysl")
 
-    get_filename_component (vert_path "${YUP_ARG_VERT}" ABSOLUTE)
-    get_filename_component (frag_path "${YUP_ARG_FRAG}" ABSOLUTE)
+    set (stage_args "")
+    set (stage_paths "")
+    set (stage_arg_names VERT FRAG COMPUTE)
+    set (stage_names vertex fragment compute)
+    foreach (stage_arg stage IN ZIP_LISTS stage_arg_names stage_names)
+        if (NOT YUP_ARG_${stage_arg})
+            continue()
+        endif()
 
-    if (NOT EXISTS "${vert_path}")
-        message (FATAL_ERROR "yup_add_shader_bundle: vertex shader not found: ${vert_path}")
-    endif()
-    if (NOT EXISTS "${frag_path}")
-        message (FATAL_ERROR "yup_add_shader_bundle: fragment shader not found: ${frag_path}")
-    endif()
+        get_filename_component (stage_path "${YUP_ARG_${stage_arg}}" ABSOLUTE)
+        if (NOT EXISTS "${stage_path}")
+            _yup_message (FATAL_ERROR "yup_add_shader_bundle: ${stage} shader not found: ${stage_path}")
+        endif()
+
+        list (APPEND stage_args --stage ${stage} "${stage_path}")
+        list (APPEND stage_paths "${stage_path}")
+    endforeach()
+
+    set (depend_paths "")
+    foreach (depend IN LISTS YUP_ARG_DEPENDS)
+        get_filename_component (depend_path "${depend}" ABSOLUTE)
+        if (NOT EXISTS "${depend_path}")
+            _yup_message (FATAL_ERROR "yup_add_shader_bundle: dependency not found: ${depend_path}")
+        endif()
+
+        list (APPEND depend_paths "${depend_path}")
+    endforeach()
+
+    # ==== Re-run the configure step when an input changes
+    set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${stage_paths} ${depend_paths})
 
     # ==== Ensure the host tool is available (built and cached once)
     _yup_build_shader_bundler_tool (shader_bundler_exe)
 
-    # ==== Generate the .ysl bundle at configure time
+    # ==== Generate the .ysl bundle at configure time, unless tool, arguments and inputs are unchanged
     set (bundle_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUTPUT_NAME}.ysl")
+    set (bundle_key_path "${bundle_path}.sha256")
 
-    _yup_message (STATUS "Generating shader bundle ${bundle_path}")
-    _yup_execute_process_or_fail (
+    set (bundler_command
         "${shader_bundler_exe}"
-            --vert "${vert_path}"
-            --frag "${frag_path}"
+            ${stage_args}
             --output "${bundle_path}"
             --entry "${YUP_ARG_ENTRY}"
             --glsl-version "${YUP_ARG_GLSL_VERSION}"
             ${YUP_ARG_OPTIONS})
+
+    get_property (bundle_key GLOBAL PROPERTY YUP_SHADER_BUNDLER_SHA256)
+    string (APPEND bundle_key "${bundler_command}")
+    foreach (input_path IN LISTS stage_paths depend_paths)
+        file (SHA256 "${input_path}" input_hash)
+        string (APPEND bundle_key "${input_path}=${input_hash}")
+    endforeach()
+    string (SHA256 bundle_key "${bundle_key}")
+
+    set (previous_bundle_key "")
+    if (EXISTS "${bundle_path}" AND EXISTS "${bundle_key_path}")
+        file (READ "${bundle_key_path}" previous_bundle_key)
+    endif()
+
+    if (bundle_key STREQUAL previous_bundle_key)
+        _yup_message (STATUS "Shader bundle ${bundle_path} is up to date")
+    else()
+        _yup_message (STATUS "Generating shader bundle ${bundle_path}")
+        file (REMOVE "${bundle_key_path}")
+        _yup_execute_process_or_fail (${bundler_command})
+        file (WRITE "${bundle_key_path}" "${bundle_key}")
+    endif()
+
+    # ==== Hand the bundle over to BUNDLE_RESOURCES instead of embedding it
+    if (YUP_ARG_BUNDLE_RESOURCE)
+        set (${YUP_ARG_BUNDLE_RESOURCE} "${bundle_path}@${YUP_ARG_BUNDLE_DESTINATION}" PARENT_SCOPE)
+        return()
+    endif()
 
     # ==== Embed the generated bundle into an object library
     yup_add_embedded_binary_resources (

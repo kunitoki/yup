@@ -707,17 +707,31 @@ void Graphics::setClipPath (const Path& clipPath)
     auto& options = currentRenderOptions();
 
     options.clipPath = clipPath;
+    options.clipTransform = options.getTransform();
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
     renderPath->fillRule (clipPath.isUsingNonZeroWinding() ? rive::FillRule::nonZero : rive::FillRule::evenOdd);
-    renderPath->addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
+    renderPath->addRenderPath (clipPath.getRenderPath(), options.clipTransform.toMat2D());
 
     renderer.clipPath (renderPath.get());
 }
 
 Path Graphics::getClipPath() const
 {
-    return currentRenderOptions().clipPath;
+    const auto& options = currentRenderOptions();
+
+    if (options.clipPath.isEmpty())
+        return {};
+
+    const auto transform = options.getTransform();
+
+    if (transform == options.clipTransform)
+        return options.clipPath;
+
+    if (transform.getDeterminant() == 0.0f)
+        return {};
+
+    return options.clipPath.transformed (options.clipTransform.followedBy (transform.inverted()));
 }
 
 //==============================================================================

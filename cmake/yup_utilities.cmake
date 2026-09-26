@@ -298,7 +298,7 @@ endfunction()
 
 function (_yup_merge_plist original_plist subset_xml_string output_plist)
     if (NOT EXISTS "${original_plist}")
-        message (FATAL_ERROR "Original plist file does not exist: ${original_plist}")
+        _yup_message (FATAL_ERROR "Original plist file does not exist: ${original_plist}")
     endif()
 
     file (COPY "${original_plist}" DESTINATION "${output_plist}")
@@ -312,7 +312,7 @@ function (_yup_merge_plist original_plist subset_xml_string output_plist)
         ERROR_VARIABLE error_message)
 
     if (NOT result EQUAL 0)
-        message (FATAL_ERROR "Failed to merge plist: ${error_message}")
+        _yup_message (FATAL_ERROR "Failed to merge plist: ${error_message}")
     endif()
 
     file (REMOVE "${temp_plist}")
@@ -329,7 +329,7 @@ function (_yup_execute_process_or_fail)
 
     if (NOT result EQUAL 0)
         _yup_join_list_with_separator ("${ARGN}" " " "" "" command_string)
-        message (FATAL_ERROR "Failed to execute command '${command_string}': ${error_message}")
+        _yup_message (FATAL_ERROR "Failed to execute command '${command_string}': ${error_message}")
     endif()
 endfunction()
 
@@ -342,7 +342,7 @@ function (_yup_download_file url file_path expected_sha256)
     foreach (attempt RANGE 1 ${max_attempts})
         if (attempt GREATER 1)
             math (EXPR retry_delay "(${attempt} - 1) * 5")
-            message (STATUS "Download of ${url} failed (${error_message}), retrying in ${retry_delay}s (attempt ${attempt}/${max_attempts})")
+            _yup_message (STATUS "Download of ${url} failed (${error_message}), retrying in ${retry_delay}s (attempt ${attempt}/${max_attempts})")
             execute_process (COMMAND "${CMAKE_COMMAND}" -E sleep ${retry_delay})
         endif()
 
@@ -366,7 +366,7 @@ function (_yup_download_file url file_path expected_sha256)
         file (REMOVE "${file_path}")
     endforeach()
 
-    message (FATAL_ERROR "Failed to download ${url} after ${max_attempts} attempts: ${error_message}")
+    _yup_message (FATAL_ERROR "Failed to download ${url} after ${max_attempts} attempts: ${error_message}")
 endfunction()
 
 #==============================================================================

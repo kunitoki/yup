@@ -70,7 +70,7 @@ public:
         iOS = 0x1000,
         WASM = 0x2000,
 
-        WebBrowser = WASM | 0x0100,
+        WebBrowser = WASM | 1,
 
         MacOSX_10_7 = MacOSX | 7,
         MacOSX_10_8 = MacOSX | 8,
@@ -85,6 +85,9 @@ public:
         MacOS_12 = MacOSX | 17,
         MacOS_13 = MacOSX | 18,
         MacOS_14 = MacOSX | 19,
+        MacOS_15 = MacOSX | 20,
+        MacOS_26 = MacOSX | 21,
+        MacOS_27 = MacOSX | 22,
 
         Win2000 = Windows | 1,
         WinXP = Windows | 2,
@@ -117,7 +120,13 @@ public:
     */
     static String getOperatingSystemVersionString();
 
-    /** Returns true if the OS is 64-bit, or false for a 32-bit OS. */
+    /** Returns true if the operating system is 64-bit, or false for a 32-bit OS.
+
+        This reports the bitness of the OS, not of the running binary: a 32-bit build
+        running on a 64-bit OS returns true. On Linux it reports the kernel architecture.
+        On WebAssembly it is a best-effort guess about the host, falling back to the wasm
+        memory model when the host can't be inspected.
+    */
     static bool isOperatingSystem64Bit();
 
     //==============================================================================

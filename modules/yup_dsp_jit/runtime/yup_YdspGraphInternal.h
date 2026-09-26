@@ -360,18 +360,18 @@ struct YdspAudioGraph::Pimpl
 
         int rateMultiplier = 1;
         int rateDivider = 1;
-        std::unique_ptr<yup::Oversampler<float, 2, ydspOversamplerSincRadius>> oversampler2x;
-        std::unique_ptr<yup::Oversampler<float, 4, ydspOversamplerSincRadius>> oversampler4x;
-        std::unique_ptr<yup::Oversampler<float, 8, ydspOversamplerSincRadius>> oversampler8x;
+        std::unique_ptr<SincOversampler<float, 2, ydspOversamplerSincRadius>> oversampler2x;
+        std::unique_ptr<SincOversampler<float, 4, ydspOversamplerSincRadius>> oversampler4x;
+        std::unique_ptr<SincOversampler<float, 8, ydspOversamplerSincRadius>> oversampler8x;
         std::vector<float> oversampleInputBuf;
         std::vector<float*> oversampleInPtrs;
         std::vector<float*> oversampleOutPtrs;
         std::vector<float> oversampleZeroBuf; // inputless generators only
         std::vector<const float*> oversampleZeroInPtrs;
 
-        std::unique_ptr<yup::Oversampler<float, 2, ydspOversamplerSincRadius>> decimator2x, interpolator2x;
-        std::unique_ptr<yup::Oversampler<float, 4, ydspOversamplerSincRadius>> decimator4x, interpolator4x;
-        std::unique_ptr<yup::Oversampler<float, 8, ydspOversamplerSincRadius>> decimator8x, interpolator8x;
+        std::unique_ptr<SincOversampler<float, 2, ydspOversamplerSincRadius>> decimator2x, interpolator2x;
+        std::unique_ptr<SincOversampler<float, 4, ydspOversamplerSincRadius>> decimator4x, interpolator4x;
+        std::unique_ptr<SincOversampler<float, 8, ydspOversamplerSincRadius>> decimator8x, interpolator8x;
         std::vector<float> decimInputBuf;
         std::vector<float*> decimInPtrs;
         std::vector<float> decimOutputBuf;
@@ -432,7 +432,7 @@ struct YdspAudioGraph::Pimpl
     //==========================================================================
     // MIDI and MPE ingestion.
 
-    struct EventIngest : public yup::MPEInstrument::Listener
+    struct EventIngest : public MPEInstrument::Listener
     {
         EventIngest (Pimpl& owner, int eventInputIndex) noexcept
             : owner (owner)
@@ -440,11 +440,11 @@ struct YdspAudioGraph::Pimpl
         {
         }
 
-        void noteAdded (yup::MPENote note) override;
-        void noteReleased (yup::MPENote note) override;
-        void notePitchbendChanged (yup::MPENote note) override;
-        void notePressureChanged (yup::MPENote note) override;
-        void noteTimbreChanged (yup::MPENote note) override;
+        void noteAdded (MPENote note) override;
+        void noteReleased (MPENote note) override;
+        void notePitchbendChanged (MPENote note) override;
+        void notePressureChanged (MPENote note) override;
+        void noteTimbreChanged (MPENote note) override;
 
         Pimpl& owner;
         int eventInputIndex = 0; // the graph event input this instrument feeds
@@ -452,20 +452,20 @@ struct YdspAudioGraph::Pimpl
 
     void ensureEventInputs();
 
-    void setExpressionTrackingMode (yup::MPEInstrument::TrackingMode mode);
+    void setExpressionTrackingMode (MPEInstrument::TrackingMode mode);
 
     /** The number of simultaneously playing notes tracked without allocating. */
     static constexpr int maxTrackedNotes = 128;
 
     std::vector<String> eventInputNames;
     std::vector<EventIngest> eventIngests;
-    std::vector<std::unique_ptr<yup::MPEInstrument>> mpeInstruments;
+    std::vector<std::unique_ptr<MPEInstrument>> mpeInstruments;
 
     // Outer index = graph input event port (matches eventInputNames). Built
     // from explicit `graphInput -> node.inputEvent;` connections only - a
     // graph input event has no implicit broadcast to same-named node inputs.
     std::vector<std::vector<Node::RoutedEventEdge>> graphInputRouting;
-    yup::MPEInstrument::TrackingMode expressionTrackingMode = yup::MPEInstrument::allNotesOnChannel;
+    MPEInstrument::TrackingMode expressionTrackingMode = MPEInstrument::allNotesOnChannel;
 
     struct GroupEventTarget
     {
@@ -628,7 +628,7 @@ struct YdspAudioGraph::Pimpl
     //==========================================================================
     // Event ingestion and routing.
 
-    void ingestChannelMessage (const yup::MidiMessage& message, int eventInputIndex);
+    void ingestChannelMessage (const MidiMessage& message, int eventInputIndex);
     void scheduleAllSoundOff (int eventInputIndex);
     void routeEvent (YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex);
     void dispatchEventToNode (Node& node, YdspEventShape shape, uint16_t noteId, const YdspEventPayload& payload, int sampleOffset, int eventInputIndex);
@@ -639,8 +639,8 @@ struct YdspAudioGraph::Pimpl
     // destinations (another node, the graph boundary, or next block's carry
     // queue), once per node per block.
 
-    void drainOutputEvents (Node& node, int srcNodeIndex, int blockSize, yup::MidiBuffer* midiOut);
-    void deliverResolvedEvent (int dstNode, int dstEventInputIndex, int srcNodeIndex, int64_t shapeTag, const YdspEventContext& fields, int sampleOffset, int blockSize, yup::MidiBuffer* midiOut);
+    void drainOutputEvents (Node& node, int srcNodeIndex, int blockSize, MidiBuffer* midiOut);
+    void deliverResolvedEvent (int dstNode, int dstEventInputIndex, int srcNodeIndex, int64_t shapeTag, const YdspEventContext& fields, int sampleOffset, int blockSize, MidiBuffer* midiOut);
 
     //==========================================================================
     // Voice allocation (resolve note events into per-voice pending calls).
@@ -693,11 +693,7 @@ struct YdspAudioGraph::Pimpl
             return;
         }
 
-        // The analyzer rejects summing fan-in on any non-float32 stream, so a
-        // non-float type here is a programming error, not a stream the host
-        // passed: refuse rather than reinterpreting int bytes as float32.
         jassert (type == YdspValueType::float32Type);
-
         if (type != YdspValueType::float32Type)
             return;
 
@@ -777,7 +773,7 @@ struct YdspAudioGraph::Pimpl
                                  Span<const YdspInputBuffer> inputs,
                                  Span<YdspOutputBuffer> outputs,
                                  int blockSize,
-                                 yup::MidiBuffer* midiOut);
+                                 MidiBuffer* midiOut);
 
     //==========================================================================
     // Sample-accurate sub-block execution.
@@ -833,7 +829,7 @@ struct YdspAudioGraph::Pimpl
     // Oversampled node execution
 
     template <int Factor>
-    void runOversampledKernel (yup::Oversampler<float, Factor, ydspOversamplerSincRadius>& oversampler, Node& node, YdspKernelContext& ctx, int blockSize)
+    void runOversampledKernel (SincOversampler<float, Factor, ydspOversamplerSincRadius>& oversampler, Node& node, YdspKernelContext& ctx, int blockSize)
     {
         const auto osBlockSize = blockSize * Factor;
 
@@ -882,8 +878,8 @@ struct YdspAudioGraph::Pimpl
     // Undersampled node execution
 
     template <int Factor>
-    void runUndersampledKernel (yup::Oversampler<float, Factor, ydspOversamplerSincRadius>& decimator,
-                                yup::Oversampler<float, Factor, ydspOversamplerSincRadius>& interpolator,
+    void runUndersampledKernel (SincOversampler<float, Factor, ydspOversamplerSincRadius>& decimator,
+                                SincOversampler<float, Factor, ydspOversamplerSincRadius>& interpolator,
                                 Node& node,
                                 YdspKernelContext& ctx,
                                 int blockSize)

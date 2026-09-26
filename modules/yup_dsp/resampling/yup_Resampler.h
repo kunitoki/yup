@@ -235,8 +235,8 @@ private:
 //==============================================================================
 /** @name Convenience type aliases for common resampling configurations */
 ///@{
-using ResamplerFloat = Resampler<float, 8>;   /**< Resampler for float samples, 8-tap radius */
-using ResamplerDouble = Resampler<double, 8>; /**< Resampler for double samples, 8-tap radius */
+using ResamplerFloat = Resampler<float, 16>;   /**< Resampler for float samples, 16-tap radius */
+using ResamplerDouble = Resampler<double, 16>; /**< Resampler for double samples, 16-tap radius */
 ///@}
 
 } // namespace yup

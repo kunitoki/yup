@@ -41,7 +41,12 @@
 #include <opus_library/src/opus_encoder.c>
 #include <opus_library/src/extensions.c>
 #include <opus_library/src/opus_multistream.c>
+
+// Its "mdct.h" can resolve to libvorbis/lib/mdct.h when both modules share a target: rename vorbis' private typedef
+#define mdct_lookup yup_vorbis_mdct_lookup
 #include <opus_library/src/opus_multistream_encoder.c>
+#undef mdct_lookup
+
 #include <opus_library/src/opus_multistream_decoder.c>
 #include <opus_library/src/repacketizer.c>
 #include <opus_library/src/opus_projection_encoder.c>

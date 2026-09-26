@@ -46,12 +46,18 @@ TEST (SystemStats, OperatingSystemType)
 #elif YUP_IOS
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::iOS);
 #elif YUP_EMSCRIPTEN
-    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WebBrowser);
+    EXPECT_EQ (systemType, SystemStats::OperatingSystemType::WebBrowser);
 #elif YUP_WASM
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WASM);
 #else
     ignoreUnused (systemType);
 #endif
+}
+
+TEST (SystemStatsTests, WebBrowserDoesNotAliasOtherFamilies)
+{
+    EXPECT_NE (SystemStats::WebBrowser & SystemStats::WASM, 0);
+    EXPECT_EQ (SystemStats::WebBrowser & SystemStats::MacOSX, 0);
 }
 
 TEST (SystemStatsTests, GetOperatingSystemName)
@@ -60,13 +66,34 @@ TEST (SystemStatsTests, GetOperatingSystemName)
     EXPECT_FALSE (osName.isEmpty());
 }
 
+#if ! YUP_WASM
+TEST (SystemStatsTests, GetOperatingSystemVersionString)
+{
+    const auto version = SystemStats::getOperatingSystemVersionString();
+    EXPECT_TRUE (version.isNotEmpty());
+    EXPECT_NE (version, "Unknown");
+}
+#endif
+
+#if YUP_MAC
+TEST (SystemStatsTests, MacOSTypeAndNameAreVersioned)
+{
+    EXPECT_GE (SystemStats::getOperatingSystemType(), SystemStats::MacOS_11);
+    EXPECT_TRUE (SystemStats::getOperatingSystemName().startsWith ("macOS "));
+}
+#endif
+
 TEST (SystemStatsTests, IsOperatingSystem64Bit)
 {
-    bool is64Bit = SystemStats::isOperatingSystem64Bit();
+    [[maybe_unused]] const bool is64Bit = SystemStats::isOperatingSystem64Bit();
+
+#if YUP_MAC || YUP_IOS
+    EXPECT_TRUE (is64Bit);
+#elif ! YUP_WASM
+    // A 32-bit build may run on either a 32 or a 64-bit OS, only a 64-bit build is conclusive
     if constexpr (sizeof (void*) == 8)
         EXPECT_TRUE (is64Bit);
-    else
-        EXPECT_FALSE (is64Bit);
+#endif
 }
 
 TEST (SystemStatsTests, GetEnvironmentVariable)

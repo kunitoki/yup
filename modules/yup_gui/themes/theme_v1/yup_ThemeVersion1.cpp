@@ -45,23 +45,6 @@ extern const std::size_t FontAwesome7Font_size;
 
 //==============================================================================
 
-/** Clips to a path given in the local coordinates of the component being painted.
-
-    Graphics::setClipPath() only applies the linear part of the current transform, while the
-    component position lives in the drawing area, so the path is mapped to the target here.
-*/
-void setLocalClipPath (Graphics& g, const Path& localPath)
-{
-    const auto savedTransform = g.getTransform();
-    const auto localToTarget = savedTransform.translated (g.getDrawingArea().getTopLeft());
-
-    g.setTransform (AffineTransform::identity());
-    g.setClipPath (localPath.transformed (localToTarget));
-    g.setTransform (savedTransform);
-}
-
-//==============================================================================
-
 struct SliderColors
 {
     Color background;
@@ -462,9 +445,7 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     }
 
     auto clipState = g.saveState();
-    Path textClipPath;
-    textClipPath.addRectangle (textArea);
-    setLocalClipPath (g, textClipPath);
+    g.setClipPath (textArea);
 
     // Selection
     if (editor.hasSelection())
@@ -987,7 +968,7 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
         Path clipPath;
         clipPath.addRoundedRectangle (progressBar.getLocalBounds(), cornerSize);
-        setLocalClipPath (g, clipPath);
+        g.setClipPath (clipPath);
 
         // Build two separate paths for alternating solid color shades
         Path stripesLight;
@@ -1024,7 +1005,7 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
             Path clipPath;
             clipPath.addRoundedRectangle (progressBar.getLocalBounds(), cornerSize);
-            setLocalClipPath (g, clipPath);
+            g.setClipPath (clipPath);
 
             // Draw the filled bar
             auto filledBounds = bounds.withWidth (filledWidth);

@@ -440,8 +440,8 @@ Inside `paint()` the mapping from local coordinates to the render target is
 `g.getTransform().translated (g.getDrawingArea().getTopLeft())`: the linear part
 of the composed transform lives in the transform and the translation in the
 drawing area, so untransformed components see an identity transform exactly as
-before. Keep this in mind when clipping: `Graphics::setClipPath()` applies only
-the transform, not the drawing area offset.
+before. Clips set with `Graphics::setClipPath()` use the same local coordinates
+as every draw call.
 
 A parent can also present its children through a custom projection by overriding
 `getChildPointFromLocal()` / `getLocalPointFromChild()`, which every input path

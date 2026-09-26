@@ -195,7 +195,7 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
     const std::array<float, 4> sourceValues { -1.0f, -0.5f, 0.0f, 1.0f };
 
     {
-        std::array<std::uint8_t, sourceValues.size()> destination {};
+        std::array<uint8, sourceValues.size()> destination {};
         AudioFormatWriter::WriteHelper::writeInt8 (destination.data(), sourceValues.data(), static_cast<int> (sourceValues.size()));
 
         EXPECT_EQ (1, destination[0]);
@@ -205,17 +205,17 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
     }
 
     {
-        std::array<std::uint16_t, 2> destination {};
+        std::array<uint16, 2> destination {};
         const std::array<float, 2> values { 0.25f, 1.0f };
 
         AudioFormatWriter::WriteHelper::writeInt16 (destination.data(), values.data(), static_cast<int> (values.size()), true);
 
-        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<std::uint16_t> (static_cast<int> (values[0] * 32767.0f))), destination[0]);
-        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<std::uint16_t> (static_cast<int> (values[1] * 32767.0f))), destination[1]);
+        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<uint16> (static_cast<int> (values[0] * 32767.0f))), destination[0]);
+        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<uint16> (static_cast<int> (values[1] * 32767.0f))), destination[1]);
     }
 
     {
-        std::array<std::uint8_t, 6> destination {};
+        std::array<uint8, 6> destination {};
         const std::array<float, 2> values { 0.25f, 1.0f };
 
         AudioFormatWriter::WriteHelper::writeInt24 (destination.data(), values.data(), static_cast<int> (values.size()), true);
@@ -229,12 +229,12 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
     }
 
     {
-        std::array<std::uint32_t, 1> destination {};
+        std::array<uint32, 1> destination {};
         const std::array<float, 1> values { 0.25f };
 
         AudioFormatWriter::WriteHelper::writeInt32 (destination.data(), values.data(), static_cast<int> (values.size()), true);
 
-        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<std::uint32_t> (static_cast<int> (values[0] * 2147483647.0f))), destination[0]);
+        EXPECT_EQ (ByteOrder::swapIfBigEndian (static_cast<uint32> (static_cast<int> (values[0] * 2147483647.0f))), destination[0]);
     }
 
     {
@@ -243,8 +243,8 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
 
         AudioFormatWriter::WriteHelper::writeFloat32 (destination.data(), values.data(), static_cast<int> (values.size()), true);
 
-        EXPECT_EQ (std::bit_cast<std::uint32_t> (ByteOrder::swapIfBigEndian (values[0])), std::bit_cast<std::uint32_t> (destination[0]));
-        EXPECT_EQ (std::bit_cast<std::uint32_t> (ByteOrder::swapIfBigEndian (values[1])), std::bit_cast<std::uint32_t> (destination[1]));
+        EXPECT_EQ (std::bit_cast<uint32> (ByteOrder::swapIfBigEndian (values[0])), std::bit_cast<uint32> (destination[0]));
+        EXPECT_EQ (std::bit_cast<uint32> (ByteOrder::swapIfBigEndian (values[1])), std::bit_cast<uint32> (destination[1]));
     }
 
     {
@@ -253,7 +253,7 @@ TEST (AudioFormatWriterTests, WriteHelperEncodesIntegerAndFloatFormats)
 
         AudioFormatWriter::WriteHelper::writeFloat64 (destination.data(), values.data(), static_cast<int> (values.size()), true);
 
-        EXPECT_EQ (std::bit_cast<std::uint64_t> (ByteOrder::swapIfBigEndian (values[0])), std::bit_cast<std::uint64_t> (destination[0]));
-        EXPECT_EQ (std::bit_cast<std::uint64_t> (ByteOrder::swapIfBigEndian (values[1])), std::bit_cast<std::uint64_t> (destination[1]));
+        EXPECT_EQ (std::bit_cast<uint64> (ByteOrder::swapIfBigEndian (values[0])), std::bit_cast<uint64> (destination[0]));
+        EXPECT_EQ (std::bit_cast<uint64> (ByteOrder::swapIfBigEndian (values[1])), std::bit_cast<uint64> (destination[1]));
     }
 }

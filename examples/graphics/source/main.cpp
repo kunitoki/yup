@@ -20,13 +20,24 @@
 */
 
 #include <yup_core/yup_core.h>
-#include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
-#include <yup_animation/yup_animation.h>
 #include <yup_gui/yup_gui.h>
+#if YUP_MODULE_AVAILABLE_yup_audio_devices
+#include <yup_audio_devices/yup_audio_devices.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_dsp
+#include <yup_dsp/yup_dsp.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
 #include <yup_audio_gui/yup_audio_gui.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_animation
+#include <yup_animation/yup_animation.h>
+#endif
+#if YUP_MODULE_AVAILABLE_yup_ai
 #include <yup_ai/yup_ai.h>
+#endif
 #if YUP_MODULE_AVAILABLE_yup_python
 #include <yup_python/yup_python.h>
 #endif
@@ -65,58 +76,85 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
     return basePath;
 }
 
+/** Loads a shader bundle precompiled by the SHADERS of a demo in CMakeLists.txt. */
+inline yup::ResultValue<yup::ShaderBundle> loadShaderBundle (yup::StringRef name)
+{
+#if YUP_WASM || YUP_MOBILE
+    const auto shadersPath = getAssetPath ("data/shaders");
+#else
+    const auto shadersPath = yup::File (YUP_EXAMPLE_GRAPHICS_SHADERS_PATH);
+#endif
+
+    return yup::ShaderBundle::loadFromFile (shadersPath.getChildFile (yup::String (name) + ".ysl"));
+}
+
+/** Compiles a render pipeline from a shader bundle loaded with loadShaderBundle(). */
+inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::GpuDevice::Ptr device,
+                                                                          yup::StringRef name,
+                                                                          const yup::GpuPipelineOptions& options = {})
+{
+    auto bundle = loadShaderBundle (name);
+    if (bundle.failed())
+        return yup::makeResultValueFail ("Shader bundle " + yup::String (name) + " failed to load: " + bundle.getErrorMessage());
+
+    return yup::GpuPipeline::compileFromBundle (std::move (device), bundle.getReference(), options);
+}
+
 //==============================================================================
 
+#if YUP_EXAMPLE_GRAPHICS_DEMO_AI
+#include "examples/AI.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
 #include "examples/Artboard.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_AI
-#include "examples/AI.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
+#include "examples/ArtboardLayout.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
 #include "examples/Audio.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_AudioFile
-#include "examples/AudioFileDemo.h"
+#include "examples/AudioFile.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Clipboard
-#include "examples/ClipboardDemo.h"
+#include "examples/Clipboard.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ColorLab
 #include "examples/ColorLab.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Component3D
-#include "examples/Component3DDemo.h"
+#include "examples/Component3D.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComponentEffects
-#include "examples/ComponentEffectsDemo.h"
+#include "examples/ComponentEffects.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ComputeParticles
-#include "examples/ComputeParticlesDemo.h"
+#include "examples/ComputeParticles.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Convolution
-#include "examples/ConvolutionDemo.h"
+#include "examples/Convolution.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Crossover
-#include "examples/CrossoverDemo.h"
+#include "examples/Crossover.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_CodeEditor
 #include "examples/CodeEditor.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_DragAndDrop
-#include "examples/DragAndDropDemo.h"
+#include "examples/DragAndDrop.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
 #include "examples/FileChooser.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
-#include "examples/FilterDemo.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Filter
+#include "examples/Filter.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
-#include "examples/FluidSimulationDemo.h"
+#include "examples/FluidSimulation.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_GpuAudio
-#include "examples/GpuAudioProcessingDemo.h"
+#include "examples/GpuAudioProcessing.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Images
 #include "examples/Images.h"
@@ -128,37 +166,37 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #include "examples/LayoutFonts.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
-#include "examples/LottieDemo.h"
+#include "examples/Lottie.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
-#include "examples/OffscreenRenderDemo.h"
+#include "examples/OffscreenRender.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
-#include "examples/OpaqueDemo.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
+#include "examples/Opaque.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
-#include "examples/PaintProfilerDemo.h"
+#include "examples/PaintProfiler.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
 #include "examples/Paths.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
-#include "examples/PbrDemo.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Pbr
+#include "examples/Pbr.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
 #include "examples/PopupMenu.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ScrollBar
-#include "examples/ScrollBarDemo.h"
+#include "examples/ScrollBar.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Sliders
-#include "examples/SliderDemo.h"
+#include "examples/Slider.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpectrumAnalyzer
 #include "examples/SpectrumAnalyzer.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_SpinningCube
-#include "examples/SpinningCubeDemo.h"
+#include "examples/SpinningCube.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Svg
 #include "examples/Svg.h"
@@ -166,8 +204,8 @@ inline yup::File getAssetPath (yup::StringRef subPath = {})
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
-#include "examples/ToastNotificationDemo.h"
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
+#include "examples/ToastNotification.h"
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
 #include "examples/TouchTrails.h"
@@ -263,6 +301,8 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Artboard
         addDemo ("Artboard", [] { return std::make_unique<ArtboardDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ArtboardLayout
         addDemo ("Artboard Layout", [] { return std::make_unique<ArtboardLayoutDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Audio
@@ -301,7 +341,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FileChooser
         addDemo ("File Chooser", [] { return std::make_unique<FileChooserDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_FilterDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Filter
         addDemo ("Filter Demo", [] { return std::make_unique<FilterDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_FluidSimulation
@@ -325,7 +365,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_OffscreenRender
         addDemo ("Offscreen Render", [] { return std::make_unique<OffscreenRenderDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_OpaqueDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Opaque
         addDemo ("Opaque Demo", [] { return std::make_unique<OpaqueDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PaintProfiler
@@ -334,7 +374,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Paths
         addDemo ("Paths", [] { return std::make_unique<PathsExample>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_PbrDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Pbr
         addDemo ("PBR IBL", [] { return std::make_unique<PbrDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_PopupMenu
@@ -358,7 +398,7 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
 #endif
-#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotificationDemo
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails

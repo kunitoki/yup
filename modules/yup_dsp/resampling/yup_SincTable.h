@@ -115,20 +115,25 @@ public:
     /**
         Multiplies the stored half-kernel by the second half of a Kaiser window.
 
-        The full symmetric window has 2 * tableSize - 1 samples, so the stored
-        center coefficient is exactly aligned with the window center and remains
-        unchanged.
+        The window spans exactly the kernel radius: 2 * SincRadius * OversampleFactor + 1
+        samples centered on the stored center coefficient, which remains unchanged.
+        Entries beyond the radius (tap == SincRadius with a nonzero fractional phase)
+        are set to zero, so the kernel decays smoothly to zero at its edge instead of
+        being cut off part-way through the window.
 
         @param beta  Kaiser window shape parameter (higher = more side-lobe suppression).
     */
     void applyKaiserWindow (CoeffType beta = CoeffType (5)) noexcept
     {
-        constexpr int N = tableSize * 2 - 1;
-        constexpr int center = tableSize - 1;
+        constexpr int center = SincRadius * OversampleFactor;
+        constexpr int N = 2 * center + 1;
 
-        for (int i = 0; i < tableSize; ++i)
+        for (int i = 0; i <= center; ++i)
             table[static_cast<std::size_t> (i)] *=
                 WindowFunctions<CoeffType>::kaiser (center + i, N, beta);
+
+        for (int i = center + 1; i < tableSize; ++i)
+            table[static_cast<std::size_t> (i)] = CoeffType (0);
     }
 
     //==============================================================================
