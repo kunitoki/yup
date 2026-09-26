@@ -22,6 +22,10 @@ Everything lives in `src/`, which is the Vite root:
 
 Screenshots and the logo are referenced straight from `../docs/_static/images` and `../logo.svg`, so the site never duplicates them. Vite hashes them into `dist/` on build.
 
+## SEO
+
+Each page only declares its `<title>` and `<meta name="description">`. On top of those, the `yup-partials` plugin in `vite.config.js` adds the canonical link and the Open Graph and Twitter card tags, plus schema.org JSON-LD on the home page. On build it also writes `sitemap.xml` (from the `pages` list), `robots.txt` and `og.jpg`, the social card image, which is copied from `docs/_static/images`. All absolute URLs come from `siteUrl` in `vite.config.js`. Add new pages to `pages` so they end up in the sitemap.
+
 ## Deployment
 
 `.github/workflows/deploy_website.yml` builds the site and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/_static/images/` or `logo.svg`. It also runs on manual dispatch.
