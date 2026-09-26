@@ -169,6 +169,91 @@
         filter: drop-shadow(0 0 8px rgb(10 132 255 / 0.55));
     }
 
+    .search-dialog {
+        @apply mx-auto mt-[12vh] w-[min(40rem,calc(100%-2rem))] max-w-none overflow-hidden rounded-2xl border border-edge bg-surface p-0 text-ink;
+        box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 40px 90px -30px rgb(10 132 255 / 0.45);
+    }
+
+    .search-dialog::backdrop {
+        background: rgb(7 9 14 / 0.7);
+        backdrop-filter: blur(4px);
+    }
+
+    .search-hit {
+        @apply block rounded-xl px-3 py-2.5 transition hover:bg-white/[0.03];
+    }
+
+    .search-hit[aria-selected="true"] {
+        @apply bg-glow/10;
+        box-shadow: inset 0 0 0 1px rgb(10 132 255 / 0.35);
+    }
+
+    .compare th,
+    .compare td {
+        @apply border-b border-edge px-4 py-3.5 align-top leading-relaxed;
+    }
+
+    .compare tbody tr:last-child > * {
+        @apply border-b-0;
+    }
+
+    .compare thead th {
+        @apply font-mono text-xs uppercase tracking-[0.1em] text-ink;
+    }
+
+    .compare tbody th {
+        @apply font-medium text-ink;
+    }
+
+    .compare td {
+        @apply text-muted;
+    }
+
+    .compare .compare-yup {
+        @apply bg-glow/8 text-ink;
+    }
+
+    .compare thead .compare-yup {
+        @apply text-glow-soft;
+    }
+
+    /* Orbiting logo from the Wasm shell's boot loader, used on the 404 page. */
+    .orbit {
+        @apply size-40 rounded-full transition-transform hover:scale-105 active:scale-95;
+    }
+
+    .orbit .track {
+        fill: none;
+        stroke: var(--color-edge);
+        stroke-width: 1.5;
+    }
+
+    .orbit .arc {
+        fill: none;
+        stroke: var(--color-glow);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-dasharray: 22 78;
+        filter: drop-shadow(0 0 5px rgb(10 132 255 / 0.7));
+        animation: orbit-trace 2.8s linear infinite;
+    }
+
+    .orbit .dart {
+        fill: var(--color-glow);
+        filter: drop-shadow(0 0 10px rgb(10 132 255 / 0.6));
+    }
+
+    .orbit .dot {
+        fill: var(--color-glow-soft);
+        filter: drop-shadow(0 0 7px var(--color-glow));
+    }
+
+    @keyframes orbit-trace {
+        to {
+            stroke-dashoffset: -100;
+        }
+    }
+
     details.faq summary::-webkit-details-marker {
         display: none;
     }
@@ -186,5 +271,9 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
         scroll-behavior: auto !important;
+    }
+
+    .orbit .dot {
+        display: none;
     }
 }

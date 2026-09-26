@@ -5,7 +5,8 @@ on:
     paths:
       - "**/workflows/deploy_website.yml"
       - "website/**"
-      - "docs/_static/images/**"
+      - "docs/**"
+      - "modules/*/yup_*.h"
       - "logo.svg"
     branches:
       - main
