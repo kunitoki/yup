@@ -1,0 +1,27 @@
+<header class="sticky top-0 z-40 border-b border-edge/70 bg-void/70 backdrop-blur-xl">
+    <nav class="container-site flex h-16 items-center justify-between gap-6">
+        <a href="./index.html" class="flex items-center gap-2.5" aria-label="YUP home">
+            <img class="brand-mark size-8" src="../../logo.svg" alt="" />
+            <b class="text-lg font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i></b>
+        </a>
+
+        <div id="nav-menu" class="absolute inset-x-0 top-16 hidden flex-col gap-1 border-b border-edge bg-void/95 p-4 md:static md:flex md:flex-row md:items-center md:border-0 md:bg-transparent md:p-0">
+            <a class="nav-link" data-nav href="./index.html">Home</a>
+            <a class="nav-link" data-nav href="./modules.html">Modules</a>
+            <a class="nav-link" data-nav href="./showcase.html">Showcase</a>
+            <a class="nav-link" data-nav href="./get-started.html">Get Started</a>
+            <a class="nav-link" href="https://yup.readthedocs.io/" target="_blank" rel="noopener">Docs</a>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <a class="btn btn-ghost hidden sm:inline-flex" href="https://discord.gg/E6pSdcj4R" target="_blank" rel="noopener">Discord</a>
+            <a class="btn btn-primary" href="https://github.com/kunitoki/yup" target="_blank" rel="noopener">
+                <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" /></svg>
+                GitHub
+            </a>
+            <button id="nav-toggle" type="button" class="btn btn-ghost px-3 md:hidden" aria-controls="nav-menu" aria-expanded="false" aria-label="Toggle navigation">
+                <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+            </button>
+        </div>
+    </nav>
+</header>

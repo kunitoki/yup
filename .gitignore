@@ -53,3 +53,7 @@ __pycache__/
 .cache/
 docs/superpowers/
 .worktrees/
+
+# Website
+website/node_modules/
+website/dist/
