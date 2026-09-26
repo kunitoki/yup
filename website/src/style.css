@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* Palette and type follow cmake/platforms/emscripten/shell.html. */
+@theme {
+    --color-void: #07090e;
+    --color-surface: #0e121a;
+    --color-edge: #1b2230;
+    --color-ink: #e6eaf2;
+    --color-muted: #7c8798;
+    --color-glow: #0a84ff;
+    --color-glow-soft: #6fb6ff;
+    --color-danger: #ff6b5a;
+
+    --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+    html {
+        color-scheme: dark;
+        scroll-behavior: smooth;
+    }
+
+    body {
+        @apply bg-void text-ink font-sans antialiased;
+    }
+
+    /* Ambient bloom: the page is lit from behind, like the Wasm shell stage. */
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+            radial-gradient(70vw 50vh at 50% -10%, rgb(10 132 255 / 0.2), transparent 70%),
+            radial-gradient(90vw 60vh at 50% 120%, rgb(10 132 255 / 0.08), transparent 70%);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-glow);
+        outline-offset: 3px;
+    }
+
+    ::selection {
+        background: rgb(10 132 255 / 0.35);
+    }
+}
+
+@layer components {
+    .container-site {
+        @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+    }
+
+    .section {
+        @apply relative py-20 sm:py-28;
+    }
+
+    .chip {
+        @apply inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-edge px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted;
+    }
+
+    .chip-on {
+        @apply border-glow/35 bg-glow/8 text-glow-soft;
+    }
+
+    .chip-wip {
+        @apply border-dashed text-muted/80;
+    }
+
+    .eyebrow {
+        @apply font-mono text-xs uppercase tracking-[0.14em] text-glow-soft;
+    }
+
+    .heading {
+        @apply text-3xl font-semibold tracking-tight text-balance sm:text-4xl;
+    }
+
+    .lead {
+        @apply text-base leading-relaxed text-muted sm:text-lg;
+    }
+
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition;
+    }
+
+    .btn-primary {
+        @apply bg-glow text-white shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_10px_30px_-10px_rgb(10_132_255/0.9)] hover:bg-[#2b95ff];
+    }
+
+    .btn-ghost {
+        @apply border border-edge bg-white/[0.02] text-ink hover:border-glow/50;
+    }
+
+    .card {
+        @apply relative overflow-hidden rounded-2xl border border-edge bg-surface/80;
+    }
+
+    /* Cursor-following highlight; --mx / --my are set from main.js. */
+    .spotlight::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 300ms ease;
+        background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgb(10 132 255 / 0.12), transparent 60%);
+    }
+
+    .spotlight:hover::before {
+        opacity: 1;
+    }
+
+    .icon-tile {
+        @apply grid size-11 place-items-center rounded-xl border border-glow/30 bg-glow/10 text-glow-soft shadow-[0_0_24px_-8px_rgb(10_132_255/0.9)];
+    }
+
+    /* Faint grid that fades out towards the edges. */
+    .bg-grid {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+            linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
+            linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+    }
+
+    /* Framed canvas, modeled on the embedded Wasm shell. */
+    .stage-frame {
+        @apply overflow-hidden rounded-2xl border border-edge bg-surface;
+        box-shadow:
+            0 0 0 1px rgb(255 255 255 / 0.04),
+            0 0 0 6px rgb(10 132 255 / 0.04),
+            0 40px 90px -30px rgb(10 132 255 / 0.45);
+    }
+
+    .segmented {
+        @apply inline-flex gap-0.5 rounded-[10px] border border-edge bg-white/[0.02] p-0.5;
+    }
+
+    .seg {
+        @apply h-7 cursor-pointer rounded-lg px-3 font-mono text-[11px] tracking-[0.06em] text-muted transition hover:text-ink;
+    }
+
+    .seg[aria-pressed="true"] {
+        @apply bg-glow/16 text-ink;
+        box-shadow: inset 0 0 0 1px rgb(10 132 255 / 0.4), 0 0 18px -6px rgb(10 132 255 / 0.9);
+    }
+
+    .code {
+        @apply overflow-x-auto p-5 font-mono text-[13px] leading-relaxed text-ink/90;
+    }
+
+    .nav-link {
+        @apply rounded-lg px-3 py-2 text-sm text-muted transition hover:text-ink;
+    }
+
+    .nav-link[aria-current="page"] {
+        @apply text-ink;
+    }
+
+    .brand-mark {
+        filter: drop-shadow(0 0 8px rgb(10 132 255 / 0.55));
+    }
+
+    details.faq summary::-webkit-details-marker {
+        display: none;
+    }
+
+    details.faq[open] .faq-plus {
+        transform: rotate(45deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

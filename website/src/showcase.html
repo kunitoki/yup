@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- @head -->
+        <title>Showcase - YUP!</title>
+        <meta name="description" content="Screenshots of YUP graphics, GUI, DSP and audio." />
+    </head>
+    <body>
+        <!-- @header -->
+
+        <main>
+            <section class="relative overflow-hidden pt-16 pb-6 sm:pt-24">
+                <div class="bg-grid"></div>
+                <div class="container-site relative text-center">
+                    <p class="eyebrow">Showcase</p>
+                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Rendered by YUP, every pixel</h1>
+                    <p class="lead mx-auto mt-5 max-w-2xl">Everything below comes from the example apps in the repository.</p>
+                </div>
+            </section>
+
+            <section class="pb-24">
+                <div class="container-site">
+                    <div class="mt-8 flex justify-center">
+                        <nav class="segmented flex-wrap" aria-label="Gallery sections">
+                        <a class="seg inline-flex items-center" href="#graphics">Graphics and GPU</a>
+                        <a class="seg inline-flex items-center" href="#ui">Interface</a>
+                        <a class="seg inline-flex items-center" href="#svg">SVG</a>
+                        <a class="seg inline-flex items-center" href="#dsp">DSP</a>
+                        <a class="seg inline-flex items-center" href="#audio">Audio</a>
+                        </nav>
+                    </div>
+                <section id="graphics" class="mt-20 scroll-mt-24">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-2xl font-semibold">Graphics and GPU</h2>
+                        <p class="hidden text-sm text-muted sm:block">Vector rendering on Rive, plus RHI compute and 3D.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Artboard.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rive_artboard.jpg" alt="Rive artboards" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Rive artboards</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/LottieDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_lottie.png" alt="Lottie playback" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Lottie playback</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpinningCubeDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_cube.jpg" alt="RHI spinning cube" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>RHI spinning cube</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PbrDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Physically based rendering</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FluidSimulationDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>GPU fluid simulation</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/VariableFonts.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_variable_fonts.jpg" alt="Variable fonts" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Variable fonts</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                    </div>
+                </section>
+                <section id="ui" class="mt-20 scroll-mt-24">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-2xl font-semibold">Interface</h2>
+                        <p class="hidden text-sm text-muted sm:block">Widgets and tools built with the GUI toolkit.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_color_picker.png" alt="Color picker" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Color picker</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/ColorLab.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_gradient_editor.png" alt="Gradient editor" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Gradient editor</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/TouchTrails.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_multitouch.jpg" alt="Multitouch trails" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Multitouch trails</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PaintProfilerDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_component_profiler.png" alt="Paint profiler" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Paint profiler</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                    </div>
+                </section>
+                <section id="svg" class="mt-20 scroll-mt-24">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-2xl font-semibold">SVG</h2>
+                        <p class="hidden text-sm text-muted sm:block">Complex vector artwork, parsed and drawn on the GPU.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="Ghostscript tiger" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Ghostscript tiger</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_svg_lambo.jpg" alt="Sports car" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Sports car</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_svg_yellow_car.jpg" alt="Yellow car" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Yellow car</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_svg_scimitar.jpg" alt="Scimitar" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Scimitar</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                    </div>
+                </section>
+                <section id="dsp" class="mt-20 scroll-mt-24">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-2xl font-semibold">DSP</h2>
+                        <p class="hidden text-sm text-muted sm:block">Filter design, crossovers and spectral analysis from yup_dsp.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FilterDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_filter_rbj.png" alt="RBJ filter responses" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>RBJ filter responses</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FilterDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_filter_butter.png" alt="Butterworth design" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Butterworth design</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/CrossoverDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_crossover.png" alt="Crossover network" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Crossover network</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_spectrum_fill.png" alt="Spectrum analyzer, filled" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Spectrum analyzer, filled</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_dsp_spectrum_line.png" alt="Spectrum analyzer, line" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Spectrum analyzer, line</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_waveform_onsets.jpg" alt="Onset detection" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Onset detection</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                    </div>
+                </section>
+                <section id="audio" class="mt-20 scroll-mt-24">
+                    <div class="flex items-baseline justify-between gap-4 border-b border-edge pb-3">
+                        <h2 class="text-2xl font-semibold">Audio</h2>
+                        <p class="hidden text-sm text-muted sm:block">Graph editing, plugin hosting and audio visualization.</p>
+                    </div>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_graph.png" alt="Audio graph editor" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Audio graph editor</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_host.png" alt="Plugin host" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Plugin host</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-contain bg-void p-2 transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_scope.png" alt="Oscilloscope" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Oscilloscope</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                        <figure class="card spotlight group">
+                            <a href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/AudioFileDemo.h" target="_blank" rel="noopener">
+                                <img class="aspect-[4/3] w-full border-b border-edge object-cover transition duration-500 group-hover:scale-[1.02]" src="../../docs/_static/images/yup_audio_waveform.png" alt="Waveform view" loading="lazy" />
+                                <figcaption class="flex items-center justify-between gap-3 p-4 text-sm"><span>Waveform view</span><span class="text-muted group-hover:text-glow-soft"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg></span></figcaption>
+                            </a>
+                        </figure>
+                    </div>
+                </section>
+                </div>
+            </section>
+        </main>
+
+        <!-- @footer -->
+    </body>
+</html>

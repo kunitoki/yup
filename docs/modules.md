@@ -56,7 +56,7 @@ compression. Optionally integrates `sqlite3_library` to enable `SqliteDatabase`.
 flowchart LR
     yup_core:::self --> zlib:::ext
     yup_core -. optional .-> sqlite3_library:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -73,7 +73,7 @@ flowchart LR
     yup_simd:::self --> yup_core
     yup_simd --> xsimd:::ext
     yup_simd -. optional .-> eigen_library:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -92,7 +92,7 @@ long-running YUP application.
 ```mermaid
 flowchart LR
     yup_events:::self --> yup_core
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -110,7 +110,7 @@ HTTP or custom transports.
 flowchart LR
     yup_ai:::self --> yup_core
     yup_ai --> yup_events
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -133,7 +133,7 @@ flowchart LR
     yup_shading -. optional .-> glslang:::opt
     yup_shading -. optional .-> spirv_cross:::opt
     yup_shading -. optional .-> spirv_tools:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -151,7 +151,7 @@ flowchart LR
     yup_rhi:::self --> yup_core
     yup_rhi --> yup_shading
     yup_rhi --> rive:::ext
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -177,7 +177,7 @@ flowchart LR
     yup_graphics -. optional .-> libwebp:::opt
     yup_graphics -. optional .-> libgif:::opt
     yup_graphics -. optional .-> libtiff:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -191,7 +191,7 @@ layered on top of the graphics stack.
 flowchart LR
     yup_animation:::self --> yup_core
     yup_animation --> yup_graphics
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -207,7 +207,7 @@ schema-validatable data with an XPath-like query engine.
 ```mermaid
 flowchart LR
     yup_data_model:::self --> yup_events
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -226,7 +226,7 @@ flowchart LR
     yup_gui --> yup_data_model
     yup_gui --> yup_graphics
     yup_gui --> rive:::ext
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -243,7 +243,7 @@ flowchart LR
     yup_audio_gui --> yup_audio_graph
     yup_audio_gui --> yup_dsp
     yup_audio_gui --> yup_gui
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -260,7 +260,7 @@ helpers, and processing utilities.
 flowchart LR
     yup_audio_basics:::self --> yup_core
     yup_audio_basics --> yup_simd
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -273,7 +273,7 @@ audio and MIDI devices.
 flowchart LR
     yup_audio_devices:::self --> yup_audio_basics
     yup_audio_devices --> yup_events
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -295,7 +295,7 @@ flowchart LR
     yup_audio_formats -. optional .-> opus_library:::opt
     yup_audio_formats -. optional .-> flac_library:::opt
     yup_audio_formats -. optional .-> hmp3_library:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -313,7 +313,7 @@ flowchart LR
     yup_dsp --> yup_simd
     yup_dsp -. optional .-> pffft_library:::opt
     yup_dsp -. optional .-> bungee_library:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```
@@ -333,7 +333,7 @@ flowchart LR
     yup_dsp_jit --> yup_dsp
     yup_dsp_jit --> asmjit_library:::ext
     yup_dsp_jit --> sleef_library:::ext
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -347,7 +347,7 @@ flowchart LR
     yup_audio_processors:::self --> yup_audio_basics
     yup_audio_processors --> yup_data_model
     yup_audio_processors --> yup_dsp
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -360,7 +360,7 @@ backed by the data model.
 flowchart LR
     yup_audio_graph:::self --> yup_audio_processors
     yup_audio_graph --> yup_data_model
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -373,7 +373,7 @@ See [Building plugins](build-system/building-plugins.md).
 flowchart LR
     yup_audio_plugin_client:::self --> yup_audio_processors
     yup_audio_plugin_client --> yup_gui
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -384,7 +384,7 @@ In-process hosting of third-party VST3, CLAP, LV2, and AU (v2/v3) plugins.
 ```mermaid
 flowchart LR
     yup_audio_plugin_host:::self --> yup_audio_processors
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
 ```
 
@@ -411,7 +411,7 @@ flowchart LR
     yup_python -. optional .-> yup_events:::opt
     yup_python -. optional .-> yup_graphics:::opt
     yup_python -. optional .-> yup_gui:::opt
-    classDef self fill:#6366f1,color:#fff,stroke:#4f46e5;
+    classDef self fill:#0a84ff,color:#fff,stroke:#0066cc;
     classDef ext fill:#f3f4f6,color:#374151,stroke:#9ca3af,stroke-dasharray:4 3;
     classDef opt fill:#fff7ed,color:#9a3412,stroke:#fb923c,stroke-dasharray:2 2;
 ```

@@ -1,3 +1,24 @@
 .sy-head-brand img+strong {
   display: inline !important;
 }
+
+/* Palette shared with the website (website/src/style.css). */
+html[data-accent-color="blue"] {
+  --accent-9: #0a84ff;
+}
+
+html.dark {
+  --sy-c-background: #07090e;
+  --sy-c-background-dropback: #0e121acc;
+  --sy-c-surface: #0e121a;
+  --sy-c-divider: #1b2230;
+  --sy-c-border: #1b2230;
+  --sy-c-text: #e6eaf2;
+  --sy-c-light: #7c8798;
+  --sy-c-foot-background: #0e121a;
+  --sy-c-foot-divider: #1b2230;
+}
+
+html.dark[data-accent-color="blue"] {
+  --accent-a11: #6fb6ff;
+}

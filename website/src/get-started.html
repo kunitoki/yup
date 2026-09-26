@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- @head -->
+        <title>Get Started - YUP!</title>
+        <meta name="description" content="Install the prerequisites, build the YUP examples and add YUP to your own CMake project." />
+    </head>
+    <body>
+        <!-- @header -->
+
+        <main>
+            <section class="relative overflow-hidden pt-16 pb-12 sm:pt-24">
+                <div class="bg-grid"></div>
+                <div class="container-site relative text-center">
+                    <p class="eyebrow">Get started</p>
+                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">From clone to running app</h1>
+                    <p class="lead mx-auto mt-5 max-w-2xl">A C++20 compiler and CMake 3.31 or later are all you need to build the examples. When you are ready, pull YUP into your own project with <code class="font-mono text-ink">FetchContent</code>.</p>
+                </div>
+            </section>
+
+            <div class="container-site max-w-4xl pb-24">
+                <!-- 1. Prerequisites -->
+                <section class="relative border-l border-edge pb-16 pl-8 sm:pl-12">
+                    <span class="absolute -left-4 top-0 grid size-8 place-items-center rounded-full border border-glow/40 bg-surface font-mono text-xs text-glow-soft shadow-[0_0_18px_-4px_rgb(10_132_255/0.9)]">1</span>
+                    <h2 class="text-2xl font-semibold">Install the prerequisites</h2>
+                    <p class="mt-2 text-muted">Pick your platform. Every target builds from the same sources.</p>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                        <div class="card p-5">
+                            <h3 class="font-semibold">Windows</h3>
+                            <p class="mt-1 text-sm text-muted">Visual Studio 2022.</p>
+                        </div>
+                        <div class="card p-5">
+                            <h3 class="font-semibold">macOS and iOS</h3>
+                            <p class="mt-1 text-sm text-muted">Xcode 15.2 and the command-line tools.</p>
+                        </div>
+                        <div class="card p-5">
+                            <h3 class="font-semibold">Wasm</h3>
+                            <p class="mt-1 text-sm text-muted">Emscripten SDK 4.0.22 or later. The WebGPU port is fetched automatically.</p>
+                        </div>
+                        <div class="card p-5">
+                            <h3 class="font-semibold">Android</h3>
+                            <p class="mt-1 text-sm text-muted">JDK 17, Android SDK and NDK r27c or later.</p>
+                        </div>
+                    </div>
+                    <div class="stage-frame mt-4" data-copy-scope>
+                        <div class="flex items-center justify-between border-b border-edge px-4 py-2">
+                            <span class="font-mono text-[11px] tracking-[0.06em] text-muted">Linux packages</span>
+                            <button class="seg" type="button" data-copy>copy</button>
+                        </div>
+                        <!-- @code snippets/linux-deps.sh -->
+                    </div>
+                </section>
+
+                <!-- 2. Build -->
+                <section class="relative border-l border-edge pb-16 pl-8 sm:pl-12">
+                    <span class="absolute -left-4 top-0 grid size-8 place-items-center rounded-full border border-glow/40 bg-surface font-mono text-xs text-glow-soft shadow-[0_0_18px_-4px_rgb(10_132_255/0.9)]">2</span>
+                    <h2 class="text-2xl font-semibold">Clone and build the examples</h2>
+                    <p class="mt-2 text-muted">A standard desktop build with tests and examples enabled.</p>
+                    <div class="stage-frame mt-6" data-tabs>
+                        <div class="flex items-center justify-between gap-3 border-b border-edge px-4 py-2">
+                            <div class="segmented" role="tablist" aria-label="Build target">
+                                <button class="seg" type="button" role="tab" aria-pressed="true" data-tab="desktop">Desktop</button>
+                                <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="wasm">Wasm</button>
+                                <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="just">just</button>
+                            </div>
+                            <button class="seg" type="button" data-copy>copy</button>
+                        </div>
+                        <div data-panel="desktop"><!-- @code snippets/build-desktop.sh --></div>
+                        <div data-panel="wasm" class="hidden"><!-- @code snippets/build-wasm.sh --></div>
+                        <div data-panel="just" class="hidden"><!-- @code snippets/build-just.sh --></div>
+                    </div>
+                    <p class="mt-4 text-sm text-muted">Then run targets like <code class="font-mono text-ink">example_graphics</code>, <code class="font-mono text-ink">example_app</code> or <code class="font-mono text-ink">example_console</code>, and <code class="font-mono text-ink">yup_tests</code> for the test suite.</p>
+                </section>
+
+                <!-- 3. Your project -->
+                <section class="relative border-l border-edge pb-16 pl-8 sm:pl-12">
+                    <span class="absolute -left-4 top-0 grid size-8 place-items-center rounded-full border border-glow/40 bg-surface font-mono text-xs text-glow-soft shadow-[0_0_18px_-4px_rgb(10_132_255/0.9)]">3</span>
+                    <h2 class="text-2xl font-semibold">Add YUP to your project</h2>
+                    <p class="mt-2 text-muted">Fetch the framework and declare an app or plugin target with the modules you need.</p>
+                    <div class="stage-frame mt-6" data-tabs>
+                        <div class="flex items-center justify-between gap-3 border-b border-edge px-4 py-2">
+                            <div class="segmented" role="tablist" aria-label="Target type">
+                                <button class="seg" type="button" role="tab" aria-pressed="true" data-tab="app">Application</button>
+                                <button class="seg" type="button" role="tab" aria-pressed="false" data-tab="plugin">Plugin</button>
+                            </div>
+                            <button class="seg" type="button" data-copy>copy</button>
+                        </div>
+                        <div data-panel="app"><!-- @code snippets/app.cmake --></div>
+                        <div data-panel="plugin" class="hidden"><!-- @code snippets/plugin.cmake --></div>
+                    </div>
+                </section>
+
+                <!-- 4. Next -->
+                <section class="relative pl-8 sm:pl-12">
+                    <span class="absolute -left-4 top-0 grid size-8 place-items-center rounded-full border border-glow/40 bg-glow font-mono text-xs text-white shadow-[0_0_18px_-4px_rgb(10_132_255/0.9)]">4</span>
+                    <h2 class="text-2xl font-semibold">Keep going</h2>
+                    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                        <a class="card spotlight group p-5" href="https://yup.readthedocs.io/en/latest/build-system/building-standalone.html" target="_blank" rel="noopener">
+                            <h3 class="font-semibold group-hover:text-glow-soft">Building standalone apps</h3>
+                            <p class="mt-1 text-sm text-muted">Every <code class="font-mono">yup_standalone_app</code> option, resources and platform packaging.</p>
+                        </a>
+                        <a class="card spotlight group p-5" href="https://yup.readthedocs.io/en/latest/build-system/building-plugins.html" target="_blank" rel="noopener">
+                            <h3 class="font-semibold group-hover:text-glow-soft">Building audio plugins</h3>
+                            <p class="mt-1 text-sm text-muted">Formats, install locations and the processor and editor classes.</p>
+                        </a>
+                        <a class="card spotlight group p-5" href="https://yup.readthedocs.io/en/latest/build-system/cmake-api.html" target="_blank" rel="noopener">
+                            <h3 class="font-semibold group-hover:text-glow-soft">CMake API reference</h3>
+                            <p class="mt-1 text-sm text-muted">Targets, module resolution and build options.</p>
+                        </a>
+                        <a class="card spotlight group p-5" href="https://github.com/kunitoki/yup/tree/main/examples" target="_blank" rel="noopener">
+                            <h3 class="font-semibold group-hover:text-glow-soft">Example apps</h3>
+                            <p class="mt-1 text-sm text-muted">Graphics, audio graph, plugin and console examples to learn from.</p>
+                        </a>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- @footer -->
+    </body>
+</html>
