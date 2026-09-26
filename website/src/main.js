@@ -52,3 +52,36 @@ moduleFilter?.addEventListener("input", () => {
         group.hidden = group.querySelector("[data-module]:not([hidden])") === null;
     });
 });
+
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+document.querySelectorAll("[data-slideshow]").forEach((show) => {
+    const slides = [...show.querySelectorAll("[data-slide]")];
+    const buttons = [...show.querySelectorAll("[data-slide-to]")];
+    const label = show.querySelector("[data-slide-label]");
+    const chips = show.querySelector("[data-slide-chips]");
+    let current = 0;
+    let timer;
+
+    const go = (index) => {
+        current = (index + slides.length) % slides.length;
+        const slide = slides[current];
+
+        slides.forEach((s) => s.toggleAttribute("data-active", s === slide));
+        buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(i === current)));
+        label.textContent = slide.dataset.label;
+        chips.replaceChildren(...slide.dataset.chips.split(",").map((name) =>
+            Object.assign(document.createElement("span"), { className: "chip chip-on", textContent: name })));
+    };
+
+    const play = () => {
+        clearInterval(timer);
+        if (!reducedMotion)
+            timer = setInterval(() => go(current + 1), 5000);
+    };
+
+    buttons.forEach((button, i) => button.addEventListener("click", () => { go(i); play(); }));
+    show.addEventListener("mouseenter", () => clearInterval(timer));
+    show.addEventListener("mouseleave", play);
+    play();
+});

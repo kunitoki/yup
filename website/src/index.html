@@ -28,23 +28,47 @@
                         <a class="btn btn-ghost" href="./showcase.html">See the showcase</a>
                     </div>
 
-                    <div class="stage-frame mx-auto mt-16 max-w-3xl text-left">
+                    <div class="stage-frame mx-auto mt-16 max-w-3xl text-left" data-slideshow>
                         <div class="flex h-12 items-center justify-between gap-4 border-b border-edge bg-gradient-to-b from-surface to-surface/60 px-4">
                             <div class="flex items-center gap-2.5">
-                                <svg class="brand-mark size-5" viewBox="0 0 24 24" aria-hidden="true">
-                                    <ellipse cx="12" cy="11" rx="10.2" ry="5.4" transform="rotate(-24 12 11)" fill="none" stroke="#0A84FF" stroke-width="1.6" opacity="0.65" />
-                                    <path d="M12 2 21 21 12 16.4 3 21Z" fill="#0A84FF" />
-                                </svg>
-                                <b class="text-sm font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i> <span class="font-normal text-muted">audio graph</span></b>
+                                <img class="brand-mark size-6" src="../../logo.svg" alt="" />
+                                <b class="text-sm font-semibold tracking-tight">YUP<i class="not-italic text-glow">!</i> <span class="font-normal text-muted" data-slide-label>audio graph editor</span></b>
                             </div>
-                            <div class="hidden gap-2 sm:flex">
+                            <div class="hidden gap-2 sm:flex" data-slide-chips>
                                 <span class="chip chip-on">yup_audio_graph</span>
                                 <span class="chip chip-on">yup_gui</span>
                             </div>
                         </div>
-                        <a href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener" title="Open the audio graph example">
-                            <img class="block w-full" src="../../docs/_static/images/yup_audio_graph.png" alt="The YUP audio graph editor" />
-                        </a>
+                        <div class="relative aspect-[16/10] bg-[#05070b]">
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-active data-label="audio graph editor" data-chips="yup_audio_graph,yup_gui" href="https://github.com/kunitoki/yup/tree/main/examples/audiograph" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_audio_graph.png" alt="The YUP audio graph editor" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="physically based rendering" data-chips="yup_rhi,yup_shading" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/PbrDemo.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_rhi_pbr.jpg" alt="Physically based rendering through the YUP RHI" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="spectrum analyzer" data-chips="yup_dsp,yup_audio_gui" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/SpectrumAnalyzer.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_dsp_spectrum_line.png" alt="Realtime spectrum analyzer" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="svg rendering" data-chips="yup_graphics" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/Svg.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_svg_tiger.jpg" alt="The Ghostscript tiger rendered from SVG" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="gpu fluid simulation" data-chips="yup_rhi" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/FluidSimulationDemo.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_rhi_fluid.jpg" alt="GPU fluid simulation with compute shaders" loading="lazy" />
+                            </a>
+                            <a class="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-700 data-active:pointer-events-auto data-active:opacity-100" data-slide data-label="lottie animation" data-chips="yup_animation" href="https://github.com/kunitoki/yup/blob/main/examples/graphics/source/examples/LottieDemo.h" target="_blank" rel="noopener">
+                                <img class="size-full object-contain" src="../../docs/_static/images/yup_lottie.png" alt="Lottie animation playback" loading="lazy" />
+                            </a>
+                        </div>
+                        <div class="flex justify-center border-t border-edge bg-gradient-to-b from-surface/60 to-surface px-4 py-2.5">
+                            <div class="segmented flex-wrap justify-center" role="group" aria-label="Showcase">
+                                <button class="seg" type="button" data-slide-to="0" aria-pressed="true">Audio graph</button>
+                                <button class="seg" type="button" data-slide-to="1" aria-pressed="false">PBR</button>
+                                <button class="seg" type="button" data-slide-to="2" aria-pressed="false">Spectrum</button>
+                                <button class="seg" type="button" data-slide-to="3" aria-pressed="false">SVG</button>
+                                <button class="seg" type="button" data-slide-to="4" aria-pressed="false">Fluid</button>
+                                <button class="seg" type="button" data-slide-to="5" aria-pressed="false">Lottie</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

@@ -20,8 +20,8 @@ Everything lives in `src/`, which is the Vite root:
 - `src/style.css` - Tailwind entry point and theme tokens (palette from `cmake/platforms/emscripten/shell.html`).
 - `src/main.js` - mobile nav, card spotlight, code tabs, copy buttons and the module filter.
 
-Screenshots are referenced straight from `../docs/_static/images`, so the site never duplicates them. Vite hashes them into `dist/` on build.
+Screenshots and the logo are referenced straight from `../docs/_static/images` and `../logo.svg`, so the site never duplicates them. Vite hashes them into `dist/` on build.
 
 ## Deployment
 
-`.github/workflows/deploy_website.yml` builds the site and publishes it to GitHub Pages on every push to `main` that touches `website/` or `docs/_static/images/`. It also runs on manual dispatch.
+`.github/workflows/deploy_website.yml` builds the site and publishes it to GitHub Pages on every push to `main` that touches `website/`, `docs/_static/images/` or `logo.svg`. It also runs on manual dispatch.

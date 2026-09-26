@@ -32,15 +32,16 @@ const readPartial = (path) => readFileSync(resolve(partialsDir, path), "utf8");
 // Expands <!-- @name --> into partials/<name>.html and <!-- @code path --> into a
 // highlighted <pre> of partials/<path>, then marks the current page's nav link.
 function partials() {
-    const docs = normalizePath(resolve(import.meta.dirname, "..", "docs")).replace(/^\//, "");
+    const repo = normalizePath(resolve(import.meta.dirname, "..")).replace(/^\//, "");
 
     return {
         name: "yup-partials",
         configureServer(server) {
-            // In dev, ../../docs/... image URLs resolve to /docs/... which lives outside the root.
+            // In dev, ../../docs/... and ../../logo.svg resolve to /docs/... and /logo.svg,
+            // which live in the repository root outside the Vite root.
             server.middlewares.use((req, _res, next) => {
-                if (req.url?.startsWith("/docs/"))
-                    req.url = `/@fs/${docs}${req.url.slice(5)}`;
+                if (req.url?.startsWith("/docs/") || req.url === "/logo.svg")
+                    req.url = `/@fs/${repo}${req.url}`;
                 next();
             });
 
