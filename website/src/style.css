@@ -64,6 +64,10 @@
         @apply border-glow/35 bg-glow/8 text-glow-soft;
     }
 
+    .chip-link {
+        @apply transition hover:border-glow/60 hover:text-ink;
+    }
+
     .chip-wip {
         @apply border-dashed text-muted/80;
     }

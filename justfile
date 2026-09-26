@@ -167,6 +167,12 @@ rive_shaders_update:
   rm -Rf thirdparty/rive/source/renderer/shaders/out
   .venv/bin/deactivate
 
+[doc("develop website")]
+[working-directory: 'website']
+website:
+  npm install
+  npm run dev
+
 [doc("update the example graphics demo")]
 update_emscripten_example NAME DEST DEMOPATH:
   sed -i '' -e 's/YUP_EXAMPLE_GRAPHICS_DEMO:STRING=.*/YUP_EXAMPLE_GRAPHICS_DEMO:STRING={{NAME}}/g' build/emscripten/CMakeCache.txt
