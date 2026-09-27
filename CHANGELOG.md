@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- SDL/Emscripten: normalize touch coordinates against the logical window size so high-DPI mobile input is not scaled by the device pixel ratio.
 - `GpuComputePipeline::compileFromBundle` resolves the `main0` kernel SPIRV-Cross emits for a GLSL `main` on Metal, like `GpuPipeline::compileFromBundle` already did, instead of failing with "Metal compute function not found: main".
 - CMake: `yup_add_shader_bundle` accepts a `COMPUTE` stage, and with `BUNDLE_RESOURCE` ships the `.ysl` through `BUNDLE_RESOURCES` instead of embedding it. Bundles are only regenerated when the tool, the arguments or an input (stages and the new `DEPENDS`) changed. The graphics example declares the modules, data and precompiled shaders of each demo, so a single-demo build (`YUP_EXAMPLE_GRAPHICS_DEMO`) only links what that demo uses. Only the SpinningCube and GpuAudio demos, which edit shaders live, still need the shader transpiler.
 - **Behavior change** `SystemStats`: `isOperatingSystem64Bit` reports the OS instead of the build (32-bit builds on 64-bit Linux, Android, Windows on ARM; iOS now true; best-effort host probe on WebAssembly). Added `MacOS_15`, `MacOS_26` and `MacOS_27`. The macOS name reads `macOS <version>`, the Android version is `Build.VERSION.RELEASE` and the device description drops the serial, the Linux version is the kernel release, and `WebBrowser` no longer aliases the `MacOSX` bit (compare it with `==`, or test the family with `& WASM`).

@@ -1838,10 +1838,9 @@ void SDLComponentNative::handleTouchUp (SDL_FingerID fingerId, const Point<float
 
 Point<float> SDLComponentNative::getTouchPosition (const SDL_TouchFingerEvent& event) const
 {
-    const auto size = getContentSize().to<float>();
-    const auto scale = getWindowUnitsPerPoint (window);
+    const auto size = getSize().to<float>();
 
-    return Point<float> (event.x * size.getWidth(), event.y * size.getHeight()) / scale;
+    return { event.x * size.getWidth(), event.y * size.getHeight() };
 }
 
 //==============================================================================
