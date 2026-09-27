@@ -385,6 +385,22 @@
         transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
       }
 
+      .seg[data-mode] {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .seg svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
       .seg:hover { color: var(--ink); }
 
       .seg[aria-pressed="true"] {
@@ -449,6 +465,9 @@
         .rail { padding: 0 12px; gap: 8px; }
         .chips { gap: 4px; }
         #chip-isolation, #chip-threads { display: none; }
+        .controls { gap: 8px; }
+        .seg[data-mode] { padding: 0 10px; }
+        .seg[data-mode] span { display: none; }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -520,9 +539,18 @@
           </label>
         </div>
         <div class="segmented" role="group" aria-label="Canvas display">
-          <button class="seg" type="button" data-mode="embedded" aria-pressed="true">Embedded</button>
-          <button class="seg" type="button" data-mode="window" aria-pressed="false">Full window</button>
-          <button class="seg" type="button" data-mode="fullscreen" aria-pressed="false">Fullscreen</button>
+          <button class="seg" type="button" data-mode="embedded" aria-pressed="true" aria-label="Embedded" title="Embedded">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><rect x="5" y="6" width="6" height="4" rx="0.5"/></svg>
+            <span>Embedded</span>
+          </button>
+          <button class="seg" type="button" data-mode="window" aria-pressed="false" aria-label="Full window" title="Full window">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5"/><path d="M1.75 5.75h12.5"/></svg>
+            <span>Full window</span>
+          </button>
+          <button class="seg" type="button" data-mode="fullscreen" aria-pressed="false" aria-label="Fullscreen" title="Fullscreen">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg>
+            <span>Fullscreen</span>
+          </button>
         </div>
       </div>
     </footer>
