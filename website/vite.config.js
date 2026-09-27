@@ -76,6 +76,12 @@ function seoTags(page, html) {
                     codeRepository: "https://github.com/kunitoki/yup",
                     programmingLanguage: "C++",
                     license: "https://opensource.org/license/isc-license-txt",
+                    keywords: [
+                        "JUCE alternative", "Visage alternative", "Qt alternative", "iPlug2 alternative", "audio plugin framework",
+                        "C++ audio", "real-time audio", "DSP", "music software", "audio development", "plugin hosting", "real-time DSP",
+                        "CLAP", "VST3", "Audio Unit", "GPU", "RHI", "graphics programming", "real-time rendering", "shaders", "Vulkan",
+                        "Metal", "DirectX", "OpenGL", "WebGPU", "C++ framework", "modern C++", "ISC license", "open source framework"
+                    ]
                 },
             ],
         };

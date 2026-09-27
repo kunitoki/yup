@@ -113,7 +113,6 @@ void DragImageComponent::updateWindowSize()
     if (auto* native = getNativeComponent())
         native->setOpacity (opacity);
 
-    // A transparent window shows nothing until it is repainted, so a fresh ghost always needs one.
     setVisible (true);
     repaint();
 }

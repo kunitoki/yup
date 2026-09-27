@@ -159,6 +159,20 @@ public:
     virtual void tick() {}
 
     //==============================================================================
+    /** Switches presentation synchronization to the display refresh (vsync) at runtime.
+
+        Overrides the Options::vsync the context was created with. Call it from the thread that
+        renders, between frames. Backends whose presentation mode is fixed when the device is
+        created (Dawn, WebGPU) and OpenGL, where the window owns the swap interval, ignore it.
+
+        @param shouldEnable True to present on the display refresh, false to present immediately.
+
+        @return True if presentation now follows the requested mode, so with vsync enabled
+                presenting a frame waits for the display refresh. False when it is ignored.
+    */
+    virtual bool setVsyncEnabled (bool shouldEnable) { return false; }
+
+    //==============================================================================
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.

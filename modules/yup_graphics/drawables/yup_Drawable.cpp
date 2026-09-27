@@ -94,6 +94,24 @@ SVGPattern::Ptr getPatternById (const SVGData& data, const String& id)
 {
     return data.patternsById[id];
 }
+
+// A <use> without its own paint instantiates the referenced shape with the shape's own styling.
+const SVGElement* getInstancedShape (const SVGData& data, const SVGElement& element)
+{
+    if (! element.reference || element.path)
+        return nullptr;
+
+    const bool useDefinesFill = element.fillColor || element.fillCurrentColor || element.fillUrl || element.noFill;
+    const bool useDefinesStroke = element.strokeColor || element.strokeCurrentColor || element.strokeUrl || element.noStroke;
+    if (useDefinesFill || useDefinesStroke)
+        return nullptr;
+
+    const auto refElement = data.elementsById[*element.reference];
+    if (refElement == nullptr || ! refElement->path || ! refElement->children.empty())
+        return nullptr;
+
+    return refElement.get();
+}
 } // namespace
 
 //==============================================================================
@@ -715,6 +733,8 @@ void Drawable::paintElement (Graphics& g,
         }
     }
 
+    const auto instancedShape = getInstancedShape (data, element);
+
     // Fill setup
     if (element.fillColor)
     {
@@ -826,7 +846,7 @@ void Drawable::paintElement (Graphics& g,
                 fillElementPath();
             }
         }
-        else if (element.reference)
+        else if (element.reference && instancedShape == nullptr)
         {
             if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
@@ -962,7 +982,7 @@ void Drawable::paintElement (Graphics& g,
                                                       << " bounds: " << pathToStroke->getBounds().toString());
             g.strokePath (*pathToStroke);
         }
-        else if (element.reference)
+        else if (element.reference && instancedShape == nullptr)
         {
             if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && refElement->path)
             {
@@ -1067,7 +1087,11 @@ void Drawable::paintElement (Graphics& g,
         }
     }
 
-    if (element.reference)
+    if (instancedShape != nullptr)
+    {
+        paintElement (g, data, *instancedShape, isFillDefined && ! element.noFill, isStrokeDefined && ! element.noStroke, currentColor, visitingElements, currentStrokeDashArray, currentStrokeDashOffset, recursionDepth + 1);
+    }
+    else if (element.reference)
     {
         if (auto refElement = data.elementsById[*element.reference]; refElement != nullptr && ! refElement->children.empty())
         {

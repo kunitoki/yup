@@ -45,10 +45,11 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , unfocusedFrameRate (options.unfocusedFramerateRedraw)
     , effectiveFrameRate (options.framerateRedraw.value_or (60.0f))
+    , vsyncEnabled (options.flags.test (vsync))
+    , isTemporaryWindow (options.flags.test (temporaryWindow))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
     , shouldCaptureMouse (options.flags.test (captureMouse))
-    , vsyncEnabled (options.flags.test (vsync))
 {
     incReferenceCount();
 
@@ -192,11 +193,6 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
 
         SDL_GL_MakeCurrent (window, windowContext);
-
-        // On Emscripten SDL maps the swap interval onto the main loop timing, which must stay on requestAnimationFrame
-#if ! YUP_EMSCRIPTEN
-        SDL_GL_SetSwapInterval (vsyncEnabled ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
-#endif
 
 #if ! YUP_EMSCRIPTEN
         SDL_GL_SetAttribute (SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
@@ -599,7 +595,7 @@ void SDLComponentNative::setFullScreen (bool shouldBeFullScreen)
 #if YUP_EMSCRIPTEN
         emscripten_request_fullscreen ("#canvas", false);
 #else
-        SDL_SetWindowFullscreen (window, true); // SDL_SetWindowFullscreenMode
+        SDL_SetWindowFullscreen (window, true);
 #endif
     }
     else
@@ -858,6 +854,28 @@ void SDLComponentNative::updateEffectiveFrameRate (bool hasFocus)
 
 //==============================================================================
 
+bool SDLComponentNative::isVsyncEnabled() const
+{
+    return vsyncEnabled.load (std::memory_order_relaxed);
+}
+
+void SDLComponentNative::setVsyncEnabled (bool shouldEnable)
+{
+    YUP_ASSERT_MESSAGE_THREAD
+
+    if (vsyncEnabled.exchange (shouldEnable, std::memory_order_relaxed) == shouldEnable)
+        return;
+
+#if ! YUP_EMSCRIPTEN
+    if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && window != nullptr)
+        SDL_SetWindowSurfaceVSync (window, shouldEnable ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
+#endif
+
+    repaint();
+}
+
+//==============================================================================
+
 Point<float> SDLComponentNative::getCursorPosition() const
 {
     YUP_ASSERT_MESSAGE_THREAD
@@ -958,6 +976,7 @@ void SDLComponentNative::run()
     double maxFrameTimeMs = 0.0;
     double renderCostMs = 0.0;
     double nextFrameDeadlineMs = 0.0;
+    bool pacedByPresent = false;
 
     while (! threadShouldExit())
     {
@@ -972,7 +991,7 @@ void SDLComponentNative::run()
 
         const double renderBudgetMs = jlimit (1.0, maxFrameTimeMs, renderCostMs * 1.15);
 
-        for (;;)
+        while (! pacedByPresent)
         {
             const auto wakeTimeMs = nextFrameDeadlineMs - renderBudgetMs;
             const auto waitMs = wakeTimeMs - yup::Time::getMillisecondCounterHiRes();
@@ -1012,7 +1031,9 @@ void SDLComponentNative::run()
         if (threadShouldExit())
             break;
 
-        if (didPaint)
+        pacedByPresent = didPaint && presentWaitsForVsync;
+
+        if (didPaint && ! pacedByPresent)
             renderCostMs = renderCostMs * 0.9 + (yup::Time::getMillisecondCounterHiRes() - renderStartMs) * 0.1;
 
         const auto nowMs = yup::Time::getMillisecondCounterHiRes();
@@ -1226,6 +1247,20 @@ bool SDLComponentNative::renderFrame()
 
         if (isGL)
             SDL_GL_MakeCurrent (window, windowContext);
+
+        // Emscripten stays out of this: SDL maps the swap interval onto the main loop timing, which must stay on
+        // requestAnimationFrame. Not every driver takes the adaptive interval, fall back to plain vsync then.
+        if (const bool vsync = vsyncEnabled.load (std::memory_order_relaxed); appliedVsyncEnabled != vsync)
+        {
+            appliedVsyncEnabled = vsync;
+
+            const bool applied = ! isGL
+                                   ? context->setVsyncEnabled (vsync)
+                                   : vsync ? (SDL_GL_SetSwapInterval (SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE) || SDL_GL_SetSwapInterval (1))
+                                           : SDL_GL_SetSwapInterval (SDL_WINDOW_SURFACE_VSYNC_DISABLED);
+
+            presentWaitsForVsync = vsync && applied;
+        }
 #endif
 
         {
@@ -1356,7 +1391,7 @@ void SDLComponentNative::startAnimationFrameLoop()
         return;
 
     lastAnimationFrameMs = 0.0;
-    animationFrameCounter = 0;
+    nextAnimationFrameMs = 0.0;
     activeAnimationFrameLoop = new AnimationFrameLoop { WeakReference<SDLComponentNative> (this) };
 
     emscripten_request_animation_frame_loop (animationFrameCallback, activeAnimationFrameLoop);
@@ -1377,18 +1412,58 @@ void SDLComponentNative::renderAnimationFrame (double timestampMs)
 
     lastAnimationFrameMs = timestampMs;
 
-    const auto wantedFrameMs = 1000.0 / jmax (1.0f, effectiveFrameRate.load (std::memory_order_relaxed));
+    if (! vsyncEnabled)
+    {
+        if (timestampMs < nextAnimationFrameMs - displayFrameMs * 0.5)
+            return;
 
-    if (++animationFrameCounter < jmax (1, roundToInt (wantedFrameMs / displayFrameMs)))
-        return;
+        const auto wantedFrameMs = 1000.0 / jmax (1.0f, effectiveFrameRate.load (std::memory_order_relaxed));
 
-    animationFrameCounter = 0;
+        nextAnimationFrameMs += wantedFrameMs;
+        if (nextAnimationFrameMs < timestampMs)
+            nextAnimationFrameMs = timestampMs + wantedFrameMs;
+    }
 
     YUP_TRY
     {
         renderFrame();
     }
     YUP_CATCH_EXCEPTION
+}
+
+//==============================================================================
+// Called by the page shell. Getters return -1 until the application has created its window.
+extern "C"
+{
+    int EMSCRIPTEN_KEEPALIVE yupIsVsyncEnabled()
+    {
+        auto* native = SDLComponentNative::getPrimaryNativeComponent();
+        return native != nullptr ? (native->isVsyncEnabled() ? 1 : 0) : -1;
+    }
+
+    void EMSCRIPTEN_KEEPALIVE yupSetVsyncEnabled (int shouldEnable)
+    {
+        if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
+            native->setVsyncEnabled (shouldEnable != 0);
+    }
+
+    float EMSCRIPTEN_KEEPALIVE yupGetDesiredFrameRate()
+    {
+        auto* native = SDLComponentNative::getPrimaryNativeComponent();
+        return native != nullptr ? native->getDesiredFrameRate() : -1.0f;
+    }
+
+    void EMSCRIPTEN_KEEPALIVE yupSetDesiredFrameRate (float newFrameRate)
+    {
+        if (auto* native = SDLComponentNative::getPrimaryNativeComponent())
+            native->setDesiredFrameRate (newFrameRate);
+    }
+
+    float EMSCRIPTEN_KEEPALIVE yupGetCurrentFrameRate()
+    {
+        auto* native = SDLComponentNative::getPrimaryNativeComponent();
+        return native != nullptr ? native->getCurrentFrameRate() : -1.0f;
+    }
 }
 #endif
 
@@ -1838,10 +1913,9 @@ void SDLComponentNative::handleTouchUp (SDL_FingerID fingerId, const Point<float
 
 Point<float> SDLComponentNative::getTouchPosition (const SDL_TouchFingerEvent& event) const
 {
-    const auto size = getContentSize().to<float>();
-    const auto scale = getWindowUnitsPerPoint (window);
+    const auto size = getSize().to<float>();
 
-    return Point<float> (event.x * size.getWidth(), event.y * size.getHeight()) / scale;
+    return { event.x * size.getWidth(), event.y * size.getHeight() };
 }
 
 //==============================================================================
@@ -2846,6 +2920,25 @@ bool SDLComponentNative::anyNativeWindowHasKeyboardFocus()
     }
 
     return false;
+}
+
+SDLComponentNative* SDLComponentNative::getPrimaryNativeComponent()
+{
+    auto* desktop = Desktop::getInstanceWithoutCreating();
+
+    if (desktop == nullptr)
+        return nullptr;
+
+    for (const auto& [userdata, nativeComponent] : desktop->nativeComponents)
+    {
+        ignoreUnused (userdata);
+
+        if (auto* sdlNativeComponent = dynamic_cast<SDLComponentNative*> (nativeComponent);
+            sdlNativeComponent != nullptr && ! sdlNativeComponent->isTemporaryWindow)
+            return sdlNativeComponent;
+    }
+
+    return nullptr;
 }
 
 bool SDLComponentNative::anyNativeWindowContains (Point<float> screenPosition)

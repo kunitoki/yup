@@ -599,6 +599,33 @@ public:
     virtual void setDesiredFrameRate (float newFrameRate) = 0;
 
     //==============================================================================
+    /** Checks if Vsync is enabled.
+
+        Starts from Options::withVSync() and follows any later setVsyncEnabled() call.
+
+        @return True if Vsync is enabled, false otherwise.
+    */
+    virtual bool isVsyncEnabled() const = 0;
+
+    /** Enables or disables Vsync.
+
+        Overrides Options::withVSync() at runtime; the change takes effect before the next frame.
+        With vsync the presentation waits for the display refresh (GL swap interval, Metal display
+        sync, D3D present interval) and the window renders at the display rate, disabled it paces to
+        getDesiredFrameRate(). Dawn keeps the mode its device was created with and stays paced to
+        getDesiredFrameRate().
+
+        On the web the browser always presents on the display refresh, so this chooses the pacing
+        instead: enabled renders on every refresh, disabled paces to getDesiredFrameRate() on the
+        elapsed time (a rate that doesn't divide the refresh averages out over uneven intervals).
+
+        Must be called on the message thread.
+
+        @param shouldEnable True to enable Vsync, false to disable it.
+    */
+    virtual void setVsyncEnabled (bool shouldEnable) = 0;
+
+    //==============================================================================
     /** Gets the native handle for the component.
 
         @return The native handle as a void pointer.

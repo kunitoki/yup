@@ -170,8 +170,6 @@ void DragAndDropTarget::dispatchItemDragMove (Component& topmostComponent,
 void DragAndDropTarget::dispatchItemDragExit (Component& topmostComponent,
                                               const DragAndDropData& data)
 {
-    // A drag exit carries no meaningful cursor position, so localPosition is left at its
-    // default and targets must not rely on it.
     DragAndDropSourceDetails details;
     details.data = data;
 
