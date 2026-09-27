@@ -74,16 +74,11 @@ bool DragAndDropManager::startDragging (DragAndDropSource& source, Component& co
 void DragAndDropManager::finishNativeDrag (std::optional<DragAndDropAction> performed)
 {
     const auto data = currentData;
-
-    // The mouse up below runs user code that may delete the source, so the component is held weakly
-    // rather than as a pointer resolved once.
     const auto sourceComponentRef = sourceComponent;
 
     currentData = {};
     sourceComponent = nullptr;
 
-    // The platform drag ran its own event loop and consumed the button release that ended it, so the
-    // window the drag started from is still in the middle of a mouse gesture and has to be told.
     if (auto* component = sourceComponentRef.get())
         if (auto* native = component->getNativeComponent())
             native->cancelCurrentMouseGesture();
@@ -109,8 +104,6 @@ bool DragAndDropManager::beginSession (DragAndDropSource& source, Component& com
     createGhost();
     moveGhostTo (Desktop::getInstance()->getCurrentMouseLocation());
 
-    // The gesture has to keep flowing when the pointer leaves the source window, even for a window
-    // that was not created with ComponentNative::captureMouse.
     if (auto* native = component.getNativeComponent())
         native->setGlobalMouseCaptureActive (true);
 
@@ -224,7 +217,6 @@ void DragAndDropManager::mouseUp (const MouseEvent& event)
     if (component != nullptr
         && DragAndDropTarget::dispatchItemDrop (*component, currentData, toWindowPosition (*component, screenPosition)))
     {
-        // Shift asks for a move; anything else copies. Only the move/copy pair is negotiated for now.
         performed = (event.getModifiers().isShiftDown() && currentOptions.allowedActions.test (dragAndDropActionMove))
                         ? DragAndDropAction::move
                         : DragAndDropAction::copy;

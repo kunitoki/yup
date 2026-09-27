@@ -120,7 +120,7 @@ HGLOBAL makeGlobalFromFiles (const Array<File>& files)
     }
 
     header->pFiles = static_cast<DWORD> (headerSize);
-    header->fWide = TRUE; // the shell reads the paths as wide characters
+    header->fWide = TRUE;
 
     auto* write = reinterpret_cast<wchar_t*> (reinterpret_cast<char*> (header) + headerSize);
 
@@ -400,7 +400,6 @@ public:
 
     JobStatus runJob() override
     {
-        // OLE drag-and-drop needs a single-threaded apartment, which this pool thread provides.
         const auto oleResult = OleInitialize (nullptr);
 
         auto* dataObject = new PayloadDataObject (payload);

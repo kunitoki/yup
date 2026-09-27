@@ -155,8 +155,6 @@ String toFileUrl (const File& file)
     {
         const auto value = static_cast<unsigned int> (static_cast<unsigned char> (*pointer));
 
-        // Everything a shell or a browser takes literally passes through; the rest, spaces included,
-        // is escaped.
         const auto isLiteral = (value >= 'a' && value <= 'z')
                             || (value >= 'A' && value <= 'Z')
                             || (value >= '0' && value <= '9')
@@ -255,8 +253,6 @@ private:
         unsigned long count = 0, bytesAfter = 0;
         unsigned char* data = nullptr;
 
-        // Only the version, which is the first item of the XdndAware property. Anything below 3
-        // predates the parts of the protocol used here.
         if (XGetWindowProperty (display, candidate, atoms.aware, 0, 1, False, AnyPropertyType,
                                 &actualType, &actualFormat, &count, &bytesAfter, &data) != Success)
             return 0;
@@ -285,8 +281,6 @@ bool performNativeDrag (Component&,
                         const DragAndDropData& data,
                         std::function<void (std::optional<DragAndDropAction>)> onComplete)
 {
-    // Hand-rolled rather than delegated to SDL, which has no drag source: its drop events cover the
-    // receiving side only, and the serial Wayland would need in order to start a drag is not exposed.
     XdndConnection connection;
 
     if (! connection.isValid())
@@ -300,7 +294,6 @@ bool performNativeDrag (Component&,
     if (! atoms.internAll (display))
         return false;
 
-    // The formats the destination is offered, in the order it should prefer them.
     Array<Atom> offeredTypes;
 
     if (! data.getFiles().isEmpty())
@@ -325,8 +318,6 @@ bool performNativeDrag (Component&,
     if (XGetSelectionOwner (display, atoms.selection) != sourceWindow)
         return false;
 
-    // More than three formats do not fit in the XdndEnter message, so the whole list goes into a
-    // property the destination reads from the source window.
     const auto needsTypeListProperty = offeredTypes.size() > 3;
 
     if (needsTypeListProperty)
@@ -369,14 +360,12 @@ bool performNativeDrag (Component&,
                          (! needsTypeListProperty && offeredTypes.size() > 2) ? offeredTypes[2] : 0);
     };
 
-    // Answers the destination's request for the payload, which is the only point at which the data
-    // crosses over.
     const auto serveSelectionRequest = [&] (const XSelectionRequestEvent& request)
     {
         auto property = request.property;
 
         if (property == 0)
-            property = request.target; // obsolete clients ask for the target as the property
+            property = request.target;
 
         const char* transfer = nullptr;
         unsigned long transferLength = 0;
@@ -464,10 +453,7 @@ bool performNativeDrag (Component&,
             }
             else if (event.type == ClientMessage && event.xclient.message_type == atoms.status)
             {
-                // The status carries both the verdict on this position and the action the
-                // destination would take, which is all we need unless it changes its mind at the end.
                 accepted = (event.xclient.data.l[1] & 1) != 0;
-
                 if (accepted)
                     performed = toAction (static_cast<Atom> (event.xclient.data.l[4]), atoms);
             }
@@ -486,8 +472,6 @@ bool performNativeDrag (Component&,
     Window lastWindow = 0;
     auto lastOfferedPosition = -1;
 
-    // The drag loop. SDL's events go unpumped while this runs, which costs nothing here: an exported
-    // drag has no in-app session and no ghost, so our own windows have nothing to redraw.
     while (true)
     {
         Window rootReturn = 0, childReturn = 0;
@@ -523,7 +507,6 @@ bool performNativeDrag (Component&,
 
             if (packedPosition != lastOfferedPosition)
             {
-                // Shift asks for a move, matching how the in-app side reads the same gesture.
                 const auto wantsMove = (mask & ShiftMask) != 0;
 
                 sendXdndMessage (target, atoms.position, 0, packedPosition, CurrentTime,
@@ -536,8 +519,6 @@ bool performNativeDrag (Component&,
         Thread::sleep (positionIntervalMs);
     }
 
-    // The button came up: an accepted offer becomes a drop, which is what makes the destination ask
-    // for the data. Anything else is a leave.
     if (lastWindow != 0)
     {
         pumpPendingEvents();
@@ -560,9 +541,6 @@ bool performNativeDrag (Component&,
         }
     }
 
-    // This implementation blocks, so the outcome is already known by the time we get here: there is no
-    // separate thread to hand it over from. The message thread is the right one to report on either
-    // way, and it is where we already are.
     onComplete (accepted ? performed : DragAndDropAction::none);
 
     return true;

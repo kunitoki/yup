@@ -144,10 +144,6 @@ bool performNativeDrag (Component& sourceComponent,
     if (view == nil)
         return false;
 
-    // AppKit starts a session from the event that began the drag, and by the time the gesture has left
-    // our windows that event is no longer being dispatched. currentEvent is what the application is
-    // processing, which during a mouse drag is the drag event itself. With nothing to start from, the
-    // drag stays in app.
     NSEvent* event = [NSApp currentEvent];
 
     if (event == nil)
@@ -155,7 +151,6 @@ bool performNativeDrag (Component& sourceComponent,
 
     constexpr CGFloat imageSize = 52.0f;
 
-    // mouseLocation is in screen coordinates; the dragging frame is in the view's.
     const auto windowPoint = [window convertPointFromScreen: [NSEvent mouseLocation]];
     const auto origin = [view convertPoint: windowPoint fromView: nil];
 
@@ -163,8 +158,6 @@ bool performNativeDrag (Component& sourceComponent,
 
     for (const auto& file : data.getFiles())
     {
-        // What goes on the pasteboard is a reference to the file, not its contents: whoever accepts
-        // the drop does the copying.
         NSURL* url = [NSURL fileURLWithPath: toNSString (file.getFullPathName())];
 
         auto* pasteboardItem = [[NSPasteboardItem alloc] init];
@@ -177,9 +170,6 @@ bool performNativeDrag (Component& sourceComponent,
                                      : data.hasUris() ? data.getUris().joinIntoString ("\n")
                                                       : String();
 
-    // An image payload is already PNG encoded by the payload itself, so it goes on as it is. It also
-    // makes the better drag image: exactly what is being dragged, rather than a badge. It shares one
-    // pasteboard item with the text, so a destination that only wants text still sees the name.
     const auto png = data.getMimeData (DragAndDropData::mimeTypePng);
 
     NSData* pngData = png.getSize() > 0 ? [NSData dataWithBytes: png.getData() length: (NSUInteger) png.getSize()] : nil;
@@ -206,7 +196,6 @@ bool performNativeDrag (Component& sourceComponent,
 
         if (pngImage != nil)
         {
-            // Sized to the image instead of a fixed frame, so the drag keeps its aspect ratio.
             const auto payloadSize = [pngImage size];
 
             [dragItem setDraggingFrame: NSMakeRect (origin.x - payloadSize.width * 0.5,
@@ -220,11 +209,9 @@ bool performNativeDrag (Component& sourceComponent,
                               contents: makeDragImage (1, imageSize)];
         }
 
-        // The payload leads the file items: it is the most descriptive thing being dragged.
         [items insertObject: dragItem atIndex: 0];
     }
 
-    // Nothing AppKit can carry, so the drag stays in app, where the ghost still shows it.
     if ([items count] == 0)
         return false;
 
@@ -234,8 +221,6 @@ bool performNativeDrag (Component& sourceComponent,
 
     [view beginDraggingSessionWithItems: items event: event source: dragSource];
 
-    // The session runs its own event loop inside that call, so by the time it returns the drag is over
-    // and the destination's operation has already been recorded by the source's ended callback.
     if (onComplete != nullptr)
         MessageManager::callAsync ([completion = std::move (onComplete), action = dragSource.performedAction] { completion (action); });
 

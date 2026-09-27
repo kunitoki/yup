@@ -42,8 +42,6 @@ namespace
         return String::fromUTF8 (static_cast<const char*> (block.getData()), static_cast<int> (block.getSize()));
     }
 
-    // text/uri-list payloads follow RFC 2483: one URI per line, with blank lines
-    // and comment lines (starting with '#') ignored.
     StringArray parseUriList (const String& list)
     {
         StringArray result;
@@ -98,8 +96,6 @@ DragAndDropData DragAndDropData::withImage (const Image& image) const
 #if YUP_IMAGE_FORMAT_PNG
     if (image.isValid())
     {
-        // The writer takes ownership of the destination stream, so allocate it on the
-        // heap and read the encoded bytes back before the writer's scope ends.
         auto* stream = new MemoryOutputStream();
         PngImageFormatWriter writer (stream, PixelFormat::RGBA);
 
