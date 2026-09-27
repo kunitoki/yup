@@ -124,6 +124,10 @@ public:
 
     void setDesiredFrameRate (float) override {}
 
+    bool isVsyncEnabled() const override { return false; }
+
+    void setVsyncEnabled (bool) override {}
+
     void* getNativeHandle() const override { return nullptr; }
 
     rive::Factory* getFactory() override { return nullptr; }

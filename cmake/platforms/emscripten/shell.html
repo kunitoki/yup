@@ -393,6 +393,53 @@
         box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.4), 0 0 18px -6px rgba(10, 132, 255, 0.9);
       }
 
+      .pacing {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .pacing[hidden] { display: none; }
+
+      .fps {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 10px 0 4px;
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.02);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        transition: opacity 160ms ease;
+      }
+
+      .fps input {
+        width: 5ch;
+        height: 24px;
+        padding: 0 4px;
+        border: 0 none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--ink);
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        appearance: textfield;
+        -moz-appearance: textfield;
+      }
+
+      .fps input::-webkit-inner-spin-button,
+      .fps input::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      .fps:has(input:disabled) { opacity: 0.45; }
+
       :focus-visible {
         outline: 2px solid var(--glow);
         outline-offset: 3px;
@@ -463,6 +510,15 @@
 
     <footer class="rail rail--bottom">
       <div class="controls">
+        <div class="pacing" id="pacing" hidden>
+          <div class="segmented">
+            <button class="seg" type="button" id="vsync" aria-pressed="false">VSync</button>
+          </div>
+          <label class="fps">
+            <input id="fps" type="number" min="1" max="1000" step="1" value="60" aria-label="Frames per second">
+            <span>fps</span>
+          </label>
+        </div>
         <div class="segmented" role="group" aria-label="Canvas display">
           <button class="seg" type="button" data-mode="embedded" aria-pressed="true">Embedded</button>
           <button class="seg" type="button" data-mode="window" aria-pressed="false">Full window</button>
@@ -529,7 +585,7 @@
       function applyMode(mode) {
         document.body.dataset.mode = mode;
         ejectElement.textContent = mode === 'fullscreen' ? 'Exit fullscreen' : 'Exit full window';
-        document.querySelectorAll('.seg').forEach(function (button) {
+        document.querySelectorAll('.seg[data-mode]').forEach(function (button) {
           button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
         });
         window.dispatchEvent(new Event('resize'));
@@ -556,7 +612,7 @@
         applyMode(isFullscreen() ? 'fullscreen' : layoutMode);
       }
 
-      document.querySelectorAll('.seg').forEach(function (button) {
+      document.querySelectorAll('.seg[data-mode]').forEach(function (button) {
         button.addEventListener('click', function () { setMode(button.dataset.mode); });
       });
 
@@ -564,6 +620,65 @@
 
       document.addEventListener('fullscreenchange', onFullscreenChange);
       document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+      // ---------------------------------------------------------- frame pacing
+
+      var pacingElement = document.getElementById('pacing');
+      var vsyncElement = document.getElementById('vsync');
+      var fpsElement = document.getElementById('fps');
+      var runtimeReady = false;
+      var shownVsync = null;
+
+      // The exports only exist in GUI applications, and calling one before the runtime is up aborts
+      function pacingVsyncState() {
+        if (!runtimeReady || typeof Module._yupIsVsyncEnabled !== 'function')
+          return -1;
+        return Module._yupIsVsyncEnabled();
+      }
+
+      function pollFramePacing() {
+        var state = pacingVsyncState();
+        if (state < 0)
+          return;
+
+        var vsync = state === 1;
+        pacingElement.hidden = false;
+        vsyncElement.setAttribute('aria-pressed', String(vsync));
+        fpsElement.disabled = vsync;
+
+        // While editable the field belongs to the user, only refresh it when vsync turns off
+        if (vsync) {
+          var currentRate = Module._yupGetCurrentFrameRate();
+          if (currentRate > 0)
+            fpsElement.value = Math.round(currentRate);
+        } else if (shownVsync !== false) {
+          fpsElement.value = Math.round(Module._yupGetDesiredFrameRate());
+        }
+
+        shownVsync = vsync;
+      }
+
+      vsyncElement.addEventListener('click', function () {
+        var state = pacingVsyncState();
+        if (state < 0)
+          return;
+        Module._yupSetVsyncEnabled(state === 1 ? 0 : 1);
+        pollFramePacing();
+      });
+
+      // SDL listens for keys on the window and cancels the ones it handles, keep typing here away from it
+      ['keydown', 'keyup', 'keypress'].forEach(function (type) {
+        fpsElement.addEventListener(type, function (e) { e.stopPropagation(); });
+      });
+
+      fpsElement.addEventListener('change', function () {
+        if (pacingVsyncState() < 0)
+          return;
+        var rate = parseInt(fpsElement.value, 10);
+        if (rate > 0)
+          Module._yupSetDesiredFrameRate(Math.min(rate, 1000));
+        fpsElement.value = Math.round(Module._yupGetDesiredFrameRate());
+      });
 
       // -------------------------------------------------------------- progress
 
@@ -599,7 +714,9 @@
             });
           }
         ],
-        postRun: [],
+        postRun: [
+          function () { runtimeReady = true; }
+        ],
         print: (function() {
           return function(text) {
             if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
@@ -638,6 +755,7 @@
       window.setInterval(function () {
         pollAudioState();
         pollMidiState();
+        pollFramePacing();
       }, 250);
       Module.setStatus('Downloading module');
       window.onerror = (event) => {

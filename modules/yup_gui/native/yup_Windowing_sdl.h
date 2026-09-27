@@ -115,6 +115,10 @@ public:
     void setDesiredFrameRate (float newFrameRate) override;
 
     //==============================================================================
+    bool isVsyncEnabled() const override;
+    void setVsyncEnabled (bool shouldEnable) override;
+
+    //==============================================================================
     void setOpacity (float opacity) override;
     float getOpacity() const override;
 
@@ -148,6 +152,10 @@ public:
 
     //==============================================================================
     Point<float> getCursorPosition() const;
+
+    //==============================================================================
+    /** Returns the first non-temporary (not popup/menu) window, or nullptr when none exists. */
+    static SDLComponentNative* getPrimaryNativeComponent();
 
     //==============================================================================
     void handleMouseMoveOrDrag (const Point<float>& position, TouchFinger* touchFinger = nullptr);
@@ -322,7 +330,7 @@ private:
     AnimationFrameLoop* activeAnimationFrameLoop = nullptr;
     double lastAnimationFrameMs = 0.0;
     double displayFrameMs = 1000.0 / 60.0;
-    int animationFrameCounter = 0;
+    double nextAnimationFrameMs = 0.0;
 #endif
 
     std::atomic<float> desiredFrameRate = 60.0f;
@@ -339,6 +347,10 @@ private:
     bool firstDisplay = true;
 
     WaitableEvent renderEvent { true };
+    std::atomic<bool> vsyncEnabled = false;
+    std::optional<bool> appliedVsyncEnabled;
+    bool presentWaitsForVsync = false;
+    bool isTemporaryWindow = false;
     std::atomic<bool> shouldRenderContinuous = false;
     double lastRenderTimeSeconds = 0.0;
     std::atomic<bool> renderAtomicMode = false;
@@ -347,7 +359,6 @@ private:
     bool shouldCaptureMouse = false;
     bool mouseCaptureActive = false;
     bool globalMouseCaptureActive = false;
-    bool vsyncEnabled = false;
 };
 
 } // namespace yup

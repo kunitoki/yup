@@ -95,9 +95,9 @@ emscripten_test_release:
   node yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]
-emscripten_serve:
+emscripten_serve INTERFACE="localhost":
   #uv run python -m http.server -d .
-  uv run python tools/serve.py -p 8000 -d .
+  uv run python tools/serve.py -i {{INTERFACE}} -p 8000 -d .
 
 [doc("generate python wheel for yup_python bindings")]
 [working-directory: 'python']
