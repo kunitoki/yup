@@ -122,7 +122,9 @@ void registerYupDataModelBindings (py::module_& m)
         .def ("childAdded", &DataTreeListener::childAdded)
         .def ("childRemoved", &DataTreeListener::childRemoved)
         .def ("childMoved", &DataTreeListener::childMoved)
-        .def ("treeRedirected", &DataTreeListener::treeRedirected);
+        .def ("treeRedirected", &DataTreeListener::treeRedirected)
+        .def ("parentChanged", &DataTreeListener::parentChanged)
+        .def ("ancestorChanged", &DataTreeListener::ancestorChanged);
 
     // ============================================================================================ yup::DataTree
 

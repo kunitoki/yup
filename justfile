@@ -1,7 +1,5 @@
 alias c := clean
 
-gtest_filter := "*"
-
 [doc("list available recipes")]
 default:
   @just --list
@@ -22,10 +20,10 @@ build PLATFORM="mac" CONFIG="Debug" TARGET="yup_tests":
 
 [doc("execute unit tests using cmake")]
 [macos]
-test CONFIG="Debug":
+test CONFIG="Debug" GTEST_FILTER="*":
   cmake -G Xcode -B build/mac
   cmake --build build/mac --target yup_tests --config {{CONFIG}}
-  build/mac/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter={{gtest_filter}}
+  build/mac/tests/{{CONFIG}}/yup_tests.app/Contents/MacOS/yup_tests --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("generate and open project in macOS using Xcode")]
 [macos]
@@ -84,15 +82,15 @@ emscripten CONFIG="Debug" TARGET="yup_tests":
 
 [doc("run Debug tests for WASM")]
 [working-directory: 'build/emscripten/tests/Debug/']
-emscripten_test_debug:
+emscripten_test_debug GTEST_FILTER="*":
   @just build emscripten Debug
-  node yup_tests.js --gtest_filter={{gtest_filter}}
+  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("run Release tests for WASM")]
 [working-directory: 'build/emscripten/tests/Release/']
-emscripten_test_release:
+emscripten_test_release GTEST_FILTER="*":
   @just build emscripten Release
-  node yup_tests.js --gtest_filter={{gtest_filter}}
+  node yup_tests.js --gtest_filter="{{GTEST_FILTER}}"
 
 [doc("serve project for WASM")]
 emscripten_serve INTERFACE="localhost":
