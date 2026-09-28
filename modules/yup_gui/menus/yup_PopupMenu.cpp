@@ -441,6 +441,7 @@ PopupMenu::PopupMenu (const Options& options)
 {
     setOpaque (false);
     setWantsKeyboardFocus (true);
+    setMouseCursor (MouseCursor::Hand);
 }
 
 PopupMenu::~PopupMenu()

@@ -38,37 +38,52 @@ const Identifier MidiKeyboardComponent::Style::blackKeyColorId ("midiKeyboardBla
 const Identifier MidiKeyboardComponent::Style::blackKeyPressedColorId ("midiKeyboardBlackKeyPressed");
 const Identifier MidiKeyboardComponent::Style::blackKeyShadowColorId ("midiKeyboardBlackKeyShadow");
 const Identifier MidiKeyboardComponent::Style::keyOutlineColorId ("midiKeyboardKeyOutline");
+const Identifier MidiKeyboardComponent::Style::scrollButtonBackgroundColorId ("midiKeyboardScrollButtonBackground");
+const Identifier MidiKeyboardComponent::Style::scrollButtonArrowColorId ("midiKeyboardScrollButtonArrow");
+
+//==============================================================================
+MidiKeyboardComponent::ScrollButton::ScrollButton (MidiKeyboardComponent& ownerToUse, bool shouldScrollUp)
+    : Button (shouldScrollUp ? "ScrollUpButton" : "ScrollDownButton")
+    , owner (ownerToUse)
+    , scrollsUp (shouldScrollUp)
+{
+    // Clicking hands the focus to the keyboard instead, so it keeps playing from the computer keyboard.
+    setWantsKeyboardFocus (false);
+}
+
+void MidiKeyboardComponent::ScrollButton::paintButton (Graphics& g)
+{
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+}
 
 //==============================================================================
 MidiKeyboardComponent::MidiKeyboardComponent (MidiKeyboardState& stateToUse, Orientation orientationToUse)
     : state (stateToUse)
     , orientation (orientationToUse)
+    , scrollDownButton (*this, false)
+    , scrollUpButton (*this, true)
 {
     state.addListener (this);
     setWantsKeyboardFocus (true);
+    setMouseCursor (MouseCursor::Hand);
     //setMouseClickGrabsKeyboardFocus (true);
 
-    octaveDownButton = std::make_unique<TextButton> ("-");
-    octaveDownButton->setClickingGrabFocus (false);
-    octaveDownButton->onClick = [this]
-    {
-        setOctaveForMiddleC (octaveNumForMiddleC - 1);
-    };
-    addAndMakeVisible (*octaveDownButton);
+    pointerDownNotes.fill (-1);
 
-    octaveUpButton = std::make_unique<TextButton> ("+");
-    octaveUpButton->setClickingGrabFocus (false);
-    octaveUpButton->onClick = [this]
+    scrollDownButton.onClick = [this]
     {
-        setOctaveForMiddleC (octaveNumForMiddleC + 1);
+        shiftVisibleRange (-12);
     };
-    addAndMakeVisible (*octaveUpButton);
+    addChildComponent (scrollDownButton);
 
-    octaveLabel = std::make_unique<Label> ("OctaveLabel");
-    octaveLabel->setText (String (octaveNumForMiddleC), dontSendNotification);
-    octaveLabel->setJustification (Justification::center);
-    octaveLabel->setWantsMouseEvents (false, false); // clicks pass through to the buttons either side
-    addAndMakeVisible (*octaveLabel);
+    scrollUpButton.onClick = [this]
+    {
+        shiftVisibleRange (12);
+    };
+    addChildComponent (scrollUpButton);
+
+    updateScrollButtons();
 }
 
 MidiKeyboardComponent::~MidiKeyboardComponent()
@@ -93,17 +108,33 @@ void MidiKeyboardComponent::setMidiChannel (int midiChannelNumber)
     }
 }
 
+void MidiKeyboardComponent::setMidiChannelsToDisplay (int midiChannelMask)
+{
+    if (midiInChannelMask != midiChannelMask)
+    {
+        midiInChannelMask = midiChannelMask;
+        repaint();
+    }
+}
+
 void MidiKeyboardComponent::setOctaveForMiddleC (int octaveNumber)
 {
     if (octaveNumForMiddleC != octaveNumber)
+    {
+        octaveNumForMiddleC = octaveNumber;
+        repaint();
+    }
+}
+
+void MidiKeyboardComponent::setKeyPressBaseOctave (int octaveNumber)
+{
+    if (keyPressBaseOctave != octaveNumber)
     {
         // Release any held notes so a key held across the octave change can't
         // get stuck (keyUp can no longer resolve it to the same note number).
         resetAnyKeysInUse();
 
-        octaveNumForMiddleC = octaveNumber;
-        octaveLabel->setText (String (octaveNumForMiddleC), dontSendNotification);
-        repaint();
+        keyPressBaseOctave = octaveNumber;
     }
 }
 
@@ -121,21 +152,104 @@ void MidiKeyboardComponent::setKeyboardKeys (const String& keys)
     }
 }
 
-void MidiKeyboardComponent::setLowestVisibleKey (int noteNumber)
-{
-    setAvailableRange (noteNumber, rangeEnd);
-}
-
+//==============================================================================
 void MidiKeyboardComponent::setAvailableRange (int lowestNote, int highestNote)
 {
     jassert (isPositiveAndBelow (lowestNote, 128));
     jassert (isPositiveAndBelow (highestNote, 128));
     jassert (lowestNote <= highestNote);
 
-    if (rangeStart != lowestNote || rangeEnd != highestNote)
+    rangeStart = jlimit (0, 127, lowestNote);
+    rangeEnd = jlimit (rangeStart, 127, highestNote);
+
+    setVisibleRange (rangeStart, rangeEnd);
+
+    // The visible range may already cover it, but the buttons still depend on the new edges.
+    updateScrollButtons();
+    repaint();
+}
+
+void MidiKeyboardComponent::setVisibleRange (int lowestNote, int highestNote)
+{
+    const auto newLowest = jlimit (rangeStart, rangeEnd, lowestNote);
+    const auto newHighest = jlimit (newLowest, rangeEnd, highestNote);
+
+    if (newLowest == lowestVisibleKey && newHighest == highestVisibleKey)
+        return;
+
+    lowestVisibleKey = newLowest;
+    highestVisibleKey = newHighest;
+
+    updateScrollButtons();
+    repaint();
+
+    if (onVisibleRangeChanged)
+        onVisibleRangeChanged();
+}
+
+void MidiKeyboardComponent::setLowestVisibleKey (int noteNumber)
+{
+    setVisibleRange (jmin (noteNumber, highestVisibleKey), highestVisibleKey);
+}
+
+void MidiKeyboardComponent::setHighestVisibleKey (int noteNumber)
+{
+    setVisibleRange (lowestVisibleKey, jmax (noteNumber, lowestVisibleKey));
+}
+
+//==============================================================================
+void MidiKeyboardComponent::setScrollButtonsVisible (bool shouldBeVisible)
+{
+    if (scrollButtonsVisible != shouldBeVisible)
     {
-        rangeStart = jlimit (0, 127, lowestNote);
-        rangeEnd = jlimit (0, 127, highestNote);
+        scrollButtonsVisible = shouldBeVisible;
+        updateScrollButtons();
+        repaint();
+    }
+}
+
+void MidiKeyboardComponent::setScrollButtonWidth (float widthOrHeight)
+{
+    widthOrHeight = jmax (0.0f, widthOrHeight);
+
+    if (scrollButtonWidth != widthOrHeight)
+    {
+        scrollButtonWidth = widthOrHeight;
+        updateScrollButtons();
+        repaint();
+    }
+}
+
+//==============================================================================
+void MidiKeyboardComponent::setOrientation (Orientation newOrientation)
+{
+    if (orientation != newOrientation)
+    {
+        resetAnyKeysInUse();
+        orientation = newOrientation;
+        updateScrollButtons();
+        repaint();
+    }
+}
+
+void MidiKeyboardComponent::setBlackNoteLengthProportion (float proportion)
+{
+    proportion = jlimit (0.0f, 1.0f, proportion);
+
+    if (blackNoteLengthProportion != proportion)
+    {
+        blackNoteLengthProportion = proportion;
+        repaint();
+    }
+}
+
+void MidiKeyboardComponent::setBlackNoteWidthProportion (float proportion)
+{
+    proportion = jlimit (0.0f, 1.0f, proportion);
+
+    if (blackNoteWidthProportion != proportion)
+    {
+        blackNoteWidthProportion = proportion;
         repaint();
     }
 }
@@ -145,22 +259,20 @@ Rectangle<float> MidiKeyboardComponent::getRectangleForKey (int midiNoteNumber) 
 {
     jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
 
-    if (midiNoteNumber < rangeStart || midiNoteNumber > rangeEnd)
+    if (midiNoteNumber < lowestVisibleKey || midiNoteNumber > highestVisibleKey)
         return {};
 
-    auto keyWidth = getKeyStartRange().getLength() / getNumWhiteKeysInRange (rangeStart, rangeEnd + 1);
     Rectangle<float> pos;
     bool isBlack;
 
-    getKeyPosition (midiNoteNumber, keyWidth, pos, isBlack);
+    getKeyPosition (midiNoteNumber, getKeyWidth(), pos, isBlack);
 
     return pos;
 }
 
 int MidiKeyboardComponent::getNoteAtPosition (Point<float> position) const
 {
-    float mousePositionVelocity;
-    return remappedXYToNote (position, mousePositionVelocity);
+    return getNoteAndVelocityAtPosition (position).note;
 }
 
 //==============================================================================
@@ -171,13 +283,30 @@ void MidiKeyboardComponent::paint (Graphics& g)
 }
 
 //==============================================================================
+bool MidiKeyboardComponent::mouseDownOnKey (int, const MouseEvent&)
+{
+    return true;
+}
+
+bool MidiKeyboardComponent::mouseDraggedToKey (int, const MouseEvent&)
+{
+    return true;
+}
+
+void MidiKeyboardComponent::mouseUpOnKey (int, const MouseEvent&)
+{
+}
+
+//==============================================================================
 void MidiKeyboardComponent::mouseDown (const MouseEvent& e)
 {
     if (! isEnabled())
         return;
 
-    updateNoteUnderMouse (e, true);
-    shouldCheckState = true;
+    const auto note = getNoteAtPosition (e.getPosition());
+
+    if (note >= 0 && mouseDownOnKey (note, e))
+        updateNoteUnderMouse (e, true);
 }
 
 void MidiKeyboardComponent::mouseDrag (const MouseEvent& e)
@@ -185,7 +314,11 @@ void MidiKeyboardComponent::mouseDrag (const MouseEvent& e)
     if (! isEnabled())
         return;
 
-    updateNoteUnderMouse (e, true);
+    // Dragging off the keys releases the note held by this pointer.
+    const auto note = getNoteAtPosition (e.getPosition());
+
+    if (note < 0 || mouseDraggedToKey (note, e))
+        updateNoteUnderMouse (e, true);
 }
 
 void MidiKeyboardComponent::mouseUp (const MouseEvent& e)
@@ -193,16 +326,12 @@ void MidiKeyboardComponent::mouseUp (const MouseEvent& e)
     if (! isEnabled())
         return;
 
-    // Always release all notes that were triggered by mouse interaction
-    for (auto noteDown : mouseDownNotes)
-        state.noteOff (midiChannel, noteDown, velocity);
-
-    mouseDownNotes.clear();
-
-    // Update visual state to show keys are no longer pressed
     updateNoteUnderMouse (e, false);
-    updateShadowNoteUnderMouse (e);
-    shouldCheckState = true;
+
+    const auto note = getNoteAtPosition (e.getPosition());
+
+    if (note >= 0)
+        mouseUpOnKey (note, e);
 }
 
 void MidiKeyboardComponent::mouseMove (const MouseEvent& e)
@@ -217,25 +346,15 @@ void MidiKeyboardComponent::mouseEnter (const MouseEvent& e)
 {
     updateShadowNoteUnderMouse (e);
 
-    // If we're entering while dragging, trigger the note under the mouse
+    // If we're entering while dragging, trigger the note under the pointer
     if (e.isAnyButtonDown())
-    {
-        updateNoteUnderMouse (e, true);
-    }
+        mouseDrag (e);
 }
 
 void MidiKeyboardComponent::mouseExit (const MouseEvent& e)
 {
-    updateShadowNoteUnderMouse (e);
-
-    // If we're dragging and leaving the component, release all notes
-    if (e.isAnyButtonDown() && ! mouseDownNotes.isEmpty())
-    {
-        for (auto noteDown : mouseDownNotes)
-            state.noteOff (midiChannel, noteDown, velocity);
-
-        mouseDownNotes.clear();
-    }
+    // Leaving the component releases the note held by this pointer only
+    updateNoteUnderMouse (e, false);
 }
 
 void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
@@ -243,7 +362,7 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
     const auto modifiers = event.getModifiers();
 
     // Ctrl/Cmd + wheel zooms in and out, clamped to a minimum span of a single
-    // octave and a maximum span covering the whole 0-127 note range.
+    // octave and a maximum span covering the whole available range.
     if (modifiers.isControlDown() || modifiers.isCommandDown())
     {
         auto zoomDelta = wheel.getDeltaY() != 0.0f ? wheel.getDeltaY() : wheel.getDeltaX();
@@ -253,7 +372,7 @@ void MidiKeyboardComponent::mouseWheel (const MouseEvent& event, const MouseWhee
             auto anchorNote = getNoteAtPosition (event.getPosition());
 
             if (anchorNote < 0)
-                anchorNote = rangeStart + (rangeEnd - rangeStart) / 2;
+                anchorNote = lowestVisibleKey + (highestVisibleKey - lowestVisibleKey) / 2;
 
             zoomBy (zoomDelta, anchorNote);
         }
@@ -292,15 +411,7 @@ void MidiKeyboardComponent::handleAsyncUpdate()
 //==============================================================================
 void MidiKeyboardComponent::resized()
 {
-    shouldCheckState = true;
-
-    constexpr float octaveButtonSize = 18.0f;
-    constexpr float octaveLabelWidth = 22.0f;
-
-    auto octaveSelectorBounds = Rectangle<float> (2.0f, 2.0f, octaveButtonSize * 2.0f + octaveLabelWidth, octaveButtonSize);
-    octaveDownButton->setBounds (octaveSelectorBounds.removeFromLeft (octaveButtonSize));
-    octaveLabel->setBounds (octaveSelectorBounds.removeFromLeft (octaveLabelWidth));
-    octaveUpButton->setBounds (octaveSelectorBounds);
+    updateScrollButtons();
 }
 
 void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
@@ -309,7 +420,7 @@ void MidiKeyboardComponent::keyDown (const KeyPress& key, const Point<float>&)
 
     if (midiNote >= 0)
     {
-        midiNote += 12 * octaveNumForMiddleC;
+        midiNote += 12 * keyPressBaseOctave;
 
         if (midiNote >= 0 && midiNote < 128 && ! keyDownNotes.contains (midiNote))
         {
@@ -325,7 +436,7 @@ void MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
 
     if (midiNote >= 0)
     {
-        midiNote += 12 * octaveNumForMiddleC;
+        midiNote += 12 * keyPressBaseOctave;
 
         if (keyDownNotes.removeFirstMatchingValue (midiNote) >= 0)
             state.noteOff (midiChannel, midiNote, 0.0f);
@@ -334,7 +445,9 @@ void MidiKeyboardComponent::keyUp (const KeyPress& key, const Point<float>&)
 
 void MidiKeyboardComponent::focusLost()
 {
-    resetAnyKeysInUse();
+    // Pointer notes are released by their own mouse up: focus moves on every
+    // finger down, so touching another component must not cut a held chord.
+    releaseKeyPressNotes();
 }
 
 //==============================================================================
@@ -345,23 +458,25 @@ int MidiKeyboardComponent::getMidiNoteForKey (const KeyPress& key) const
     return keyboardKeys.indexOfChar (character);
 }
 
+void MidiKeyboardComponent::shiftVisibleRange (int semitones)
+{
+    const auto span = highestVisibleKey - lowestVisibleKey;
+    const auto newStart = jlimit (rangeStart, rangeEnd - span, lowestVisibleKey + semitones);
+
+    setVisibleRange (newStart, newStart + span);
+}
+
 void MidiKeyboardComponent::scrollByWhiteKeys (int numWhiteKeys)
 {
     if (numWhiteKeys == 0)
         return;
 
-    const auto span = rangeEnd - rangeStart;
-
-    auto newStart = whiteKeyToNote (getNumWhiteKeysInRange (0, rangeStart) + numWhiteKeys);
+    auto newStart = whiteKeyToNote (getNumWhiteKeysInRange (0, lowestVisibleKey) + numWhiteKeys);
 
     if (newStart < 0)
-        return;
+        newStart = (numWhiteKeys < 0) ? rangeStart : rangeEnd;
 
-    auto newEnd = jmin (127, newStart + span);
-    newStart = newEnd - span;
-
-    if (newStart != rangeStart || newEnd != rangeEnd)
-        setAvailableRange (newStart, newEnd);
+    shiftVisibleRange (newStart - lowestVisibleKey);
 }
 
 void MidiKeyboardComponent::zoomBy (float zoomDelta, int anchorNote)
@@ -369,41 +484,28 @@ void MidiKeyboardComponent::zoomBy (float zoomDelta, int anchorNote)
     if (zoomDelta == 0.0f)
         return;
 
-    const auto span = rangeEnd - rangeStart;
+    const auto span = highestVisibleKey - lowestVisibleKey;
+    const auto availableSpan = rangeEnd - rangeStart;
 
     if (span == 0)
         return;
 
     // Each wheel notch multiplies the span by a fixed factor, clamped so that
     // zooming in can never go below a single octave and zooming out can never
-    // exceed the full 0-127 note range.
+    // exceed the available range.
     auto newSpan = (zoomDelta > 0.0f) ? roundToInt (span / 1.25f)
                                       : roundToInt (span * 1.25f);
 
-    newSpan = jlimit (12, 127, newSpan);
+    newSpan = jlimit (jmin (12, availableSpan), availableSpan, newSpan);
 
     if (newSpan == span)
         return;
 
     // Keep the note under the mouse at the same relative position within the range.
-    const auto anchorPos = (float) (anchorNote - rangeStart) / (float) span;
+    const auto anchorPos = (float) (anchorNote - lowestVisibleKey) / (float) span;
+    const auto newStart = jlimit (rangeStart, rangeEnd - newSpan, roundToInt (anchorNote - anchorPos * newSpan));
 
-    auto newStart = roundToInt (anchorNote - anchorPos * newSpan);
-    auto newEnd = newStart + newSpan;
-
-    if (newStart < 0)
-    {
-        newStart = 0;
-        newEnd = newSpan;
-    }
-    else if (newEnd > 127)
-    {
-        newEnd = 127;
-        newStart = 127 - newSpan;
-    }
-
-    if (newStart != rangeStart || newEnd != rangeEnd)
-        setAvailableRange (newStart, newEnd);
+    setVisibleRange (newStart, newStart + newSpan);
 }
 
 int MidiKeyboardComponent::whiteKeyToNote (int whiteKeyIndex) const
@@ -447,240 +549,200 @@ int MidiKeyboardComponent::getNumWhiteKeysInRange (int rangeStart, int rangeEnd)
     return numWhiteKeys;
 }
 
-String MidiKeyboardComponent::getWhiteNoteText (int midiNoteNumber)
+String MidiKeyboardComponent::getWhiteNoteText (int midiNoteNumber) const
 {
     if (isBlackKey (midiNoteNumber))
         return {};
 
-    static const char* const noteNames[] = { "C", "", "D", "", "E", "F", "", "G", "", "A", "", "B" };
-
-    return String (noteNames[midiNoteNumber % 12]);
+    return MidiMessage::getMidiNoteName (midiNoteNumber, true, midiNoteNumber % 12 == 0, octaveNumForMiddleC);
 }
 
 void MidiKeyboardComponent::getKeyPosition (int midiNoteNumber, float keyWidth, Rectangle<float>& keyPos, bool& isBlack) const
 {
     jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
 
-    // Fixed black key offsets for proper positioning
-    // static const float blackKeyOffsets[] = { 0.0f, 0.25f, 0.0f, 0.35f, 0.0f, 0.0f, 0.25f, 0.0f, 0.3f, 0.0f, 0.35f, 0.0f };
-    static const float blackKeyOffsets[] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    auto octave = midiNoteNumber / 12;
-    auto note = midiNoteNumber % 12;
-
-    auto numWhiteKeysBefore = 0;
-    auto notePos = 0;
-
-    for (int i = 0; i < note; ++i)
-    {
-        if (! isBlackKey (i))
-            ++numWhiteKeysBefore;
-    }
-
-    for (int i = rangeStart; i < midiNoteNumber; ++i)
-    {
-        if (! isBlackKey (i))
-            ++notePos;
-    }
-
     isBlack = isBlackKey (midiNoteNumber);
 
-    auto x = notePos * keyWidth;
+    // Offset along the keyboard axis, from its low end. Black keys sit centered on the
+    // boundary between their neighbours.
+    auto x = getNumWhiteKeysInRange (lowestVisibleKey, midiNoteNumber) * keyWidth;
     auto w = keyWidth;
 
     if (isBlack)
     {
-        auto blackKeyWidth = keyWidth * 0.7f;
-        x = x - (blackKeyWidth * 0.5f) + (keyWidth * blackKeyOffsets[note]);
-        w = blackKeyWidth;
+        w = keyWidth * blackNoteWidthProportion;
+        x -= w * 0.5f;
     }
+
+    // Keys hang from their back edge, so black keys are anchored there.
+    const auto keyStart = getKeyStartRange();
+    const auto depth = (orientation == horizontalKeyboard) ? getHeight() : getWidth();
+    const auto length = isBlack ? depth * blackNoteLengthProportion : depth;
 
     switch (orientation)
     {
         case horizontalKeyboard:
-            keyPos = Rectangle<float> (x, 0.0f, w, (float) getHeight());
+            keyPos = Rectangle<float> (keyStart.getStart() + x, 0.0f, w, length);
             break;
 
         case verticalKeyboardFacingLeft:
-            keyPos = Rectangle<float> ((float) getWidth() - ((isBlack ? 0.7f : 1.0f) * (float) getWidth()),
-                                       x,
-                                       (isBlack ? 0.7f : 1.0f) * (float) getWidth(),
-                                       w);
+            keyPos = Rectangle<float> (depth - length, keyStart.getStart() + x, length, w);
             break;
 
         case verticalKeyboardFacingRight:
-            keyPos = Rectangle<float> (0.0f, (float) getHeight() - x - w, (isBlack ? 0.7f : 1.0f) * (float) getWidth(), w);
+            keyPos = Rectangle<float> (0.0f, keyStart.getEnd() - x - w, length, w);
             break;
 
         default:
             break;
-    }
-
-    if (isBlack)
-    {
-        switch (orientation)
-        {
-            case horizontalKeyboard:
-                keyPos = keyPos.withHeight (keyPos.getHeight() * 0.6f);
-                break;
-            case verticalKeyboardFacingLeft:
-                keyPos = keyPos.withWidth (keyPos.getWidth() * 0.6f);
-                break;
-            case verticalKeyboardFacingRight:
-                keyPos = keyPos.withX (keyPos.getX() + keyPos.getWidth() * 0.4f)
-                             .withWidth (keyPos.getWidth() * 0.6f);
-                break;
-            default:
-                break;
-        }
     }
 }
 
 Range<float> MidiKeyboardComponent::getKeyStartRange() const
 {
-    return (orientation == horizontalKeyboard) ? Range<float> (0.0f, (float) getWidth())
-                                               : Range<float> (0.0f, (float) getHeight());
+    const auto length = (orientation == horizontalKeyboard) ? getWidth() : getHeight();
+    const auto buttonWidth = scrollDownButton.isVisible() ? jmin (scrollButtonWidth, length * 0.5f) : 0.0f;
+
+    return { buttonWidth, length - buttonWidth };
 }
 
-int MidiKeyboardComponent::xyToNote (Point<float> pos, float& mousePositionVelocity)
+float MidiKeyboardComponent::getKeyWidth() const
 {
-    return remappedXYToNote (pos, mousePositionVelocity);
+    return getKeyStartRange().getLength() / (float) jmax (1, getNumWhiteKeysInRange (lowestVisibleKey, highestVisibleKey + 1));
 }
 
-int MidiKeyboardComponent::remappedXYToNote (Point<float> pos, float& mousePositionVelocity) const
+MidiKeyboardComponent::NoteAndVelocity MidiKeyboardComponent::getNoteAndVelocityAtPosition (Point<float> position) const
 {
-    auto keyWidth = getKeyStartRange().getLength() / getNumWhiteKeysInRange (rangeStart, rangeEnd + 1);
+    // Black keys at the visible edges overhang the key area, keep them off the scroll buttons.
+    if (! getKeyStartRange().contains ((orientation == horizontalKeyboard) ? position.getX() : position.getY()))
+        return {};
 
-    auto coord = (orientation == horizontalKeyboard) ? pos.getX() : pos.getY();
-    auto otherCoord = (orientation == horizontalKeyboard) ? pos.getY() : pos.getX();
+    const auto keyWidth = getKeyWidth();
 
-    auto blackKeyDepth = 0.7f;
-
-    switch (orientation)
+    // Black keys lie on top of the white ones, so they are hit first.
+    for (const auto blackKeys : { true, false })
     {
-        case horizontalKeyboard:
-            blackKeyDepth = getHeight() * 0.6f;
-            break;
-        case verticalKeyboardFacingLeft:
-            blackKeyDepth = getWidth() * 0.6f;
-            break;
-        case verticalKeyboardFacingRight:
-            blackKeyDepth = getWidth() * 0.6f;
-            break;
-        default:
-            break;
-    }
-
-    // First try black keys
-    for (int note = rangeStart; note <= rangeEnd; ++note)
-    {
-        if (isBlackKey (note))
+        for (int note = lowestVisibleKey; note <= highestVisibleKey; ++note)
         {
             Rectangle<float> area;
             bool isBlack;
             getKeyPosition (note, keyWidth, area, isBlack);
 
-            if (area.contains (pos))
+            if (isBlack != blackKeys || ! area.contains (position))
+                continue;
+
+            float distanceFromBack = 0.0f;
+
+            switch (orientation)
             {
-                mousePositionVelocity = jlimit (0.0f, 1.0f, otherCoord / area.getHeight());
-                return note;
+                case horizontalKeyboard:
+                    distanceFromBack = (position.getY() - area.getY()) / area.getHeight();
+                    break;
+
+                case verticalKeyboardFacingLeft:
+                    distanceFromBack = (area.getRight() - position.getX()) / area.getWidth();
+                    break;
+
+                case verticalKeyboardFacingRight:
+                    distanceFromBack = (position.getX() - area.getX()) / area.getWidth();
+                    break;
+
+                default:
+                    break;
             }
+
+            return { note, jlimit (0.0f, 1.0f, distanceFromBack) };
         }
     }
 
-    // Then try white keys
-    for (int note = rangeStart; note <= rangeEnd; ++note)
-    {
-        if (! isBlackKey (note))
-        {
-            Rectangle<float> area;
-            bool isBlack;
-            getKeyPosition (note, keyWidth, area, isBlack);
-
-            if (area.contains (pos))
-            {
-                mousePositionVelocity = jlimit (0.0f, 1.0f, otherCoord / area.getHeight());
-                return note;
-            }
-        }
-    }
-
-    mousePositionVelocity = velocity;
-    return -1;
+    return {};
 }
 
 void MidiKeyboardComponent::repaintNote (int midiNoteNumber)
 {
-    if (midiNoteNumber >= rangeStart && midiNoteNumber <= rangeEnd)
+    if (midiNoteNumber >= lowestVisibleKey && midiNoteNumber <= highestVisibleKey)
         repaint (getRectangleForKey (midiNoteNumber).roundToInt().enlarged (1)); // getSmallestIntegerContainer
 }
 
-void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown, int fingerNum)
+void MidiKeyboardComponent::updateNoteUnderMouse (Point<float> pos, bool isDown, int pointerSlot)
 {
-    float mousePositionVelocity;
-    auto newNote = xyToNote (pos, mousePositionVelocity);
-    auto oldNote = mouseOverNote;
+    const auto noteInfo = getNoteAndVelocityAtPosition (pos);
+    const auto newNote = noteInfo.note;
+    const auto eventVelocity = useMousePositionForVelocity ? noteInfo.velocity * velocity : velocity;
 
-    // Always update hover visual state when the note under mouse changes
-    if (oldNote != newNote)
+    // Only the real mouse hovers: a lifted finger must not leave its last key tinted
+    if (pointerSlot == 0 && newNote != mouseOverNote)
     {
-        repaintNote (oldNote);
+        repaintNote (mouseOverNote);
         repaintNote (newNote);
         mouseOverNote = newNote;
     }
 
-    if (isDown)
-    {
-        // Handle note triggering - this should work regardless of hover state
+    const auto oldNoteDown = pointerDownNotes[(size_t) pointerSlot];
+    const auto newNoteDown = isDown ? newNote : -1;
 
-        // First, release any previously pressed notes that are no longer under the mouse
-        for (int i = mouseDownNotes.size(); --i >= 0;)
-        {
-            auto pressedNote = mouseDownNotes.getUnchecked (i);
-            if (pressedNote != newNote)
-            {
-                state.noteOff (midiChannel, pressedNote, mousePositionVelocity);
-                mouseDownNotes.remove (i);
-            }
-        }
+    if (oldNoteDown == newNoteDown)
+        return;
 
-        // Then, trigger the new note if it's valid and not already pressed
-        if (newNote >= 0 && ! mouseDownNotes.contains (newNote))
-        {
-            state.noteOn (midiChannel, newNote, mousePositionVelocity);
-            mouseDownNotes.add (newNote);
-        }
-    }
+    // A note shared by several pointers sounds once, and stops when the last one leaves it
+    pointerDownNotes[(size_t) pointerSlot] = -1;
+
+    if (oldNoteDown >= 0 && ! isNoteHeldByPointer (oldNoteDown))
+        state.noteOff (midiChannel, oldNoteDown, eventVelocity);
+
+    if (newNoteDown >= 0 && ! isNoteHeldByPointer (newNoteDown))
+        state.noteOn (midiChannel, newNoteDown, eventVelocity);
+
+    pointerDownNotes[(size_t) pointerSlot] = newNoteDown;
 }
 
 void MidiKeyboardComponent::updateNoteUnderMouse (const MouseEvent& e, bool isDown)
 {
-    updateNoteUnderMouse (e.getPosition(), isDown, 0);
+    // The mouse (touch index -1) takes slot 0, each finger the slots after it
+    const auto pointerSlot = e.getTouchIndex() + 1;
+
+    if (! isPositiveAndBelow (pointerSlot, maxPointers))
+    {
+        jassertfalse; // More simultaneous pointers than the keyboard can track
+        return;
+    }
+
+    updateNoteUnderMouse (e.getPosition(), isDown, pointerSlot);
+}
+
+bool MidiKeyboardComponent::isNoteHeldByPointer (int midiNoteNumber) const
+{
+    return std::find (pointerDownNotes.begin(), pointerDownNotes.end(), midiNoteNumber) != pointerDownNotes.end();
 }
 
 void MidiKeyboardComponent::resetAnyKeysInUse()
 {
-    if (! mouseDownNotes.isEmpty())
+    for (auto& noteDown : pointerDownNotes)
     {
-        for (auto noteDown : mouseDownNotes)
-            state.noteOff (midiChannel, noteDown, velocity);
+        const auto note = std::exchange (noteDown, -1);
 
-        mouseDownNotes.clear();
+        if (note >= 0 && ! isNoteHeldByPointer (note))
+            state.noteOff (midiChannel, note, velocity);
     }
 
-    if (! keyDownNotes.isEmpty())
-    {
-        for (auto noteDown : keyDownNotes)
-            state.noteOff (midiChannel, noteDown, 0.0f);
-
-        keyDownNotes.clear();
-    }
+    releaseKeyPressNotes();
 
     mouseOverNote = -1;
 }
 
+void MidiKeyboardComponent::releaseKeyPressNotes()
+{
+    for (auto noteDown : keyDownNotes)
+        state.noteOff (midiChannel, noteDown, 0.0f);
+
+    keyDownNotes.clear();
+}
+
 void MidiKeyboardComponent::updateShadowNoteUnderMouse (const MouseEvent& e)
 {
+    if (e.isTouch())
+        return;
+
     auto note = getNoteAtPosition (e.getPosition());
 
     if (note != mouseOverNote)
@@ -689,6 +751,41 @@ void MidiKeyboardComponent::updateShadowNoteUnderMouse (const MouseEvent& e)
         mouseOverNote = note;
         repaintNote (mouseOverNote);
     }
+}
+
+void MidiKeyboardComponent::updateScrollButtons()
+{
+    const auto canScrollDown = lowestVisibleKey > rangeStart;
+    const auto canScrollUp = highestVisibleKey < rangeEnd;
+    const auto showButtons = scrollButtonsVisible && (canScrollDown || canScrollUp);
+
+    scrollDownButton.setEnabled (canScrollDown);
+    scrollUpButton.setEnabled (canScrollUp);
+    scrollDownButton.setVisible (showButtons);
+    scrollUpButton.setVisible (showButtons);
+
+    if (! showButtons)
+        return;
+
+    auto bounds = getLocalBounds();
+
+    if (orientation == horizontalKeyboard)
+    {
+        const auto buttonWidth = jmin (scrollButtonWidth, bounds.getWidth() * 0.5f);
+
+        scrollDownButton.setBounds (bounds.removeFromLeft (buttonWidth));
+        scrollUpButton.setBounds (bounds.removeFromRight (buttonWidth));
+        return;
+    }
+
+    // Each button sits at the end of the keys it scrolls towards.
+    const auto buttonHeight = jmin (scrollButtonWidth, bounds.getHeight() * 0.5f);
+    const auto topButton = bounds.removeFromTop (buttonHeight);
+    const auto bottomButton = bounds.removeFromBottom (buttonHeight);
+    const auto lowNotesAtTop = orientation == verticalKeyboardFacingLeft;
+
+    scrollDownButton.setBounds (lowNotesAtTop ? topButton : bottomButton);
+    scrollUpButton.setBounds (lowNotesAtTop ? bottomButton : topButton);
 }
 
 } // namespace yup
