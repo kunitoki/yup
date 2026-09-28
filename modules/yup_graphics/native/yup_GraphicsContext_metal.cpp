@@ -286,8 +286,20 @@ public:
         renderTarget->setTargetTexture (nil);
     }
 
+    bool setVsyncEnabled (bool shouldEnable) override
+    {
+        options.vsync = shouldEnable;
+
+#if YUP_MAC
+        swapchain.displaySyncEnabled = shouldEnable ? YES : NO;
+        return true;
+#else
+        return shouldEnable; // iOS always presents on the display refresh
+#endif
+    }
+
 private:
-    const Options options;
+    Options options;
     rive::gpu::RenderContextMetalImpl::ContextOptions renderContextOptions;
     GpuDevice::Ptr gpuDevice;
     id<MTLDevice> gpu = MTLCreateSystemDefaultDevice();

@@ -147,6 +147,30 @@ svf.processMultipleOutputs (in, lp, hp, bp, bs, n); // any output buffer may be 
 lowpass). Coefficients are `k = 1/Q`, `g = tan(ω/2)`, normalized as
 `g / (1 + g·(k + g))`.
 
+### VAStateVariableFilter
+
+`VAStateVariableFilter` is a topology preserving transform SVF after Zavalishin.
+Where `StateVariableFilter` offers four outputs and clamps Q, this one produces
+eight outputs from one pass, takes a resonance in `0..1` (`Q = 1 / (2 (1 - r))`)
+or a raw Q, and adds a band shelf whose gain is set in dB.
+
+```cpp
+VAStateVariableFilter<float> svf;
+svf.setParameters (yup::FilterMode::bandpassCpg, 1200.f, 4.f, 0.f, 48000.0);
+svf.setResonance (0.8f);                    // or setQ()
+svf.setCutoffPitch (60.f);                  // MIDI note, 440 Hz at 69
+
+float y = svf.processSample (x);            // output selected by the mode
+auto outs = svf.processAllOutputs (x);      // .lowpass .highpass .bandpass .unityGainBandpass
+                                            // .bandShelf .notch .allpass .peak
+```
+
+Supported modes: `lowpass`, `highpass`, `bandpassCsg` (peak gain `Q`),
+`bandpassCpg` (unity peak gain), `bandstop`, `allpass` and `peak` (the band shelf,
+`input + K · 2 R · BP` with `K = 10^(dB / 20) - 1`). The lowpass-minus-highpass
+output of the original is available as `Outputs::peak` only. `getComplexResponse`
+is analytic through the bilinear substitution, so it matches the processed signal.
+
 ### ButterworthFilter
 
 `ButterworthFilter` is a mathematically correct Butterworth design (analog

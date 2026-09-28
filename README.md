@@ -40,11 +40,6 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 ## Screenshots
 
-<div>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
-    <img src="./docs/demos/web_render_0.png" style="width:99%" /></a>
-</div>
-
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_graph.png" style="width:57.5%;" /></a>
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_host.png" style="width:39.5%;" /></a>
 <div>
@@ -64,13 +59,6 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 <div>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_waveform_onsets.jpg" style="width:31.2%;" /></a>
   <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_audio_scope.png" style="width:66%;" /></a>
-</div>
-
-<div>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" style="width:23.8%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" style="width:23.8%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" style="width:23.8%;" /></a>
-  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" style="width:23.8%;" /></a>
 </div>
 
 <div>

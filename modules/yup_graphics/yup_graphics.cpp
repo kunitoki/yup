@@ -34,6 +34,7 @@
 
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 #include <rive/renderer/rive_renderer.hpp>
+#include <rive/math/mat4.hpp>
 #include <rive/renderer/rive_render_image.hpp>
 #include <rive/text/font_hb.hpp>
 #include <rive/renderer/ore/ore_context.hpp>
@@ -138,7 +139,10 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 //==============================================================================
 #include "context/yup_GraphicsContext.cpp"
 #include "primitives/yup_Path.cpp"
+#include "primitives/yup_Matrix4.cpp"
+#include "primitives/yup_Ray.cpp"
 #include "primitives/yup_CubicBezier.cpp"
+#include "meshes/yup_MeshSurfaceMapper.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
 #include "imaging/yup_ImagePixelData.cpp"

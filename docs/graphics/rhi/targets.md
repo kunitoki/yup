@@ -111,7 +111,7 @@ if (canvas != nullptr)
 }
 ```
 
-`beginDraw (const GpuFrameDescriptor& frameDesc = {})` opens (or reopens) a 2D
+`beginDraw (const GpuFrameDescriptor& frameDesc = {}, float scale = 1.0f)` opens (or reopens) a 2D
 frame and returns the `Graphics` to draw into. On the first call it opens a
 fresh offscreen 2D GPU frame; subsequent calls discard the previous frame's
 `Graphics` and reopen a new one on the same already-allocated target, avoiding
@@ -120,6 +120,12 @@ per-frame GPU resource reallocation. `frameDesc` gives control over
 `renderTargetWidth`/`renderTargetHeight` are ignored and auto-filled from the
 canvas. The default `{}` reproduces the previous behaviour (clear to
 transparent black, no msaa).
+
+`scale` is the number of canvas pixels per logical drawing unit. The canvas stays
+sized in pixels, while the returned `Graphics` reports `scale` through
+`getContextScale()` and its default drawing area is the canvas size divided by
+`scale`. For example, a canvas created at 128×96 and opened with a scale of 2 is
+drawn into with 64×48 logical coordinates, which keeps it sharp on a 2× display.
 
 ### Custom-pass path
 
@@ -137,7 +143,7 @@ pass.finish();
 | `getTarget()`                       | The underlying `GpuTarget` backing this canvas.                   |
 | `getWidth()` / `getHeight()`        | Canvas dimensions in pixels.                                      |
 | `beginRenderPass (frame, options)`  | Begins a render pass targeting the backing texture.               |
-| `beginDraw (frameDesc = {})`        | Opens/reopens a 2D frame; returns the `Graphics` to draw into.    |
+| `beginDraw (frameDesc = {}, scale = 1)` | Opens/reopens a 2D frame; returns the `Graphics` to draw into. |
 | `commit()`                          | Finalizes an open 2D command. Usually unnecessary (auto-commits). |
 | `asTexture()`                       | GPU-texture view; auto-commits an open 2D frame.                  |
 | `asImage()`                         | `Image` with GPU texture + CPU pixels; auto-commits.              |

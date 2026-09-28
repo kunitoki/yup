@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- @head -->
+        <title>YUP compared with JUCE, iPlug2, DPF, Visage and Qt - YUP!</title>
+        <meta name="description" content="A factual comparison of YUP with JUCE, iPlug2, DPF, Visage and Qt: licensing, plugin formats, plugin hosting, GPU rendering, platforms, web target, Python and AI." />
+    </head>
+    <body>
+        <!-- @header -->
+
+        <main>
+            <section class="relative overflow-hidden pt-16 pb-12 sm:pt-24">
+                <div class="bg-grid"></div>
+                <div class="container-site relative text-center">
+                    <p class="eyebrow">Compare</p>
+                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">YUP next to the alternatives</h1>
+                    <p class="lead mx-auto mt-5 max-w-2xl">How YUP lines up against the frameworks people usually weigh it against, taken from each project's own documentation. Every framework here is good at something, so pick the one that fits your project.</p>
+                </div>
+            </section>
+
+            <section class="pb-16">
+                <div class="container-site">
+                    <div class="card overflow-x-auto">
+                        <table class="compare w-full min-w-[68rem] text-left text-sm">
+                            <thead>
+                                <tr>
+                                    <th scope="col"><span class="sr-only">Feature</span></th>
+                                    <th scope="col" class="compare-yup">YUP</th>
+                                    <th scope="col">JUCE 9</th>
+                                    <th scope="col">iPlug2</th>
+                                    <th scope="col">DPF</th>
+                                    <th scope="col">Visage</th>
+                                    <th scope="col">Qt 6</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th scope="row">License</th>
+                                    <td class="compare-yup">ISC</td>
+                                    <td>AGPLv3 or commercial</td>
+                                    <td>zlib-like</td>
+                                    <td>ISC</td>
+                                    <td>MIT</td>
+                                    <td>LGPLv3, GPLv3 (some modules) or commercial</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Closed-source commercial use</th>
+                                    <td class="compare-yup">Free, no revenue cap</td>
+                                    <td>Free up to $20k revenue, then $40 or $175 per user per month (or perpetual)</td>
+                                    <td>Free, no revenue cap</td>
+                                    <td>Free, no revenue cap</td>
+                                    <td>Free, no revenue cap</td>
+                                    <td>Free under LGPLv3 terms, otherwise a commercial license</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Builds plugins</th>
+                                    <td class="compare-yup">CLAP, VST3 (Windows, macOS), AUv2, AUv3 (macOS), standalone. Linux, AAX and LV2 in progress</td>
+                                    <td>VST, VST3, AU, AUv3, AAX, LV2, standalone. CLAP through the third-party clap-juce-extensions</td>
+                                    <td>CLAP, VST2, VST3, AUv2, AUv3, AAX, WAM, standalone</td>
+                                    <td>CLAP, VST2, VST3, AUv2, LV2, LADSPA, DSSI, JACK standalone</td>
+                                    <td>No, UI library only (ships a CLAP example)</td>
+                                    <td>No, not a plugin framework</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Hosts plugins</th>
+                                    <td class="compare-yup">CLAP, VST3, AUv2</td>
+                                    <td>VST, VST3, AU, AUv3, LV2</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">UI rendering</th>
+                                    <td class="compare-yup">GPU by default: Metal, Direct3D 11, OpenGL, OpenGL ES, WebGL2, WebGPU. Vulkan in progress</td>
+                                    <td>CoreGraphics, Direct2D or software, optional OpenGL</td>
+                                    <td>NanoVG or Skia on OpenGL or Metal, GPU by default</td>
+                                    <td>OpenGL by default, OpenGL ES, Cairo, WebView</td>
+                                    <td>GPU only, through bgfx: Direct3D 11/12, Metal, Vulkan, WebGL</td>
+                                    <td>Qt Quick on OpenGL, Vulkan, Direct3D 11/12 or Metal. Widgets in software</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Platforms</th>
+                                    <td class="compare-yup">Windows, macOS, Linux, iOS, Android, Wasm</td>
+                                    <td>Windows, macOS, Linux, iOS, Android</td>
+                                    <td>Windows, macOS, iOS, visionOS, Web</td>
+                                    <td>Windows, macOS, Linux</td>
+                                    <td>Windows, macOS, Linux, Web</td>
+                                    <td>Windows, macOS, Linux, iOS, Android, Wasm, embedded</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Runs in the browser</th>
+                                    <td class="compare-yup">Yes: Emscripten with WebGPU or WebGL2, AudioWorklet and Web MIDI</td>
+                                    <td>No official target</td>
+                                    <td>Yes: Emscripten, packaged as Web Audio Modules</td>
+                                    <td>Emscripten target in the build files</td>
+                                    <td>Yes: Emscripten with WebGL (UI only, no audio)</td>
+                                    <td>Yes: Emscripten with WebGL</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Official Python bindings</th>
+                                    <td class="compare-yup">Yes, <code class="font-mono">yup_python</code></td>
+                                    <td>No (third-party popsicle)</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>Yes, Qt for Python</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">AI in the framework</th>
+                                    <td class="compare-yup">LLM clients, tools, embeddings, MCP client and server</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No</td>
+                                    <td>No, AI features are in the tooling (Qt Creator)</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Language</th>
+                                    <td class="compare-yup">C++20</td>
+                                    <td>C++17</td>
+                                    <td>C++17</td>
+                                    <td>C++11</td>
+                                    <td>C++17</td>
+                                    <td>C++17</td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Build system</th>
+                                    <td class="compare-yup">CMake</td>
+                                    <td>CMake or Projucer</td>
+                                    <td>CMake, Xcode and Visual Studio projects, Make</td>
+                                    <td>Make or CMake</td>
+                                    <td>CMake</td>
+                                    <td>CMake</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="mt-4 font-mono text-[11px] tracking-[0.06em] text-muted">Checked September 2026 against JUCE 9.0, the iPlug2, DPF and Visage main branches and the Qt 6.11 documentation. Spotted something out of date? <a class="text-glow-soft hover:text-ink" href="https://github.com/kunitoki/yup/issues" target="_blank" rel="noopener">Open an issue</a>.</p>
+                </div>
+            </section>
+
+            <section class="pb-24">
+                <div class="container-site grid gap-5 md:grid-cols-2">
+                    <article class="card p-7">
+                        <h2 class="text-lg font-semibold">Where YUP stands out</h2>
+                        <ul class="mt-4 space-y-3 text-sm leading-relaxed text-muted">
+                            <li class="flex gap-3"><span class="text-glow">+</span>One permissive license for everything. Unlike JUCE and Qt, there are no revenue tiers or copyleft terms to track.</li>
+                            <li class="flex gap-3"><span class="text-glow">+</span>A GPU renderer on every platform, including WebGPU, plus a low-level RHI for compute and custom shaders.</li>
+                            <li class="flex gap-3"><span class="text-glow">+</span>Plugin building and plugin hosting in the same framework, with native CLAP.</li>
+                            <li class="flex gap-3"><span class="text-glow">+</span>The same app on desktop, mobile and the web, with Python bindings and AI clients built in.</li>
+                        </ul>
+                    </article>
+                    <article class="card p-7">
+                        <h2 class="text-lg font-semibold">When another choice fits better</h2>
+                        <ul class="mt-4 space-y-3 text-sm leading-relaxed text-muted">
+                            <li class="flex gap-3"><span class="text-muted">-</span>You need Linux, AAX or LV2 plugins today: JUCE and DPF (Linux, LV2) and iPlug2 (AAX) ship them now.</li>
+                            <li class="flex gap-3"><span class="text-muted">-</span>You need stable APIs and a large ecosystem: YUP is early-stage and its APIs may still change.</li>
+                            <li class="flex gap-3"><span class="text-muted">-</span>You only need a GPU UI on top of your own audio code: Visage is a focused, MIT licensed UI library.</li>
+                            <li class="flex gap-3"><span class="text-muted">-</span>You are building a general desktop or embedded UI without audio: Qt covers far more of that ground.</li>
+                        </ul>
+                    </article>
+                </div>
+                <div class="container-site mt-8">
+                    <h2 class="font-mono text-xs uppercase tracking-[0.12em] text-ink">Sources</h2>
+                    <ul class="mt-4 flex flex-wrap gap-2">
+                        <li><a class="chip chip-link" href="https://juce.com/get-juce/" target="_blank" rel="noopener">JUCE licensing</a></li>
+                        <li><a class="chip chip-link" href="https://juce.com/juce/features/" target="_blank" rel="noopener">JUCE features</a></li>
+                        <li><a class="chip chip-link" href="https://github.com/juce-framework/JUCE" target="_blank" rel="noopener">JUCE repository</a></li>
+                        <li><a class="chip chip-link" href="https://github.com/free-audio/clap-juce-extensions" target="_blank" rel="noopener">clap-juce-extensions</a></li>
+                        <li><a class="chip chip-link" href="https://github.com/iPlug2/iPlug2" target="_blank" rel="noopener">iPlug2 repository</a></li>
+                        <li><a class="chip chip-link" href="https://github.com/DISTRHO/DPF" target="_blank" rel="noopener">DPF repository</a></li>
+                        <li><a class="chip chip-link" href="https://github.com/VitalAudio/visage" target="_blank" rel="noopener">Visage repository</a></li>
+                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/licensing.html" target="_blank" rel="noopener">Qt licensing</a></li>
+                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/topics-graphics.html" target="_blank" rel="noopener">Qt graphics</a></li>
+                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/supported-platforms.html" target="_blank" rel="noopener">Qt platforms</a></li>
+                        <li><a class="chip chip-link" href="https://doc.qt.io/qtforpython-6/" target="_blank" rel="noopener">Qt for Python</a></li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <!-- @footer -->
+    </body>
+</html>

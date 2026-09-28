@@ -78,7 +78,12 @@ String SystemStats::getOperatingSystemName()
 
 String SystemStats::getOperatingSystemVersionString()
 {
-    return "Unknown";
+    struct utsname info;
+
+    if (uname (&info) != 0)
+        return {};
+
+    return String::fromUTF8 (info.release);
 }
 
 bool SystemStats::isOperatingSystem64Bit()
@@ -86,8 +91,13 @@ bool SystemStats::isOperatingSystem64Bit()
 #if YUP_64BIT
     return true;
 #else
-    //xxx not sure how to find this out?..
-    return false;
+    struct utsname info;
+
+    if (uname (&info) != 0)
+        return false;
+
+    const String machine (info.machine);
+    return machine.contains ("64") || machine == "s390x";
 #endif
 }
 

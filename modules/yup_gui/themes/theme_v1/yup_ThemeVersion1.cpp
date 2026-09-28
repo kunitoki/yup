@@ -445,7 +445,7 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
     }
 
     auto clipState = g.saveState();
-    g.setClipPath (textArea.translated (editor.getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    g.setClipPath (textArea);
 
     // Selection
     if (editor.hasSelection())
@@ -966,10 +966,8 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
         auto state = g.saveState();
 
-        // Create a rounded rect clip path (setClipPath requires global coordinates)
-        const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
         Path clipPath;
-        clipPath.addRoundedRectangle (globalBounds, cornerSize);
+        clipPath.addRoundedRectangle (progressBar.getLocalBounds(), cornerSize);
         g.setClipPath (clipPath);
 
         // Build two separate paths for alternating solid color shades
@@ -1005,10 +1003,8 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
         {
             auto state = g.saveState();
 
-            // Create a rounded rect clip path for the filled portion (setClipPath requires global coordinates)
-            const auto globalBounds = progressBar.getBoundsRelativeToTopLevelComponent();
             Path clipPath;
-            clipPath.addRoundedRectangle (globalBounds, cornerSize);
+            clipPath.addRoundedRectangle (progressBar.getLocalBounds(), cornerSize);
             g.setClipPath (clipPath);
 
             // Draw the filled bar

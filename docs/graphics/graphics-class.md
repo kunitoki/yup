@@ -81,7 +81,10 @@ g.setFeather (2.0f);                  // soft edge falloff
 - **Drawing area** - the rectangle drawing is offset into and clipped against
   (`setDrawingArea` / `getDrawingArea`). `fillAll()` fills this area.
 - **Clip path** - a rectangle or `Path` that constrains drawing
-  (`setClipPath` / `getClipPath`).
+  (`setClipPath` / `getClipPath`). It is given in the current local coordinates,
+  like any draw call, and is fixed when set: changing the transform or drawing
+  area afterwards does not move it. Each clip intersects with the ones already in
+  effect until the state is restored.
 
 ```cpp
 g.addTransform (AffineTransform::translation (10.0f, 10.0f));

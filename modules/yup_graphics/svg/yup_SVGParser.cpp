@@ -651,7 +651,7 @@ bool SVGParser::parseElement (const XmlElement& element, bool parentIsRoot, Affi
             e->markerMid = parent->markerMid;
         if (! e->markerEnd && parent->markerEnd)
             e->markerEnd = parent->markerEnd;
-        if (! e->hidden && parent->hidden)
+        if (! e->hidden && parent->hidden && parent->tagName != "defs" && ! parent->isSymbol)
             e->hidden = parent->hidden;
     }
 

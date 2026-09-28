@@ -184,6 +184,9 @@ g = canvas.beginDraw(frameDesc)
 Calling `beginDraw()` with no argument keeps the previous behaviour: clear to
 transparent black, no msaa, interleaved-gradient-noise dithering.
 
+Both forms accept an optional `scale`, the number of canvas pixels per logical
+drawing unit, e.g. `canvas.beginDraw(scale=2.0)` or `canvas.beginDraw(frameDesc, 2.0)`.
+
 ## Bit flags
 
 `GpuColorWriteMask` composes with `|` and `&`:

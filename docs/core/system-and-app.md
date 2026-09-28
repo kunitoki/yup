@@ -26,6 +26,10 @@ String yup     = SystemStats::getYUPVersion();
 String path    = SystemStats::getEnvironmentVariable ("PATH", {});
 ```
 
+`isOperatingSystem64Bit()` reports the bitness of the OS, not of the build, so a
+32-bit binary on a 64-bit OS returns true. On WebAssembly it is a best-effort guess
+about the host.
+
 `getUniqueDeviceID()` returns a stable per-device identifier, and the
 language/region getters (`getUserLanguage`, `getUserRegion`, `getDisplayLanguage`)
 support localization.

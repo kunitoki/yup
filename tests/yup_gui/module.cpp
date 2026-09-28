@@ -36,6 +36,7 @@
 #include "yup_Component.cpp"
 #include "yup_ComponentNative.cpp"
 #include "yup_ComponentEffect.cpp"
+#include "yup_ComponentPointMapping.cpp"
 #include "yup_Desktop.cpp"
 #include "yup_DragAndDropData.cpp"
 #include "yup_DragAndDropManager.cpp"

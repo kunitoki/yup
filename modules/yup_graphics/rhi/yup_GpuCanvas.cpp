@@ -71,7 +71,7 @@ int GpuCanvas::getHeight() const noexcept
 
 //==============================================================================
 
-Graphics& GpuCanvas::beginDraw (const GpuFrameDescriptor& frameDesc)
+Graphics& GpuCanvas::beginDraw (const GpuFrameDescriptor& frameDesc, float scale)
 {
     jassert (context != nullptr && target != nullptr);
 
@@ -81,7 +81,7 @@ Graphics& GpuCanvas::beginDraw (const GpuFrameDescriptor& frameDesc)
 
     target->invalidateCachedTexture();
 
-    graphics = std::make_unique<Graphics> (*context, *target->getRenderableTarget(), frameDesc);
+    graphics = std::make_unique<Graphics> (*context, *target->getRenderableTarget(), frameDesc, scale);
     frameOpen = true;
 
     return *graphics;

@@ -70,7 +70,7 @@ public:
         g.fillAll();
     }
 
-    yup::Color backgroundColor = yup::Colors::transparentBlack;
+    yup::Color backgroundColor = yup::Color (0xff404040);
 
 private:
     static constexpr const char* defaultScript = R"(
@@ -94,6 +94,6 @@ PYBIND11_EMBEDDED_MODULE (custom, m)
 
     py::module_::import (yup::PythonModuleName);
 
-    py::class_<PythonDemo, yup::Component> (m, "PythonDemo")
+    py::class_<PythonDemo, yup::Component, py::smart_holder> (m, "PythonDemo")
         .def_readwrite ("backgroundColor", &PythonDemo::backgroundColor);
 }

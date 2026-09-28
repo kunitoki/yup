@@ -117,6 +117,7 @@
 #include <algorithm>
 #include <functional>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -139,6 +140,16 @@
 // Frequency domain functions
 #include "frequency/yup_FFTProcessor.h"
 #include "frequency/yup_SpectrumAnalyzerState.h"
+
+// Oscillators (need FFTProcessor for the wavetable renderer)
+#include "oscillators/yup_FourierSeries.h"
+#include "oscillators/yup_SyncSpectralResampler.h"
+#include "oscillators/yup_AdditiveOscillator.h"
+#include "oscillators/yup_WavetableOscillator.h"
+#include "oscillators/yup_SyncOscillator.h"
+#include "oscillators/yup_WaveformBank.h"
+#include "oscillators/yup_PrismSpectrum.h"
+#include "oscillators/yup_LFO.h"
 
 // Onset detection
 #include "onsets/yup_FilterBank.h"
@@ -181,6 +192,7 @@
 #include "filters/yup_RbjFilter.h"
 #include "filters/yup_ZoelzerFilter.h"
 #include "filters/yup_StateVariableFilter.h"
+#include "filters/yup_VAStateVariableFilter.h"
 #include "filters/yup_ButterworthFilter.h"
 #include "filters/yup_LinkwitzRileyFilter.h"
 #include "filters/yup_DirectFIR.h"
@@ -204,5 +216,9 @@
 // Oversampling and sample-rate conversion
 #include "resampling/yup_CircularBuffer.h"
 #include "resampling/yup_SincTable.h"
-#include "resampling/yup_Oversampler.h"
+#include "resampling/yup_SincOversampler.h"
+#include "resampling/yup_HalfbandOversampler.h"
 #include "resampling/yup_Resampler.h"
+
+// Audio-rate oscillator modulation (needs HalfbandOversampler)
+#include "oscillators/yup_ModulatedOscillator.h"

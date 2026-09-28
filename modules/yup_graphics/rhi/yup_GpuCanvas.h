@@ -133,12 +133,18 @@ public:
 
         Not applicable to canvases used only via beginRenderPass().
 
+        The canvas stays sized in pixels. @p scale maps logical drawing units to canvas
+        pixels, so a canvas created at twice a component's size and drawn with a scale of
+        2 is covered by the component's logical bounds, and the returned Graphics reports
+        it through getContextScale().
+
         @param frameDesc  Controls msaa/dither/loadOp/clearColor for the offscreen
                           frame. Its renderTargetWidth/renderTargetHeight are ignored
                           and auto-filled from the canvas. Defaults reproduce the
                           previous hardcoded behaviour (clear to transparent black).
+        @param scale      The number of canvas pixels per logical drawing unit.
     */
-    Graphics& beginDraw (const GpuFrameDescriptor& frameDesc = {});
+    Graphics& beginDraw (const GpuFrameDescriptor& frameDesc = {}, float scale = 1.0f);
 
     /** Finalises any open 2D GPU render command.
 

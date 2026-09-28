@@ -39,6 +39,15 @@ protected:
         graphics = std::make_unique<Graphics> (*context, *renderer);
     }
 
+    static void expectBoundsNear (const Path& path, const Rectangle<float>& expected)
+    {
+        const auto bounds = path.getBounds();
+        EXPECT_NEAR (bounds.getX(), expected.getX(), 1.0e-3f);
+        EXPECT_NEAR (bounds.getY(), expected.getY(), 1.0e-3f);
+        EXPECT_NEAR (bounds.getWidth(), expected.getWidth(), 1.0e-3f);
+        EXPECT_NEAR (bounds.getHeight(), expected.getHeight(), 1.0e-3f);
+    }
+
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
     std::unique_ptr<Graphics> graphics;
@@ -965,6 +974,69 @@ TEST_F (GraphicsTest, GetClipPath_ReturnsSetPathClip)
 
     const Path clip = graphics->getClipPath();
     EXPECT_FALSE (clip.isEmpty());
+}
+
+TEST_F (GraphicsTest, GetClipPath_RoundTripsInLocalCoordinates)
+{
+    graphics->setDrawingArea ({ 30.0f, 40.0f, 100.0f, 100.0f });
+    graphics->setTransform (AffineTransform::rotation (0.3f).scaled (1.5f));
+    graphics->setClipPath (Rectangle<float> (10.0f, 20.0f, 50.0f, 60.0f));
+
+    expectBoundsNear (graphics->getClipPath(), { 10.0f, 20.0f, 50.0f, 60.0f });
+}
+
+TEST_F (GraphicsTest, GetClipPath_RemapsWhenTransformChangesAfterClipping)
+{
+    graphics->setDrawingArea ({ 30.0f, 40.0f, 100.0f, 100.0f });
+    graphics->setClipPath (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f));
+    graphics->addTransform (AffineTransform::translation (10.0f, 10.0f));
+
+    expectBoundsNear (graphics->getClipPath(), { -10.0f, -10.0f, 100.0f, 100.0f });
+}
+
+TEST_F (GraphicsTest, GetClipPath_RemapsWhenDrawingAreaChangesAfterClipping)
+{
+    graphics->setDrawingArea ({ 0.0f, 0.0f, 200.0f, 200.0f });
+    graphics->setClipPath (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f));
+    graphics->setDrawingArea ({ 20.0f, 30.0f, 200.0f, 200.0f });
+
+    expectBoundsNear (graphics->getClipPath(), { -20.0f, -30.0f, 100.0f, 100.0f });
+}
+
+TEST_F (GraphicsTest, GetClipPath_RespectsContextScale)
+{
+    Graphics scaledGraphics (*context, *renderer, 2.0f);
+    scaledGraphics.setDrawingArea ({ 10.0f, 10.0f, 100.0f, 100.0f });
+    scaledGraphics.setClipPath (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f));
+
+    expectBoundsNear (scaledGraphics.getClipPath(), { 0.0f, 0.0f, 100.0f, 100.0f });
+
+    scaledGraphics.setDrawingArea ({ 20.0f, 20.0f, 100.0f, 100.0f });
+
+    expectBoundsNear (scaledGraphics.getClipPath(), { -10.0f, -10.0f, 100.0f, 100.0f });
+}
+
+TEST_F (GraphicsTest, GetClipPath_RestoredWithSavedState)
+{
+    graphics->setClipPath (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f));
+
+    {
+        const auto savedState = graphics->saveState();
+        graphics->setDrawingArea ({ 5.0f, 5.0f, 50.0f, 50.0f });
+        graphics->setClipPath (Rectangle<float> (10.0f, 10.0f, 20.0f, 20.0f));
+
+        expectBoundsNear (graphics->getClipPath(), { 10.0f, 10.0f, 20.0f, 20.0f });
+    }
+
+    expectBoundsNear (graphics->getClipPath(), { 0.0f, 0.0f, 100.0f, 100.0f });
+}
+
+TEST_F (GraphicsTest, GetClipPath_SingularTransformReturnsEmpty)
+{
+    graphics->setClipPath (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f));
+    graphics->setTransform (AffineTransform::scaling (0.0f, 1.0f));
+
+    EXPECT_TRUE (graphics->getClipPath().isEmpty());
 }
 
 // =============================================================================

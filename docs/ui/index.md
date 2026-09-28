@@ -38,6 +38,8 @@ windowing, widgets, and theming are still to come.
   effects to `Component` subtrees.
 - [Component caching](component-caching.md) — `setCachedToTexture`
   for GPU texture caching.
+- [Components in 3D](component-3d.md) — present live, interactive
+  components on 3D geometry with `setManuallyComposited` and `MeshSurfaceMapper`.
 - [Component snapshots](component-snapshots.md) — `snapshotToImage` and
   `snapshotToTexture` for pixel capture.
 - [Component Layout](component-layout.md) — `FlexBox` and `Grid`, flexible and track-based
@@ -63,6 +65,7 @@ layout
 component-drag-and-drop
 component-styling
 component-effects
+component-3d
 component-caching
 component-snapshots
 component-profiling

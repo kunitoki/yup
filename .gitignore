@@ -39,6 +39,7 @@
 build/*
 cmake-build*
 out/*
+infer-out/*
 
 # Ides/Agents
 __pycache__/
@@ -53,3 +54,7 @@ __pycache__/
 .cache/
 docs/superpowers/
 .worktrees/
+
+# Website
+website/node_modules/
+website/dist/

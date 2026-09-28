@@ -134,28 +134,11 @@ MouseEvent MouseEvent::withRelativePositionTo (Component* targetComponent) const
     if (targetComponent == nullptr)
         return *this;
 
-    // Calculate the position relative to the target component
-    auto relativePos = position;
+    const auto relativePos = targetComponent->getLocalPointFromTopLevel (position);
 
-    // Walk up the component hierarchy to find the offset from the top-level component
-    auto currentComponent = targetComponent;
-    while (currentComponent != nullptr && currentComponent->getParentComponent() != nullptr)
-    {
-        relativePos = relativePos - currentComponent->getBounds().getPosition();
-        currentComponent = currentComponent->getParentComponent();
-    }
-
-    // Also translate the last mouse down position if it exists
     auto relativeLastPos = lastMouseDownPosition;
-    if (lastMouseDownPosition != Point<float>() && targetComponent != nullptr)
-    {
-        currentComponent = targetComponent;
-        while (currentComponent != nullptr && currentComponent->getParentComponent() != nullptr)
-        {
-            relativeLastPos = relativeLastPos - currentComponent->getBounds().getPosition();
-            currentComponent = currentComponent->getParentComponent();
-        }
-    }
+    if (lastMouseDownPosition != Point<float>())
+        relativeLastPos = targetComponent->getLocalPointFromTopLevel (lastMouseDownPosition);
 
     return { buttons, modifiers, relativePos, relativeLastPos, lastMouseDownTime, targetComponent, touchIndex, pressure };
 }

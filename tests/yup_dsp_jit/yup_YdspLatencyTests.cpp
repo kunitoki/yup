@@ -606,6 +606,75 @@ TEST (YdspLatencyTests, CompensatesAnUndersampledBranchAgainstADryOne)
     EXPECT_LT (residual, reference * 0.15) << "residual RMS " << residual << " against input RMS " << reference;
 }
 
+TEST (YdspLatencyTests, UndersampledStereoNodeKeepsEachChannelOnItsOwnSignal)
+{
+    YdspCompiler compiler;
+
+    auto graph = latencyCompile (R"YDSP(
+        processor Pair { input stream a; input stream b; output stream c; output stream d; process { c = a; d = b; } }
+        graph G {
+            input stream l;
+            input stream r;
+            output stream yl;
+            output stream yr;
+            node slow = Pair / 4;
+            connection { l -> slow.a; r -> slow.b; slow.c -> yl; slow.d -> yr; }
+        }
+    )YDSP",
+                                 compiler);
+
+    ASSERT_TRUE (graph.isValid());
+
+    const auto expectedLatency = latencyOversamplerDelay * 4 + 3;
+    ASSERT_EQ (expectedLatency, graph.getLatencySamples());
+
+    constexpr int blockSize = 250; // not a multiple of 4, so the decimated block size varies
+    constexpr int blockCount = 8;
+    constexpr double sampleRate = 48000.0;
+
+    graph.prepare (sampleRate, blockSize);
+
+    const std::vector<std::vector<float>> inputs {
+        latencySine (blockSize * blockCount, 300.0, sampleRate),
+        latencySine (blockSize * blockCount, 700.0, sampleRate)
+    };
+
+    std::vector<std::vector<float>> outputs (2, std::vector<float> (static_cast<size_t> (blockSize), 0.0f));
+
+    for (int block = 0; block < blockCount; ++block)
+    {
+        const auto offset = static_cast<size_t> (block * blockSize);
+
+        std::vector<YdspInputBuffer> inputBuffers;
+        for (const auto& channel : inputs)
+            inputBuffers.emplace_back (Span<const float> (channel.data() + offset, static_cast<size_t> (blockSize)));
+
+        std::vector<YdspOutputBuffer> outputBuffers;
+        for (auto& channel : outputs)
+            outputBuffers.emplace_back (Span<float> (channel.data(), channel.size()));
+
+        graph.process (YdspProcessRequest { inputBuffers, outputBuffers, blockSize });
+    }
+
+    for (size_t ch = 0; ch < inputs.size(); ++ch)
+    {
+        const auto* expected = inputs[ch].data() + blockSize * (blockCount - 1) - expectedLatency;
+
+        double error = 0.0;
+        double reference = 0.0;
+
+        for (int i = 0; i < blockSize; ++i)
+        {
+            const auto diff = static_cast<double> (outputs[ch][static_cast<size_t> (i)]) - static_cast<double> (expected[i]);
+            error += diff * diff;
+            reference += static_cast<double> (expected[i]) * static_cast<double> (expected[i]);
+        }
+
+        ASSERT_GT (reference, 1.0) << "channel " << ch;
+        EXPECT_LT (std::sqrt (error / reference), 0.1) << "channel " << ch << " did not reproduce its own input";
+    }
+}
+
 TEST (YdspLatencyTests, ARateChangedKernelReportsItsOwnSampleRate)
 {
     YdspCompiler compiler;

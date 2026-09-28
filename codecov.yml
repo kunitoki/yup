@@ -15,6 +15,7 @@ coverage:
         threshold: 5%
         base: auto
         flags:
+          - yup_ai
           - yup_animation
           - yup_audio_basics
           - yup_audio_devices

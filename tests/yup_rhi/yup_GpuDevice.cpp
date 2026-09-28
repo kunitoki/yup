@@ -292,6 +292,43 @@ TEST_F (GpuDeviceErrorTests, ComputePipelineCompileFromGlslOnHeadlessFails)
 }
 #endif // YUP_ENABLE_SHADER_TRANSPILER
 
+#if YUP_APPLE
+// ---------------------------------------------------------------------------
+// GpuComputePipeline — Metal
+// ---------------------------------------------------------------------------
+
+class GpuComputePipelineMetalTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        device = GpuDevice::create (GpuPlatform::Metal, {});
+        if (device == nullptr || ! device->isComputeAvailable())
+            GTEST_SKIP() << "No Metal compute device available";
+    }
+
+    GpuDevice::Ptr device;
+};
+
+TEST_F (GpuComputePipelineMetalTests, CompileFromBundleResolvesRenamedMainEntryPoint)
+{
+    // SPIRV-Cross names the MSL kernel main0, while the bundle keeps the GLSL entry point name.
+    ShaderInfo info;
+    info.stage = ShaderStage::compute;
+    info.language = ShaderLanguage::msl;
+    info.entryPoint = "main";
+    info.source = "#include <metal_stdlib>\n"
+                  "using namespace metal;\n"
+                  "kernel void main0 (uint3 id [[thread_position_in_grid]]) {}\n";
+
+    ShaderBundle bundle;
+    bundle.addShader (std::move (info));
+
+    auto result = GpuComputePipeline::compileFromBundle (device, bundle, GpuWorkgroupSize { 8, 1, 1 });
+    EXPECT_TRUE (result.wasOk()) << result.getErrorMessage();
+}
+#endif // YUP_APPLE
+
 // ---------------------------------------------------------------------------
 // GpuComputePass — invalid (headless) pass setter no-ops
 // ---------------------------------------------------------------------------

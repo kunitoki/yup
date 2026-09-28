@@ -10,7 +10,8 @@ It is built on the open source [Rive](https://rive.app/) renderer.
 
 - [Primitives](primitives.md) - `Point`, `Rectangle`, `Color`, `ColorGradient`,
   `Path`, `AffineTransform`, `StrokeType`, `BlendMode` - the value types every
-  drawing call consumes.
+  drawing call consumes - plus `Vector3`, `Matrix4`, `Ray` and `MeshSurfaceMapper`
+  for 3D.
 - [The Graphics class](graphics-class.md) - the immediate-mode 2D drawing API:
   state model, fills, strokes, text, images, transforms, clipping, transparency
   layers, and offscreen rendering.

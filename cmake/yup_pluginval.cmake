@@ -39,15 +39,7 @@ function (_yup_setup_validation_tool tool_name tool_version tool_platform tool_a
     if (NOT EXISTS "${tool_executable_path}")
         _yup_message (STATUS "Downloading ${tool_name} ${tool_version} for ${tool_platform}")
 
-        file (DOWNLOAD "${tool_url}" "${tool_archive_path}"
-              SHOW_PROGRESS
-              STATUS download_status)
-
-        list (GET download_status 0 download_error)
-        if (NOT download_error EQUAL 0)
-            list (GET download_status 1 download_error_message)
-            _yup_message (FATAL_ERROR "Failed to download ${tool_name}: ${download_error_message}")
-        endif()
+        _yup_download_file ("${tool_url}" "${tool_archive_path}" "")
 
         _yup_message (STATUS "Extracting ${tool_name} archive")
         execute_process(

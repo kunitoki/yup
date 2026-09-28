@@ -162,6 +162,12 @@ public:
 
     }
 
+    bool setVsyncEnabled (bool shouldEnable) override
+    {
+        options.vsync = shouldEnable;
+        return ! isHeadless;
+    }
+
 private:
     const bool isHeadless;
     Options options;

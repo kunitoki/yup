@@ -124,6 +124,10 @@ public:
 
     void setDesiredFrameRate (float) override {}
 
+    bool isVsyncEnabled() const override { return false; }
+
+    void setVsyncEnabled (bool) override {}
+
     void* getNativeHandle() const override { return nullptr; }
 
     rive::Factory* getFactory() override { return nullptr; }
@@ -2539,6 +2543,25 @@ TEST_F (ComponentTest, DesktopNativeDelegationSetters)
     EXPECT_EQ (constRoot.getNativeComponent(), root->getNativeComponent());
 }
 
+TEST_F (ComponentTest, TransformToScreenMatchesLocalToScreenOnDesktop)
+{
+    // The mock native sits at the screen origin, so the root bounds position must not be added again.
+    ComponentHelper::attachMockNative (*root);
+    ComponentHelper::setOnDesktop (*root, true);
+    root->setBounds (10, 20, 400, 300);
+
+    const Point<float> point (3.0f, 4.0f);
+
+    for (const Component* component : { root.get(), child.get() })
+    {
+        const auto viaTransform = point.transformed (component->getTransformToScreen());
+        const auto viaPoint = component->localToScreen (point);
+
+        EXPECT_NEAR (viaPoint.getX(), viaTransform.getX(), 0.001f) << component->getComponentID();
+        EXPECT_NEAR (viaPoint.getY(), viaTransform.getY(), 0.001f) << component->getComponentID();
+    }
+}
+
 TEST_F (ComponentTest, ChildResolvesNativeThroughParent)
 {
     // Child has no native; parent does → getNativeComponent walks up (both overloads).
@@ -2867,6 +2890,21 @@ protected:
         return *children.back();
     }
 
+    struct ClipRecordingComponent : Component
+    {
+        void paint (Graphics& g) override { clipBounds = g.getClipPath().getBounds(); }
+
+        Rectangle<float> clipBounds;
+    };
+
+    static void expectRectNear (const Rectangle<float>& actual, const Rectangle<float>& expected)
+    {
+        EXPECT_NEAR (actual.getX(), expected.getX(), 1.0e-3f);
+        EXPECT_NEAR (actual.getY(), expected.getY(), 1.0e-3f);
+        EXPECT_NEAR (actual.getWidth(), expected.getWidth(), 1.0e-3f);
+        EXPECT_NEAR (actual.getHeight(), expected.getHeight(), 1.0e-3f);
+    }
+
     static RectangleList<float> region (std::initializer_list<Rectangle<int>> rects)
     {
         RectangleList<float> result;
@@ -2998,6 +3036,43 @@ TEST_F (ComponentRepaintRegionTest, ANonOpaqueChildDoesNotHideTheParent)
 
     // Nothing opaque covers the parent any more, so it has to paint its own background.
     EXPECT_EQ (1, root->paintCount);
+}
+
+TEST_F (ComponentRepaintRegionTest, NestedChildSeesClipInLocalCoordinates)
+{
+    CountingComponent parent;
+    parent.setBounds (5.0f, 5.0f, 200.0f, 200.0f);
+    parent.setVisible (true);
+    root->addChildComponent (parent);
+
+    ClipRecordingComponent child;
+    child.setBounds (10.0f, 20.0f, 40.0f, 30.0f);
+    child.setVisible (true);
+    parent.addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, root->getLocalBounds(), false);
+
+    expectRectNear (child.clipBounds, { 0.0f, 0.0f, 40.0f, 30.0f });
+}
+
+TEST_F (ComponentRepaintRegionTest, TransformedChildSeesClipInLocalCoordinates)
+{
+    CountingComponent parent;
+    parent.setBounds (5.0f, 5.0f, 200.0f, 200.0f);
+    parent.setVisible (true);
+    root->addChildComponent (parent);
+
+    ClipRecordingComponent child;
+    child.setBounds (10.0f, 20.0f, 40.0f, 30.0f);
+    child.setTransform (AffineTransform::scaling (2.0f));
+    child.setVisible (true);
+    parent.addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, root->getLocalBounds(), false);
+
+    expectRectNear (child.clipBounds, { 0.0f, 0.0f, 40.0f, 30.0f });
 }
 
 // =============================================================================

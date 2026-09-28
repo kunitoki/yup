@@ -122,6 +122,10 @@ public:
 
     void setDesiredFrameRate (float newFrameRate) override { desiredFrameRate = newFrameRate; }
 
+    bool isVsyncEnabled() const override { return vsyncEnabled; }
+
+    void setVsyncEnabled (bool shouldEnable) override { vsyncEnabled = shouldEnable; }
+
     void* getNativeHandle() const override { return nullptr; }
 
     rive::Factory* getFactory() override { return nullptr; }
@@ -138,6 +142,7 @@ public:
 
     RectangleList<float> repaintAreas;
     float desiredFrameRate = 60.0f;
+    bool vsyncEnabled = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StubComponentNative)
 };

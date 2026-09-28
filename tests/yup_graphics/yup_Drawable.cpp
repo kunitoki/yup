@@ -2164,3 +2164,110 @@ TEST (DrawableTests, PaintSVGWithPreserveAspectRatioXMidYMidMeet)
         drawable.paint (graphics, Rectangle<float> (0.0f, 0.0f, 64.0f, 64.0f), Fitting::scaleToFit, Justification::center);
     });
 }
+
+// ==============================================================================
+// Use element instancing
+// ==============================================================================
+
+class DrawableUseTests : public ::testing::Test
+{
+protected:
+    class RecordingRenderer : public rive::Renderer
+    {
+    public:
+        void save() override { opacityStack.push_back (opacityStack.back()); }
+
+        void restore() override
+        {
+            if (opacityStack.size() > 1)
+                opacityStack.pop_back();
+        }
+
+        void transform (const rive::Mat2D&) override {}
+
+        void drawPath (rive::RenderPath*, rive::RenderPaint*) override { drawOpacities.push_back (opacityStack.back()); }
+
+        void clipPath (rive::RenderPath*) override {}
+
+        void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+        void drawImageMesh (const rive::RenderImage*,
+                            rive::ImageSampler,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            rive::rcp<rive::RenderBuffer>,
+                            uint32_t,
+                            uint32_t,
+                            rive::BlendMode,
+                            float) override {}
+
+        void modulateOpacity (float opacity) override { opacityStack.back() *= opacity; }
+
+        std::vector<float> drawOpacities;
+
+    private:
+        std::vector<float> opacityStack { 1.0f };
+    };
+
+    std::vector<float> paintAndRecordOpacities (StringRef svg)
+    {
+        Drawable drawable;
+        EXPECT_TRUE (drawable.parseSVG (svg));
+
+        auto context = GraphicsContext::createContext (GpuPlatform::Headless, {});
+        RecordingRenderer recorder;
+        Graphics graphics (*context, recorder);
+
+        drawable.paint (graphics);
+
+        return recorder.drawOpacities;
+    }
+};
+
+TEST_F (DrawableUseTests, UseOfShapeAppliesReferencedOpacity)
+{
+    const auto opacities = paintAndRecordOpacities (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<path id=\"p\" d=\"M 0,0 L 10,0 L 10,10 Z\" fill=\"red\" opacity=\"0.5\" />"
+        "<use href=\"#p\" x=\"10\" />"
+        "</svg>");
+
+    ASSERT_EQ (2u, opacities.size());
+    EXPECT_FLOAT_EQ (0.5f, opacities[0]);
+    EXPECT_FLOAT_EQ (0.5f, opacities[1]);
+}
+
+TEST_F (DrawableUseTests, UseOfSymbolPaintsItsContent)
+{
+    const auto opacities = paintAndRecordOpacities (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<symbol id=\"s\"><rect width=\"10\" height=\"10\" fill=\"red\" /></symbol>"
+        "<use href=\"#s\" />"
+        "</svg>");
+
+    EXPECT_EQ (1u, opacities.size());
+}
+
+TEST_F (DrawableUseTests, UseOfDefsShapeIsPainted)
+{
+    const auto opacities = paintAndRecordOpacities (
+        "<svg viewBox=\"0 0 100 100\">"
+        "<defs><rect id=\"r\" width=\"10\" height=\"10\" fill=\"red\" /></defs>"
+        "<use href=\"#r\" />"
+        "</svg>");
+
+    EXPECT_EQ (1u, opacities.size());
+}
+
+TEST_F (DrawableUseTests, UseWithOwnPaintKeepsOverride)
+{
+    const auto opacities = paintAndRecordOpacities (
+        "<svg viewBox=\"-40 0 150 100\">"
+        "<g fill=\"grey\" transform=\"translate(-36 45.5) scale(1 0.5)\">"
+        "<path id=\"heart\" d=\"M 10,30 A 20,20 0,0,1 50,30 A 20,20 0,0,1 90,30 Q 90,60 50,90 Q 10,60 10,30 z\" />"
+        "</g>"
+        "<use href=\"#heart\" fill=\"none\" stroke=\"red\" />"
+        "</svg>");
+
+    EXPECT_EQ (2u, opacities.size());
+}
