@@ -36,6 +36,7 @@ ComboBox::ComboBox (StringRef componentID)
     : Component (componentID)
 {
     setWantsKeyboardFocus (true);
+    setMouseCursor (MouseCursor::Hand);
 }
 
 ComboBox::~ComboBox() = default;

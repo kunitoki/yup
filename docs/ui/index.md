@@ -55,6 +55,8 @@ windowing, widgets, and theming are still to come.
   `CodeTokeniser`, and the syntax-highlighting `CodeEditor` component.
 - [Artboards (Rive)](artboard.md) — `ArtboardFile`, `Artboard`,
   `ArtboardNode`, and ViewModel data binding.
+- [MIDI keyboard](midi-keyboard.md) - `MidiKeyboardComponent`, multitouch
+  playing, scroll buttons and the available / visible key ranges.
 
 ```{toctree}
 :hidden:
@@ -71,4 +73,5 @@ component-snapshots
 component-profiling
 code-editor
 artboard
+midi-keyboard
 ```
