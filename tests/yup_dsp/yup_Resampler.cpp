@@ -65,6 +65,45 @@ protected:
         std::fill (buf.begin(), buf.end(), value);
     }
 
+    // Largest deviation of a resampled 440 Hz sine from the analytic signal, after warm up
+    double measureSineError (double outputSampleRate) const
+    {
+        constexpr double frequency = 440.0;
+
+        Resampler<float, 8> resampler;
+        resampler.prepare (sourceSampleRate, outputSampleRate, 1, blockSize);
+
+        std::vector<float> input (blockSize);
+        std::vector<float> output (static_cast<std::size_t> (blockSize * outputSampleRate / sourceSampleRate) + 2, 0.0f);
+        const float* inPtrs[] = { input.data() };
+        float* outPtrs[] = { output.data() };
+
+        const int latency = resampler.getLatencyInSamples();
+        int inputSample = 0;
+        int outputSample = 0;
+        double maxError = 0.0;
+
+        for (int block = 0; block < 8; ++block)
+        {
+            for (auto& sample : input)
+                sample = static_cast<float> (std::sin (MathConstants<double>::twoPi * frequency * static_cast<double> (inputSample++) / sourceSampleRate));
+
+            const int produced = resampler.resample (inPtrs, outPtrs, 1, blockSize);
+
+            for (int i = 0; i < produced; ++i, ++outputSample)
+            {
+                if (block < 4)
+                    continue;
+
+                const double sourcePosition = static_cast<double> (outputSample) * sourceSampleRate / outputSampleRate - latency;
+                const double expected = std::sin (MathConstants<double>::twoPi * frequency * sourcePosition / sourceSampleRate);
+                maxError = jmax (maxError, std::abs (static_cast<double> (output[static_cast<std::size_t> (i)]) - expected));
+            }
+        }
+
+        return maxError;
+    }
+
     // Max output buffer size for a 44100 -> 48000 conversion
     static constexpr int maxOutputSize = static_cast<int> (blockSize * 48000.0 / 44100.0) + 2;
 
@@ -94,9 +133,71 @@ TEST_F (ResamplerTest, PrepareWithSameLayoutDoesNotAllocate)
 
     EXPECT_EQ (0u, allocations.count);
 }
+
+TEST_F (ResamplerTest, SetRatioDoesNotAllocate)
+{
+    AllocationCounter allocations;
+    resamplerUp.setRatio (sourceSampleRate, 50000.0);
+    resamplerUp.setRatio (sourceSampleRate, 32000.0);
+
+    EXPECT_EQ (0u, allocations.count);
+}
 #endif
 
 //==============================================================================
+TEST_F (ResamplerTest, SetRatioKeepsOutputContinuous)
+{
+    constexpr double frequency = 440.0;
+    constexpr double newTargetSampleRate = 50000.0;
+    constexpr int bufferSize = static_cast<int> (blockSize * newTargetSampleRate / sourceSampleRate) + 2;
+
+    std::vector<float> input (blockSize);
+    std::vector<float> output (bufferSize, 0.0f);
+    const float* inPtrs[] = { input.data() };
+    float* outPtrs[] = { output.data() };
+
+    int inputSample = 0;
+    float previous = 0.0f;
+    float maxStep = 0.0f;
+
+    for (int block = 0; block < 16; ++block)
+    {
+        if (block == 8)
+            resamplerUp.setRatio (sourceSampleRate, newTargetSampleRate);
+
+        // Downsampling moves the cutoff, so this one rebuilds the kernel
+        if (block == 12)
+            resamplerUp.setRatio (sourceSampleRate, 40000.0);
+
+        for (auto& sample : input)
+            sample = static_cast<float> (std::sin (MathConstants<double>::twoPi * frequency * static_cast<double> (inputSample++) / sourceSampleRate));
+
+        const int produced = resamplerUp.resample (inPtrs, outPtrs, 1, blockSize);
+
+        for (int i = 0; i < produced; ++i)
+        {
+            if (block >= 4)
+                maxStep = jmax (maxStep, std::abs (output[static_cast<std::size_t> (i)] - previous));
+
+            previous = output[static_cast<std::size_t> (i)];
+        }
+    }
+
+    // A full scale 440 Hz sine at 40 kHz moves by at most 2 * pi * 440 / 40000 ~= 0.069 per sample
+    EXPECT_LT (maxStep, 0.08f);
+}
+
+TEST_F (ResamplerTest, UpsampledSineMatchesAnalyticSignal)
+{
+    EXPECT_LT (measureSineError (targetSampleRate), 5.0e-3);
+}
+
+TEST_F (ResamplerTest, DownsampledSineMatchesAnalyticSignal)
+{
+    EXPECT_LT (measureSineError (40000.0), 5.0e-3);
+    EXPECT_LT (measureSineError (sourceSampleRate / 2.0), 5.0e-3);
+}
+
 TEST_F (ResamplerTest, DefaultConstructionDoesNotCrash)
 {
     Resampler<float, 8> r;

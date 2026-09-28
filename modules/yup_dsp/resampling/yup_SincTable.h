@@ -47,6 +47,12 @@ public:
     /** Number of entries in the half-kernel storage. */
     static constexpr int tableSize = (SincRadius + 1) * OversampleFactor;
 
+    /** Number of entries in a half window, from the kernel center to its radius. */
+    static constexpr int halfWindowSize = SincRadius * OversampleFactor + 1;
+
+    /** Second half of a symmetric window spanning the kernel radius, see applyWindow(). */
+    using HalfWindow = std::array<CoeffType, static_cast<std::size_t> (halfWindowSize)>;
+
     //==============================================================================
     /** Default constructor. */
     SincTable() noexcept = default;
@@ -137,6 +143,42 @@ public:
     }
 
     //==============================================================================
+    /**
+        Multiplies the stored half-kernel by a precomputed half window.
+
+        With a window from fillKaiserHalfWindow() this matches applyKaiserWindow(),
+        including zeroing the entries beyond the kernel radius.
+
+        @param halfWindow  The window to apply.
+    */
+    void applyWindow (const HalfWindow& halfWindow) noexcept
+    {
+        for (int i = 0; i < halfWindowSize; ++i)
+            table[static_cast<std::size_t> (i)] *= halfWindow[static_cast<std::size_t> (i)];
+
+        for (int i = halfWindowSize; i < tableSize; ++i)
+            table[static_cast<std::size_t> (i)] = CoeffType (0);
+    }
+
+        /**
+        Fills halfWindow with the Kaiser window applied by applyKaiserWindow().
+
+        Evaluating the window is far more expensive than the sinc itself, so compute
+        it once and reuse it with applyWindow() when the kernel is rebuilt often.
+
+        @param halfWindow  Destination for the window values.
+        @param beta        Kaiser window shape parameter.
+    */
+    static void fillKaiserHalfWindow (HalfWindow& halfWindow, CoeffType beta = CoeffType (5)) noexcept
+    {
+        constexpr int center = halfWindowSize - 1;
+        constexpr int N = 2 * center + 1;
+
+        for (int i = 0; i <= center; ++i)
+            halfWindow[static_cast<std::size_t> (i)] = WindowFunctions<CoeffType>::kaiser (center + i, N, beta);
+    }
+
+    //==============================================================================
     /** Returns the kernel value at absolute (mirrored) index i. */
     forcedinline CoeffType& operator[] (int i) noexcept
     {
@@ -145,7 +187,7 @@ public:
     }
 
     /** Returns the kernel value at absolute (mirrored) index i. */
-    const forcedinline CoeffType& operator[] (int i) const noexcept
+    forcedinline const CoeffType& operator[] (int i) const noexcept
     {
         const int idx = (i < 0) ? -i : i;
         return table[static_cast<std::size_t> (idx)];
@@ -168,7 +210,7 @@ public:
     }
 
     /** @copydoc operator()(int, int) */
-    const forcedinline CoeffType& operator() (int tap, int delta) const noexcept
+    forcedinline const CoeffType& operator() (int tap, int delta) const noexcept
     {
         if (tap < 0)
             return table[static_cast<std::size_t> ((-tap) * OversampleFactor - delta)];

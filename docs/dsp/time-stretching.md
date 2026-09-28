@@ -94,14 +94,16 @@ setters, `setInputPosition`, and `setInputProvider` form the realtime path.
 (`defaultSequenceLengthMs = 82` ms), cross-fades `12` ms overlaps, and finds
 the best overlap position within a `14` ms seek window using a hierarchical
 `quickScanOffsets` table (coarse-to-fine cross-correlation summed over all
-channels). Pitch-shifting (`pitchRatio ≠ 1`) is implemented by
-time-stretching first and then resampling with a `ResamplerFloat` — this is
-why pitch shifts change duration unless the time ratio compensates.
+channels). Pitch-shifting is implemented by time-stretching first and then
+resampling with a `ResamplerFloat` - this is why pitch shifts change duration
+unless the time ratio compensates. The output always goes through the
+resampler, also at `pitchRatio = 1`, so pitch changes are glitch-free at the
+cost of the resampler's `SincRadius` samples of latency.
 
 Tempo (`1 / timeRatio`) is clamped to `[1, 4]`, so the effective stretch
 ratio is at least `0.25` (4× speed-up). Unity tempo takes a direct-copy fast
 path. Latency is reported as the input/output FIFO backlog difference
-(`max (0, input − output)`).
+(`max (0, input − output)`) plus the resampler latency.
 
 ### Bungee backend
 
