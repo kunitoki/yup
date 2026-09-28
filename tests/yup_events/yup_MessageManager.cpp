@@ -45,6 +45,19 @@ protected:
 #endif
     }
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     MessageManager* mm = nullptr;
 };
 
@@ -64,6 +77,29 @@ TEST_F (MessageManagerTests, HasStopMessageNotBeenSentInitially)
 {
     EXPECT_FALSE (mm->hasStopMessageBeenSent());
 }
+
+#if YUP_EMSCRIPTEN && YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (MessageManagerTests, TriggerAsyncUpdateDoesNotAllocate)
+{
+    // The audio worklet triggers async updates, and it can't safely allocate
+    struct Updater : public AsyncUpdater
+    {
+        void handleAsyncUpdate() override {}
+    };
+
+    Updater updater;
+
+    size_t count = 0;
+    {
+        AllocationCounter allocations;
+        updater.triggerAsyncUpdate();
+        count = allocations.count;
+    }
+
+    updater.cancelPendingUpdate();
+    EXPECT_EQ (0u, count);
+}
+#endif
 
 #if 0
 

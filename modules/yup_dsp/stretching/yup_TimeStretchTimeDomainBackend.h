@@ -320,6 +320,16 @@ private:
         pitchStretchedWritePointers.resize (static_cast<size_t> (channelCount));
         pitchResampledWritePointers.resize (static_cast<size_t> (channelCount));
 
+        // Sized for pitch ratios from 1 / maximumPreallocatedTempo to maximumPreallocatedTempo,
+        // so changing the pitch on the audio thread doesn't grow any of these buffers.
+        const int maxPitchFrames = static_cast<int> (std::ceil (jmax (1, spec.maximumBlockSize) * maximumPreallocatedTempo)) + 16;
+        for (int channel = 0; channel < channelCount; ++channel)
+        {
+            pitchStretchedBuffers[static_cast<size_t> (channel)].reserve (static_cast<size_t> (maxPitchFrames));
+            pitchResampledBuffers[static_cast<size_t> (channel)].reserve (static_cast<size_t> (maxPitchFrames));
+        }
+
+        pitchResamplerInputCapacity = maxPitchFrames;
         ensurePitchProcessingCapacity (jmax (1, spec.maximumBlockSize * 4));
         resetPitchShifter();
     }

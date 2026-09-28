@@ -68,9 +68,33 @@ protected:
     // Max output buffer size for a 44100 -> 48000 conversion
     static constexpr int maxOutputSize = static_cast<int> (blockSize * 48000.0 / 44100.0) + 2;
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     Resampler<float, 8> resamplerUp;   // 44100 -> 48000
     Resampler<float, 8> resamplerDown; // 48000 -> 44100
 };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (ResamplerTest, PrepareWithSameLayoutDoesNotAllocate)
+{
+    AllocationCounter allocations;
+    resamplerUp.prepare (sourceSampleRate, 50000.0, maxChannels, blockSize);
+    resamplerUp.prepare (sourceSampleRate, targetSampleRate, maxChannels, blockSize / 2);
+
+    EXPECT_EQ (0u, allocations.count);
+}
+#endif
 
 //==============================================================================
 TEST_F (ResamplerTest, DefaultConstructionDoesNotCrash)

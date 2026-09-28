@@ -76,6 +76,10 @@ public:
         history buffers, and initialises the phase accumulator.  Must be called
         before resample().
 
+        Calling it again with the same number of channels and no larger block
+        size than before reuses the existing buffers, so it does not allocate -
+        it can then be used to change the ratio from the audio thread.
+
         @param sourceSampleRate  Sample rate of the input signal in Hz.
         @param targetSampleRate  Desired output sample rate in Hz.
         @param maxChannels       Maximum number of audio channels.
@@ -99,7 +103,9 @@ public:
         beginBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
         endBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
 
-        xBufs.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxBlockSize + SincRadius + 1), SampleType {}));
+        xBufs.resize (static_cast<std::size_t> (maxChannels));
+        for (auto& ch : xBufs)
+            ch.assign (static_cast<std::size_t> (maxBlockSize + SincRadius + 1), SampleType {});
     }
 
     /**

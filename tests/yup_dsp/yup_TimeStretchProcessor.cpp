@@ -56,11 +56,61 @@ protected:
         }
     }
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     TimeStretchProcessor::ProcessSpec spec;
     AudioBuffer<float> inputBuffer;
     AudioBuffer<float> outputBuffer;
     int64 inputPosition = 0;
 };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (TimeStretchProcessorTests, TimeDomainPitchChangesDoNotAllocate)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    processor.setInputProvider ([numChannels = this->numChannels] (int64 beginFrame,
+                                                                   int numFrames,
+                                                                   float* const* destChannels,
+                                                                   int,
+                                                                   int& muteHead,
+                                                                   int& muteTail)
+    {
+        muteHead = 0;
+        muteTail = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            for (int i = 0; i < numFrames; ++i)
+                destChannels[ch][i] = static_cast<float> (std::sin (0.05 * static_cast<double> (beginFrame + i)));
+    });
+
+    auto* const* output = outputBuffer.getArrayOfWritePointers();
+    ASSERT_TRUE (processor.process (nullptr, 0, output, maximumBlockSize).wasOk());
+
+    AllocationCounter allocations;
+    for (const auto pitchRatio : { 4.0, 0.25, 2.0, 1.0 })
+    {
+        processor.setPitchRatio (pitchRatio);
+
+        for (int block = 0; block < 4; ++block)
+            processor.process (nullptr, 0, output, maximumBlockSize);
+    }
+
+    EXPECT_EQ (0u, allocations.count);
+}
+#endif
 
 //==============================================================================
 TEST_F (TimeStretchProcessorTests, DefaultConstruction)

@@ -915,6 +915,57 @@ TEST_F (MidiKeyboardStateTests, ThreadSafety)
     EXPECT_FALSE (state->isNoteOn (2, 64));
 }
 
+TEST_F (MidiKeyboardStateTests, ProcessNextMidiEventIsSerializedWithNoteOn)
+{
+    // A MIDI input thread feeding processNextMidiEvent() must not run listeners
+    // concurrently with the UI thread calling noteOn() / noteOff().
+    struct OverlapListener : public MidiKeyboardState::Listener
+    {
+        void handleNoteOn (MidiKeyboardState*, int, int, float) override { enterAndLeave(); }
+
+        void handleNoteOff (MidiKeyboardState*, int, int, float) override { enterAndLeave(); }
+
+        void enterAndLeave()
+        {
+            if (inside.fetch_add (1) > 0)
+                overlapped = true;
+
+            for (int i = 0; i < 100; ++i)
+                std::this_thread::yield();
+
+            inside.fetch_sub (1);
+        }
+
+        std::atomic<int> inside { 0 };
+        std::atomic<bool> overlapped { false };
+    };
+
+    OverlapListener overlapListener;
+    state->addListener (&overlapListener);
+
+    std::thread midiThread ([this]
+    {
+        for (int i = 0; i < 500; ++i)
+        {
+            state->processNextMidiEvent (MidiMessage::noteOn (2, 64, 0.5f));
+            state->processNextMidiEvent (MidiMessage::noteOff (2, 64));
+        }
+    });
+
+    for (int i = 0; i < 500; ++i)
+    {
+        state->noteOn (1, 60, 0.5f);
+        state->noteOff (1, 60, 0.0f);
+    }
+
+    midiThread.join();
+    state->removeListener (&overlapListener);
+
+    EXPECT_FALSE (overlapListener.overlapped);
+    EXPECT_FALSE (state->isNoteOn (1, 60));
+    EXPECT_FALSE (state->isNoteOn (2, 64));
+}
+
 TEST_F (MidiKeyboardStateTests, ComplexSequence)
 {
     state->addListener (listener.get());
