@@ -18,17 +18,17 @@ Everything lives in `src/`, which is the Vite root:
 - `src/404.html` - served by GitHub Pages for any missing path. It sets `<base href="/">` so its assets resolve at any depth, and it is built but kept out of the sitemap.
 - `src/partials/` - shared `head`, `header` and `footer`, inlined where a page contains `<!-- @name -->`.
 - `src/partials/snippets/` - plain code samples (`.cpp`, `.cmake`, `.sh`), inlined and highlighted with Shiki where a page contains `<!-- @code snippets/<file> -->`. Edit them as normal source files; the dev server reloads on save.
-- `src/style.css` - Tailwind entry point and theme tokens (palette from `cmake/platforms/emscripten/shell.html`).
-- `src/main.js` - mobile nav, card spotlight, code tabs, copy buttons, the module filter and the docs search dialog.
+- `src/style.css` - Tailwind entry point, theme tokens and components. The base palette comes from `cmake/platforms/emscripten/shell.html`; amber (`audio`) marks the audio domain, blue (`graphics`) marks graphics, GPU and primary actions, and green (`ship`) marks what ships.
+- `src/main.js` - mobile nav, code tabs, copy buttons, the home slideshow, the module filter and the docs search dialog.
 
 ## Build-time data
 
-- `<!-- @count modules -->` becomes the number of `modules/yup_*` folders. `<!-- @count <name> -->` counts the `<li>` items or `chip-on` chips inside the page element marked `data-count="<name>"`, so a stat always matches the list it summarizes.
+- `<!-- @count modules -->` becomes the number of `modules/yup_*` folders. `<!-- @count <name> -->` counts the `<li>` items inside the page list marked `data-count="<name>"`, so a number in the copy always matches the list it summarizes. Keep in-progress items out of that list.
 - Docs search (the header button, `Cmd/Ctrl+K` or `/`) reads `virtual:docs-index`, which the `yup-partials` plugin builds from the h1-h3 sections of `docs/**/*.md` and which loads only when the dialog first opens. Links point to the matching section ids on yup.readthedocs.io. Restart the dev server after editing the docs.
 
 ## Analytics
 
-Set `goatCounterCode` in `vite.config.js` to your GoatCounter site code to add the cookie-free [GoatCounter](https://www.goatcounter.com/) script to every page. Elements with `data-goatcounter-click="<name>"` (the "Run live" and GitHub buttons) are counted as events. While the code is empty, no script is added.
+Set `goatCounterCode` in `vite.config.js` to your GoatCounter site code to add the cookie-free [GoatCounter](https://www.goatcounter.com/) script to every page. Elements with `data-goatcounter-click="<name>"` (the "Run the synth in your browser" and GitHub buttons) are counted as events. While the code is empty, no script is added.
 
 Screenshots and the logo are referenced straight from `../docs/_static/images` and `../logo.svg`, so the site never duplicates them. Vite hashes them into `dist/` on build.
 

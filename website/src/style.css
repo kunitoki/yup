@@ -1,18 +1,30 @@
 @import "tailwindcss";
 
-/* Palette follows cmake/platforms/emscripten/shell.html; type is Geist, self-hosted via Fontsource. */
+/* Base palette follows cmake/platforms/emscripten/shell.html. Hues carry meaning: amber is the audio
+   domain, blue is graphics, GPU and primary actions, green is what ships. Type is Geist, self-hosted
+   via Fontsource. */
 @theme {
     --color-void: #07090e;
     --color-surface: #0e121a;
     --color-edge: #1b2230;
     --color-ink: #e6eaf2;
     --color-muted: #7c8798;
-    --color-glow: #0a84ff;
-    --color-glow-soft: #6fb6ff;
+    --color-graphics: #0a84ff;
+    --color-graphics-soft: #6fb6ff;
+    --color-audio: #f5a524;
+    --color-ship: #30d158;
     --color-danger: #ff6b5a;
 
     --font-sans: "Geist Variable", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    /* 1.25 scale: 14 / 16 / 20 / 25 / 31 / 39. */
+    --text-2xl: 1.5625rem;
+    --text-2xl--line-height: 1.3;
+    --text-3xl: 1.9375rem;
+    --text-3xl--line-height: 1.2;
+    --text-4xl: 2.4375rem;
+    --text-4xl--line-height: 1.15;
 }
 
 @layer base {
@@ -25,20 +37,8 @@
         @apply bg-void text-ink font-sans antialiased;
     }
 
-    /* Ambient bloom: the page is lit from behind, like the Wasm shell stage. */
-    body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: -1;
-        pointer-events: none;
-        background:
-            radial-gradient(70vw 50vh at 50% -10%, rgb(10 132 255 / 0.2), transparent 70%),
-            radial-gradient(90vw 60vh at 50% 120%, rgb(10 132 255 / 0.08), transparent 70%);
-    }
-
     :focus-visible {
-        outline: 2px solid var(--color-glow);
+        outline: 2px solid var(--color-graphics);
         outline-offset: 3px;
     }
 
@@ -57,23 +57,20 @@
     }
 
     .chip {
-        @apply inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-edge px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted;
+        @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded border border-edge px-2 py-0.5 text-xs text-muted;
+    }
+
+    /* Identifiers only: module names, targets, files. */
+    .chip-id {
+        @apply font-mono;
     }
 
     .chip-on {
-        @apply border-glow/35 bg-glow/8 text-glow-soft;
+        @apply border-graphics/35 text-graphics-soft;
     }
 
-    .chip-link {
-        @apply transition hover:border-glow/60 hover:text-ink;
-    }
-
-    .chip-wip {
-        @apply border-dashed text-muted/80;
-    }
-
-    .eyebrow {
-        @apply font-mono text-xs uppercase tracking-[0.14em] text-glow-soft;
+    .chip-audio {
+        @apply border-audio/35 text-audio;
     }
 
     .heading {
@@ -81,76 +78,185 @@
     }
 
     .lead {
-        @apply text-base leading-relaxed text-muted sm:text-lg;
+        @apply max-w-[60ch] text-base leading-relaxed text-muted sm:text-lg;
     }
 
     .btn {
-        @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition;
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition;
     }
 
     .btn-primary {
-        @apply bg-glow text-white shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_10px_30px_-10px_rgb(10_132_255/0.9)] hover:bg-[#2b95ff];
+        @apply bg-graphics text-white hover:bg-[#2b95ff];
     }
 
     .btn-ghost {
-        @apply border border-edge bg-white/[0.02] text-ink hover:border-glow/50;
-    }
-
-    .card {
-        @apply relative overflow-hidden rounded-2xl border border-edge bg-surface/80;
-    }
-
-    /* Cursor-following highlight; --mx / --my are set from main.js. */
-    .spotlight::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 300ms ease;
-        background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgb(10 132 255 / 0.12), transparent 60%);
-    }
-
-    .spotlight:hover::before {
-        opacity: 1;
-    }
-
-    .icon-tile {
-        @apply grid size-11 place-items-center rounded-xl border border-glow/30 bg-glow/10 text-glow-soft shadow-[0_0_24px_-8px_rgb(10_132_255/0.9)];
-    }
-
-    /* Faint grid that fades out towards the edges. */
-    .bg-grid {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image:
-            linear-gradient(to right, rgb(255 255 255 / 0.045) 1px, transparent 1px),
-            linear-gradient(to bottom, rgb(255 255 255 / 0.045) 1px, transparent 1px);
-        background-size: 44px 44px;
-        mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+        @apply border border-edge text-ink hover:border-muted;
     }
 
     /* Framed canvas, modeled on the embedded Wasm shell. */
-    .stage-frame {
-        @apply overflow-hidden rounded-2xl border border-edge bg-surface;
-        box-shadow:
-            0 0 0 1px rgb(255 255 255 / 0.04),
-            0 0 0 6px rgb(10 132 255 / 0.04),
-            0 40px 90px -30px rgb(10 132 255 / 0.45);
+    .frame {
+        @apply overflow-hidden rounded-[10px] border border-edge bg-surface;
+    }
+
+    /* A signal lane: a rail in the domain color with one ring node per stage. */
+    .lane {
+        --signal: var(--color-graphics);
+        position: relative;
+        border-left: 2px solid var(--signal);
+    }
+
+    .lane-audio {
+        --signal: var(--color-audio);
+    }
+
+    .lane-title {
+        @apply pb-10 pl-7 text-2xl font-semibold sm:pl-9;
+        color: var(--signal);
+    }
+
+    /* The modules a stage is made of. */
+    .stage-ids {
+        @apply mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs;
+        color: var(--signal);
+    }
+
+    .stage {
+        @apply relative pb-12 pl-7 last:pb-0 sm:pl-9;
+    }
+
+    .stage::before {
+        content: "";
+        position: absolute;
+        top: 0.35rem;
+        left: -7px;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--signal);
+        border-radius: 9999px;
+        background: var(--color-void);
+    }
+
+    /* After the merge both rails run touching and turn green by the time they ship. */
+    .lane-merged {
+        --signal: var(--color-ink);
+        position: relative;
+
+        & > .stage {
+            padding-left: 2.5rem;
+            background:
+                linear-gradient(var(--color-audio), var(--color-ship)) 0 0 / 2px 100% no-repeat,
+                linear-gradient(var(--color-graphics), var(--color-ship)) 2px 0 / 2px 100% no-repeat;
+        }
+
+        & > .stage:last-child {
+            background:
+                linear-gradient(var(--color-ship), var(--color-ship)) 0 0 / 2px 100% no-repeat,
+                linear-gradient(var(--color-ship), var(--color-ship)) 2px 0 / 2px 100% no-repeat;
+        }
+
+        /* One node centered on the pair. */
+        & > .stage::before {
+            left: -4px;
+            border: 0;
+            background: linear-gradient(90deg, var(--color-audio), var(--color-graphics));
+        }
+
+        & > .stage:last-child::before {
+            background: var(--color-ship);
+        }
+    }
+
+    /* Two lanes side by side. On narrow screens the lanes dissolve into one list: both rails run next
+       to each other and the stages interleave through their order utilities. */
+    .lanes {
+        display: grid;
+
+        @media (width >= 64rem) {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        @media (width < 64rem) {
+            background:
+                linear-gradient(var(--color-audio), var(--color-audio)) 0 0 / 2px 100% no-repeat,
+                linear-gradient(var(--color-graphics), var(--color-graphics)) 14px 0 / 2px 100% no-repeat;
+
+            & > .lane {
+                display: contents;
+            }
+
+            & .lane-title {
+                display: none;
+            }
+
+            & .stage {
+                padding-bottom: 2.5rem;
+                padding-left: 2.5rem;
+            }
+
+            & .lane-audio .stage::before {
+                left: -5px;
+            }
+
+            & .lane:not(.lane-audio) .stage::before {
+                left: 9px;
+            }
+        }
+    }
+
+    /* Numbered nodes for real sequences. */
+    .lane-steps {
+        counter-reset: step;
+    }
+
+    .lane-steps > .stage {
+        counter-increment: step;
+    }
+
+    .lane-steps > .stage::before {
+        content: counter(step);
+        top: 0;
+        left: -15px;
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--signal);
+    }
+
+    /* Hero waveform, drawn once on load. The resting state is fully drawn, so reduced motion shows it static. */
+    .hero-wave path {
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 1;
+        animation: wave-draw 2.4s cubic-bezier(0.55, 0, 0.25, 1) both;
+
+        /* The SVG scales with the page, so keep the stroke readable on phones. */
+        @media (width < 40rem) {
+            stroke-width: 5;
+        }
+    }
+
+    @keyframes wave-draw {
+        from {
+            stroke-dashoffset: 1;
+        }
     }
 
     .segmented {
-        @apply inline-flex gap-0.5 rounded-[10px] border border-edge bg-white/[0.02] p-0.5;
+        @apply inline-flex gap-0.5 rounded-lg border border-edge p-0.5;
     }
 
     .seg {
-        @apply h-7 cursor-pointer rounded-lg px-3 font-mono text-[11px] tracking-[0.06em] text-muted transition hover:text-ink;
+        @apply h-7 cursor-pointer rounded-md px-3 text-xs text-muted transition hover:text-ink;
     }
 
     .seg[aria-pressed="true"] {
-        @apply bg-glow/16 text-ink;
-        box-shadow: inset 0 0 0 1px rgb(10 132 255 / 0.4), 0 0 18px -6px rgb(10 132 255 / 0.9);
+        @apply bg-graphics/16 text-ink;
+        box-shadow: inset 0 0 0 1px rgb(10 132 255 / 0.4);
     }
 
     .code {
@@ -165,13 +271,8 @@
         @apply text-ink;
     }
 
-    .brand-mark {
-        filter: drop-shadow(0 0 8px rgb(10 132 255 / 0.55));
-    }
-
     .search-dialog {
-        @apply mx-auto mt-[12vh] w-[min(40rem,calc(100%-2rem))] max-w-none overflow-hidden rounded-2xl border border-edge bg-surface p-0 text-ink;
-        box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 40px 90px -30px rgb(10 132 255 / 0.45);
+        @apply mx-auto mt-[12vh] w-[min(40rem,calc(100%-2rem))] max-w-none overflow-hidden rounded-[10px] border border-edge bg-surface p-0 text-ink;
     }
 
     .search-dialog::backdrop {
@@ -180,11 +281,11 @@
     }
 
     .search-hit {
-        @apply block rounded-xl px-3 py-2.5 transition hover:bg-white/[0.03];
+        @apply block rounded-lg px-3 py-2.5 transition hover:bg-white/[0.03];
     }
 
     .search-hit[aria-selected="true"] {
-        @apply bg-glow/10;
+        @apply bg-graphics/10;
         box-shadow: inset 0 0 0 1px rgb(10 132 255 / 0.35);
     }
 
@@ -198,7 +299,7 @@
     }
 
     .compare thead th {
-        @apply font-mono text-xs uppercase tracking-[0.1em] text-ink;
+        @apply font-semibold text-ink;
     }
 
     .compare tbody th {
@@ -210,11 +311,11 @@
     }
 
     .compare .compare-yup {
-        @apply bg-glow/8 text-ink;
+        @apply bg-graphics/8 text-ink;
     }
 
     .compare thead .compare-yup {
-        @apply text-glow-soft;
+        @apply text-graphics-soft;
     }
 
     /* Orbiting logo from the Wasm shell's boot loader, used on the 404 page. */
@@ -230,22 +331,19 @@
 
     .orbit .arc {
         fill: none;
-        stroke: var(--color-glow);
+        stroke: var(--color-graphics);
         stroke-width: 2;
         stroke-linecap: round;
         stroke-dasharray: 22 78;
-        filter: drop-shadow(0 0 5px rgb(10 132 255 / 0.7));
         animation: orbit-trace 2.8s linear infinite;
     }
 
     .orbit .dart {
-        fill: var(--color-glow);
-        filter: drop-shadow(0 0 10px rgb(10 132 255 / 0.6));
+        fill: var(--color-graphics);
     }
 
     .orbit .dot {
-        fill: var(--color-glow-soft);
-        filter: drop-shadow(0 0 7px var(--color-glow));
+        fill: var(--color-graphics-soft);
     }
 
     @keyframes orbit-trace {
