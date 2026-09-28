@@ -718,9 +718,9 @@ struct PyComboBox : PyComponent<Base>
 
 /** Trampoline for ListBoxModel, which is entirely virtual and is never owned by a ListBox.
 
-    refreshComponentForRow is deliberately absent: it hands the ListBox ownership of a raw
-    Component*, which pybind11 cannot take away from a Python-owned instance without risking a
-    double free. A Python model paints its rows through paintListBoxItem/getRowText/getRowIcon.
+    refreshRowComponent is deliberately absent: it hands the ListBox ownership of the row
+    component, which pybind11 cannot take away from a Python-owned instance without risking a
+    double free. A Python model shows its rows through the built-in item, via getRowText/getRowIcon.
 */
 template <class Base = yup::ListBoxModel>
 struct PyListBoxModel : Base
@@ -733,19 +733,9 @@ struct PyListBoxModel : Base
         PYBIND11_OVERRIDE_PURE (int, Base, getNumRows);
     }
 
-    int getRowHeight (int rowIndex) override
+    float getRowSize (int rowIndex) override
     {
-        PYBIND11_OVERRIDE (int, Base, getRowHeight, rowIndex);
-    }
-
-    int getRowWidth (int rowIndex) override
-    {
-        PYBIND11_OVERRIDE (int, Base, getRowWidth, rowIndex);
-    }
-
-    void paintListBoxItem (int rowIndex, yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) override
-    {
-        PYBIND11_OVERRIDE (void, Base, paintListBoxItem, rowIndex, g, area, isSelected);
+        PYBIND11_OVERRIDE (float, Base, getRowSize, rowIndex);
     }
 
     yup::String getRowText (int rowIndex) override
@@ -773,9 +763,9 @@ struct PyListBoxModel : Base
         PYBIND11_OVERRIDE (void, Base, rowDoubleClicked, rowIndex, event);
     }
 
-    void returnKeyPressed (int lastSelectedRow) override
+    void returnKeyPressed (int currentRow) override
     {
-        PYBIND11_OVERRIDE (void, Base, returnKeyPressed, lastSelectedRow);
+        PYBIND11_OVERRIDE (void, Base, returnKeyPressed, currentRow);
     }
 
     void deleteKeyPressed (const yup::Array<int>& selectedRows) override

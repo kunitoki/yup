@@ -50,6 +50,7 @@
 #include "yup_GridParity.cpp"
 #include "yup_KeyModifiers.cpp"
 #include "yup_KeyPress.cpp"
+#include "yup_KineticScroller.cpp"
 #include "yup_Label.cpp"
 #include "yup_ListBox.cpp"
 #include "yup_ListBoxItem.cpp"

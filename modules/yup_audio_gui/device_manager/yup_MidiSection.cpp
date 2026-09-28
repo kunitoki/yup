@@ -26,6 +26,7 @@ namespace yup
 MidiSection::MidiInputRowComponent::MidiInputRowComponent()
 {
     setOpaque (false);
+    setWantsMouseEvents (false, true);
     addAndMakeVisible (toggle);
     addAndMakeVisible (nameLabel);
 }
@@ -71,11 +72,11 @@ int MidiSection::InputModel::getNumRows()
     return midiDevices.size();
 }
 
-Component* MidiSection::InputModel::refreshComponentForRow (int rowIndex, Component* existing)
+void MidiSection::InputModel::refreshRowComponent (int rowIndex, bool isSelected, std::unique_ptr<Component>& component)
 {
-    auto* row = dynamic_cast<MidiInputRowComponent*> (existing);
-    if (row == nullptr)
-        row = new MidiInputRowComponent();
+    ignoreUnused (isSelected);
+
+    auto* row = &reuseOrCreate<MidiInputRowComponent> (component);
 
     const auto& dev = midiDevices[rowIndex];
     const bool enabled = enabledIds.contains (dev.identifier);
@@ -95,8 +96,6 @@ Component* MidiSection::InputModel::refreshComponentForRow (int rowIndex, Compon
         if (onInputsChanged != nullptr)
             onInputsChanged (enabledIds);
     });
-
-    return row;
 }
 
 //==============================================================================

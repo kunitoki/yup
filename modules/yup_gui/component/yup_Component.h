@@ -853,7 +853,7 @@ public:
     /**
         Add the component to the desktop.
 
-        @param nativeOptions The native options of the component.
+        @param nativeOptions The native flags of the component.
         @param parent The parent of the component.
      */
     void addToDesktop (const ComponentNative::Options& nativeOptions, void* parent = nullptr);
@@ -1741,7 +1741,7 @@ private:
     std::atomic_bool isRepainting { false };
     std::atomic_bool subtreeDirty { true };
 
-    struct Options
+    struct InternalFlags
     {
         bool isVisible : 1;
         bool isDisabled : 1;
@@ -1762,8 +1762,8 @@ private:
 
     union
     {
-        uint64 optionsValue;
-        Options options;
+        uint64 flagsValue;
+        InternalFlags flags;
     };
 
 #if YUP_ENABLE_COMPONENT_PAINT_DEBUGGING

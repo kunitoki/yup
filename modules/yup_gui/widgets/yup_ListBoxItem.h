@@ -27,8 +27,8 @@ namespace yup
     A list item component that can display text and an icon.
 
     This component is used by ListBox when the ListBoxModel's
-    refreshComponentForRow() method returns nullptr. It provides a simple
-    way to display text and/or an icon (as a Drawable) with configurable layout.
+    refreshRowComponent() method leaves the row component null. It provides a simple
+    way to display text and/or an icon (as a Drawable or an Image) with configurable layout.
 
     The icon can be positioned to the left, right, above, or below the text.
     The component integrates with the YUP theme system for styling.
@@ -69,17 +69,15 @@ public:
     String getText() const;
 
     //==============================================================================
-    /** Sets the icon drawable to display.
+    /** Sets the icon drawable to display, replacing any icon image.
 
         @param newIcon  The drawable to use as an icon (can be nullptr for no icon)
     */
     void setIconDrawable (std::shared_ptr<Drawable> newIcon);
 
-    /** Sets the icon from an image.
+    /** Sets the icon from an image, replacing any icon drawable.
 
-        This creates a drawable from the image internally.
-
-        @param newIcon  The image to use as an icon
+        @param newIcon  The image to use as an icon, or an invalid Image for no icon
     */
     void setIcon (const Image& newIcon);
 
@@ -88,6 +86,12 @@ public:
         @return The icon drawable being displayed
     */
     std::shared_ptr<Drawable> getIconDrawable() const;
+
+    /** Returns the current icon image.
+
+        @return The icon image being displayed, or an invalid Image when there is none
+    */
+    Image getIconImage() const;
 
     //==============================================================================
     /** Sets the position of the icon relative to the text.
@@ -169,6 +173,7 @@ private:
     //==============================================================================
     String text;
     std::shared_ptr<Drawable> iconDrawable;
+    Image iconImage;
     IconPosition iconPosition = IconPosition::left;
     bool selected = false;
     bool hovered = false;

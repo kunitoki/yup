@@ -72,6 +72,7 @@ graphics_demo (GpuAudio MODULES ${audio_modules} dr_libs RESOURCES audio LIVE_SH
 graphics_demo (Images MODULES libgif libjpeg libtiff libwebp)
 graphics_demo (Layout)
 graphics_demo (LayoutFonts)
+graphics_demo (ListBox)
 graphics_demo (Lottie MODULES yup::yup_animation RESOURCES lottie)
 graphics_demo (OffscreenRender)
 graphics_demo (Opaque)

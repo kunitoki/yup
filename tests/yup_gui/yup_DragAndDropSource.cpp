@@ -45,6 +45,16 @@ TEST_F (DragAndDropSourceTests, DefaultOptionsDescribeAnEmptyInternalDrag)
     EXPECT_EQ (0.0f, options.imageOffset.getY());
     EXPECT_FLOAT_EQ (0.7f, options.imageOpacity);
     EXPECT_FALSE (options.allowExternalDrag);
+    EXPECT_EQ (-1, options.touchIndex);
+}
+
+TEST_F (DragAndDropSourceTests, WithTouchPointerRecordsTheFingerAndWhereItIs)
+{
+    const auto options = DragAndDropSource::DragOptions{}.withTouchPointer (2, Point<float> (30.0f, 40.0f));
+
+    EXPECT_EQ (2, options.touchIndex);
+    EXPECT_EQ (30.0f, options.touchScreenPosition.getX());
+    EXPECT_EQ (40.0f, options.touchScreenPosition.getY());
 }
 
 TEST_F (DragAndDropSourceTests, BuildersChainAndPreserveWhatTheySet)

@@ -181,6 +181,7 @@
 #include "keyboard/yup_TextInputTarget.cpp"
 #include "mouse/yup_MouseEvent.cpp"
 #include "mouse/yup_MouseCursor.cpp"
+#include "mouse/yup_KineticScroller.cpp"
 #include "clipboard/yup_SystemClipboard.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"

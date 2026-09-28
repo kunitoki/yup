@@ -1550,13 +1550,14 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
     if (touchFinger != nullptr)
     {
         const auto fingerId = touchFinger->fingerId;
+        const auto touchIndex = touchFinger->index;
         touchFinger->position = position;
 
         auto event = MouseEvent()
                          .withButtons (touchFinger->buttons)
                          .withModifiers (currentKeyModifiers)
                          .withPosition (position)
-                         .withTouchIndex (touchFinger->index)
+                         .withTouchIndex (touchIndex)
                          .withPressure (touchFinger->pressure);
 
         if (touchFinger->lastDownPosition)
@@ -1588,6 +1589,10 @@ void SDLComponentNative::handleMouseMoveOrDrag (const Point<float>& position, To
                 }
             }
         }
+
+        // Lets a drag and drop session started by this finger follow it outside its component.
+        Desktop::getInstance()->handleGlobalMouseDrag (MouseEvent (MouseEvent::leftButton, currentKeyModifiers, component.localToScreen (position))
+                                                           .withTouchIndex (touchIndex));
 
         return;
     }
@@ -1743,6 +1748,16 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (touchFinger->lastDownTime)
             event = event.withLastMouseDownTime (*touchFinger->lastDownTime);
 
+        // A system cancel must end a drag this finger is carrying with no drop at all.
+        if (wasCanceled)
+        {
+            if (auto* manager = DragAndDropManager::getInstanceWithoutCreating();
+                manager != nullptr && manager->isDragging() && manager->getCurrentDragTouchIndex() == touchIndex)
+            {
+                manager->cancelDrag();
+            }
+        }
+
         if (auto* clickedComponent = touchFinger->clickedComponent.get())
         {
             const auto currentMouseDownTime = yup::Time::getCurrentTime();
@@ -1788,6 +1803,10 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
                     activeTouches.getReference (currentIndex).componentUnderPointer = currentComponent;
             }
         }
+
+        // Ends a drag and drop session started by this finger, wherever it was released.
+        Desktop::getInstance()->handleGlobalMouseUp (MouseEvent (MouseEvent::noButtons, currentKeyModifiers, component.localToScreen (position))
+                                                         .withTouchIndex (touchIndex));
 
         return;
     }

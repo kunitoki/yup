@@ -81,7 +81,7 @@ private:
         std::function<void (const StringArray&)> onInputsChanged;
 
         int getNumRows() override;
-        Component* refreshComponentForRow (int rowIndex, Component* existing) override;
+        void refreshRowComponent (int rowIndex, bool isSelected, std::unique_ptr<Component>& component) override;
 
     private:
         Array<MidiDeviceInfo> midiDevices;

@@ -88,6 +88,12 @@ public:
         */
         bool allowExternalDrag = false;
 
+        /** The finger the drag follows, or -1 when it follows the mouse. See withTouchPointer(). */
+        int touchIndex = -1;
+
+        /** Where the finger was, in screen coordinates, when a touch drag started. */
+        Point<float> touchScreenPosition;
+
         //==============================================================================
         /** Sets the payload. */
         DragOptions& withData (DragAndDropData newData);
@@ -106,6 +112,17 @@ public:
 
         /** Sets whether the drag may leave the application. */
         DragOptions& withExternalDragAllowed (bool shouldAllowExternalDrag);
+
+        /** Makes the drag follow a finger instead of the mouse.
+
+            Only the moves and the release of that finger drive the session, and the ghost starts at
+            @a screenPosition, since a touch has no mouse cursor to start from. A list uses this to start
+            dragging a row on a long-press.
+
+            @param newTouchIndex   The finger's touch index, see MouseEvent::getTouchIndex(); -1 for the mouse.
+            @param screenPosition  Where the finger is, in screen coordinates.
+        */
+        DragOptions& withTouchPointer (int newTouchIndex, Point<float> screenPosition);
     };
 
     //==============================================================================

@@ -356,6 +356,11 @@ started on one of several selected rows carry all of them.
 `setDragSourceEnabled (false)` makes a list undraggable without consulting its model at all;
 it is enabled by default.
 
+With touch, a drag scrolls the list instead, so a long press is what starts dragging: it
+selects the pressed row and drags the selection, following that finger. A custom source can
+do the same by starting its drag with `DragOptions::withTouchPointer (touchIndex, screenPosition)`:
+the session then follows only that finger, and a system cancel of the touch ends it without a drop.
+
 ---
 
 ## Python

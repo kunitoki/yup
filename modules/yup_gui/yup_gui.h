@@ -149,6 +149,7 @@
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
 #include "mouse/yup_MouseListener.h"
+#include "mouse/yup_KineticScroller.h"
 #include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
