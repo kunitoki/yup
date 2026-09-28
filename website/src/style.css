@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Palette and type follow cmake/platforms/emscripten/shell.html. */
+/* Palette follows cmake/platforms/emscripten/shell.html; type is Geist, self-hosted via Fontsource. */
 @theme {
     --color-void: #07090e;
     --color-surface: #0e121a;
@@ -11,8 +11,8 @@
     --color-glow-soft: #6fb6ff;
     --color-danger: #ff6b5a;
 
-    --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --font-sans: "Geist Variable", ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @layer base {

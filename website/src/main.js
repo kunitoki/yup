@@ -1,5 +1,7 @@
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 
 // Eases wheel ticks into continuous scrolling; touch stays native and code blocks keep their own horizontal scroll.
 const lenis = new Lenis({ autoRaf: true, anchors: true, allowNestedScroll: true });
