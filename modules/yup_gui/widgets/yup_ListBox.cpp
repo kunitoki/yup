@@ -307,6 +307,16 @@ ListBox::ListBox (StringRef componentID, Orientation orientation)
 
 ListBox::~ListBox()
 {
+    // A list carrying a gesture on behalf of this one will never see its release now.
+    if (gesture.handOffTarget.get() != nullptr)
+    {
+        MessageManager::callAsync ([target = gesture.handOffTarget]
+        {
+            if (auto* list = dynamic_cast<ListBox*> (target.get()))
+                list->releaseLostGesture();
+        });
+    }
+
     // The model may already be gone, so nothing here may call into it.
     model = nullptr;
     destroyAllRows();
@@ -1497,6 +1507,11 @@ void ListBox::updateScrollBars()
 
     scrollBar.setRangeLimits (0.0, getTotalContentSize());
     scrollBar.setCurrentRange (position, position + viewportSize);
+
+    // The bar only updates its own visibility when its ranges change, which misses it being hidden above.
+    const auto mode = scrollBar.getVisibilityMode();
+    scrollBar.setVisible (mode == ScrollBar::VisibilityMode::alwaysVisible
+                          || (mode == ScrollBar::VisibilityMode::autoHide && scrollBar.isScrollingNeeded()));
 }
 
 void ListBox::handleScrollBarMoved (ScrollBar& scrollBar)
@@ -1586,6 +1601,9 @@ void ListBox::anchorScrollPosition (int anchorRow, float anchorStart, const std:
     if (newAnchorRow < 0)
         return;
 
+    // The content already changed size, so the anchored position must be checked against the new limits.
+    scroller.setLimits (getMinScrollOffset(), getMaxScrollOffset(), viewportSize);
+
     const auto delta = rowStarts[static_cast<size_t> (newAnchorRow)] - anchorStart;
 
     if (delta != 0.0f)
@@ -1595,8 +1613,13 @@ void ListBox::anchorScrollPosition (int anchorRow, float anchorStart, const std:
 //==============================================================================
 void ListBox::handleRowClick (int rowIndex, const MouseEvent& event)
 {
+    const BailOutChecker checker (this);
+
     if (onRowClicked)
         onRowClicked (rowIndex);
+
+    if (checker.shouldBailOut())
+        return;
 
     if (model != nullptr)
         model->rowClicked (rowIndex, event);
@@ -1705,9 +1728,15 @@ bool ListBox::isTouchLike (const MouseEvent& event) const
 
 void ListBox::gestureDown (const MouseEvent& event)
 {
-    // Only the first finger drives a gesture.
     if (gesture.active)
-        return;
+    {
+        // Only the first finger drives a gesture.
+        if (event.getTouchIndex() != gesture.touchIndex)
+            return;
+
+        // The same pointer pressing again means its release was lost.
+        releaseLostGesture();
+    }
 
     if (! event.isTouch() && getWantsKeyboardFocus())
         takeKeyboardFocus();
@@ -1838,6 +1867,7 @@ void ListBox::gestureUp (const MouseEvent& event)
     updateLayout();
 
     const auto rowIndex = getRowIndexAt (event.getPosition());
+    const BailOutChecker checker (this);
 
     if (! finished.scrolling
         && ! finished.tapCancelled
@@ -1847,13 +1877,32 @@ void ListBox::gestureUp (const MouseEvent& event)
         && rowIndex == finished.pressedRow)
     {
         tapRow (rowIndex, event);
+
+        // A tap may close whatever hosts the list.
+        if (checker.shouldBailOut())
+            return;
     }
 
-    const BailOutChecker checker (this);
     dispatchPendingNotifications();
 
     if (shouldRefresh && ! checker.shouldBailOut() && onRefresh)
         onRefresh();
+}
+
+void ListBox::releaseLostGesture()
+{
+    if (! gesture.active)
+        return;
+
+    if (gesture.scrolling || scroller.getOverscroll() != 0.0f)
+        scroller.endDrag (gestureClock);
+    else
+        scroller.stop();
+
+    gesture = {};
+
+    updateLayout();
+    dispatchPendingNotifications();
 }
 
 ListBox* ListBox::findHandOffTarget (const MouseEvent& event)

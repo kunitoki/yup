@@ -773,14 +773,15 @@ TEST_F (ListBoxTests, OnVisibleRowsChangedReportsTheNewRange)
     std::vector<Range<int>> ranges;
     listBox->onVisibleRowsChanged = [&] (Range<int> range) { ranges.push_back (range); };
 
-    listBox->setScrollPosition (100.0f);
+    // At 110 the 400pt window spans 110 to 510: rows 2 (100-150) to 10 (500-550).
+    listBox->setScrollPosition (110.0f);
 
     ASSERT_EQ (1u, ranges.size());
     EXPECT_EQ (2, ranges[0].getStart());
-    EXPECT_EQ (10, ranges[0].getEnd());
+    EXPECT_EQ (11, ranges[0].getEnd());
 
     // Same range, no callback.
-    listBox->setScrollPosition (101.0f);
+    listBox->setScrollPosition (120.0f);
     EXPECT_EQ (1u, ranges.size());
 }
 
@@ -891,6 +892,22 @@ TEST_F (ListBoxTests, InsertingRowsBelowTheViewDoesNotScroll)
     listBox->rowsInserted (50, 5);
 
     EXPECT_FLOAT_EQ (200.0f, listBox->getScrollPosition());
+}
+
+TEST_F (ListBoxTests, InsertingRowsAboveTheViewKeepsTheVisibleRowsInPlaceAtTheEnd)
+{
+    setNumRows (50);
+    listBox->setRowSize (20.0f);
+
+    // Scrolled all the way down: the anchored position lies past the old end of the content.
+    listBox->setScrollPosition (600.0f);
+    ASSERT_EQ (30, listBox->getVisibleRowRange().getStart());
+
+    model->numRows += 3;
+    listBox->rowsInserted (0, 3);
+
+    EXPECT_FLOAT_EQ (660.0f, listBox->getScrollPosition());
+    EXPECT_EQ (33, listBox->getVisibleRowRange().getStart());
 }
 
 TEST_F (ListBoxTests, RemovingRowsAboveTheViewKeepsTheVisibleRowsInPlace)
@@ -1180,7 +1197,7 @@ TEST_F (ListBoxTests, UpdateContentRefreshesVisibleRows)
 
 TEST_F (ListBoxTests, ResizeUpdatesVisibleRows)
 {
-    listBox->setRowSize (10.0f);
+    listBox->setRowSize (40.0f);
 
     auto visibleCountBefore = listBox->getVisibleRowsCount();
 
@@ -1217,6 +1234,40 @@ TEST_F (ListBoxTests, MinimumContentSizeMakesShortContentScrollable)
 
 //==============================================================================
 // Scrollbar Tests
+
+TEST_F (ListBoxTests, TheScrollBarComesBackAfterTheModelIsReset)
+{
+    listBox->setRowSize (50.0f);
+    ASSERT_TRUE (listBox->getVerticalScrollBar()->isVisible());
+
+    listBox->setModel (nullptr);
+    EXPECT_FALSE (listBox->getVerticalScrollBar()->isVisible());
+
+    listBox->setModel (model.get());
+    EXPECT_TRUE (listBox->getVerticalScrollBar()->isVisible());
+}
+
+TEST_F (ListBoxTests, TheScrollBarComesBackAfterAnOrientationRoundTrip)
+{
+    listBox->setRowSize (50.0f);
+    ASSERT_TRUE (listBox->getVerticalScrollBar()->isVisible());
+
+    listBox->setOrientation (ListBox::Orientation::horizontal);
+    listBox->setOrientation (ListBox::Orientation::vertical);
+
+    EXPECT_TRUE (listBox->getVerticalScrollBar()->isVisible());
+}
+
+TEST_F (ListBoxTests, TheScrollBarStaysHiddenWhenTheContentFits)
+{
+    EXPECT_FALSE (listBox->getHorizontalScrollBar()->isVisible());
+
+    setNumRows (3);
+    EXPECT_FALSE (listBox->getVerticalScrollBar()->isVisible());
+
+    listBox->setVerticalScrollBarVisibility (ScrollBar::VisibilityMode::alwaysVisible);
+    EXPECT_TRUE (listBox->getVerticalScrollBar()->isVisible());
+}
 //==============================================================================
 
 TEST_F (ListBoxTests, VerticalScrollBarExists)
@@ -1780,6 +1831,55 @@ TEST_F (ListBoxTests, MovingAcrossANestedListHandsTheGestureToTheParentList)
     EXPECT_EQ (0, child.getNumSelectedRows());
 
     child.setModel (nullptr);
+}
+
+TEST_F (ListBoxTests, AParentListRecoversWhenTheNestedListCarryingItsGestureIsDeleted)
+{
+    listBox->setRowSize (50.0f);
+
+    TestListBoxModel childModel (10);
+    auto child = std::make_unique<ListBox> (StringRef(), ListBox::Orientation::horizontal);
+    child->setBounds (0.0f, 0.0f, 280.0f, 100.0f);
+    child->setModel (&childModel);
+    listBox->addAndMakeVisible (*child);
+
+    child->mouseDown (touchAt ({ 150.0f, 80.0f }));
+    runFrames (1);
+    child->mouseDrag (touchAt ({ 150.0f, 30.0f }));
+    ASSERT_EQ (ListBox::ScrollState::dragging, listBox->getScrollState());
+
+    // The row hosting the nested list is recycled mid-gesture: its release never arrives.
+    child->setModel (nullptr);
+    child.reset();
+
+    // The next press on the parent starts a fresh gesture instead of being ignored.
+    const auto before = listBox->getScrollPosition();
+    listBox->mouseDown (touchAt (pointAlong (300.0f)));
+    runFrames (1);
+    listBox->mouseDrag (touchAt (pointAlong (200.0f)));
+
+    EXPECT_FLOAT_EQ (before + 90.0f, listBox->getScrollPosition());
+
+    runFrames (10);
+    listBox->mouseUp (touchAt (pointAlong (200.0f)));
+    EXPECT_NE (ListBox::ScrollState::dragging, listBox->getScrollState());
+}
+
+TEST_F (ListBoxTests, ATapCallbackMayDeleteTheList)
+{
+    bool clicked = false;
+    listBox->onRowClicked = [&] (int)
+    {
+        clicked = true;
+        listBox.reset();
+    };
+
+    const auto position = listBox->getRowBounds (2).getCenter();
+    listBox->mouseDown (touchAt (position));
+    listBox->mouseUp (touchAt (position));
+
+    EXPECT_TRUE (clicked);
+    EXPECT_EQ (nullptr, listBox);
 }
 
 TEST_F (ListBoxTests, ALongPressSelectsAndOwnsTheRestOfTheGesture)

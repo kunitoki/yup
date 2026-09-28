@@ -853,6 +853,7 @@ private:
     void gestureDown (const MouseEvent& event);
     void gestureDrag (const MouseEvent& event);
     void gestureUp (const MouseEvent& event);
+    void releaseLostGesture();
     ListBox* findHandOffTarget (const MouseEvent& event);
     MouseEvent translateEventFor (const MouseEvent& event, Point<float> localPosition, Component& target) const;
     void triggerLongPress();
