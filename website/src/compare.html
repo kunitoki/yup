@@ -9,18 +9,16 @@
         <!-- @header -->
 
         <main>
-            <section class="relative overflow-hidden pt-16 pb-12 sm:pt-24">
-                <div class="bg-grid"></div>
-                <div class="container-site relative text-center">
-                    <p class="eyebrow">Compare</p>
-                    <h1 class="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">YUP next to the alternatives</h1>
-                    <p class="lead mx-auto mt-5 max-w-2xl">How YUP lines up against the frameworks people usually weigh it against, taken from each project's own documentation. Every framework here is good at something, so pick the one that fits your project.</p>
+            <section class="pt-16 pb-12 sm:pt-24">
+                <div class="container-site">
+                    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">YUP next to the alternatives</h1>
+                    <p class="lead mt-5">How YUP lines up against the frameworks people usually weigh it against, taken from each project's own documentation. Every framework here is good at something, so pick the one that fits your project.</p>
                 </div>
             </section>
 
             <section class="pb-16">
                 <div class="container-site">
-                    <div class="card overflow-x-auto">
+                    <div class="overflow-x-auto border-y border-edge">
                         <table class="compare w-full min-w-[68rem] text-left text-sm">
                             <thead>
                                 <tr>
@@ -136,45 +134,45 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="mt-4 font-mono text-[11px] tracking-[0.06em] text-muted">Checked September 2026 against JUCE 9.0, the iPlug2, DPF and Visage main branches and the Qt 6.11 documentation. Spotted something out of date? <a class="text-glow-soft hover:text-ink" href="https://github.com/kunitoki/yup/issues" target="_blank" rel="noopener">Open an issue</a>.</p>
+                    <p class="mt-4 text-xs text-muted">Checked September 2026 against JUCE 9.0, the iPlug2, DPF and Visage main branches and the Qt 6.11 documentation. Spotted something out of date? <a class="text-graphics-soft hover:text-ink" href="https://github.com/kunitoki/yup/issues" target="_blank" rel="noopener">Open an issue</a>.</p>
                 </div>
             </section>
 
             <section class="pb-24">
-                <div class="container-site grid gap-5 md:grid-cols-2">
-                    <article class="card p-7">
+                <div class="container-site grid gap-12 md:grid-cols-2">
+                    <article>
                         <h2 class="text-lg font-semibold">Where YUP stands out</h2>
-                        <ul class="mt-4 space-y-3 text-sm leading-relaxed text-muted">
-                            <li class="flex gap-3"><span class="text-glow">+</span>One permissive license for everything. Unlike JUCE and Qt, there are no revenue tiers or copyleft terms to track.</li>
-                            <li class="flex gap-3"><span class="text-glow">+</span>A GPU renderer on every platform, including WebGPU, plus a low-level RHI for compute and custom shaders.</li>
-                            <li class="flex gap-3"><span class="text-glow">+</span>Plugin building and plugin hosting in the same framework, with native CLAP.</li>
-                            <li class="flex gap-3"><span class="text-glow">+</span>The same app on desktop, mobile and the web, with Python bindings and AI clients built in.</li>
+                        <ul class="mt-4 max-w-[60ch] list-disc space-y-3 pl-5 text-sm leading-relaxed text-muted marker:text-edge">
+                            <li>One permissive license for everything. Unlike JUCE and Qt, there are no revenue tiers or copyleft terms to track.</li>
+                            <li>A GPU renderer on every platform, including WebGPU, plus a low-level RHI for compute and custom shaders.</li>
+                            <li>Plugin building and plugin hosting in the same framework, with native CLAP.</li>
+                            <li>The same app on desktop, mobile and the web, with Python bindings and AI clients built in.</li>
                         </ul>
                     </article>
-                    <article class="card p-7">
+                    <article>
                         <h2 class="text-lg font-semibold">When another choice fits better</h2>
-                        <ul class="mt-4 space-y-3 text-sm leading-relaxed text-muted">
-                            <li class="flex gap-3"><span class="text-muted">-</span>You need Linux, AAX or LV2 plugins today: JUCE and DPF (Linux, LV2) and iPlug2 (AAX) ship them now.</li>
-                            <li class="flex gap-3"><span class="text-muted">-</span>You need stable APIs and a large ecosystem: YUP is early-stage and its APIs may still change.</li>
-                            <li class="flex gap-3"><span class="text-muted">-</span>You only need a GPU UI on top of your own audio code: Visage is a focused, MIT licensed UI library.</li>
-                            <li class="flex gap-3"><span class="text-muted">-</span>You are building a general desktop or embedded UI without audio: Qt covers far more of that ground.</li>
+                        <ul class="mt-4 max-w-[60ch] list-disc space-y-3 pl-5 text-sm leading-relaxed text-muted marker:text-edge">
+                            <li>You need Linux, AAX or LV2 plugins today: JUCE and DPF (Linux, LV2) and iPlug2 (AAX) ship them now.</li>
+                            <li>You need stable APIs and a large ecosystem: YUP is early-stage and its APIs may still change.</li>
+                            <li>You only need a GPU UI on top of your own audio code: Visage is a focused, MIT licensed UI library.</li>
+                            <li>You are building a general desktop or embedded UI without audio: Qt covers far more of that ground.</li>
                         </ul>
                     </article>
                 </div>
-                <div class="container-site mt-8">
-                    <h2 class="font-mono text-xs uppercase tracking-[0.12em] text-ink">Sources</h2>
-                    <ul class="mt-4 flex flex-wrap gap-2">
-                        <li><a class="chip chip-link" href="https://juce.com/get-juce/" target="_blank" rel="noopener">JUCE licensing</a></li>
-                        <li><a class="chip chip-link" href="https://juce.com/juce/features/" target="_blank" rel="noopener">JUCE features</a></li>
-                        <li><a class="chip chip-link" href="https://github.com/juce-framework/JUCE" target="_blank" rel="noopener">JUCE repository</a></li>
-                        <li><a class="chip chip-link" href="https://github.com/free-audio/clap-juce-extensions" target="_blank" rel="noopener">clap-juce-extensions</a></li>
-                        <li><a class="chip chip-link" href="https://github.com/iPlug2/iPlug2" target="_blank" rel="noopener">iPlug2 repository</a></li>
-                        <li><a class="chip chip-link" href="https://github.com/DISTRHO/DPF" target="_blank" rel="noopener">DPF repository</a></li>
-                        <li><a class="chip chip-link" href="https://github.com/VitalAudio/visage" target="_blank" rel="noopener">Visage repository</a></li>
-                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/licensing.html" target="_blank" rel="noopener">Qt licensing</a></li>
-                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/topics-graphics.html" target="_blank" rel="noopener">Qt graphics</a></li>
-                        <li><a class="chip chip-link" href="https://doc.qt.io/qt-6/supported-platforms.html" target="_blank" rel="noopener">Qt platforms</a></li>
-                        <li><a class="chip chip-link" href="https://doc.qt.io/qtforpython-6/" target="_blank" rel="noopener">Qt for Python</a></li>
+                <div class="container-site mt-14">
+                    <h2 class="text-sm font-medium text-ink">Sources</h2>
+                    <ul class="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://juce.com/get-juce/" target="_blank" rel="noopener">JUCE licensing</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://juce.com/juce/features/" target="_blank" rel="noopener">JUCE features</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://github.com/juce-framework/JUCE" target="_blank" rel="noopener">JUCE repository</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://github.com/free-audio/clap-juce-extensions" target="_blank" rel="noopener">clap-juce-extensions</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://github.com/iPlug2/iPlug2" target="_blank" rel="noopener">iPlug2 repository</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://github.com/DISTRHO/DPF" target="_blank" rel="noopener">DPF repository</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://github.com/VitalAudio/visage" target="_blank" rel="noopener">Visage repository</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://doc.qt.io/qt-6/licensing.html" target="_blank" rel="noopener">Qt licensing</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://doc.qt.io/qt-6/topics-graphics.html" target="_blank" rel="noopener">Qt graphics</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://doc.qt.io/qt-6/supported-platforms.html" target="_blank" rel="noopener">Qt platforms</a></li>
+                        <li><a class="text-graphics-soft hover:text-ink" href="https://doc.qt.io/qtforpython-6/" target="_blank" rel="noopener">Qt for Python</a></li>
                     </ul>
                 </div>
             </section>
