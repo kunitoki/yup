@@ -1548,9 +1548,8 @@ OSStatus AudioPluginProcessorAU::GetProperty (AudioUnitPropertyID inID,
         }
 
         auto* bundleLocation = (__bridge_retained CFURLRef)[bundle bundleURL];
-        auto* viewClass = CFStringCreateWithCString (kCFAllocatorDefault,
-                                                     "AudioPluginProcessorAUViewFactory",
-                                                     kCFStringEncodingUTF8);
+        // The class may be renamed per plugin to stay unique in the host process, so pass its runtime name
+        auto* viewClass = (__bridge_retained CFStringRef) NSStringFromClass ([AudioPluginProcessorAUViewFactory class]);
 
         if (bundleLocation == nullptr || viewClass == nullptr)
         {
