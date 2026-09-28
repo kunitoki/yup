@@ -385,6 +385,8 @@ private:
     {
         listeners = std::make_shared<ArrayType>();
         iterators = std::make_shared<SafeIterators>();
+
+        iterators->reserve (4);
     };
 
     //==============================================================================

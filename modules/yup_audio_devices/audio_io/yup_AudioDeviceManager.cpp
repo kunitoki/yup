@@ -1145,6 +1145,13 @@ void AudioDeviceManager::audioDeviceAboutToStartInt (AudioIODevice* const device
     {
         const AudioLockType::ScopedLockType sl (audioCallbackLock);
 
+        // Sized here so the audio callback, which resizes it only when the block grows, never allocates.
+        tempBuffer.setSize (jmax (1, device->getActiveOutputChannels().countNumberOfSetBits()),
+                            jmax (1, device->getCurrentBufferSizeSamples()),
+                            false,
+                            false,
+                            true);
+
         for (int i = callbacks.size(); --i >= 0;)
             callbacks.getUnchecked (i)->audioDeviceAboutToStart (device);
     }

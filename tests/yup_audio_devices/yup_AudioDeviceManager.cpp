@@ -85,8 +85,21 @@ public:
         outChannels = outputs;
         sampleRate = sr;
         blockSize = bs;
+        inputBuffer.setSize (inputs.countNumberOfSetBits(), bs);
+        outputBuffer.setSize (outputs.countNumberOfSetBits(), bs);
         on = true;
         return {};
+    }
+
+    // Emulates the driver rendering one block, into buffers allocated when opening.
+    void processBlock()
+    {
+        callback->audioDeviceIOCallbackWithContext (inputBuffer.getArrayOfReadPointers(),
+                                                    inputBuffer.getNumChannels(),
+                                                    outputBuffer.getArrayOfWritePointers(),
+                                                    outputBuffer.getNumChannels(),
+                                                    blockSize,
+                                                    {});
     }
 
     void close() override { on = false; }
@@ -137,6 +150,7 @@ private:
     AudioIODeviceCallback* callback = nullptr;
     String outName, inName;
     BigInteger outChannels, inChannels;
+    AudioBuffer<float> inputBuffer, outputBuffer;
     double sampleRate = 0.0;
     int blockSize = 0;
     bool on = false, playing = false;
@@ -233,6 +247,19 @@ public:
 class AudioDeviceManagerTests : public ::testing::Test
 {
 public:
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     void initialiseWithDefaultDevices (AudioDeviceManager& manager)
     {
         manager.initialiseWithDefaultDevices (2, 2);
@@ -715,6 +742,31 @@ TEST_F (AudioDeviceManagerTests, AddAndRemoveAudioCallback)
     manager.removeAudioCallback (&callback);
     EXPECT_TRUE (stoppedCalled);
 }
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (AudioDeviceManagerTests, FirstAudioCallbackDoesNotAllocate)
+{
+    AudioDeviceManager manager;
+    initialiseManager (manager);
+    manager.initialiseWithDefaultDevices (2, 2);
+
+    MockCallback callback;
+    manager.addAudioCallback (&callback);
+
+    auto* device = dynamic_cast<MockDevice*> (manager.getCurrentAudioDevice());
+    ASSERT_NE (device, nullptr);
+
+    size_t count = 0;
+    {
+        AllocationCounter allocations;
+        device->processBlock();
+        count = allocations.count;
+    }
+
+    manager.removeAudioCallback (&callback);
+    EXPECT_EQ (0u, count);
+}
+#endif
 
 TEST_F (AudioDeviceManagerTests, MultipleAudioCallbacks)
 {

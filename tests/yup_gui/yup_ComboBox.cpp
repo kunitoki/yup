@@ -72,6 +72,11 @@ TEST_F (ComboBoxTest, ConstructorInitializesCorrectly)
     EXPECT_FALSE (comboBox->isTextEditable());
 }
 
+TEST_F (ComboBoxTest, UsesHandCursor)
+{
+    EXPECT_EQ (MouseCursor::Hand, comboBox->getMouseCursor().getType());
+}
+
 TEST_F (ComboBoxTest, AddItemIncreasesCount)
 {
     comboBox->addItem (kTestText1, kTestId1);

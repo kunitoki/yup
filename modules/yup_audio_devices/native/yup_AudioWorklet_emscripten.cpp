@@ -201,22 +201,18 @@ public:
         }
         else
         {
-            callback.store (newCallback, std::memory_order_release);
-            isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
+            const bool contextRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
 
-            if (! isRunning && hasBeenActivatedAlreadyByUser)
-            {
-                emscripten_resume_audio_context_sync (context);
-                isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
-            }
+            if (newCallback != nullptr && (contextRunning || hasBeenActivatedAlreadyByUser))
+                newCallback->audioDeviceAboutToStart (this);
 
             firstCallback = true;
+            callback.store (newCallback, std::memory_order_release);
 
-            if (newCallback != nullptr)
-            {
-                if (isRunning)
-                    newCallback->audioDeviceAboutToStart (this);
-            }
+            if (! contextRunning && hasBeenActivatedAlreadyByUser)
+                emscripten_resume_audio_context_sync (context);
+
+            isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
         }
     }
 
@@ -364,13 +360,13 @@ private:
 
         if (emscripten_audio_context_state (context) != AUDIO_CONTEXT_STATE_RUNNING)
         {
+            if (auto* currentCallback = callback.load (std::memory_order_acquire))
+                currentCallback->audioDeviceAboutToStart (this);
+
             emscripten_resume_audio_context_sync (context);
 
             isRunning = true;
             hasBeenActivatedAlreadyByUser = true;
-
-            if (auto* currentCallback = callback.load (std::memory_order_acquire))
-                currentCallback->audioDeviceAboutToStart (this);
         }
     }
 

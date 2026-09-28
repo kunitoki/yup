@@ -709,7 +709,12 @@ public:
                                            const yup::AudioIODeviceCallbackContext& context) override
     {
         if (monoOutputBuffer.size() < static_cast<std::size_t> (numSamples))
-            monoOutputBuffer.resize (static_cast<std::size_t> (numSamples), 0.0f);
+        {
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+                yup::FloatVectorOperations::clear (outputChannelData[channel], numSamples);
+
+            return;
+        }
 
         if (useAudioFile.load() && filePlayer.isLoaded())
             filePlayer.renderNextBlock (monoOutputBuffer.data(), numSamples);
@@ -736,19 +741,15 @@ public:
         double sampleRate = device->getCurrentSampleRate();
         const int maxBlockSize = yup::jmax (1, device->getCurrentBufferSizeSamples());
 
-        {
-            const AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
+        // Setup signal generator
+        signalGenerator.prepare (sampleRate, maxBlockSize);
+        signalGenerator.setFrequency (currentFrequency);
+        signalGenerator.setAmplitude (currentAmplitude);
+        signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
+        monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
 
-            // Setup signal generator
-            signalGenerator.prepare (sampleRate, maxBlockSize);
-            signalGenerator.setFrequency (currentFrequency);
-            signalGenerator.setAmplitude (currentAmplitude);
-            signalGenerator.setSweepParameters (20.0, 22000.0, sweepDurationSeconds);
-            monoOutputBuffer.assign (static_cast<std::size_t> (maxBlockSize), 0.0f);
-
-            // Match the file player's resampler to the device rate.
-            filePlayer.setTargetSampleRate (sampleRate);
-        }
+        // Match the file player's resampler to the device rate.
+        filePlayer.setTargetSampleRate (sampleRate);
 
         // Configure spectrum displays
         analyzerComponent.setSampleRate (sampleRate);
@@ -1020,7 +1021,7 @@ private:
     template <typename Callback>
     void updateSignalGenerator (Callback&& callback)
     {
-        const AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
+        const yup::AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
         callback (signalGenerator);
     }
 
@@ -1221,6 +1222,13 @@ private:
     {
         int selectedId = fftSizeCombo->getSelectedId();
         currentFFTSize = 64 << (selectedId - 1); // 64, 128, 256, ..., 16384
+
+        // Resizing a state replaces the FIFO the audio callback pushes into
+        {
+            const yup::AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
+            analyzerState.setFftSize (currentFFTSize);
+            spectrogramState.setFftSize (currentFFTSize);
+        }
 
         // Update both displays (each owns its own state)
         analyzerComponent.setFFTSize (currentFFTSize);

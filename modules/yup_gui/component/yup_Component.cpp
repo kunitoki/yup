@@ -1721,6 +1721,12 @@ void Component::applyPaintState (Graphics& g, const RectangleList<float>& clipRe
     // untransformed hierarchy keeps painting in exactly the same state it always had
     g.setDrawingArea (getLocalBounds().withPosition (toTopLevel.getTranslation()));
     g.setTransform (toTopLevel.withAbsoluteTranslation (0.0f, 0.0f));
+
+    // Under rotation or shear the clip region only holds the bounding box, so clip to the real
+    // outline too. Children paint inside this state, so they inherit it.
+    const bool isAxisAligned = approximatelyEqual (toTopLevel.getShearX(), 0.0f) && approximatelyEqual (toTopLevel.getShearY(), 0.0f);
+    if (! options.unclippedRendering && ! isAxisAligned)
+        g.setClipPath (getLocalBounds());
 }
 
 void Component::paintSubtree (Graphics& g, const RectangleList<float>& clipRegion, float opacity, bool renderContinuous)

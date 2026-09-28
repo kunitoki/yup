@@ -50,6 +50,9 @@ public:
         createDirIfNotExists (File::commonApplicationDataDirectory);
         createDirIfNotExists (File::globalApplicationsDirectory);
         createDirIfNotExists (File::tempDirectory);
+
+        eventQueue.ensureStorageAllocated (queueCapacity);
+        deliveryQueue.ensureStorageAllocated (queueCapacity);
     }
 
     ~InternalMessageQueue()
@@ -63,7 +66,7 @@ public:
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
-            const ScopedLock sl (lock);
+            const SpinLock::ScopedLockType sl (lock);
 
             eventQueue.add (msg);
         }
@@ -74,28 +77,30 @@ public:
     //==============================================================================
     void deliverNextMessages()
     {
-        ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
-
         {
-            const ScopedLock sl (lock);
+            const SpinLock::ScopedLockType sl (lock);
 
-            currentEvents = std::move (eventQueue);
-            eventQueue.clear();
+            deliveryQueue.swapWith (eventQueue);
         }
 
-        while (! currentEvents.isEmpty())
+        for (auto* message : deliveryQueue)
         {
-            if (auto message = currentEvents.removeAndReturn (0))
+            if (message != nullptr)
                 message->messageCallback();
         }
+
+        deliveryQueue.clearQuick();
     }
 
     //==============================================================================
     YUP_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
-    CriticalSection lock;
+    static constexpr int queueCapacity = 256;
+
+    SpinLock lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
+    ReferenceCountedArray<MessageManager::MessageBase> deliveryQueue;
 };
 
 YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)

@@ -155,6 +155,10 @@ public:
         if (numOutputChannels < 2 || audioBuffer.getNumSamples() == 0)
             return;
 
+        lowGain.setTargetValue (lowGainTarget.load());
+        highGain.setTargetValue (highGainTarget.load());
+        crossoverFreq.setTargetValue (crossoverFreqTarget.load());
+
         // Get the active filter
         yup::LinkwitzRileyFilter<float>* activeFilter = nullptr;
 
@@ -309,7 +313,7 @@ private:
         //freqSlider.setTextValueSuffix (" Hz");
         freqSlider.onValueChanged = [this] (double value)
         {
-            crossoverFreq.setTargetValue ((float) value);
+            crossoverFreqTarget = (float) value;
             setCrossoverFrequency (value);
         };
         addAndMakeVisible (freqSlider);
@@ -326,7 +330,7 @@ private:
         //lowGainSlider.setTextValueSuffix (" x");
         lowGainSlider.onValueChanged = [this] (double value)
         {
-            lowGain.setTargetValue ((float) value);
+            lowGainTarget = (float) value;
         };
         addAndMakeVisible (lowGainSlider);
 
@@ -342,7 +346,7 @@ private:
         //highGainSlider.setTextValueSuffix (" x");
         highGainSlider.onValueChanged = [this] (double value)
         {
-            highGain.setTargetValue ((float) value);
+            highGainTarget = (float) value;
         };
         addAndMakeVisible (highGainSlider);
 
@@ -368,6 +372,14 @@ private:
 
         auto sampleRate = audioDeviceManager.getCurrentAudioDevice() ? audioDeviceManager.getCurrentAudioDevice()->getCurrentSampleRate() : 44100.0;
 
+        // The display has its own filters, the audio ones are retuned by the audio thread
+        displayFilter2.setSampleRate (sampleRate);
+        displayFilter4.setSampleRate (sampleRate);
+        displayFilter8.setSampleRate (sampleRate);
+        displayFilter2.setFrequency (currentCrossoverFreq);
+        displayFilter4.setFrequency (currentCrossoverFreq);
+        displayFilter8.setFrequency (currentCrossoverFreq);
+
         for (int i = 0; i < numPoints; ++i)
         {
             double normalised = static_cast<double> (i) / (numPoints - 1);
@@ -381,22 +393,22 @@ private:
             {
                 case 2:
                 {
-                    lowMag = filter2.getMagnitudeResponseLowBand (freq);
-                    highMag = filter2.getMagnitudeResponseHighBand (freq);
+                    lowMag = displayFilter2.getMagnitudeResponseLowBand (freq);
+                    highMag = displayFilter2.getMagnitudeResponseHighBand (freq);
                     break;
                 }
 
                 case 4:
                 {
-                    lowMag = filter4.getMagnitudeResponseLowBand (freq);
-                    highMag = filter4.getMagnitudeResponseHighBand (freq);
+                    lowMag = displayFilter4.getMagnitudeResponseLowBand (freq);
+                    highMag = displayFilter4.getMagnitudeResponseHighBand (freq);
                     break;
                 }
 
                 case 8:
                 {
-                    lowMag = filter8.getMagnitudeResponseLowBand (freq);
-                    highMag = filter8.getMagnitudeResponseHighBand (freq);
+                    lowMag = displayFilter8.getMagnitudeResponseLowBand (freq);
+                    highMag = displayFilter8.getMagnitudeResponseHighBand (freq);
                     break;
                 }
             }
@@ -474,13 +486,17 @@ private:
     yup::LinkwitzRiley2Filter<float> filter2;
     yup::LinkwitzRiley4Filter<float> filter4;
     yup::LinkwitzRiley8Filter<float> filter8;
-    int currentOrder = 4;
+    yup::LinkwitzRiley2Filter<float> displayFilter2;
+    yup::LinkwitzRiley4Filter<float> displayFilter4;
+    yup::LinkwitzRiley8Filter<float> displayFilter8;
+    std::atomic<int> currentOrder { 4 };
 
     // Process
     yup::FixedSizeFunction<16, void (float, float, float&, float&, float&, float&)> filterProcess;
 
-    // Gains
+    // Gains, targets written by the UI thread
     yup::SmoothedValue<float> lowGain, highGain, crossoverFreq;
+    std::atomic<float> lowGainTarget { 1.0f }, highGainTarget { 1.0f }, crossoverFreqTarget { 1000.0f };
 
     // UI
     yup::Label orderLabel;

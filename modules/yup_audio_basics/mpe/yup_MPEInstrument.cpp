@@ -950,7 +950,7 @@ void MPEInstrument::releaseAllNotes()
         });
     }
 
-    notes.clear();
+    notes.clearQuick();
 }
 
 void MPEInstrument::reserveNotes (int numNotes)

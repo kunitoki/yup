@@ -179,7 +179,11 @@ public:
     /** Set the time stretch ratio (output length / input length). */
     void setTimeRatio (double newTimeRatio);
 
-    /** Set the pitch ratio (frequency multiplier). */
+    /** Set the pitch ratio (frequency multiplier).
+
+        With the time-domain backend, ratios between 0.25 and 4 are applied without
+        allocating, so they can be changed from the audio thread.
+    */
     void setPitchRatio (double newPitchRatio);
 
     /** Returns the current time ratio. */

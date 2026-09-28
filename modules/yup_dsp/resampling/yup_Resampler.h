@@ -76,6 +76,11 @@ public:
         history buffers, and initialises the phase accumulator.  Must be called
         before resample().
 
+        Calling it again with the same number of channels and no larger block
+        size than before reuses the existing buffers, so it does not allocate.
+        It still clears the history and the phase, so use setRatio() to change
+        the ratio of a running stream without a discontinuity.
+
         @param sourceSampleRate  Sample rate of the input signal in Hz.
         @param targetSampleRate  Desired output sample rate in Hz.
         @param maxChannels       Maximum number of audio channels.
@@ -83,23 +88,46 @@ public:
     */
     void prepare (double sourceSampleRate, double targetSampleRate, int maxChannels, int maxBlockSize)
     {
-        jassert (sourceSampleRate > 0.0 && targetSampleRate > 0.0);
         jassert (maxChannels > 0 && maxBlockSize > 0);
+
+        setRatio (sourceSampleRate, targetSampleRate);
+
+        currentPhase = 0.0;
+        maxOutputSamples = static_cast<int> (maxBlockSize * oversampleFactor) + 1;
+
+        xBufs.resize (static_cast<std::size_t> (maxChannels));
+        for (auto& ch : xBufs)
+            ch.assign (static_cast<std::size_t> (maxBlockSize + historySize), SampleType {});
+    }
+
+    /**
+        Changes the conversion ratio while keeping the phase and the history.
+
+        The stream continues without a discontinuity, which makes this suitable
+        for smoothly varying the ratio from the audio thread: it does not
+        allocate, and it only recomputes the sinc table when downsampling moves
+        the cutoff, reusing a Kaiser window computed once.
+
+        @param sourceSampleRate  Sample rate of the input signal in Hz.
+        @param targetSampleRate  Desired output sample rate in Hz.
+    */
+    void setRatio (double sourceSampleRate, double targetSampleRate) noexcept
+    {
+        jassert (sourceSampleRate > 0.0 && targetSampleRate > 0.0);
+
+        oversampleFactor = targetSampleRate / sourceSampleRate;
+
+        const double normalizedCutoff = std::min (1.0, oversampleFactor) / 2.0;
+        if (normalizedCutoff == tableCutoff)
+            return;
+
+        tableCutoff = normalizedCutoff;
 
         const CoeffType cutoff = static_cast<CoeffType> (
             std::min (sourceSampleRate, targetSampleRate) / 2.0);
 
         sincTable.configureWithCutoff (cutoff, static_cast<CoeffType> (sourceSampleRate));
-        sincTable.applyKaiserWindow (CoeffType (5));
-
-        currentPhase = 0.0;
-        oversampleFactor = targetSampleRate / sourceSampleRate;
-        maxOutputSamples = static_cast<int> (maxBlockSize * oversampleFactor) + 1;
-
-        beginBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
-        endBufs.assign (maxChannels, CircularBuffer<SampleType, SincRadius> {});
-
-        xBufs.assign (maxChannels, std::vector<SampleType> (static_cast<std::size_t> (maxBlockSize + SincRadius + 1), SampleType {}));
+        sincTable.applyWindow (getKaiserHalfWindow());
     }
 
     /**
@@ -112,12 +140,6 @@ public:
     void reset() noexcept
     {
         currentPhase = 0.0;
-
-        for (auto& b : beginBufs)
-            b.clear();
-
-        for (auto& b : endBufs)
-            b.clear();
 
         for (auto& ch : xBufs)
             std::fill (ch.begin(), ch.end(), SampleType {});
@@ -139,20 +161,7 @@ public:
     {
         jassert (numChannels > 0 && numSamples > 0);
         jassert (numChannels <= static_cast<int> (xBufs.size()));
-        jassert (numSamples + SincRadius + 1 <= static_cast<int> (xBufs[0].size()));
-
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            auto& xBuf = xBufs[static_cast<std::size_t> (ch)];
-            auto& eBuf = endBufs[static_cast<std::size_t> (ch)];
-
-            for (int i = 0; i < numSamples + SincRadius; ++i)
-            {
-                xBuf[static_cast<std::size_t> (i)] = (i >= SincRadius)
-                                                       ? input[ch][i - SincRadius]
-                                                       : eBuf[i];
-            }
-        }
+        jassert (numSamples + historySize <= static_cast<int> (xBufs[0].size()));
 
         const int outputCount = static_cast<int> (std::ceil ((numSamples - currentPhase) * oversampleFactor));
         const CoeffType gainScale = (oversampleFactor < 1.0)
@@ -161,45 +170,36 @@ public:
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
+            // The input is staged after 2 * SincRadius samples of history, so every tap of
+            // the kernel reads real past and future samples and the output lags by SincRadius.
             auto& xBuf = xBufs[static_cast<std::size_t> (ch)];
-            auto& bBuf = beginBufs[static_cast<std::size_t> (ch)];
+            std::copy (input[ch], input[ch] + numSamples, xBuf.begin() + historySize);
+
+            const SampleType* center = xBuf.data() + SincRadius;
 
             for (int k = 0; k < outputCount; ++k)
             {
                 const double virtualIndex = static_cast<double> (k) / oversampleFactor + currentPhase;
                 const int index = static_cast<int> (virtualIndex);
                 const int delta = static_cast<int> ((virtualIndex - index) * Resolution);
+                const SampleType* x = center + index;
 
-                if (delta != 0)
+                if (delta != 0 || oversampleFactor < 1.0)
                 {
                     CoeffType acc = CoeffType (0);
 
-                    for (int n = -SincRadius; n <= 0; ++n)
-                        acc += sincTable (n, delta)
-                             * static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index - n)]);
-
-                    for (int n = 1; n <= SincRadius; ++n)
-                        acc += sincTable (n, delta)
-                             * static_cast<CoeffType> (bBuf[SincRadius - n]);
+                    for (int n = -SincRadius; n <= SincRadius; ++n)
+                        acc += sincTable (n, delta) * static_cast<CoeffType> (x[-n]);
 
                     output[ch][k] = static_cast<SampleType> (acc * gainScale);
                 }
                 else
                 {
-                    output[ch][k] = static_cast<SampleType> (
-                        static_cast<CoeffType> (xBuf[static_cast<std::size_t> (index)]) * gainScale);
-
-                    if (index > 0)
-                        bBuf.push (xBuf[static_cast<std::size_t> (index - 1)]);
-                    else
-                        bBuf.push (bBuf[SincRadius - 1]);
+                    output[ch][k] = static_cast<SampleType> (static_cast<CoeffType> (x[0]) * gainScale);
                 }
             }
 
-            beginBufs[static_cast<std::size_t> (ch)].push (xBuf[static_cast<std::size_t> (numSamples - 1)]);
-
-            for (int i = 0; i < SincRadius; ++i)
-                endBufs[static_cast<std::size_t> (ch)].push (xBuf[static_cast<std::size_t> (numSamples + i)]);
+            std::copy (xBuf.begin() + numSamples, xBuf.begin() + numSamples + historySize, xBuf.begin());
         }
 
         currentPhase = std::max (0.0, (currentPhase + static_cast<double> (outputCount) / oversampleFactor) - numSamples);
@@ -219,14 +219,30 @@ public:
 
 private:
     //==============================================================================
-    SincTable<CoeffType, Resolution, SincRadius> sincTable;
+    using SincTableType = SincTable<CoeffType, Resolution, SincRadius>;
 
-    std::vector<CircularBuffer<SampleType, SincRadius>> beginBufs;
-    std::vector<CircularBuffer<SampleType, SincRadius>> endBufs;
+    static constexpr int historySize = 2 * SincRadius;
+
+    static const typename SincTableType::HalfWindow& getKaiserHalfWindow() noexcept
+    {
+        struct KaiserHalfWindow
+        {
+            KaiserHalfWindow() noexcept { SincTableType::fillKaiserHalfWindow (values, CoeffType (5)); }
+
+            typename SincTableType::HalfWindow values;
+        };
+
+        static const KaiserHalfWindow window;
+        return window.values;
+    }
+
+    SincTableType sincTable;
+
     std::vector<std::vector<SampleType>> xBufs;
 
     double currentPhase = 0.0;
     double oversampleFactor = 1.0;
+    double tableCutoff = 0.0;
     int maxOutputSamples = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Resampler)

@@ -83,6 +83,12 @@ TEST_F (PopupMenuTest, StaticCreateMethodWorks)
     EXPECT_EQ (0, menu->getNumItems());
 }
 
+TEST_F (PopupMenuTest, UsesHandCursor)
+{
+    auto menu = PopupMenu::create();
+    EXPECT_EQ (MouseCursor::Hand, menu->getMouseCursor().getType());
+}
+
 TEST_F (PopupMenuTest, CreateWithOptions)
 {
     PopupMenu::Options options;
