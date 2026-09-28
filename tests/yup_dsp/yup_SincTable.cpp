@@ -142,6 +142,25 @@ TEST_F (SincTableTest, ApplyKaiserWindowPreservesCenter)
     EXPECT_DOUBLE_EQ (table (0, 0), before);
 }
 
+TEST_F (SincTableTest, ApplyWindowMatchesApplyKaiserWindow)
+{
+    using Table = SincTable<double, factor, radius>;
+
+    Table expected;
+    expected.configureWithCutoff (sampleRate / 3.0, sampleRate);
+    expected.applyKaiserWindow (5.0);
+
+    Table::HalfWindow halfWindow;
+    Table::fillKaiserHalfWindow (halfWindow, 5.0);
+
+    Table windowed;
+    windowed.configureWithCutoff (sampleRate / 3.0, sampleRate);
+    windowed.applyWindow (halfWindow);
+
+    for (int i = 0; i < Table::tableSize; ++i)
+        EXPECT_DOUBLE_EQ (windowed[i], expected[i]);
+}
+
 TEST_F (SincTableTest, ConfigureWithLowerCutoffWidensMainLobe)
 {
     SincTable<double, factor, radius> highCut;

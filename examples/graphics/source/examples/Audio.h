@@ -78,6 +78,7 @@ public:
 class AudioExample
     : public yup::Component
     , public yup::AudioIODeviceCallback
+    , public yup::MidiInputCallback
 {
 public:
     AudioExample()
@@ -88,8 +89,11 @@ public:
     {
         audioDeviceError = deviceManager.initialiseWithDefaultDevices (0, 2);
 
-        // The keyboard state is pumped into the synth by processNextMidiBuffer(), so no note
-        // listener is registered here: listening as well would trigger every note twice.
+        // The keyboard state is never touched from the audio thread: its listeners post UI
+        // updates, which would block there. Its notes reach the synth through the collector.
+        midiCollector.reset (44100.0);
+        keyboardState.addListener (&midiCollector);
+
         keyboardComponent.setAvailableRange (36, 84); // C2 to C6
         keyboardComponent.setLowestVisibleKey (48);   // Start from C3
         keyboardComponent.setMidiChannel (1);
@@ -101,7 +105,7 @@ public:
         keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder);
         mainPage.addAndMakeVisible (keyboardComponent);
 
-        // Like the keyboard, the wheels follow keyboardState, which the audio callback
+        // Like the keyboard, the wheels follow keyboardState, which the MIDI input callback
         // updates from the hardware input too; their own moves go in through the collector.
         pitchWheelComponent.onValueChanged = [this] (double value)
         {
@@ -263,6 +267,7 @@ public:
     ~AudioExample() override
     {
         closeMidiInput();
+        keyboardState.removeListener (&midiCollector);
 
         deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
@@ -450,12 +455,7 @@ public:
             yup::FloatVectorOperations::clear (renderBuffer.getWritePointer (channel), numSamples);
 
         midiBuffer.clear();
-
-        // processNextMidiBuffer() reads whatever is already in the buffer before injecting
-        // the on-screen keyboard's own events, so collecting the hardware input first is
-        // what lights up the drawn keys as well as playing the notes.
         midiCollector.removeNextBlockOfMessages (midiBuffer, numSamples);
-        keyboardState.processNextMidiBuffer (midiBuffer, 0, numSamples, true);
         for (const auto metadata : midiBuffer)
             if (metadata.getMessage().isNoteOn())
                 receivedNoteOns.fetch_add (1, std::memory_order_relaxed);
@@ -496,6 +496,17 @@ public:
         }
     }
 
+    void handleIncomingMidiMessage (yup::MidiInput*, const yup::MidiMessage& message) override
+    {
+        if (message.isSysEx())
+            return;
+
+        keyboardState.processNextMidiEvent (message);
+
+        if (! message.isNoteOnOrOff())
+            midiCollector.addMessageToQueue (message);
+    }
+
 private:
     //==============================================================================
     /** Opens the selected hardware input and reports device-open failures in the UI. */
@@ -517,7 +528,7 @@ private:
             return;
         }
         midiInputIdentifier = identifier;
-        deviceManager.addMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+        deviceManager.addMidiInputDeviceCallback (midiInputIdentifier, this);
     }
 
     /** Releases the input again, so a hidden demo does not hold the device open. */
@@ -526,7 +537,7 @@ private:
         if (midiInputIdentifier.isEmpty())
             return;
 
-        deviceManager.removeMidiInputDeviceCallback (midiInputIdentifier, &midiCollector);
+        deviceManager.removeMidiInputDeviceCallback (midiInputIdentifier, this);
         deviceManager.setMidiInputDeviceEnabled (midiInputIdentifier, false);
 
         midiInputIdentifier.clear();
@@ -535,10 +546,6 @@ private:
     /** Queues a message from one of the on-screen wheels, timestamped as the collector expects. */
     void sendWheelMessage (yup::MidiMessage message)
     {
-        // The collector is only reset, and so only ready, once an audio device has started.
-        if (deviceManager.getCurrentAudioDevice() == nullptr)
-            return;
-
         message.setTimeStamp (yup::Time::getMillisecondCounterHiRes() * 0.001);
         midiCollector.addMessageToQueue (message);
     }

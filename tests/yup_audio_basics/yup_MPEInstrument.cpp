@@ -110,8 +110,41 @@ protected:
         testLayout.setUpperZone (6);
     }
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     MPEZoneLayout testLayout;
 };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (MPEInstrumentTest, ReleaseAllNotesKeepsReservedStorage)
+{
+    MPEInstrument test;
+    test.setZoneLayout (testLayout);
+    test.reserveNotes (16);
+
+    test.noteOn (3, 60, MPEValue::from7BitInt (100));
+    test.releaseAllNotes();
+    EXPECT_EQ (test.getNumPlayingNotes(), 0);
+
+    AllocationCounter allocations;
+    test.noteOn (3, 60, MPEValue::from7BitInt (100));
+    test.noteOn (4, 61, MPEValue::from7BitInt (100));
+
+    EXPECT_EQ (0u, allocations.count);
+    EXPECT_EQ (test.getNumPlayingNotes(), 2);
+}
+#endif
 
 TEST_F (MPEInstrumentTest, InitialZoneLayout)
 {

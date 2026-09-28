@@ -235,6 +235,8 @@ int MidiKeyboardState::getControllerValue (const int midiChannel, const int cont
 
 void MidiKeyboardState::processNextMidiEvent (const MidiMessage& message)
 {
+    const AudioLockType::ScopedLockType sl (lock);
+
     if (message.isNoteOn())
     {
         noteOnInternal (message.getChannel(), message.getNoteNumber(), message.getFloatVelocity());

@@ -351,7 +351,7 @@ public:
 
     void setNextReadPosition (yup::int64 newPosition) override
     {
-        const auto oldPosition = outputPosition;
+        const auto oldPosition = outputPosition.load();
         outputPosition = newPosition;
 
         const auto inputPos = getInputPositionForOutput (newPosition);
@@ -509,7 +509,7 @@ private:
     int numChannels = 0;
     int maxInputBlockSize = 0;
     double sampleRate = 0.0;
-    yup::int64 outputPosition = 0;
+    std::atomic<yup::int64> outputPosition { 0 };
     bool timeStretchAvailable = false;
     yup::TimeStretchProcessor::Backend preferredBackend = yup::TimeStretchProcessor::Backend::automatic;
 
@@ -1032,6 +1032,12 @@ private:
             return;
         }
 
+        // Nothing may read the buffer while it is replaced: not the audio callback
+        // through the current source, nor the waveform and onset jobs.
+        transportSource.stop();
+        transportSource.setSource (nullptr);
+        waveformThreadPool.removeAllJobs (true, -1);
+
         const int numChannels = reader->numChannels;
         const int numSamples = static_cast<int> (reader->lengthInSamples);
         audioBuffer.setSize (numChannels, numSamples);
@@ -1044,8 +1050,6 @@ private:
                                ? static_cast<double> (numSamples) / loadedSampleRate
                                : 0.0;
 
-        transportSource.stop();
-        transportSource.setSource (nullptr);
         memorySource = std::make_unique<yup::MemoryAudioSource> (audioBuffer, false, loopEnabled);
         timeStretchSource = std::make_unique<TimeStretchAudioSource> (memorySource.get(),
                                                                       numChannels,
@@ -1058,7 +1062,7 @@ private:
         waveformDisplay.setPlayhead (0.0, audioLengthSeconds);
 
         // Compute onsets in background
-        waveformThreadPool.addJob ([this]
+        waveformThreadPool.addJob ([this, weakThis = yup::WeakReference<yup::Component> (this)]
         {
             superFlux.prepare ({ .spectrogram = { .fftSize = 2048, .fps = 200 },
                                  .peakPicker = { .threshold = 0.8f },
@@ -1070,9 +1074,10 @@ private:
             onsetTimes = superFlux.getOnsetTimes();
             hasOnsets = true;
 
-            yup::MessageManager::callAsync ([this]
+            yup::MessageManager::callAsync ([this, weakThis]
             {
-                waveformDisplay.setOnsetData (onsetTimes);
+                if (weakThis.get() != nullptr)
+                    waveformDisplay.setOnsetData (onsetTimes);
             });
         });
 

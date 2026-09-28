@@ -178,7 +178,39 @@ protected:
             result.insert (random.nextInt ({ 0, max }));
         return result;
     }
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
 };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (ListenerListTests, FirstCallDoesNotAllocate)
+{
+    ListenerList<MyListenerType> listeners;
+    MyListenerType listener;
+    listeners.add (&listener);
+
+    size_t count = 0;
+    {
+        AllocationCounter allocations;
+        listeners.call (&MyListenerType::myCallbackMethod, 1, true);
+        count = allocations.count;
+    }
+
+    EXPECT_EQ (0u, count);
+    EXPECT_EQ (listener.getCallbackCount(), 1);
+}
+#endif
 
 TEST_F (ListenerListTests, Add_Remove_Contains)
 {

@@ -12,8 +12,7 @@ compile-time circular buffer and the sinc lookup table.
 ### CircularBuffer
 
 `CircularBuffer<SampleType, BufferSize>` is a fixed-size compile-time ring
-buffer for O(1) push plus random-access sample history — the per-channel
-history primitive used by `Resampler`:
+buffer for O(1) push plus random-access sample history:
 
 ```cpp
 yup::CircularBuffer<float, 512> history;
@@ -191,13 +190,17 @@ int produced = r.resample (inPtrs, outPtrs, numChannels, numSamples);
 - `resample` converts `numSamples` per channel and returns the number of
   output samples written per channel. Output buffers must hold at least
   `ceil (numSamples × target / source) + 1`. When downsampling, the gain is
-  auto-scaled by the ratio; exact phase multiples pass through directly.
+  auto-scaled by the ratio; when upsampling, exact phase multiples pass
+  through directly.
 - `getLatencyInSamples()` returns `SincRadius` (input-rate samples).
 - `reset()` resets the phase accumulator and clears history — use it after a
   transport discontinuity.
+- `setRatio (source, target)` changes the ratio of a running stream, keeping
+  phase and history so the output stays continuous. It does not allocate, so
+  the ratio can be varied from the audio thread; `prepare` clears the state.
 
-Aliases: `ResamplerFloat = Resampler<float, 8>`,
-`ResamplerDouble = Resampler<double, 8>`.
+Aliases: `ResamplerFloat = Resampler<float, 16>`,
+`ResamplerDouble = Resampler<double, 16>`.
 
 ## Related
 

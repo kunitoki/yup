@@ -874,7 +874,7 @@ public:
     {
         // Update oscilloscope
         {
-            const yup::CriticalSection::ScopedLockType sl (renderMutex);
+            const yup::AudioLockType::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData, readPos);
         }
 
@@ -901,6 +901,21 @@ public:
                                            int numSamples,
                                            const yup::AudioIODeviceCallbackContext& context) override
     {
+        const auto configGeneration = audioConfigGeneration.load();
+        if (configGeneration != appliedAudioConfigGeneration)
+        {
+            appliedAudioConfigGeneration = configGeneration;
+            updateCurrentAudioFilter();
+        }
+
+        smoothedFrequency.setTargetValue (targetFrequency.load());
+        smoothedFrequency2.setTargetValue (targetFrequency2.load());
+        smoothedQ.setTargetValue (targetQ.load());
+        smoothedGain.setTargetValue (targetGain.load());
+        smoothedOrder.setTargetValue (targetOrder.load());
+        noiseGeneratorAmplitude.setTargetValue (targetNoiseLevel.load());
+        outputGain.setTargetValue (targetOutputLevel.load());
+
         for (int sample = 0; sample < numSamples; ++sample)
         {
             // Check if any parameters are changing and update filter coefficients if needed
@@ -929,7 +944,7 @@ public:
         }
 
         // Update render data for oscilloscope
-        const yup::CriticalSection::ScopedLockType sl (renderMutex);
+        const yup::AudioLockType::ScopedLockType sl (renderMutex);
         std::swap (inputData, renderData);
     }
 
@@ -947,19 +962,18 @@ public:
         smoothedGain.reset (sampleRate, 0.05);
         smoothedOrder.reset (sampleRate, 0.1); // Slower for order changes
 
-        // Set initial values
-        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
-        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
-        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
-        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
-        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
-
         // Prepare all audio filters
         for (auto& filter : allAudioFilters)
         {
             if (filter)
                 filter->prepare (sampleRate, device->getCurrentBufferSizeSamples());
         }
+
+        // Grow the resizable audio filters to the order and FIR length slider maximums once,
+        // so that later changes on the audio thread reuse their storage instead of allocating.
+        audioButterworthFilter->setParameters (yup::FilterMode::lowpass, 16, 1000.0, 2000.0, sampleRate);
+        const std::vector<double> longestFIR (257, 0.0);
+        audioDirectFIR->setCoefficients (longestFIR.data(), longestFIR.size());
 
         // Prepare all UI filters
         for (auto& filter : allUIFilters)
@@ -980,6 +994,7 @@ public:
         frequencyResponsePlot.setSampleRate (sampleRate);
 
         // Update current audio filter based on stored settings
+        appliedAudioConfigGeneration = audioConfigGeneration.load();
         updateCurrentAudioFilter();
     }
 
@@ -1034,6 +1049,8 @@ private:
         firCoefficientsSlider->setValue (64.0);
         firCoefficientsSlider->onValueChanged = [this] (double value)
         {
+            firNumCoefficients = static_cast<int> (value);
+            ++audioConfigGeneration;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*firCoefficientsSlider);
@@ -1048,7 +1065,9 @@ private:
         firWindowCombo->setSelectedId (1);
         firWindowCombo->onSelectedItemChanged = [this]
         {
+            firWindowTypeId = firWindowCombo->getSelectedId();
             updateWindowParameterRange();
+            ++audioConfigGeneration;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*firWindowCombo);
@@ -1060,6 +1079,8 @@ private:
         firWindowParameterSlider->setValue (1.0);
         firWindowParameterSlider->onValueChanged = [this] (double value)
         {
+            firWindowParameter = value;
+            ++audioConfigGeneration;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*firWindowParameterSlider);
@@ -1071,7 +1092,7 @@ private:
         frequencySlider->setValue (1000.0);
         frequencySlider->onValueChanged = [this] (double value)
         {
-            smoothedFrequency.setTargetValue ((float) value);
+            targetFrequency = (float) value;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*frequencySlider);
@@ -1082,7 +1103,7 @@ private:
         frequency2Slider->setValue (2000.0);
         frequency2Slider->onValueChanged = [this] (double value)
         {
-            smoothedFrequency2.setTargetValue ((float) value);
+            targetFrequency2 = (float) value;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*frequency2Slider);
@@ -1093,7 +1114,7 @@ private:
         qSlider->setValue (0.0);
         qSlider->onValueChanged = [this] (double value)
         {
-            smoothedQ.setTargetValue ((float) value);
+            targetQ = (float) value;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*qSlider);
@@ -1104,7 +1125,7 @@ private:
         gainSlider->setValue (0.0);
         gainSlider->onValueChanged = [this] (double value)
         {
-            smoothedGain.setTargetValue ((float) value);
+            targetGain = (float) value;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*gainSlider);
@@ -1114,7 +1135,7 @@ private:
         orderSlider->setValue (2.0);
         orderSlider->onValueChanged = [this] (double value)
         {
-            smoothedOrder.setTargetValue ((float) value);
+            targetOrder = (float) value;
             requestAnalysisUpdate();
         };
         addAndMakeVisible (*orderSlider);
@@ -1125,7 +1146,7 @@ private:
         noiseGainSlider->setValue (0.1);
         noiseGainSlider->onValueChanged = [this] (double value)
         {
-            noiseGeneratorAmplitude.setTargetValue ((float) value);
+            targetNoiseLevel = (float) value;
         };
         addAndMakeVisible (*noiseGainSlider);
 
@@ -1135,7 +1156,7 @@ private:
         outputGainSlider->setValue (0.5);
         outputGainSlider->onValueChanged = [this] (double value)
         {
-            outputGain.setTargetValue ((float) value);
+            targetOutputLevel = (float) value;
         };
         addAndMakeVisible (*outputGainSlider);
 
@@ -1308,15 +1329,8 @@ private:
         updateControlVisibility();
         currentResponseTypeId = responseTypeCombo->getSelectedId();
 
-        // Synchronize smoothed values with current UI values when switching filters
-        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
-        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
-        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
-        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
-        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
-
-        // Update audio filter selection (thread-safe since we're just changing a pointer)
-        updateCurrentAudioFilter();
+        // The audio thread switches its own filter at the start of the next block
+        ++audioConfigGeneration;
 
         // Update UI filter with current parameters
         updateUIFilterParameters();
@@ -1453,12 +1467,12 @@ private:
                 break;
         }
 
-        // Synchronize smoothed values with current UI values when switching filters
-        smoothedFrequency.setCurrentAndTargetValue (static_cast<float> (frequencySlider->getValue()));
-        smoothedFrequency2.setCurrentAndTargetValue (static_cast<float> (frequency2Slider->getValue()));
-        smoothedQ.setCurrentAndTargetValue (static_cast<float> (qSlider->getValue()));
-        smoothedGain.setCurrentAndTargetValue (static_cast<float> (gainSlider->getValue()));
-        smoothedOrder.setCurrentAndTargetValue (static_cast<float> (orderSlider->getValue()));
+        // Jump straight to the current values when switching filters
+        smoothedFrequency.setCurrentAndTargetValue (targetFrequency.load());
+        smoothedFrequency2.setCurrentAndTargetValue (targetFrequency2.load());
+        smoothedQ.setCurrentAndTargetValue (targetQ.load());
+        smoothedGain.setCurrentAndTargetValue (targetGain.load());
+        smoothedOrder.setCurrentAndTargetValue (targetOrder.load());
 
         // Update audio filter with current smoothed parameters
         updateAudioFilterParameters();
@@ -1802,12 +1816,12 @@ private:
 
     void updateFIRFilterParameters (yup::DirectFIR<float>* fir, std::vector<double>& coeffs, double freq, double freq2)
     {
-        int numCoeffs = static_cast<int> (firCoefficientsSlider->getValue());
-        auto windowType = getFIRWindowType (firWindowCombo->getSelectedId());
+        int numCoeffs = firNumCoefficients.load();
+        auto windowType = getFIRWindowType (firWindowTypeId.load());
         auto responseMode = getFilterMode (currentResponseTypeId);
 
         // Get window parameter (for Kaiser and Rakshit-Ullah windows)
-        double windowParam = firWindowParameterSlider->getValue();
+        double windowParam = firWindowParameter.load();
 
         if (responseMode.test (yup::FilterMode::lowpass))
             yup::FilterDesigner<double>::designFIRLowpass (coeffs, numCoeffs, freq, currentSampleRate, windowType, windowParam);
@@ -1932,12 +1946,28 @@ private:
     std::vector<std::complex<double>> poles;
     std::vector<std::complex<double>> zeros;
 
-    std::vector<double> firCoefficients { 512, 0.0f };
-    std::vector<double> firCoefficientsUI { 512, 0.0f };
+    std::vector<double> firCoefficients = std::vector<double> (512, 0.0);
+    std::vector<double> firCoefficientsUI = std::vector<double> (512, 0.0);
 
     // Filter type settings (thread-safe storage)
     std::atomic<int> currentFilterTypeId { 1 };
     std::atomic<int> currentResponseTypeId { 1 };
+
+    // Control values written by the UI thread and applied by the audio thread
+    std::atomic<float> targetFrequency { 1000.0f };
+    std::atomic<float> targetFrequency2 { 2000.0f };
+    std::atomic<float> targetQ { 0.0f };
+    std::atomic<float> targetGain { 0.0f };
+    std::atomic<float> targetOrder { 2.0f };
+    std::atomic<float> targetNoiseLevel { 0.1f };
+    std::atomic<float> targetOutputLevel { 0.5f };
+    std::atomic<int> firNumCoefficients { 64 };
+    std::atomic<int> firWindowTypeId { 1 };
+    std::atomic<double> firWindowParameter { 1.0 };
+
+    // Bumped by the UI whenever the audio filter must be switched or redesigned
+    std::atomic<int> audioConfigGeneration { 0 };
+    int appliedAudioConfigGeneration = -1;
 
     // Audio thread filter instances
     std::shared_ptr<yup::RbjFilter<float>> audioRbj;
@@ -1999,7 +2029,7 @@ private:
     // Audio buffer management
     std::vector<float> inputData;
     std::vector<float> renderData;
-    yup::CriticalSection renderMutex;
+    yup::AudioLockType renderMutex;
     std::atomic_int readPos { 0 };
     std::atomic_bool analysisUpdatePending { false };
 };

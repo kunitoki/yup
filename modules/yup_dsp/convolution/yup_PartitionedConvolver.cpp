@@ -484,8 +484,8 @@ public:
         {
             SpinLock::ScopedLockType lock (processingLock);
 
-            directFIR = std::move (newFIR);
-            layers = std::move (newLayers);
+            std::swap (directFIR, newFIR);
+            std::swap (layers, newLayers);
             finalImpulseLength = trimmedLength;
 
             resetStateUnsafe();

@@ -66,6 +66,22 @@ top-right `audio` and `midi` indicators show the current browser permission and
 runtime state. This activation is provided by the shell and audio-device
 backend, so individual examples do not need their own browser-specific button.
 
+## Audio thread rules on the web
+
+The audio callback runs on the browser's audio worklet, which cannot block.
+Whenever the audio callback has to wait - a `CriticalSection` or `std::mutex`
+held by another thread, or a `malloc` / `free` racing one on another thread -
+the page aborts with
+`Assertion failed: emscripten_is_main_browser_thread()`. It only happens under
+contention, so it shows up as an occasional crash. In the audio callback:
+
+- Share state with the UI through atomics, or guard it with `AudioLockType`
+  (a spin lock on the web) - for example the device manager's
+  `getAudioCallbackLock()`.
+- Size every buffer in `audioDeviceAboutToStart`, never in the callback.
+- Don't post messages (`triggerAsyncUpdate`, `callAsync`, change broadcasts),
+  as queuing them locks and allocates. Set a flag and poll it from the UI.
+
 ## Related
 
 - [Building audio plugins](../build-system/building-plugins.md)
