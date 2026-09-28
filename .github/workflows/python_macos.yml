@@ -9,6 +9,7 @@ on:
       - "**/modules/**"
       - "**/thirdparty/**"
       - "**/python/**"
+      - "!**/LICENSE*"
       - "!**/native/generated/**"
       - "!**/native/java*/**"
       - "!**/native/*_android.*"
