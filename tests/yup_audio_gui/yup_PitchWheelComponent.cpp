@@ -63,6 +63,11 @@ TEST_F (PitchWheelComponentTest, ConstructWithComponentId)
     EXPECT_EQ (String ("testPitchWheel"), wheel->getComponentID());
 }
 
+TEST_F (PitchWheelComponentTest, UsesHandCursor)
+{
+    EXPECT_EQ (MouseCursor::Hand, wheel->getMouseCursor().getType());
+}
+
 //==============================================================================
 TEST_F (PitchWheelComponentTest, SetValueClampsToRange)
 {

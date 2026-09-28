@@ -175,6 +175,7 @@ public:
             std::fill (channel.begin(), channel.end(), 0.0f);
 
         midBufferDirty = false;
+        resumingFromUnityTempo = false;
         skipFraction = 0.0f;
         inputStartPosition = pendingInputPosition;
     }
@@ -192,8 +193,8 @@ public:
         parameters = newParameters;
         updateTempo();
 
-        if (std::abs (previousPitchRatio - getPitchRatio()) > 0.000001)
-            resetPitchShifter();
+        if (std::abs (previousPitchRatio - getPitchRatio()) > 0.000001 && spec.outputSampleRate > 0.0)
+            pitchResampler.setRatio (spec.outputSampleRate * getPitchRatio(), spec.outputSampleRate);
     }
 
     void setInputProvider (TimeStretchProcessor::InputProvider provider) override
@@ -217,10 +218,7 @@ public:
         if (inputProvider == nullptr && inputChannels != nullptr && inputFrameCount > 0)
             appendDirectInput (inputChannels, inputFrameCount);
 
-        if (isPitchShiftEnabled())
-            return processPitchShifted (outputChannels, outputFrameCount);
-
-        return renderTimeDomainOutput (outputChannels, outputFrameCount);
+        return processPitchShifted (outputChannels, outputFrameCount);
     }
 
     String getBackendName() const override
@@ -230,7 +228,8 @@ public:
 
     double getLatencyInFrames() const override
     {
-        return jmax (0.0, static_cast<double> (inputBuffer.getNumSamples() - outputBuffer.getNumSamples()));
+        return jmax (0.0, static_cast<double> (inputBuffer.getNumSamples() - outputBuffer.getNumSamples()))
+             + pitchResampler.getLatencyInSamples() / getPitchRatio();
     }
 
 private:
@@ -305,11 +304,6 @@ private:
         return getTimeRatio() * getPitchRatio();
     }
 
-    bool isPitchShiftEnabled() const noexcept
-    {
-        return std::abs (getPitchRatio() - 1.0) > 0.000001;
-    }
-
     void preparePitchShifter (int fifoCapacity)
     {
         pitchOutputBuffer.prepare (channelCount, fifoCapacity);
@@ -320,6 +314,16 @@ private:
         pitchStretchedWritePointers.resize (static_cast<size_t> (channelCount));
         pitchResampledWritePointers.resize (static_cast<size_t> (channelCount));
 
+        // Sized for pitch ratios from 1 / maximumPreallocatedTempo to maximumPreallocatedTempo,
+        // so changing the pitch on the audio thread doesn't grow any of these buffers.
+        const int maxPitchFrames = static_cast<int> (std::ceil (jmax (1, spec.maximumBlockSize) * maximumPreallocatedTempo)) + 16;
+        for (int channel = 0; channel < channelCount; ++channel)
+        {
+            pitchStretchedBuffers[static_cast<size_t> (channel)].reserve (static_cast<size_t> (maxPitchFrames));
+            pitchResampledBuffers[static_cast<size_t> (channel)].reserve (static_cast<size_t> (maxPitchFrames));
+        }
+
+        pitchResamplerInputCapacity = maxPitchFrames;
         ensurePitchProcessingCapacity (jmax (1, spec.maximumBlockSize * 4));
         resetPitchShifter();
     }
@@ -503,6 +507,8 @@ private:
 
     void processUnity (int framesNeeded)
     {
+        resumingFromUnityTempo = true;
+
         if (midBufferDirty)
         {
             ensureInputFrames (overlapLength);
@@ -531,6 +537,16 @@ private:
     void processStretchedSequence()
     {
         ensureInputFrames (samplesPerRequest);
+
+        if (resumingFromUnityTempo)
+        {
+            for (int channel = 0; channel < channelCount; ++channel)
+                std::copy (inputBuffer.getReadPointer (channel),
+                           inputBuffer.getReadPointer (channel) + overlapLength,
+                           midBuffers[static_cast<size_t> (channel)].begin());
+
+            resumingFromUnityTempo = false;
+        }
 
         const int offset = midBufferDirty ? seekBestOverlapPosition() : 0;
         writeOverlap (offset);
@@ -660,6 +676,7 @@ private:
     float nominalSkip = 0.0f;
     float skipFraction = 0.0f;
     bool midBufferDirty = false;
+    bool resumingFromUnityTempo = false;
 
     int64 inputStartPosition = 0;
     int64 pendingInputPosition = 0;

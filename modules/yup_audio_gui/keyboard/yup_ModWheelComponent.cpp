@@ -37,6 +37,7 @@ ModWheelComponent::ModWheelComponent (MidiKeyboardState& stateToUse, StringRef c
 {
     state.addListener (this);
     setOpaque (true); // paint() always fully covers its bounds
+    setMouseCursor (MouseCursor::Hand);
 }
 
 ModWheelComponent::~ModWheelComponent()

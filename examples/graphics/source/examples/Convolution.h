@@ -125,6 +125,9 @@ public:
         // Reset convolver
         convolver.reset();
         convolver.prepare (static_cast<std::size_t> (device->getCurrentBufferSizeSamples()));
+
+        tempDryBuffer.assign (static_cast<size_t> (device->getCurrentBufferSizeSamples()), 0.0f);
+        tempWetBuffer.assign (static_cast<size_t> (device->getCurrentBufferSizeSamples()), 0.0f);
     }
 
     void audioDeviceStopped() override
@@ -148,9 +151,12 @@ public:
         if (numOutputChannels < 2 || audioBuffer.getNumSamples() == 0)
             return;
 
-        // Prepare buffers for processing
-        tempDryBuffer.resize (static_cast<size_t> (numSamples));
-        tempWetBuffer.resize (static_cast<size_t> (numSamples));
+        // The buffers are sized when the device starts, resizing them here would allocate
+        if (static_cast<size_t> (numSamples) > tempDryBuffer.size())
+            return;
+
+        wetGain.setTargetValue (wetGainTarget.load());
+        dryGain.setTargetValue (dryGainTarget.load());
 
         // Process samples
         const int totalSamples = audioBuffer.getNumSamples();
@@ -184,7 +190,7 @@ public:
         }
 
         // Process through convolver if IR is loaded
-        std::fill (tempWetBuffer.begin(), tempWetBuffer.end(), 0.0f);
+        std::fill_n (tempWetBuffer.begin(), numSamples, 0.0f);
         if (hasImpulseResponse)
             convolver.process (tempDryBuffer.data(), tempWetBuffer.data(), static_cast<size_t> (numSamples));
 
@@ -346,7 +352,7 @@ private:
         wetGainSlider.setValue (1.0);
         wetGainSlider.onValueChanged = [this] (double value)
         {
-            wetGain.setTargetValue ((float) value);
+            wetGainTarget = (float) value;
         };
         addAndMakeVisible (wetGainSlider);
 
@@ -359,7 +365,7 @@ private:
         dryGainSlider.setValue (0.3);
         dryGainSlider.onValueChanged = [this] (double value)
         {
-            dryGain.setTargetValue ((float) value);
+            dryGainTarget = (float) value;
         };
         addAndMakeVisible (dryGainSlider);
 
@@ -469,8 +475,9 @@ private:
     std::vector<float> tempDryBuffer;
     std::vector<float> tempWetBuffer;
 
-    // Smoothed parameters
+    // Smoothed parameters, targets written by the UI thread
     yup::SmoothedValue<float> wetGain, dryGain;
+    std::atomic<float> wetGainTarget { 1.0f }, dryGainTarget { 0.3f };
 
     // UI
     yup::TextButton loadIRButton;

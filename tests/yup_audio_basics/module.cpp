@@ -46,6 +46,7 @@
 #include "yup_MPEInstrument.cpp"
 #include "yup_MPEMessages.cpp"
 #include "yup_MPENote.cpp"
+#include "yup_MPESynthesiser.cpp"
 #include "yup_MPESynthesiserBase.cpp"
 #include "yup_MPEUtils.cpp"
 #include "yup_MPEValue.cpp"

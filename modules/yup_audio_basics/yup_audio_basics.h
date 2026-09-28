@@ -68,6 +68,10 @@
 #undef Factor
 
 //==============================================================================
+#include <chrono>
+#include <type_traits>
+
+//==============================================================================
 /** The lock type used by the audio thread.
 
     On wasm a CriticalSection can block in a futex_wait, which is fatal on the
@@ -81,15 +85,16 @@
 
     @tags{Audio}
 */
+namespace yup
+{
+
 #if YUP_WASM
 using AudioLockType = yup::RecursiveSpinLock;
 #else
 using AudioLockType = yup::CriticalSection;
 #endif
 
-//==============================================================================
-#include <chrono>
-#include <type_traits>
+} // namespace yup
 
 //==============================================================================
 #include "buffers/yup_AudioDataConverters.h"

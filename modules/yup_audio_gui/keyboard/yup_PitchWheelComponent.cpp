@@ -37,6 +37,7 @@ PitchWheelComponent::PitchWheelComponent (MidiKeyboardState& stateToUse, StringR
 {
     state.addListener (this);
     setOpaque (true); // paint() always fully covers its bounds
+    setMouseCursor (MouseCursor::Hand);
 }
 
 PitchWheelComponent::~PitchWheelComponent()

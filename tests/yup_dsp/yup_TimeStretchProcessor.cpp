@@ -56,11 +56,109 @@ protected:
         }
     }
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     TimeStretchProcessor::ProcessSpec spec;
     AudioBuffer<float> inputBuffer;
     AudioBuffer<float> outputBuffer;
     int64 inputPosition = 0;
 };
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (TimeStretchProcessorTests, TimeDomainPitchChangesDoNotAllocate)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    processor.setInputProvider ([numChannels = this->numChannels] (int64 beginFrame,
+                                                                   int numFrames,
+                                                                   float* const* destChannels,
+                                                                   int,
+                                                                   int& muteHead,
+                                                                   int& muteTail)
+    {
+        muteHead = 0;
+        muteTail = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            for (int i = 0; i < numFrames; ++i)
+                destChannels[ch][i] = static_cast<float> (std::sin (0.05 * static_cast<double> (beginFrame + i)));
+    });
+
+    auto* const* output = outputBuffer.getArrayOfWritePointers();
+    ASSERT_TRUE (processor.process (nullptr, 0, output, maximumBlockSize).wasOk());
+
+    AllocationCounter allocations;
+    for (const auto pitchRatio : { 4.0, 0.25, 2.0, 1.0 })
+    {
+        processor.setPitchRatio (pitchRatio);
+
+        for (int block = 0; block < 4; ++block)
+            processor.process (nullptr, 0, output, maximumBlockSize);
+    }
+
+    EXPECT_EQ (0u, allocations.count);
+}
+#endif
+
+TEST_F (TimeStretchProcessorTests, TimeDomainPitchChangesAreContinuous)
+{
+    TimeStretchProcessor processor;
+    ASSERT_TRUE (processor.prepare (spec, TimeStretchProcessor::Backend::timeDomain).wasOk());
+
+    processor.setInputProvider ([numChannels = this->numChannels] (int64 beginFrame,
+                                                                   int numFrames,
+                                                                   float* const* destChannels,
+                                                                   int,
+                                                                   int& muteHead,
+                                                                   int& muteTail)
+    {
+        muteHead = 0;
+        muteTail = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+            for (int i = 0; i < numFrames; ++i)
+                destChannels[ch][i] = static_cast<float> (std::sin (0.05 * static_cast<double> (beginFrame + i)));
+    });
+
+    auto* const* output = outputBuffer.getArrayOfWritePointers();
+    float previous = 0.0f;
+    float maxStep = 0.0f;
+    int block = 0;
+
+    for (const auto pitchRatio : { 1.5, 1.52, 1.25, 1.0, 0.8, 1.0, 1.3 })
+    {
+        processor.setPitchRatio (pitchRatio);
+
+        for (int i = 0; i < 4; ++i, ++block)
+        {
+            ASSERT_TRUE (processor.process (nullptr, 0, output, maximumBlockSize).wasOk());
+
+            const auto* samples = outputBuffer.getReadPointer (0);
+            for (int n = 0; n < maximumBlockSize; ++n)
+            {
+                if (block > 0)
+                    maxStep = jmax (maxStep, std::abs (samples[n] - previous));
+
+                previous = samples[n];
+            }
+        }
+    }
+
+    // A full scale sine at 0.05 rad per sample pitched up by 1.52 moves by at most ~0.076 per sample
+    EXPECT_LT (maxStep, 0.12f);
+}
 
 //==============================================================================
 TEST_F (TimeStretchProcessorTests, DefaultConstruction)
@@ -667,7 +765,7 @@ TEST_F (TimeStretchProcessorTests, TimeDomainProviderMuteRegionsAreApplied)
             std::fill (destChannels[ch], destChannels[ch] + numFrames, static_cast<float> (ch + 1));
     });
 
-    AudioBuffer<float> providerOutput (numChannels, 32);
+    AudioBuffer<float> providerOutput (numChannels, 64);
     auto result = processor.process (nullptr,
                                      0,
                                      providerOutput.getArrayOfWritePointers(),
@@ -677,18 +775,22 @@ TEST_F (TimeStretchProcessorTests, TimeDomainProviderMuteRegionsAreApplied)
     EXPECT_EQ (result.getValue(), providerOutput.getNumSamples());
     EXPECT_GT (providerCallCount, 0);
 
+    // The provider input reaches the output through the pitch resampler, delayed by its latency
+    const int latency = ResamplerFloat().getLatencyInSamples();
+    ASSERT_LT (latency + 16, providerOutput.getNumSamples());
+
     for (int ch = 0; ch < numChannels; ++ch)
     {
         const auto expectedValue = static_cast<float> (ch + 1);
         const auto* samples = providerOutput.getReadPointer (ch);
 
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < latency + 3; ++i)
             EXPECT_FLOAT_EQ (samples[i], 0.0f);
 
-        for (int i = 3; i < 16; ++i)
+        for (int i = latency + 3; i < latency + 16; ++i)
             EXPECT_FLOAT_EQ (samples[i], expectedValue);
 
-        for (int i = 16; i < providerOutput.getNumSamples(); ++i)
+        for (int i = latency + 16; i < providerOutput.getNumSamples(); ++i)
             EXPECT_FLOAT_EQ (samples[i], 0.0f);
     }
 }
@@ -729,11 +831,14 @@ TEST_F (TimeStretchProcessorTests, TimeDomainUnityTempoCopiesProviderInput)
     EXPECT_EQ (result.getValue(), providerOutput.getNumSamples());
     EXPECT_GE (lastRequestedFrameCount, providerOutput.getNumSamples());
 
+    // The provider input reaches the output through the pitch resampler, delayed by its latency
+    const int latency = ResamplerFloat().getLatencyInSamples();
+
     for (int ch = 0; ch < numChannels; ++ch)
     {
         const auto* samples = providerOutput.getReadPointer (ch);
         for (int i = 0; i < providerOutput.getNumSamples(); ++i)
-            EXPECT_FLOAT_EQ (samples[i], static_cast<float> (i * (ch + 1)));
+            EXPECT_FLOAT_EQ (samples[i], static_cast<float> (jmax (0, i - latency) * (ch + 1)));
     }
 }
 

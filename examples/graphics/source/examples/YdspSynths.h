@@ -512,7 +512,7 @@ public:
     void refreshDisplay (double) override
     {
         {
-            const AudioLockType::ScopedLockType sl (renderMutex);
+            const yup::AudioLockType::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData);
         }
 
@@ -547,6 +547,8 @@ public:
         renderBuffer.assign (static_cast<size_t> (deviceBufferSize), 0.0f);
         renderBufferRight.assign (static_cast<size_t> (deviceBufferSize), 0.0f);
         renderData.assign (static_cast<size_t> (deviceBufferSize), 0.0f);
+        inputBufferL.assign (static_cast<size_t> (deviceBufferSize), 0.0f);
+        inputBufferR.assign (static_cast<size_t> (deviceBufferSize), 0.0f);
 
         midiMessages.ensureSize (4096);
 
@@ -595,7 +597,9 @@ public:
         midiCollector.removeNextBlockOfMessages (midiMessages, numSamples);
 
         if (renderBuffer.size() < static_cast<size_t> (numSamples)
-            || renderBufferRight.size() < static_cast<size_t> (numSamples))
+            || renderBufferRight.size() < static_cast<size_t> (numSamples)
+            || inputBufferL.size() < static_cast<size_t> (numSamples)
+            || inputBufferR.size() < static_cast<size_t> (numSamples))
         {
             for (int sample = 0; sample < numSamples; ++sample)
                 for (int channel = 0; channel < numOutputChannels; ++channel)
@@ -616,13 +620,6 @@ public:
 
         if (graphInputs > 0)
         {
-            if (inputBufferL.size() < static_cast<size_t> (numSamples)
-                || inputBufferR.size() < static_cast<size_t> (numSamples))
-            {
-                inputBufferL.resize (static_cast<size_t> (numSamples), 0.0f);
-                inputBufferR.resize (static_cast<size_t> (numSamples), 0.0f);
-            }
-
             fillEffectInputSource (inputChannelData, numInputChannels, numSamples);
 
             if (graphInputs == 1)
@@ -651,13 +648,14 @@ public:
             {}
         });
 
-        const AudioLockType::ScopedLockType sl (renderMutex);
+        const yup::AudioLockType::ScopedLockType sl (renderMutex);
+        const auto volume = masterVolume.load();
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            const auto left = std::tanh (renderBuffer[static_cast<size_t> (sample)] * masterVolume);
+            const auto left = std::tanh (renderBuffer[static_cast<size_t> (sample)] * volume);
             const auto right = graphOutputs > 1
-                                 ? std::tanh (renderBufferRight[static_cast<size_t> (sample)] * masterVolume)
+                                 ? std::tanh (renderBufferRight[static_cast<size_t> (sample)] * volume)
                                  : left;
 
             for (int channel = 0; channel < numOutputChannels; ++channel)
@@ -672,6 +670,10 @@ public:
 
     void handleIncomingMidiMessage (yup::MidiInput*, const yup::MidiMessage& message) override
     {
+        // Sysex is of no use to the graph, and reading it back on the audio thread allocates.
+        if (message.isSysEx())
+            return;
+
         keyboardState.processNextMidiEvent (message);
 
         if (! message.isNoteOnOrOff())
@@ -936,11 +938,13 @@ private:
 
         graph = cached;
 
-        if (deviceBufferSize > 0)
-            graph->prepare (deviceSampleRate, deviceBufferSize);
-
         {
-            const AudioLockType::ScopedLockType sl (graphLock);
+            const yup::AudioLockType::ScopedLockType audioLock (deviceManager.getAudioCallbackLock());
+
+            if (deviceBufferSize > 0)
+                graph->prepare (deviceSampleRate, deviceBufferSize);
+
+            const yup::AudioLockType::ScopedLockType sl (graphLock);
             currentGraph = graph;
         }
 
@@ -954,7 +958,7 @@ private:
 
     std::shared_ptr<yup::YdspAudioGraph> getCurrentGraph() const
     {
-        const AudioLockType::ScopedLockType sl (graphLock);
+        const yup::AudioLockType::ScopedLockType sl (graphLock);
         return currentGraph;
     }
 
@@ -1049,7 +1053,7 @@ private:
         retiredGraphs.push_back (compiledSynths[static_cast<size_t> (index)]);
 
         {
-            const AudioLockType::ScopedLockType sl (graphLock);
+            const yup::AudioLockType::ScopedLockType sl (graphLock);
             retiredGraphs.push_back (currentGraph);
             currentGraph = graph;
         }
@@ -1669,7 +1673,7 @@ private:
     yup::AudioDeviceManager deviceManager;
     double deviceSampleRate = 0.0;
     int deviceBufferSize = 0;
-    float masterVolume = 0.5f;
+    std::atomic<float> masterVolume { 0.5f };
 
     std::unique_ptr<yup::ComboBox> inputSourceCombo;
     std::atomic<int> effectInputSource { 2 };
@@ -1686,7 +1690,7 @@ private:
     double tonePhaseB = 0.0;
 
     // The patch currently being processed
-    mutable AudioLockType graphLock;
+    mutable yup::AudioLockType graphLock;
     std::shared_ptr<yup::YdspAudioGraph> currentGraph;
 
     // Lazily compiled patches, cached per combo index
@@ -1715,7 +1719,7 @@ private:
     std::vector<float> renderBuffer;
     std::vector<float> renderBufferRight;
     std::vector<float> renderData;
-    AudioLockType renderMutex;
+    yup::AudioLockType renderMutex;
     yup::MidiBuffer midiMessages;
 
     // UI

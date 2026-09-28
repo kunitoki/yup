@@ -1343,31 +1343,60 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
     if (bounds.isEmpty())
         return;
 
-    auto keyWidth = keyboard.getKeyStartRange().getLength();
-    keyWidth /= keyboard.getNumWhiteKeysInRange (keyboard.getLowestVisibleKey(), keyboard.getHighestVisibleKey() + 1);
-
-    // Draw keyboard background with subtle gradient shadow
-    auto keyboardWidth = keyboard.getKeyStartRange().getEnd();
-    auto shadowColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
-
-    if (! shadowColor.isTransparent())
+    enum class Side
     {
-        // Draw subtle top shadow gradient for depth
-        ColorGradient shadowGradient;
-        shadowGradient.addColorStop (shadowColor, Point<float> (0.0f, 0.0f), 0.0f);
-        shadowGradient.addColorStop (shadowColor.withAlpha (0.0f), Point<float> (0.0f, 5.0f), 1.0f);
+        left,
+        top,
+        right,
+        bottom
+    };
 
-        g.setFillColorGradient (shadowGradient);
-        g.fillRect (Rectangle<float> (0.0f, 0.0f, keyboardWidth, 5.0f));
-    }
-
-    // Draw separator line at bottom
-    auto lineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
-    if (! lineColor.isTransparent())
+    // Keys hang from their back edge, and run from the leading to the trailing edge along the axis.
+    struct KeyEdges
     {
-        g.setFillColor (lineColor);
-        g.fillRect (Rectangle<float> (0.0f, bounds.getHeight() - 1.0f, keyboardWidth, 1.0f));
-    }
+        Side back, front, leading, trailing;
+    };
+
+    const auto orientation = keyboard.getOrientation();
+    const auto isHorizontal = orientation == MidiKeyboardComponent::horizontalKeyboard;
+
+    const auto edges = [orientation]() -> KeyEdges
+    {
+        switch (orientation)
+        {
+            case MidiKeyboardComponent::verticalKeyboardFacingLeft:
+                return { Side::right, Side::left, Side::top, Side::bottom };
+
+            case MidiKeyboardComponent::verticalKeyboardFacingRight:
+                return { Side::left, Side::right, Side::bottom, Side::top };
+
+            default:
+                return { Side::top, Side::bottom, Side::left, Side::right };
+        }
+    }();
+
+    const auto slice = [] (Rectangle<float> area, Side side, float amount)
+    {
+        switch (side)
+        {
+            case Side::left:
+                return area.removeFromLeft (amount);
+
+            case Side::top:
+                return area.removeFromTop (amount);
+
+            case Side::right:
+                return area.removeFromRight (amount);
+
+            default:
+                return area.removeFromBottom (amount);
+        }
+    };
+
+    const auto keyWidth = keyboard.getKeyWidth();
+    const auto keyRange = keyboard.getKeyStartRange();
+    const auto keysArea = isHorizontal ? Rectangle<float> (keyRange.getStart(), 0.0f, keyRange.getLength(), bounds.getHeight())
+                                       : Rectangle<float> (0.0f, keyRange.getStart(), bounds.getWidth(), keyRange.getLength());
 
     // Paint white keys first
     for (int note = keyboard.getLowestVisibleKey(); note <= keyboard.getHighestVisibleKey(); ++note)
@@ -1398,48 +1427,20 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
         g.setFillColor (fillColor);
         g.fillRect (keyArea);
 
-        // Draw key separator line on the left edge
+        // Draw key separator line on the leading edge, and on the trailing edge of the last key
         if (! outlineColor.isTransparent())
         {
             g.setFillColor (outlineColor);
-            g.fillRect (keyArea.removeFromLeft (1.0f));
+            g.fillRect (slice (keyArea, edges.leading, 1.0f));
 
-            // Draw right edge for the last key
             if (note == keyboard.getHighestVisibleKey())
-                g.fillRect (keyArea.removeFromRight (1.0f).translated (keyArea.getWidth(), 0.0f));
+                g.fillRect (slice (keyArea, edges.trailing, 1.0f));
         }
 
-        // Draw note text if there's space
-        if (keyboard.getWidth() > 100 && keyArea.getWidth() > 15.0f)
+        // Draw note text near the front edge if there's space
+        if (keyRange.getLength() > 100.0f && keyWidth > 15.0f)
         {
-            auto noteText = String();
-            int noteInOctave = note % 12;
-            switch (noteInOctave)
-            {
-                case 0:
-                    noteText = "C";
-                    break;
-                case 2:
-                    noteText = "D";
-                    break;
-                case 4:
-                    noteText = "E";
-                    break;
-                case 5:
-                    noteText = "F";
-                    break;
-                case 7:
-                    noteText = "G";
-                    break;
-                case 9:
-                    noteText = "A";
-                    break;
-                case 11:
-                    noteText = "B";
-                    break;
-                default:
-                    break;
-            }
+            auto noteText = keyboard.getWhiteNoteText (note);
 
             if (noteText.isNotEmpty())
             {
@@ -1449,17 +1450,37 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
 
                 g.setFillColor (textColor);
 
-                StyledText styledText;
-                {
-                    auto modifier = styledText.startUpdate();
-                    modifier.appendText (noteText, theme.getDefaultFont().withHeight (11.0f));
-                    modifier.setHorizontalAlign (StyledText::center);
-                }
+                const auto font = theme.getDefaultFont().withHeight (11.0f);
 
-                auto textArea = keyArea.reduced (2.0f).removeFromBottom (16.0f);
-                g.fillFittedText (styledText, textArea);
+                if (isHorizontal)
+                    g.fillFittedText (noteText, font, keyArea.reduced (2.0f).removeFromBottom (16.0f), Justification::center);
+                else
+                    g.fillFittedText (noteText, font, keyArea.reduced (2.0f), edges.front == Side::left ? Justification::centerLeft : Justification::centerRight);
             }
         }
+    }
+
+    // Draw subtle shadow gradient along the back edge for depth
+    auto shadowColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::whiteKeyShadowColorId).value_or (Color());
+
+    if (! shadowColor.isTransparent())
+    {
+        const auto shadowArea = slice (keysArea, edges.back, 5.0f);
+
+        ColorGradient shadowGradient;
+        shadowGradient.addColorStop (shadowColor, slice (shadowArea, edges.back, 0.0f).getCenter(), 0.0f);
+        shadowGradient.addColorStop (shadowColor.withAlpha (0.0f), slice (shadowArea, edges.front, 0.0f).getCenter(), 1.0f);
+
+        g.setFillColorGradient (shadowGradient);
+        g.fillRect (shadowArea);
+    }
+
+    // Draw separator line along the front edge
+    auto lineColor = theme.findColor (keyboard, MidiKeyboardComponent::Style::keyOutlineColorId).value_or (Color());
+    if (! lineColor.isTransparent())
+    {
+        g.setFillColor (lineColor);
+        g.fillRect (slice (keysArea, edges.front, 1.0f));
     }
 
     // Paint black keys on top
@@ -1503,14 +1524,62 @@ void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKe
             auto highlightColor = fillColor.brighter (0.4f);
             g.setFillColor (highlightColor);
 
-            // Create highlight area - top portion and side edges
-            auto sideIndent = keyArea.getWidth() * 0.125f;
-            auto topIndent = keyArea.getHeight() * 0.875f;
-            auto highlightArea = keyArea.reduced (sideIndent, 0).removeFromTop (topIndent);
+            // Create highlight area - back portion and side edges
+            auto sideIndent = (isHorizontal ? keyArea.getWidth() : keyArea.getHeight()) * 0.125f;
+            auto keyLength = isHorizontal ? keyArea.getHeight() : keyArea.getWidth();
+            auto highlightArea = isHorizontal ? keyArea.reduced (sideIndent, 0.0f) : keyArea.reduced (0.0f, sideIndent);
 
-            g.fillRect (highlightArea);
+            g.fillRect (slice (highlightArea, edges.back, keyLength * 0.875f));
         }
     }
+}
+
+void paintMidiKeyboardScrollButton (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent::ScrollButton& button)
+{
+    const auto bounds = button.getLocalBounds();
+
+    if (bounds.isEmpty())
+        return;
+
+    g.setFillColor (theme.findColor (button, MidiKeyboardComponent::Style::scrollButtonBackgroundColorId).value_or (Color()));
+    g.fillRect (bounds);
+
+    // Turns of a triangle pointing right, so the arrow points along the keys it scrolls to
+    auto angle = button.isScrollingUp() ? 0.0f : 0.5f;
+
+    switch (button.getKeyboard().getOrientation())
+    {
+        case MidiKeyboardComponent::verticalKeyboardFacingLeft:
+            angle = button.isScrollingUp() ? 0.25f : 0.75f;
+            break;
+
+        case MidiKeyboardComponent::verticalKeyboardFacingRight:
+            angle = button.isScrollingUp() ? 0.75f : 0.25f;
+            break;
+
+        default:
+            break;
+    }
+
+    auto arrowAlpha = 0.4f;
+    if (! button.isEnabled())
+        arrowAlpha = 0.15f;
+    else if (button.isButtonDown())
+        arrowAlpha = 1.0f;
+    else if (button.isButtonOver())
+        arrowAlpha = 0.6f;
+
+    const auto arrowSize = jmin (bounds.getWidth(), bounds.getHeight()) * 0.6f;
+
+    Path arrow;
+    arrow.addTriangle (0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.5f);
+    arrow.transform (AffineTransform::rotation (MathConstants<float>::twoPi * angle, 0.5f, 0.5f)
+                         .scaled (arrowSize)
+                         .translated (bounds.getCenterX() - arrowSize * 0.5f, bounds.getCenterY() - arrowSize * 0.5f));
+
+    auto arrowColor = theme.findColor (button, MidiKeyboardComponent::Style::scrollButtonArrowColorId).value_or (Color());
+    g.setFillColor (arrowColor.withMultipliedAlpha (arrowAlpha));
+    g.fillPath (arrow);
 }
 
 void paintVectorWheel (Graphics& g, Rectangle<float> bounds, float normalizedValue, Color topColor, Color bottomColor, Color outlineColor, Color gripColor)
@@ -1994,6 +2063,9 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
     theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
     theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
+    theme->setComponentStyle<MidiKeyboardComponent::ScrollButton> (ComponentStyle::createStyle<MidiKeyboardComponent::ScrollButton> (paintMidiKeyboardScrollButton));
+    theme->setColor (MidiKeyboardComponent::Style::scrollButtonBackgroundColorId, Color (0xffd3d3d3));
+    theme->setColor (MidiKeyboardComponent::Style::scrollButtonArrowColorId, Color (0xff000000));
 
     theme->setComponentStyle<PitchWheelComponent> (ComponentStyle::createStyle<PitchWheelComponent> (paintPitchWheel));
     theme->setColor (PitchWheelComponent::Style::bodyTopColorId, Color (0xff5a5a5a));

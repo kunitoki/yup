@@ -62,6 +62,11 @@ TEST_F (ModWheelComponentTest, ConstructWithComponentId)
     EXPECT_EQ (String ("testModWheel"), wheel->getComponentID());
 }
 
+TEST_F (ModWheelComponentTest, UsesHandCursor)
+{
+    EXPECT_EQ (MouseCursor::Hand, wheel->getMouseCursor().getType());
+}
+
 //==============================================================================
 TEST_F (ModWheelComponentTest, SetValueClampsToRange)
 {

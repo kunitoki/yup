@@ -282,7 +282,7 @@ public:
             // no GPU allocation happens on the audio thread.
             computeDevice->updateBuffer (gpuInputBuf[slot], inputBuf.data(), inputBuf.size() * sizeof (float));
 
-            Params params { gain, mix, 0.0f, 0.0f };
+            Params params { gain.load(), mix.load(), 0.0f, 0.0f };
 
             uint32_t workgroupsX = (static_cast<uint32_t> (processSamples) + 255) / 256;
 
@@ -418,8 +418,8 @@ private:
 
     void handleAsyncUpdate() override
     {
-        gainLabel->setText ("Gain: " + yup::String (gain, 2), yup::dontSendNotification);
-        mixLabel->setText ("Mix: " + yup::String (mix, 2), yup::dontSendNotification);
+        gainLabel->setText ("Gain: " + yup::String (gain.load(), 2), yup::dontSendNotification);
+        mixLabel->setText ("Mix: " + yup::String (mix.load(), 2), yup::dontSendNotification);
         repaint();
     }
 
@@ -436,7 +436,12 @@ private:
         auto result = yup::GpuComputePipeline::compileFromGlsl (computeDevice, glslSource);
         if (result.wasOk())
         {
-            computePipeline = result.getValue();
+            auto pipeline = result.getValue();
+            {
+                const yup::AudioLockType::ScopedLockType lock (deviceManager.getAudioCallbackLock());
+                std::swap (computePipeline, pipeline);
+            }
+
             compileStatusLabel->setText ("Shader: compiled OK", yup::dontSendNotification);
         }
         else
@@ -521,8 +526,8 @@ void main()
     int writePos = 0;
 
     // Parameters.
-    float gain = 3.0f;
-    float mix = 1.0f;
+    std::atomic<float> gain { 3.0f };
+    std::atomic<float> mix { 1.0f };
 
     // UI.
     float lastPeakOutput = 0.0f;

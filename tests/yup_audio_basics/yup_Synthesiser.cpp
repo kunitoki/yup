@@ -220,6 +220,19 @@ protected:
         synth.reset();
     }
 
+#if YUP_ENABLE_ALLOCATION_HOOKS
+    struct AllocationCounter : private AllocationHooks::Listener
+    {
+        AllocationCounter() { AllocationHooks::getForCurrentThread().addListener (this); }
+
+        ~AllocationCounter() override { AllocationHooks::getForCurrentThread().removeListener (this); }
+
+        void newOrDeleteCalled() noexcept override { ++count; }
+
+        size_t count = 0;
+    };
+#endif
+
     std::unique_ptr<TestSynthesiser> synth;
 };
 
@@ -1033,6 +1046,26 @@ TEST_F (SynthesiserTest, VoiceStealingPrefersOldestNote)
     bool voice2Has67 = (voice2->getCurrentlyPlayingNote() == 67);
     EXPECT_TRUE (voice1Has67 || voice2Has67);
 }
+
+#if YUP_ENABLE_ALLOCATION_HOOKS
+TEST_F (SynthesiserTest, VoiceStealingDoesNotAllocate)
+{
+    synth->setNoteStealingEnabled (true);
+
+    synth->addVoice (new TestVoice());
+    synth->addVoice (new TestVoice());
+    synth->addSound (SynthesiserSound::Ptr (new TestSound()));
+
+    synth->noteOn (1, 60, 0.8f);
+    synth->noteOn (1, 72, 0.7f);
+
+    AllocationCounter allocations;
+    synth->noteOn (1, 67, 0.6f);
+    synth->noteOn (1, 64, 0.6f);
+
+    EXPECT_EQ (0u, allocations.count);
+}
+#endif
 
 TEST_F (SynthesiserTest, VoiceStealingPrefersSameNote)
 {

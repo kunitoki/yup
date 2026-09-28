@@ -90,7 +90,7 @@ private:
     //==============================================================================
     AudioBuffer<float> buffer;
     int position = 0;
-    bool isCurrentlyLooping;
+    std::atomic<bool> isCurrentlyLooping;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryAudioSource)

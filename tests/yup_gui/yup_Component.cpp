@@ -3075,6 +3075,85 @@ TEST_F (ComponentRepaintRegionTest, TransformedChildSeesClipInLocalCoordinates)
     expectRectNear (child.clipBounds, { 0.0f, 0.0f, 40.0f, 30.0f });
 }
 
+TEST_F (ComponentRepaintRegionTest, RotatedChildIsClippedToItsOutline)
+{
+    ClipRecordingComponent child;
+    child.setBounds (100.0f, 50.0f, 40.0f, 30.0f);
+    child.setTransform (AffineTransform::rotation (MathConstants<float>::pi / 6.0f));
+    child.setVisible (true);
+    root->addChildComponent (child);
+
+    Graphics g (*context, *renderer, 1.0f);
+    ComponentHelper::triggerPaint (*root, g, root->getLocalBounds(), false);
+
+    // The bounding box of the rotated child would map back to a larger area around it
+    expectRectNear (child.clipBounds, { 0.0f, 0.0f, 40.0f, 30.0f });
+}
+
+// =============================================================================
+// Transformed clipping, verified on rendered pixels
+// =============================================================================
+
+class ComponentTransformClipGpuTest : public ::testing::Test
+{
+protected:
+    struct FillComponent : Component
+    {
+        void paint (Graphics& g) override
+        {
+            g.setFillColor (Colors::red);
+            g.fillAll();
+        }
+    };
+
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, 64, 64) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    static std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+std::unique_ptr<GraphicsContext> ComponentTransformClipGpuTest::gpuContext;
+
+TEST_F (ComponentTransformClipGpuTest, ChildOfRotatedParentIsClippedToTheParentOutline)
+{
+    CountingComponent root;
+    root.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+
+    // Rotated by 45 degrees the parent is a diamond with corners at (50, 20), (78, 48), (50, 77), (22, 48)
+    CountingComponent parent;
+    parent.setBounds (50.0f, 20.0f, 40.0f, 40.0f);
+    parent.setTransform (AffineTransform::rotation (MathConstants<float>::pi / 4.0f));
+    root.addAndMakeVisible (parent);
+
+    FillComponent child;
+    child.setBounds (-40.0f, -40.0f, 120.0f, 120.0f);
+    parent.addAndMakeVisible (child);
+
+    const auto image = root.snapshotToImage (*gpuContext);
+    ASSERT_TRUE (image.isValid());
+
+    EXPECT_GT (image.getPixelColor (50, 48).getAlpha(), 0);
+    EXPECT_EQ (0, image.getPixelColor (25, 24).getAlpha());
+}
+
 // =============================================================================
 // Notifications and state the platform layer drives
 // =============================================================================

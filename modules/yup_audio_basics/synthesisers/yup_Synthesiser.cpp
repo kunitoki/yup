@@ -564,7 +564,7 @@ SynthesiserVoice* Synthesiser::findVoiceToSteal (SynthesiserSound* soundToPlay,
     const AudioLockType::ScopedLockType sl (stealLock);
 
     // this is a list of voices we can steal, sorted by how long they've been running
-    usableVoicesToStealArray.clear();
+    usableVoicesToStealArray.clearQuick();
 
     for (auto* voice : voices)
     {
