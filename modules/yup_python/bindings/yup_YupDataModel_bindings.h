@@ -66,6 +66,16 @@ struct PyDataTreeListener : public yup::DataTreeListener
     {
         PYBIND11_OVERRIDE (void, yup::DataTreeListener, treeRedirected, tree);
     }
+
+    void parentChanged (yup::DataTree& child, yup::DataTree& previousParent) override
+    {
+        PYBIND11_OVERRIDE (void, yup::DataTreeListener, parentChanged, child, previousParent);
+    }
+
+    void ancestorChanged (yup::DataTree& tree, yup::DataTree& reparentedAncestor) override
+    {
+        PYBIND11_OVERRIDE (void, yup::DataTreeListener, ancestorChanged, tree, reparentedAncestor);
+    }
 };
 
 //==============================================================================

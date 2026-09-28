@@ -31,8 +31,15 @@ class DataTreeSchema;
 /**
     Base class for objects that want to receive notifications about DataTree changes.
 
-    Listeners are automatically removed when the DataTree is destroyed, but should
-    be explicitly removed if the listener is destroyed first to avoid dangling pointers.
+    Listeners are dropped when the underlying node is destroyed (not when a single DataTree
+    handle to it goes away), and must be explicitly removed if the listener is destroyed
+    first to avoid dangling pointers.
+    Notifications can be sent while a parent node is being destroyed (see parentChanged()),
+    so a listener that outlives its registration can still be called.
+
+    Notifications are only delivered to listeners registered on the affected node, they
+    are not propagated up to the ancestors. Every callback is invoked after the change has
+    been fully applied, so the tree is in its final and consistent state when inspected.
 
     @code
     class MyListener : public DataTree::Listener
@@ -100,6 +107,38 @@ public:
         @param tree The DataTree whose structure was replaced
     */
     virtual void treeRedirected (DataTree& tree) {}
+
+    /**
+        Called on the child's listeners after it was added to, removed from, or moved to another parent.
+
+        When this is called, child.getParent() returns the new parent, or an invalid tree if the child
+        has been detached. Moving a child within the same parent does not trigger this callback.
+
+        If the parent is destroyed while the child is still referenced elsewhere, this is called with
+        both previousParent and child.getParent() invalid. In that case the callback runs from inside
+        the parent's destructor, on whichever thread released the last reference to it, so a listener
+        must not throw.
+
+        @param child The DataTree whose parent changed
+        @param previousParent The former parent, or an invalid tree if the child had no parent
+                              or the parent was destroyed
+
+        @see ancestorChanged
+    */
+    virtual void parentChanged (DataTree& child, DataTree& previousParent) {}
+
+    /**
+        Called on each descendant's listeners after one of its ancestors changed its parent.
+
+        This is sent to every node below the one that received parentChanged(), which is
+        itself not notified with this callback.
+
+        @param tree The descendant DataTree whose chain of ancestors changed
+        @param reparentedAncestor The ancestor whose parent changed
+
+        @see parentChanged
+    */
+    virtual void ancestorChanged (DataTree& tree, DataTree& reparentedAncestor) {}
 };
 
 //==============================================================================
@@ -185,6 +224,8 @@ class YUP_API DataTree
         void sendChildAddedMessage (std::shared_ptr<DataObject> child);
         void sendChildRemovedMessage (std::shared_ptr<DataObject> child, int formerIndex);
         void sendChildMovedMessage (std::shared_ptr<DataObject> child, int oldIndex, int newIndex);
+        void sendParentChangedMessage (std::shared_ptr<DataObject> previousParent);
+        void sendAncestorChangedMessage (const std::shared_ptr<DataObject>& reparentedAncestor);
 
         //==============================================================================
         std::shared_ptr<DataObject> clone() const;

@@ -222,6 +222,8 @@ class DataTreeListenerImpl(yup.DataTreeListener):
         self.property_changes = []
         self.child_additions = []
         self.child_removals = []
+        self.parent_changes = []
+        self.ancestor_changes = []
 
     def propertyChanged(self, tree, property):
         # Identifier is automatically converted to string by type caster
@@ -234,6 +236,19 @@ class DataTreeListenerImpl(yup.DataTreeListener):
     def childRemoved(self, _parent, child, formerIndex):
         childType = child.getType()
         self.child_removals.append((childType if isinstance(childType, str) else childType.toString(), formerIndex))
+
+    def parentChanged(self, child, previousParent):
+        self.parent_changes.append((self._typeName(previousParent), self._typeName(child.getParent())))
+
+    def ancestorChanged(self, tree, reparentedAncestor):
+        self.ancestor_changes.append((self._typeName(tree), self._typeName(reparentedAncestor)))
+
+    @staticmethod
+    def _typeName(tree):
+        if not tree.isValid():
+            return None
+        treeType = tree.getType()
+        return treeType if isinstance(treeType, str) else treeType.toString()
 
 def test_DataTree_listener():
     """Test DataTree listener notifications."""
@@ -270,6 +285,45 @@ def test_DataTree_listener():
 
     # Cleanup
     tree.removeListener(listener)
+
+def test_DataTree_listener_reparent():
+    """Test parentChanged and ancestorChanged notifications when a child is reparented."""
+    parent1 = yup.DataTree(yup.Identifier("Parent1"))
+    parent2 = yup.DataTree(yup.Identifier("Parent2"))
+    child = yup.DataTree(yup.Identifier("Child"))
+    grandchild = yup.DataTree(yup.Identifier("Grandchild"))
+
+    transaction = child.beginTransaction()
+    transaction.addChild(grandchild)
+    transaction.commit()
+
+    childListener = DataTreeListenerImpl()
+    grandchildListener = DataTreeListenerImpl()
+    child.addListener(childListener)
+    grandchild.addListener(grandchildListener)
+
+    transaction = parent1.beginTransaction()
+    transaction.addChild(child)
+    transaction.commit()
+
+    assert len(childListener.parent_changes) == 1
+    assert childListener.parent_changes[0] == (None, "Parent1")
+
+    transaction = parent2.beginTransaction()
+    transaction.addChild(child)
+    transaction.commit()
+
+    assert len(childListener.parent_changes) == 2
+    assert childListener.parent_changes[1] == ("Parent1", "Parent2")
+    assert len(childListener.ancestor_changes) == 0
+
+    assert len(grandchildListener.parent_changes) == 0
+    assert len(grandchildListener.ancestor_changes) == 2
+    assert grandchildListener.ancestor_changes[1] == ("Grandchild", "Child")
+
+    # Cleanup
+    child.removeListener(childListener)
+    grandchild.removeListener(grandchildListener)
 
 #==================================================================================================
 
