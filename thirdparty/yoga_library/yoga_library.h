@@ -30,7 +30,7 @@
     name:             A portable layout engine targeting web standards
     description:      A portable layout engine targeting web standards.
     website:          https://github.com/facebook/yoga
-    license:          Public Domain
+    license:          MIT
 
     searchpaths:      upstream
 

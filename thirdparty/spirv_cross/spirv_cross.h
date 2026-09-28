@@ -30,7 +30,7 @@
     name:               SPIRV-Cross
     description:        SPIRV-Cross is a tool designed for parsing and converting SPIR-V to other shader languages (GLSL, HLSL, MSL, JSON reflection).
     website:            https://github.com/KhronosGroup/SPIRV-Cross
-    license:            Apache-2.0 OR MIT
+    license:            Apache-2.0
 
     searchpaths:        upstream
 
