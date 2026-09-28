@@ -793,24 +793,6 @@ ListBox::ScrollState ListBox::getScrollState() const noexcept
     return scroller.isAnimating() ? ScrollState::settling : ScrollState::idle;
 }
 
-void ListBox::setSnapMode (SnapMode newSnapMode)
-{
-    snapMode = newSnapMode;
-
-    if (snapMode == SnapMode::none)
-        scroller.setSnapFunction ({});
-    else
-        scroller.setSnapFunction ([this] (float restPosition, float)
-        {
-            return getSnapTarget (restPosition);
-        });
-}
-
-ListBox::SnapMode ListBox::getSnapMode() const noexcept
-{
-    return snapMode;
-}
-
 void ListBox::setMouseDragScrollingEnabled (bool shouldBeEnabled)
 {
     mouseDragScrollingEnabled = shouldBeEnabled;
@@ -1739,7 +1721,6 @@ void ListBox::gestureDown (const MouseEvent& event)
     gesture.downPosition = position;
     gesture.lastPosition = position;
     gesture.downTime = gestureClock;
-    gesture.scrollPositionAtStart = scroller.getOffset();
 
     // A press that stops moving content is only there to catch it, it is not a tap.
     gesture.tapCancelled = wasMoving;
@@ -1844,7 +1825,7 @@ void ListBox::gestureUp (const MouseEvent& event)
     }
     else
     {
-        // Not a scroll: release the content without a fling or a snap, bouncing back if it was caught overscrolled.
+        // Not a scroll: release the content without a fling, bouncing back if it was caught overscrolled.
         if (scroller.getOverscroll() != 0.0f)
             scroller.endDrag (gestureClock);
         else
@@ -1964,49 +1945,6 @@ bool ListBox::startDraggingSelectedRows (int touchIndex, Point<float> screenPosi
     rowSelectedOnMouseUp = -1;
 
     return startDragging (options);
-}
-
-float ListBox::getSnapTarget (float restPosition) const
-{
-    if (snapMode == SnapMode::page)
-    {
-        if (viewportSize <= 0.0f)
-            return restPosition;
-
-        const auto startPage = std::round (gesture.scrollPositionAtStart / viewportSize);
-        const auto page = jlimit (startPage - 1.0f, startPage + 1.0f, std::round (restPosition / viewportSize));
-
-        return page * viewportSize;
-    }
-
-    if (numRows == 0)
-        return restPosition;
-
-    const bool centered = snapMode == SnapMode::rowCenter;
-    const auto origin = getRowsOrigin();
-    const auto reference = restPosition + (centered ? viewportSize * 0.5f : 0.0f);
-    const auto begin = rowStarts.begin();
-    const auto index = static_cast<int> (std::lower_bound (begin, begin + numRows, reference - origin) - begin);
-
-    auto target = restPosition;
-    auto bestDistance = std::numeric_limits<float>::max();
-
-    for (const auto row : { index - 2, index - 1, index })
-    {
-        if (! isPositiveAndBelow (row, numRows))
-            continue;
-
-        const auto rowStart = origin + rowStarts[static_cast<size_t> (row)];
-        const auto anchor = rowStart + (centered ? rowSizes[static_cast<size_t> (row)] * 0.5f : 0.0f);
-
-        if (const auto distance = std::abs (anchor - reference); distance < bestDistance)
-        {
-            bestDistance = distance;
-            target = anchor - (centered ? viewportSize * 0.5f : 0.0f);
-        }
-    }
-
-    return target;
 }
 
 //==============================================================================

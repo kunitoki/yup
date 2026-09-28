@@ -369,13 +369,19 @@ float KineticScroller::computeReleaseVelocity (double timeSeconds) const
 
 void KineticScroller::startFling (float releaseVelocity)
 {
-    const auto decayRate = getDecayRate();
+    auto decayRate = getDecayRate();
     auto target = offset + releaseVelocity / decayRate;
 
     if (snapFunction)
     {
         target = clampToLimits (snapFunction (target, releaseVelocity));
-        releaseVelocity = (target - offset) * decayRate;
+
+        const auto distance = target - offset;
+
+        if (distance * releaseVelocity > 0.0f && std::abs (releaseVelocity) > std::abs (distance) * decayRate)
+            decayRate = releaseVelocity / distance;
+        else
+            releaseVelocity = distance * decayRate;
     }
 
     if (std::abs (target - offset) < kineticSettleDistance)
@@ -387,6 +393,7 @@ void KineticScroller::startFling (float releaseVelocity)
     }
 
     flingTarget = target;
+    flingDecayRate = decayRate;
     velocity = releaseVelocity;
     state = State::flinging;
 }
@@ -407,10 +414,9 @@ void KineticScroller::startSpring (float initialVelocity)
 
 void KineticScroller::stepFling (float deltaSeconds)
 {
-    const auto decayRate = getDecayRate();
-    const auto newVelocity = velocity * std::exp (-decayRate * deltaSeconds);
+    const auto newVelocity = velocity * std::exp (-flingDecayRate * deltaSeconds);
 
-    offset += (velocity - newVelocity) / decayRate;
+    offset += (velocity - newVelocity) / flingDecayRate;
     velocity = newVelocity;
 
     if (offset < minOffset || offset > maxOffset)

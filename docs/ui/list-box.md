@@ -116,7 +116,7 @@ To follow the scrolling:
 - `onScroll (offset)` - on every change of the scroll position.
 - `onVisibleRowsChanged (range)` - when the range of visible rows changes.
 - `onScrollStateChanged (state)` - `idle`, `dragging` (following a finger) or
-  `settling` (a fling, a bounce, a snap or an animated scroll).
+  `settling` (a fling, a bounce or an animated scroll).
 - `onEndReached()` - once when the end comes within `setEndReachedThreshold()`
   (half the visible size by default), also when the content is shorter than the
   list. It fires again after the row count changes, which is what infinite
@@ -165,7 +165,7 @@ With touch:
 desktop list scrolls with momentum and overscroll too; clicks then select on
 release and a long press drags rows out.
 
-## Overscroll, snapping and pull-to-refresh
+## Overscroll and pull-to-refresh
 
 Dragged past its ends, the list stretches with a rubber band and springs back.
 `setScrollOptions()` tunes the physics with a `KineticScroller::Options`:
@@ -176,8 +176,6 @@ list.setScrollOptions (yup::KineticScroller::Options()
                            .withOverscrollResistance (0.4f)
                            .withDeceleration (0.998f));
 ```
-
-`setSnapMode()` makes flings land on a row start, a row center or a page.
 
 With `setPullToRefreshEnabled (true)`, pulling the content away from its start
 past the indicator size and releasing calls `onRefresh` and keeps a spinning

@@ -269,6 +269,7 @@ private:
     std::vector<Sample> samples;
 
     float flingTarget = 0.0f;
+    float flingDecayRate = 1.0f;
     float springTarget = 0.0f;
 
     float animationStart = 0.0f;

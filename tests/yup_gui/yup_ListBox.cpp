@@ -1845,54 +1845,9 @@ TEST_F (ListBoxTests, WithOverscrollDisabledATouchDragClamps)
     listBox->mouseUp (touchAt (pointAlong (300.0f)));
 }
 
-TEST_F (ListBoxTests, SnapModesLandOnTheirTargets)
+TEST_F (ListBoxTests, TapsDoNotMoveTheList)
 {
     listBox->setRowSize (50.0f);
-
-    // A slow 37pt drag (27pt past the slop) released after resting: no fling, so the snap decides.
-    const auto dragAndRest = [this]
-    {
-        listBox->setScrollPosition (0.0f);
-        swipe (300.0f, 263.0f, false);
-        runFrames (10);
-        listBox->mouseUp (touchAt (pointAlong (263.0f)));
-        runFrames (300);
-    };
-
-    EXPECT_EQ (ListBox::SnapMode::none, listBox->getSnapMode());
-    dragAndRest();
-    EXPECT_FLOAT_EQ (27.0f, listBox->getScrollPosition());
-
-    listBox->setSnapMode (ListBox::SnapMode::rowStart);
-    dragAndRest();
-    EXPECT_FLOAT_EQ (50.0f, listBox->getScrollPosition());
-
-    // Row 4 spans 200 to 250, its center 225 sits in the middle of the 400pt viewport at 25.
-    listBox->setSnapMode (ListBox::SnapMode::rowCenter);
-    dragAndRest();
-    EXPECT_FLOAT_EQ (25.0f, listBox->getScrollPosition());
-
-    listBox->setSnapMode (ListBox::SnapMode::page);
-    dragAndRest();
-    EXPECT_FLOAT_EQ (0.0f, listBox->getScrollPosition());
-}
-
-TEST_F (ListBoxTests, APageFlingMovesAtMostOnePage)
-{
-    setNumRows (100);
-    listBox->setRowSize (50.0f);
-    listBox->setSnapMode (ListBox::SnapMode::page);
-
-    swipe (390.0f, 10.0f);
-    runFrames (600);
-
-    EXPECT_FLOAT_EQ (400.0f, listBox->getScrollPosition());
-}
-
-TEST_F (ListBoxTests, TapsDoNotSnap)
-{
-    listBox->setRowSize (50.0f);
-    listBox->setSnapMode (ListBox::SnapMode::rowStart);
     listBox->setScrollPosition (27.0f);
 
     tapRow (3);

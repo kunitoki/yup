@@ -258,21 +258,12 @@ public:
         end      /**< Align the row with the end of the visible area. */
     };
 
-    /** Where a touch fling comes to rest. */
-    enum class SnapMode
-    {
-        none,      /**< Wherever the fling's momentum takes it. */
-        rowStart,  /**< With the nearest row aligned to the start of the visible area. */
-        rowCenter, /**< With the nearest row centered in the visible area. */
-        page       /**< On the nearest multiple of the visible size, at most one page from where the drag started. */
-    };
-
     /** What the scroll position is doing. */
     enum class ScrollState
     {
         idle,     /**< Not moving. */
         dragging, /**< Following a finger. */
-        settling  /**< Moving on its own: a fling, a bounce back, a snap or an animated scroll. */
+        settling  /**< Moving on its own: a fling, a bounce back or an animated scroll. */
     };
 
     //==============================================================================
@@ -526,17 +517,11 @@ public:
     /** Returns what the scroll position is doing. */
     ScrollState getScrollState() const noexcept;
 
-    /** Sets where touch flings come to rest. Snapping only applies when a dragging finger is released. */
-    void setSnapMode (SnapMode newSnapMode);
-
-    /** Returns where touch flings come to rest. */
-    SnapMode getSnapMode() const noexcept;
-
     /** Makes the mouse scroll the list the way a finger does.
 
         Off by default, where a mouse press selects straight away and a mouse drag starts dragging
-        the selected rows out of the list. When enabled, a mouse drag scrolls with momentum,
-        overscroll and snapping exactly like touch, a click selects when the button is released, and
+        the selected rows out of the list. When enabled, a mouse drag scrolls with momentum and
+        overscroll exactly like touch, a click selects when the button is released, and
         holding the button still starts dragging rows out. Useful for touch-first interfaces that
         also run on the desktop.
 
@@ -821,7 +806,6 @@ private:
         Point<float> lastPosition;
         double downTime = 0.0;
         int pressedRow = -1;
-        float scrollPositionAtStart = 0.0f;
         bool scrolling = false;
         bool crossAxis = false;
         bool tapCancelled = false;
@@ -874,7 +858,6 @@ private:
     void triggerLongPress();
     void tapRow (int rowIndex, const MouseEvent& event);
     bool startDraggingSelectedRows (int touchIndex, Point<float> screenPosition);
-    float getSnapTarget (float restPosition) const;
     float getMinScrollOffset() const;
 
     //==============================================================================
@@ -945,7 +928,6 @@ private:
 
     PointerGesture gesture;
     double gestureClock = 0.0;
-    SnapMode snapMode = SnapMode::none;
     bool mouseDragScrollingEnabled = false;
     bool pullToRefreshEnabled = false;
     bool refreshing = false;

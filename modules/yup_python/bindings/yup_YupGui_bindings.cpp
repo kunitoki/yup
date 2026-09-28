@@ -1759,12 +1759,6 @@ void registerYupGuiBindings (py::module_& m)
         .value ("end", ListBox::ScrollAlignment::end)
         .export_values();
 
-    py::enum_<ListBox::SnapMode> (classListBox, "SnapMode")
-        .value ("none", ListBox::SnapMode::none)
-        .value ("rowStart", ListBox::SnapMode::rowStart)
-        .value ("rowCenter", ListBox::SnapMode::rowCenter)
-        .value ("page", ListBox::SnapMode::page);
-
     py::enum_<ListBox::ScrollState> (classListBox, "ScrollState")
         .value ("idle", ListBox::ScrollState::idle)
         .value ("dragging", ListBox::ScrollState::dragging)
@@ -1809,8 +1803,6 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setScrollPosition", &ListBox::setScrollPosition, "newOffset"_a, "animated"_a = false)
         .def ("getScrollPosition", &ListBox::getScrollPosition)
         .def ("getScrollState", &ListBox::getScrollState)
-        .def ("setSnapMode", &ListBox::setSnapMode, "newSnapMode"_a)
-        .def ("getSnapMode", &ListBox::getSnapMode)
         .def ("setMouseDragScrollingEnabled", &ListBox::setMouseDragScrollingEnabled, "shouldBeEnabled"_a)
         .def ("isMouseDragScrollingEnabled", &ListBox::isMouseDragScrollingEnabled)
         .def ("setPullToRefreshEnabled", &ListBox::setPullToRefreshEnabled, "shouldBeEnabled"_a)

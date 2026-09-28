@@ -282,17 +282,14 @@ def test_row_sizes_and_spacing_round_trip():
 def test_touch_options_round_trip():
     box = yup.ListBox()
 
-    assert box.getSnapMode() == yup.ListBox.SnapMode.none
     assert box.isMouseDragScrollingEnabled() is False
     assert box.isPullToRefreshEnabled() is False
     assert box.isRefreshing() is False
 
-    box.setSnapMode(yup.ListBox.SnapMode.rowStart)
     box.setMouseDragScrollingEnabled(True)
     box.setPullToRefreshEnabled(True)
     box.setRefreshing(True)
 
-    assert box.getSnapMode() == yup.ListBox.SnapMode.rowStart
     assert box.isMouseDragScrollingEnabled() is True
     assert box.isPullToRefreshEnabled() is True
     assert box.isRefreshing() is True

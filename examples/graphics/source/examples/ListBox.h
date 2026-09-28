@@ -27,7 +27,7 @@
     - Text only: a thousand rows through the built-in ListBoxItem.
     - Text and icons: image icons, a header, pull-to-refresh and infinite loading.
     - Custom rows: cards with their own button, of varying heights, and every few rows a nested
-      horizontal carousel that snaps. A vertical swipe on a carousel scrolls the outer list.
+      horizontal carousel. A vertical swipe on a carousel scrolls the outer list.
 
     With "Kinetic mouse drag" on, the mouse scrolls the lists the way a finger does, fling and
     overscroll included; with it off, a mouse drag starts dragging the selected rows instead.
@@ -84,10 +84,9 @@ public:
         auto bounds = getLocalBounds().reduced (8.0f);
 
         auto bar = bounds.removeFromTop (32.0f);
-        const auto cellWidth = bar.getWidth() / 5.0f;
+        const auto cellWidth = bar.getWidth() / 4.0f;
 
         selectionMode.setBounds (bar.removeFromLeft (cellWidth).reduced (4.0f, 2.0f));
-        snapMode.setBounds (bar.removeFromLeft (cellWidth).reduced (4.0f, 2.0f));
         mouseScrolling.setBounds (bar.removeFromLeft (cellWidth).reduced (4.0f, 2.0f));
         overscroll.setBounds (bar.removeFromLeft (cellWidth).reduced (4.0f, 2.0f));
         resistanceLabel.setBounds (bar.removeFromLeft (bar.getWidth() * 0.45f).reduced (4.0f, 2.0f));
@@ -119,7 +118,6 @@ private:
     struct Options
     {
         yup::ListBox::SelectionMode selectionMode = yup::ListBox::SelectionMode::single;
-        yup::ListBox::SnapMode snapMode = yup::ListBox::SnapMode::none;
         bool mouseDragScrolling = true;
         bool overscroll = true;
         float resistance = 0.55f;
@@ -377,7 +375,6 @@ private:
             setWantsMouseEvents (false, true);
 
             cards.setSelectionMode (yup::ListBox::SelectionMode::none);
-            cards.setSnapMode (yup::ListBox::SnapMode::rowStart);
             cards.setRowSpacing (8.0f);
             cards.setContentInsets (8.0f, 8.0f);
             cards.setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
@@ -478,14 +475,6 @@ private:
         selectionMode.onSelectedItemChanged = [this] { applyOptions(); };
         addAndMakeVisible (selectionMode);
 
-        snapMode.addItem ("No snapping", 1);
-        snapMode.addItem ("Snap to row start", 2);
-        snapMode.addItem ("Snap to row center", 3);
-        snapMode.addItem ("Snap to pages", 4);
-        snapMode.setSelectedId (1, yup::dontSendNotification);
-        snapMode.onSelectedItemChanged = [this] { applyOptions(); };
-        addAndMakeVisible (snapMode);
-
         mouseScrolling.setButtonText ("Kinetic mouse drag");
         mouseScrolling.setToggleState (true, yup::dontSendNotification);
         mouseScrolling.onClick = [this] { applyOptions(); };
@@ -530,15 +519,7 @@ private:
             yup::ListBox::SelectionMode::multiple
         };
 
-        static constexpr yup::ListBox::SnapMode snapModes[] = {
-            yup::ListBox::SnapMode::none,
-            yup::ListBox::SnapMode::rowStart,
-            yup::ListBox::SnapMode::rowCenter,
-            yup::ListBox::SnapMode::page
-        };
-
         options.selectionMode = selectionModes[yup::jlimit (0, 2, selectionMode.getSelectedItemIndex())];
-        options.snapMode = snapModes[yup::jlimit (0, 3, snapMode.getSelectedItemIndex())];
         options.mouseDragScrolling = mouseScrolling.getToggleState();
         options.overscroll = overscroll.getToggleState();
         options.resistance = static_cast<float> (resistance.getValue());
@@ -547,7 +528,6 @@ private:
         {
             options.applyTo (*list);
             list->setSelectionMode (options.selectionMode);
-            list->setSnapMode (options.snapMode);
         }
 
         // Pull-to-refresh is an overscroll gesture.
@@ -580,7 +560,6 @@ private:
     Options options;
 
     yup::ComboBox selectionMode;
-    yup::ComboBox snapMode;
     yup::ToggleButton mouseScrolling;
     yup::ToggleButton overscroll;
     yup::Label resistanceLabel;
