@@ -74,8 +74,8 @@ public:
     /** Returns the text of the item, read when the row was last refreshed. */
     const String& getItemText() const noexcept;
 
-    /** Returns the icon of the item, read when the row was last refreshed. */
-    const Image& getItemIcon() const noexcept;
+    /** Returns true if the item shows an icon, read when the row was last refreshed. */
+    bool hasItemIcon() const noexcept;
 
     /** Returns true if the item provides custom content, in which case the theme paints no icon nor text. */
     bool hasCustomContent() const noexcept;
@@ -110,7 +110,7 @@ private:
     bool itemMightContainSubItems = false;
     float itemHeight = 0.0f;
     String itemText;
-    Image itemIcon;
+    bool itemHasIcon = false;
     std::unique_ptr<Component> content;
     std::unique_ptr<DisclosureButton> disclosureButton;
 

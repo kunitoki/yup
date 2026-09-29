@@ -808,6 +808,16 @@ struct PyTreeViewItem : Base, pybind11::trampoline_self_life_support
         PYBIND11_OVERRIDE (yup::Image, Base, getItemIcon);
     }
 
+    bool hasItemIcon() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, hasItemIcon);
+    }
+
+    void paintItemIcon (yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) const override
+    {
+        PYBIND11_OVERRIDE (void, Base, paintItemIcon, g, area, isSelected);
+    }
+
     yup::String getUniqueName() const override
     {
         PYBIND11_OVERRIDE (yup::String, Base, getUniqueName);

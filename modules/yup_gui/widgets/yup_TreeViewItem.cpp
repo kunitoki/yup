@@ -245,6 +245,19 @@ Image TreeViewItem::getItemIcon() const
     return {};
 }
 
+bool TreeViewItem::hasItemIcon() const
+{
+    return getItemIcon().isValid();
+}
+
+void TreeViewItem::paintItemIcon (Graphics& g, Rectangle<float> area, bool isSelected) const
+{
+    ignoreUnused (isSelected);
+
+    if (const auto icon = getItemIcon(); icon.isValid())
+        g.drawImage (icon, area);
+}
+
 String TreeViewItem::getUniqueName() const
 {
     return getItemText();

@@ -40,6 +40,8 @@ protected:
 
         String getItemText() const override { return name; }
 
+        Image getItemIcon() const override { return icon; }
+
         bool mightContainSubItems() const override { return container || TreeViewItem::mightContainSubItems(); }
 
         void itemOpennessChanged (bool isNowOpen) override
@@ -54,6 +56,7 @@ protected:
         }
 
         String name;
+        Image icon;
         bool container = false;
         int lazyChildren = 0;
         std::vector<bool> opennessChanges;
@@ -263,9 +266,17 @@ TEST_F (TreeViewItemTests, DefaultsForViewHooks)
     EXPECT_TRUE (root.getDragSourceDescription().isVoid());
     EXPECT_FALSE (root.isInterestedInDragSource (details));
     EXPECT_FALSE (root.getItemIcon().isValid());
+    EXPECT_FALSE (root.hasItemIcon());
     EXPECT_LE (root.getItemHeight(), 0.0f);
 
     auto component = std::unique_ptr<Component> (new Component());
     root.refreshItemComponent (component);
     EXPECT_EQ (nullptr, component);
+}
+
+TEST_F (TreeViewItemTests, AnImageIconMakesTheItemShowAnIcon)
+{
+    root.icon = Image (16, 16, PixelFormat::RGBA);
+
+    EXPECT_TRUE (root.hasItemIcon());
 }

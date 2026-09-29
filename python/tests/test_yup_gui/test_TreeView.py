@@ -302,3 +302,22 @@ def test_data_tree_items_keep_their_undo_manager():
     assert item.getUndoManager() is not None
     assert str(item.getDataTree().getType()) == "Root"
     assert item.mightContainSubItems()
+
+
+def test_item_icon_hooks():
+    class IconItem(yup.TreeViewItem):
+        def __init__(self, icon):
+            super().__init__()
+            self.icon = icon
+
+        def hasItemIcon(self):
+            return self.icon
+
+    assert Item("plain").hasItemIcon() is False
+    assert IconItem(True).hasItemIcon() is True
+
+    tree = yup.TreeView()
+    tree.setBounds(0.0, 0.0, 200.0, 100.0)
+    tree.setRootItem(IconItem(True))
+
+    assert tree.getRootItem().hasItemIcon() is True

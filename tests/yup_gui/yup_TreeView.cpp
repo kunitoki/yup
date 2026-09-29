@@ -40,6 +40,8 @@ protected:
 
         String getItemText() const override { return name; }
 
+        bool hasItemIcon() const override { return paintsIcon; }
+
         bool mightContainSubItems() const override { return container || TreeViewItem::mightContainSubItems(); }
 
         void itemOpennessChanged (bool isNowOpen) override
@@ -89,6 +91,7 @@ protected:
         }
 
         String name;
+        bool paintsIcon = false;
         bool container = false;
         int lazyChildren = 0;
         bool openFirstChild = false;
@@ -304,6 +307,41 @@ TEST_F (TreeViewTests, HiddenRootShowsItsSubItemsAtTheTop)
 
     tree->setRootItemVisible (true);
     EXPECT_EQ ("root,a,b,c", rowNames());
+}
+
+TEST_F (TreeViewTests, RowsMakeRoomForItemsThatPaintAnIcon)
+{
+    buildFlatTree (2);
+    find ("0").paintsIcon = true;
+    find ("0").itemChanged();
+
+    auto* withIcon = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
+    auto* withoutIcon = dynamic_cast<TreeViewRow*> (list().getComponentForRow (1));
+    ASSERT_NE (nullptr, withIcon);
+    ASSERT_NE (nullptr, withoutIcon);
+
+    EXPECT_TRUE (withIcon->hasItemIcon());
+    EXPECT_FALSE (withIcon->getIconBounds().isEmpty());
+    EXPECT_GE (withIcon->getTextBounds().getX(), withIcon->getIconBounds().getRight());
+
+    EXPECT_FALSE (withoutIcon->hasItemIcon());
+    EXPECT_TRUE (withoutIcon->getIconBounds().isEmpty());
+    EXPECT_LT (withoutIcon->getTextBounds().getX(), withIcon->getTextBounds().getX());
+}
+
+TEST_F (TreeViewTests, AnItemThatStopsPaintingAnIconGivesTheSpaceBack)
+{
+    buildFlatTree (1);
+    auto& item = find ("0");
+    item.paintsIcon = true;
+    item.itemChanged();
+
+    item.paintsIcon = false;
+    item.itemChanged();
+
+    auto* row = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
+    ASSERT_NE (nullptr, row);
+    EXPECT_TRUE (row->getIconBounds().isEmpty());
 }
 
 TEST_F (TreeViewTests, HiddenRootIsOpenedWhenSet)

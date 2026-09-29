@@ -101,9 +101,9 @@ const String& TreeViewRow::getItemText() const noexcept
     return itemText;
 }
 
-const Image& TreeViewRow::getItemIcon() const noexcept
+bool TreeViewRow::hasItemIcon() const noexcept
 {
-    return itemIcon;
+    return itemHasIcon;
 }
 
 bool TreeViewRow::hasCustomContent() const noexcept
@@ -122,7 +122,7 @@ Rectangle<float> TreeViewRow::getDisclosureBounds() const
 
 Rectangle<float> TreeViewRow::getIconBounds() const
 {
-    if (! itemIcon.isValid())
+    if (! itemHasIcon)
         return {};
 
     const auto size = itemHeight * 0.7f;
@@ -169,7 +169,7 @@ void TreeViewRow::update (TreeView& newOwnerView, TreeViewItem& newItem, int new
     selected = shouldBeSelected;
     itemHeight = newOwnerView.getFullItemHeight (newItem);
     itemText = newItem.getItemText();
-    itemIcon = newItem.getItemIcon();
+    itemHasIcon = newItem.hasItemIcon();
     itemMightContainSubItems = newItem.mightContainSubItems();
 
     newItem.refreshItemComponent (content);

@@ -40,6 +40,7 @@ When what an item shows changes, call `itemChanged()`.
 | Override | Purpose |
 | --- | --- |
 | `getItemText()`, `getItemIcon()` | What the built-in row shows. Long text is truncated with an ellipsis. |
+| `hasItemIcon()`, `paintItemIcon (g, area, isSelected)` | Draws the built-in row's icon yourself, see below. |
 | `mightContainSubItems()` | Whether the item has a disclosure button. Defaults to having sub-items. |
 | `getItemHeight()` | The row height; 0 uses `TreeView::getDefaultItemHeight()`. |
 | `refreshItemComponent (component)` | Custom row content, see below. |
@@ -101,6 +102,29 @@ private:
 A hidden root is always open, so it gets its `itemOpennessChanged (true)` as
 soon as it is set.
 
+## Icons
+
+The built-in row shows an icon before the text when the item has one. Return an
+`Image` from `getItemIcon()`, or draw the icon yourself: return `true` from
+`hasItemIcon()` and paint it in `paintItemIcon()`, which gets the square to draw
+in and whether the item is selected, so vector shapes, icon font glyphs and
+drawables can all follow the selection color:
+
+```cpp
+bool hasItemIcon() const override { return true; }
+
+void paintItemIcon (yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) const override
+{
+    yup::Path folder;
+    folder.addRoundedRectangle (area.reduced (2.0f), 2.0f);
+
+    g.setFillColor (isSelected ? yup::Colors::white : yup::Color (0xffe8b04a));
+    g.fillPath (folder);
+}
+```
+
+Call `itemChanged()` when the item gains or loses its icon.
+
 ## Custom content
 
 Override `refreshItemComponent()` to show your own component after the
@@ -121,6 +145,12 @@ The content should call `setWantsMouseEvents (false, true)` on itself, so that
 pressing it still selects the row and only its interactive children take the
 press. The default implementation resets the component, which shows the
 built-in icon and text.
+
+Custom content replaces the built-in icon and text, so it can lay out anything
+along the row: the graphics example's widget tree draws a type icon and a name on
+the left and puts buttons to add and remove widgets on the right. Read
+`isSelected()` on the item when painting, to follow the selection: rows are
+refreshed when it changes.
 
 ## Drag and drop
 

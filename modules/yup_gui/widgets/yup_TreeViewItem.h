@@ -30,8 +30,9 @@ class TreeView;
 /**
     A node shown by a TreeView.
 
-    Subclass it to describe your data: override getItemText() (and optionally getItemIcon()) for the
-    built-in look, or refreshItemComponent() for custom content. An item owns its sub-items, and a
+    Subclass it to describe your data: override getItemText() (and optionally getItemIcon(), or
+    hasItemIcon() and paintItemIcon() to draw the icon yourself) for the built-in look, or
+    refreshItemComponent() for custom content. An item owns its sub-items, and a
     TreeView owns its root item.
 
     Every structural change made through this class - adding, removing or moving sub-items, opening
@@ -179,6 +180,35 @@ public:
 
     /** Returns the icon the built-in row shows before the text, or an invalid Image for none. */
     virtual Image getItemIcon() const;
+
+    /** Returns true if the built-in row shows an icon before the text.
+
+        The default returns true when getItemIcon() is valid. Override it together with
+        paintItemIcon() to draw the icon instead of providing an image.
+    */
+    virtual bool hasItemIcon() const;
+
+    /** Draws the icon of the built-in row. Only called when hasItemIcon() returns true.
+
+        The default draws getItemIcon() into @a area. Override it to draw a vector shape, a glyph of
+        the theme's icon font or a Drawable, and to tint it for the selection:
+
+        @code
+        void paintItemIcon (Graphics& g, Rectangle<float> area, bool isSelected) const override
+        {
+            Path folder;
+            folder.addRoundedRectangle (area.reduced (1.0f), 2.0f);
+
+            g.setFillColor (isSelected ? Colors::white : Color (0xffe8b04a));
+            g.fillPath (folder);
+        }
+        @endcode
+
+        @param g           The graphics context, in the row's coordinates
+        @param area        The square to draw the icon in
+        @param isSelected  Whether the item is selected
+    */
+    virtual void paintItemIcon (Graphics& g, Rectangle<float> area, bool isSelected) const;
 
     /** Returns a name that identifies this item among its siblings.
 

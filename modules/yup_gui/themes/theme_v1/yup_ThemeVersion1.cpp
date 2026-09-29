@@ -1164,8 +1164,8 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
     if (row.hasCustomContent())
         return;
 
-    if (const auto& icon = row.getItemIcon(); icon.isValid())
-        g.drawImage (icon, row.getIconBounds());
+    if (row.hasItemIcon())
+        row.getItem()->paintItemIcon (g, row.getIconBounds(), row.isItemSelected());
 
     const auto& text = row.getItemText();
     const auto textBounds = row.getTextBounds();
