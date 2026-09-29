@@ -145,7 +145,7 @@ row is separate from the selection, like a keyboard focus within the list:
 | Return | `returnKeyPressed (currentRow)`. |
 
 `setCurrentRow()`, `getCurrentRow()` and `onCurrentRowChanged` give access to
-it. While the list has keyboard focus, the current row is outlined.
+it.
 
 ## Mouse and touch
 
