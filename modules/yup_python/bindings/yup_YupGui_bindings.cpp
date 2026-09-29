@@ -1690,17 +1690,14 @@ void registerYupGuiBindings (py::module_& m)
         .def (py::init<>())
         .def ("getNumRows", &ListBoxModel::getNumRows,
               "Returns the number of rows in the list; a Python subclass must override it.")
-        .def ("getRowHeight", &ListBoxModel::getRowHeight, "rowIndex"_a,
-              "Returns 0 to use the ListBox's fixed row height.")
-        .def ("getRowWidth", &ListBoxModel::getRowWidth, "rowIndex"_a,
-              "Returns 0 to use the ListBox's fixed row width.")
-        .def ("paintListBoxItem", &ListBoxModel::paintListBoxItem, "rowIndex"_a, "g"_a, "area"_a, "isSelected"_a)
+        .def ("getRowSize", &ListBoxModel::getRowSize, "rowIndex"_a,
+              "The row's size along the scroll axis; 0 or less uses the ListBox's row size.")
         .def ("getRowText", &ListBoxModel::getRowText, "rowIndex"_a)
         .def ("getRowIcon", &ListBoxModel::getRowIcon, "rowIndex"_a)
         .def ("selectedRowsChanged", &ListBoxModel::selectedRowsChanged, "selectedRows"_a)
         .def ("rowClicked", &ListBoxModel::rowClicked, "rowIndex"_a, "event"_a)
         .def ("rowDoubleClicked", &ListBoxModel::rowDoubleClicked, "rowIndex"_a, "event"_a)
-        .def ("returnKeyPressed", &ListBoxModel::returnKeyPressed, "lastSelectedRow"_a)
+        .def ("returnKeyPressed", &ListBoxModel::returnKeyPressed, "currentRow"_a)
         .def ("deleteKeyPressed", &ListBoxModel::deleteKeyPressed, "selectedRows"_a)
         .def ("getDragSourceDescription", &ListBoxModel::getDragSourceDescription, "selectedRows"_a);
 
@@ -1725,6 +1722,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("setIcon", &ListBoxItem::setIcon, "newIcon"_a)
         .def ("setIconPosition", &ListBoxItem::setIconPosition, "position"_a)
         .def ("getIconPosition", &ListBoxItem::getIconPosition)
+        .def ("getIconImage", &ListBoxItem::getIconImage)
         .def ("setSelected", &ListBoxItem::setSelected, "shouldBeSelected"_a)
         .def ("isSelected", &ListBoxItem::isSelected)
         .def ("setHovered", &ListBoxItem::setHovered, "shouldBeHovered"_a)
@@ -1754,6 +1752,19 @@ void registerYupGuiBindings (py::module_& m)
         .value ("multiple", ListBox::SelectionMode::multiple)
         .export_values();
 
+    py::enum_<ListBox::ScrollAlignment> (classListBox, "ScrollAlignment")
+        .value ("nearest", ListBox::ScrollAlignment::nearest)
+        .value ("start", ListBox::ScrollAlignment::start)
+        .value ("center", ListBox::ScrollAlignment::center)
+        .value ("end", ListBox::ScrollAlignment::end)
+        .export_values();
+
+    py::enum_<ListBox::ScrollState> (classListBox, "ScrollState")
+        .value ("idle", ListBox::ScrollState::idle)
+        .value ("dragging", ListBox::ScrollState::dragging)
+        .value ("settling", ListBox::ScrollState::settling)
+        .export_values();
+
     classListBox
         .def (py::init<StringRef, ListBox::Orientation>(),
               "componentID"_a = StringRef(), "orientation"_a = ListBox::Orientation::vertical)
@@ -1777,20 +1788,38 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isRowSelected", &ListBox::isRowSelected, "rowIndex"_a)
         .def ("getNumSelectedRows", &ListBox::getNumSelectedRows)
 
+        .def ("setCurrentRow", &ListBox::setCurrentRow, "rowIndex"_a, "notification"_a = NotificationType::sendNotification)
+        .def ("getCurrentRow", &ListBox::getCurrentRow)
+
         .def ("updateContent", &ListBox::updateContent)
+        .def ("rowsInserted", &ListBox::rowsInserted, "startRow"_a, "count"_a)
+        .def ("rowsRemoved", &ListBox::rowsRemoved, "startRow"_a, "count"_a)
+        .def ("rowMoved", &ListBox::rowMoved, "fromRow"_a, "toRow"_a)
+        .def ("rowsChanged", &ListBox::rowsChanged, "startRow"_a, "count"_a)
         .def ("repaintRow", &ListBox::repaintRow, "rowIndex"_a)
-        .def ("scrollToEnsureRowIsVisible", &ListBox::scrollToEnsureRowIsVisible, "rowIndex"_a)
+
+        .def ("scrollToRow", &ListBox::scrollToRow,
+              "rowIndex"_a, "alignment"_a = ListBox::ScrollAlignment::nearest, "animated"_a = false)
+        .def ("setScrollPosition", &ListBox::setScrollPosition, "newOffset"_a, "animated"_a = false)
+        .def ("getScrollPosition", &ListBox::getScrollPosition)
+        .def ("getScrollState", &ListBox::getScrollState)
+        .def ("setMouseDragScrollingEnabled", &ListBox::setMouseDragScrollingEnabled, "shouldBeEnabled"_a)
+        .def ("isMouseDragScrollingEnabled", &ListBox::isMouseDragScrollingEnabled)
+        .def ("setPullToRefreshEnabled", &ListBox::setPullToRefreshEnabled, "shouldBeEnabled"_a)
+        .def ("isPullToRefreshEnabled", &ListBox::isPullToRefreshEnabled)
+        .def ("setRefreshing", &ListBox::setRefreshing, "shouldBeRefreshing"_a)
+        .def ("isRefreshing", &ListBox::isRefreshing)
+        .def ("getPullToRefreshProgress", &ListBox::getPullToRefreshProgress)
+        .def ("setEndReachedThreshold", &ListBox::setEndReachedThreshold, "viewportFraction"_a)
+        .def ("getEndReachedThreshold", &ListBox::getEndReachedThreshold)
 
         .def ("setOrientation", &ListBox::setOrientation, "newOrientation"_a)
         .def ("getOrientation", &ListBox::getOrientation)
-        .def ("setRowHeight", &ListBox::setRowHeight, "newHeight"_a)
-        .def ("setRowWidth", &ListBox::setRowWidth, "newWidth"_a)
-        .def ("getRowHeight", &ListBox::getRowHeight)
-        .def ("getRowWidth", &ListBox::getRowWidth)
-        .def ("setVariableHeightEnabled", &ListBox::setVariableHeightEnabled, "enabled"_a)
-        .def ("setVariableWidthEnabled", &ListBox::setVariableWidthEnabled, "enabled"_a)
-        .def ("isVariableHeightEnabled", &ListBox::isVariableHeightEnabled)
-        .def ("isVariableWidthEnabled", &ListBox::isVariableWidthEnabled)
+        .def ("setRowSize", &ListBox::setRowSize, "newSize"_a)
+        .def ("getRowSize", &ListBox::getRowSize)
+        .def ("setRowSpacing", &ListBox::setRowSpacing, "newSpacing"_a)
+        .def ("getRowSpacing", &ListBox::getRowSpacing)
+        .def ("setContentInsets", &ListBox::setContentInsets, "leading"_a, "trailing"_a)
         .def ("setMinimumContentSize", &ListBox::setMinimumContentSize, "minSize"_a)
         .def ("getMinimumContentSize", &ListBox::getMinimumContentSize)
 
@@ -1804,10 +1833,19 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getRowAt", &ListBox::getRowAt, "position"_a)
         .def ("getComponentForRow", &ListBox::getComponentForRow, "rowIndex"_a, py::return_value_policy::reference_internal)
         .def ("getRowBounds", &ListBox::getRowBounds, "rowIndex"_a)
+        .def ("getHoveredRow", &ListBox::getHoveredRow)
 
         .def_readwrite ("onRowClicked", &ListBox::onRowClicked, "Called with the row the user clicked.")
         .def_readwrite ("onRowDoubleClicked", &ListBox::onRowDoubleClicked, "Called with the row the user double-clicked.")
-        .def_readwrite ("onSelectionChanged", &ListBox::onSelectionChanged, "Called when the selected rows change.");
+        .def_readwrite ("onSelectionChanged", &ListBox::onSelectionChanged, "Called when the selected rows change.")
+        .def_readwrite ("onRowEntered", &ListBox::onRowEntered, "Called with the row the mouse moved onto.")
+        .def_readwrite ("onRowExited", &ListBox::onRowExited, "Called with the row the mouse left.")
+        .def_readwrite ("onCurrentRowChanged", &ListBox::onCurrentRowChanged, "Called with the new current row.")
+        .def_readwrite ("onScroll", &ListBox::onScroll, "Called with the new scroll position.")
+        .def_readwrite ("onVisibleRowsChanged", &ListBox::onVisibleRowsChanged, "Called with the new range of visible rows.")
+        .def_readwrite ("onScrollStateChanged", &ListBox::onScrollStateChanged, "Called with the new scroll state.")
+        .def_readwrite ("onRefresh", &ListBox::onRefresh, "Called when a pull triggers a refresh.")
+        .def_readwrite ("onEndReached", &ListBox::onEndReached, "Called once when the end of the content comes within the end-reached threshold.");
 
     py::class_<ListBox::Style> listBoxStyle (classListBox, "Style");
     listBoxStyle.attr ("backgroundColorId") = ListBox::Style::backgroundColorId;
@@ -1815,6 +1853,8 @@ void registerYupGuiBindings (py::module_& m)
     listBoxStyle.attr ("rowBackgroundColorId") = ListBox::Style::rowBackgroundColorId;
     listBoxStyle.attr ("selectedRowBackgroundColorId") = ListBox::Style::selectedRowBackgroundColorId;
     listBoxStyle.attr ("hoveredRowBackgroundColorId") = ListBox::Style::hoveredRowBackgroundColorId;
+    listBoxStyle.attr ("refreshIndicatorColorId") = ListBox::Style::refreshIndicatorColorId;
+    listBoxStyle.attr ("refreshIndicatorSizeId") = ListBox::Style::refreshIndicatorSizeId;
 
     // ============================================================================================ yup::ComboBox
 

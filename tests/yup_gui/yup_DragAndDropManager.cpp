@@ -241,8 +241,9 @@ void endAnyActiveDrag()
     if (manager == nullptr || ! manager->isDragging())
         return;
 
+    // A session only ends on a release from the pointer it follows.
     manager->cancelDrag();
-    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 0.0f, 0.0f }));
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 0.0f, 0.0f }).withTouchIndex (manager->getCurrentDragTouchIndex()));
 }
 
 } // namespace
@@ -414,6 +415,56 @@ TEST_F (DragAndDropManagerSessionTests, AnExternalDragIsIgnoredWhileAnInternalDr
     manager().handleExternalDragPosition (root, Point<float> (10.0f, 10.0f), data);
 
     EXPECT_TRUE (manager().isDragging());
+}
+
+TEST_F (DragAndDropManagerSessionTests, ATouchSessionFollowsOnlyItsOwnFinger)
+{
+    auto options = payloadOptions ("payload");
+    options.withTouchPointer (1, { 10.0f, 10.0f });
+
+    ASSERT_TRUE (manager().startDragging (source, source, options));
+    EXPECT_EQ (1, manager().getCurrentDragTouchIndex());
+
+    // Neither the mouse nor another finger can end it.
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }));
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (0));
+    Desktop::getInstance()->handleGlobalMouseDrag (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (0));
+
+    EXPECT_TRUE (manager().isDragging());
+    EXPECT_EQ (0, source.endedCount);
+
+    Desktop::getInstance()->handleGlobalMouseDrag (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (1));
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (1));
+
+    EXPECT_FALSE (manager().isDragging());
+    EXPECT_EQ (1, source.endedCount);
+    EXPECT_EQ (-1, manager().getCurrentDragTouchIndex());
+}
+
+TEST_F (DragAndDropManagerSessionTests, ACancelledTouchSessionEndsWithNoAction)
+{
+    auto options = payloadOptions ("payload");
+    options.withTouchPointer (0, { 10.0f, 10.0f });
+
+    ASSERT_TRUE (manager().startDragging (source, source, options));
+
+    manager().cancelDrag();
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (0));
+
+    EXPECT_FALSE (manager().isDragging());
+    EXPECT_EQ (1, source.endedCount);
+    EXPECT_EQ (DragAndDropAction::none, source.lastPerformed);
+}
+
+TEST_F (DragAndDropManagerSessionTests, AMouseSessionIgnoresFingers)
+{
+    startSession();
+
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }).withTouchIndex (0));
+    EXPECT_TRUE (manager().isDragging());
+
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 40.0f, 30.0f }));
+    EXPECT_FALSE (manager().isDragging());
 }
 
 //==============================================================================

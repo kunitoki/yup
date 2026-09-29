@@ -238,7 +238,7 @@ public:
 
     static void setOnDesktop (Component& comp, bool value)
     {
-        comp.options.onDesktop = value;
+        comp.flags.onDesktop = value;
     }
 
     static void triggerDisplayChanged (Component& comp)
@@ -2802,11 +2802,11 @@ TEST_F (ComponentTest, GetParentComponentWithTypeWalksUpTheChain)
 
 TEST (ComponentNativeOptionsTest, RepaintModeDefaultsToDisjointRegionsAndIsSettable)
 {
-    ComponentNative::Options options;
-    EXPECT_EQ (ComponentNative::RepaintMode::disjointRegions, options.repaintMode);
+    ComponentNative::Options flags;
+    EXPECT_EQ (ComponentNative::RepaintMode::disjointRegions, flags.repaintMode);
 
-    options.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
-    EXPECT_EQ (ComponentNative::RepaintMode::boundingBox, options.repaintMode);
+    flags.withRepaintMode (ComponentNative::RepaintMode::boundingBox);
+    EXPECT_EQ (ComponentNative::RepaintMode::boundingBox, flags.repaintMode);
 }
 
 namespace

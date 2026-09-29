@@ -63,6 +63,13 @@ DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withExternalDrag
     return *this;
 }
 
+DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withTouchPointer (int newTouchIndex, Point<float> screenPosition)
+{
+    touchIndex = newTouchIndex;
+    touchScreenPosition = screenPosition;
+    return *this;
+}
+
 //==============================================================================
 
 bool DragAndDropSource::startDragging (DragOptions options)

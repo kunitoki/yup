@@ -1017,6 +1017,46 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 
 //==============================================================================
 
+void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& listBox)
+{
+    const auto bounds = listBox.getLocalBounds();
+
+    g.setFillColor (listBox.findColor (ListBox::Style::backgroundColorId).value_or (Color (0xffffffff)));
+    g.fillRect (bounds);
+
+    g.setStrokeColor (listBox.findColor (ListBox::Style::outlineColorId).value_or (Color (0xffcccccc)));
+    g.setStrokeWidth (1.0f);
+    g.strokeRect (bounds);
+
+    // The pull-to-refresh indicator lives in the space the content reveals when pulled from its start.
+    const auto progress = listBox.getPullToRefreshProgress();
+    const auto revealed = -listBox.getScrollPosition();
+
+    if (progress <= 0.0f || revealed <= 0.0f)
+        return;
+
+    const auto indicatorSize = listBox.getRefreshIndicatorSize();
+    const auto along = jmin (revealed, indicatorSize) * 0.5f;
+    const auto center = listBox.getOrientation() == ListBox::Orientation::vertical
+                          ? Point<float> (bounds.getCenterX(), bounds.getY() + along)
+                          : Point<float> (bounds.getX() + along, bounds.getCenterY());
+
+    const auto radius = indicatorSize * 0.2f;
+    const auto spin = listBox.isRefreshing()
+                        ? static_cast<float> (Time::getMillisecondCounter() % 1000) / 1000.0f * MathConstants<float>::twoPi
+                        : 0.0f;
+    const auto startAngle = spin - MathConstants<float>::halfPi;
+
+    Path arc;
+    arc.addArc (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f, startAngle, startAngle + progress * MathConstants<float>::twoPi * 0.8f, true);
+
+    g.setStrokeColor (listBox.findColor (ListBox::Style::refreshIndicatorColorId).value_or (Color (0xff4ebfff)));
+    g.setStrokeWidth (indicatorSize * 0.06f);
+    g.strokePath (arc);
+}
+
+//==============================================================================
+
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
     // Determine background color
@@ -1025,7 +1065,7 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
     if (item.isSelected())
         backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorSelectedId).value_or (Color (0xff3a7ebf));
     else if (item.isHovered())
-        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x22ffffff));
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x14000000));
     else
         backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorId).value_or (Color (0x00000000));
 
@@ -1041,6 +1081,8 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
     auto iconBounds = item.getIconBoundsForRendering();
     if (iconDrawable != nullptr && ! iconBounds.isEmpty())
         iconDrawable->paint (g, iconBounds, Fitting::scaleToFit, Justification::center);
+    else if (const auto iconImage = item.getIconImage(); iconImage.isValid() && ! iconBounds.isEmpty())
+        g.drawImage (iconImage, iconBounds);
 
     // Draw text
     auto text = item.getText();
@@ -1062,8 +1104,12 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
         auto styledText = yup::StyledText();
         {
             auto modifier = styledText.startUpdate();
-            modifier.appendText (text, font.withHeight (fontSize));
+            modifier.setMaxSize (textBounds.getSize());
+            modifier.setHorizontalAlign (StyledText::left);
             modifier.setVerticalAlign (StyledText::middle);
+            modifier.setOverflow (StyledText::ellipsis);
+            modifier.setWrap (StyledText::noWrap);
+            modifier.appendText (text, font.withHeight (fontSize));
         }
 
         g.fillFittedText (styledText, textBounds);
@@ -2047,12 +2093,21 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ProgressBar::Style::backgroundColorId, Color (0xff3d3d3d));
     theme->setColor (ProgressBar::Style::foregroundColorId, Color (0xff4ebfff));
 
+    theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
+    theme->setColor (ListBox::Style::backgroundColorId, Color (0xffffffff));
+    theme->setColor (ListBox::Style::outlineColorId, Color (0xffcccccc));
+    theme->setColor (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
+    theme->setColor (ListBox::Style::selectedRowBackgroundColorId, Color (0xff3a7ebf));
+    theme->setColor (ListBox::Style::hoveredRowBackgroundColorId, Color (0x14000000));
+    theme->setColor (ListBox::Style::refreshIndicatorColorId, Color (0xff4ebfff));
+    theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
+
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
     theme->setColor (ListBoxItem::Style::textColorId, Colors::black);
     theme->setColor (ListBoxItem::Style::textColorSelectedId, Colors::white);
     theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
     theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
-    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x22ffffff));
+    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

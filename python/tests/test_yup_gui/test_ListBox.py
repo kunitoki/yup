@@ -10,9 +10,9 @@ The rows only exist for a laid-out component, so nothing here builds a real list
 a ListBox with no size has no visible rows, which is what keeps these tests free of a native
 window. Two things are therefore out of reach and covered elsewhere or deliberately not bound:
 
-- ListBoxModel.paintListBoxItem needs a Graphics, so it is only reachable through a real paint.
-- ListBoxModel.refreshComponentForRow is not bound at all: it hands the ListBox ownership of the
-  returned component, which pybind11 cannot take away from a Python-owned instance.
+- ListBoxModel.refreshRowComponent is not bound at all: it hands the ListBox ownership of the
+  row component, which pybind11 cannot take away from a Python-owned instance.
+- Header and footer components and the scroll physics options are not bound either.
 
 The file runs inside yup.TestApplication, the same fixture test_ApplicationTheme.py takes.
 ListBoxItem lays its text and icon out through calculateLayout(), which reads the theme font and
@@ -33,11 +33,8 @@ class Model(yup.ListBoxModel):
     def getNumRows(self):
         return self.rows
 
-    def getRowHeight(self, rowIndex):
-        return 20 + rowIndex
-
-    def getRowWidth(self, rowIndex):
-        return 30 + rowIndex
+    def getRowSize(self, rowIndex):
+        return 20.0 + rowIndex
 
     def getRowText(self, rowIndex):
         return f"Row {rowIndex}"
@@ -51,8 +48,8 @@ class Model(yup.ListBoxModel):
     def rowDoubleClicked(self, rowIndex, event):
         self.log.append(("doubleClicked", rowIndex))
 
-    def returnKeyPressed(self, lastSelectedRow):
-        self.log.append(("return", lastSelectedRow))
+    def returnKeyPressed(self, currentRow):
+        self.log.append(("return", currentRow))
 
     def deleteKeyPressed(self, selectedRows):
         self.log.append(("delete", list(selectedRows)))
@@ -91,8 +88,7 @@ def test_the_base_row_count_is_pure_virtual():
 def test_the_override_supplies_the_row_metrics_and_text():
     model = Model()
 
-    assert model.getRowHeight(1) == 21
-    assert model.getRowWidth(1) == 31
+    assert model.getRowSize(1) == 21.0
     assert model.getRowText(2) == "Row 2"
 
 
@@ -119,10 +115,10 @@ def test_the_remaining_callbacks_receive_what_they_are_given():
     assert model.log[1][1] == 1
 
 
-def test_refresh_component_for_row_is_not_exposed():
-    # It transfers ownership of the returned component to the ListBox, which is not something
+def test_refresh_row_component_is_not_exposed():
+    # It transfers ownership of the row component to the ListBox, which is not something
     # that can be expressed safely from Python, so the hook is left out of the bindings.
-    assert not hasattr(Model(), "refreshComponentForRow")
+    assert not hasattr(Model(), "refreshRowComponent")
 
 
 # ==============================================================================
@@ -135,11 +131,13 @@ def test_list_box_defaults():
     assert box.getModel() is None
     assert box.getSelectionMode() == yup.ListBox.SelectionMode.single
     assert box.getOrientation() == yup.ListBox.Orientation.vertical
-    assert box.getRowHeight() == 24
-    assert box.getRowWidth() == 100
-    assert box.isVariableHeightEnabled() is False
-    assert box.isVariableWidthEnabled() is False
+    assert box.getRowSize() == 24.0
+    assert box.getRowSpacing() == 0.0
     assert box.getMinimumContentSize() == 0
+    assert box.getCurrentRow() == -1
+    assert box.getScrollPosition() == 0.0
+    assert box.getScrollState() == yup.ListBox.ScrollState.idle
+    assert box.getEndReachedThreshold() == 0.5
     assert box.getNumSelectedRows() == 0
     assert box.getSelectedRow() == -1
     assert box.getSelectedRows().isEmpty() is True
@@ -268,20 +266,92 @@ def test_the_selection_callback_fires_when_the_selection_changes():
     assert calls == ["changed"]
 
 
-def test_row_sizes_and_flags_round_trip():
+def test_row_sizes_and_spacing_round_trip():
     box = yup.ListBox()
 
-    box.setRowHeight(32)
-    box.setRowWidth(150)
-    box.setVariableHeightEnabled(True)
-    box.setVariableWidthEnabled(True)
+    box.setRowSize(32.0)
+    box.setRowSpacing(4.0)
+    box.setContentInsets(8.0, 8.0)
     box.setMinimumContentSize(64)
 
-    assert box.getRowHeight() == 32
-    assert box.getRowWidth() == 150
-    assert box.isVariableHeightEnabled() is True
-    assert box.isVariableWidthEnabled() is True
+    assert box.getRowSize() == 32.0
+    assert box.getRowSpacing() == 4.0
     assert box.getMinimumContentSize() == 64
+
+
+def test_touch_options_round_trip():
+    box = yup.ListBox()
+
+    assert box.isMouseDragScrollingEnabled() is False
+    assert box.isPullToRefreshEnabled() is False
+    assert box.isRefreshing() is False
+
+    box.setMouseDragScrollingEnabled(True)
+    box.setPullToRefreshEnabled(True)
+    box.setRefreshing(True)
+
+    assert box.isMouseDragScrollingEnabled() is True
+    assert box.isPullToRefreshEnabled() is True
+    assert box.isRefreshing() is True
+    assert box.getPullToRefreshProgress() == 1.0
+
+
+def test_the_default_row_size_follows_the_orientation():
+    box = yup.ListBox()
+    box.setOrientation(yup.ListBox.Orientation.horizontal)
+
+    assert box.getRowSize() == 96.0
+
+
+def test_the_current_row_is_separate_from_the_selection():
+    calls = []
+    box = yup.ListBox()
+    box.setModel(Model(4))
+    box.onCurrentRowChanged = lambda row: calls.append(row)
+
+    box.setCurrentRow(2)
+
+    assert box.getCurrentRow() == 2
+    assert box.getNumSelectedRows() == 0
+    assert calls == [2]
+
+
+def test_change_notifications_shift_the_selection():
+    model = Model(4)
+    box = yup.ListBox()
+    box.setModel(model)
+    box.selectRow(1, False)
+
+    model.rows = 6
+    box.rowsInserted(0, 2)
+
+    assert list(box.getSelectedRows()) == [3]
+
+    model.rows = 5
+    box.rowsRemoved(0, 1)
+
+    assert list(box.getSelectedRows()) == [2]
+
+    box.rowMoved(2, 0)
+
+    assert list(box.getSelectedRows()) == [0]
+
+
+def test_scrolling_round_trips_and_reports():
+    offsets = []
+    box = yup.ListBox()
+    box.setBounds(0.0, 0.0, 200.0, 100.0)
+    box.setModel(Model(40))
+    box.onScroll = lambda offset: offsets.append(offset)
+
+    box.setScrollPosition(50.0)
+
+    assert box.getScrollPosition() == 50.0
+    assert offsets == [50.0]
+
+    box.scrollToRow(0, yup.ListBox.ScrollAlignment.start)
+
+    assert box.getScrollPosition() == 0.0
 
 
 def test_orientation_and_selection_mode_round_trip():
@@ -323,3 +393,17 @@ def test_style_ids_are_exposed():
     assert str(yup.ListBoxItem.Style.backgroundColorId) == "listBoxItemBackground"
     assert str(yup.ListBoxItem.Style.backgroundColorSelectedId) == "listBoxItemBackgroundSelected"
     assert str(yup.ListBoxItem.Style.backgroundColorHoveredId) == "listBoxItemBackgroundHovered"
+
+
+def test_hover_callbacks_round_trip():
+    box = yup.ListBox()
+    box.setModel(Model(3))
+
+    assert box.getHoveredRow() == -1
+
+    # Assigning and clearing the callbacks is safe without a mouse.
+    box.onRowEntered = lambda row: None
+    box.onRowExited = lambda row: None
+    box.onRowEntered = None
+    box.onRowExited = None
+

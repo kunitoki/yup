@@ -487,8 +487,8 @@ public:
         //==============================================================================
         int getNumRows() override { return rows.size(); }
 
-        /** The text a row displays. The ListBox's built-in renderer takes a row's text and icon
-            from here; paintListBoxItem() is not part of that path. */
+        /** The text a row displays. refreshRowComponent() is not overridden, so every row is the
+            ListBox's built-in ListBoxItem, which takes a row's text and icon from here. */
         yup::String getRowText (int rowIndex) override
         {
             return rowIndex >= 0 && rowIndex < rows.size() ? rows[rowIndex] : yup::String();

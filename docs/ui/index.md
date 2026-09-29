@@ -57,6 +57,8 @@ windowing, widgets, and theming are still to come.
   `ArtboardNode`, and ViewModel data binding.
 - [MIDI keyboard](midi-keyboard.md) - `MidiKeyboardComponent`, multitouch
   playing, scroll buttons and the available / visible key ranges.
+- [List box](list-box.md) - `ListBox` and `ListBoxModel`, custom rows, change
+  notifications, touch scrolling and pull-to-refresh.
 
 ```{toctree}
 :hidden:
@@ -74,4 +76,5 @@ component-profiling
 code-editor
 artboard
 midi-keyboard
+list-box
 ```

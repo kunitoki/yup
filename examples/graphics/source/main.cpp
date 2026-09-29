@@ -165,6 +165,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
 #include "examples/LayoutFonts.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
+#include "examples/ListBox.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
 #include "examples/Lottie.h"
 #endif
@@ -360,6 +363,9 @@ public:
 #if YUP_EXAMPLE_GRAPHICS_DEMO_LayoutFonts
         addDemo ("Layout Fonts", [] { return std::make_unique<LayoutFontsExample>(); });
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_ListBox
+        addDemo ("List Box", [] { return std::make_unique<ListBoxDemo>(); });
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_Lottie
         addDemo ("Lottie", [] { return std::make_unique<LottieDemo>(); });
 #endif
@@ -434,8 +440,7 @@ public:
 
             listBox = std::make_unique<yup::ListBox>();
             listBox->setModel (listModel.get());
-            listBox->setRowHeight (30);
-            listBox->setRowWidth (200);
+            listBox->setRowSize (30);
             listBox->selectRow (0, false, yup::dontSendNotification);
             addAndMakeVisible (listBox.get());
         }
@@ -465,7 +470,7 @@ public:
             if (width > height)
             {
                 listBox->setOrientation (yup::ListBox::Orientation::vertical);
-                listBox->setRowHeight (30);
+                listBox->setRowSize (30);
                 listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
                 listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
 
@@ -479,8 +484,7 @@ public:
             else
             {
                 listBox->setOrientation (yup::ListBox::Orientation::horizontal);
-                listBox->setRowWidth (80);
-                listBox->setRowHeight (listBoxHeight);
+                listBox->setRowSize (80);
                 listBox->setVerticalScrollBarVisibility (yup::ScrollBar::VisibilityMode::alwaysHidden);
                 listBox->setHorizontalScrollBarVisibility (yup::ScrollBar::VisibilityMode::autoHide);
 
