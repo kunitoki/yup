@@ -165,10 +165,7 @@ public:
     */
     virtual var getDragSourceDescription (const Array<int>& selectedRows);
 
-protected:
-    /** Constructor. */
-    ListBoxModel() = default;
-
+    //==============================================================================
     /** Returns the row component as a T, creating one when it is null or of another type.
 
         Meant for refreshRowComponent(): recycled components are reused as they are, anything else is
@@ -189,6 +186,10 @@ protected:
         component = std::move (created);
         return result;
     }
+
+protected:
+    /** Constructor. */
+    ListBoxModel() = default;
 
 private:
     YUP_DECLARE_NON_COPYABLE (ListBoxModel)
