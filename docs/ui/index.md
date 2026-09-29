@@ -59,6 +59,9 @@ windowing, widgets, and theming are still to come.
   playing, scroll buttons and the available / visible key ranges.
 - [List box](list-box.md) - `ListBox` and `ListBoxModel`, custom rows, change
   notifications, touch scrolling and pull-to-refresh.
+- [Tree view](tree-view.md) - `TreeView` and `TreeViewItem`, lazy loading,
+  custom content, drag and drop reordering, `DataTree` mirroring and saved
+  openness state.
 
 ```{toctree}
 :hidden:
@@ -77,4 +80,5 @@ code-editor
 artboard
 midi-keyboard
 list-box
+tree-view
 ```

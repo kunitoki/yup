@@ -1854,6 +1854,192 @@ void registerYupGuiBindings (py::module_& m)
     listBoxStyle.attr ("refreshIndicatorColorId") = ListBox::Style::refreshIndicatorColorId;
     listBoxStyle.attr ("refreshIndicatorSizeId") = ListBox::Style::refreshIndicatorSizeId;
 
+    // ============================================================================================ yup::TreeViewItem
+
+    const auto toItemList = [] (const std::vector<TreeViewItem*>& items)
+    {
+        py::list result;
+
+        for (auto* item : items)
+            result.append (py::cast (item, py::return_value_policy::reference));
+
+        return result;
+    };
+
+    py::class_<TreeViewItem, PyTreeViewItem<>, py::smart_holder> classTreeViewItem (m, "TreeViewItem");
+
+    classTreeViewItem
+        .def (py::init<>())
+
+        // The parent takes the item over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("addSubItem", [] (TreeViewItem& self, std::unique_ptr<TreeViewItem> newItem, int index) -> TreeViewItem&
+        {
+            if (newItem == nullptr)
+                throw py::value_error ("newItem must not be None");
+
+            return self.addSubItem (std::move (newItem), index);
+        }, "newItem"_a, "index"_a = -1, py::return_value_policy::reference)
+        .def ("removeSubItem", &TreeViewItem::removeSubItem, "index"_a)
+        .def ("moveSubItem", &TreeViewItem::moveSubItem, "currentIndex"_a, "newIndex"_a)
+        .def ("clearSubItems", &TreeViewItem::clearSubItems)
+        .def ("getNumSubItems", &TreeViewItem::getNumSubItems)
+        .def ("getSubItem", &TreeViewItem::getSubItem, "index"_a, py::return_value_policy::reference)
+        .def ("getParentItem", &TreeViewItem::getParentItem, py::return_value_policy::reference)
+        .def ("getIndexInParent", &TreeViewItem::getIndexInParent)
+        .def ("getDepth", &TreeViewItem::getDepth)
+        .def ("getOwnerView", &TreeViewItem::getOwnerView, py::return_value_policy::reference)
+        .def ("isEqualToOrDescendantOf", &TreeViewItem::isEqualToOrDescendantOf, "possibleAncestor"_a)
+
+        .def ("setOpen", &TreeViewItem::setOpen, "shouldBeOpen"_a)
+        .def ("isOpen", &TreeViewItem::isOpen)
+        .def ("setOpenRecursively", &TreeViewItem::setOpenRecursively, "shouldBeOpen"_a)
+        .def ("isSelected", &TreeViewItem::isSelected)
+        .def ("setSelected", &TreeViewItem::setSelected, "shouldBeSelected"_a, "deselectOthers"_a = true)
+        .def ("itemChanged", &TreeViewItem::itemChanged)
+        .def ("repaintItem", &TreeViewItem::repaintItem)
+
+        .def ("mightContainSubItems", &TreeViewItem::mightContainSubItems)
+        .def ("getItemText", &TreeViewItem::getItemText)
+        .def ("getItemIcon", &TreeViewItem::getItemIcon)
+        .def ("getUniqueName", &TreeViewItem::getUniqueName)
+        .def ("getItemHeight", &TreeViewItem::getItemHeight)
+        .def ("itemOpennessChanged", &TreeViewItem::itemOpennessChanged, "isNowOpen"_a)
+        .def ("itemClicked", &TreeViewItem::itemClicked, "event"_a)
+        .def ("itemDoubleClicked", &TreeViewItem::itemDoubleClicked, "event"_a)
+        .def ("itemSelectionChanged", &TreeViewItem::itemSelectionChanged, "isNowSelected"_a)
+        .def ("getDragSourceDescription", &TreeViewItem::getDragSourceDescription)
+        .def ("isInterestedInDragSource", &TreeViewItem::isInterestedInDragSource, "details"_a)
+        .def ("itemDropped", &TreeViewItem::itemDropped, "details"_a, "insertIndex"_a);
+
+    // ============================================================================================ yup::DataTreeViewItem
+
+    py::class_<DataTreeViewItem, TreeViewItem, PyTreeViewItem<DataTreeViewItem>, py::smart_holder> classDataTreeViewItem (m, "DataTreeViewItem");
+
+    classDataTreeViewItem
+        .def (py::init<DataTree>(), "node"_a)
+        .def (py::init<DataTree, UndoManager::Ptr>(), "node"_a, "undoManager"_a)
+        .def ("getDataTree", &DataTreeViewItem::getDataTree)
+        .def ("getUndoManager", &DataTreeViewItem::getUndoManager);
+
+    // ============================================================================================ yup::TreeViewRow
+
+    py::class_<TreeViewRow, Component, PyComponent<TreeViewRow>, py::smart_holder> classTreeViewRow (m, "TreeViewRow");
+
+    classTreeViewRow
+        .def (py::init<>())
+        .def ("getItem", &TreeViewRow::getItem, py::return_value_policy::reference)
+        .def ("getOwnerView", &TreeViewRow::getOwnerView, py::return_value_policy::reference)
+        .def ("getDepth", &TreeViewRow::getDepth)
+        .def ("isItemSelected", &TreeViewRow::isItemSelected)
+        .def ("getOpenFraction", &TreeViewRow::getOpenFraction)
+        .def ("getItemHeight", &TreeViewRow::getItemHeight)
+        .def ("getItemText", &TreeViewRow::getItemText)
+        .def ("getItemIcon", &TreeViewRow::getItemIcon)
+        .def ("hasCustomContent", &TreeViewRow::hasCustomContent)
+        .def ("getDisclosureBounds", &TreeViewRow::getDisclosureBounds)
+        .def ("getIconBounds", &TreeViewRow::getIconBounds)
+        .def ("getTextBounds", &TreeViewRow::getTextBounds);
+
+    // ============================================================================================ yup::TreeView
+
+    // The item callbacks are write-only: an item reference would be copied into Python, and items are not copyable.
+    const auto setItemCallback = [] (std::function<void (TreeViewItem&)> TreeView::* member)
+    {
+        return [member] (TreeView& self, std::function<void (TreeViewItem*)> callback)
+        {
+            if (! callback)
+            {
+                self.*member = nullptr;
+                return;
+            }
+
+            self.*member = [callback = std::move (callback)] (TreeViewItem& item)
+            {
+                callback (&item);
+            };
+        };
+    };
+
+    py::class_<TreeView, Component, PyComponent<TreeView>, py::smart_holder> classTreeView (m, "TreeView");
+
+    classTreeView
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        // The view takes the root over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("setRootItem", [] (TreeView& self, std::unique_ptr<TreeViewItem> newRootItem)
+        {
+            self.setRootItem (std::move (newRootItem));
+        }, py::arg ("newRootItem").none (true))
+        .def ("getRootItem", &TreeView::getRootItem, py::return_value_policy::reference)
+        .def ("setRootItemVisible", &TreeView::setRootItemVisible, "shouldBeVisible"_a)
+        .def ("isRootItemVisible", &TreeView::isRootItemVisible)
+        .def ("setOpenCloseButtonsVisible", &TreeView::setOpenCloseButtonsVisible, "shouldBeVisible"_a)
+        .def ("areOpenCloseButtonsVisible", &TreeView::areOpenCloseButtonsVisible)
+
+        .def ("setIndentSize", &TreeView::setIndentSize, "newIndentSize"_a)
+        .def ("getIndentSize", &TreeView::getIndentSize)
+        .def ("setDefaultItemHeight", &TreeView::setDefaultItemHeight, "newHeight"_a)
+        .def ("getDefaultItemHeight", &TreeView::getDefaultItemHeight)
+        .def ("setIndentGuidesVisible", &TreeView::setIndentGuidesVisible, "shouldBeVisible"_a)
+        .def ("areIndentGuidesVisible", &TreeView::areIndentGuidesVisible)
+        .def ("setExpandAnimationTime", &TreeView::setExpandAnimationTime, "seconds"_a)
+        .def ("getExpandAnimationTime", &TreeView::getExpandAnimationTime)
+
+        .def ("setVerticalScrollBarVisibility", &TreeView::setVerticalScrollBarVisibility, "mode"_a)
+        .def ("setScrollPosition", &TreeView::setScrollPosition, "newPosition"_a, "animated"_a = false)
+        .def ("getScrollPosition", &TreeView::getScrollPosition)
+
+        .def ("setSelectionMode", &TreeView::setSelectionMode, "mode"_a)
+        .def ("getSelectionMode", &TreeView::getSelectionMode)
+        .def ("getNumSelectedItems", &TreeView::getNumSelectedItems)
+        .def ("getSelectedItems", [toItemList] (const TreeView& self)
+        {
+            return toItemList (self.getSelectedItems());
+        })
+        .def ("clearSelectedItems", &TreeView::clearSelectedItems)
+
+        .def ("getNumRowsInTree", &TreeView::getNumRowsInTree)
+        .def ("getItemOnRow", &TreeView::getItemOnRow, "rowIndex"_a, py::return_value_policy::reference)
+        .def ("getRowOf", &TreeView::getRowOf, "item"_a)
+        .def ("getItemAt", &TreeView::getItemAt, "position"_a, py::return_value_policy::reference)
+        .def ("getItemBounds", &TreeView::getItemBounds, "item"_a)
+        .def ("scrollToItem", &TreeView::scrollToItem,
+              "item"_a, "alignment"_a = ListBox::ScrollAlignment::nearest, "animated"_a = false)
+
+        .def ("getOpennessState", &TreeView::getOpennessState, "includeScrollPosition"_a)
+        .def ("restoreOpennessState", &TreeView::restoreOpennessState, "state"_a, "restoreSelection"_a)
+
+        .def_static ("getDraggedItems", [toItemList] (const DragAndDropSourceDetails& details)
+        {
+            return toItemList (TreeView::getDraggedItems (details));
+        }, "details"_a)
+
+        .def_readwrite ("onSelectionChanged", &TreeView::onSelectionChanged, "Called when the selection changes.")
+        .def_property ("onItemClicked", nullptr, setItemCallback (&TreeView::onItemClicked), "Called with the item whose row was clicked.")
+        .def_property ("onItemDoubleClicked", nullptr, setItemCallback (&TreeView::onItemDoubleClicked), "Called with the item whose row was double-clicked.")
+        .def_property ("onReturnKeyPressed", nullptr, setItemCallback (&TreeView::onReturnKeyPressed), "Called with the item on the current row when Return is pressed.")
+        .def_property ("onDeleteKeyPressed", nullptr, [toItemList] (TreeView& self, std::function<void (py::list)> callback)
+        {
+            if (! callback)
+            {
+                self.onDeleteKeyPressed = nullptr;
+                return;
+            }
+
+            self.onDeleteKeyPressed = [callback = std::move (callback), toItemList] (std::vector<TreeViewItem*> items)
+            {
+                py::gil_scoped_acquire gil;
+                callback (toItemList (items));
+            };
+        }, "Called with the selected items when Delete or Backspace is pressed.");
+
+    py::class_<TreeView::Style> treeViewStyle (classTreeView, "Style");
+    treeViewStyle.attr ("indentGuideColorId") = TreeView::Style::indentGuideColorId;
+    treeViewStyle.attr ("disclosureColorId") = TreeView::Style::disclosureColorId;
+    treeViewStyle.attr ("itemTextColorId") = TreeView::Style::itemTextColorId;
+    treeViewStyle.attr ("itemTextSelectedColorId") = TreeView::Style::itemTextSelectedColorId;
+    treeViewStyle.attr ("dropIndicatorColorId") = TreeView::Style::dropIndicatorColorId;
+
     // ============================================================================================ yup::ComboBox
 
     py::class_<ComboBox, Component, PyComboBox<>, py::smart_holder> classComboBox (m, "ComboBox");

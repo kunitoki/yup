@@ -781,6 +781,81 @@ struct PyListBoxModel : Base
 
 // ============================================================================================
 
+/** Trampoline for TreeViewItem and DataTreeViewItem.
+
+    Items are owned by their parent item or by the TreeView, so Python instances are handed over as
+    std::unique_ptr: trampoline_self_life_support keeps the Python object alive while C++ owns it,
+    which keeps the overrides reachable. refreshItemComponent is deliberately absent, for the same
+    ownership reason as ListBoxModel::refreshRowComponent, and so is DataTreeViewItem::createSubItem.
+*/
+template <class Base = yup::TreeViewItem>
+struct PyTreeViewItem : Base, pybind11::trampoline_self_life_support
+{
+    using Base::Base;
+
+    bool mightContainSubItems() const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, mightContainSubItems);
+    }
+
+    yup::String getItemText() const override
+    {
+        PYBIND11_OVERRIDE (yup::String, Base, getItemText);
+    }
+
+    yup::Image getItemIcon() const override
+    {
+        PYBIND11_OVERRIDE (yup::Image, Base, getItemIcon);
+    }
+
+    yup::String getUniqueName() const override
+    {
+        PYBIND11_OVERRIDE (yup::String, Base, getUniqueName);
+    }
+
+    float getItemHeight() const override
+    {
+        PYBIND11_OVERRIDE (float, Base, getItemHeight);
+    }
+
+    void itemOpennessChanged (bool isNowOpen) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemOpennessChanged, isNowOpen);
+    }
+
+    void itemClicked (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemClicked, event);
+    }
+
+    void itemDoubleClicked (const yup::MouseEvent& event) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDoubleClicked, event);
+    }
+
+    void itemSelectionChanged (bool isNowSelected) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemSelectionChanged, isNowSelected);
+    }
+
+    yup::var getDragSourceDescription() const override
+    {
+        PYBIND11_OVERRIDE (yup::var, Base, getDragSourceDescription);
+    }
+
+    bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) const override
+    {
+        PYBIND11_OVERRIDE (bool, Base, isInterestedInDragSource, details);
+    }
+
+    void itemDropped (const yup::DragAndDropSourceDetails& details, int insertIndex) override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemDropped, details, insertIndex);
+    }
+};
+
+// ============================================================================================
+
 /** Trampoline for TextEditor, which implements TextInputTarget's pure virtual.
 
     The bindings can only declare Component as TextEditor's Python base, so the TextInputTarget
