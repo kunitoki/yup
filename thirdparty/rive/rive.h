@@ -116,7 +116,11 @@
 
 #if YUP_RIVE_USE_OPENGL && YUP_APPLE
 #undef YUP_RIVE_USE_OPENGL
-#endif 
+#endif
+
+#if YUP_RIVE_USE_OPENGL && defined (__EMSCRIPTEN__) && RIVE_WEBGPU
+#undef YUP_RIVE_USE_OPENGL
+#endif
 
 #if YUP_RIVE_USE_OPENGL
 #if !defined(RIVE_DESKTOP_GL) && !defined(RIVE_WEBGL) && !defined(RIVE_ANDROID) && !YUP_ANDROID && !YUP_WASM

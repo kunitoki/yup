@@ -73,6 +73,7 @@
 #include "wgsl/yup_GlslAst.h"
 #include "wgsl/yup_GlslParser.h"
 #include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslTypeLegalizer.h"
 #include "wgsl/yup_WgslEmitter.h"
 #include "shading/yup_WgslTranspiler.h"
 #include "shading/yup_ShaderTranspiler.h"
