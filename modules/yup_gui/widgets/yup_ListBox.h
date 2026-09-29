@@ -747,6 +747,23 @@ public:
     /** Callback called when the selection changes. */
     std::function<void()> onSelectionChanged;
 
+    /** Called when the mouse moves onto a row, including onto the row's own child components.
+        Fingers never hover.
+
+        @param rowIndex  The row now under the mouse
+    */
+    std::function<void (int rowIndex)> onRowEntered;
+
+    /** Called when the mouse leaves a row. Not called when the hovered row is removed.
+
+        @param rowIndex  The row the mouse left
+    */
+    std::function<void (int rowIndex)> onRowExited;
+
+    /** Returns the row under the mouse, or -1. The theme highlights it with Style::hoveredRowBackgroundColorId
+        (ListBoxItem::Style::backgroundColorHoveredId for the built-in rows). */
+    int getHoveredRow() const noexcept;
+
     //==============================================================================
     /** Style identifiers for theming. */
     struct Style
@@ -844,6 +861,7 @@ private:
     void navigateTo (int rowIndex, const KeyModifiers& modifiers);
     void notifySelectionChanged();
     void updateHoveredRow (Point<float> position);
+    void setHoveredRow (int newHoveredRow);
 
     void dispatchPendingNotifications();
 

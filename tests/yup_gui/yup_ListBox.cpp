@@ -1671,6 +1671,99 @@ TEST_F (ListBoxTests, TheHoverGoesWhenTheMouseLeavesTheList)
     EXPECT_FALSE (item->isHovered());
 }
 
+TEST_F (ListBoxTests, RowsReportTheMouseEnteringAndLeaving)
+{
+    std::vector<String> events;
+    listBox->onRowEntered = [&] (int row) { events.push_back ("enter " + String (row)); };
+    listBox->onRowExited = [&] (int row) { events.push_back ("exit " + String (row)); };
+
+    const auto moveTo = [this] (Point<float> position)
+    {
+        listBox->mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), position));
+    };
+
+    EXPECT_EQ (-1, listBox->getHoveredRow());
+
+    moveTo (listBox->getRowBounds (2).getCenter());
+    EXPECT_EQ (2, listBox->getHoveredRow());
+
+    // Moving within the row reports nothing new.
+    moveTo (listBox->getRowBounds (2).getCenter().translated (10.0f, 0.0f));
+
+    moveTo (listBox->getRowBounds (4).getCenter());
+    listBox->mouseExit (MouseEvent (MouseEvent::noButtons, KeyModifiers(), Point<float> (-10.0f, -10.0f)));
+
+    EXPECT_EQ (-1, listBox->getHoveredRow());
+    EXPECT_EQ ((std::vector<String> { "enter 2", "exit 2", "enter 4", "exit 4" }), events);
+}
+
+TEST_F (ListBoxTests, MovingOntoARowsOwnChildKeepsTheRowHovered)
+{
+    int exits = 0;
+    listBox->onRowExited = [&] (int) { ++exits; };
+
+    const auto overRow = listBox->getRowBounds (3).getCenter();
+    listBox->mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), overRow));
+
+    // The list loses the mouse to a component inside the row, but the pointer is still over the row.
+    listBox->mouseExit (MouseEvent (MouseEvent::noButtons, KeyModifiers(), overRow));
+
+    EXPECT_EQ (3, listBox->getHoveredRow());
+    EXPECT_EQ (0, exits);
+}
+
+TEST_F (ListBoxTests, ATouchPressEndsTheMouseHover)
+{
+    std::vector<int> exited;
+    listBox->onRowExited = [&] (int row) { exited.push_back (row); };
+
+    listBox->mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), listBox->getRowBounds (2).getCenter()));
+    listBox->mouseDown (MouseEvent (MouseEvent::leftButton, KeyModifiers(), listBox->getRowBounds (5).getCenter()).withTouchIndex (0));
+
+    EXPECT_EQ (-1, listBox->getHoveredRow());
+    EXPECT_EQ (std::vector<int> ({ 2 }), exited);
+
+    listBox->mouseUp (MouseEvent (MouseEvent::leftButton, KeyModifiers(), listBox->getRowBounds (5).getCenter()).withTouchIndex (0));
+}
+
+TEST_F (ListBoxTests, WheelScrollingMovesTheHoverToTheRowUnderThePointer)
+{
+    listBox->setRowSize (50.0f);
+
+    std::vector<int> entered;
+    listBox->onRowEntered = [&] (int row) { entered.push_back (row); };
+
+    const auto position = listBox->getRowBounds (0).getCenter();
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), position);
+    listBox->mouseMove (event);
+
+    listBox->mouseWheel (event, MouseWheelData (0.0f, -1.0f));
+
+    if (listBox->getScrollPosition() == 0.0f)
+        listBox->mouseWheel (event, MouseWheelData (0.0f, 1.0f));
+
+    // Three rows of 50pt scrolled under a still pointer.
+    EXPECT_EQ (3, listBox->getHoveredRow());
+    EXPECT_EQ (std::vector<int> ({ 0, 3 }), entered);
+}
+
+TEST_F (ListBoxTests, TheHoveredRowFollowsInsertionsAndIsForgottenWhenRemoved)
+{
+    int exits = 0;
+    listBox->onRowExited = [&] (int) { ++exits; };
+
+    listBox->mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), listBox->getRowBounds (4).getCenter()));
+
+    model->numRows += 2;
+    listBox->rowsInserted (0, 2);
+    EXPECT_EQ (6, listBox->getHoveredRow());
+
+    model->numRows -= 1;
+    listBox->rowsRemoved (6, 1);
+    EXPECT_EQ (-1, listBox->getHoveredRow());
+    EXPECT_EQ (0, exits);
+}
+
 //==============================================================================
 // Touch Tests
 //==============================================================================

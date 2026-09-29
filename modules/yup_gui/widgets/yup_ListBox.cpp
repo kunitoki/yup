@@ -234,7 +234,7 @@ public:
         if (selected)
             backgroundColor = owner.findColor (ListBox::Style::selectedRowBackgroundColorId).value_or (Color (0xff3a7ebf));
         else if (hovered)
-            backgroundColor = owner.findColor (ListBox::Style::hoveredRowBackgroundColorId).value_or (Color (0x22ffffff));
+            backgroundColor = owner.findColor (ListBox::Style::hoveredRowBackgroundColorId).value_or (Color (0x14000000));
         else
             backgroundColor = owner.findColor (ListBox::Style::rowBackgroundColorId).value_or (Color (0x00000000));
 
@@ -1161,13 +1161,17 @@ void ListBox::mouseMove (const MouseEvent& event)
 
 void ListBox::mouseExit (const MouseEvent& event)
 {
-    ignoreUnused (event);
-
-    if (hoveredRow < 0)
+    if (event.isTouch())
         return;
 
-    hoveredRow = -1;
-    updateRowStates();
+    // The list also loses the mouse to the rows' own interactive children, still over their row.
+    const auto position = event.getPosition();
+    setHoveredRow (getLocalBounds().contains (position) ? getRowIndexAt (position) : -1);
+}
+
+int ListBox::getHoveredRow() const noexcept
+{
+    return hoveredRow;
 }
 
 void ListBox::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
@@ -1697,13 +1701,30 @@ void ListBox::notifySelectionChanged()
 
 void ListBox::updateHoveredRow (Point<float> position)
 {
-    const auto newHoveredRow = getRowIndexAt (position);
+    setHoveredRow (getRowIndexAt (position));
+}
 
+void ListBox::setHoveredRow (int newHoveredRow)
+{
     if (newHoveredRow == hoveredRow)
         return;
 
-    hoveredRow = newHoveredRow;
+    const auto previousRow = std::exchange (hoveredRow, newHoveredRow);
     updateRowStates();
+
+    const BailOutChecker checker (this);
+
+    if (previousRow >= 0 && onRowExited)
+    {
+        onRowExited (previousRow);
+
+        if (checker.shouldBailOut())
+            return;
+    }
+
+    // The exit callback may have moved the hover on already.
+    if (newHoveredRow >= 0 && hoveredRow == newHoveredRow && onRowEntered)
+        onRowEntered (newHoveredRow);
 }
 
 //==============================================================================
@@ -1741,8 +1762,12 @@ void ListBox::gestureDown (const MouseEvent& event)
     gesture.tapCancelled = wasMoving;
     gesture.pressedRow = wasMoving ? -1 : getRowIndexAt (position);
 
-    hoveredRow = -1;
-    updateRowStates();
+    // A finger takes over from the mouse.
+    const BailOutChecker checker (this);
+    setHoveredRow (-1);
+
+    if (checker.shouldBailOut())
+        return;
 
     scroller.beginDrag (axisOf (*this).main (position), gestureClock);
     dispatchPendingNotifications();

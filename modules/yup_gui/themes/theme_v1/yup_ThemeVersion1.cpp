@@ -1065,7 +1065,7 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
     if (item.isSelected())
         backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorSelectedId).value_or (Color (0xff3a7ebf));
     else if (item.isHovered())
-        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x22ffffff));
+        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x14000000));
     else
         backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorId).value_or (Color (0x00000000));
 
@@ -2098,7 +2098,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ListBox::Style::outlineColorId, Color (0xffcccccc));
     theme->setColor (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
     theme->setColor (ListBox::Style::selectedRowBackgroundColorId, Color (0xff3a7ebf));
-    theme->setColor (ListBox::Style::hoveredRowBackgroundColorId, Color (0x22ffffff));
+    theme->setColor (ListBox::Style::hoveredRowBackgroundColorId, Color (0x14000000));
     theme->setColor (ListBox::Style::refreshIndicatorColorId, Color (0xff4ebfff));
     theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
 
@@ -2107,7 +2107,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ListBoxItem::Style::textColorSelectedId, Colors::white);
     theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
     theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
-    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x22ffffff));
+    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
