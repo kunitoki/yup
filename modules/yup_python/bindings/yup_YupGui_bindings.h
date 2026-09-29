@@ -848,6 +848,16 @@ struct PyTreeViewItem : Base, pybind11::trampoline_self_life_support
         PYBIND11_OVERRIDE (void, Base, itemSelectionChanged, isNowSelected);
     }
 
+    void itemEntered() override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemEntered);
+    }
+
+    void itemExited() override
+    {
+        PYBIND11_OVERRIDE (void, Base, itemExited);
+    }
+
     yup::var getDragSourceDescription() const override
     {
         PYBIND11_OVERRIDE (yup::var, Base, getDragSourceDescription);

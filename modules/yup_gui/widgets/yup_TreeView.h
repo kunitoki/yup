@@ -188,6 +188,9 @@ public:
     /** Returns the item at a position in this component, or nullptr. */
     TreeViewItem* getItemAt (Point<float> position) const;
 
+    /** Returns the item under the mouse, or nullptr. Fingers never hover. */
+    TreeViewItem* getHoveredItem() const noexcept;
+
     /** Returns the bounds of an item's row in this component, or an empty rectangle when it is not visible. */
     Rectangle<float> getItemBounds (const TreeViewItem& item) const;
 
@@ -239,6 +242,13 @@ public:
     /** Called when an item's row is double-clicked. */
     std::function<void (TreeViewItem& item)> onItemDoubleClicked;
 
+    /** Called when the mouse moves onto an item's row, after TreeViewItem::itemEntered(). */
+    std::function<void (TreeViewItem& item)> onItemEntered;
+
+    /** Called when the mouse leaves an item's row, after TreeViewItem::itemExited(). Not called for an
+        item removed from the tree. */
+    std::function<void (TreeViewItem& item)> onItemExited;
+
     /** Called when Return is pressed, with the item on the current row. */
     std::function<void (TreeViewItem& item)> onReturnKeyPressed;
 
@@ -248,9 +258,8 @@ public:
     //==============================================================================
     /** Style identifiers for theming.
 
-        The rows also use the ListBox::Style colors for the background, the selection and the hover.
-        Colors set on the TreeView reach its rows. The current row outline is transparent by default;
-        set ListBox::Style::currentRowOutlineColorId on the TreeView to show it.
+        The rows also use the ListBox::Style colors for the background and the selection, while the
+        hovered row is painted with itemHoveredColorId. Colors set on the TreeView reach its rows.
     */
     struct Style
     {
@@ -259,6 +268,7 @@ public:
         static inline const Identifier itemTextColorId { "treeViewItemText" };
         static inline const Identifier itemTextSelectedColorId { "treeViewItemTextSelected" };
         static inline const Identifier dropIndicatorColorId { "treeViewDropIndicator" };
+        static inline const Identifier itemHoveredColorId { "treeViewItemHovered" };
     };
 
     //==============================================================================
@@ -348,6 +358,8 @@ private:
     void rebuildRows (const std::vector<TreeViewItem*>& itemsToSelect, TreeViewItem* itemToMakeCurrent);
     void ensureHiddenRootIsOpen();
     void forgetItems (const TreeViewItem& subtree);
+    void updateHoveredItem (const MouseEvent& event, bool pointerLeftList);
+    void setHoveredItem (TreeViewItem* newItem);
     bool isRowListInSync() const;
 
     void expandItem (TreeViewItem& item);
@@ -399,6 +411,11 @@ private:
     std::optional<DropTarget> dropTarget;
     std::optional<DragAndDropSourceDetails> activeDrag;
     TreeViewItem* hoverExpandItem = nullptr;
+
+    /** The item under the mouse, and the item whose enter or exit notification is running: cleared when
+        it is removed, so the notification does not reach a deleted item. */
+    TreeViewItem* hoveredItem = nullptr;
+    TreeViewItem* notifyingHoverItem = nullptr;
     double hoverExpandSeconds = 0.0;
     float autoScrollSpeed = 0.0f;
 

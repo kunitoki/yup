@@ -73,6 +73,16 @@ protected:
             selectionChanges.push_back (isNowSelected);
         }
 
+        void itemEntered() override { ++enteredCount; }
+
+        void itemExited() override
+        {
+            ++exitedCount;
+
+            if (onExited)
+                onExited();
+        }
+
         var getDragSourceDescription() const override
         {
             return draggable ? var (name) : var();
@@ -97,6 +107,9 @@ protected:
         bool openFirstChild = false;
         int opennessChangeCount = 0;
         int clickCount = 0;
+        int enteredCount = 0;
+        int exitedCount = 0;
+        std::function<void()> onExited;
         std::vector<bool> selectionChanges;
         bool draggable = true;
         bool acceptsDrops = true;
@@ -196,6 +209,17 @@ protected:
     {
         for (int index = 0; index < count; ++index)
             tree->refreshDisplay (1.0 / 60.0);
+    }
+
+    /** Moves the mouse (or a finger) to the middle of a row. */
+    void hoverRow (int rowIndex, bool isTouch = false)
+    {
+        auto event = MouseEvent (MouseEvent::noButtons, KeyModifiers(), list().getRowBounds (rowIndex).getCenter());
+
+        if (isTouch)
+            event = event.withTouchIndex (0);
+
+        list().mouseMove (event);
     }
 
     float heightOf (const String& name) const
@@ -342,6 +366,122 @@ TEST_F (TreeViewTests, AnItemThatStopsPaintingAnIconGivesTheSpaceBack)
     auto* row = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
     ASSERT_NE (nullptr, row);
     EXPECT_TRUE (row->getIconBounds().isEmpty());
+}
+
+TEST_F (TreeViewTests, TheMouseEntersAndExitsItems)
+{
+    buildFlatTree (3);
+
+    std::vector<String> events;
+    tree->onItemEntered = [&] (TreeViewItem& item) { events.push_back ("enter " + item.getItemText()); };
+    tree->onItemExited = [&] (TreeViewItem& item) { events.push_back ("exit " + item.getItemText()); };
+
+    hoverRow (0);
+    EXPECT_EQ (&find ("0"), tree->getHoveredItem());
+    EXPECT_TRUE (find ("0").isHovered());
+    EXPECT_EQ (1, find ("0").enteredCount);
+
+    auto* row = dynamic_cast<TreeViewRow*> (list().getComponentForRow (0));
+    ASSERT_NE (nullptr, row);
+    EXPECT_TRUE (row->isItemHovered());
+
+    // Moving within the same row reports nothing new.
+    list().mouseMove (MouseEvent (MouseEvent::noButtons, KeyModifiers(), list().getRowBounds (0).getCenter().translated (10.0f, 0.0f)));
+    EXPECT_EQ (1, find ("0").enteredCount);
+
+    hoverRow (1);
+    EXPECT_EQ (1, find ("0").exitedCount);
+    EXPECT_FALSE (find ("0").isHovered());
+    EXPECT_FALSE (row->isItemHovered());
+    EXPECT_EQ (1, find ("1").enteredCount);
+
+    list().mouseExit (MouseEvent (MouseEvent::noButtons, KeyModifiers(), Point<float> (-10.0f, -10.0f)));
+    EXPECT_EQ (nullptr, tree->getHoveredItem());
+    EXPECT_EQ (1, find ("1").exitedCount);
+
+    EXPECT_EQ ((std::vector<String> { "enter 0", "exit 0", "enter 1", "exit 1" }), events);
+}
+
+TEST_F (TreeViewTests, MovingOntoARowsOwnChildKeepsTheItemHovered)
+{
+    buildFlatTree (3);
+    hoverRow (1);
+
+    // The list loses the mouse to a component inside the row, but the pointer is still over the item.
+    list().mouseExit (MouseEvent (MouseEvent::noButtons, KeyModifiers(), list().getRowBounds (1).getCenter()));
+
+    EXPECT_EQ (&find ("1"), tree->getHoveredItem());
+    EXPECT_EQ (0, find ("1").exitedCount);
+}
+
+TEST_F (TreeViewTests, TouchDoesNotHoverItems)
+{
+    buildFlatTree (3);
+
+    hoverRow (0, true);
+
+    EXPECT_EQ (nullptr, tree->getHoveredItem());
+    EXPECT_EQ (0, find ("0").enteredCount);
+}
+
+TEST_F (TreeViewTests, RemovingTheHoveredItemForgetsItWithoutNotifying)
+{
+    auto& root = buildFlatTree (3);
+    hoverRow (1);
+
+    root.removeSubItem (1);
+
+    EXPECT_EQ (nullptr, tree->getHoveredItem());
+
+    hoverRow (0);
+    EXPECT_EQ (&find ("0"), tree->getHoveredItem());
+}
+
+TEST_F (TreeViewTests, AnItemMayRemoveItselfWhenTheMouseLeavesIt)
+{
+    auto& root = buildFlatTree (3);
+    int exitCallbacks = 0;
+    tree->onItemExited = [&] (TreeViewItem&) { ++exitCallbacks; };
+
+    hoverRow (1);
+    find ("1").onExited = [&root] { root.removeSubItem (1); };
+
+    hoverRow (0);
+
+    // The item is gone, so the view does not report it; the item now under the mouse is entered.
+    EXPECT_EQ (0, exitCallbacks);
+    EXPECT_EQ (2, root.getNumSubItems());
+    EXPECT_EQ (&find ("0"), tree->getHoveredItem());
+    EXPECT_EQ (1, find ("0").enteredCount);
+}
+
+TEST_F (TreeViewTests, WheelScrollingUpdatesTheHoveredItem)
+{
+    buildFlatTree (50);
+    hoverRow (0);
+    ASSERT_EQ (&find ("0"), tree->getHoveredItem());
+
+    const auto position = list().getRowBounds (0).getCenter();
+    const MouseEvent event (MouseEvent::noButtons, KeyModifiers(), position);
+
+    list().mouseWheel (event, MouseWheelData (0.0f, -1.0f));
+
+    if (tree->getScrollPosition() == 0.0f)
+        list().mouseWheel (event, MouseWheelData (0.0f, 1.0f));
+
+    ASSERT_GT (tree->getScrollPosition(), 0.0f);
+    EXPECT_NE (&find ("0"), tree->getHoveredItem());
+    EXPECT_EQ (tree->getItemAt (position), tree->getHoveredItem());
+}
+
+TEST_F (TreeViewTests, SettingANewRootForgetsTheHoveredItem)
+{
+    buildFlatTree (3);
+    hoverRow (0);
+
+    buildFlatTree (2);
+
+    EXPECT_EQ (nullptr, tree->getHoveredItem());
 }
 
 TEST_F (TreeViewTests, HiddenRootIsOpenedWhenSet)

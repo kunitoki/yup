@@ -160,6 +160,9 @@ public:
     */
     void setSelected (bool shouldBeSelected, bool deselectOthers = true);
 
+    /** Returns true while the mouse is over the item's row. Fingers never hover. */
+    bool isHovered() const;
+
     //==============================================================================
     /** Tells the TreeView that what this item shows changed, including its height. */
     void itemChanged();
@@ -248,6 +251,15 @@ public:
 
     /** Called when the item gets selected or deselected. */
     virtual void itemSelectionChanged (bool isNowSelected);
+
+    /** Called when the mouse moves onto the item's row, including onto the row's own child components. */
+    virtual void itemEntered();
+
+    /** Called when the mouse leaves the item's row.
+
+        Not called when the item is removed from the tree while hovered.
+    */
+    virtual void itemExited();
 
     //==============================================================================
     /** Returns a description of the item for dragging it out of the TreeView.

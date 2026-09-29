@@ -148,6 +148,34 @@ public:
             ListBox::keyDown (key, position);
     }
 
+    void mouseMove (const MouseEvent& event) override
+    {
+        ListBox::mouseMove (event);
+        owner.updateHoveredItem (event, false);
+    }
+
+    void mouseEnter (const MouseEvent& event) override
+    {
+        ListBox::mouseEnter (event);
+        owner.updateHoveredItem (event, false);
+    }
+
+    void mouseExit (const MouseEvent& event) override
+    {
+        ListBox::mouseExit (event);
+
+        // The list also loses the mouse to the rows' own interactive children, still over their item.
+        owner.updateHoveredItem (event, ! getLocalBounds().contains (event.getPosition()));
+    }
+
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) override
+    {
+        ListBox::mouseWheel (event, wheelData);
+
+        // The content moved under a still pointer.
+        owner.updateHoveredItem (event, false);
+    }
+
     void mouseDown (const MouseEvent& event) override
     {
         if (! owner.animation.has_value())
@@ -206,8 +234,8 @@ TreeView::TreeView (StringRef componentID)
     // The list paints everything, this component only paints the drop indicator over it.
     setOpaque (false);
 
-    // The selection is enough to show where the keyboard is, so the current row gets no outline.
-    setColor (ListBox::Style::currentRowOutlineColorId, Colors::transparentBlack);
+    // The rows paint the hover of the item under the mouse themselves, see TreeView::Style::itemHoveredColorId.
+    setColor (ListBox::Style::hoveredRowBackgroundColorId, Colors::transparentBlack);
 
     model = std::make_unique<TreeListModel> (*this);
 
@@ -235,6 +263,9 @@ void TreeView::setRootItem (std::unique_ptr<TreeViewItem> newRootItem)
 
     finishAnimation();
     clearDragState();
+
+    hoveredItem = nullptr;
+    notifyingHoverItem = nullptr;
 
     // The previous items stay alive until the new rows are in, so their selection callbacks can run.
     auto previousRootItem = std::move (rootItem);
@@ -429,6 +460,11 @@ TreeViewItem* TreeView::getItemAt (Point<float> position) const
 {
     // The list fills this component, so positions need no conversion.
     return getItemOnRow (list->getRowAt (position));
+}
+
+TreeViewItem* TreeView::getHoveredItem() const noexcept
+{
+    return hoveredItem;
 }
 
 Rectangle<float> TreeView::getItemBounds (const TreeViewItem& item) const
@@ -1198,6 +1234,12 @@ void TreeView::forgetItems (const TreeViewItem& subtree)
     if (isInside (hoverExpandItem))
         hoverExpandItem = nullptr;
 
+    if (isInside (hoveredItem))
+        hoveredItem = nullptr;
+
+    if (isInside (notifyingHoverItem))
+        notifyingHoverItem = nullptr;
+
     if (dropTarget.has_value() && isInside (dropTarget->parent))
     {
         dropTarget.reset();
@@ -1594,6 +1636,58 @@ void TreeView::updateDragState (const DragAndDropSourceDetails& details)
 
     dropTarget = findDropTarget (details);
     repaint();
+}
+
+void TreeView::updateHoveredItem (const MouseEvent& event, bool pointerLeftList)
+{
+    if (event.isTouch())
+        return;
+
+    setHoveredItem (pointerLeftList ? nullptr : getItemAt (event.getPosition()));
+}
+
+void TreeView::setHoveredItem (TreeViewItem* newItem)
+{
+    if (newItem == hoveredItem)
+        return;
+
+    auto* previousItem = std::exchange (hoveredItem, newItem);
+
+    if (previousItem != nullptr)
+        repaintItem (*previousItem);
+
+    if (newItem != nullptr)
+        repaintItem (*newItem);
+
+    const BailOutChecker checker (this);
+
+    // Each notification can change the tree: an item removed meanwhile is not reported any further.
+    if (previousItem != nullptr)
+    {
+        notifyingHoverItem = previousItem;
+        previousItem->itemExited();
+
+        if (checker.shouldBailOut())
+            return;
+
+        if (std::exchange (notifyingHoverItem, nullptr) != nullptr && onItemExited)
+            onItemExited (*previousItem);
+
+        if (checker.shouldBailOut())
+            return;
+    }
+
+    if (newItem == nullptr || hoveredItem != newItem)
+        return;
+
+    notifyingHoverItem = newItem;
+    newItem->itemEntered();
+
+    if (checker.shouldBailOut())
+        return;
+
+    if (std::exchange (notifyingHoverItem, nullptr) != nullptr && onItemEntered)
+        onItemEntered (*newItem);
 }
 
 void TreeView::clearDragState()

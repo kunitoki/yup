@@ -267,7 +267,12 @@ TEST_F (TreeViewItemTests, DefaultsForViewHooks)
     EXPECT_FALSE (root.isInterestedInDragSource (details));
     EXPECT_FALSE (root.getItemIcon().isValid());
     EXPECT_FALSE (root.hasItemIcon());
+    EXPECT_FALSE (root.isHovered());
     EXPECT_LE (root.getItemHeight(), 0.0f);
+
+    // Nothing to report - and reporting anyway is safe.
+    root.itemEntered();
+    root.itemExited();
 
     auto component = std::unique_ptr<Component> (new Component());
     root.refreshItemComponent (component);

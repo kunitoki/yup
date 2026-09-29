@@ -210,6 +210,11 @@ bool TreeViewItem::isSelected() const
     return ownerView != nullptr && ownerView->isItemSelected (*this);
 }
 
+bool TreeViewItem::isHovered() const
+{
+    return ownerView != nullptr && ownerView->getHoveredItem() == this;
+}
+
 void TreeViewItem::setSelected (bool shouldBeSelected, bool deselectOthers)
 {
     if (ownerView != nullptr)
@@ -296,6 +301,10 @@ void TreeViewItem::itemSelectionChanged (bool isNowSelected)
 {
     ignoreUnused (isNowSelected);
 }
+
+void TreeViewItem::itemEntered() {}
+
+void TreeViewItem::itemExited() {}
 
 //==============================================================================
 var TreeViewItem::getDragSourceDescription() const

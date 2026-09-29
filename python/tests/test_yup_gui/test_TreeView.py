@@ -321,3 +321,19 @@ def test_item_icon_hooks():
     tree.setRootItem(IconItem(True))
 
     assert tree.getRootItem().hasItemIcon() is True
+
+
+def test_hover_defaults_and_style():
+    tree = yup.TreeView()
+    tree.setRootItem(Item("root"))
+
+    assert tree.getHoveredItem() is None
+    assert tree.getRootItem().isHovered() is False
+    assert str(yup.TreeView.Style.itemHoveredColorId) == "treeViewItemHovered"
+
+    # Assigning and clearing the callbacks is safe without a mouse.
+    tree.onItemEntered = lambda item: None
+    tree.onItemExited = lambda item: None
+    tree.onItemEntered = None
+    tree.onItemExited = None
+

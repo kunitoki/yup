@@ -22,16 +22,16 @@
 #pragma once
 
 //==============================================================================
-/** Four trees side by side.
+/** Three trees side by side.
 
     - Files: the home folder, loaded lazily one folder at a time as it opens, with file and folder
       icons drawn by the items themselves (paintItemIcon).
-    - Tasks: plain items that can be reordered and regrouped by drag and drop, with a backlog of
-      thousands of tasks to scroll through.
     - DataTree: a DataTree document mirrored by DataTreeViewItems. Drag and drop moves the nodes,
       and the buttons add, delete, undo and redo.
     - Widgets: custom row components (refreshItemComponent) with a type icon on the left and
-      buttons on the right that add and remove widgets.
+      buttons on the right, shown on the hovered or selected row, that add and remove widgets, and
+      thousands of widgets across hundreds of screens to scroll through. The buttons below it
+      expand or collapse everything.
 
     Open and close with the disclosure buttons, a double-click, Left and Right, or Alt for a whole
     branch.
@@ -46,10 +46,6 @@ public:
         fileTree.setRootItem (std::make_unique<FileItem> (yup::File::getSpecialLocation (yup::File::userHomeDirectory)));
         fileTree.getRootItem()->setOpen (true);
 
-        setupTree (taskTree, taskTitle, "Tasks");
-        taskTree.setRootItemVisible (false);
-        taskTree.setRootItem (createTasks());
-
         setupTree (dataTree, dataTitle, "DataTree");
         dataTree.setRootItemVisible (false);
         dataTree.setRootItem (std::make_unique<NodeItem> (createDocument(), undoManager));
@@ -62,6 +58,10 @@ public:
         widgetTree.setRootItemVisible (false);
         widgetTree.setDefaultItemHeight (30.0f);
         widgetTree.setRootItem (createWidgets());
+        widgetTree.onItemEntered = [this] (yup::TreeViewItem& item)
+        {
+            status.setText ("Widgets: over " + item.getItemText(), yup::dontSendNotification);
+        };
 
         for (auto [button, text] : { std::pair { &addButton, "Add" },
                                      std::pair { &deleteButton, "Delete" },
@@ -77,8 +77,16 @@ public:
         undoButton.onClick = [this] { undoManager->undo(); };
         redoButton.onClick = [this] { undoManager->redo(); };
 
+        expandAllButton.setButtonText ("Expand all");
+        expandAllButton.onClick = [this] { setAllWidgetsOpen (true); };
+        addAndMakeVisible (expandAllButton);
+
+        collapseAllButton.setButtonText ("Collapse all");
+        collapseAllButton.onClick = [this] { setAllWidgetsOpen (false); };
+        addAndMakeVisible (collapseAllButton);
+
         addAndMakeVisible (status);
-        status.setText ("Drag tasks and nodes to reorder them", yup::dontSendNotification);
+        status.setText ("Drag nodes to reorder them", yup::dontSendNotification);
     }
 
     void paint (yup::Graphics& g) override
@@ -94,10 +102,9 @@ public:
         status.setBounds (bounds.removeFromBottom (24.0f));
         bounds.removeFromBottom (4.0f);
 
-        const auto panelWidth = bounds.getWidth() / 4.0f;
+        const auto panelWidth = bounds.getWidth() / 3.0f;
 
         for (auto [title, tree] : { std::pair { &fileTitle, &fileTree },
-                                    std::pair { &taskTitle, &taskTree },
                                     std::pair { &dataTitle, &dataTree },
                                     std::pair { &widgetTitle, &widgetTree } })
         {
@@ -105,21 +112,37 @@ public:
             title->setBounds (panel.removeFromTop (24.0f));
 
             if (tree == &dataTree)
-            {
-                auto buttons = panel.removeFromBottom (32.0f);
-                const auto buttonWidth = buttons.getWidth() / 4.0f;
-
-                for (auto* button : { &addButton, &deleteButton, &undoButton, &redoButton })
-                    button->setBounds (buttons.removeFromLeft (buttonWidth).reduced (2.0f));
-
-                panel.removeFromBottom (4.0f);
-            }
+                layoutButtons (panel, { &addButton, &deleteButton, &undoButton, &redoButton });
+            else if (tree == &widgetTree)
+                layoutButtons (panel, { &expandAllButton, &collapseAllButton });
 
             tree->setBounds (panel);
         }
     }
 
 private:
+    //==============================================================================
+    /** Lays a row of buttons out at the bottom of a panel. */
+    static void layoutButtons (yup::Rectangle<float>& panel, std::initializer_list<yup::TextButton*> buttons)
+    {
+        auto area = panel.removeFromBottom (32.0f);
+        const auto buttonWidth = area.getWidth() / static_cast<float> (buttons.size());
+
+        for (auto* button : buttons)
+            button->setBounds (area.removeFromLeft (buttonWidth).reduced (2.0f));
+
+        panel.removeFromBottom (4.0f);
+    }
+
+    /** Opens or closes every widget. The root is hidden and stays open, so its sub-items are the top level. */
+    void setAllWidgetsOpen (bool shouldBeOpen)
+    {
+        auto* root = widgetTree.getRootItem();
+
+        for (int index = 0; index < root->getNumSubItems(); ++index)
+            root->getSubItem (index)->setOpenRecursively (shouldBeOpen);
+    }
+
     //==============================================================================
     /** A file or folder; a folder lists its content the first time it opens. */
     class FileItem : public yup::TreeViewItem
@@ -211,73 +234,6 @@ private:
     private:
         yup::File file;
         bool directory = false;
-    };
-
-    //==============================================================================
-    /** A task or a group of tasks. Tasks dragged from this tree can be dropped among the sub-items of any item. */
-    class TaskItem : public yup::TreeViewItem
-    {
-    public:
-        explicit TaskItem (yup::String name, bool isGroup = false)
-            : name (std::move (name))
-            , group (isGroup)
-        {
-        }
-
-        yup::String getItemText() const override
-        {
-            return name;
-        }
-
-        bool mightContainSubItems() const override
-        {
-            return group || getNumSubItems() > 0;
-        }
-
-        yup::var getDragSourceDescription() const override
-        {
-            return name;
-        }
-
-        bool isInterestedInDragSource (const yup::DragAndDropSourceDetails& details) const override
-        {
-            const auto dragged = yup::TreeView::getDraggedItems (details);
-
-            return ! dragged.empty() && std::all_of (dragged.begin(), dragged.end(), [] (yup::TreeViewItem* item)
-            {
-                return dynamic_cast<TaskItem*> (item) != nullptr;
-            });
-        }
-
-        void itemDropped (const yup::DragAndDropSourceDetails& details, int insertIndex) override
-        {
-            const auto dragged = yup::TreeView::getDraggedItems (details);
-
-            for (auto* item : dragged)
-            {
-                auto* oldParent = item->getParentItem();
-                const auto oldIndex = item->getIndexInParent();
-
-                if (oldParent == this)
-                {
-                    // The insertion index counts the item itself when it sits before it.
-                    const auto newIndex = yup::jmin (getNumSubItems() - 1, insertIndex > oldIndex ? insertIndex - 1 : insertIndex);
-                    moveSubItem (oldIndex, newIndex);
-                    insertIndex = newIndex + 1;
-                }
-                else
-                {
-                    addSubItem (oldParent->removeSubItem (oldIndex), insertIndex++);
-                }
-            }
-
-            for (size_t index = 0; index < dragged.size(); ++index)
-                dragged[index]->setSelected (true, index == 0);
-        }
-
-    private:
-        yup::String name;
-        bool group = false;
     };
 
     //==============================================================================
@@ -468,6 +424,11 @@ private:
 
         bool mightContainSubItems() const override { return getNumSubItems() > 0; }
 
+        // The row shows its buttons while hovered, so it is refreshed as the mouse comes and goes.
+        void itemEntered() override { itemChanged(); }
+
+        void itemExited() override { itemChanged(); }
+
         void refreshItemComponent (std::unique_ptr<yup::Component>& component) override
         {
             reuseOrCreate<WidgetRowContent> (component).setup (*this);
@@ -509,6 +470,32 @@ private:
         header.add ("ComponentName", WidgetKind::button);
         header.add ("SubHeader", WidgetKind::text);
 
+        // Hundreds of closed screens of about twenty widgets each, to scroll through and to expand all at once.
+        static const char* const screenNames[] = { "Home", "Search", "Profile", "Settings", "Checkout", "Inbox", "Detail", "Onboarding" };
+
+        for (int index = 1; index <= 250; ++index)
+        {
+            auto& screen = root->add (yup::String (screenNames[index % 8]) + "Screen" + yup::String (index), WidgetKind::scaffold);
+            auto& body = screen.add ("Column", WidgetKind::column);
+
+            auto& top = body.add ("Header", WidgetKind::row);
+            top.add ("Back", WidgetKind::button);
+            top.add ("Title", WidgetKind::text);
+
+            auto& cards = body.add ("Content", WidgetKind::column);
+
+            for (int cardIndex = 1; cardIndex <= 4; ++cardIndex)
+            {
+                auto& cardItem = cards.add ("Card " + yup::String (cardIndex), WidgetKind::container);
+                cardItem.add ("Thumbnail", WidgetKind::image);
+                cardItem.add ("Caption", WidgetKind::text);
+            }
+
+            body.add ("Footer", WidgetKind::row).add ("Action", WidgetKind::button);
+
+            screen.setOpenRecursively (false);
+        }
+
         return root;
     }
 
@@ -524,34 +511,6 @@ private:
             status.setText (name + ": " + yup::String (tree.getNumSelectedItems()) + " selected", yup::dontSendNotification);
         };
         addAndMakeVisible (tree);
-    }
-
-    static std::unique_ptr<yup::TreeViewItem> createTasks()
-    {
-        auto root = std::make_unique<TaskItem> ("Tasks", true);
-
-        const auto addGroup = [&root] (const char* name, std::initializer_list<const char*> tasks) -> yup::TreeViewItem&
-        {
-            auto& group = root->addSubItem (std::make_unique<TaskItem> (name, true));
-
-            for (const auto* task : tasks)
-                group.addSubItem (std::make_unique<TaskItem> (task));
-
-            group.setOpen (true);
-            return group;
-        };
-
-        addGroup ("Today", { "Write the release notes", "Review the tree view", "Fix the flaky test" });
-        addGroup ("This week", { "Plan the sprint", "Update the dependencies" });
-        addGroup ("Someday", {});
-
-        auto& backlog = addGroup ("Backlog", {});
-        backlog.setOpen (false);
-
-        for (int index = 1; index <= 5000; ++index)
-            backlog.addSubItem (std::make_unique<TaskItem> ("Backlog task " + yup::String (index)));
-
-        return root;
     }
 
     static yup::DataTree createNode (const yup::String& name, std::initializer_list<yup::DataTree> children = {})
@@ -613,16 +572,20 @@ private:
     yup::UndoManager::Ptr undoManager { new yup::UndoManager() };
     int nodeCounter = 0;
 
-    yup::Label fileTitle, taskTitle, dataTitle, widgetTitle, status;
-    yup::TreeView fileTree, taskTree, dataTree, widgetTree;
+    yup::Label fileTitle, dataTitle, widgetTitle, status;
+    yup::TreeView fileTree, dataTree, widgetTree;
     yup::TextButton addButton, deleteButton, undoButton, redoButton;
+    yup::TextButton expandAllButton, collapseAllButton;
 };
 
 //==============================================================================
 inline void TreeViewDemo::WidgetRowContent::setup (WidgetItem& newItem)
 {
     item = &newItem;
-    addButton.setVisible (item->canHaveChildren());
+
+    const auto showsActions = item->isHovered() || item->isSelected();
+    addButton.setVisible (showsActions && item->canHaveChildren());
+    removeButton.setVisible (showsActions);
     repaint();
 }
 
@@ -646,11 +609,20 @@ inline void TreeViewDemo::WidgetRowContent::paint (yup::Graphics& g)
 
     const auto textArea = bounds.withTrimmedLeft (4.0f).withTrimmedRight (bounds.getHeight() * 2.0f + 4.0f);
 
+    // One line, truncated with an ellipsis when the panel is too narrow.
+    yup::StyledText styledText;
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (textArea.getSize());
+        modifier.setHorizontalAlign (yup::StyledText::left);
+        modifier.setVerticalAlign (yup::StyledText::middle);
+        modifier.setOverflow (yup::StyledText::ellipsis);
+        modifier.setWrap (yup::StyledText::noWrap);
+        modifier.appendText (item->name, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f));
+    }
+
     g.setFillColor (item->kind == WidgetKind::button ? yup::Color (0xff8f6bff) : textColor);
-    g.fillFittedText (item->name,
-                      yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f),
-                      textArea,
-                      yup::Justification::centerLeft);
+    g.fillFittedText (styledText, textArea);
 }
 
 inline void TreeViewDemo::WidgetRowContent::addChild()

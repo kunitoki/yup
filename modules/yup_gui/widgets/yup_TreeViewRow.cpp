@@ -83,6 +83,11 @@ bool TreeViewRow::isItemSelected() const noexcept
     return selected;
 }
 
+bool TreeViewRow::isItemHovered() const noexcept
+{
+    return ownerView != nullptr && item != nullptr && ownerView->getHoveredItem() == item;
+}
+
 float TreeViewRow::getOpenFraction() const
 {
     if (ownerView == nullptr || item == nullptr)

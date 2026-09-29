@@ -1893,6 +1893,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("isOpen", &TreeViewItem::isOpen)
         .def ("setOpenRecursively", &TreeViewItem::setOpenRecursively, "shouldBeOpen"_a)
         .def ("isSelected", &TreeViewItem::isSelected)
+        .def ("isHovered", &TreeViewItem::isHovered)
         .def ("setSelected", &TreeViewItem::setSelected, "shouldBeSelected"_a, "deselectOthers"_a = true)
         .def ("itemChanged", &TreeViewItem::itemChanged)
         .def ("repaintItem", &TreeViewItem::repaintItem)
@@ -1908,6 +1909,8 @@ void registerYupGuiBindings (py::module_& m)
         .def ("itemClicked", &TreeViewItem::itemClicked, "event"_a)
         .def ("itemDoubleClicked", &TreeViewItem::itemDoubleClicked, "event"_a)
         .def ("itemSelectionChanged", &TreeViewItem::itemSelectionChanged, "isNowSelected"_a)
+        .def ("itemEntered", &TreeViewItem::itemEntered)
+        .def ("itemExited", &TreeViewItem::itemExited)
         .def ("getDragSourceDescription", &TreeViewItem::getDragSourceDescription)
         .def ("isInterestedInDragSource", &TreeViewItem::isInterestedInDragSource, "details"_a)
         .def ("itemDropped", &TreeViewItem::itemDropped, "details"_a, "insertIndex"_a);
@@ -1932,6 +1935,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getOwnerView", &TreeViewRow::getOwnerView, py::return_value_policy::reference)
         .def ("getDepth", &TreeViewRow::getDepth)
         .def ("isItemSelected", &TreeViewRow::isItemSelected)
+        .def ("isItemHovered", &TreeViewRow::isItemHovered)
         .def ("getOpenFraction", &TreeViewRow::getOpenFraction)
         .def ("getItemHeight", &TreeViewRow::getItemHeight)
         .def ("getItemText", &TreeViewRow::getItemText)
@@ -2003,6 +2007,7 @@ void registerYupGuiBindings (py::module_& m)
         .def ("getItemOnRow", &TreeView::getItemOnRow, "rowIndex"_a, py::return_value_policy::reference)
         .def ("getRowOf", &TreeView::getRowOf, "item"_a)
         .def ("getItemAt", &TreeView::getItemAt, "position"_a, py::return_value_policy::reference)
+        .def ("getHoveredItem", &TreeView::getHoveredItem, py::return_value_policy::reference)
         .def ("getItemBounds", &TreeView::getItemBounds, "item"_a)
         .def ("scrollToItem", &TreeView::scrollToItem,
               "item"_a, "alignment"_a = ListBox::ScrollAlignment::nearest, "animated"_a = false)
@@ -2018,6 +2023,8 @@ void registerYupGuiBindings (py::module_& m)
         .def_readwrite ("onSelectionChanged", &TreeView::onSelectionChanged, "Called when the selection changes.")
         .def_property ("onItemClicked", nullptr, setItemCallback (&TreeView::onItemClicked), "Called with the item whose row was clicked.")
         .def_property ("onItemDoubleClicked", nullptr, setItemCallback (&TreeView::onItemDoubleClicked), "Called with the item whose row was double-clicked.")
+        .def_property ("onItemEntered", nullptr, setItemCallback (&TreeView::onItemEntered), "Called with the item whose row the mouse moved onto.")
+        .def_property ("onItemExited", nullptr, setItemCallback (&TreeView::onItemExited), "Called with the item whose row the mouse left.")
         .def_property ("onReturnKeyPressed", nullptr, setItemCallback (&TreeView::onReturnKeyPressed), "Called with the item on the current row when Return is pressed.")
         .def_property ("onDeleteKeyPressed", nullptr, [toItemList] (TreeView& self, std::function<void (py::list)> callback)
         {
@@ -2040,6 +2047,7 @@ void registerYupGuiBindings (py::module_& m)
     treeViewStyle.attr ("itemTextColorId") = TreeView::Style::itemTextColorId;
     treeViewStyle.attr ("itemTextSelectedColorId") = TreeView::Style::itemTextSelectedColorId;
     treeViewStyle.attr ("dropIndicatorColorId") = TreeView::Style::dropIndicatorColorId;
+    treeViewStyle.attr ("itemHoveredColorId") = TreeView::Style::itemHoveredColorId;
 
     // ============================================================================================ yup::ComboBox
 

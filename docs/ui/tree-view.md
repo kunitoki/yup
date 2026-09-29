@@ -46,6 +46,7 @@ When what an item shows changes, call `itemChanged()`.
 | `refreshItemComponent (component)` | Custom row content, see below. |
 | `itemOpennessChanged (isNowOpen)` | Called when the item opens or closes: create lazy sub-items here. |
 | `itemClicked`, `itemDoubleClicked`, `itemSelectionChanged` | Interaction. A double-click toggles the item by default. |
+| `itemEntered()`, `itemExited()` | The mouse moved onto or off the item's row, see below. |
 | `getUniqueName()` | Identifies the item among its siblings when saving the openness state. |
 | `getDragSourceDescription()`, `isInterestedInDragSource()`, `itemDropped()` | Drag and drop, see below. |
 
@@ -124,6 +125,19 @@ void paintItemIcon (yup::Graphics& g, yup::Rectangle<float> area, bool isSelecte
 ```
 
 Call `itemChanged()` when the item gains or loses its icon.
+
+## Hover
+
+The item under the mouse is `TreeView::getHoveredItem()`, and
+`TreeViewItem::isHovered()` tells an item whether it is the one. Moving onto a
+row calls `itemEntered()` on its item and then `TreeView::onItemEntered`, and
+leaving it calls `itemExited()` and `TreeView::onItemExited`. Moving onto a row's
+own buttons still counts as being over the item, a wheel scroll updates the
+hovered item as the content moves under the pointer, and fingers never hover.
+An item removed from the tree while hovered gets no exit call.
+
+The hovered row is painted with `TreeView::Style::itemHoveredColorId`; custom
+content can read `isHovered()` to show extra controls only on the hovered row.
 
 ## Custom content
 
@@ -247,11 +261,10 @@ tree.restoreOpennessState (state, true);
 
 ## Styling
 
-The rows use the `ListBox::Style` colors for the background, the selection and
-the hover. The current row has no outline unless you set
-`ListBox::Style::currentRowOutlineColorId` on the tree. `TreeView::Style` adds
-`indentGuideColorId`, `disclosureColorId`, `itemTextColorId`,
-`itemTextSelectedColorId` and `dropIndicatorColorId`. Colors set on the
+The rows use the `ListBox::Style` colors for the background and the selection.
+`TreeView::Style` adds `indentGuideColorId`, `disclosureColorId`,
+`itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId` and
+`itemHoveredColorId` (the hovered row). Colors set on the
 `TreeView` reach its rows. Themes paint the rows through the `ComponentStyle`
 registered for `TreeViewRow`, which exposes the row's item, depth, open
 fraction and layout. See [component styling](component-styling.md).

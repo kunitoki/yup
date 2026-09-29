@@ -1127,6 +1127,13 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
 
     const auto indentSize = view->getIndentSize();
 
+    // The selection is painted under the row by the list; the hover only shows on unselected rows.
+    if (row.isItemHovered() && ! row.isItemSelected())
+    {
+        g.setFillColor (theme.findColor (row, TreeView::Style::itemHoveredColorId).value_or (Color (0x14000000)));
+        g.fillRect (row.getLocalBounds());
+    }
+
     // One guide per ancestor level, under the center of that ancestor's disclosure button.
     if (view->areIndentGuidesVisible() && indentSize > 0.0f)
     {
@@ -2191,6 +2198,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (TreeView::Style::itemTextColorId, Colors::black);
     theme->setColor (TreeView::Style::itemTextSelectedColorId, Colors::white);
     theme->setColor (TreeView::Style::dropIndicatorColorId, Color (0xff4ebfff));
+    theme->setColor (TreeView::Style::itemHoveredColorId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

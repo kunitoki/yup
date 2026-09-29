@@ -61,6 +61,9 @@ public:
     /** Returns true if the item is selected. */
     bool isItemSelected() const noexcept;
 
+    /** Returns true while the mouse is over the item. */
+    bool isItemHovered() const noexcept;
+
     /** Returns how open the item is, from 0 (closed) to 1 (open), in between while it animates. */
     float getOpenFraction() const;
 
