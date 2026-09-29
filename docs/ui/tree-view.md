@@ -157,8 +157,11 @@ void refreshItemComponent (std::unique_ptr<yup::Component>& component) override
 
 The content should call `setWantsMouseEvents (false, true)` on itself, so that
 pressing it still selects the row and only its interactive children take the
-press. The default implementation resets the component, which shows the
-built-in icon and text.
+press. Components are opaque by default: content that lets the row show
+through (and its children, such as small icon buttons) must call
+`setOpaque (false)`, or repainting it alone paints the list background over the
+row's hover and selection. The default implementation resets the component,
+which shows the built-in icon and text.
 
 Custom content replaces the built-in icon and text, so it can lay out anything
 along the row: the graphics example's widget tree draws a type icon and a name on

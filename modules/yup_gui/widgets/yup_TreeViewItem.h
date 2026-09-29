@@ -231,7 +231,9 @@ public:
         the disclosure button, at the full height of the row.
 
         Content that should still let a press select the row calls setWantsMouseEvents (false, true)
-        on itself, so that only its interactive children take presses.
+        on itself, so that only its interactive children take presses. Content (and children of it)
+        that does not fill its whole area with an opaque color calls setOpaque (false), otherwise a
+        repaint of just that component skips the row's hover, selection and guides underneath it.
 
         @param component  The row's current content, owned by the row; may be null
     */

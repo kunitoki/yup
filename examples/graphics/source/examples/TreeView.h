@@ -102,11 +102,12 @@ public:
         status.setBounds (bounds.removeFromBottom (24.0f));
         bounds.removeFromBottom (4.0f);
 
-        const auto panelWidth = bounds.getWidth() / 3.0f;
+        const auto firstPanelWidth = bounds.getWidth() / 3.5f;
+        const auto remainingPanelWidth = (bounds.getWidth() - firstPanelWidth) / 2.0f;
 
-        for (auto [title, tree] : { std::pair { &fileTitle, &fileTree },
-                                    std::pair { &dataTitle, &dataTree },
-                                    std::pair { &widgetTitle, &widgetTree } })
+        for (auto [title, tree, panelWidth] : { std::tuple { &fileTitle, &fileTree, firstPanelWidth },
+                                                std::tuple { &dataTitle, &dataTree, remainingPanelWidth ,},
+                                                std::tuple { &widgetTitle, &widgetTree, remainingPanelWidth } })
         {
             auto panel = bounds.removeFromLeft (panelWidth).reduced (4.0f);
             title->setBounds (panel.removeFromTop (24.0f));
@@ -323,6 +324,8 @@ private:
             : Button ("IconButton")
             , plus (isPlus)
         {
+            // It only paints a glyph and a translucent highlight over the row.
+            setOpaque (false);
         }
 
         void paintButton (yup::Graphics& g) override
@@ -373,6 +376,9 @@ private:
     public:
         WidgetRowContent()
         {
+            // The row paints the hover, selection and guides underneath.
+            setOpaque (false);
+
             // Presses on the empty areas still select the row; the buttons take their own.
             setWantsMouseEvents (false, true);
 
