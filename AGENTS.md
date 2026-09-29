@@ -9,9 +9,10 @@ Copyright line for new files: `Copyright (c) 2026 - kunitoki@gmail.com`.
 
 ## Hard Rules
 
-- **Never run bash commands to configure, compile or test.** Say what should be tested; the user runs it and reports back.
+- **Never run bash commands to configure, compile or test, unless you are directed to do so.** Say what should be tested; the user runs it and reports back.
+- **When you are directed to configure, compile or test, you should rely ONLY on the `just` tool and its actions.** Never try to escape or bypass it.
 - **Code that changed without you noticing is the user's doing, not a linter's.** Acknowledge it, never revert it.
-- Headers and implementation files are compiled through the main module header/cpp - linter errors when parsing them in isolation are expected.
+- **Headers and implementation files are compiled through the main module header/cpp** - linter errors when parsing them in isolation are expected.
 
 ## Design Rules
 

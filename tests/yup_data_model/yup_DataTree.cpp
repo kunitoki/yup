@@ -589,7 +589,22 @@ public:
 
     void childRemoved (DataTree& parent, DataTree& child, int formerIndex) override
     {
-        childRemovals.push_back ({ parent, child, formerIndex });
+        childRemovals.push_back ({ parent, child, formerIndex, child.getParent() });
+    }
+
+    void parentChanged (DataTree& child, DataTree& previousParent) override
+    {
+        parentChanges.push_back ({ child, previousParent, child.getParent() });
+    }
+
+    void ancestorChanged (DataTree& tree, DataTree& reparentedAncestor) override
+    {
+        ancestorChanges.push_back ({ tree, reparentedAncestor });
+    }
+
+    void treeRedirected (DataTree&) override
+    {
+        ++redirections;
     }
 
     struct PropertyChange
@@ -602,17 +617,34 @@ public:
     {
         DataTree parent, child;
         int index = -1;
+        DataTree parentSeen;
+    };
+
+    struct ParentChange
+    {
+        DataTree child, previousParent, parentSeen;
+    };
+
+    struct AncestorChange
+    {
+        DataTree tree, reparentedAncestor;
     };
 
     std::vector<PropertyChange> propertyChanges;
     std::vector<ChildChange> childAdditions;
     std::vector<ChildChange> childRemovals;
+    std::vector<ParentChange> parentChanges;
+    std::vector<AncestorChange> ancestorChanges;
+    int redirections = 0;
 
     void reset()
     {
         propertyChanges.clear();
         childAdditions.clear();
         childRemovals.clear();
+        parentChanges.clear();
+        ancestorChanges.clear();
+        redirections = 0;
     }
 };
 
@@ -666,6 +698,523 @@ TEST_F (DataTreeTests, ChildChangeNotifications)
     EXPECT_EQ (0, listener.childRemovals[0].index);
 
     tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ParentChangedOnAddChild)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child (childType);
+    child.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.addChild (child);
+    }
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (child, listener.parentChanges[0].child);
+    EXPECT_FALSE (listener.parentChanges[0].previousParent.isValid());
+    EXPECT_EQ (tree, listener.parentChanges[0].parentSeen);
+    EXPECT_TRUE (listener.ancestorChanges.empty());
+
+    listener.reset();
+    undoManager->undo();
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (tree, listener.parentChanges[0].previousParent);
+    EXPECT_FALSE (listener.parentChanges[0].parentSeen.isValid());
+
+    child.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ParentChangedOnReparent)
+{
+    TestListener childListener;
+    TestListener parent1Listener;
+    DataTree parent1 ("Parent1");
+    DataTree parent2 ("Parent2");
+    DataTree child (childType);
+
+    {
+        auto transaction = parent1.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    child.addListener (&childListener);
+    parent1.addListener (&parent1Listener);
+
+    {
+        auto transaction = parent2.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    ASSERT_EQ (1, childListener.parentChanges.size());
+    EXPECT_EQ (parent1, childListener.parentChanges[0].previousParent);
+    EXPECT_EQ (parent2, childListener.parentChanges[0].parentSeen);
+
+    ASSERT_EQ (1, parent1Listener.childRemovals.size());
+    EXPECT_EQ (child, parent1Listener.childRemovals[0].child);
+    EXPECT_EQ (parent2, parent1Listener.childRemovals[0].parentSeen);
+
+    child.removeListener (&childListener);
+    parent1.removeListener (&parent1Listener);
+}
+
+TEST_F (DataTreeTests, ParentChangedOnReparentUndoRedo)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree parent1 ("Parent1");
+    DataTree parent2 ("Parent2");
+    DataTree child (childType);
+
+    {
+        auto transaction = parent1.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    child.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = parent2.beginTransaction (undoManager);
+        transaction.addChild (child);
+    }
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (parent1, listener.parentChanges[0].previousParent);
+    EXPECT_EQ (parent2, listener.parentChanges[0].parentSeen);
+
+    listener.reset();
+    undoManager->undo();
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (parent2, listener.parentChanges[0].previousParent);
+    EXPECT_EQ (parent1, listener.parentChanges[0].parentSeen);
+
+    listener.reset();
+    undoManager->redo();
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (parent1, listener.parentChanges[0].previousParent);
+    EXPECT_EQ (parent2, listener.parentChanges[0].parentSeen);
+
+    child.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ParentChangedOnRemoveChildByObjectAndIndex)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    child1.addListener (&listener);
+    child2.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.removeChild (child1);
+    }
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (child1, listener.parentChanges[0].child);
+    EXPECT_EQ (tree, listener.parentChanges[0].previousParent);
+    EXPECT_FALSE (listener.parentChanges[0].parentSeen.isValid());
+
+    listener.reset();
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.removeChild (0);
+    }
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (child2, listener.parentChanges[0].child);
+    EXPECT_EQ (tree, listener.parentChanges[0].previousParent);
+    EXPECT_FALSE (listener.parentChanges[0].parentSeen.isValid());
+
+    listener.reset();
+    undoManager->undo();
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (child2, listener.parentChanges[0].child);
+    EXPECT_FALSE (listener.parentChanges[0].previousParent.isValid());
+    EXPECT_EQ (tree, listener.parentChanges[0].parentSeen);
+
+    listener.reset();
+    undoManager->undo();
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_EQ (child1, listener.parentChanges[0].child);
+    EXPECT_FALSE (listener.parentChanges[0].previousParent.isValid());
+    EXPECT_EQ (tree, listener.parentChanges[0].parentSeen);
+
+    child1.removeListener (&listener);
+    child2.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ParentChangedOnRemoveAllChildren)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    child1.addListener (&listener);
+    child2.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.removeAllChildren();
+    }
+
+    ASSERT_EQ (2, listener.parentChanges.size());
+    for (const auto& change : listener.parentChanges)
+    {
+        EXPECT_EQ (tree, change.previousParent);
+        EXPECT_FALSE (change.parentSeen.isValid());
+    }
+
+    listener.reset();
+    undoManager->undo();
+
+    ASSERT_EQ (2, listener.parentChanges.size());
+    EXPECT_EQ (child1, listener.parentChanges[0].child);
+    EXPECT_EQ (child2, listener.parentChanges[1].child);
+    for (const auto& change : listener.parentChanges)
+    {
+        EXPECT_FALSE (change.previousParent.isValid());
+        EXPECT_EQ (tree, change.parentSeen);
+    }
+
+    child1.removeListener (&listener);
+    child2.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, AncestorChangedReachesDescendants)
+{
+    TestListener childListener;
+    TestListener grandchildListener;
+    DataTree grandchild ("Grandchild");
+    DataTree child (childType, { grandchild });
+
+    child.addListener (&childListener);
+    grandchild.addListener (&grandchildListener);
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child);
+    }
+
+    ASSERT_EQ (1, childListener.parentChanges.size());
+    EXPECT_TRUE (childListener.ancestorChanges.empty());
+
+    EXPECT_TRUE (grandchildListener.parentChanges.empty());
+    ASSERT_EQ (1, grandchildListener.ancestorChanges.size());
+    EXPECT_EQ (grandchild, grandchildListener.ancestorChanges[0].tree);
+    EXPECT_EQ (child, grandchildListener.ancestorChanges[0].reparentedAncestor);
+
+    child.removeListener (&childListener);
+    grandchild.removeListener (&grandchildListener);
+}
+
+TEST_F (DataTreeTests, MoveChildDoesNotSendParentChanged)
+{
+    TestListener listener;
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+    }
+
+    child1.addListener (&listener);
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.moveChild (0, 1);
+    }
+
+    EXPECT_EQ (child1, tree.getChild (1));
+    EXPECT_TRUE (listener.parentChanges.empty());
+    EXPECT_TRUE (listener.ancestorChanges.empty());
+
+    child1.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, RemoveAllChildrenNotifiesFromBack)
+{
+    TestListener listener;
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+    DataTree child3 ("Child3");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+        transaction.addChild (child3);
+    }
+
+    tree.addListener (&listener);
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.removeAllChildren();
+    }
+
+    ASSERT_EQ (3, listener.childRemovals.size());
+    EXPECT_EQ (child3, listener.childRemovals[0].child);
+    EXPECT_EQ (2, listener.childRemovals[0].index);
+    EXPECT_EQ (child2, listener.childRemovals[1].child);
+    EXPECT_EQ (1, listener.childRemovals[1].index);
+    EXPECT_EQ (child1, listener.childRemovals[2].child);
+    EXPECT_EQ (0, listener.childRemovals[2].index);
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, TransactionAddThenRemoveAllChildren)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree existing ("Existing");
+    DataTree added ("Added");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (existing);
+    }
+
+    tree.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.addChild (added);
+        transaction.removeAllChildren();
+    }
+
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_FALSE (existing.getParent().isValid());
+    EXPECT_FALSE (added.getParent().isValid());
+
+    ASSERT_EQ (2, listener.childRemovals.size());
+    EXPECT_EQ (added, listener.childRemovals[0].child);
+    EXPECT_EQ (1, listener.childRemovals[0].index);
+    EXPECT_EQ (existing, listener.childRemovals[1].child);
+    EXPECT_EQ (0, listener.childRemovals[1].index);
+
+    undoManager->undo();
+
+    ASSERT_EQ (1, tree.getNumChildren());
+    EXPECT_EQ (existing, tree.getChild (0));
+    EXPECT_EQ (tree, existing.getParent());
+    EXPECT_FALSE (added.getParent().isValid());
+
+    undoManager->redo();
+
+    EXPECT_EQ (0, tree.getNumChildren());
+    EXPECT_FALSE (existing.getParent().isValid());
+    EXPECT_FALSE (added.getParent().isValid());
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, TransactionRemoveThenRemoveAllChildren)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    DataTree child1 ("Child1");
+    DataTree child2 ("Child2");
+    DataTree child3 ("Child3");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.addChild (child1);
+        transaction.addChild (child2);
+        transaction.addChild (child3);
+    }
+
+    tree.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.removeChild (child2);
+        transaction.removeAllChildren();
+    }
+
+    EXPECT_EQ (0, tree.getNumChildren());
+
+    ASSERT_EQ (3, listener.childRemovals.size());
+    EXPECT_EQ (child2, listener.childRemovals[0].child);
+    EXPECT_EQ (1, listener.childRemovals[0].index);
+    EXPECT_EQ (child3, listener.childRemovals[1].child);
+    EXPECT_EQ (1, listener.childRemovals[1].index);
+    EXPECT_EQ (child1, listener.childRemovals[2].child);
+    EXPECT_EQ (0, listener.childRemovals[2].index);
+
+    undoManager->undo();
+
+    ASSERT_EQ (3, tree.getNumChildren());
+    EXPECT_EQ (child1, tree.getChild (0));
+    EXPECT_EQ (child2, tree.getChild (1));
+    EXPECT_EQ (child3, tree.getChild (2));
+    EXPECT_EQ (tree, child1.getParent());
+    EXPECT_EQ (tree, child2.getParent());
+    EXPECT_EQ (tree, child3.getParent());
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, TransactionSetThenRemoveAllPropertiesNotifies)
+{
+    TestListener listener;
+    auto undoManager = UndoManager::Ptr (new UndoManager());
+    const Identifier existingProperty ("existing");
+    const Identifier addedProperty ("added");
+
+    {
+        auto transaction = tree.beginTransaction();
+        transaction.setProperty (existingProperty, 1);
+    }
+
+    tree.addListener (&listener);
+
+    undoManager->beginNewTransaction();
+    {
+        auto transaction = tree.beginTransaction (undoManager);
+        transaction.setProperty (addedProperty, 2);
+        transaction.removeAllProperties();
+    }
+
+    EXPECT_EQ (0, tree.getNumProperties());
+
+    const auto countChanges = [&] (const Identifier& name)
+    {
+        return std::count_if (listener.propertyChanges.begin(), listener.propertyChanges.end(), [&] (const auto& change)
+        {
+            return change.property == name;
+        });
+    };
+
+    EXPECT_EQ (2, countChanges (addedProperty));
+    EXPECT_EQ (1, countChanges (existingProperty));
+
+    undoManager->undo();
+
+    EXPECT_TRUE (tree.hasProperty (existingProperty));
+    EXPECT_FALSE (tree.hasProperty (addedProperty));
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, AssigningSameObjectDoesNotRedirect)
+{
+    TestListener listener;
+    tree.addListener (&listener);
+
+    DataTree handle (tree);
+    DataTree sameTree (tree);
+
+    handle = sameTree;
+    handle = DataTree (tree);
+    EXPECT_EQ (0, listener.redirections);
+
+    handle = DataTree ("Other");
+    EXPECT_EQ (1, listener.redirections);
+
+    tree.removeListener (&listener);
+}
+
+TEST_F (DataTreeTests, ParentDestructionNotifiesReferencedChildren)
+{
+    TestListener childListener;
+    TestListener grandchildListener;
+    DataTree grandchild ("Grandchild");
+    DataTree child (childType, { grandchild });
+
+    {
+        DataTree parent ("Parent", { child });
+        child.addListener (&childListener);
+        grandchild.addListener (&grandchildListener);
+    }
+
+    EXPECT_FALSE (child.getParent().isValid());
+
+    ASSERT_EQ (1, childListener.parentChanges.size());
+    EXPECT_EQ (child, childListener.parentChanges[0].child);
+    EXPECT_FALSE (childListener.parentChanges[0].previousParent.isValid());
+    EXPECT_FALSE (childListener.parentChanges[0].parentSeen.isValid());
+
+    EXPECT_TRUE (grandchildListener.parentChanges.empty());
+    ASSERT_EQ (1, grandchildListener.ancestorChanges.size());
+    EXPECT_EQ (child, grandchildListener.ancestorChanges[0].reparentedAncestor);
+
+    child.removeListener (&childListener);
+    grandchild.removeListener (&grandchildListener);
+}
+
+TEST_F (DataTreeTests, ParentDestructionSkipsUnreferencedChildren)
+{
+    TestListener listener;
+
+    {
+        DataTree parent ("Parent");
+
+        {
+            DataTree child (childType);
+            child.addListener (&listener);
+
+            auto transaction = parent.beginTransaction();
+            transaction.addChild (child);
+        }
+
+        listener.reset();
+    }
+
+    EXPECT_TRUE (listener.parentChanges.empty());
+    EXPECT_TRUE (listener.ancestorChanges.empty());
+}
+
+TEST_F (DataTreeTests, ParentDestructionNotifiesSurvivingGrandchildOnce)
+{
+    TestListener listener;
+    DataTree grandchild ("Grandchild");
+
+    {
+        DataTree parent ("Parent", { DataTree (childType, { grandchild }) });
+        grandchild.addListener (&listener);
+    }
+
+    EXPECT_FALSE (grandchild.getParent().isValid());
+
+    ASSERT_EQ (1, listener.parentChanges.size());
+    EXPECT_FALSE (listener.parentChanges[0].previousParent.isValid());
+    EXPECT_FALSE (listener.parentChanges[0].parentSeen.isValid());
+    EXPECT_TRUE (listener.ancestorChanges.empty());
+
+    grandchild.removeListener (&listener);
 }
 
 //==============================================================================

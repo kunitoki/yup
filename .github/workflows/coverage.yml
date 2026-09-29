@@ -9,6 +9,7 @@ on:
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
+      - "!**/LICENSE*"
       - "!**/native/generated/**"
       - "!**/native/java*/**"
       - "!**/native/*_android.*"
