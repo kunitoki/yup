@@ -191,6 +191,27 @@ protected:
     /** Constructor. */
     ListBoxModel() = default;
 
+    /** Returns the row component as a T, creating one when it is null or of another type.
+
+        Meant for refreshRowComponent(): recycled components are reused as they are, anything else is
+        replaced by a new T built from @a args.
+
+        @param component  The row component passed to refreshRowComponent()
+        @param args       The constructor arguments used when a new T has to be created
+        @return The component, now guaranteed to be a T
+    */
+    template <class T, class... Args>
+    static T& reuseOrCreate (std::unique_ptr<Component>& component, Args&&... args)
+    {
+        if (auto* existing = dynamic_cast<T*> (component.get()))
+            return *existing;
+
+        auto created = std::make_unique<T> (std::forward<Args> (args)...);
+        auto& result = *created;
+        component = std::move (created);
+        return result;
+    }
+
 private:
     YUP_DECLARE_NON_COPYABLE (ListBoxModel)
 };
