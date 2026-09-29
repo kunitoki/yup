@@ -387,7 +387,6 @@ def test_style_ids_are_exposed():
     assert str(yup.ListBox.Style.rowBackgroundColorId) == "rowBackground"
     assert str(yup.ListBox.Style.selectedRowBackgroundColorId) == "selectedRowBackground"
     assert str(yup.ListBox.Style.hoveredRowBackgroundColorId) == "hoveredRowBackground"
-    assert str(yup.ListBox.Style.currentRowOutlineColorId) == "listBoxCurrentRowOutline"
 
     assert str(yup.ListBoxItem.Style.textColorId) == "listBoxItemText"
     assert str(yup.ListBoxItem.Style.textColorSelectedId) == "listBoxItemTextSelected"

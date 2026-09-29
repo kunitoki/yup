@@ -210,9 +210,8 @@ private:
 class RemoveAllPropertiesAction : public UndoableAction
 {
 public:
-    RemoveAllPropertiesAction (std::shared_ptr<DataTree::DataObject> obj, const NamedValueSet& oldProps)
+    explicit RemoveAllPropertiesAction (std::shared_ptr<DataTree::DataObject> obj)
         : dataObject (std::move (obj))
-        , oldProperties (oldProps)
     {
     }
 
@@ -227,7 +226,7 @@ public:
             return false;
 
         if (state == UndoableActionState::Redo)
-            dataObject->properties.clear();
+            oldProperties = std::exchange (dataObject->properties, {});
         else
             dataObject->properties = oldProperties;
 
@@ -266,24 +265,19 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
-            if (auto currentParent = childObject->parent.lock())
-            {
-                previousParent = currentParent;
+            auto currentParent = childObject->parent.lock();
+            previousParent = currentParent;
+            previousIndex = -1;
 
-                // Find child index in current parent
+            if (currentParent != nullptr)
+            {
                 auto& currentChildren = currentParent->children;
                 auto it = std::find (currentChildren.begin(), currentChildren.end(), childObject);
                 if (it != currentChildren.end())
                 {
                     previousIndex = static_cast<int> (std::distance (currentChildren.begin(), it));
                     currentChildren.erase (it);
-                    currentParent->sendChildRemovedMessage (childObject, previousIndex);
                 }
-            }
-            else
-            {
-                previousParent.reset();
-                previousIndex = -1;
             }
 
             const int numChildren = static_cast<int> (parentObject->children.size());
@@ -291,33 +285,46 @@ public:
 
             parentObject->children.insert (parentObject->children.begin() + actualIndex, childObject);
             childObject->parent = parentObject;
+
+            if (currentParent != nullptr && previousIndex >= 0)
+                currentParent->sendChildRemovedMessage (childObject, previousIndex);
+
             parentObject->sendChildAddedMessage (childObject);
+
+            if (currentParent != parentObject)
+                childObject->sendParentChangedMessage (std::move (currentParent));
         }
         else
         {
-            // Find child in parent
             auto& parentChildren = parentObject->children;
             auto it = std::find (parentChildren.begin(), parentChildren.end(), childObject);
-            if (it != parentChildren.end())
+            if (it == parentChildren.end())
+                return true;
+
+            const int childIndex = static_cast<int> (std::distance (parentChildren.begin(), it));
+            parentChildren.erase (it);
+
+            auto prevParent = previousParent.lock();
+            if (prevParent != nullptr)
             {
-                const int childIndex = static_cast<int> (std::distance (parentChildren.begin(), it));
-                parentChildren.erase (it);
-                parentObject->sendChildRemovedMessage (childObject, childIndex);
+                const int numChildren = static_cast<int> (prevParent->children.size());
+                const int actualIndex = (previousIndex < 0 || previousIndex > numChildren) ? numChildren : previousIndex;
 
-                if (auto prevParent = previousParent.lock())
-                {
-                    const int numChildren = static_cast<int> (prevParent->children.size());
-                    const int actualIndex = (previousIndex < 0 || previousIndex > numChildren) ? numChildren : previousIndex;
-
-                    prevParent->children.insert (prevParent->children.begin() + actualIndex, childObject);
-                    childObject->parent = prevParent;
-                    prevParent->sendChildAddedMessage (childObject);
-                }
-                else
-                {
-                    childObject->parent.reset();
-                }
+                prevParent->children.insert (prevParent->children.begin() + actualIndex, childObject);
+                childObject->parent = prevParent;
             }
+            else
+            {
+                childObject->parent.reset();
+            }
+
+            parentObject->sendChildRemovedMessage (childObject, childIndex);
+
+            if (prevParent != nullptr)
+                prevParent->sendChildAddedMessage (childObject);
+
+            if (prevParent != parentObject)
+                childObject->sendParentChangedMessage (parentObject);
         }
 
         return true;
@@ -373,6 +380,7 @@ public:
             parentChildren.erase (parentChildren.begin() + index);
             childObject->parent.reset();
             parentObject->sendChildRemovedMessage (childObject, index);
+            childObject->sendParentChangedMessage (parentObject);
         }
         else
         {
@@ -385,6 +393,7 @@ public:
             parentChildren.insert (parentChildren.begin() + actualIndex, childObject);
             childObject->parent = parentObject;
             parentObject->sendChildAddedMessage (childObject);
+            childObject->sendParentChangedMessage (nullptr);
         }
 
         return true;
@@ -401,9 +410,8 @@ private:
 class RemoveAllChildrenAction : public UndoableAction
 {
 public:
-    RemoveAllChildrenAction (std::shared_ptr<DataTree::DataObject> parent, const std::vector<std::shared_ptr<DataTree::DataObject>>& oldChildren)
+    explicit RemoveAllChildrenAction (std::shared_ptr<DataTree::DataObject> parent)
         : parentObject (std::move (parent))
-        , children (oldChildren)
     {
     }
 
@@ -419,12 +427,16 @@ public:
 
         if (state == UndoableActionState::Redo)
         {
-            parentObject->children.clear();
+            children = std::exchange (parentObject->children, {});
 
-            for (size_t i = 0; i < children.size(); ++i)
+            for (auto& child : children)
+                child->parent.reset();
+
+            for (int i = static_cast<int> (children.size()) - 1; i >= 0; --i)
             {
-                children[i]->parent.reset();
-                parentObject->sendChildRemovedMessage (children[i], static_cast<int> (i));
+                const auto& child = children[static_cast<size_t> (i)];
+                parentObject->sendChildRemovedMessage (child, i);
+                child->sendParentChangedMessage (parentObject);
             }
         }
         else
@@ -432,9 +444,12 @@ public:
             parentObject->children = children;
 
             for (auto& child : children)
-            {
                 child->parent = parentObject;
+
+            for (auto& child : children)
+            {
                 parentObject->sendChildAddedMessage (child);
+                child->sendParentChangedMessage (nullptr);
             }
         }
 
@@ -552,7 +567,19 @@ DataTree::DataObject::DataObject (const Identifier& treeType)
 {
 }
 
-DataTree::DataObject::~DataObject() = default;
+DataTree::DataObject::~DataObject()
+{
+    const auto orphans = std::exchange (children, {});
+
+    for (const auto& child : orphans)
+        child->parent.reset();
+
+    for (const auto& child : orphans)
+    {
+        if (child.use_count() > 1)
+            child->sendParentChangedMessage (nullptr);
+    }
+}
 
 void DataTree::DataObject::sendPropertyChangeMessage (const Identifier& property)
 {
@@ -591,6 +618,35 @@ void DataTree::DataObject::sendChildMovedMessage (std::shared_ptr<DataObject> ch
     {
         l.childMoved (treeObj, childTree, oldIndex, newIndex);
     });
+}
+
+void DataTree::DataObject::sendParentChangedMessage (std::shared_ptr<DataObject> previousParent)
+{
+    auto self = shared_from_this();
+    DataTree treeObj (self);
+    DataTree previousParentTree (std::move (previousParent));
+    listeners.call ([&] (DataTree::Listener& l)
+    {
+        l.parentChanged (treeObj, previousParentTree);
+    });
+
+    const auto currentChildren = children;
+    for (const auto& child : currentChildren)
+        child->sendAncestorChangedMessage (self);
+}
+
+void DataTree::DataObject::sendAncestorChangedMessage (const std::shared_ptr<DataObject>& reparentedAncestor)
+{
+    DataTree treeObj (shared_from_this());
+    DataTree ancestorTree (reparentedAncestor);
+    listeners.call ([&] (DataTree::Listener& l)
+    {
+        l.ancestorChanged (treeObj, ancestorTree);
+    });
+
+    const auto currentChildren = children;
+    for (const auto& child : currentChildren)
+        child->sendAncestorChangedMessage (reparentedAncestor);
 }
 
 std::shared_ptr<DataTree::DataObject> DataTree::DataObject::clone() const
@@ -666,7 +722,7 @@ DataTree::~DataTree() = default;
 
 DataTree& DataTree::operator= (const DataTree& other) noexcept
 {
-    if (this != &other)
+    if (this != &other && object != other.object)
     {
         if (auto oldObject = std::exchange (object, other.object))
         {
@@ -682,7 +738,7 @@ DataTree& DataTree::operator= (const DataTree& other) noexcept
 
 DataTree& DataTree::operator= (DataTree&& other) noexcept
 {
-    if (this != &other)
+    if (this != &other && object != other.object)
     {
         if (auto oldObject = std::exchange (object, other.object))
         {
@@ -797,11 +853,11 @@ void DataTree::removeAllProperties (UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveAllPropertiesAction (object, object->properties));
+        undoManager->perform (new RemoveAllPropertiesAction (object));
     }
     else
     {
-        RemoveAllPropertiesAction (object, object->properties).perform (UndoableActionState::Redo);
+        RemoveAllPropertiesAction (object).perform (UndoableActionState::Redo);
     }
 }
 
@@ -864,11 +920,11 @@ void DataTree::removeAllChildren (UndoManager* undoManager)
 
     if (undoManager != nullptr)
     {
-        undoManager->perform (new RemoveAllChildrenAction (object, object->children));
+        undoManager->perform (new RemoveAllChildrenAction (object));
     }
     else
     {
-        RemoveAllChildrenAction (object, object->children).perform (UndoableActionState::Redo);
+        RemoveAllChildrenAction (object).perform (UndoableActionState::Redo);
     }
 }
 
@@ -1371,7 +1427,7 @@ void DataTree::Transaction::commit()
 
             case PropertyChange::RemoveAll:
             {
-                actions.push_back (new RemoveAllPropertiesAction (dataObject, dataObject->properties));
+                actions.push_back (new RemoveAllPropertiesAction (dataObject));
                 break;
             }
         }
@@ -1396,7 +1452,7 @@ void DataTree::Transaction::commit()
 
             case ChildChange::RemoveAll:
             {
-                actions.push_back (new RemoveAllChildrenAction (dataObject, dataObject->children));
+                actions.push_back (new RemoveAllChildrenAction (dataObject));
                 break;
             }
 

@@ -245,16 +245,6 @@ public:
         }
     }
 
-    void paintOverChildren (Graphics& g) override
-    {
-        if (rowIndex != owner.currentRow || ! owner.hasKeyboardFocus())
-            return;
-
-        g.setStrokeColor (owner.findColor (ListBox::Style::currentRowOutlineColorId).value_or (Color (0xff4ebfff)));
-        g.setStrokeWidth (2.0f);
-        g.strokeRect (getLocalBounds().reduced (1.0f));
-    }
-
     void resized() override
     {
         if (auto* displayed = getDisplayedComponent())
@@ -506,11 +496,7 @@ void ListBox::setCurrentRow (int rowIndex, NotificationType notification)
     if (rowIndex < -1 || rowIndex >= numRows || rowIndex == currentRow)
         return;
 
-    const auto previousRow = currentRow;
     currentRow = rowIndex;
-
-    repaintRow (previousRow);
-    repaintRow (currentRow);
 
     if (notification != dontSendNotification && onCurrentRowChanged)
         onCurrentRowChanged (currentRow);

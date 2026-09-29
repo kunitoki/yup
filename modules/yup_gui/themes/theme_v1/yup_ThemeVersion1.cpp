@@ -2175,7 +2175,6 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
     theme->setColor (ListBox::Style::selectedRowBackgroundColorId, Color (0xff3a7ebf));
     theme->setColor (ListBox::Style::hoveredRowBackgroundColorId, Color (0x22ffffff));
-    theme->setColor (ListBox::Style::currentRowOutlineColorId, Color (0xff4ebfff));
     theme->setColor (ListBox::Style::refreshIndicatorColorId, Color (0xff4ebfff));
     theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
 

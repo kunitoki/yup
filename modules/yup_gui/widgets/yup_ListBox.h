@@ -380,8 +380,7 @@ public:
         The current row is separate from the selection: arrow keys move it, and in multiple selection
         mode Cmd/Ctrl + arrows move it without touching the selection, Space toggles it and Shift +
         arrows extend the selection to it. Return reports it to ListBoxModel::returnKeyPressed().
-        Clicks, taps and selectRow() move it too. While the list has keyboard focus, the current row
-        is outlined.
+        Clicks, taps and selectRow() move it too.
 
         Setting it does not scroll; call scrollToRow() for that.
 
@@ -758,7 +757,6 @@ public:
         static inline const Identifier rowBackgroundColorId { "rowBackground" };
         static inline const Identifier selectedRowBackgroundColorId { "selectedRowBackground" };
         static inline const Identifier hoveredRowBackgroundColorId { "hoveredRowBackground" };
-        static inline const Identifier currentRowOutlineColorId { "listBoxCurrentRowOutline" };
         static inline const Identifier refreshIndicatorColorId { "listBoxRefreshIndicator" };
 
         /** Metric: the size of the pull-to-refresh indicator along the scroll axis. */

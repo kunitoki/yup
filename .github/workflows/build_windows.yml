@@ -11,6 +11,7 @@ on:
       - "**/python/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "!**/LICENSE*"
       - "!**/native/generated/**"
       - "!**/native/java*/**"
       - "!**/native/*_android.*"

@@ -1850,7 +1850,6 @@ void registerYupGuiBindings (py::module_& m)
     listBoxStyle.attr ("rowBackgroundColorId") = ListBox::Style::rowBackgroundColorId;
     listBoxStyle.attr ("selectedRowBackgroundColorId") = ListBox::Style::selectedRowBackgroundColorId;
     listBoxStyle.attr ("hoveredRowBackgroundColorId") = ListBox::Style::hoveredRowBackgroundColorId;
-    listBoxStyle.attr ("currentRowOutlineColorId") = ListBox::Style::currentRowOutlineColorId;
     listBoxStyle.attr ("refreshIndicatorColorId") = ListBox::Style::refreshIndicatorColorId;
     listBoxStyle.attr ("refreshIndicatorSizeId") = ListBox::Style::refreshIndicatorSizeId;
 
