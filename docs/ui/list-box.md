@@ -147,6 +147,16 @@ row is separate from the selection, like a keyboard focus within the list:
 `setCurrentRow()`, `getCurrentRow()` and `onCurrentRowChanged` give access to
 it.
 
+## Hover
+
+`getHoveredRow()` is the row under the mouse, highlighted with
+`ListBox::Style::hoveredRowBackgroundColorId` (built-in rows use
+`ListBoxItem::Style::backgroundColorHoveredId`). `onRowEntered` and
+`onRowExited` report the mouse moving onto and off rows. Moving onto a row's own
+buttons still counts as being over the row, a wheel scroll moves the hover to the
+row that slides under the pointer, and fingers never hover: a touch ends the
+mouse hover. A hovered row that is removed gets no exit call.
+
 ## Mouse and touch
 
 With the mouse, a press selects straight away (Shift extends, Cmd/Ctrl toggles)

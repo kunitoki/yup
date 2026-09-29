@@ -393,3 +393,17 @@ def test_style_ids_are_exposed():
     assert str(yup.ListBoxItem.Style.backgroundColorId) == "listBoxItemBackground"
     assert str(yup.ListBoxItem.Style.backgroundColorSelectedId) == "listBoxItemBackgroundSelected"
     assert str(yup.ListBoxItem.Style.backgroundColorHoveredId) == "listBoxItemBackgroundHovered"
+
+
+def test_hover_callbacks_round_trip():
+    box = yup.ListBox()
+    box.setModel(Model(3))
+
+    assert box.getHoveredRow() == -1
+
+    # Assigning and clearing the callbacks is safe without a mouse.
+    box.onRowEntered = lambda row: None
+    box.onRowExited = lambda row: None
+    box.onRowEntered = None
+    box.onRowExited = None
+
