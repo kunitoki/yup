@@ -65,6 +65,8 @@ windowing, widgets, and theming are still to come.
 - [Tabs](tabs.md) - `TabBar`, `TabButton` and `TabComponent`: segmented
   controls and tabbed pages with animated selection, reordering, overflow and
   closable tabs.
+- [File chooser](file-chooser.md) - `FileChooser` for opening and saving
+  files, and how picks behave on the web.
 
 ```{toctree}
 :hidden:
@@ -85,4 +87,5 @@ midi-keyboard
 list-box
 tree-view
 tabs
+file-chooser
 ```
