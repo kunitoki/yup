@@ -38,7 +38,6 @@ public:
         addAndMakeVisible (panel);
 
         setupWidgets();
-        setupLayout();
 
         for (auto* handle : { &topLeftHandle, &topRightHandle, &bottomLeftHandle })
         {
@@ -259,11 +258,6 @@ private:
         return tabId;
     }
 
-    void setupLayout()
-    {
-        // Layout will be handled in resized()
-    }
-
     void updateStatus (const yup::String& message)
     {
         statusLabel->setText (message, yup::dontSendNotification);
@@ -313,75 +307,89 @@ private:
         repaint();
     }
 
+    /** Lays the widgets out inside the panel bounds, so they fit whatever size the panel gets.
+
+        Rows keep a fixed height and only the text editor and the slider/logo row absorb the
+        space that is left, which keeps every widget inside the panel (and so inside the
+        transformed shape the handles control).
+    */
     void layoutWidgets()
     {
-        auto bounds = panel.getLocalBounds();
-        auto margin = 20;
-        auto componentHeight = 30;
-        auto spacing = 10;
+        auto area = panel.getLocalBounds().reduced (contentMargin);
 
-        int y = margin;
+        titleLabel->setBounds (area.removeFromTop (32.0f));
+        statusLabel->setBounds (area.removeFromTop (rowHeight));
+        area.removeFromTop (sectionSpacing);
 
-        // Title
-        titleLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 40.0f));
-        y += 50;
+        // Full width, so the view tabs only overflow into the More menu when the panel is narrow
+        layoutTabs (area);
+        area.removeFromTop (sectionSpacing);
 
-        // Status
-        statusLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+        // Two columns side by side, stacked instead when the remaining area is taller than wide
+        if (area.getWidth() >= area.getHeight())
+        {
+            layoutInputs (area.removeFromLeft ((area.getWidth() - sectionSpacing) * 0.5f));
+            area.removeFromLeft (sectionSpacing);
+        }
+        else
+        {
+            layoutInputs (area.removeFromTop ((area.getHeight() - sectionSpacing) * 0.5f));
+            area.removeFromTop (sectionSpacing);
+        }
 
-        // Buttons row
-        auto buttonWidth = 120;
-        textButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
-        toggleButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + buttonWidth + spacing), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
-        switchButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + 2 * (buttonWidth + spacing)), static_cast<float> (y), 80.0f, static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+        layoutValues (area);
+    }
 
-        // Tabs
-        const auto tabsWidth = static_cast<float> (bounds.getWidth() - 2 * margin);
-        const auto addTabButtonWidth = 90.0f;
-        tabsLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth, 20.0f));
-        y += 25;
+    void layoutTabs (yup::Rectangle<float>& area)
+    {
+        constexpr auto addTabButtonWidth = 90.0f;
 
-        viewTabs->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth, 36.0f));
-        y += 36 + spacing;
+        tabsLabel->setBounds (area.removeFromTop (labelHeight));
+        viewTabs->setBounds (area.removeFromTop (tabBarHeight));
+        area.removeFromTop (spacing);
 
-        documentTabs->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth - addTabButtonWidth - spacing, 36.0f));
-        addTabButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin) + tabsWidth - addTabButtonWidth, static_cast<float> (y + 3), addTabButtonWidth, static_cast<float> (componentHeight)));
-        y += 36 + spacing * 2;
+        auto documentRow = area.removeFromTop (tabBarHeight);
+        addTabButton->setBounds (documentRow.removeFromRight (addTabButtonWidth).withSizeKeepingCenter (addTabButtonWidth, rowHeight));
+        documentRow.removeFromRight (spacing);
+        documentTabs->setBounds (documentRow);
+    }
 
-        // Input widgets
-        auto inputWidth = (bounds.getWidth() - 3 * margin) / 2;
+    void layoutInputs (yup::Rectangle<float> area)
+    {
+        constexpr auto switchWidth = 60.0f;
 
-        comboBox->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing;
+        auto buttonsRow = area.removeFromTop (rowHeight);
+        switchButton->setBounds (buttonsRow.removeFromRight (switchWidth));
+        buttonsRow.removeFromRight (spacing);
+        textButton->setBounds (buttonsRow.removeFromLeft ((buttonsRow.getWidth() - spacing) * 0.5f));
+        buttonsRow.removeFromLeft (spacing);
+        toggleButton->setBounds (buttonsRow);
+        area.removeFromTop (spacing);
 
-        textEditor->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 100.0f));
-        y += 110;
+        comboBox->setBounds (area.removeFromTop (rowHeight));
+        area.removeFromTop (spacing);
 
-        // Slider, and the image button sharing the row the square slider leaves half empty
-        auto sliderSize = static_cast<int> (inputWidth / 2);
-        slider->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (sliderSize), static_cast<float> (sliderSize)));
+        textEditor->setBounds (area);
+    }
 
-        auto imageButtonSize = 110;
-        auto imageButtonX = margin + sliderSize + spacing * 2;
-        imageButton->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y), static_cast<float> (imageButtonSize), static_cast<float> (imageButtonSize)));
-        imageButtonLabel->setBounds (yup::Rectangle<float> (static_cast<float> (imageButtonX), static_cast<float> (y + imageButtonSize + spacing), static_cast<float> (bounds.getWidth() - imageButtonX - margin), 20.0f));
+    void layoutValues (yup::Rectangle<float> area)
+    {
+        indeterminateProgressBar->setBounds (area.removeFromBottom (rowHeight));
+        indeterminateLabel->setBounds (area.removeFromBottom (labelHeight));
+        area.removeFromBottom (spacing);
 
-        y += sliderSize + spacing * 2;
+        progressBar->setBounds (area.removeFromBottom (rowHeight));
+        progressBarLabel->setBounds (area.removeFromBottom (labelHeight));
+        area.removeFromBottom (spacing);
 
-        // Progress Bar (normal mode)
-        progressBarLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
-        y += 25;
+        imageButtonLabel->setBounds (area.removeFromBottom (labelHeight));
 
-        progressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
-        y += componentHeight + spacing * 2;
+        // The rotary slider and the logo are square: take the largest pair of squares that fits
+        const auto squareSize = yup::jmax (0.0f, yup::jmin (area.getHeight(), (area.getWidth() - spacing) * 0.5f));
+        auto squaresRow = area.withSizeKeepingCenter (squareSize * 2.0f + spacing, squareSize);
 
-        // Indeterminate Progress Bar
-        indeterminateLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 20.0f));
-        y += 25;
-
-        indeterminateProgressBar->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
+        slider->setBounds (squaresRow.removeFromLeft (squareSize));
+        imageButton->setBounds (squaresRow.removeFromRight (squareSize));
     }
 
     void paint (yup::Graphics& g) override
@@ -585,6 +593,12 @@ private:
 
 private:
     static constexpr float panelMargin = 30.0f;
+    static constexpr float contentMargin = 20.0f;
+    static constexpr float spacing = 10.0f;
+    static constexpr float sectionSpacing = 16.0f;
+    static constexpr float rowHeight = 30.0f;
+    static constexpr float labelHeight = 24.0f;
+    static constexpr float tabBarHeight = 36.0f;
 
     WidgetsPanel panel;
     CornerHandle topLeftHandle;

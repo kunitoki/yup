@@ -417,7 +417,10 @@ TEST_F (TabBarTests, OverflowButtonStandsInForAHiddenSelectedTab)
     addTabs ({ "alpha", "beta", "gamma" });
     tab ("gamma").setIconGlyph (YUP_ICON_TABLE);
 
-    bar->setBounds (0.0f, 0.0f, 150.0f, 36.0f);
+    // Room for the first tab and the overflow button only, whatever the font metrics.
+    const auto width = bar->getWidth() - bar->getTabArea().getWidth()
+                     + tab ("alpha").getPreferredLength() + bar->getOverflowButton().getPreferredLength() + 4.0f;
+    bar->setBounds (0.0f, 0.0f, width, 36.0f);
     ASSERT_TRUE (bar->getOverflowButton().isVisible());
     ASSERT_FALSE (tab ("gamma").isVisible());
 
