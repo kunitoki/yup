@@ -99,9 +99,10 @@ public:
         auto scrollBarSize = 15.0f;
         auto viewportWidth = bounds.getWidth() - scrollBarSize;
         auto viewportHeight = bounds.getHeight() - scrollBarSize;
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
 
         // Draw background for entire component (including scrollbar areas)
-        g.setFillColor (yup::Color (0xff1a1a1a));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         // Define the viewport (content area without scrollbars)
@@ -126,7 +127,7 @@ public:
             g.setClipPath (yup::Rectangle<float> (visibleLeft, visibleTop, viewportWidth, viewportHeight));
 
             // Draw canvas background (only visible portion)
-            g.setFillColor (yup::Color (0xff2a2a2a));
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRect (visibleLeft, visibleTop, viewportWidth, viewportHeight);
 
             // Draw grid lines (only in visible area)
@@ -163,7 +164,7 @@ public:
         }
 
         // Draw viewport border
-        g.setStrokeColor (yup::Colors::white.withAlpha (0.3f));
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeRect (viewport);
 
@@ -257,7 +258,8 @@ private:
 
     void drawCoordinateLabels (yup::Graphics& g, float visibleLeft, float visibleTop, float visibleRight, float visibleBottom)
     {
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+        const auto theme = yup::ApplicationTheme::getGlobalTheme();
+        auto font = theme->getDefaultFont();
 
         // Draw coordinate labels at major grid intersections (only visible ones)
         float startX = std::floor (visibleLeft / 500.0f) * 500.0f;
@@ -277,7 +279,7 @@ private:
                     modifier.appendText (label, font);
                 }
 
-                g.setFillColor (yup::Colors::white);
+                g.setFillColor (theme->getPalette().getColor (yup::ThemePalette::Role::text));
                 g.fillFittedText (text, yup::Rectangle<float> (x + 10.0f, y + 10.0f, 120.0f, 20.0f));
             }
         }

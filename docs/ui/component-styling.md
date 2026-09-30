@@ -19,9 +19,10 @@ The styling system has three layers:
 | **Per-component** | This component only | `comp.setColor()`, `comp.setMetric()`, `comp.setStyle()` |
 | **Type-wide** | All instances of a widget type | `theme->setComponentStyle<T>(style)` |
 | **Theme defaults** | Fallback for all components | `theme->setColor()`, `theme->setMetric()` |
+| **Palette** | Colors derived from a handful of source colors | `theme->setPalette()` |
 
-Resolution walks : component overrides → parent chain → theme defaults.
-If nothing is found, the paint function uses a hardcoded fallback.
+Color resolution walks: component overrides → parent chain → theme defaults → palette.
+If nothing is found, the paint function falls back to the palette roles.
 
 ---
 
@@ -44,8 +45,11 @@ comp.setColor ("border", std::nullopt); // remove override → inherit
 // Get the override on THIS component only (no parent walk)
 std::optional<Color> c = comp.getColor ("background");
 
-// Walk parent chain, then fall back to ApplicationTheme defaults
+// Walk the parent chain only, this never reaches the theme
 std::optional<Color> c = comp.findColor ("background");
+
+// Walk the parent chain, then the theme defaults, then the theme palette
+std::optional<Color> c = ApplicationTheme::findComponentColor (comp, "background");
 ```
 
 ### Setting theme-level defaults
@@ -59,7 +63,8 @@ theme->setColor (TextButton::Style::backgroundColorId, Colors::cornflowerBlue);
 
 Theme-level color resolution via `theme->findColor(component, id)`:
 1. Calls `component.findColor(id)` (walks parent chain for component overrides).
-2. If not found, checks the theme's `defaultColors` map.
+2. If not found, checks the colors set with `theme->setColor()`.
+3. If not found, checks the colors derived from the theme palette (see [Palettes](#palettes)).
 
 ### Widget style IDs
 
@@ -108,7 +113,7 @@ comp.setMetric ("padding", std::nullopt); // remove override
 // Local only
 std::optional<float> r = comp.getMetric ("corner-radius");
 
-// Walk parent chain + theme fallback
+// Walk the parent chain only, use ApplicationTheme::findComponentMetric for the theme fallback
 std::optional<float> r = comp.findMetric ("corner-radius");
 ```
 
@@ -216,6 +221,10 @@ const Font& font     = theme->getDefaultFont();
 const Font& iconFont = theme->getDefaultIconFont();
 ```
 
+The built-in theme uses a 14 px default font. Buttons, combo boxes, labels, text
+editors, list rows and menus all draw their text at that height (smaller only
+when the widget is too short to fit it).
+
 ### Batch color/metric registration
 
 ```cpp
@@ -244,6 +253,58 @@ auto m = theme->findMetric (comp, "corner-radius");
 auto c = ApplicationTheme::findComponentColor (comp, "background");
 auto m = ApplicationTheme::findComponentMetric (comp, "corner-radius");
 ```
+
+---
+
+## Palettes
+
+A `ThemePalette` turns a few source colors, for example the export of an online
+palette generator, into the semantic roles a theme needs:
+
+| Role | Used for |
+|---|---|
+| `background` | Window and page background |
+| `surface` | Fields, lists and other inset areas |
+| `surfaceRaised` | Buttons, menus and other raised areas |
+| `outline` | Borders and separators |
+| `text` / `textMuted` | Primary and secondary text |
+| `accent` / `onAccent` | Selection, focus and active values, and text drawn on them |
+
+The roles are derived deterministically (the order of the source colors does not
+matter), text is always readable against the background, and missing colors are
+derived, so a single source color still gives a complete palette. Palettes are
+dark by default, pass `ThemePalette::Mode::light` for a light one.
+
+```cpp
+// From colors
+ThemePalette palette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8) });
+
+// From text: XML with <color hex="..."> or <color r g b> elements, CSS, hex lists or palette URLs
+auto result = ThemePalette::fromString ("https://coolors.co/100b00-85cb33-efffc8-a5cbc3-3b341f",
+                                        ThemePalette::Mode::dark);
+if (result.failed())
+    YUP_DBG (result.getErrorMessage());
+
+// Tweak a single role
+palette.setColor (ThemePalette::Role::accent, Colors::orange);
+```
+
+Switch the palette of the whole application at runtime, then repaint:
+
+```cpp
+ApplicationTheme::getGlobalTheme()->setPalette (result.getReference());
+topLevelComponent->repaint();
+```
+
+A theme turns the palette roles into widget colors with a palette mapping
+(`theme->setPaletteMapping()`, which calls `theme->setPaletteColor()`); the
+built-in theme maps every widget color it paints. You can also pass a palette
+when creating it: `createThemeVersion1 (palette)`.
+
+Colors set with `theme->setColor()` always win over the palette and survive
+palette changes, and colors set on a component win over both. Custom paint
+styles should read `theme.getPalette().getColor (role)` at paint time so they
+follow palette switches too.
 
 ---
 

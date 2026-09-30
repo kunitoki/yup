@@ -29,8 +29,7 @@ class AudioGraphWindow final : public yup::DocumentWindow
 {
 public:
     AudioGraphWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options().withAllowedHighDensityDisplay (true),
-                               yup::Color (0xff0d1117))
+        : yup::DocumentWindow (yup::ComponentNative::Options(), yup::Color (0xff0d1117))
     {
         setTitle ("YUP Audio Graph");
 

@@ -56,7 +56,6 @@ public:
                 continue;
 
             auto label = labels.add (std::make_unique<yup::Label> (axisInfo->tagName + "Label"));
-            label->setFont (font);
             addAndMakeVisible (label);
 
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, axisInfo->tagName));
@@ -125,7 +124,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         g.addTransform (yup::AffineTransform::rotation (
@@ -161,7 +160,6 @@ private:
     void addControl (yup::StringRef name, int index, float defaultValue, float minValue, float maxValue, float& valueToSet)
     {
         auto label = labels.add (std::make_unique<yup::Label> (name + "Label"));
-        label->setFont (font);
         addAndMakeVisible (label);
 
         auto slider = sliders.add (std::make_unique<yup::Slider> (yup::Slider::Rotary, name));

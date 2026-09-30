@@ -188,7 +188,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         auto bounds = getLocalBounds().to<float>().reduced (10.0f);
@@ -203,12 +203,18 @@ public:
         }
         else
         {
-            g.setFillColor (yup::Colors::black.withAlpha (0.15f));
-            g.fillRoundedRect (bounds, 6.0f);
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+            const auto& palette = theme->getPalette();
 
-            g.setFillColor (yup::Colors::white.withAlpha (0.3f));
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
+            g.fillRoundedRect (bounds, 6.0f);
+            g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (bounds, 6.0f);
+
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
             g.fillFittedText ("No animation loaded",
-                              yup::Font().withHeight (18.0f),
+                              theme->getDefaultFont().withHeight (18.0f),
                               bounds,
                               yup::Justification::center);
         }

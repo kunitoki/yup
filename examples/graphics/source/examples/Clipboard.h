@@ -166,7 +166,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         auto area = getLocalBounds().reduced (10).to<float>();
@@ -176,14 +176,18 @@ public:
         if (area.isEmpty())
             return;
 
+        const auto theme = yup::ApplicationTheme::getGlobalTheme();
+        const auto& palette = theme->getPalette();
+        const auto& font = theme->getDefaultFont();
+
         // MIME types text at the bottom
-        g.setFillColor (yup::Colors::white.withAlpha (0.7f));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
         auto mimeRow = area.removeFromBottom (20.0f);
 
         if (mimeTypes.isEmpty())
-            g.fillFittedText ("MIME types: (none)", yup::Font().withHeight (11.0f), mimeRow, yup::Justification::centerLeft);
+            g.fillFittedText ("MIME types: (none)", font.withHeight (11.0f), mimeRow, yup::Justification::centerLeft);
         else
-            g.fillFittedText ("MIME types: " + mimeTypes.joinIntoString (", "), yup::Font().withHeight (11.0f), mimeRow, yup::Justification::centerLeft);
+            g.fillFittedText ("MIME types: " + mimeTypes.joinIntoString (", "), font.withHeight (11.0f), mimeRow, yup::Justification::centerLeft);
 
         // Image display
         auto imageArea = area.reduced (4.0f);
@@ -203,17 +207,20 @@ public:
                 imgW * scale,
                 imgH * scale);
 
-            g.setFillColor (yup::Colors::black);
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRect (imageArea);
             g.drawImage (displayedImage, dest);
         }
         else
         {
-            g.setFillColor (yup::Colors::black.withAlpha (0.25f));
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRoundedRect (imageArea, 6.0f);
-            g.setFillColor (yup::Colors::white.withAlpha (0.4f));
+            g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (imageArea, 6.0f);
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
             g.fillFittedText ("Pasted image appears here",
-                              yup::Font().withHeight (14.0f),
+                              font.withHeight (14.0f),
                               imageArea,
                               yup::Justification::center);
         }

@@ -232,11 +232,11 @@ public:
         Color backgroundColor;
 
         if (selected)
-            backgroundColor = owner.findColor (ListBox::Style::selectedRowBackgroundColorId).value_or (Color (0xff3a7ebf));
+            backgroundColor = ApplicationTheme::findComponentColor (owner, ListBox::Style::selectedRowBackgroundColorId).value_or (Color (0xff3a7ebf));
         else if (hovered)
-            backgroundColor = owner.findColor (ListBox::Style::hoveredRowBackgroundColorId).value_or (Color (0x14000000));
+            backgroundColor = ApplicationTheme::findComponentColor (owner, ListBox::Style::hoveredRowBackgroundColorId).value_or (Color (0x14000000));
         else
-            backgroundColor = owner.findColor (ListBox::Style::rowBackgroundColorId).value_or (Color (0x00000000));
+            backgroundColor = ApplicationTheme::findComponentColor (owner, ListBox::Style::rowBackgroundColorId).value_or (Color (0x00000000));
 
         if (backgroundColor.getAlpha() > 0)
         {

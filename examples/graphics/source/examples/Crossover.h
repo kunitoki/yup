@@ -73,7 +73,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff404040));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -272,12 +272,8 @@ private:
 
     void createUI()
     {
-        // Get a 12pt font
-        auto labelFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
         // Order selection
         orderLabel.setText ("Filter Order", yup::NotificationType::dontSendNotification);
-        orderLabel.setFont (labelFont);
         addAndMakeVisible (orderLabel);
 
         orderComboBox.addItem ("2nd Order", 1);
@@ -304,7 +300,6 @@ private:
 
         // Crossover frequency slider
         freqLabel.setText ("Crossover Frequency", yup::NotificationType::dontSendNotification);
-        freqLabel.setFont (labelFont);
         addAndMakeVisible (freqLabel);
 
         freqSlider.setRange (20.0, 20000.0);
@@ -320,7 +315,6 @@ private:
 
         // Low gain slider
         lowGainLabel.setText ("Low", yup::NotificationType::dontSendNotification);
-        lowGainLabel.setFont (labelFont);
         lowGainLabel.setJustification (yup::Justification::center);
         //lowGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFF4488FF));
         addAndMakeVisible (lowGainLabel);
@@ -336,7 +330,6 @@ private:
 
         // High gain slider
         highGainLabel.setText ("High", yup::NotificationType::dontSendNotification);
-        highGainLabel.setFont (labelFont);
         highGainLabel.setJustification (yup::Justification::center);
         //highGainLabel.setColour (yup::Label::textColourId, yup::Color (0xFFFF8844));
         addAndMakeVisible (highGainLabel);

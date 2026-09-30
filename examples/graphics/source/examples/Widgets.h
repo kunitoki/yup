@@ -35,9 +35,6 @@ class WidgetsDemo : public yup::Component
 public:
     WidgetsDemo()
     {
-        auto theme = yup::ApplicationTheme::getGlobalTheme();
-        exampleFont = theme->getDefaultFont();
-
         addAndMakeVisible (panel);
 
         setupWidgets();
@@ -104,7 +101,6 @@ private:
         // Labels
         titleLabel = std::make_unique<yup::Label> ("titleLabel");
         titleLabel->setText ("YUP Widget Examples", yup::dontSendNotification);
-        titleLabel->setFont (exampleFont);
         panel.addAndMakeVisible (titleLabel.get());
 
         statusLabel = std::make_unique<yup::Label> ("statusLabel");
@@ -297,7 +293,7 @@ private:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -343,7 +339,7 @@ private:
 
             if (isButtonOver())
             {
-                g.setFillColor (yup::Colors::white.withAlpha (isButtonDown() ? 0.35f : 0.15f));
+                g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::text).withAlpha (isButtonDown() ? 0.35f : 0.15f));
                 g.fillRoundedRect (imageArea, 8.0f);
             }
 
@@ -406,7 +402,7 @@ private:
 
         void paint (yup::Graphics& g) override
         {
-            g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray).brighter (0.1f));
+            g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::surface));
             g.fillAll();
         }
 
@@ -497,7 +493,6 @@ private:
 private:
     static constexpr float panelMargin = 30.0f;
 
-    yup::Font exampleFont;
     WidgetsPanel panel;
     CornerHandle topLeftHandle;
     CornerHandle topRightHandle;

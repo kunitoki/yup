@@ -89,20 +89,21 @@ public:
         , panelTitle (title)
         , captionFont (yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (13.0f))
     {
-        setOpaque (false); // translucent rounded-rect background
+        setOpaque (false); // rounded-rect background
     }
 
     void paint (yup::Graphics& g) override
     {
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
         auto bounds = getLocalBounds().reduced (0.5f);
 
-        g.setFillColor (yup::Color (0x22ffffff));
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
         g.fillRoundedRect (bounds, 8.0f);
 
-        g.setStrokeColor (yup::Color (0x55ffffff));
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.strokeRoundedRect (bounds, 8.0f);
 
-        g.setFillColor (yup::Colors::white);
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::text));
         g.fillFittedText (panelTitle, captionFont, bounds.removeFromTop (24.0f), yup::Justification::center);
     }
 
@@ -1604,7 +1605,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 

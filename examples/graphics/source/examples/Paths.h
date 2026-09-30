@@ -33,7 +33,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         // Draw title
@@ -81,10 +81,10 @@ private:
             auto modifier = text.startUpdate();
             modifier.setMaxSize (area.getSize());
             modifier.setHorizontalAlign (yup::StyledText::center);
-            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f));
+            modifier.appendText (title, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         }
 
-        g.setFillColor (yup::Colors::white);
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::textMuted));
         g.fillFittedText (text, area.removeFromTop (16));
     }
 

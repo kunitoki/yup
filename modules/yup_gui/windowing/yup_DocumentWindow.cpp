@@ -62,7 +62,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
 void DocumentWindow::paint (Graphics& g)
 {
-    g.setFillColor (findColor (Style::backgroundColorId).value_or (Colors::dimgray));
+    g.setFillColor (ApplicationTheme::findComponentColor (*this, Style::backgroundColorId).value_or (Colors::dimgray));
     g.fillAll();
 }
 

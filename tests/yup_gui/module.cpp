@@ -70,6 +70,7 @@
 #include "yup_TextButton.cpp"
 #include "yup_TextEditor.cpp"
 #include "yup_TextInputTarget.cpp"
+#include "yup_ThemePalette.cpp"
 #include "yup_ThemeVersion1.cpp"
 #include "yup_ToggleButton.cpp"
 #include "yup_TreeView.cpp"

@@ -239,6 +239,10 @@ YUP_API void YUP_CALLTYPE initialiseYup_Windowing()
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
     YUP_MODULE_DBG (GUI_WINDOWING, "SDL: registered display event watch");
 
+#if YUP_EMSCRIPTEN
+    installBrowserPasteHandlers();
+#endif
+
     // Set the default theme now in all platforms except ios
 #if ! YUP_IOS
     ApplicationTheme::setGlobalTheme (createThemeVersion1());

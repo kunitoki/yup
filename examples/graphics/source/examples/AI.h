@@ -33,13 +33,9 @@ public:
     AIDemo()
         : Component ("AIDemo")
     {
-        auto theme = yup::ApplicationTheme::getGlobalTheme();
-        titleFont = theme->getDefaultFont();
-
         //======================================================================
         // Title
         titleLabel.setText ("AI Providers", yup::dontSendNotification);
-        titleLabel.setFont (titleFont);
         addAndMakeVisible (titleLabel);
 
         //======================================================================
@@ -234,11 +230,12 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (backgroundColor.value_or (
-            findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray)));
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+        g.setFillColor (backgroundColor.value_or (palette.getColor (yup::ThemePalette::Role::background)));
         g.fillAll();
 
-        g.setStrokeColor (yup::Colors::darkgray);
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
         g.strokeLine (20.0f, 56.0f, getWidth() - 20.0f, 56.0f); // below title
         g.strokeLine (20.0f, 96.0f, getWidth() - 20.0f, 96.0f); // below provider row
@@ -524,7 +521,6 @@ private:
     //==========================================================================
     // Title
     yup::Label titleLabel { "titleLabel" };
-    yup::Font titleFont;
 
     // Provider selector
     yup::TextButton providerOpenAIChatButton { "providerOpenAIChatButton" };

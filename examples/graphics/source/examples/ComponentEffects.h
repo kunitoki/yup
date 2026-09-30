@@ -147,8 +147,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId)
-                            .value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         if (capturedContext == nullptr)
@@ -643,8 +642,13 @@ private:
         void paint (yup::Graphics& g) override
         {
             auto bounds = getLocalBounds();
-            g.setFillColor (yup::Color (0xff2a2a3e));
+            const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRoundedRect (bounds.to<float>(), 6.0f);
+            g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
+            g.setStrokeWidth (1.0f);
+            g.strokeRoundedRect (bounds.to<float>(), 6.0f);
 
             if (snapshotImage.isValid() && snapshotImage.getWidth() > 0)
             {
@@ -655,7 +659,7 @@ private:
             }
             else
             {
-                g.setFillColor (yup::Color (0x88ffffff));
+                g.setFillColor (palette.getColor (yup::ThemePalette::Role::textMuted));
                 auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (16.0f);
                 g.fillFittedText ("Snapshot will\nappear here", font, bounds.to<float>().reduced (10.0f), yup::Justification::center);
             }

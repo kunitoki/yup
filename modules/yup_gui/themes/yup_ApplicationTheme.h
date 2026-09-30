@@ -122,8 +122,9 @@ public:
     //==============================================================================
     /** Returns a color from the global theme.
 
-        This method looks for the color in the component's properties first, then in the global theme. If no color
-        is found, it returns std::nullopt.
+        This method looks for the color in the component's properties first (walking up its parents), then in
+        the colors set explicitly with setColor(), then in the colors derived from the palette. If no color is
+        found, it returns std::nullopt.
 
         @param component     The component for which to find the color.
         @param colorId       The identifier for the color to retrieve.
@@ -134,8 +135,9 @@ public:
 
     /** Returns a color from this theme.
 
-        This method looks for the color in the component's properties first, then in this theme. If no color
-        is found, it returns std::nullopt.
+        This method looks for the color in the component's properties first (walking up its parents), then in
+        the colors set explicitly with setColor(), then in the colors derived from the palette. If no color is
+        found, it returns std::nullopt.
 
         @param component     The component for which to find the color.
         @param colorId       The identifier for the color to retrieve.
@@ -145,6 +147,9 @@ public:
     std::optional<Color> findColor (const Component& component, const Identifier& colorId) const;
 
     /** Sets a color in this theme.
+
+        Colors set this way take precedence over the colors derived from the palette, and are kept when the
+        palette changes.
 
         @param colorId       The identifier for the color to set.
         @param color         The color to set.
@@ -156,6 +161,43 @@ public:
         @param colors        An initializer list of color identifier and color pairs.
     */
     void setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors);
+
+    //==============================================================================
+    /** Sets the palette of this theme.
+
+        The palette mapping (see setPaletteMapping()) is run to rebuild the palette colors, which are used by
+        findColor() for every identifier that has no explicit color set with setColor(). Components are not
+        repainted automatically.
+
+        @param newPalette    The palette to use.
+
+        @see ThemePalette, setPaletteMapping
+    */
+    void setPalette (const ThemePalette& newPalette);
+
+    /** Returns the palette of this theme. */
+    const ThemePalette& getPalette() const;
+
+    /** A function that assigns theme colors from the roles of a palette, by calling setPaletteColor(). */
+    using PaletteMapping = std::function<void (const ThemePalette&, ApplicationTheme&)>;
+
+    /** Sets the function that turns the palette into theme colors, and runs it on the current palette.
+
+        Themes set this up when they are created, so that a new palette recolors all their components.
+
+        @param mapping       The mapping function.
+    */
+    void setPaletteMapping (PaletteMapping mapping);
+
+    /** Sets a palette derived color in this theme.
+
+        This is meant to be called from a palette mapping function. Palette colors are cleared every time the
+        palette changes, and are only used when there is no explicit color set with setColor().
+
+        @param colorId       The identifier for the color to set.
+        @param color         The color to set.
+    */
+    void setPaletteColor (const Identifier& colorId, const Color& color);
 
     //==============================================================================
     /** Returns a named float metric from the global theme.
@@ -246,6 +288,9 @@ private:
     //==============================================================================
     std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
     std::unordered_map<Identifier, Color> defaultColors;
+    std::unordered_map<Identifier, Color> paletteColors;
+    ThemePalette palette;
+    PaletteMapping paletteMapping;
     std::unordered_map<Identifier, float> defaultMetrics;
     Font defaultFont;
     Font defaultIconFont;

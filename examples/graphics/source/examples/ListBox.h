@@ -109,7 +109,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff2a2a2a));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -150,8 +150,10 @@ private:
 
         void paint (yup::Graphics& g) override
         {
-            g.setFillColor (yup::Color (0xff808080));
-            g.fillFittedText (text, getFont (12.0f), getLocalBounds().reduced (8.0f, 0.0f), yup::Justification::centerLeft);
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+
+            g.setFillColor (theme->getPalette().getColor (yup::ThemePalette::Role::textMuted));
+            g.fillFittedText (text, theme->getDefaultFont(), getLocalBounds().reduced (8.0f, 0.0f), yup::Justification::centerLeft);
         }
 
     private:
@@ -276,18 +278,20 @@ private:
 
         void paint (yup::Graphics& g) override
         {
+            const auto theme = yup::ApplicationTheme::getGlobalTheme();
+            const auto& palette = theme->getPalette();
             auto bounds = getLocalBounds().reduced (6.0f, 0.0f);
 
-            g.setFillColor (selected ? yup::Color (0xff3a7ebf) : yup::Color (0xfff2f2f2));
+            g.setFillColor (palette.getColor (selected ? yup::ThemePalette::Role::accent : yup::ThemePalette::Role::surfaceRaised));
             g.fillRoundedRect (bounds, 8.0f);
 
             auto text = bounds.reduced (12.0f, 8.0f).withTrimmedRight (84.0f);
 
-            g.setFillColor (selected ? yup::Colors::white : yup::Colors::black);
+            g.setFillColor (palette.getColor (selected ? yup::ThemePalette::Role::onAccent : yup::ThemePalette::Role::text));
             g.fillFittedText ("Post #" + yup::String (rowIndex + 1), getFont (15.0f), text.removeFromTop (text.getHeight() * 0.5f), yup::Justification::centerLeft);
 
-            g.setFillColor (selected ? yup::Colors::white.withAlpha (0.8f) : yup::Color (0xff707070));
-            g.fillFittedText ("Custom row with its own button", getFont (12.0f), text, yup::Justification::centerLeft);
+            g.setFillColor (selected ? palette.getColor (yup::ThemePalette::Role::onAccent).withAlpha (0.8f) : palette.getColor (yup::ThemePalette::Role::textMuted));
+            g.fillFittedText ("Custom row with its own button", theme->getDefaultFont(), text, yup::Justification::centerLeft);
         }
 
         std::function<void (int, bool)> onLikeChanged;
@@ -410,7 +414,7 @@ private:
 
         void paint (yup::Graphics& g) override
         {
-            g.setFillColor (yup::Color (0xff404040));
+            g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::textMuted));
             g.fillFittedText ("Carousel " + yup::String (model.carouselIndex + 1) + " - swipe sideways",
                               getFont (13.0f),
                               getLocalBounds().removeFromTop (24.0f).reduced (12.0f, 0.0f),

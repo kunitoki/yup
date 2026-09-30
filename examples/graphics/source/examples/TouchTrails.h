@@ -67,7 +67,7 @@ public:
     //==============================================================================
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (backgroundColor);
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         drawInfoText (g);
@@ -132,9 +132,6 @@ public:
 
 private:
     //==============================================================================
-    /** The color of every stroke drawn by a single pointer, in ARGB. */
-    static constexpr yup::Color backgroundColor = yup::Color (0xff14161c);
-
     /** How many trailing points a moving pointer may accumulate at most. */
     static constexpr int maxTrailPoints = 128;
 
@@ -299,10 +296,12 @@ private:
                 ++activePointers;
         }
 
-        g.setFillColor (yup::Colors::white.withAlpha (0.6f));
+        const auto mutedColor = yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::textMuted);
+
+        g.setFillColor (mutedColor);
         g.fillFittedText ("Touch and drag with one or more fingers - every finger draws in its own color.", hintFont, area.removeFromTop (18.0f), yup::Justification::left);
 
-        g.setFillColor (yup::Colors::white.withAlpha (0.4f));
+        g.setFillColor (mutedColor);
         const auto statusText = (activePointers > 0)
                                     ? "Active pointers: " + yup::String (activePointers)
                                     : yup::String ("Trails fade out after the finger is lifted.");

@@ -23,6 +23,7 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include <yup_audio_devices/yup_audio_devices.h>
 #endif
@@ -207,6 +208,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+#include "examples/Themes.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
 #include "examples/ToastNotification.h"
 #endif
@@ -271,10 +275,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options()
-                                   .withAllowedHighDensityDisplay (true)
-                                   .withVSync (true),
-                               yup::Color (0xff404040))
+        : yup::DocumentWindow (yup::ComponentNative::Options().withVSync (true))
     {
         setTitle ("main");
 
@@ -407,6 +408,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+        addDemo ("Themes", [] { return std::make_unique<ThemesDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });

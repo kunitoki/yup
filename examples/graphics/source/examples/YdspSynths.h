@@ -36,19 +36,21 @@
 #include <vector>
 
 //==============================================================================
-// Palette matching cmake/platforms/emscripten/shell.html's dark theme, so the
-// native demo and the web shell around it read as one product.
+// The demo colors, taken from the roles of the theme palette so the instrument
+// follows palette switches.
 namespace
 {
-constexpr yup::uint32 paletteVoidColor = 0xff07090e;
-constexpr yup::uint32 paletteSurfaceColor = 0xff0e121a;
-constexpr yup::uint32 paletteEdgeColor = 0xff1b2230;
-constexpr yup::uint32 paletteInkColor = 0xffe6eaf2;
-constexpr yup::uint32 paletteMutedColor = 0xff7c8798;
-constexpr yup::uint32 paletteGlowColor = 0xff0a84ff;
-constexpr yup::uint32 paletteGlowSoftColor = 0xff6fb6ff;
-constexpr yup::uint32 paletteRaisedColor = 0xff162031;
-constexpr yup::uint32 paletteDangerColor = 0xffff6b5a;
+yup::Color paletteRoleColor (yup::ThemePalette::Role role) { return yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (role); }
+
+yup::Color paletteVoidColor() { return paletteRoleColor (yup::ThemePalette::Role::background); }
+yup::Color paletteSurfaceColor() { return paletteRoleColor (yup::ThemePalette::Role::surface); }
+yup::Color paletteEdgeColor() { return paletteRoleColor (yup::ThemePalette::Role::outline); }
+yup::Color paletteInkColor() { return paletteRoleColor (yup::ThemePalette::Role::text); }
+yup::Color paletteMutedColor() { return paletteRoleColor (yup::ThemePalette::Role::textMuted); }
+yup::Color paletteGlowColor() { return paletteRoleColor (yup::ThemePalette::Role::accent); }
+yup::Color paletteGlowSoftColor() { return paletteGlowColor().mixedWith (paletteInkColor(), 0.35f, yup::ColorSpace::SRGB); }
+yup::Color paletteRaisedColor() { return paletteRoleColor (yup::ThemePalette::Role::surfaceRaised); }
+yup::Color paletteDangerColor() { return yup::Color (0xffff6b5a); }
 } // namespace
 
 //==============================================================================
@@ -68,14 +70,14 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (paletteVoidColor));
+        g.setFillColor (paletteVoidColor());
         g.fillAll();
 
         auto bounds = getLocalBounds().reduced (4.0f);
         if (renderData.empty() || bounds.isEmpty())
             return;
 
-        auto lineColor = yup::Color (paletteGlowColor);
+        auto lineColor = paletteGlowColor();
 
         const float xSize = static_cast<float> (bounds.getWidth()) / static_cast<float> (renderData.size());
         const float halfHeight = static_cast<float> (bounds.getHeight()) * 0.5f;
@@ -130,8 +132,8 @@ class YdspIconButton : public yup::Button
 {
 public:
     YdspIconButton (const char* glyphText,
-                    yup::Color backgroundColour = yup::Color (paletteSurfaceColor),
-                    yup::Color idleColour = yup::Color (paletteInkColor))
+                    yup::Color backgroundColour = paletteSurfaceColor(),
+                    yup::Color idleColour = paletteInkColor())
         : Button ("YdspIconButton")
         , glyphText (glyphText)
         , backgroundColour (backgroundColour)
@@ -154,14 +156,14 @@ public:
 
         if (isButtonOver() || isButtonDown())
         {
-            g.setStrokeColor (yup::Color (isButtonDown() ? paletteGlowColor : paletteEdgeColor));
+            g.setStrokeColor (isButtonDown() ? paletteGlowColor() : paletteEdgeColor());
             g.setStrokeWidth (1.0f);
             g.strokeRoundedRect (bounds, 8.0f);
         }
 
         auto iconColour = isEnabled()
-                            ? (isButtonOver() ? yup::Color (paletteGlowSoftColor) : idleColour)
-                            : yup::Color (paletteMutedColor);
+                            ? (isButtonOver() ? paletteGlowSoftColor() : idleColour)
+                            : paletteMutedColor();
 
         g.setFillColor (iconColour);
         auto iconFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultIconFont();
@@ -201,7 +203,7 @@ public:
     {
         deviceManager.initialiseWithDefaultDevices (0, 2);
 
-        setColor (yup::DocumentWindow::Style::backgroundColorId, yup::Color (paletteVoidColor));
+        setColor (yup::DocumentWindow::Style::backgroundColorId, paletteVoidColor());
 
         {
             yup::MemoryBlock mb;
@@ -240,7 +242,7 @@ public:
 
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-        performanceTabButton = std::make_unique<YdspIconButton> (YUP_ICON_KEYBOARD, yup::Color (paletteRaisedColor));
+        performanceTabButton = std::make_unique<YdspIconButton> (YUP_ICON_KEYBOARD, paletteRaisedColor());
         performanceTabButton->setClickingGrabFocus (false);
         performanceTabButton->onClick = [this]
         {
@@ -248,7 +250,7 @@ public:
         };
         addAndMakeVisible (*performanceTabButton);
 
-        editorTabButton = std::make_unique<YdspIconButton> (YUP_ICON_PENCIL, yup::Color (paletteRaisedColor));
+        editorTabButton = std::make_unique<YdspIconButton> (YUP_ICON_PENCIL, paletteRaisedColor());
         editorTabButton->setClickingGrabFocus (false);
         editorTabButton->onClick = [this]
         {
@@ -258,7 +260,7 @@ public:
 
         brandLabel = std::make_unique<yup::Label> ("Brand");
         brandLabel->setText ("YUP! DSPJIT");
-        brandLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteInkColor));
+        brandLabel->setColor (yup::Label::Style::textFillColorId, paletteInkColor());
         brandLabel->setJustification (yup::Justification::centerLeft);
         brandLabel->setClickingGrabFocus (false);
         {
@@ -290,12 +292,12 @@ public:
 
         masterLabel = std::make_unique<yup::Label> ("Master");
         masterLabel->setText ("Master", yup::dontSendNotification);
-        masterLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+        masterLabel->setColor (yup::Label::Style::textFillColorId, paletteMutedColor());
         masterLabel->setFont (font.withHeight (12.0f));
         masterLabel->setJustification (yup::Justification::centerLeft);
         addAndMakeVisible (*masterLabel);
 
-        clearButton = std::make_unique<YdspIconButton> (YUP_ICON_SKULL, yup::Color (paletteRaisedColor));
+        clearButton = std::make_unique<YdspIconButton> (YUP_ICON_SKULL, paletteRaisedColor());
         clearButton->onClick = [this]
         {
             keyboardState.allNotesOff (0);
@@ -345,7 +347,7 @@ public:
         diagnosticsEditor = std::make_unique<yup::TextEditor> ("diagnostics");
         diagnosticsEditor->setMultiLine (true);
         diagnosticsEditor->setReadOnly (true);
-        diagnosticsEditor->setColor (yup::TextEditor::Style::textColorId, yup::Color (paletteDangerColor));
+        diagnosticsEditor->setColor (yup::TextEditor::Style::textColorId, paletteDangerColor());
         diagnosticsEditor->setFont (yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont());
         addChildComponent (*diagnosticsEditor);
 
@@ -470,7 +472,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Color (paletteVoidColor)));
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (paletteVoidColor()));
         g.fillAll();
 
         paintRail (g, railBounds, true);
@@ -491,10 +493,10 @@ public:
         if (bounds.isEmpty())
             return;
 
-        g.setFillColor (yup::Color (paletteSurfaceColor));
+        g.setFillColor (paletteSurfaceColor());
         g.fillRect (bounds);
 
-        g.setStrokeColor (yup::Color (paletteEdgeColor));
+        g.setStrokeColor (paletteEdgeColor());
         g.setStrokeWidth (1.0f);
 
         const auto edgeY = edgeAtBottom ? bounds.getBottom() : bounds.getY();
@@ -764,7 +766,7 @@ private:
         {
             auto* label = expressionLabels.add (std::make_unique<yup::Label> (yup::String ("ExprLabel") + caption));
             label->setText (caption, yup::dontSendNotification);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+            label->setColor (yup::Label::Style::textFillColorId, paletteMutedColor());
             label->setFont (font.withHeight (13.0f));
             label->setJustification (yup::Justification::centerLeft);
             label->setWantsMouseEvents (false, false);
@@ -838,16 +840,16 @@ private:
             auto track = meter.bounds;
             auto caption = track.removeFromTop (track.getHeight() * 0.5f);
 
-            g.setFillColor (yup::Color (paletteMutedColor));
+            g.setFillColor (paletteMutedColor());
             g.fillFittedText (meter.name, font, caption, yup::Justification::centerLeft);
 
-            g.setFillColor (yup::Color (paletteEdgeColor));
+            g.setFillColor (paletteEdgeColor());
             g.fillRoundedRect (track, 3.0f);
 
             const auto filled = std::clamp (meter.value, 0.0f, 1.0f);
             if (filled > 0.0f)
             {
-                g.setFillColor (yup::Color (paletteGlowColor));
+                g.setFillColor (paletteGlowColor());
                 g.fillRoundedRect (track.withWidth (track.getWidth() * filled), 3.0f);
             }
         }
@@ -1100,7 +1102,7 @@ private:
         auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
         auto monospaceFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont();
 
-        const auto accentColor = yup::Color (paletteGlowColor);
+        const auto accentColor = paletteGlowColor();
 
         for (int i = 0; i < graph.getParameterCount(); ++i)
         {
@@ -1132,15 +1134,15 @@ private:
             slider->setNumDecimalPlacesToDisplay (3);
             slider->setValue (graph.getParameter (info.name), yup::dontSendNotification);
             slider->setClickingGrabFocus (false);
-            slider->setColor (yup::Slider::Style::trackColorId, yup::Color (paletteEdgeColor));
+            slider->setColor (yup::Slider::Style::trackColorId, paletteEdgeColor());
             slider->setColor (yup::Slider::Style::thumbColorId, accentColor);
-            slider->setColor (yup::Slider::Style::thumbOverColorId, yup::Color (paletteGlowSoftColor));
+            slider->setColor (yup::Slider::Style::thumbOverColorId, paletteGlowSoftColor());
             slider->setColor (yup::Slider::Style::thumbDownColorId, accentColor.brighter (0.3f));
             addAndMakeVisible (slider);
 
             auto label = paramLabels.add (std::make_unique<yup::Label> (yup::String ("ParamLabel") + yup::String (i)));
             label->setText (yup::String (info.displayName), yup::dontSendNotification);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+            label->setColor (yup::Label::Style::textFillColorId, paletteMutedColor());
             label->setFont (font.withHeight (14.0f));
             label->setJustification (yup::Justification::center);
             label->setWantsMouseEvents (false, false);
@@ -1148,7 +1150,7 @@ private:
 
             auto valueLabel = paramValueLabels.add (std::make_unique<yup::Label> (yup::String ("ParamValue") + yup::String (i)));
             valueLabel->setText (valueString, yup::dontSendNotification);
-            valueLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteInkColor));
+            valueLabel->setColor (yup::Label::Style::textFillColorId, paletteInkColor());
             valueLabel->setFont (monospaceFont.withHeight (13.0f));
             valueLabel->setJustification (yup::Justification::center);
             valueLabel->setWantsMouseEvents (false, false);
@@ -1175,10 +1177,10 @@ private:
     {
         for (const auto& card : paramCardBounds)
         {
-            g.setFillColor (yup::Color (paletteSurfaceColor));
+            g.setFillColor (paletteSurfaceColor());
             g.fillRoundedRect (card, 14.0f);
 
-            g.setStrokeColor (yup::Color (paletteEdgeColor));
+            g.setStrokeColor (paletteEdgeColor());
             g.setStrokeWidth (1.0f);
             g.strokeRoundedRect (card, 14.0f);
         }
@@ -1364,7 +1366,7 @@ private:
 
     void createSynthNavButtons()
     {
-        patchPrevButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_LEFT, yup::Color (paletteRaisedColor));
+        patchPrevButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_LEFT, paletteRaisedColor());
         patchPrevButton->setClickingGrabFocus (false);
         patchPrevButton->onClick = [this]
         {
@@ -1374,7 +1376,7 @@ private:
         };
         addAndMakeVisible (*patchPrevButton);
 
-        patchNextButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_RIGHT, yup::Color (paletteRaisedColor));
+        patchNextButton = std::make_unique<YdspIconButton> (YUP_ICON_CHEVRON_RIGHT, paletteRaisedColor());
         patchNextButton->setClickingGrabFocus (false);
         patchNextButton->onClick = [this]
         {
@@ -1466,7 +1468,7 @@ private:
         addAndMakeVisible (*paramNextButton);
 
         paramPageLabel = std::make_unique<yup::Label> ("ParamPage");
-        paramPageLabel->setColor (yup::Label::Style::textFillColorId, yup::Color (paletteMutedColor));
+        paramPageLabel->setColor (yup::Label::Style::textFillColorId, paletteMutedColor());
         paramPageLabel->setFont (yup::ApplicationTheme::getGlobalTheme()->getDefaultMonospaceFont().withHeight (13.0f));
         paramPageLabel->setJustification (yup::Justification::center);
         paramPageLabel->setVisible (false);

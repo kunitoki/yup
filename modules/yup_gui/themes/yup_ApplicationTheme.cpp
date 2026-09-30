@@ -63,6 +63,9 @@ std::optional<Color> ApplicationTheme::findColor (const Component& component, co
     if (auto it = defaultColors.find (colorId); it != defaultColors.end())
         return it->second;
 
+    if (auto it = paletteColors.find (colorId); it != paletteColors.end())
+        return it->second;
+
     return std::nullopt;
 }
 
@@ -75,6 +78,33 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
 {
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
+}
+
+//==============================================================================
+
+void ApplicationTheme::setPalette (const ThemePalette& newPalette)
+{
+    palette = newPalette;
+    paletteColors.clear();
+
+    if (paletteMapping)
+        paletteMapping (palette, *this);
+}
+
+const ThemePalette& ApplicationTheme::getPalette() const
+{
+    return palette;
+}
+
+void ApplicationTheme::setPaletteMapping (PaletteMapping mapping)
+{
+    paletteMapping = std::move (mapping);
+    setPalette (palette);
+}
+
+void ApplicationTheme::setPaletteColor (const Identifier& colorId, const Color& color)
+{
+    paletteColors.insert_or_assign (colorId, color);
 }
 
 //==============================================================================

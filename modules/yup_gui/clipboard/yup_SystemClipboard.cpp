@@ -77,6 +77,10 @@ void SystemClipboard::clipboardCleanupCallback (void* userdata)
 void SystemClipboard::copyTextToClipboard (const String& text)
 {
     SDL_SetClipboardText (text.toRawUTF8());
+
+#if YUP_EMSCRIPTEN
+    writeTextToBrowserClipboard (text);
+#endif
 }
 
 String SystemClipboard::getTextFromClipboard()
@@ -134,11 +138,25 @@ bool SystemClipboard::copyToClipboard (const Array<ClipboardData>& data, std::fu
         mimeTypePtrs.push_back (utf8MimeTypes.back().c_str());
     }
 
-    return SDL_SetClipboardData (clipboardDataCallback,
-                                 clipboardCleanupCallback,
-                                 state.get(),
-                                 mimeTypePtrs.data(),
-                                 mimeTypePtrs.size());
+    if (! SDL_SetClipboardData (clipboardDataCallback,
+                                clipboardCleanupCallback,
+                                state.get(),
+                                mimeTypePtrs.data(),
+                                mimeTypePtrs.size()))
+        return false;
+
+#if YUP_EMSCRIPTEN
+    for (const auto& item : state->items)
+    {
+        if (item.mimeType.startsWith ("text/plain"))
+        {
+            writeTextToBrowserClipboard (item.data.toString());
+            break;
+        }
+    }
+#endif
+
+    return true;
 }
 
 ClipboardData SystemClipboard::getFromClipboard (const String& mimeType)

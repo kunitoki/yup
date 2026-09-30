@@ -94,7 +94,7 @@ public:
     {
         titleLabel.setText ("MODULATION MATRIX", yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (12.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         for (std::size_t index = 0; index < rows.size(); ++index)
