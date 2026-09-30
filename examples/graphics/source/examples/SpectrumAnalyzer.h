@@ -628,7 +628,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -763,13 +763,9 @@ public:
 private:
     void setupUI()
     {
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
-
         // Title
         titleLabel = std::make_unique<yup::Label> ("Title");
         titleLabel->setText ("Real-Time Spectrum Analyzer Demo");
-        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
-        titleLabel->setFont (font);
         addAndMakeVisible (*titleLabel);
 
         // Signal type selector
@@ -964,23 +960,20 @@ private:
         addAndMakeVisible (*colorMapCombo);
 
         // Status labels with appropriate font size
-        auto statusFont = font.withHeight (11.0f);
+        auto statusFont = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (11.0f);
 
         frequencyLabel = std::make_unique<yup::Label> ("FrequencyLabel");
         frequencyLabel->setText ("Frequency: 440 Hz");
-        frequencyLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         frequencyLabel->setFont (statusFont);
         addAndMakeVisible (*frequencyLabel);
 
         amplitudeLabel = std::make_unique<yup::Label> ("AmplitudeLabel");
         amplitudeLabel->setText ("Amplitude: 50%");
-        amplitudeLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         amplitudeLabel->setFont (statusFont);
         addAndMakeVisible (*amplitudeLabel);
 
         fftInfoLabel = std::make_unique<yup::Label> ("FFTInfoLabel");
         fftInfoLabel->setText ("FFT: 2048");
-        fftInfoLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
         fftInfoLabel->setFont (statusFont);
         addAndMakeVisible (*fftInfoLabel);
 
@@ -1003,15 +996,11 @@ private:
         spectrogramComponent.setVisible (false);
         addAndMakeVisible (spectrogramComponent);
 
-        // Create parameter labels with proper font sizing
-        auto labelFont = font.withHeight (12.0f);
-
+        // Create parameter labels
         for (const auto& labelText : { "Signal Type:", "Frequency:", "Amplitude:", "Sweep Duration:", "FFT Size:", "Window:", "Display:", "View Mode:", "Color Map:", "Release:", "Overlap:", "Smoothing:", "Level Mode:", "Waveform:" })
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
-            label->setFont (labelFont);
             addAndMakeVisible (*label);
         }
 

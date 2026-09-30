@@ -37,8 +37,6 @@ constexpr float horizontalTextPadding = 12.0f;
 constexpr float tickedTextIndent = 8.0f;
 constexpr float submenuArrowWidth = 24.0f;
 constexpr float shortcutTextWidth = 80.0f;
-constexpr float itemTextHeight = 14.0f;
-constexpr float shortcutTextHeight = 13.0f;
 constexpr float screenEdgePadding = 5.0f;
 
 void removeActivePopup (PopupMenu* popupMenu)
@@ -517,8 +515,8 @@ void PopupMenu::setupMenuItems()
     const auto globalTheme = ApplicationTheme::getGlobalTheme();
     const auto defaultFont = globalTheme != nullptr ? globalTheme->getDefaultFont()
                                                     : Font();
-    const auto itemFont = defaultFont.withHeight (itemTextHeight);
-    const auto shortcutFont = defaultFont.withHeight (shortcutTextHeight);
+    const auto& itemFont = defaultFont;
+    const auto shortcutFont = defaultFont.withHeight (defaultFont.getHeight() - 1.0f);
     bool anyItemIsTicked = false;
     for (const auto& item : items)
     {

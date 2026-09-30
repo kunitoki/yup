@@ -23,8 +23,8 @@ namespace yup
 {
 
 //==============================================================================
-const Identifier ProgressBar::Style::backgroundColorId { "backgroundColorId" };
-const Identifier ProgressBar::Style::foregroundColorId { "foregroundColorId" };
+const Identifier ProgressBar::Style::backgroundColorId { "progressBarBackground" };
+const Identifier ProgressBar::Style::foregroundColorId { "progressBarForeground" };
 
 //==============================================================================
 ProgressBar::ProgressBar (StringRef componentID)

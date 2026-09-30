@@ -50,7 +50,10 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+        const auto textColor = palette.getColor (yup::ThemePalette::Role::text);
+
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         const int numTexts = yup::numElementsInArray (text);
@@ -59,7 +62,7 @@ public:
             const auto& textInstance = text[i];
             auto labelBounds = textInstance.bounds;
 
-            g.setFillColor (0xffffffff);
+            g.setFillColor (textColor);
             g.setFeather (10.0f);
             g.fillFittedText (textInstance.styledText, labelBounds);
 

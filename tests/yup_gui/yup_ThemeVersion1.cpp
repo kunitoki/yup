@@ -78,6 +78,78 @@ TEST (ThemeVersion1Tests, ScrollBarColorsAreRegistered)
     EXPECT_TRUE (theme->findColor (scrollBar, ScrollBar::Style::thumbColorId).has_value());
 }
 
+TEST (ThemeVersion1Tests, DefaultFontHeightIsUnified)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    EXPECT_FLOAT_EQ (14.0f, theme->getDefaultFont().getHeight());
+    EXPECT_FLOAT_EQ (14.0f, theme->getDefaultMonospaceFont().getHeight());
+}
+
+TEST (ThemeVersion1Tests, UsesPalettePassedAtCreation)
+{
+    const ThemePalette palette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8), Color (0xffa5cbc3), Color (0xff3b341f) });
+    auto theme = createThemeVersion1 (palette);
+    ASSERT_NE (nullptr, theme.get());
+
+    EXPECT_EQ (palette, theme->getPalette());
+
+    Label label;
+    EXPECT_EQ (palette.getColor (ThemePalette::Role::text), theme->findColor (label, Label::Style::textFillColorId));
+}
+
+TEST (ThemeVersion1Tests, SetPaletteChangesWidgetColors)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    TextButton button;
+    const auto before = theme->findColor (button, TextButton::Style::backgroundColorId);
+    ASSERT_TRUE (before.has_value());
+    EXPECT_EQ (theme->getPalette().getColor (ThemePalette::Role::surfaceRaised), *before);
+
+    const ThemePalette palette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8), Color (0xffa5cbc3), Color (0xff3b341f) });
+    theme->setPalette (palette);
+
+    const auto after = theme->findColor (button, TextButton::Style::backgroundColorId);
+    ASSERT_TRUE (after.has_value());
+    EXPECT_EQ (palette.getColor (ThemePalette::Role::surfaceRaised), *after);
+    EXPECT_NE (*before, *after);
+}
+
+TEST (ThemeVersion1Tests, ExplicitThemeColorBeatsPalette)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    ComboBox comboBox;
+    theme->setColor (ComboBox::Style::backgroundColorId, Colors::red);
+    theme->setPalette (ThemePalette (std::vector<Color> { Color (0xfff0f0f0), Color (0xff202020) }, ThemePalette::Mode::light));
+
+    EXPECT_EQ (Colors::red, theme->findColor (comboBox, ComboBox::Style::backgroundColorId));
+}
+
+TEST (ThemeVersion1Tests, ComponentColorBeatsThemeAndPalette)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    ListBox listBox;
+    theme->setColor (ListBox::Style::backgroundColorId, Colors::red);
+    listBox.setColor (ListBox::Style::backgroundColorId, Colors::green);
+
+    EXPECT_EQ (Colors::green, theme->findColor (listBox, ListBox::Style::backgroundColorId));
+}
+
+TEST (ThemeVersion1Tests, ProgressBarAndMeterColorsDoNotCollide)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    EXPECT_NE (ProgressBar::Style::backgroundColorId, KMeterComponent::Style::backgroundColorId);
+}
+
 TEST (ThemeVersion1Tests, PaintsCoreComponents)
 {
     auto context = yup_constructHeadlessGraphicsContext ({}, {});

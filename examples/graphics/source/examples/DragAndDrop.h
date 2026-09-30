@@ -286,11 +286,13 @@ public:
         void paint (yup::Graphics& g) override
         {
             const auto bounds = getLocalBounds().to<float>();
+            const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+            const auto accent = palette.getColor (yup::ThemePalette::Role::accent);
 
-            g.setFillColor (highlighted ? yup::Color (0xff3f6d9e) : yup::Color (0xff2b2b33));
+            g.setFillColor (highlighted ? palette.getColor (yup::ThemePalette::Role::surface).mixedWith (accent, 0.3f, yup::ColorSpace::SRGB) : palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRoundedRect (bounds, 8.0f);
 
-            g.setStrokeColor (yup::Color (0xff55555f));
+            g.setStrokeColor (highlighted ? accent : palette.getColor (yup::ThemePalette::Role::outline));
             g.setStrokeWidth (1.0f);
             g.strokeRoundedRect (bounds, 8.0f);
         }
@@ -380,11 +382,13 @@ public:
         void paint (yup::Graphics& g) override
         {
             const auto bounds = getLocalBounds().to<float>();
+            const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+            const auto accent = palette.getColor (yup::ThemePalette::Role::accent);
 
-            g.setFillColor (highlighted ? yup::Color (0xff3f6d9e) : yup::Color (0xff23232a));
+            g.setFillColor (highlighted ? palette.getColor (yup::ThemePalette::Role::surface).mixedWith (accent, 0.3f, yup::ColorSpace::SRGB) : palette.getColor (yup::ThemePalette::Role::surface));
             g.fillRoundedRect (bounds, 8.0f);
 
-            g.setStrokeColor (yup::Color (0xff55555f));
+            g.setStrokeColor (highlighted ? accent : palette.getColor (yup::ThemePalette::Role::outline));
             g.setStrokeWidth (1.0f);
             g.strokeRoundedRect (bounds, 8.0f);
         }
@@ -443,7 +447,7 @@ public:
         void paint (yup::Graphics& g) override
         {
             // A window's root component is opaque, so it has to paint its own background.
-            g.setFillColor (yup::Color (0xff1b1b20));
+            g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
             g.fillAll();
         }
 
@@ -556,7 +560,7 @@ public:
     //==============================================================================
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff1b1b20));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 

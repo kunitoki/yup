@@ -105,7 +105,7 @@ private:
 
         // Labels
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         // Title
         g.fillFittedText ("Phase Response", font, titleBounds, yup::Justification::center);
@@ -220,7 +220,7 @@ private:
 
         // Labels
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         // Title
         g.fillFittedText ("Group Delay", font, titleBounds, yup::Justification::center);
@@ -348,7 +348,7 @@ private:
 
         // Labels
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         // Title
         g.fillFittedText ("Step Response", font, titleBounds, yup::Justification::center);
@@ -462,7 +462,7 @@ private:
 
         // Labels
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         // Title
         g.fillFittedText ("Poles & Zeros", font, titleBounds, yup::Justification::center);
@@ -685,7 +685,7 @@ private:
     void drawLabels (yup::Graphics& g, yup::Rectangle<float> bounds, yup::Rectangle<float> titleBounds, yup::Rectangle<float> bottomLabelSpace)
     {
         g.setFillColor (yup::Colors::white);
-        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (12.0f);
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         // Title
         g.fillFittedText ("Filter Frequency Response", font, titleBounds, yup::Justification::center);
@@ -866,7 +866,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -1008,7 +1008,6 @@ private:
         // Title
         titleLabel = std::make_unique<yup::Label> ("Title");
         titleLabel->setText ("YUP DSP Filter Demo");
-        titleLabel->setColor (yup::Label::Style::textFillColorId, yup::Colors::white);
         //titleLabel->setJustification (yup::Justification::center);
         addAndMakeVisible (*titleLabel);
 
@@ -1179,7 +1178,6 @@ private:
         {
             auto label = parameterLabels.add (std::make_unique<yup::Label> (labelText));
             label->setText (labelText);
-            label->setColor (yup::Label::Style::textFillColorId, yup::Colors::lightgray);
             label->setFont (font);
             addAndMakeVisible (*label);
         }

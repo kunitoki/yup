@@ -88,6 +88,7 @@ graphics_demo (SpectrumAnalyzer MODULES ${audio_modules} dr_libs RESOURCES audio
 graphics_demo (SpinningCube MODULES yup::yup_animation RESOURCES lottie LIVE_SHADERS)
 graphics_demo (Svg RESOURCES svg RobotoFlex-VariableFont.ttf)
 graphics_demo (TextEditor)
+graphics_demo (Themes)
 graphics_demo (ToastNotification)
 graphics_demo (TouchTrails)
 graphics_demo (VariableFonts)

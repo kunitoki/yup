@@ -416,3 +416,69 @@ TEST_F (ApplicationThemeTest, GetDefaultMonospaceFontReturnsValid)
     auto font = theme->getDefaultMonospaceFont();
     EXPECT_TRUE (font.getHeight() >= 0.0f);
 }
+
+// =============================================================================
+
+TEST_F (ApplicationThemeTest, DefaultPaletteIsAvailableWithoutMapping)
+{
+    EXPECT_EQ (ThemePalette(), theme->getPalette());
+}
+
+TEST_F (ApplicationThemeTest, PaletteMappingFeedsFindColor)
+{
+    auto c = Component ("testComponent");
+    const Identifier id ("paletteBackedColor");
+
+    theme->setPaletteMapping ([id] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    auto palette = ThemePalette();
+    palette.setColor (ThemePalette::Role::accent, Colors::red);
+    theme->setPalette (palette);
+
+    EXPECT_EQ (palette, theme->getPalette());
+    ASSERT_TRUE (ApplicationTheme::findComponentColor (c, id).has_value());
+    EXPECT_EQ (Colors::red, *ApplicationTheme::findComponentColor (c, id));
+
+    palette.setColor (ThemePalette::Role::accent, Colors::green);
+    theme->setPalette (palette);
+    EXPECT_EQ (Colors::green, *ApplicationTheme::findComponentColor (c, id));
+}
+
+TEST_F (ApplicationThemeTest, ColorLookupOrderIsComponentThenThemeThenPalette)
+{
+    auto c = Component ("testComponent");
+    const Identifier id ("layeredColor");
+
+    theme->setPaletteMapping ([id] (const ThemePalette&, ApplicationTheme& t)
+    {
+        t.setPaletteColor (id, Colors::blue);
+    });
+
+    EXPECT_EQ (Colors::blue, *ApplicationTheme::findComponentColor (c, id));
+
+    theme->setColor (id, Colors::green);
+    EXPECT_EQ (Colors::green, *ApplicationTheme::findComponentColor (c, id));
+
+    c.setColor (id, Colors::red);
+    EXPECT_EQ (Colors::red, *ApplicationTheme::findComponentColor (c, id));
+}
+
+TEST_F (ApplicationThemeTest, SetPaletteReplacesPreviousPaletteColors)
+{
+    auto c = Component ("testComponent");
+    const Identifier accentOnly ("accentOnly");
+
+    theme->setPaletteMapping ([accentOnly] (const ThemePalette& palette, ApplicationTheme& t)
+    {
+        if (palette.getMode() == ThemePalette::Mode::dark)
+            t.setPaletteColor (accentOnly, palette.getColor (ThemePalette::Role::accent));
+    });
+
+    EXPECT_TRUE (ApplicationTheme::findComponentColor (c, accentOnly).has_value());
+
+    theme->setPalette (ThemePalette (std::vector<Color> { Colors::white, Colors::black }, ThemePalette::Mode::light));
+    EXPECT_FALSE (ApplicationTheme::findComponentColor (c, accentOnly).has_value());
+}

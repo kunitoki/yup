@@ -83,7 +83,7 @@ void TextButton::updateTextLayout()
     modifier.clear();
 
     if (buttonText.isNotEmpty())
-        modifier.appendText (buttonText, font.withHeight (getHeight() * 0.35f));
+        modifier.appendText (buttonText, font.withHeight (jmin (font.getHeight(), getHeight() * 0.6f)));
 
     repaint();
 }

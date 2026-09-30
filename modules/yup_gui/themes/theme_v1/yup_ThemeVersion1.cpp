@@ -45,6 +45,13 @@ extern const std::size_t FontAwesome7Font_size;
 
 //==============================================================================
 
+using PaletteRole = ThemePalette::Role;
+
+constexpr float widgetCornerRadius = 4.0f;
+constexpr float defaultTextHeight = 14.0f;
+
+//==============================================================================
+
 struct SliderColors
 {
     Color background;
@@ -57,13 +64,15 @@ struct SliderColors
 
 SliderColors getSliderColors (const ApplicationTheme& theme, const Slider& slider)
 {
+    const auto& palette = theme.getPalette();
+
     SliderColors colors;
-    colors.background = theme.findColor (slider, Slider::Style::backgroundColorId).value_or (Color (0xff3d3d3d));
-    colors.track = theme.findColor (slider, Slider::Style::trackColorId).value_or (Color (0xff636363));
-    colors.thumb = theme.findColor (slider, Slider::Style::thumbColorId).value_or (Color (0xff4ebfff));
+    colors.background = theme.findColor (slider, Slider::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
+    colors.track = theme.findColor (slider, Slider::Style::trackColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+    colors.thumb = theme.findColor (slider, Slider::Style::thumbColorId).value_or (palette.getColor (PaletteRole::accent));
     colors.thumbOver = theme.findColor (slider, Slider::Style::thumbOverColorId).value_or (colors.thumb.brighter (0.3f));
     colors.thumbDown = theme.findColor (slider, Slider::Style::thumbDownColorId).value_or (colors.thumb.darker (0.2f));
-    colors.text = theme.findColor (slider, Slider::Style::textColorId).value_or (Colors::white);
+    colors.text = theme.findColor (slider, Slider::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     return colors;
 }
 
@@ -325,17 +334,18 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     auto bounds = t.getLocalBounds();
     auto textBounds = t.getTextBounds();
     auto scrollOffset = t.getScrollOffset();
-    constexpr auto cornerRadius = 4.0f;
+    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto& palette = theme.getPalette();
 
     // Draw background
-    auto backgroundColor = t.findColor (TextEditor::Style::backgroundColorId).value_or (Colors::white);
+    auto backgroundColor = theme.findColor (t, TextEditor::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     g.setFillColor (backgroundColor);
     g.fillRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw outline
     auto outlineColor = t.hasKeyboardFocus()
-                          ? t.findColor (TextEditor::Style::focusedOutlineColorId).value_or (Colors::cornflowerblue)
-                          : t.findColor (TextEditor::Style::outlineColorId).value_or (Color (0xff232323));
+                          ? theme.findColor (t, TextEditor::Style::focusedOutlineColorId).value_or (palette.getColor (PaletteRole::accent))
+                          : theme.findColor (t, TextEditor::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
@@ -346,7 +356,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw selection background
     if (t.hasSelection())
     {
-        auto selectionColor = t.findColor (TextEditor::Style::selectionColorId).value_or (Colors::cornflowerblue.withAlpha (0.5f));
+        auto selectionColor = theme.findColor (t, TextEditor::Style::selectionColorId).value_or (palette.getColor (PaletteRole::accent).withAlpha (0.4f));
         g.setFillColor (selectionColor);
 
         // Get all selection rectangles for proper multiline selection rendering
@@ -360,7 +370,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     }
 
     // Draw text with scroll offset
-    auto textColor = t.findColor (TextEditor::Style::textColorId).value_or (Color (0xff232323));
+    auto textColor = theme.findColor (t, TextEditor::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     g.setFillColor (textColor);
 
     auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
@@ -369,7 +379,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw caret
     if (t.hasKeyboardFocus() && t.isCaretVisible())
     {
-        auto caretColor = t.findColor (TextEditor::Style::caretColorId).value_or (yup::Colors::black);
+        auto caretColor = theme.findColor (t, TextEditor::Style::caretColorId).value_or (palette.getColor (PaletteRole::text));
         g.setFillColor (caretColor);
 
         auto caretBounds = t.getCaretBounds();
@@ -482,26 +492,24 @@ void paintCodeEditor (Graphics& g, const ApplicationTheme& theme, const CodeEdit
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = 6.0f;
+    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto& palette = theme.getPalette();
 
     Color backgroundColor, textColor;
 
     if (b.isButtonDown())
     {
-        backgroundColor = b.findColor (TextButton::Style::backgroundPressedColorId).value_or (Colors::gray);
-        textColor = b.findColor (TextButton::Style::textPressedColorId).value_or (Colors::dimgray);
+        backgroundColor = theme.findColor (b, TextButton::Style::backgroundPressedColorId).value_or (palette.getColor (PaletteRole::accent));
+        textColor = theme.findColor (b, TextButton::Style::textPressedColorId).value_or (palette.getColor (PaletteRole::onAccent));
     }
     else
     {
-        backgroundColor = b.findColor (TextButton::Style::backgroundColorId).value_or (Colors::gray);
-        textColor = b.findColor (TextButton::Style::textColorId).value_or (Colors::white);
+        backgroundColor = theme.findColor (b, TextButton::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+        textColor = theme.findColor (b, TextButton::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
     }
 
     if (b.isButtonOver())
-    {
-        backgroundColor = backgroundColor.brighter (0.2f);
-        textColor = textColor.brighter (0.2f);
-    }
+        backgroundColor = backgroundColor.mixedWith (palette.getColor (PaletteRole::text), 0.1f, ColorSpace::SRGB);
 
     // Draw background with flat color (no gradient for modern flat design)
     g.setFillColor (backgroundColor);
@@ -509,8 +517,8 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw modern outline
     Color outlineColor = b.hasKeyboardFocus()
-                           ? b.findColor (TextButton::Style::outlineFocusedColorId).value_or (Colors::cornflowerblue)
-                           : b.findColor (TextButton::Style::outlineColorId).value_or (Colors::dimgray);
+                           ? theme.findColor (b, TextButton::Style::outlineFocusedColorId).value_or (palette.getColor (PaletteRole::accent))
+                           : theme.findColor (b, TextButton::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
@@ -528,20 +536,21 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
 {
     auto bounds = b.getLocalBounds();
-    constexpr auto cornerRadius = 6.0f;
+    constexpr auto cornerRadius = widgetCornerRadius;
+    const auto& palette = theme.getPalette();
 
     // Get colors based on toggle state
     auto bgColor = b.getToggleState()
-                     ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Colors::cornflowerblue)
-                     : b.findColor (ToggleButton::Style::backgroundColorId).value_or (Color (0xfff0f0f0));
+                     ? theme.findColor (b, ToggleButton::Style::backgroundToggledColorId).value_or (palette.getColor (PaletteRole::accent))
+                     : theme.findColor (b, ToggleButton::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
 
     auto textColor = b.getToggleState()
-                       ? b.findColor (ToggleButton::Style::textToggledColorId).value_or (Color (0xffffffff))
-                       : b.findColor (ToggleButton::Style::textColorId).value_or (Color (0xff333333));
+                       ? theme.findColor (b, ToggleButton::Style::textToggledColorId).value_or (palette.getColor (PaletteRole::onAccent))
+                       : theme.findColor (b, ToggleButton::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
 
     auto borderColor = b.getToggleState()
-                         ? b.findColor (ToggleButton::Style::borderToggledColorId).value_or (Color (0xff357abd))
-                         : b.findColor (ToggleButton::Style::borderColorId).value_or (Color (0xffcccccc));
+                         ? theme.findColor (b, ToggleButton::Style::borderToggledColorId).value_or (palette.getColor (PaletteRole::accent))
+                         : theme.findColor (b, ToggleButton::Style::borderColorId).value_or (palette.getColor (PaletteRole::outline));
 
     // Adjust colors for button state
     if (b.isButtonDown())
@@ -551,8 +560,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
     }
     else if (b.isButtonOver())
     {
-        bgColor = bgColor.brighter (0.05f);
-        borderColor = borderColor.brighter (0.05f);
+        bgColor = bgColor.mixedWith (palette.getColor (PaletteRole::text), 0.1f, ColorSpace::SRGB);
     }
 
     // Draw background
@@ -585,16 +593,17 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
     g.strokeRoundedRect (bounds, cornerSize);
 
     // Fill background based on switch state
+    const auto& palette = theme.getPalette();
     auto bgColor = s.getToggleState()
-                     ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Colors::cornflowerblue)
-                     : s.findColor (SwitchButton::Style::switchOffBackgroundColorId).value_or (Color (0xff333333));
+                     ? theme.findColor (s, SwitchButton::Style::switchOnBackgroundColorId).value_or (palette.getColor (PaletteRole::accent))
+                     : theme.findColor (s, SwitchButton::Style::switchOffBackgroundColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
 
     g.setFillColor (bgColor);
     g.fillRoundedRect (bounds, cornerSize);
 
     // Draw handle
     auto circleBounds = s.getSwitchCircleBounds().reduced (4);
-    auto circleColor = s.findColor (SwitchButton::Style::switchColorId).value_or (Colors::white);
+    auto circleColor = theme.findColor (s, SwitchButton::Style::switchColorId).value_or (palette.getColor (PaletteRole::text));
 
     g.setFillColor (circleColor);
     g.fillRoundedRect (circleBounds, cornerSize);
@@ -611,21 +620,22 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
 {
     auto& styledText = c.getStyledText();
     const auto bounds = c.getLocalBounds();
+    const auto& palette = theme.getPalette();
 
     // Draw background
-    auto bgColor = c.findColor (ComboBox::Style::backgroundColorId).value_or (Color (0xffffffff));
+    auto bgColor = theme.findColor (c, ComboBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, 4.0f);
+    g.fillRoundedRect (bounds, widgetCornerRadius);
 
     // Draw border
     const bool hasFocus = c.hasKeyboardFocus() || c.isPopupShown();
     auto outlineColor = hasFocus
-                          ? c.findColor (ComboBox::Style::focusedBorderColorId).value_or (Colors::cornflowerblue)
-                          : c.findColor (ComboBox::Style::borderColorId).value_or (Colors::dimgray);
+                          ? theme.findColor (c, ComboBox::Style::focusedBorderColorId).value_or (palette.getColor (PaletteRole::accent))
+                          : theme.findColor (c, ComboBox::Style::borderColorId).value_or (palette.getColor (PaletteRole::outline));
 
     g.setStrokeColor (outlineColor);
     g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+    g.strokeRoundedRect (bounds.reduced (0.5f), widgetCornerRadius);
 
     // Calculate text and arrow areas
     auto arrowWidth = 20.0f;
@@ -639,13 +649,13 @@ void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& 
     // Draw text
     if (! styledText.isEmpty())
     {
-        auto textColor = c.findColor (ComboBox::Style::textColorId).value_or (Color (0xff333333));
+        auto textColor = theme.findColor (c, ComboBox::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
         g.setFillColor (textColor);
         g.fillFittedText (styledText, textBounds);
     }
 
     // Draw arrow
-    auto arrowColor = c.findColor (ComboBox::Style::arrowColorId).value_or (Color (0xff666666));
+    auto arrowColor = theme.findColor (c, ComboBox::Style::arrowColorId).value_or (palette.getColor (PaletteRole::textMuted));
     g.setFillColor (arrowColor);
 
     auto center = arrowBounds.getCenter();
@@ -666,20 +676,20 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
     auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
-    if (const auto backgroundColor = l.findColor (Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
+    if (const auto backgroundColor = theme.findColor (l, Label::Style::backgroundColorId); backgroundColor && ! backgroundColor->isTransparent())
     {
         g.setFillColor (*backgroundColor);
-        g.fillRoundedRect (bounds, 4.0f);
+        g.fillRoundedRect (bounds, widgetCornerRadius);
     }
 
-    if (const auto outlineColor = l.findColor (Label::Style::outlineColorId); outlineColor && ! outlineColor->isTransparent())
+    if (const auto outlineColor = theme.findColor (l, Label::Style::outlineColorId); outlineColor && ! outlineColor->isTransparent())
     {
         g.setStrokeColor (*outlineColor);
         g.setStrokeWidth (2.0f);
-        g.strokeRoundedRect (bounds, 4.0f);
+        g.strokeRoundedRect (bounds, widgetCornerRadius);
     }
 
-    if (const auto strokeColor = l.findColor (Label::Style::textStrokeColorId); strokeColor && ! strokeColor->isTransparent())
+    if (const auto strokeColor = theme.findColor (l, Label::Style::textStrokeColorId); strokeColor && ! strokeColor->isTransparent())
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
@@ -688,7 +698,7 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
     if (! styledText.isEmpty())
     {
-        const auto fillColor = l.findColor (Label::Style::textFillColorId).value_or (Colors::white);
+        const auto fillColor = theme.findColor (l, Label::Style::textFillColorId).value_or (theme.getPalette().getColor (PaletteRole::text));
         g.setFillColor (fillColor);
         g.fillFittedText (styledText, bounds);
     }
@@ -712,14 +722,17 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         g.setFeather (0.0f);
     }
 
+    const auto& palette = theme.getPalette();
+    const auto borderColor = theme.findColor (p, PopupMenu::Style::menuBorder).value_or (palette.getColor (PaletteRole::outline));
+
     // Draw menu background
-    g.setFillColor (p.findColor (PopupMenu::Style::menuBackground).value_or (Color (0xff2a2a2a)));
-    g.fillRoundedRect (localBounds, 4.0f);
+    g.setFillColor (theme.findColor (p, PopupMenu::Style::menuBackground).value_or (palette.getColor (PaletteRole::surfaceRaised)));
+    g.fillRoundedRect (localBounds, widgetCornerRadius);
 
     // Draw border
-    g.setStrokeColor (p.findColor (PopupMenu::Style::menuBorder).value_or (Color (0xff555555)));
+    g.setStrokeColor (borderColor);
     g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (localBounds.reduced (0.5f), 4.0f);
+    g.strokeRoundedRect (localBounds.reduced (0.5f), widgetCornerRadius);
 
     // Draw items
     bool anyItemIsTicked = false;
@@ -757,13 +770,13 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Check if this item is currently showing its submenu (active submenu)
             if (p.isItemShowingSubmenu (itemIndex))
             {
-                highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
-                                     .value_or (Colors::darkgray.darker (0.3f));
+                highlightColor = theme.findColor (p, PopupMenu::Style::menuItemBackgroundActiveSubmenu)
+                                     .value_or (palette.getColor (PaletteRole::accent).withAlpha (0.15f));
             }
             else
             {
-                highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted)
-                                     .value_or (Colors::cornflowerblue);
+                highlightColor = theme.findColor (p, PopupMenu::Style::menuItemBackgroundHighlighted)
+                                     .value_or (palette.getColor (PaletteRole::accent).withAlpha (0.3f));
             }
 
             g.setFillColor (highlightColor);
@@ -772,8 +785,8 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         // Also highlight active submenu items even when not hovered
         else if (! item->isSeparator() && item->isEnabled && p.isItemShowingSubmenu (itemIndex))
         {
-            auto activeSubmenuColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
-                                          .value_or (Colors::darkgray.darker (0.3f));
+            auto activeSubmenuColor = theme.findColor (p, PopupMenu::Style::menuItemBackgroundActiveSubmenu)
+                                          .value_or (palette.getColor (PaletteRole::accent).withAlpha (0.15f));
 
             g.setFillColor (activeSubmenuColor);
             g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
@@ -783,16 +796,16 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         {
             // Draw separator line
             auto lineY = rect.getCenterY();
-            g.setStrokeColor (p.findColor (PopupMenu::Style::menuBorder).value_or (Color (0xff555555)));
+            g.setStrokeColor (borderColor);
             g.setStrokeWidth (1.0f);
             g.strokeLine (rect.getX() + 8.0f, lineY, rect.getRight() - 8.0f, lineY);
         }
         else
         {
             // Draw menu item text
-            auto textColor = item->textColor.value_or (p.findColor (PopupMenu::Style::menuItemText).value_or (Color (0xffffffff)));
+            auto textColor = item->textColor.value_or (theme.findColor (p, PopupMenu::Style::menuItemText).value_or (palette.getColor (PaletteRole::text)));
             if (! item->isEnabled)
-                textColor = p.findColor (PopupMenu::Style::menuItemTextDisabled).value_or (Color (0xff808080));
+                textColor = theme.findColor (p, PopupMenu::Style::menuItemTextDisabled).value_or (palette.getColor (PaletteRole::textMuted));
 
             g.setFillColor (textColor);
 
@@ -813,7 +826,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                     modifier.setMaxSize (textRect.getSize());
                     modifier.setOverflow (yup::StyledText::ellipsis);
                     modifier.setWrap (yup::StyledText::noWrap);
-                    modifier.appendText (item->text, itemFont.withHeight (14.0f));
+                    modifier.appendText (item->text, itemFont);
                 }
 
                 g.fillFittedText (styledText, textRect);
@@ -841,7 +854,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
                     modifier.setOverflow (yup::StyledText::ellipsis);
                     modifier.setWrap (yup::StyledText::noWrap);
                     modifier.setHorizontalAlign (yup::StyledText::right);
-                    modifier.appendText (item->shortcutKeyText, itemFont.withHeight (13.0f));
+                    modifier.appendText (item->shortcutKeyText, itemFont.withHeight (itemFont.getHeight() - 1.0f));
                 }
 
                 g.setOpacity (0.7f);
@@ -865,7 +878,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
     // Paint scroll indicators if needed
     if (p.needsScrolling())
     {
-        g.setFillColor (p.findColor (PopupMenu::Style::menuItemText).value_or (Colors::white));
+        g.setFillColor (theme.findColor (p, PopupMenu::Style::menuItemText).value_or (palette.getColor (PaletteRole::text)));
 
         // Up arrow
         if (p.canScrollUp())
@@ -918,20 +931,22 @@ void paintScrollBar (Graphics& g, const ApplicationTheme& theme, const ScrollBar
     auto cornerSize = scrollBar.getScrollBarWidth() * 0.5f;
 
     // Draw track (optional, usually invisible on macOS)
-    if (const auto trackColor = scrollBar.findColor (ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
+    if (const auto trackColor = theme.findColor (scrollBar, ScrollBar::Style::trackColorId); trackColor && ! trackColor->isTransparent())
     {
         g.setFillColor (*trackColor);
         g.fillRect (trackBounds);
     }
 
     // Draw thumb with rounded caps
+    const auto mutedColor = theme.getPalette().getColor (PaletteRole::textMuted);
+
     Color thumbColor;
     if (scrollBar.isDragging())
-        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbDraggingColorId).value_or (Color (0x99000000));
+        thumbColor = theme.findColor (scrollBar, ScrollBar::Style::thumbDraggingColorId).value_or (mutedColor.withAlpha (0.75f));
     else if (scrollBar.isThumbHovered())
-        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbHoverColorId).value_or (Color (0x77000000));
+        thumbColor = theme.findColor (scrollBar, ScrollBar::Style::thumbHoverColorId).value_or (mutedColor.withAlpha (0.55f));
     else
-        thumbColor = scrollBar.findColor (ScrollBar::Style::thumbColorId).value_or (Color (0x55000000));
+        thumbColor = theme.findColor (scrollBar, ScrollBar::Style::thumbColorId).value_or (mutedColor.withAlpha (0.35f));
 
     g.setFillColor (thumbColor);
     g.fillRoundedRect (thumbBounds, cornerSize);
@@ -945,10 +960,10 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
     const auto cornerSize = bounds.getHeight() * 0.5f;
 
     // Get colors
-    const auto backgroundColor = progressBar.findColor (ProgressBar::Style::backgroundColorId)
-                                     .value_or (Color (0xff3d3d3d));
-    const auto foregroundColor = progressBar.findColor (ProgressBar::Style::foregroundColorId)
-                                     .value_or (Color (0xff4ebfff));
+    const auto backgroundColor = theme.findColor (progressBar, ProgressBar::Style::backgroundColorId)
+                                     .value_or (theme.getPalette().getColor (PaletteRole::surfaceRaised));
+    const auto foregroundColor = theme.findColor (progressBar, ProgressBar::Style::foregroundColorId)
+                                     .value_or (theme.getPalette().getColor (PaletteRole::accent));
 
     // Draw background track
     g.setFillColor (backgroundColor);
@@ -1020,11 +1035,12 @@ void paintProgressBar (Graphics& g, const ApplicationTheme& theme, const Progres
 void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& listBox)
 {
     const auto bounds = listBox.getLocalBounds();
+    const auto& palette = theme.getPalette();
 
-    g.setFillColor (listBox.findColor (ListBox::Style::backgroundColorId).value_or (Color (0xffffffff)));
+    g.setFillColor (theme.findColor (listBox, ListBox::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface)));
     g.fillRect (bounds);
 
-    g.setStrokeColor (listBox.findColor (ListBox::Style::outlineColorId).value_or (Color (0xffcccccc)));
+    g.setStrokeColor (theme.findColor (listBox, ListBox::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline)));
     g.setStrokeWidth (1.0f);
     g.strokeRect (bounds);
 
@@ -1050,7 +1066,7 @@ void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& li
     Path arc;
     arc.addArc (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f, startAngle, startAngle + progress * MathConstants<float>::twoPi * 0.8f, true);
 
-    g.setStrokeColor (listBox.findColor (ListBox::Style::refreshIndicatorColorId).value_or (Color (0xff4ebfff)));
+    g.setStrokeColor (theme.findColor (listBox, ListBox::Style::refreshIndicatorColorId).value_or (palette.getColor (PaletteRole::accent)));
     g.setStrokeWidth (indicatorSize * 0.06f);
     g.strokePath (arc);
 }
@@ -1059,15 +1075,17 @@ void paintListBox (Graphics& g, const ApplicationTheme& theme, const ListBox& li
 
 void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBoxItem& item)
 {
+    const auto& palette = theme.getPalette();
+
     // Determine background color
     Color backgroundColor;
 
     if (item.isSelected())
-        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorSelectedId).value_or (Color (0xff3a7ebf));
+        backgroundColor = theme.findColor (item, ListBoxItem::Style::backgroundColorSelectedId).value_or (palette.getColor (PaletteRole::accent));
     else if (item.isHovered())
-        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorHoveredId).value_or (Color (0x14000000));
+        backgroundColor = theme.findColor (item, ListBoxItem::Style::backgroundColorHoveredId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.06f));
     else
-        backgroundColor = item.findColor (ListBoxItem::Style::backgroundColorId).value_or (Color (0x00000000));
+        backgroundColor = theme.findColor (item, ListBoxItem::Style::backgroundColorId).value_or (Colors::transparentBlack);
 
     // Fill background
     if (backgroundColor.getAlpha() > 0)
@@ -1092,14 +1110,14 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
         Color textColor;
 
         if (item.isSelected())
-            textColor = item.findColor (ListBoxItem::Style::textColorSelectedId).value_or (Color (0xffffffff));
+            textColor = theme.findColor (item, ListBoxItem::Style::textColorSelectedId).value_or (palette.getColor (PaletteRole::onAccent));
         else
-            textColor = item.findColor (ListBoxItem::Style::textColorId).value_or (Color (0xff000000));
+            textColor = theme.findColor (item, ListBoxItem::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
 
         g.setFillColor (textColor);
 
         auto font = theme.getDefaultFont();
-        auto fontSize = std::min (textBounds.getHeight() * 0.6f, 16.0f);
+        auto fontSize = jmin (textBounds.getHeight() * 0.6f, font.getHeight());
 
         auto styledText = yup::StyledText();
         {
@@ -1211,12 +1229,13 @@ void paintAudioGraphPendingWire (Graphics& g, const AudioGraphComponent& graph)
     g.fillEllipse (center.getX() - radius, center.getY() - radius, radius * 2.0f, radius * 2.0f);
 }
 
-void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const AudioGraphComponent& graph)
+void paintAudioGraphComponent (Graphics& g, const ApplicationTheme& theme, const AudioGraphComponent& graph)
 {
     const auto zoom = graph.getZoom();
     const auto canvasOffset = graph.getCanvasOffset();
-    const auto backgroundColor = graph.findColor (AudioGraphComponent::Style::backgroundColorId).value_or (Color (0xff101522));
-    const auto gridColor = graph.findColor (AudioGraphComponent::Style::gridColorId).value_or (Colors::white.withAlpha (0.045f));
+    const auto& palette = theme.getPalette();
+    const auto backgroundColor = theme.findColor (graph, AudioGraphComponent::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::background));
+    const auto gridColor = theme.findColor (graph, AudioGraphComponent::Style::gridColorId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.05f));
 
     g.setFillColor (backgroundColor);
     g.fillAll();
@@ -1263,6 +1282,7 @@ void paintAudioGraphComponent (Graphics& g, const ApplicationTheme&, const Audio
 }
 
 void paintAudioGraphPort (Graphics& g,
+                          const ApplicationTheme& theme,
                           const AudioGraphNodeView& node,
                           const Font& labelFont,
                           const AudioGraphNodeView::PortInfo& info,
@@ -1271,8 +1291,8 @@ void paintAudioGraphPort (Graphics& g,
                           bool isInput)
 {
     const auto portRadius = node.getPortRadius();
-    const auto portHoleColor = node.findColor (AudioGraphNodeView::Style::portHoleColorId).value_or (Color (0xff101522));
-    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId).value_or (Color (0xffd6d6d6));
+    const auto portHoleColor = theme.findColor (node, AudioGraphNodeView::Style::portHoleColorId).value_or (theme.getPalette().getColor (PaletteRole::background));
+    const auto textColor = theme.findColor (node, AudioGraphNodeView::Style::textColorId).value_or (theme.getPalette().getColor (PaletteRole::text));
 
     g.setFillColor (info.color.withAlpha (0.24f));
     g.fillEllipse (audioGraphEllipseBounds (center, portRadius * 1.8f));
@@ -1298,14 +1318,16 @@ void paintAudioGraphNodeView (Graphics& g, const ApplicationTheme& theme, const 
     const auto accent = node.getNodeColor();
     const auto headerHeight = audioGraphNodeBaseHeaderHeight * viewScale;
 
-    const auto shadowColor = node.findColor (AudioGraphNodeView::Style::shadowColorId).value_or (Colors::black);
-    const auto accentBackgroundColor = node.findColor (AudioGraphNodeView::Style::accentBackgroundColorId).value_or (accent);
-    const auto bodyBackgroundColor = node.findColor (AudioGraphNodeView::Style::bodyBackgroundColorId).value_or (Color (0xff1e2535));
-    const auto headerBackgroundColor = node.findColor (AudioGraphNodeView::Style::headerBackgroundColorId).value_or (Color (0xff141a26));
-    const auto textColor = node.findColor (AudioGraphNodeView::Style::textColorId).value_or (Color (0xffd6d6d6));
-    const auto subtitleTextColor = node.findColor (AudioGraphNodeView::Style::subtitleTextColorId).value_or (Color (0xffb8b8b8));
-    const auto parameterBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterBackgroundColorId).value_or (Color (0xff263044));
-    const auto parameterValueBackgroundColor = node.findColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId).value_or (Color (0xff1a2130));
+    const auto& palette = theme.getPalette();
+
+    const auto shadowColor = theme.findColor (node, AudioGraphNodeView::Style::shadowColorId).value_or (Colors::black);
+    const auto accentBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::accentBackgroundColorId).value_or (accent);
+    const auto bodyBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::bodyBackgroundColorId).value_or (palette.getColor (PaletteRole::surface));
+    const auto headerBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::headerBackgroundColorId).value_or (palette.getColor (PaletteRole::background));
+    const auto textColor = theme.findColor (node, AudioGraphNodeView::Style::textColorId).value_or (palette.getColor (PaletteRole::text));
+    const auto subtitleTextColor = theme.findColor (node, AudioGraphNodeView::Style::subtitleTextColorId).value_or (palette.getColor (PaletteRole::textMuted));
+    const auto parameterBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::parameterBackgroundColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+    const auto parameterValueBackgroundColor = theme.findColor (node, AudioGraphNodeView::Style::parameterValueBackgroundColorId).value_or (palette.getColor (PaletteRole::background));
 
     fillAudioGraphFeatheredRoundedRect (g, bodyBounds.translated (0.0f, 3.0f * viewScale), corner, shadowColor, viewScale);
 
@@ -1376,10 +1398,10 @@ void paintAudioGraphNodeView (Graphics& g, const ApplicationTheme& theme, const 
     const auto labelFont = font.withHeight (10.5f * viewScale);
 
     for (int i = 0; i < node.getNumInputPorts(); ++i)
-        paintAudioGraphPort (g, node, labelFont, node.getInputPortInfo (i), node.getInputPortCenter (i), viewScale, true);
+        paintAudioGraphPort (g, theme, node, labelFont, node.getInputPortInfo (i), node.getInputPortCenter (i), viewScale, true);
 
     for (int i = 0; i < node.getNumOutputPorts(); ++i)
-        paintAudioGraphPort (g, node, labelFont, node.getOutputPortInfo (i), node.getOutputPortCenter (i), viewScale, false);
+        paintAudioGraphPort (g, theme, node, labelFont, node.getOutputPortInfo (i), node.getOutputPortCenter (i), viewScale, false);
 }
 
 void paintMidiKeyboard (Graphics& g, const ApplicationTheme& theme, const MidiKeyboardComponent& keyboard)
@@ -1669,14 +1691,15 @@ void paintVectorWheel (Graphics& g, Rectangle<float> bounds, float normalizedVal
 
 void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWheelComponent& wheel)
 {
-    const auto topColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyTopColorId).value_or (Color (0xff5a5a5a));
-    const auto bottomColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyBottomColorId).value_or (Color (0xff1a1a1a));
-    const auto outlineColor = theme.findColor (wheel, PitchWheelComponent::Style::outlineColorId).value_or (Color (0xff000000));
+    const auto& palette = theme.getPalette();
+    const auto topColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+    const auto bottomColor = theme.findColor (wheel, PitchWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
+    const auto outlineColor = theme.findColor (wheel, PitchWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     const auto gripColor = theme.findColor (wheel,
                                             wheel.isCurrentlyBeingDragged() ? PitchWheelComponent::Style::gripDownColorId
                                             : wheel.isMouseOver()           ? PitchWheelComponent::Style::gripOverColorId
                                                                             : PitchWheelComponent::Style::gripColorId)
-                               .value_or (Color (0xff4ebfff));
+                               .value_or (palette.getColor (PaletteRole::accent));
 
     const auto normalized = static_cast<float> ((wheel.getValue() + 1.0) * 0.5);
     paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
@@ -1684,14 +1707,15 @@ void paintPitchWheel (Graphics& g, const ApplicationTheme& theme, const PitchWhe
 
 void paintModWheel (Graphics& g, const ApplicationTheme& theme, const ModWheelComponent& wheel)
 {
-    const auto topColor = theme.findColor (wheel, ModWheelComponent::Style::bodyTopColorId).value_or (Color (0xff5a5a5a));
-    const auto bottomColor = theme.findColor (wheel, ModWheelComponent::Style::bodyBottomColorId).value_or (Color (0xff1a1a1a));
-    const auto outlineColor = theme.findColor (wheel, ModWheelComponent::Style::outlineColorId).value_or (Color (0xff000000));
+    const auto& palette = theme.getPalette();
+    const auto topColor = theme.findColor (wheel, ModWheelComponent::Style::bodyTopColorId).value_or (palette.getColor (PaletteRole::surfaceRaised));
+    const auto bottomColor = theme.findColor (wheel, ModWheelComponent::Style::bodyBottomColorId).value_or (palette.getColor (PaletteRole::background));
+    const auto outlineColor = theme.findColor (wheel, ModWheelComponent::Style::outlineColorId).value_or (palette.getColor (PaletteRole::outline));
     const auto gripColor = theme.findColor (wheel,
                                             wheel.isCurrentlyBeingDragged() ? ModWheelComponent::Style::gripDownColorId
                                             : wheel.isMouseOver()           ? ModWheelComponent::Style::gripOverColorId
                                                                             : ModWheelComponent::Style::gripColorId)
-                               .value_or (Color (0xff4ebfff));
+                               .value_or (palette.getColor (PaletteRole::accent));
 
     const auto normalized = static_cast<float> (wheel.getValue());
     paintVectorWheel (g, wheel.getLocalBounds(), normalized, topColor, bottomColor, outlineColor, gripColor);
@@ -1707,12 +1731,13 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
         return;
 
     // Get colors from theme
-    const auto backgroundColor = theme.findColor (meter, KMeterComponent::Style::backgroundColorId).value_or (Color (0xff1a1a1a));
+    const auto& palette = theme.getPalette();
+    const auto backgroundColor = theme.findColor (meter, KMeterComponent::Style::backgroundColorId).value_or (palette.getColor (PaletteRole::surface));
     const auto greenColor = theme.findColor (meter, KMeterComponent::Style::greenZoneColorId).value_or (Color (0xff00cc00));
     const auto amberColor = theme.findColor (meter, KMeterComponent::Style::amberZoneColorId).value_or (Color (0xffffaa00));
     const auto redColor = theme.findColor (meter, KMeterComponent::Style::redZoneColorId).value_or (Color (0xffcc0000));
     const auto averageColor = theme.findColor (meter, KMeterComponent::Style::averageLevelColorId).value_or (Color (0xccffffff));
-    const auto peakColor = theme.findColor (meter, KMeterComponent::Style::peakLevelColorId).value_or (Color (0xffffffff));
+    const auto peakColor = theme.findColor (meter, KMeterComponent::Style::peakLevelColorId).value_or (palette.getColor (PaletteRole::text));
     const auto peakClipColor = theme.findColor (meter, KMeterComponent::Style::peakLevelClipColorId).value_or (Color (0xffff0000));
     const auto peakHoldColor = theme.findColor (meter, KMeterComponent::Style::peakHoldColorId).value_or (Color (0xffffff00));
 
@@ -1952,8 +1977,8 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
 
     // Draw scale markers and labels
     {
-        const auto& font = theme.getDefaultFont();
-        g.setFillColor (Color (0xffffffff).withAlpha (0.7f));
+        const auto font = theme.getDefaultFont().withHeight (12.0f);
+        g.setFillColor (palette.getColor (PaletteRole::text).withAlpha (0.7f));
 
         // Determine tick interval based on meter height and range
         const float dbPerPixel = rangeSpan / height;
@@ -2010,7 +2035,7 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
     // Draw 0dB reference line
     {
         const float zeroDbY = dbToY (0.0f);
-        g.setStrokeColor (Color (0xffffffff).withAlpha (0.5f));
+        g.setStrokeColor (palette.getColor (PaletteRole::text).withAlpha (0.5f));
         g.setStrokeWidth (1.5f);
         g.strokeLine (Point<float> (bounds.getX(), zeroDbY), Point<float> (bounds.getRight(), zeroDbY));
     }
@@ -2019,7 +2044,145 @@ void paintKMeter (Graphics& g, const ApplicationTheme& theme, const KMeterCompon
 
 //==============================================================================
 
-ApplicationTheme::Ptr createThemeVersion1()
+void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& theme)
+{
+    const auto background = palette.getColor (PaletteRole::background);
+    const auto surface = palette.getColor (PaletteRole::surface);
+    const auto surfaceRaised = palette.getColor (PaletteRole::surfaceRaised);
+    const auto outline = palette.getColor (PaletteRole::outline);
+    const auto text = palette.getColor (PaletteRole::text);
+    const auto textMuted = palette.getColor (PaletteRole::textMuted);
+    const auto accent = palette.getColor (PaletteRole::accent);
+    const auto onAccent = palette.getColor (PaletteRole::onAccent);
+    const auto hovered = text.withAlpha (0.06f);
+    const auto lightest = palette.getMode() == ThemePalette::Mode::dark ? text : background;
+
+    const auto set = [&theme] (const Identifier& colorId, Color color)
+    {
+        theme.setPaletteColor (colorId, color);
+    };
+
+    set (DocumentWindow::Style::backgroundColorId, background);
+
+    set (Slider::Style::backgroundColorId, surface);
+    set (Slider::Style::trackColorId, surfaceRaised);
+    set (Slider::Style::thumbColorId, accent);
+    set (Slider::Style::thumbOverColorId, accent.brighter (0.3f));
+    set (Slider::Style::thumbDownColorId, accent.darker (0.2f));
+    set (Slider::Style::textColorId, text);
+
+    set (TextButton::Style::backgroundColorId, surfaceRaised);
+    set (TextButton::Style::backgroundPressedColorId, accent);
+    set (TextButton::Style::textColorId, text);
+    set (TextButton::Style::textPressedColorId, onAccent);
+    set (TextButton::Style::outlineColorId, outline);
+    set (TextButton::Style::outlineFocusedColorId, accent);
+
+    set (ToggleButton::Style::backgroundColorId, surfaceRaised);
+    set (ToggleButton::Style::backgroundToggledColorId, accent);
+    set (ToggleButton::Style::textColorId, text);
+    set (ToggleButton::Style::textToggledColorId, onAccent);
+    set (ToggleButton::Style::borderColorId, outline);
+    set (ToggleButton::Style::borderToggledColorId, accent);
+
+    set (SwitchButton::Style::switchOffBackgroundColorId, surfaceRaised);
+    set (SwitchButton::Style::switchOnBackgroundColorId, accent);
+    set (SwitchButton::Style::switchColorId, lightest);
+
+    set (TextEditor::Style::backgroundColorId, surface);
+    set (TextEditor::Style::textColorId, text);
+    set (TextEditor::Style::caretColorId, text);
+    set (TextEditor::Style::outlineColorId, outline);
+    set (TextEditor::Style::focusedOutlineColorId, accent);
+    set (TextEditor::Style::selectionColorId, accent.withAlpha (0.4f));
+
+    set (ComboBox::Style::backgroundColorId, surface);
+    set (ComboBox::Style::textColorId, text);
+    set (ComboBox::Style::arrowColorId, textMuted);
+    set (ComboBox::Style::borderColorId, outline);
+    set (ComboBox::Style::focusedBorderColorId, accent);
+
+    set (Label::Style::textFillColorId, text);
+    set (Label::Style::textStrokeColorId, Colors::transparentBlack);
+    set (Label::Style::backgroundColorId, Colors::transparentBlack);
+    set (Label::Style::outlineColorId, Colors::transparentBlack);
+
+    set (PopupMenu::Style::menuBackground, surfaceRaised);
+    set (PopupMenu::Style::menuBorder, outline);
+    set (PopupMenu::Style::menuItemText, text);
+    set (PopupMenu::Style::menuItemTextDisabled, textMuted);
+    set (PopupMenu::Style::menuItemBackground, Colors::transparentBlack);
+    set (PopupMenu::Style::menuItemBackgroundHighlighted, accent.withAlpha (0.3f));
+    set (PopupMenu::Style::menuItemBackgroundActiveSubmenu, accent.withAlpha (0.15f));
+
+    set (ScrollBar::Style::trackColorId, Colors::transparentBlack);
+    set (ScrollBar::Style::thumbColorId, textMuted.withAlpha (0.35f));
+    set (ScrollBar::Style::thumbHoverColorId, textMuted.withAlpha (0.55f));
+    set (ScrollBar::Style::thumbDraggingColorId, textMuted.withAlpha (0.75f));
+
+    set (ProgressBar::Style::backgroundColorId, surfaceRaised);
+    set (ProgressBar::Style::foregroundColorId, accent);
+
+    set (ListBox::Style::backgroundColorId, surface);
+    set (ListBox::Style::outlineColorId, outline);
+    set (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
+    set (ListBox::Style::selectedRowBackgroundColorId, accent);
+    set (ListBox::Style::hoveredRowBackgroundColorId, hovered);
+    set (ListBox::Style::refreshIndicatorColorId, accent);
+
+    set (ListBoxItem::Style::textColorId, text);
+    set (ListBoxItem::Style::textColorSelectedId, onAccent);
+    set (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
+    set (ListBoxItem::Style::backgroundColorSelectedId, accent);
+    set (ListBoxItem::Style::backgroundColorHoveredId, hovered);
+
+#if YUP_MODULE_AVAILABLE_yup_audio_gui
+    const auto darkest = palette.getMode() == ThemePalette::Mode::dark ? background : text;
+
+    set (MidiKeyboardComponent::Style::whiteKeyColorId, lightest);
+    set (MidiKeyboardComponent::Style::whiteKeyPressedColorId, accent);
+    set (MidiKeyboardComponent::Style::whiteKeyShadowColorId, Color (0x40000000));
+    set (MidiKeyboardComponent::Style::blackKeyColorId, darkest);
+    set (MidiKeyboardComponent::Style::blackKeyPressedColorId, accent);
+    set (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
+    set (MidiKeyboardComponent::Style::keyOutlineColorId, textMuted);
+    set (MidiKeyboardComponent::Style::scrollButtonBackgroundColorId, surfaceRaised);
+    set (MidiKeyboardComponent::Style::scrollButtonArrowColorId, text);
+
+    set (PitchWheelComponent::Style::bodyTopColorId, surfaceRaised);
+    set (PitchWheelComponent::Style::bodyBottomColorId, background);
+    set (PitchWheelComponent::Style::outlineColorId, outline);
+    set (PitchWheelComponent::Style::gripColorId, accent);
+    set (PitchWheelComponent::Style::gripOverColorId, accent.brighter (0.2f));
+    set (PitchWheelComponent::Style::gripDownColorId, accent.brighter (0.4f));
+
+    set (ModWheelComponent::Style::bodyTopColorId, surfaceRaised);
+    set (ModWheelComponent::Style::bodyBottomColorId, background);
+    set (ModWheelComponent::Style::outlineColorId, outline);
+    set (ModWheelComponent::Style::gripColorId, accent);
+    set (ModWheelComponent::Style::gripOverColorId, accent.brighter (0.2f));
+    set (ModWheelComponent::Style::gripDownColorId, accent.brighter (0.4f));
+
+    set (KMeterComponent::Style::backgroundColorId, surface);
+    set (KMeterComponent::Style::peakLevelColorId, text);
+
+    set (AudioGraphComponent::Style::backgroundColorId, background);
+    set (AudioGraphComponent::Style::gridColorId, text.withAlpha (0.05f));
+
+    set (AudioGraphNodeView::Style::shadowColorId, Colors::black);
+    set (AudioGraphNodeView::Style::bodyBackgroundColorId, surface);
+    set (AudioGraphNodeView::Style::headerBackgroundColorId, background.mixedWith (surface, 0.5f, ColorSpace::SRGB));
+    set (AudioGraphNodeView::Style::textColorId, text);
+    set (AudioGraphNodeView::Style::subtitleTextColorId, textMuted);
+    set (AudioGraphNodeView::Style::parameterBackgroundColorId, surfaceRaised);
+    set (AudioGraphNodeView::Style::parameterValueBackgroundColorId, background);
+    set (AudioGraphNodeView::Style::portHoleColorId, background);
+#endif
+}
+
+//==============================================================================
+
+ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
 
@@ -2060,108 +2223,47 @@ ApplicationTheme::Ptr createThemeVersion1()
         yup::Logger::outputDebugString (font.getErrorMessage());
 #endif
 
-    theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
-    theme->setColor (Slider::Style::backgroundColorId, Color (0xff3d3d3d));
-    theme->setColor (Slider::Style::trackColorId, Color (0xff636363));
-    theme->setColor (Slider::Style::thumbColorId, Color (0xff4ebfff));
-    theme->setColor (Slider::Style::thumbOverColorId, Color (0xff4ebfff).brighter (0.3f));
-    theme->setColor (Slider::Style::thumbDownColorId, Color (0xff4ebfff).darker (0.2f));
-    theme->setColor (Slider::Style::textColorId, Colors::white);
+    theme->setDefaultFont (theme->getDefaultFont().withHeight (defaultTextHeight));
+    theme->setDefaultMonospaceFont (theme->getDefaultMonospaceFont().withHeight (defaultTextHeight));
 
+    theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
     theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
     theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
     theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
     theme->setComponentStyle<CodeEditor> (ComponentStyle::createStyle<CodeEditor> (paintCodeEditor));
     theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
-
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
-    theme->setColor (Label::Style::textFillColorId, Colors::white);
-    theme->setColor (Label::Style::textStrokeColorId, Colors::transparentBlack);
-    theme->setColor (Label::Style::backgroundColorId, Colors::transparentBlack);
-    theme->setColor (Label::Style::outlineColorId, Colors::transparentBlack);
-
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
-
     theme->setComponentStyle<ScrollBar> (ComponentStyle::createStyle<ScrollBar> (paintScrollBar));
-    theme->setColor (ScrollBar::Style::trackColorId, Color (0xff3d3d3d));
-    theme->setColor (ScrollBar::Style::thumbColorId, Color (0x55000000));
-    theme->setColor (ScrollBar::Style::thumbHoverColorId, Color (0x77000000));
-    theme->setColor (ScrollBar::Style::thumbDraggingColorId, Color (0x99000000));
-
     theme->setComponentStyle<ProgressBar> (ComponentStyle::createStyle<ProgressBar> (paintProgressBar));
-    theme->setColor (ProgressBar::Style::backgroundColorId, Color (0xff3d3d3d));
-    theme->setColor (ProgressBar::Style::foregroundColorId, Color (0xff4ebfff));
 
     theme->setComponentStyle<ListBox> (ComponentStyle::createStyle<ListBox> (paintListBox));
-    theme->setColor (ListBox::Style::backgroundColorId, Color (0xffffffff));
-    theme->setColor (ListBox::Style::outlineColorId, Color (0xffcccccc));
-    theme->setColor (ListBox::Style::rowBackgroundColorId, Colors::transparentBlack);
-    theme->setColor (ListBox::Style::selectedRowBackgroundColorId, Color (0xff3a7ebf));
-    theme->setColor (ListBox::Style::hoveredRowBackgroundColorId, Color (0x14000000));
-    theme->setColor (ListBox::Style::refreshIndicatorColorId, Color (0xff4ebfff));
     theme->setMetric (ListBox::Style::refreshIndicatorSizeId, 56.0f);
 
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
-    theme->setColor (ListBoxItem::Style::textColorId, Colors::black);
-    theme->setColor (ListBoxItem::Style::textColorSelectedId, Colors::white);
-    theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
-    theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
-    theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));
-    theme->setColor (MidiKeyboardComponent::Style::whiteKeyColorId, Color (0xfff0f0f0));
-    theme->setColor (MidiKeyboardComponent::Style::whiteKeyPressedColorId, Color (0xff4ebfff));
-    theme->setColor (MidiKeyboardComponent::Style::whiteKeyShadowColorId, Color (0x40000000));
-    theme->setColor (MidiKeyboardComponent::Style::blackKeyColorId, Color (0xff2a2a2a));
-    theme->setColor (MidiKeyboardComponent::Style::blackKeyPressedColorId, Color (0xff4ebfff));
-    theme->setColor (MidiKeyboardComponent::Style::blackKeyShadowColorId, Color (0x80000000));
-    theme->setColor (MidiKeyboardComponent::Style::keyOutlineColorId, Color (0xff888888));
     theme->setComponentStyle<MidiKeyboardComponent::ScrollButton> (ComponentStyle::createStyle<MidiKeyboardComponent::ScrollButton> (paintMidiKeyboardScrollButton));
-    theme->setColor (MidiKeyboardComponent::Style::scrollButtonBackgroundColorId, Color (0xffd3d3d3));
-    theme->setColor (MidiKeyboardComponent::Style::scrollButtonArrowColorId, Color (0xff000000));
-
     theme->setComponentStyle<PitchWheelComponent> (ComponentStyle::createStyle<PitchWheelComponent> (paintPitchWheel));
-    theme->setColor (PitchWheelComponent::Style::bodyTopColorId, Color (0xff5a5a5a));
-    theme->setColor (PitchWheelComponent::Style::bodyBottomColorId, Color (0xff1a1a1a));
-    theme->setColor (PitchWheelComponent::Style::outlineColorId, Colors::black);
-    theme->setColor (PitchWheelComponent::Style::gripColorId, Color (0xff4ebfff));
-    theme->setColor (PitchWheelComponent::Style::gripOverColorId, Color (0xff7bd0ff));
-    theme->setColor (PitchWheelComponent::Style::gripDownColorId, Color (0xff9de3ff));
-
     theme->setComponentStyle<ModWheelComponent> (ComponentStyle::createStyle<ModWheelComponent> (paintModWheel));
-    theme->setColor (ModWheelComponent::Style::bodyTopColorId, Color (0xff5a5a5a));
-    theme->setColor (ModWheelComponent::Style::bodyBottomColorId, Color (0xff1a1a1a));
-    theme->setColor (ModWheelComponent::Style::outlineColorId, Colors::black);
-    theme->setColor (ModWheelComponent::Style::gripColorId, Color (0xff4ebfff));
-    theme->setColor (ModWheelComponent::Style::gripOverColorId, Color (0xff7bd0ff));
-    theme->setColor (ModWheelComponent::Style::gripDownColorId, Color (0xff9de3ff));
 
+    // Meter zones carry meaning, so they don't follow the palette
     theme->setComponentStyle<KMeterComponent> (ComponentStyle::createStyle<KMeterComponent> (paintKMeter));
-    theme->setColor (KMeterComponent::Style::backgroundColorId, Color (0xff1a1a1a));
     theme->setColor (KMeterComponent::Style::greenZoneColorId, Color (0xff00cc00));
     theme->setColor (KMeterComponent::Style::amberZoneColorId, Color (0xffffaa00));
     theme->setColor (KMeterComponent::Style::redZoneColorId, Color (0xffcc0000));
     theme->setColor (KMeterComponent::Style::averageLevelColorId, Color (0xccffffff));
-    theme->setColor (KMeterComponent::Style::peakLevelColorId, Color (0xffffffff));
     theme->setColor (KMeterComponent::Style::peakLevelClipColorId, Color (0xffff0000));
     theme->setColor (KMeterComponent::Style::peakHoldColorId, Color (0xffffff00));
 
     theme->setComponentStyle<AudioGraphComponent> (ComponentStyle::createStyle<AudioGraphComponent> (paintAudioGraphComponent));
-    theme->setColor (AudioGraphComponent::Style::backgroundColorId, Color (0xff101522));
-    theme->setColor (AudioGraphComponent::Style::gridColorId, Colors::white.withAlpha (0.045f));
-
     theme->setComponentStyle<AudioGraphNodeView> (ComponentStyle::createStyle<AudioGraphNodeView> (paintAudioGraphNodeView));
-    theme->setColor (AudioGraphNodeView::Style::shadowColorId, Colors::black);
-    theme->setColor (AudioGraphNodeView::Style::bodyBackgroundColorId, Color (0xff1e2535));
-    theme->setColor (AudioGraphNodeView::Style::headerBackgroundColorId, Color (0xff141a26));
-    theme->setColor (AudioGraphNodeView::Style::textColorId, Color (0xffd6d6d6));
-    theme->setColor (AudioGraphNodeView::Style::subtitleTextColorId, Color (0xffb8b8b8));
-    theme->setColor (AudioGraphNodeView::Style::parameterBackgroundColorId, Color (0xff263044));
-    theme->setColor (AudioGraphNodeView::Style::parameterValueBackgroundColorId, Color (0xff1a2130));
-    theme->setColor (AudioGraphNodeView::Style::portHoleColorId, Color (0xff101522));
 #endif
+
+    theme->setPaletteMapping (mapPaletteThemeVersion1);
+    theme->setPalette (palette);
 
     return theme;
 }

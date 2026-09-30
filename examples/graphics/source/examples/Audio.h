@@ -35,7 +35,8 @@
 #include <vector>
 
 //==============================================================================
-/** The PRISM logo, with the viewBox cropped to the drawing so it fills the header slot. */
+/** The PRISM logo, with the viewBox cropped to the drawing so it fills the header slot.
+    Its #FFFFFF stroke is replaced by the palette text color when parsed. */
 inline constexpr const char* synthLogoSvg = R"svg(
 <svg xmlns="http://www.w3.org/2000/svg" width="236" height="122" viewBox="10 66 236 122" fill="none">
   <g stroke="#FFFFFF" stroke-linejoin="miter" stroke-linecap="square" transform="translate(0 37)">
@@ -98,11 +99,9 @@ public:
         keyboardComponent.setLowestVisibleKey (48);   // Start from C3
         keyboardComponent.setMidiChannel (1);
         keyboardComponent.setVelocity (0.7f);
-        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::whiteKeyColorId, yup::Color (0xffd7dde3));
-        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::whiteKeyPressedColorId, SynthTheme::accent);
-        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyColorId, yup::Color (0xff191d21));
-        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyPressedColorId, SynthTheme::accentDim);
-        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder);
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::whiteKeyPressedColorId, SynthTheme::accent());
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::blackKeyPressedColorId, SynthTheme::accentDim());
+        keyboardComponent.setColor (yup::MidiKeyboardComponent::Style::keyOutlineColorId, SynthTheme::panelBorder());
         mainPage.addAndMakeVisible (keyboardComponent);
 
         // Like the keyboard, the wheels follow keyboardState, which the MIDI input callback
@@ -120,39 +119,39 @@ public:
         {
             using Style = typename std::decay_t<decltype (wheel)>::Style;
 
-            wheel.setColor (Style::bodyTopColorId, SynthTheme::panelBackground);
-            wheel.setColor (Style::bodyBottomColorId, SynthTheme::displayBackground);
-            wheel.setColor (Style::outlineColorId, SynthTheme::panelBorder);
-            wheel.setColor (Style::gripColorId, SynthTheme::accentDim);
-            wheel.setColor (Style::gripOverColorId, SynthTheme::accent);
-            wheel.setColor (Style::gripDownColorId, SynthTheme::accent);
+            wheel.setColor (Style::bodyTopColorId, SynthTheme::panelBackground());
+            wheel.setColor (Style::bodyBottomColorId, SynthTheme::displayBackground());
+            wheel.setColor (Style::outlineColorId, SynthTheme::panelBorder());
+            wheel.setColor (Style::gripColorId, SynthTheme::accentDim());
+            wheel.setColor (Style::gripOverColorId, SynthTheme::accent());
+            wheel.setColor (Style::gripDownColorId, SynthTheme::accent());
             wheel.setClickingGrabFocus (false);
             mainPage.addAndMakeVisible (wheel);
         };
         addWheel (pitchWheelComponent);
         addWheel (modWheelComponent);
 
-        logo.parseSVG (synthLogoSvg);
+        logo.parseSVG (yup::String (synthLogoSvg).replace ("#FFFFFF", SynthTheme::textPrimary().toString()));
 
         const auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         titleLabel.setText ("P R I S M   /   SPECTRAL SYNTH", yup::dontSendNotification);
         titleLabel.setFont (font.withHeight (20.0f));
-        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary);
+        titleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textPrimary());
         addAndMakeVisible (titleLabel);
 
         subtitleLabel.setText ("Sculpt harmonics. Scatter phases. Play the spectrum.", yup::dontSendNotification);
         subtitleLabel.setFont (font.withHeight (12.0f));
-        subtitleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        subtitleLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
         addAndMakeVisible (subtitleLabel);
 
         loadLabel.setFont (font.withHeight (11.0f));
-        loadLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary);
+        loadLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::textSecondary());
         mainPage.addAndMakeVisible (loadLabel);
 
         voiceLabel.setText ("", yup::dontSendNotification);
         voiceLabel.setFont (font.withHeight (11.0f));
-        voiceLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::accent);
+        voiceLabel.setColor (yup::Label::Style::textFillColorId, SynthTheme::accent());
         addAndMakeVisible (voiceLabel);
 
         for (int index = 0; index < SynthExample::oscillatorCount; ++index)
@@ -197,12 +196,12 @@ public:
 
         for (auto* button : { &mainPageButton, &modulationPageButton })
         {
-            button->setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::panelBackground);
-            button->setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim);
-            button->setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary);
-            button->setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary);
-            button->setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder);
-            button->setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent);
+            button->setColor (yup::ToggleButton::Style::backgroundColorId, SynthTheme::panelBackground());
+            button->setColor (yup::ToggleButton::Style::backgroundToggledColorId, SynthTheme::accentDim());
+            button->setColor (yup::ToggleButton::Style::textColorId, SynthTheme::textSecondary());
+            button->setColor (yup::ToggleButton::Style::textToggledColorId, SynthTheme::textPrimary());
+            button->setColor (yup::ToggleButton::Style::borderColorId, SynthTheme::panelBorder());
+            button->setColor (yup::ToggleButton::Style::borderToggledColorId, SynthTheme::accent());
             addAndMakeVisible (*button);
         }
 
@@ -212,15 +211,15 @@ public:
         modulationPageButton.onClick = [this] { showModulationPage (true); };
         showModulationPage (false);
 
-        randomizeButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
-        randomizeButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary);
-        randomizeButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
+        randomizeButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground());
+        randomizeButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary());
+        randomizeButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder());
         randomizeButton.onClick = [this] { randomizeVoice(); };
         addAndMakeVisible (randomizeButton);
 
-        clearButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground);
-        clearButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary);
-        clearButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder);
+        clearButton.setColor (yup::TextButton::Style::backgroundColorId, SynthTheme::panelBackground());
+        clearButton.setColor (yup::TextButton::Style::textColorId, SynthTheme::textPrimary());
+        clearButton.setColor (yup::TextButton::Style::outlineColorId, SynthTheme::panelBorder());
         clearButton.onClick = [this]
         {
             keyboardState.allNotesOff (0); // Turn off all notes on all channels
@@ -368,7 +367,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (SynthTheme::windowBackground);
+        g.setFillColor (SynthTheme::windowBackground());
         g.fillAll();
 
         logo.paint (g, logoArea);

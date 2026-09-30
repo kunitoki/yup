@@ -569,7 +569,8 @@ void TextEditor::updateStyledTextIfNeeded()
     if (text.isNotEmpty())
     {
         auto textColor = findColor (Style::textColorId).value_or (Colors::black);
-        auto currentFont = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
+        const auto& defaultFont = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+        auto currentFont = font.value_or (defaultFont);
 
         modifier.setMaxSize (getTextBounds().getSize());
         modifier.setHorizontalAlign (StyledText::left);
@@ -577,7 +578,7 @@ void TextEditor::updateStyledTextIfNeeded()
         modifier.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
         modifier.setOverflow (StyledText::visible);
 
-        modifier.appendText (text, currentFont.withHeight (fontSize.value_or (14.0f)));
+        modifier.appendText (text, currentFont.withHeight (fontSize.value_or (defaultFont.getHeight())));
     }
 
     needsUpdate = false;

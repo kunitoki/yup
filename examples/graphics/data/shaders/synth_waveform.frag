@@ -6,7 +6,9 @@ layout(set = 0, binding = 0) uniform Params
     float time;
     float width;
     float height;
-    float pad;
+    float lightMode;
+    vec4 accent;
+    vec4 background;
 } u;
 
 layout(set = 0, binding = 1) uniform Samples
@@ -16,9 +18,7 @@ layout(set = 0, binding = 1) uniform Samples
 
 layout(location = 0) out vec4 fragColor;
 
-const vec3 accent = vec3(0.447, 0.918, 0.824);
 const float focal = 2.8;
-const vec3 background = vec3(0.055, 0.067, 0.078);
 
 float fetchSample(int index)
 {
@@ -65,9 +65,14 @@ void main()
         z += d;
 
         float phase = z * 0.5 + hue;
-        vec3 tone = accent * (cos(phase) + 1.3) + vec3(0.0, 0.15, 0.08) * cos(phase + 2.0);
+        vec3 tone = u.accent.rgb * (cos(phase) + 1.3) + u.accent.gbr * 0.15 * cos(phase + 2.0);
         color += tone / max(d * z, 1.0e-4);
     }
 
-    fragColor = vec4(max(tanh(color / 900.0), background), 1.0);
+    vec3 glow = tanh(color / 900.0);
+
+    if (u.lightMode > 0.5)
+        fragColor = vec4(mix(u.background.rgb, u.accent.rgb, clamp(max(glow.r, max(glow.g, glow.b)), 0.0, 1.0)), 1.0);
+    else
+        fragColor = vec4(max(glow, u.background.rgb), 1.0);
 }

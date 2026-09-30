@@ -84,12 +84,6 @@ public:
         openMultipleFiles.setBounds (buttons1.removeFromLeft (buttonWidth));
     }
 
-    void paint (yup::Graphics& g) override
-    {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
-        g.fillAll();
-    }
-
 private:
     yup::TextButton openFile;
     yup::TextButton openMultipleFiles;

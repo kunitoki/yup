@@ -221,6 +221,7 @@
 #include "layout/yup_FlexBox.cpp"
 #include "layout/yup_GridItem.cpp"
 #include "layout/yup_Grid.cpp"
+#include "themes/yup_ThemePalette.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
 
 //==============================================================================

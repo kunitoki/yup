@@ -24,6 +24,6 @@ namespace yup
 
 //==============================================================================
 
-ApplicationTheme::Ptr createThemeVersion1();
+ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette = {});
 
 } // namespace yup

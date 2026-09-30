@@ -207,6 +207,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
 #include "examples/TextEditor.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+#include "examples/Themes.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
 #include "examples/ToastNotification.h"
 #endif
@@ -270,8 +273,7 @@ public:
     CustomWindow()
         : yup::DocumentWindow (yup::ComponentNative::Options()
                                    .withAllowedHighDensityDisplay (true)
-                                   .withVSync (false),
-                               yup::Color (0xff404040))
+                                   .withVSync (false))
     {
         setTitle ("main");
 
@@ -404,6 +406,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TextEditor
         addDemo ("Text Editor", [] { return std::make_unique<TextEditorDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_Themes
+        addDemo ("Themes", [] { return std::make_unique<ThemesDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_ToastNotification
         addDemo ("Toast Notifications", [] { return std::make_unique<ToastNotificationDemo>(); });

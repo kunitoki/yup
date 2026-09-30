@@ -172,11 +172,13 @@ private:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (yup::Color (0xff404040));
+        const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+        g.setFillColor (palette.getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         // Draw section dividers
-        g.setStrokeColor (yup::Colors::gray.withAlpha (0.3f));
+        g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
 
         auto bounds = getLocalBounds();

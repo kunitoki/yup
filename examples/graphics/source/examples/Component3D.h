@@ -74,7 +74,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -140,10 +140,12 @@ private:
 
         void paint (yup::Graphics& g) override
         {
-            g.setFillColor (yup::Color (0xff2b2f3a));
+            const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
+
+            g.setFillColor (palette.getColor (yup::ThemePalette::Role::surface));
             g.fillAll();
 
-            g.setStrokeColor (yup::Colors::orange);
+            g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
             g.setStrokeWidth (4.0f);
             g.strokeRect (getLocalBounds().reduced (2.0f));
         }

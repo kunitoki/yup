@@ -59,8 +59,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        // Fill background
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
 
         // Capture context pointer for use outside paint() (safe: context lives with the window).
