@@ -26,15 +26,6 @@ namespace yup
 
 DragImageComponent::DragImageComponent()
 {
-    addToDesktop (ComponentNative::Options{}
-                      .withDecoration (false)
-                      .withResizableWindow (false)
-                      .withAlwaysOnTop (true)
-                      .withTransparent (true)
-                      .withFocusable (false)
-                      .withTemporaryWindow (true)
-                      .withClearColor (Colors::transparentBlack));
-
     setVisible (false);
     setOpaque (false);
 }
@@ -43,6 +34,35 @@ DragImageComponent::~DragImageComponent()
 {
     clearDragImage();
     removeFromDesktop();
+}
+
+//==============================================================================
+
+void DragImageComponent::setHostComponent (Component* newHost)
+{
+    if (newHost == nullptr)
+    {
+        if (! isOnDesktop())
+        {
+            addToDesktop (ComponentNative::Options{}
+                              .withDecoration (false)
+                              .withResizableWindow (false)
+                              .withAlwaysOnTop (true)
+                              .withTransparent (true)
+                              .withFocusable (false)
+                              .withTemporaryWindow (true)
+                              .withClearColor (Colors::transparentBlack));
+        }
+
+        return;
+    }
+
+    removeFromDesktop();
+
+    if (getParentComponent() != newHost)
+        newHost->addChildComponent (this);
+
+    toFront (false);
 }
 
 //==============================================================================
@@ -84,7 +104,16 @@ void DragImageComponent::clearDragImage()
 
 void DragImageComponent::moveToScreenPosition (const Point<float>& screenPosition)
 {
-    setPosition (screenPosition - hotspot);
+    auto* host = getParentComponent();
+    if (host == nullptr)
+    {
+        setPosition (screenPosition - hotspot);
+        return;
+    }
+
+    // Unlike setPosition, setBounds repaints where a child was. Whole units keep the image crisp, as a
+    // window of its own would be.
+    setBounds (getBounds().withPosition ((host->screenToLocal (screenPosition) - hotspot).toNearestInt()));
 }
 
 //==============================================================================
@@ -110,8 +139,11 @@ void DragImageComponent::updateWindowSize()
         hostedComponent->setBounds (getLocalBounds());
     }
 
-    if (auto* native = getNativeComponent())
-        native->setOpacity (opacity);
+    // A hosted ghost's native component is the host window, which must not fade with it
+    if (isOnDesktop())
+        getNativeComponent()->setOpacity (opacity);
+    else
+        setOpacity (opacity);
 
     setVisible (true);
     repaint();
@@ -121,6 +153,11 @@ void DragImageComponent::paint (Graphics& g)
 {
     if (hostedComponent == nullptr && dragImage.isValid())
         g.drawImageAt (dragImage, Point<float>());
+}
+
+bool DragImageComponent::hitTest (float, float)
+{
+    return false;
 }
 
 } // namespace yup

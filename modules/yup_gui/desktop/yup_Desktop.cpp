@@ -274,9 +274,7 @@ Component* Desktop::findComponentAt (const Point<float>& screenPosition, Compone
         if (&root == componentToIgnore || ! root.isVisible())
             continue;
 
-        const auto localPosition = screenPosition - nativeComponent->getBounds().getPosition().to<float>();
-
-        if (auto* found = root.findComponentAt (localPosition))
+        if (auto* found = root.findComponentAt (root.screenToLocal (screenPosition)))
         {
             if (nativeComponent->getFocusedComponent() != nullptr)
                 return found;
