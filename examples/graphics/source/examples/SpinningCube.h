@@ -175,8 +175,9 @@ public:
     {
         if (! isDragging)
         {
-            angleY += 0.038f;
-            angleX += 0.012f;
+            const auto deltaSeconds = static_cast<float> (lastFrameTimeSeconds);
+            angleY += 2.28f * deltaSeconds;
+            angleX += 0.72f * deltaSeconds;
         }
 
         lottiePlayer.advanceTime (lastFrameTimeSeconds);

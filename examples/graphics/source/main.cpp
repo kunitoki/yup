@@ -273,7 +273,7 @@ public:
     CustomWindow()
         : yup::DocumentWindow (yup::ComponentNative::Options()
                                    .withAllowedHighDensityDisplay (true)
-                                   .withVSync (false),
+                                   .withVSync (true),
                                yup::Color (0xff404040))
     {
         setTitle ("main");
