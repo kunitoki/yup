@@ -78,6 +78,19 @@ public:
         /** The opacity applied to the ghost window. */
         float imageOpacity = 0.7f;
 
+        /** Whether the ghost floats inside the source's top-level component instead of its own window.
+
+            A window of its own can float over every YUP window, and over the gap between them, but the
+            web has a single canvas that a second window would take over. So this defaults to true on
+            the web and false elsewhere. Inside the top-level component the ghost stays within that window.
+        */
+        bool imageInTopLevelComponent =
+#if YUP_EMSCRIPTEN
+            true;
+#else
+            false;
+#endif
+
         /** The operations this drag offers. */
         DragAndDropActions allowedActions = dragAndDropActionCopy | dragAndDropActionMove | dragAndDropActionLink;
 
@@ -106,6 +119,12 @@ public:
 
         /** Sets the ghost window opacity. */
         DragOptions& withImageOpacity (float newOpacity);
+
+        /** Sets whether the ghost floats inside the source's top-level component instead of its own window.
+
+            @see imageInTopLevelComponent
+        */
+        DragOptions& withImageInTopLevelComponent (bool shouldUseTopLevelComponent);
 
         /** Sets the operations this drag offers. */
         DragOptions& withAllowedActions (DragAndDropActions newActions);

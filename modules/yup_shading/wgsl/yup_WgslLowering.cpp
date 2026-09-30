@@ -417,6 +417,9 @@ public:
         // Collect compute builtins from function body usage
         collectComputeBuiltinsFromUsage (result);
 
+        // Make the implicit conversions of GLSL explicit
+        WgslTypeLegalizer::legalize (result.ast);
+
         return makeResultValueOk (std::move (result));
     }
 

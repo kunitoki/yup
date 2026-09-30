@@ -35,8 +35,7 @@ public:
                           const SubgraphConfig& config,
                           std::function<void (int)> onPresetChangedIn,
                           std::function<void()> onClosedIn)
-        : yup::DocumentWindow (yup::ComponentNative::Options().withAllowedHighDensityDisplay (true).withResizableWindow (true),
-                               yup::Color (0xff0d1117))
+        : yup::DocumentWindow (yup::ComponentNative::Options(), yup::Color (0xff0d1117))
         , panel (std::move (panelToOwn))
         , onPresetChanged (std::move (onPresetChangedIn))
         , onClosed (std::move (onClosedIn))

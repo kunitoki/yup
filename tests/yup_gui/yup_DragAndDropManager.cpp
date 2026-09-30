@@ -467,6 +467,80 @@ TEST_F (DragAndDropManagerSessionTests, AMouseSessionIgnoresFingers)
     EXPECT_FALSE (manager().isDragging());
 }
 
+TEST_F (DragAndDropManagerSessionTests, TheTopLevelComponentHostsTheImageByDefaultOnlyOnTheWeb)
+{
+#if YUP_EMSCRIPTEN
+    EXPECT_TRUE (DragAndDropSource::DragOptions{}.imageInTopLevelComponent);
+#else
+    EXPECT_FALSE (DragAndDropSource::DragOptions{}.imageInTopLevelComponent);
+#endif
+}
+
+//==============================================================================
+
+/** A source inside a window, for the ghost that floats inside the source's top-level component
+    instead of opening a window of its own. None of this needs a desktop. */
+class DragAndDropManagerHostedGhostTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        window.setBounds (0.0f, 0.0f, 200.0f, 200.0f);
+        window.addAndMakeVisible (source);
+    }
+
+    void TearDown() override { endAnyActiveDrag(); }
+
+    DragAndDropManager& manager() const { return *DragAndDropManager::getInstance(); }
+
+    void startHostedSession()
+    {
+        auto options = payloadOptions ("payload");
+        options.withDragImage (Image (4, 4, PixelFormat::RGBA)).withImageInTopLevelComponent (true);
+
+        ASSERT_TRUE (manager().startDragging (source, source, options));
+    }
+
+    Component* findGhost() const
+    {
+        for (int i = 0; i < window.getNumChildComponents(); ++i)
+        {
+            if (auto* child = window.getChildComponent (i); child != &source)
+                return child;
+        }
+
+        return nullptr;
+    }
+
+    Component window;
+    ManagerTestSource source;
+};
+
+TEST_F (DragAndDropManagerHostedGhostTests, TheGhostFloatsOnTopOfTheSourceTopLevelComponent)
+{
+    startHostedSession();
+
+    auto* ghost = findGhost();
+    ASSERT_NE (nullptr, ghost);
+
+    EXPECT_TRUE (ghost->isVisible());
+    EXPECT_FALSE (ghost->isOnDesktop());
+    EXPECT_EQ (ghost, window.getChildComponent (window.getNumChildComponents() - 1));
+}
+
+TEST_F (DragAndDropManagerHostedGhostTests, TheHostedGhostIsHiddenWhenTheDragEnds)
+{
+    startHostedSession();
+
+    auto* ghost = findGhost();
+    ASSERT_NE (nullptr, ghost);
+
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt ({ 5.0f, 5.0f }));
+
+    EXPECT_FALSE (manager().isDragging());
+    EXPECT_FALSE (ghost->isVisible());
+}
+
 //==============================================================================
 
 /** The other half of the manager: a drag that really crosses a window, so Desktop::findComponentAt
@@ -512,13 +586,12 @@ protected:
 
     /** A screen position that lands on the target however the platform placed the window.
 
-        Desktop::findComponentAt subtracts the native window's origin before hit-testing the root
-        component, so building the point from that same origin cancels it out exactly. Deriving it
-        from the component's screen bounds instead disagrees whenever the window is placed somewhere
-        other than where it was asked to go - which is what happens under a window manager. */
+        Built the way the native backend builds the screen position of a real pointer event, with
+        localToScreen(). The window may not sit where it was asked to go - a window manager moves
+        it, and the web can't place it at all - so the bounds it was given are no reliable origin. */
     Point<float> overTarget() const
     {
-        return root.getNativeComponent()->getBounds().getPosition().to<float>() + target.getBounds().getCenter();
+        return root.localToScreen (target.getBounds().getCenter());
     }
 
     Component root;
@@ -562,6 +635,23 @@ TEST_F (DragAndDropManagerDropTests, DroppingOverATargetPerformsACopy)
     EXPECT_EQ ("payload", target.lastDropData.getText());
     EXPECT_EQ (DragAndDropAction::copy, source.lastPerformed);
     EXPECT_FALSE (manager().isDragging());
+}
+
+TEST_F (DragAndDropManagerDropTests, AGhostInsideTheWindowDoesNotHideTheTargetBelowIt)
+{
+    endAnyActiveDrag();
+
+    // The hotspot puts the pointer in the middle of the ghost, right over the target.
+    auto options = payloadOptions ("hosted");
+    options.withDragImage (Image (8, 8, PixelFormat::RGBA), Point<float> (4.0f, 4.0f)).withImageInTopLevelComponent (true);
+    ASSERT_TRUE (manager().startDragging (source, source, options));
+
+    Desktop::getInstance()->handleGlobalMouseDrag (screenEventAt (overTarget()));
+    EXPECT_EQ (static_cast<DragAndDropTarget*> (&target), manager().getCurrentDragTarget());
+
+    Desktop::getInstance()->handleGlobalMouseUp (screenEventAt (overTarget()));
+    EXPECT_EQ (1, target.dropCount);
+    EXPECT_EQ ("hosted", target.lastDropData.getText());
 }
 
 TEST_F (DragAndDropManagerDropTests, ShiftAsksForAMoveInsteadOfACopy)

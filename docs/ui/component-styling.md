@@ -83,6 +83,7 @@ Every themable widget exposes color IDs:
 | `ProgressBar::Style` | `backgroundColorId`, `foregroundColorId` |
 | `ListBox::Style` | `backgroundColorId`, `outlineColorId`, `rowBackgroundColorId`, `selectedRowBackgroundColorId`, `hoveredRowBackgroundColorId`, `refreshIndicatorColorId` (metric: `refreshIndicatorSizeId`) |
 | `ListBoxItem::Style` | `textColorId`, `textColorSelectedId`, `backgroundColorId`, `backgroundColorSelectedId`, `backgroundColorHoveredId` |
+| `TreeView::Style` | `indentGuideColorId`, `disclosureColorId`, `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId`, `itemHoveredColorId` (the rows also use the `ListBox::Style` colors) |
 | `PopupMenu::Style` | `menuBackground`, `menuBorder`, `menuItemText`, `menuItemTextDisabled`, `menuItemBackground`, `menuItemBackgroundHighlighted`, `menuItemBackgroundActiveSubmenu` |
 | `DocumentWindow::Style` | `backgroundColorId` |
 | `MidiKeyboardComponent::Style` | `whiteKeyColorId`, `whiteKeyPressedColorId`, `whiteKeyShadowColorId`, `blackKeyColorId`, `blackKeyPressedColorId`, `blackKeyShadowColorId`, `keyOutlineColorId`, `scrollButtonBackgroundColorId`, `scrollButtonArrowColorId` |

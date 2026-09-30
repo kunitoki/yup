@@ -263,6 +263,9 @@ void DragAndDropManager::createGhost()
     if (ghost == nullptr)
         ghost = std::make_unique<DragImageComponent>();
 
+    auto* source = sourceComponent.get();
+    ghost->setHostComponent (currentOptions.imageInTopLevelComponent && source != nullptr ? source->getTopLevelComponent() : nullptr);
+
     if (currentOptions.dragImageComponent != nullptr)
         ghost->setDragImageComponent (currentOptions.dragImageComponent, currentOptions.imageOffset, currentOptions.imageOpacity);
     else

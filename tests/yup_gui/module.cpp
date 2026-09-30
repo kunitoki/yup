@@ -37,6 +37,7 @@
 #include "yup_ComponentNative.cpp"
 #include "yup_ComponentEffect.cpp"
 #include "yup_ComponentPointMapping.cpp"
+#include "yup_DataTreeViewItem.cpp"
 #include "yup_Desktop.cpp"
 #include "yup_DragAndDropData.cpp"
 #include "yup_DragAndDropManager.cpp"
@@ -72,3 +73,5 @@
 #include "yup_ThemePalette.cpp"
 #include "yup_ThemeVersion1.cpp"
 #include "yup_ToggleButton.cpp"
+#include "yup_TreeView.cpp"
+#include "yup_TreeViewItem.cpp"

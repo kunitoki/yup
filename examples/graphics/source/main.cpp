@@ -23,6 +23,7 @@
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
+
 #if YUP_MODULE_AVAILABLE_yup_audio_devices
 #include <yup_audio_devices/yup_audio_devices.h>
 #endif
@@ -216,6 +217,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
 #include "examples/TouchTrails.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+#include "examples/TreeView.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
 #include "examples/VariableFonts.h"
 #endif
@@ -271,9 +275,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options()
-                                   .withAllowedHighDensityDisplay (true)
-                                   .withVSync (false))
+        : yup::DocumentWindow (yup::ComponentNative::Options().withVSync (true))
     {
         setTitle ("main");
 
@@ -415,6 +417,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
         addDemo ("Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+        addDemo ("Tree View", [] { return std::make_unique<TreeViewDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });

@@ -347,6 +347,10 @@ public:
     {
         std::string out;
 
+        // GLSL allows implicit-derivative sampling in non-uniform control flow, WGSL rejects it by default
+        if (program.entryPoint.isFragment)
+            out += "diagnostic(off, derivative_uniformity);\n";
+
         // Emit polyfills first
         for (auto& pf : program.polyfills)
             out += pf + "\n";
@@ -454,6 +458,28 @@ private:
             if (! il.qualifier)
                 continue;
 
+            if (il.qualifier->hasStorage (StorageQualifier::constQual))
+            {
+                for (auto& sd : il.declarations)
+                {
+                    auto fullType = il.type;
+                    fullType.arraySpecifiers.insert (fullType.arraySpecifiers.end(),
+                                                     sd.arraySpecifiers.begin(),
+                                                     sd.arraySpecifiers.end());
+
+                    out += "const " + sd.name + ": " + genericTypeName (fullType);
+
+                    if (sd.initializer && sd.initializer->expr)
+                    {
+                        out += " = ";
+                        emitExpr (*sd.initializer->expr, out);
+                    }
+
+                    out += ";\n";
+                }
+                continue;
+            }
+
             bool isUniform = il.qualifier->hasStorage (StorageQualifier::uniform);
             bool isBuffer = il.qualifier->hasStorage (StorageQualifier::buffer);
             bool isIn = il.qualifier->hasStorage (StorageQualifier::in);
@@ -539,8 +565,8 @@ private:
         if (program.entryPoint.isVertex)
         {
             out += "var<private> gl_Position: vec4<f32>;\n";
-            out += "var<private> gl_VertexIndex: u32;\n";
-            out += "var<private> gl_InstanceIndex: u32;\n";
+            out += "var<private> gl_VertexIndex: i32;\n";
+            out += "var<private> gl_InstanceIndex: i32;\n";
         }
 
         // gl_FragCoord / gl_FrontFacing as implicit builtins in fragment shaders
@@ -708,8 +734,8 @@ private:
         // Copy implicit builtin inputs
         if (program.entryPoint.isVertex)
         {
-            out += "    gl_VertexIndex = input.vertex_index;\n";
-            out += "    gl_InstanceIndex = input.instance_index;\n";
+            out += "    gl_VertexIndex = i32(input.vertex_index);\n";
+            out += "    gl_InstanceIndex = i32(input.instance_index);\n";
         }
         if (program.entryPoint.isFragment)
         {
@@ -1167,33 +1193,13 @@ private:
         else if (expr.is<ExprBinary>())
         {
             auto& bin = expr.as<ExprBinary>();
-            if (bin.op == BinaryOp::mod)
-            {
-                // Floor-mod: mod(x,y) → (x - y * floor(x / y))
-                out += "(";
-                if (bin.left)
-                    emitExpr (*bin.left, out);
-                out += " - ";
-                if (bin.right)
-                    emitExpr (*bin.right, out);
-                out += " * floor(";
-                if (bin.left)
-                    emitExpr (*bin.left, out);
-                out += " / ";
-                if (bin.right)
-                    emitExpr (*bin.right, out);
-                out += "))";
-            }
-            else
-            {
-                out += "(";
-                if (bin.left)
-                    emitExpr (*bin.left, out);
-                out += " " + binaryOpSymbol (bin.op) + " ";
-                if (bin.right)
-                    emitExpr (*bin.right, out);
-                out += ")";
-            }
+            out += "(";
+            if (bin.left)
+                emitExpr (*bin.left, out);
+            out += " " + binaryOpSymbol (bin.op) + " ";
+            if (bin.right)
+                emitExpr (*bin.right, out);
+            out += ")";
         }
         else if (expr.is<ExprTernary>())
         {

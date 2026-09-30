@@ -34,6 +34,18 @@ transpiler that bypasses SPIR-V for code generation - no SPIRV-Cross WGSL backen
 required. The bundled reflection data still derives from SPIR-V so binding
 assignment stays consistent across all targets.
 
+The transpiler makes GLSL's implicit conversions explicit, as WGSL requires:
+`int` / `uint` values mixed with `float` (or `int` with `uint`) are converted
+in expressions, initializers, assignments, return values and function
+arguments, shift amounts become unsigned, and scalar arguments of `min`,
+`max`, `clamp`, `step` and `smoothstep` are expanded to the vector type of the
+other arguments. `gl_VertexIndex` and `gl_InstanceIndex` are `int`, as in GLSL.
+Fragment shaders turn off WGSL's `derivative_uniformity` check, so `texture()`
+can be called inside branches that depend on varyings, as GLSL allows.
+Conversions are only inserted where the transpiler can infer the types
+involved, so when a WebGPU shader fails to compile with a type mismatch, spell
+the conversion out in the GLSL source.
+
 ```cpp
 ResultValue<GpuPipeline::Ptr> GpuPipeline::compileFromBundle (
     GpuDevice::Ptr          ctx,
