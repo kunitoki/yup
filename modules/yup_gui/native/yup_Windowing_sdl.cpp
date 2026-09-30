@@ -1473,6 +1473,9 @@ void SDLComponentNative::renderAnimationFrame (double timestampMs)
         renderFrame();
     }
     YUP_CATCH_EXCEPTION
+
+    if (framePaintedSincePointerCheck.exchange (false) && SDL_GetMouseFocus() == window)
+        revalidateStationaryPointer();
 }
 
 //==============================================================================
@@ -1684,8 +1687,6 @@ Component* SDLComponentNative::getPointerTarget() const
 
 void SDLComponentNative::revalidateStationaryPointer()
 {
-    // Animations, effects and 3D projections can move content under a pointer that didn't move:
-    // dispatch a synthetic move (or drag) only when that changed what the pointer is over
     const auto position = lastMouseMovePosition;
 
     if (lastComponentClicked == nullptr && component.findComponentAtForMouseEvent (position) != lastComponentUnderMouse.get())

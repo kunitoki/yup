@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- Fixed WebAssembly windows not re-evaluating a stationary pointer when painted content moved under it, so hover and cursor didn't follow widgets displaced by effects such as the Component Effects wave.
 - Fixed `FileChooser` on the web returning files before their contents were copied, multi-file picks overwriting each other and the chooser never being freed. Picks are now fully written to the in-memory filesystem when the callback runs.
 - `SpectrumAnalyzerComponent::Style`: the background gradient, outline, fill, grid and text colors are now style colors. Theme1 derives them from the palette, so the spectrum follows the accent color instead of a fixed green.
 - **Behavior change** `SpectrumAnalyzerComponent` updates once per displayed frame by default instead of on a 30 Hz timer; `setUpdateRate (0)` returns to this mode and `getUpdateRate()` then reports 0. The release is timed from the elapsed time between updates and holds the latest FFT frame between hops, so the falloff is the same at any frame rate and no longer flickers when the display refreshes faster than FFT frames arrive. Backlogged FFT frames are skipped so the latency does not grow at low frame rates.
