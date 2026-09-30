@@ -200,7 +200,8 @@ public:
 
             The render loop still observes `framerateRedraw`, because some backends submit a
             synchronized presentation asynchronously rather than blocking until the display is
-            ready. Off by default.
+            ready. Without a `framerateRedraw`, it targets the refresh rate of the display the
+            window is on, and follows the window to other displays. Off by default.
 
             @param shouldUseVSync True to synchronize presentation to the display, false to pace frames with the software timer.
 
@@ -250,7 +251,8 @@ public:
 
         /** Sets the target framerate for continuous rendering.
 
-            @param newFramerateRedraw The target framerate, or std::nullopt to use the default.
+            @param newFramerateRedraw The target framerate, or std::nullopt to use the default: the
+                                      display refresh rate with vsync, 60 otherwise.
 
             @return Reference to this Options object for method chaining.
         */
@@ -569,6 +571,9 @@ public:
     //==============================================================================
     /** Gets the current framerate.
 
+        Counts the frames presented over roughly the last second, so it matches the display refresh
+        while something repaints every frame and drops towards zero while nothing repaints.
+
         @return The current framerate in frames per second.
     */
     virtual float getCurrentFrameRate() const = 0;
@@ -579,6 +584,9 @@ public:
         produced at: the window throttles itself while unfocused if an unfocused framerate was
         configured, and a frame that takes longer than its budget delays the ones after it. Use
         getCurrentFrameRate() for the rate actually being achieved.
+
+        Unless a rate was set with Options::withFramerateRedraw() or setDesiredFrameRate(), this is
+        the display refresh rate while vsync is enabled, and 60 otherwise.
 
         @return The desired framerate in frames per second.
 

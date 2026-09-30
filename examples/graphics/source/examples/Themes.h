@@ -35,7 +35,7 @@ public:
 
         const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
         paletteEditor.setText (toHexList (palette.getSourceColors()), yup::dontSendNotification);
-        lightModeSwitch.setToggleState (palette.getMode() == yup::ThemePalette::Mode::light, yup::dontSendNotification);
+        modeTabs.setSelectedTab (palette.getMode() == yup::ThemePalette::Mode::light ? "light" : "dark", yup::dontSendNotification);
     }
 
     void resized() override
@@ -57,8 +57,7 @@ public:
         buttons.removeFromLeft (spacing);
         applyButton.setBounds (buttons.removeFromLeft (80.0f));
         buttons.removeFromLeft (spacing * 2.0f);
-        lightModeSwitch.setBounds (buttons.removeFromLeft (56.0f));
-        lightModeLabel.setBounds (buttons.removeFromLeft (60.0f));
+        modeTabs.setBounds (buttons.removeFromLeft (140.0f));
 
         left.removeFromTop (spacing);
         errorLabel.setBounds (left.removeFromTop (rowHeight));
@@ -98,6 +97,8 @@ public:
         gallerySwitch.setBounds (switchRow.removeFromLeft (56.0f));
         galleryLeft.removeFromTop (spacing);
         galleryProgress.setBounds (galleryLeft.removeFromTop (12.0f));
+        galleryLeft.removeFromTop (spacing);
+        galleryTabs.setBounds (galleryLeft.removeFromTop (rowHeight + 6.0f));
 
         galleryList.setBounds (bounds.reduced (spacing, 0.0f).withTrimmedBottom (spacing));
     }
@@ -221,14 +222,14 @@ private:
         };
         addAndMakeVisible (applyButton);
 
-        lightModeSwitch.onClick = [this]
+        modeTabs.setLayout (yup::TabBar::Layout::fill);
+        modeTabs.addTab ("dark", "Dark");
+        modeTabs.addTab ("light", "Light");
+        modeTabs.onSelectionChanged = [this] (const yup::Identifier&)
         {
             applyPalette();
         };
-        addAndMakeVisible (lightModeSwitch);
-
-        lightModeLabel.setText ("Light", yup::dontSendNotification);
-        addAndMakeVisible (lightModeLabel);
+        addAndMakeVisible (modeTabs);
 
         errorLabel.setColor (yup::Label::Style::textFillColorId, yup::Colors::orangered);
         addAndMakeVisible (errorLabel);
@@ -274,6 +275,9 @@ private:
         galleryList.setRowSize (28.0f);
         galleryList.selectRow (2, false, yup::dontSendNotification);
 
+        for (const auto* name : { "Share", "Privacy", "Publishing", "Domain" })
+            galleryTabs.addTab (yup::String (name).toLowerCase(), name);
+
         for (yup::Component* component : { static_cast<yup::Component*> (&galleryButton),
                                            static_cast<yup::Component*> (&galleryToggle),
                                            static_cast<yup::Component*> (&gallerySwitch),
@@ -281,6 +285,7 @@ private:
                                            static_cast<yup::Component*> (&galleryEditor),
                                            static_cast<yup::Component*> (&galleryLabel),
                                            static_cast<yup::Component*> (&galleryProgress),
+                                           static_cast<yup::Component*> (&galleryTabs),
                                            static_cast<yup::Component*> (&galleryList) })
         {
             addAndMakeVisible (component);
@@ -290,7 +295,7 @@ private:
     //==============================================================================
     void applyPalette()
     {
-        const auto mode = lightModeSwitch.getToggleState() ? yup::ThemePalette::Mode::light : yup::ThemePalette::Mode::dark;
+        const auto mode = modeTabs.getSelectedTabId() == yup::Identifier ("light") ? yup::ThemePalette::Mode::light : yup::ThemePalette::Mode::dark;
         auto result = yup::ThemePalette::fromString (paletteEditor.getText(), mode);
 
         if (result.failed())
@@ -409,8 +414,7 @@ private:
     yup::TextEditor paletteEditor;
     yup::TextButton pasteButton;
     yup::TextButton applyButton;
-    yup::SwitchButton lightModeSwitch;
-    yup::Label lightModeLabel;
+    yup::TabBar modeTabs;
     yup::Label errorLabel;
     yup::Rectangle<float> swatchArea;
 
@@ -430,6 +434,7 @@ private:
     yup::TextEditor galleryEditor;
     yup::Label galleryLabel;
     yup::ProgressBar galleryProgress;
+    yup::TabBar galleryTabs;
     yup::ListBox galleryList;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThemesDemo)

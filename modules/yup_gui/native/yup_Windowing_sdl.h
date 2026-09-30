@@ -46,6 +46,7 @@ class SDLComponentNative final
     struct TouchClickState
     {
         std::optional<yup::Time> lastUpTime;
+        std::optional<Point<float>> lastPosition;
         WeakReference<Component> lastComponent;
     };
 
@@ -233,9 +234,11 @@ private:
     int findTouchFingerIndex (SDL_FingerID fingerId) const;
     int getFreeTouchIndex() const;
     TouchClickState& getTouchClickState (int touchIndex);
+    static bool isNearLastClick (const std::optional<Point<float>>& downPosition, const std::optional<Point<float>>& lastClickPosition);
 
     bool hasNativeKeyboardFocus() const;
 
+    void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
 
 #if YUP_EMSCRIPTEN
@@ -287,6 +290,8 @@ private:
     std::optional<Point<float>> lastMouseDownPosition;
     std::optional<yup::Time> lastMouseDownTime;
     std::optional<yup::Time> lastMouseUpTime;
+    std::optional<Point<float>> lastClickPosition;
+    WeakReference<Component> lastClickComponent;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
@@ -333,6 +338,7 @@ private:
     double nextAnimationFrameMs = 0.0;
 #endif
 
+    std::optional<float> requestedFrameRate;
     std::atomic<float> desiredFrameRate = 60.0f;
     std::optional<float> unfocusedFrameRate;
     std::atomic<float> effectiveFrameRate = 60.0f;

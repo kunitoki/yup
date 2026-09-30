@@ -62,6 +62,9 @@ windowing, widgets, and theming are still to come.
 - [Tree view](tree-view.md) - `TreeView` and `TreeViewItem`, lazy loading,
   custom content, drag and drop reordering, `DataTree` mirroring and saved
   openness state.
+- [Tabs](tabs.md) - `TabBar`, `TabButton` and `TabComponent`: segmented
+  controls and tabbed pages with animated selection, reordering, overflow and
+  closable tabs.
 
 ```{toctree}
 :hidden:
@@ -81,4 +84,5 @@ artboard
 midi-keyboard
 list-box
 tree-view
+tabs
 ```

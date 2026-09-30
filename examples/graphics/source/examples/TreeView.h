@@ -91,7 +91,7 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.setFillColor (yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::background));
         g.fillAll();
     }
 
@@ -179,6 +179,7 @@ private:
         void paintItemIcon (yup::Graphics& g, yup::Rectangle<float> area, bool isSelected) const override
         {
             const auto r = area.reduced (area.getWidth() * 0.1f);
+            const auto selectedColor = yup::ApplicationTheme::getGlobalTheme()->getPalette().getColor (yup::ThemePalette::Role::onAccent);
             yup::Path shape;
 
             if (directory)
@@ -187,7 +188,7 @@ private:
                 shape.addRoundedRectangle (r.getX(), r.getY() + r.getHeight() * 0.1f, r.getWidth() * 0.45f, r.getHeight() * 0.3f, 1.5f);
                 shape.addRoundedRectangle (r.getX(), r.getY() + r.getHeight() * 0.22f, r.getWidth(), r.getHeight() * 0.68f, 2.0f);
 
-                g.setFillColor (isSelected ? yup::Colors::white : yup::Color (0xffe8b04a));
+                g.setFillColor (isSelected ? selectedColor : yup::Color (0xffe8b04a));
                 g.fillPath (shape);
                 return;
             }
@@ -204,7 +205,7 @@ private:
             shape.lineTo (left, r.getBottom());
             shape.close();
 
-            g.setFillColor (isSelected ? yup::Colors::white : yup::Color (0xff8aa4c8));
+            g.setFillColor (isSelected ? selectedColor : yup::Color (0xff8aa4c8));
             g.fillPath (shape);
         }
 
@@ -334,7 +335,7 @@ private:
 
             if (isButtonOver() || isButtonDown())
             {
-                g.setFillColor (yup::Color (isButtonDown() ? 0x40000000 : 0x20000000));
+                g.setFillColor (color.withAlpha (isButtonDown() ? 0.25f : 0.12f));
                 g.fillRoundedRect (bounds, 4.0f);
             }
 
@@ -601,9 +602,10 @@ inline void TreeViewDemo::WidgetRowContent::paint (yup::Graphics& g)
         return;
 
     const auto selected = item->isSelected();
+    const auto& palette = yup::ApplicationTheme::getGlobalTheme()->getPalette();
     const auto textColor = yup::ApplicationTheme::findComponentColor (*this, selected ? yup::TreeView::Style::itemTextSelectedColorId
                                                                                       : yup::TreeView::Style::itemTextColorId)
-                               .value_or (selected ? yup::Colors::white : yup::Colors::black);
+                               .value_or (palette.getColor (selected ? yup::ThemePalette::Role::onAccent : yup::ThemePalette::Role::text));
 
     addButton.color = textColor;
     removeButton.color = textColor;
@@ -611,7 +613,10 @@ inline void TreeViewDemo::WidgetRowContent::paint (yup::Graphics& g)
     auto bounds = getLocalBounds();
     const auto iconArea = bounds.removeFromLeft (bounds.getHeight()).reduced (4.0f);
 
-    paintWidgetIcon (g, item->kind, iconArea, item->kind == WidgetKind::button ? yup::Color (0xff8f6bff) : textColor);
+    // Buttons stand out in purple, except on the selection where they take its text color.
+    const auto kindColor = item->kind == WidgetKind::button && ! selected ? yup::Color (0xff8f6bff) : textColor;
+
+    paintWidgetIcon (g, item->kind, iconArea, kindColor);
 
     const auto textArea = bounds.withTrimmedLeft (4.0f).withTrimmedRight (bounds.getHeight() * 2.0f + 4.0f);
 
@@ -627,7 +632,7 @@ inline void TreeViewDemo::WidgetRowContent::paint (yup::Graphics& g)
         modifier.appendText (item->name, yup::ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (14.0f));
     }
 
-    g.setFillColor (item->kind == WidgetKind::button ? yup::Color (0xff8f6bff) : textColor);
+    g.setFillColor (kindColor);
     g.fillFittedText (styledText, textArea);
 }
 

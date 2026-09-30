@@ -1143,19 +1143,21 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
     if (view == nullptr || row.getItem() == nullptr)
         return;
 
+    const auto& palette = theme.getPalette();
+
     const auto indentSize = view->getIndentSize();
 
     // The selection is painted under the row by the list; the hover only shows on unselected rows.
     if (row.isItemHovered() && ! row.isItemSelected())
     {
-        g.setFillColor (theme.findColor (row, TreeView::Style::itemHoveredColorId).value_or (Color (0x14000000)));
+        g.setFillColor (theme.findColor (row, TreeView::Style::itemHoveredColorId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.06f)));
         g.fillRect (row.getLocalBounds());
     }
 
     // One guide per ancestor level, under the center of that ancestor's disclosure button.
     if (view->areIndentGuidesVisible() && indentSize > 0.0f)
     {
-        g.setStrokeColor (theme.findColor (row, TreeView::Style::indentGuideColorId).value_or (Color (0x33000000)));
+        g.setStrokeColor (theme.findColor (row, TreeView::Style::indentGuideColorId).value_or (palette.getColor (PaletteRole::textMuted).withAlpha (0.3f)));
         g.setStrokeWidth (1.0f);
 
         for (int level = 0; level < row.getDepth(); ++level)
@@ -1179,7 +1181,7 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
                                .scaled (size)
                                .translated (center.getX(), center.getY()));
 
-        g.setStrokeColor (theme.findColor (row, TreeView::Style::disclosureColorId).value_or (Color (0xff808080)));
+        g.setStrokeColor (theme.findColor (row, TreeView::Style::disclosureColorId).value_or (palette.getColor (PaletteRole::textMuted)));
         g.setStrokeWidth (1.5f);
         g.setStrokeCap (StrokeCap::Round);
         g.setStrokeJoin (StrokeJoin::Round);
@@ -1199,8 +1201,8 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
         return;
 
     const auto textColor = row.isItemSelected()
-                             ? theme.findColor (row, TreeView::Style::itemTextSelectedColorId).value_or (Colors::white)
-                             : theme.findColor (row, TreeView::Style::itemTextColorId).value_or (Colors::black);
+                             ? theme.findColor (row, TreeView::Style::itemTextSelectedColorId).value_or (palette.getColor (PaletteRole::onAccent))
+                             : theme.findColor (row, TreeView::Style::itemTextColorId).value_or (palette.getColor (PaletteRole::text));
 
     auto styledText = StyledText();
     {
@@ -1215,6 +1217,154 @@ void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeVie
 
     g.setFillColor (textColor);
     g.fillFittedText (styledText, textBounds);
+}
+
+//==============================================================================
+
+constexpr float tabBarTrackCornerRadius = 8.0f;
+constexpr float tabBarPillCornerRadius = 5.0f;
+
+void paintTabBar (Graphics& g, const ApplicationTheme& theme, const TabBar& bar)
+{
+    const auto& palette = theme.getPalette();
+    auto bounds = bar.getLocalBounds();
+    const auto indicator = bar.getIndicatorBounds();
+    const auto trackColor = theme.findColor (bar, TabBar::Style::trackColorId).value_or (palette.getColor (PaletteRole::surface));
+    const auto focusColor = theme.findColor (bar, TabBar::Style::focusOutlineColorId).value_or (palette.getColor (PaletteRole::accent));
+
+    if (bar.getVariant() == TabBar::Variant::pill)
+    {
+        g.setFillColor (trackColor);
+        g.fillRoundedRect (bounds, tabBarTrackCornerRadius);
+
+        if (indicator.isEmpty())
+            return;
+
+        // A soft shadow of layered fills, narrow enough to stay inside the track.
+        constexpr int numShadowLayers = 3;
+
+        for (int i = numShadowLayers; i > 0; --i)
+        {
+            const auto spread = static_cast<float> (i) * 0.7f;
+            g.setFillColor (Colors::black.withAlpha (0.03f + static_cast<float> (numShadowLayers - i) * 0.02f));
+            g.fillRoundedRect (indicator.reduced (-spread).translated (0.0f, 0.5f), tabBarPillCornerRadius + spread);
+        }
+
+        g.setFillColor (theme.findColor (bar, TabBar::Style::indicatorColorId).value_or (palette.getColor (PaletteRole::surfaceRaised)));
+        g.fillRoundedRect (indicator, tabBarPillCornerRadius);
+
+        if (bar.isFocusIndicatorVisible())
+        {
+            g.setStrokeColor (focusColor);
+            g.setStrokeWidth (2.0f);
+            g.strokeRoundedRect (indicator.reduced (-1.0f), tabBarPillCornerRadius + 1.0f);
+        }
+
+        return;
+    }
+
+    const auto vertical = bar.getOrientation() == TabBar::Orientation::vertical;
+    const auto hairline = vertical ? (bar.isFlipped() ? bounds.removeFromLeft (1.0f) : bounds.removeFromRight (1.0f))
+                                   : (bar.isFlipped() ? bounds.removeFromTop (1.0f) : bounds.removeFromBottom (1.0f));
+
+    g.setFillColor (trackColor);
+    g.fillRect (hairline);
+
+    if (! indicator.isEmpty())
+    {
+        g.setFillColor (theme.findColor (bar, TabBar::Style::underlineColorId).value_or (palette.getColor (PaletteRole::accent)));
+        g.fillRoundedRect (indicator, 1.0f);
+    }
+
+    if (bar.isFocusIndicatorVisible())
+    {
+        g.setStrokeColor (focusColor);
+        g.setStrokeWidth (2.0f);
+        g.strokeRoundedRect (bar.getLocalBounds().reduced (1.0f), widgetCornerRadius);
+    }
+}
+
+void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton& button)
+{
+    const auto& palette = theme.getPalette();
+    const auto selected = button.isSelected();
+    const auto alpha = button.isEnabled() ? 1.0f : 0.4f;
+    const auto hoveredColor = theme.findColor (button, TabButton::Style::hoveredBackgroundColorId).value_or (palette.getColor (PaletteRole::text).withAlpha (0.06f));
+
+    // The selected background is the indicator, painted by the bar so it can slide between tabs.
+    if (button.isButtonOver() && ! selected && button.isEnabled())
+    {
+        g.setFillColor (hoveredColor);
+        g.fillRoundedRect (button.getLocalBounds(), tabBarPillCornerRadius);
+    }
+
+    const auto textColor = (selected ? theme.findColor (button, TabButton::Style::textSelectedColorId).value_or (palette.getColor (PaletteRole::text))
+                                     : theme.findColor (button, TabButton::Style::textColorId).value_or (palette.getColor (PaletteRole::textMuted)))
+                               .withMultipliedAlpha (alpha);
+
+    if (const auto iconBounds = button.getIconBounds(); ! iconBounds.isEmpty())
+    {
+        if (button.getIconImage().isValid())
+        {
+            g.drawImage (button.getIconImage(), iconBounds);
+        }
+        else
+        {
+            // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
+            g.setFillColor (textColor);
+            g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (iconBounds.getHeight() * 0.85f), iconBounds, Justification::center);
+        }
+    }
+
+    if (const auto textBounds = button.getTextBounds(); ! textBounds.isEmpty())
+    {
+        auto styledText = StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.setMaxSize (textBounds.getSize());
+            modifier.setHorizontalAlign (StyledText::left);
+            modifier.setVerticalAlign (StyledText::middle);
+            modifier.setOverflow (StyledText::ellipsis);
+            modifier.setWrap (StyledText::noWrap);
+            modifier.appendText (button.getText(), button.getFont (selected));
+        }
+
+        g.setFillColor (textColor);
+        g.fillFittedText (styledText, textBounds);
+    }
+
+    if (const auto closeBounds = button.getCloseButtonBounds(); ! closeBounds.isEmpty())
+    {
+        if (button.isCloseButtonOver())
+        {
+            g.setFillColor (hoveredColor.withMultipliedAlpha (2.0f));
+            g.fillRoundedRect (closeBounds, closeBounds.getWidth() * 0.5f);
+        }
+
+        const auto cross = closeBounds.reduced (closeBounds.getWidth() * 0.3f);
+        g.setStrokeColor (theme.findColor (button, TabButton::Style::closeButtonColorId).value_or (palette.getColor (PaletteRole::textMuted)).withMultipliedAlpha (alpha));
+        g.setStrokeWidth (1.5f);
+        g.setStrokeCap (StrokeCap::Round);
+        g.strokeLine (cross.getTopLeft(), cross.getBottomRight());
+        g.strokeLine (cross.getTopRight(), cross.getBottomLeft());
+    }
+
+    if (const auto arrowBounds = button.getArrowBounds(); ! arrowBounds.isEmpty())
+    {
+        const auto center = arrowBounds.getCenter();
+        const auto size = arrowBounds.getWidth() * 0.35f;
+
+        Path chevron;
+        chevron.moveTo (center.getX() - size, center.getY() - size * 0.5f);
+        chevron.lineTo (center.getX(), center.getY() + size * 0.5f);
+        chevron.lineTo (center.getX() + size, center.getY() - size * 0.5f);
+
+        g.setStrokeColor (textColor);
+        g.setStrokeWidth (1.5f);
+        g.setStrokeCap (StrokeCap::Round);
+        g.setStrokeJoin (StrokeJoin::Round);
+        g.strokePath (chevron);
+    }
 }
 
 //==============================================================================
@@ -2219,6 +2369,23 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
     set (ListBoxItem::Style::backgroundColorSelectedId, accent);
     set (ListBoxItem::Style::backgroundColorHoveredId, hovered);
 
+    set (TreeView::Style::indentGuideColorId, textMuted.withAlpha (0.3f));
+    set (TreeView::Style::disclosureColorId, textMuted);
+    set (TreeView::Style::itemTextColorId, text);
+    set (TreeView::Style::itemTextSelectedColorId, onAccent);
+    set (TreeView::Style::dropIndicatorColorId, accent);
+    set (TreeView::Style::itemHoveredColorId, hovered);
+
+    set (TabBar::Style::trackColorId, surface);
+    set (TabBar::Style::indicatorColorId, surfaceRaised);
+    set (TabBar::Style::underlineColorId, accent);
+    set (TabBar::Style::focusOutlineColorId, accent);
+
+    set (TabButton::Style::textColorId, textMuted);
+    set (TabButton::Style::textSelectedColorId, text);
+    set (TabButton::Style::hoveredBackgroundColorId, hovered);
+    set (TabButton::Style::closeButtonColorId, textMuted);
+
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     const auto darkest = palette.getMode() == ThemePalette::Mode::dark ? background : text;
 
@@ -2326,13 +2493,10 @@ ApplicationTheme::Ptr createThemeVersion1 (const ThemePalette& palette)
 
     theme->setComponentStyle<ListBoxItem> (ComponentStyle::createStyle<ListBoxItem> (paintListBoxItem));
 
+    theme->setComponentStyle<TabBar> (ComponentStyle::createStyle<TabBar> (paintTabBar));
+    theme->setComponentStyle<TabButton> (ComponentStyle::createStyle<TabButton> (paintTabButton));
+
     theme->setComponentStyle<TreeViewRow> (ComponentStyle::createStyle<TreeViewRow> (paintTreeViewRow));
-    theme->setColor (TreeView::Style::indentGuideColorId, Color (0x33000000));
-    theme->setColor (TreeView::Style::disclosureColorId, Color (0xff808080));
-    theme->setColor (TreeView::Style::itemTextColorId, Colors::black);
-    theme->setColor (TreeView::Style::itemTextSelectedColorId, Colors::white);
-    theme->setColor (TreeView::Style::dropIndicatorColorId, Color (0xff4ebfff));
-    theme->setColor (TreeView::Style::itemHoveredColorId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

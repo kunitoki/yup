@@ -1200,6 +1200,10 @@ void ListBox::mouseDoubleClick (const MouseEvent& event)
         if (gesture.scrolling)
             return;
 
+        // Only a second tap on the row the first tap acted on is a double-tap.
+        if (getRowIndexAt (event.getPosition()) != currentRow)
+            return;
+
         // The platform reports the double-tap before the release that completes it, and that
         // release must not toggle the row the first tap just selected.
         gesture.doubleTapped = true;

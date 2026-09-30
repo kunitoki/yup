@@ -267,7 +267,8 @@ tree.restoreOpennessState (state, true);
 The rows use the `ListBox::Style` colors for the background and the selection.
 `TreeView::Style` adds `indentGuideColorId`, `disclosureColorId`,
 `itemTextColorId`, `itemTextSelectedColorId`, `dropIndicatorColorId` and
-`itemHoveredColorId` (the hovered row). Colors set on the
+`itemHoveredColorId` (the hovered row). They follow the theme palette unless
+set explicitly. Colors set on the
 `TreeView` reach its rows. Themes paint the rows through the `ComponentStyle`
 registered for `TreeViewRow`, which exposes the row's item, depth, open
 fraction and layout. See [component styling](component-styling.md).
