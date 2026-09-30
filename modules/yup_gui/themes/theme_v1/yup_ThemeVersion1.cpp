@@ -2416,6 +2416,13 @@ void mapPaletteThemeVersion1 (const ThemePalette& palette, ApplicationTheme& the
     set (KMeterComponent::Style::backgroundColorId, surface);
     set (KMeterComponent::Style::peakLevelColorId, text);
 
+    set (SpectrumAnalyzerComponent::Style::backgroundTopColorId, surface);
+    set (SpectrumAnalyzerComponent::Style::backgroundBottomColorId, background);
+    set (SpectrumAnalyzerComponent::Style::outlineColorId, accent);
+    set (SpectrumAnalyzerComponent::Style::fillColorId, accent.withAlpha (0.75f));
+    set (SpectrumAnalyzerComponent::Style::gridColorId, text.withAlpha (0.375f));
+    set (SpectrumAnalyzerComponent::Style::textColorId, textMuted);
+
     set (AudioGraphComponent::Style::backgroundColorId, background);
     set (AudioGraphComponent::Style::gridColorId, text.withAlpha (0.05f));
 

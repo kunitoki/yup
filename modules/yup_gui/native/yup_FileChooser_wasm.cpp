@@ -52,309 +52,204 @@ static String createAcceptAttribute (const String& filters)
 }
 
 //==============================================================================
-class EmscriptenFileChooser : public ReferenceCountedObject
+// JavaScript bridge: a hidden <input type="file"> whose picks are copied into
+// the in-memory filesystem one after the other, before the chooser completes.
+// clang-format off
+
+EM_JS (void, yupFileChooserShow, (int id, int multiple, int directory, const char* accept), {
+    var input = document.createElement ('input');
+    input.type = 'file';
+    input.style.display = 'none';
+    input.multiple = multiple !== 0;
+    input.webkitdirectory = directory !== 0;
+
+    var acceptAttribute = UTF8ToString (accept);
+    if (acceptAttribute && directory === 0)
+        input.accept = acceptAttribute;
+
+    var finished = false;
+    var finish = function()
+    {
+        if (finished)
+            return;
+
+        finished = true;
+        input.remove();
+        Module._yupFileChooserFinished (id);
+    };
+
+    input.onchange = function()
+    {
+        var files = Array.from (input.files || []);
+
+        files.reduce (function (previous, file)
+        {
+            return previous.then (function() { return file.arrayBuffer(); }).then (function (buffer)
+            {
+                var bytes = new Uint8Array (buffer);
+                var ptr = Module._yupFileChooserAllocate (id, bytes.length);
+
+                if (ptr)
+                    HEAPU8.set (bytes, ptr);
+
+                Module.ccall ('yupFileChooserAddFile', null, ['number', 'string', 'number'],
+                              [id, file.webkitRelativePath || file.name, bytes.length]);
+            });
+        }, Promise.resolve()).catch (function (error)
+        {
+            console.warn ('Could not read the chosen files:', error);
+        }).then (finish);
+    };
+
+    input.oncancel = finish;
+
+    document.body.appendChild (input);
+    input.click();
+});
+
+EM_JS (int, yupFileChooserPromptSaveName, (char* buffer, int size), {
+    var name = prompt ('Enter filename:');
+    return name ? stringToUTF8 (name, buffer, size) : 0;
+});
+
+// clang-format on
+
+//==============================================================================
+class EmscriptenFileChooser
 {
 public:
-    using Ptr = ReferenceCountedObjectPtr<EmscriptenFileChooser>;
-
-    EmscriptenFileChooser (String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
-        : filters (std::move (filters))
-        , isSave (isSave)
-        , canChooseDirectories (canChooseDirectories)
-        , allowsMultiple (allowsMultiple)
+    EmscriptenFileChooser (FileChooser::CompletionCallback callback, bool isDirectoryPick)
+        : callback (std::move (callback))
+        , isDirectoryPick (isDirectoryPick)
     {
     }
 
-    void setCallback (FileChooser::CompletionCallback callback)
+    void* allocate (size_t size)
     {
-        this->callback = std::move (callback);
+        scratch.setSize (size);
+        return scratch.getData();
     }
 
-    void addFileResult (File path)
+    void addFile (const String& relativePath, size_t size)
     {
-        results.add (std::move (path));
-    }
+        if (relativePath.isEmpty() || size > scratch.getSize() || (size > 0 && scratch.getData() == nullptr))
+            return;
 
-    void showDialog()
-    {
-        if (isSave)
+        if (destination == File())
         {
-            // For save operations, we'll create a download link
-            // This is a workaround since browsers don't allow writing files directly
-            showSaveDialog();
+            destination = File::getSpecialLocation (File::tempDirectory)
+                              .getChildFile ("yup_file_chooser")
+                              .getNonexistentChildFile ("pick", {}, false);
         }
-        else if (canChooseDirectories)
-        {
-            // Directory selection is limited in browsers
-            // We'll use the webkitdirectory attribute if available
-            showDirectoryDialog();
-        }
+
+        const auto file = destination.getChildFile (relativePath);
+
+        if (file.getParentDirectory().createDirectory().failed())
+            return;
+
+        const bool written = size > 0 ? file.replaceWithData (scratch.getData(), size) : file.create().wasOk();
+        if (! written)
+            return;
+
+        if (isDirectoryPick)
+            results.addIfNotAlreadyThere (destination.getChildFile (relativePath.upToFirstOccurrenceOf ("/", false, false)));
         else
+            results.add (file);
+    }
+
+    void finish()
+    {
+        MessageManager::callAsync ([callback = std::move (callback), results = std::move (results)]
         {
-            // Regular file selection
-            showOpenDialog (allowsMultiple);
-        }
+            if (callback)
+                callback (! results.isEmpty(), results);
+        });
     }
 
-    void showOpenDialog (bool multiple)
-    {
-        // Create a hidden file input element
-        // clang-format off
-        EM_ASM ({
-            var fileInput = document.createElement ('input');
-            fileInput.type = 'file';
-            fileInput.style.display = 'none';
-
-            if ($1) // multiple
-                fileInput.multiple = true;
-
-            var acceptAttr = UTF8ToString($2);
-            if (acceptAttr)
-                fileInput.accept = acceptAttr;
-
-            fileInput.onchange = function (event)
-            {
-                var files = event.target.files;
-                var fileCount = files.length;
-
-                // Store file information
-                Module.fileChooserResults = [];
-
-                for (var i = 0; i < fileCount; i++)
-                {
-                    var file = files[i];
-                    Module.fileChooserResults.push ({
-                        name: file.name,
-                        size: file.size,
-                        type: file.type,
-                        lastModified: file.lastModified
-                    });
-
-                    // Create a virtual file path
-                    var virtualPath = '/tmp/' + file.name;
-
-                    // Read file content and store it in the virtual filesystem
-                    var reader = new FileReader();
-                    reader.onload = function (e)
-                    {
-                        try
-                        {
-                            var data = new Uint8Array (e.target.result);
-                            FS.writeFile (virtualPath, data);
-                        }
-                        catch (err)
-                        {
-                            console.warn ('Could not write file to virtual filesystem:', err);
-                        }
-                    };
-
-                    reader.readAsArrayBuffer (file);
-                }
-
-                // Notify completion
-                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
-
-                // Clean up
-                document.body.removeChild (fileInput);
-            };
-
-            fileInput.oncancel = function()
-             {
-                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild (fileInput);
-            };
-
-            document.body.appendChild(fileInput);
-            fileInput.click();
-        }, this, (allowsMultiple ? 1 : 0), (createAcceptAttribute (filters).toRawUTF8()));
-        // clang-format on
-    }
-
-    void showDirectoryDialog()
-    {
-        // clang-format off
-        EM_ASM ({
-            var fileInput = document.createElement ('input');
-            fileInput.type = 'file';
-            fileInput.style.display = 'none';
-            fileInput.webkitdirectory = true;
-
-            fileInput.onchange = function (event)
-            {
-                var files = event.target.files;
-                var fileCount = files.length;
-
-                Module.fileChooserResults = [];
-
-                if (fileCount > 0)
-                {
-                    // Get the directory name from the first file's path
-                    var firstFile = files[0];
-                    var pathParts = firstFile.webkitRelativePath.split ('/');
-                    var dirName = pathParts[0];
-
-                    Module.fileChooserResults.push ({
-                        name: dirName,
-                        isDirectory: true,
-                        path: '/tmp/' + dirName
-                    });
-
-                    // Create directory structure in virtual filesystem
-                    var processedDirs = new Set();
-
-                    for (var i = 0; i < fileCount; i++)
-                    {
-                        var file = files[i];
-                        var relativePath = file.webkitRelativePath;
-                        var fullPath = '/tmp/' + relativePath;
-
-                        // Create directories
-                        var pathParts = relativePath.split ('/');
-                        var currentPath = '/tmp';
-
-                        for (var j = 0; j < pathParts.length - 1; j++)
-                        {
-                            currentPath += '/' + pathParts[j];
-                            if (! processedDirs.has(currentPath))
-                            {
-                                try
-                                {
-                                    FS.mkdir (currentPath);
-                                    processedDirs.add (currentPath);
-                                }
-                                catch (err)
-                                {
-                                    // Directory might already exist
-                                }
-                            }
-                        }
-
-                        // Write file
-                        var reader = new FileReader();
-                        reader.onload = function (e)
-                        {
-                            try
-                            {
-                                var data = new Uint8Array (e.target.result);
-                                FS.writeFile (fullPath, data);
-                            }
-                            catch (err)
-                            {
-                                console.warn ('Could not write file to virtual filesystem:', err);
-                            }
-                        };
-
-                        reader.readAsArrayBuffer (file);
-                    }
-                }
-
-                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild (fileInput);
-            };
-
-            fileInput.oncancel = function()
-            {
-                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild (fileInput);
-            };
-
-            document.body.appendChild(fileInput);
-            fileInput.click();
-        }, this);
-        // clang-format on
-    }
-
-    void showSaveDialog()
-    {
-        // clang-format off
-        EM_ASM ({
-            var filename = prompt ('Enter filename:');
-
-            if (filename)
-            {
-                var result = {};
-                result['name'] = filename;
-                result['isSave'] = true;
-                result['path'] = '/tmp/' + filename;
-                Module.fileChooserResults = [result];
-            }
-            else
-            {
-                Module.fileChooserResults = [];
-            }
-
-            Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
-        }, this);
-        // clang-format on
-    }
-
-    void processResults()
-    {
-        // clang-format off
-        EM_ASM ({
-            if (Module.fileChooserResults)
-            {
-                var jsResults = Module.fileChooserResults;
-
-                for (var i = 0; i < jsResults.length; i++)
-                {
-                    var result = jsResults[i];
-                    var path = result.path || ('/tmp/' + result.name);
-
-                    // Call back to C++ with the file path
-                    Module.ccall ('addFileResult', null, ['number', 'string'], [$0, path]);
-                }
-
-                delete Module.fileChooserResults;
-            }
-        }, this);
-        // clang-format on
-
-        if (callback)
-            callback (results.size() > 0, results);
-    }
-
+private:
     FileChooser::CompletionCallback callback;
+    bool isDirectoryPick;
+    File destination;
+    MemoryBlock scratch;
     Array<File> results;
-    String filters;
-    bool isSave;
-    bool canChooseDirectories;
-    bool allowsMultiple;
-    bool completed;
+
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EmscriptenFileChooser)
 };
 
-static EmscriptenFileChooser* currentFileChooser = nullptr;
+//==============================================================================
+// Only touched on the browser main thread, which runs the YUP message loop.
+static std::unordered_map<int, std::unique_ptr<EmscriptenFileChooser>>& getWebFileChoosers()
+{
+    static std::unordered_map<int, std::unique_ptr<EmscriptenFileChooser>> choosers;
+    return choosers;
+}
+
+static EmscriptenFileChooser* findWebFileChooser (int id)
+{
+    auto& choosers = getWebFileChoosers();
+    auto it = choosers.find (id);
+    return it != choosers.end() ? it->second.get() : nullptr;
+}
 
 extern "C"
 {
-    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+    void* EMSCRIPTEN_KEEPALIVE yupFileChooserAllocate (int id, int size)
     {
-        if (chooser != nullptr)
-            chooser->processResults();
+        auto* chooser = findWebFileChooser (id);
+        return chooser != nullptr && size >= 0 ? chooser->allocate (static_cast<size_t> (size)) : nullptr;
     }
 
-    void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+    void EMSCRIPTEN_KEEPALIVE yupFileChooserAddFile (int id, const char* relativePath, int size)
     {
-        if (chooser != nullptr && path != nullptr)
-            chooser->addFileResult (File (String::fromUTF8 (path)));
+        if (auto* chooser = findWebFileChooser (id); chooser != nullptr && relativePath != nullptr && size >= 0)
+            chooser->addFile (String::fromUTF8 (relativePath), static_cast<size_t> (size));
+    }
+
+    void EMSCRIPTEN_KEEPALIVE yupFileChooserFinished (int id)
+    {
+        auto& choosers = getWebFileChoosers();
+        auto it = choosers.find (id);
+        if (it == choosers.end())
+            return;
+
+        auto chooser = std::move (it->second);
+        choosers.erase (it);
+        chooser->finish();
     }
 
 } // extern "C"
 
+//==============================================================================
 void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
-    const bool isSave = (flags & saveMode) != 0;
-    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
-
-    auto chooser = EmscriptenFileChooser::Ptr { new EmscriptenFileChooser (filters, isSave, canChooseDirectories, allowsMultiple) };
-
-    chooser->setCallback ([callback = std::move (callback), chooser] (bool success, const Array<File>& results)
+    if ((flags & saveMode) != 0)
     {
-        callback (success, results);
-    });
+        char name[1024] = {};
+        const bool chosen = yupFileChooserPromptSaveName (name, static_cast<int> (sizeof (name))) > 0;
 
-    chooser->showDialog();
+        Array<File> results;
+        if (chosen)
+            results.add (File::getSpecialLocation (File::tempDirectory).getChildFile (String::fromUTF8 (name)));
+
+        MessageManager::callAsync ([callback = std::move (callback), chosen, results]
+        {
+            if (callback)
+                callback (chosen, results);
+        });
+
+        return;
+    }
+
+    static int nextId = 0;
+    const int id = ++nextId;
+    const bool isDirectoryPick = (flags & canSelectDirectories) != 0;
+
+    getWebFileChoosers()[id] = std::make_unique<EmscriptenFileChooser> (std::move (callback), isDirectoryPick);
+
+    yupFileChooserShow (id,
+                        (flags & canSelectMultipleItems) != 0 ? 1 : 0,
+                        isDirectoryPick ? 1 : 0,
+                        createAcceptAttribute (filters).toRawUTF8());
 }
 
 } // namespace yup

@@ -162,6 +162,7 @@ endif()
 # ==== Precompile shaders, bundled like the data files and read from the build tree on desktop
 #      - see loadShaderBundle()
 set (shaders_dir "${CMAKE_CURRENT_LIST_DIR}/data/shaders")
+set (shaders_output_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 file (GLOB shader_includes "${shaders_dir}/*.glsl")
 foreach (shader IN LISTS demo_shaders)
     string (REPLACE ":" ";" shader_parts "${shader}")
@@ -178,6 +179,7 @@ foreach (shader IN LISTS demo_shaders)
         ${shader_stages}
         BUNDLE_RESOURCE shader_resource
         BUNDLE_DESTINATION "data/shaders/${shader_name}.ysl"
+        TEMP_FOLDER "${shaders_output_dir}"
         DEPENDS ${shader_includes}
         OPTIONS "-I${shaders_dir}")
 
@@ -193,6 +195,7 @@ if ("SpinningCube" IN_LIST selected_demo_ids)
         VERT ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.vert
         FRAG ${CMAKE_CURRENT_LIST_DIR}/data/shaders/cube.frag
         NAMESPACE yup
+        TEMP_FOLDER "${shaders_output_dir}"
         OUTPUT_NAME
             ShaderBundle
         RESOURCE_NAME
@@ -203,7 +206,7 @@ endif()
 # ==== Prepare target
 set (additional_definitions
     ${demo_definitions}
-    "YUP_EXAMPLE_GRAPHICS_SHADERS_PATH=\"${CMAKE_CURRENT_BINARY_DIR}\"")
+    "YUP_EXAMPLE_GRAPHICS_SHADERS_PATH=\"${shaders_output_dir}\"")
 
 yup_standalone_app (
     TARGET_NAME ${target_name}

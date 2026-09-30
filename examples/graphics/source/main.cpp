@@ -457,7 +457,7 @@ public:
 
         selectComponent (0);
 
-        startTimerHz (10);
+        startTimerHz (1);
     }
 
     ~CustomWindow() override
