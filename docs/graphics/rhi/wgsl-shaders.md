@@ -55,6 +55,10 @@ ESSL samplers declared without a binding are numbered like glslang does: the
 next free binding of their set, in declaration order. Only resources the entry
 point uses are numbered; unused unbound ones are dropped from the WGSL.
 
+WGSL reflection (and so the binding map of a WGSL pipeline) only lists the
+resources the entry point uses, the same set WebGPU puts in an automatic
+pipeline layout. Don't bind resources a WebGPU shader doesn't use.
+
 A combined image sampler (`sampler2D` and friends) is split into a texture at
 its own binding and a companion sampler named `<texture>_sampler`. **Companion
 samplers take the bindings after the highest binding used in their group**, in

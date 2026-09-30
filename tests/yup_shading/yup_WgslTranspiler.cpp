@@ -4520,7 +4520,9 @@ TEST_F (WgslCorpusTests, ShadersTranspile)
     }
 }
 
-TEST_F (WgslCorpusTests, WgslReflectionKeepsEveryBoundResource)
+// WGSL reflection lists only the resources the entry point uses. Every corpus shader uses all it
+// declares, so its WGSL binding map must describe exactly what the other targets describe.
+TEST_F (WgslCorpusTests, WgslReflectionMatchesOtherTargets)
 {
     ShaderTranspiler::Ptr transpiler = new ShaderTranspiler();
 
