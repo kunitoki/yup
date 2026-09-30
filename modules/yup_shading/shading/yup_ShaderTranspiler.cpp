@@ -1008,14 +1008,13 @@ static void fillHLSLBackendSlots (const std::string& hlslSource, ShaderReflectio
 }
 
 //==============================================================================
-// WGSL backend slot filler: copies SPIR-V binding numbers into backendSlot fields.
-// The WGSL emitter assigns @group/@binding to match glslang's SPIR-V assignment
-// 1:1, so backendSlot = binding and backendSlotSecondary stays ~0u except for
-// sampled images where the split sampler gets its own binding computed by the
-// same allocator used in WgslLowering.
+// WGSL backend slot filler. Every resource keeps its SPIR-V binding as @binding;
+// a combined image sampler is split into a texture at that binding and a
+// companion sampler whose binding follows wgsl::assignWgslCompanionSamplerBindings,
+// the rule the WGSL transpiler uses, reported as backendSlotSecondary.
 //==============================================================================
 
-static void fillWGSLBackendSlots (spirv_cross::Compiler& compiler, ShaderReflection& ref)
+static void fillWGSLBackendSlots (ShaderReflection& ref)
 {
     auto fillVec = [] (std::vector<ShaderReflection::ResourceBinding>& bindings)
     {
@@ -1037,39 +1036,29 @@ static void fillWGSLBackendSlots (spirv_cross::Compiler& compiler, ShaderReflect
     fillVec (ref.pushConstantBuffers);
     fillVec (ref.shaderRecordBuffers);
     fillVec (ref.separateImages);
-
-    // For separate samplers in WGSL, allocator assigns the next free binding
-    // in the same group after all textures. We compute a simple sequential
-    // allocation matching the WgslLowering allocator: textures in ascending
-    // binding order get companion samplers at a deterministic offset.
-    std::map<uint32_t, uint32_t> groupNextSamplerBinding;
-
-    for (auto& img : ref.sampledImages)
-    {
-        uint32_t g = img.set;
-        if (groupNextSamplerBinding[g] == 0)
-            groupNextSamplerBinding[g] = img.binding + 1;
-        else
-            groupNextSamplerBinding[g] = groupNextSamplerBinding[g];
-    }
+    fillVec (ref.separateSamplers);
 
     for (auto& samp : ref.separateSamplers)
-    {
-        uint32_t g = samp.set;
-        samp.backendSlot = samp.binding;
-
-        // Find matching image and assign companion sampler binding
-        for (auto& img : ref.sampledImages)
-        {
-            if (img.set == g)
-            {
-                img.backendSlotSecondary = groupNextSamplerBinding[g]++;
-                break;
-            }
-        }
-
         samp.backendSlotSecondary = samp.backendSlot;
+
+    std::vector<wgsl::WgslBindingSlot> slots;
+    std::vector<ShaderReflection::ResourceBinding*> combined;
+
+    for (auto* resources : { &ref.uniformBuffers, &ref.storageBuffers, &ref.sampledImages, &ref.separateImages,
+                             &ref.separateSamplers, &ref.storageImages })
+    {
+        for (auto& r : *resources)
+        {
+            slots.push_back ({ r.set, r.binding, resources == &ref.sampledImages });
+            combined.push_back (resources == &ref.sampledImages ? &r : nullptr);
+        }
     }
+
+    const auto companions = wgsl::assignWgslCompanionSamplerBindings (slots);
+
+    for (size_t i = 0; i < slots.size(); ++i)
+        if (combined[i] != nullptr)
+            combined[i]->backendSlotSecondary = companions[i];
 }
 
 //==============================================================================
@@ -1186,6 +1175,10 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
 
     shader.setSourceEntryPoint (options.entryPoint.toRawUTF8());
 
+    // Resources without an explicit binding get the next free slot of their set in declaration
+    // order, the same rule the WGSL transpiler applies, instead of all landing on binding 0
+    shader.setAutoMapBindings (true);
+
     // Inject defines as a preamble
     String preamble;
 
@@ -1245,7 +1238,7 @@ ResultValue<MemoryBlock> ShaderTranspiler::compileToSPIRV (const String& source,
     glslang::TProgram program;
     program.addShader (&shader);
 
-    if (! program.link (messages))
+    if (! program.link (messages) || ! program.mapIO())
     {
         String infoLog = program.getInfoLog();
         String debugLog = program.getInfoDebugLog();
@@ -1426,7 +1419,6 @@ ResultValue<String> ShaderTranspiler::transpile (const String& source,
 
         // Run the direct GLSL→WGSL transpiler
         WgslTranspileOptions wgslOpts;
-        wgslOpts.entryPoint = options.entryPoint;
 
         if (options.entryPoint.isNotEmpty())
             wgslOpts.outputEntryPoint = options.entryPoint;
@@ -1604,11 +1596,24 @@ ResultValue<ShaderReflection> ShaderTranspiler::reflectFromSPIRV (const MemoryBl
             {
                 auto compiler = createSpirvCompiler (words, wordCount);
 
-                // WGSL reflection uses SPIR-V for validation/reflection only;
-                // backendSlot = binding (the WGSL emitter assigns @group/@binding
-                // to match glslang's SPIR-V assignment 1:1).
+                // WGSL keeps SPIR-V bindings; split combined samplers add a companion binding
                 auto ref = extractReflection (*compiler);
-                fillWGSLBackendSlots (*compiler, ref);
+
+                // Only resources the entry point uses count: glslang gives unused unbound ones a
+                // colliding binding 0, and the WGSL output never binds them
+                const auto active = compiler->get_active_interface_variables();
+
+                for (auto* resources : { &ref.uniformBuffers, &ref.storageBuffers, &ref.sampledImages, &ref.separateImages,
+                                         &ref.separateSamplers, &ref.storageImages })
+                {
+                    resources->erase (std::remove_if (resources->begin(), resources->end(), [&active] (const auto& r)
+                                      {
+                                          return active.count (r.resourceId) == 0;
+                                      }),
+                                      resources->end());
+                }
+
+                fillWGSLBackendSlots (ref);
 
                 return makeResultValueOk (std::move (ref));
             }

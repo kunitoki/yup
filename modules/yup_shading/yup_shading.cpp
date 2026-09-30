@@ -38,13 +38,32 @@
 #include <glslang/upstream/StandAlone/DirStackFileIncluder.h>
 #include <spirv_cross/spirv_cross.h>
 
+#include <cmath>
+#include <cstring>
+#include <deque>
+#include <iomanip>
+#include <limits>
+#include <locale>
+#include <set>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+
 #include "wgsl/yup_GlslAst.h"
+#include "wgsl/yup_WgslTypeUtils.h"
+#include "wgsl/yup_WgslAstUtils.h"
 #include "wgsl/yup_GlslParser.h"
 #include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslStatementLowering.h"
+#include "wgsl/yup_WgslBuiltins.h"
+#include "wgsl/yup_WgslHostLayout.h"
 #include "wgsl/yup_WgslTypeLegalizer.h"
 #include "wgsl/yup_WgslEmitter.h"
 #include "wgsl/yup_GlslParser.cpp"
 #include "wgsl/yup_WgslLowering.cpp"
+#include "wgsl/yup_WgslStatementLowering.cpp"
+#include "wgsl/yup_WgslBuiltins.cpp"
+#include "wgsl/yup_WgslHostLayout.cpp"
 #include "wgsl/yup_WgslTypeLegalizer.cpp"
 #include "wgsl/yup_WgslEmitter.cpp"
 

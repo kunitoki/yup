@@ -46,7 +46,9 @@ enum class UnaryOp
     preInc,
     preDec,
     postInc,
-    postDec
+    postDec,
+    addressOf, // produced by lowering only: &operand
+    deref      // produced by lowering only: *operand
 };
 
 //==============================================================================
@@ -70,7 +72,8 @@ enum class BinaryOp
     bitwiseXor,
     bitwiseOr,
     logicalAnd,
-    logicalOr
+    logicalOr,
+    logicalXor
 };
 
 //==============================================================================
@@ -104,6 +107,17 @@ enum class StorageQualifier
     shared,
     centroid,
     sample
+};
+
+//==============================================================================
+/** Memory qualifier for buffers and images. */
+enum class MemoryQualifier
+{
+    readonlyQual,
+    writeonlyQual,
+    coherent,
+    volatileQual,
+    restrict
 };
 
 //==============================================================================
@@ -182,6 +196,8 @@ enum class TypeKind
     sampler1DShadow,
     sampler2DShadow,
     samplerCubeShadow,
+    samplerCubeArray,
+    samplerCubeArrayShadow,
     sampler1DArray,
     sampler2DArray,
     sampler1DArrayShadow,
@@ -195,6 +211,7 @@ enum class TypeKind
     isampler2D,
     isampler3D,
     isamplerCube,
+    isamplerCubeArray,
     isampler1DArray,
     isampler2DArray,
     isampler2DRect,
@@ -205,6 +222,7 @@ enum class TypeKind
     usampler2D,
     usampler3D,
     usamplerCube,
+    usamplerCubeArray,
     usampler1DArray,
     usampler2DArray,
     usampler2DRect,
@@ -215,6 +233,7 @@ enum class TypeKind
     image2D,
     image3D,
     imageCube,
+    imageCubeArray,
     image1DArray,
     image2DArray,
     image2DRect,
@@ -225,6 +244,7 @@ enum class TypeKind
     iimage2D,
     iimage3D,
     iimageCube,
+    iimageCubeArray,
     iimage1DArray,
     iimage2DArray,
     iimage2DRect,
@@ -235,6 +255,7 @@ enum class TypeKind
     uimage2D,
     uimage3D,
     uimageCube,
+    uimageCubeArray,
     uimage1DArray,
     uimage2DArray,
     uimage2DRect,
@@ -248,16 +269,43 @@ enum class TypeKind
     texture2D,
     texture3D,
     textureCube,
+    textureCubeArray,
     texture1DArray,
     texture2DArray,
     texture2DRect,
     textureBuffer,
     texture2DMS,
     texture2DMSArray,
+    itexture1D,
+    itexture2D,
+    itexture3D,
+    itextureCube,
+    itextureCubeArray,
+    itexture1DArray,
+    itexture2DArray,
+    itexture2DRect,
+    itextureBuffer,
+    itexture2DMS,
+    itexture2DMSArray,
+    utexture1D,
+    utexture2D,
+    utexture3D,
+    utextureCube,
+    utextureCubeArray,
+    utexture1DArray,
+    utexture2DArray,
+    utexture2DRect,
+    utextureBuffer,
+    utexture2DMS,
+    utexture2DMSArray,
     samplerType,
     samplerShadow,
     subpassInput,
     subpassInputMS,
+
+    // WGSL storage types produced by lowering
+    atomicI32,
+    atomicU32,
 
     namedStruct
 };
@@ -305,7 +353,24 @@ enum class LayoutQualifierId
     depthGreater,
     depthLess,
     depthUnchanged,
-    depthAny
+    depthAny,
+    offset,
+    align,
+    index,
+    pushConstant,
+    constantId,
+    localSizeXId,
+    localSizeYId,
+    localSizeZId,
+    imageFormat,
+    originUpperLeft,
+    pixelCenterInteger,
+    sharedLayout,
+    packedLayout,
+    scalarLayout,
+    maxVertices,
+    stream,
+    bufferReference
 };
 
 //==============================================================================
@@ -341,6 +406,7 @@ struct LayoutQualifierEntry
 {
     SourceLocation loc;
     LayoutQualifierId id;
+    std::string name;            // identifier as written, e.g. the image format "rgba8"
     std::unique_ptr<Expr> value; // null for id-only qualifiers like std140
 };
 
@@ -360,6 +426,7 @@ struct TypeQualifier
     std::vector<StorageQualifier> storage;
     std::vector<InterpolationQualifier> interpolation;
     std::vector<PrecisionQualifier> precision;
+    std::vector<MemoryQualifier> memory;
     bool invariant = false;
     bool precise = false;
     std::unique_ptr<LayoutQualifier> layout;
@@ -368,6 +435,14 @@ struct TypeQualifier
     {
         for (auto& s : storage)
             if (s == sq)
+                return true;
+        return false;
+    }
+
+    bool hasMemory (MemoryQualifier mq) const
+    {
+        for (auto& m : memory)
+            if (m == mq)
                 return true;
         return false;
     }
@@ -429,6 +504,7 @@ struct StructFieldSpecifier
     TypeSpecifier type;
     std::string name;
     std::unique_ptr<TypeQualifier> qualifier;
+    uint32_t sizeAttribute = 0; // WGSL @size set by the host layout pass, 0 when natural
 };
 
 //==============================================================================
@@ -477,6 +553,7 @@ struct Declaration
     std::unique_ptr<InitDeclaratorList> initDeclaratorList; // null for non-decl stmts
     std::unique_ptr<StructSpecifier> structSpecifier;       // null if not a struct decl
     std::unique_ptr<TypeQualifier> qualifier;               // standalone qualifier decl (e.g. layout(local_size_x=8) in;)
+    std::vector<std::string> qualifiedNames;                // qualifier-only redeclarations (e.g. invariant gl_Position;)
 };
 
 //==============================================================================
@@ -497,6 +574,7 @@ struct FunctionPrototype
     SourceLocation loc;
     TypeSpecifier returnType;
     std::string name;
+    std::string originalName; // GLSL name when lowering renamed an overload, empty otherwise
     std::vector<FunctionParameterDeclaration> parameters;
 };
 
@@ -515,7 +593,7 @@ struct ExprVariable
 struct ExprIntConst
 {
     SourceLocation loc;
-    int value = 0;
+    int64_t value = 0; // 64 bits so that the operand of -2147483648 fits
 };
 
 /** Unsigned integer literal. */
@@ -530,6 +608,7 @@ struct ExprFloatConst
 {
     SourceLocation loc;
     double value = 0.0;
+    bool isDouble = false; // lf / LF suffix
 };
 
 /** Boolean literal. */
@@ -646,6 +725,7 @@ struct Expr
 {
     SourceLocation loc;
     ExprVariant value;
+    std::optional<TypeSpecifier> type; // inferred type, filled by WgslTypeLegalizer
 
     Expr() = default;
     Expr (Expr&&) = default;
@@ -684,12 +764,21 @@ struct StmtSelection
     std::unique_ptr<Statement> elseBranch; // null if no else
 };
 
+/** Switch clause produced by lowering: one or more selectors sharing a body without fallthrough. */
+struct SwitchClause
+{
+    SourceLocation loc;
+    std::vector<std::unique_ptr<Expr>> labels; // a null entry stands for default
+    std::vector<Statement> body;
+};
+
 /** Switch statement. */
 struct StmtSwitch
 {
     SourceLocation loc;
     std::unique_ptr<Expr> selector;
-    std::vector<Statement> body; // expected to be case/default + statements
+    std::vector<Statement> body;        // as parsed: case labels interleaved with statements
+    std::vector<SwitchClause> clauses;  // filled by lowering, which then clears body
 };
 
 /** Case label statement. */
@@ -723,6 +812,15 @@ struct StmtFor
     std::unique_ptr<Expr> condition; // null if empty
     std::unique_ptr<Expr> update;    // null if empty
     std::unique_ptr<Statement> body;
+};
+
+/** Loop produced by lowering: loop { body continuing { continuing break if breakIf; } } */
+struct StmtLoop
+{
+    SourceLocation loc;
+    std::vector<Statement> body;
+    std::vector<Statement> continuing;
+    std::unique_ptr<Expr> breakIf; // null when absent
 };
 
 /** Jump statement: return / break / continue / discard. */
@@ -766,7 +864,8 @@ using StatementVariant = std::variant<
     StmtJump,
     StmtExpr,
     StmtCompound,
-    StmtDeclaration>;
+    StmtDeclaration,
+    StmtLoop>;
 
 //==============================================================================
 /** Statement node wrapping the variant. */
@@ -889,6 +988,7 @@ inline Expr copyExpr (const Expr& e)
 {
     Expr result;
     result.loc = e.loc;
+    result.type = e.type;
 
     std::visit ([&] (const auto& alt)
     {
@@ -966,6 +1066,176 @@ inline Expr copyExpr (const Expr& e)
         }
     },
                 e.value);
+
+    return result;
+}
+
+//==============================================================================
+/** Deep-copy helpers for declarations and statements. */
+
+inline std::unique_ptr<Expr> copyExprPtr (const std::unique_ptr<Expr>& e)
+{
+    return e ? std::make_unique<Expr> (copyExpr (*e)) : nullptr;
+}
+
+inline std::unique_ptr<TypeQualifier> copyTypeQualifier (const TypeQualifier* q)
+{
+    if (q == nullptr)
+        return nullptr;
+
+    auto result = std::make_unique<TypeQualifier>();
+    result->loc = q->loc;
+    result->storage = q->storage;
+    result->interpolation = q->interpolation;
+    result->precision = q->precision;
+    result->memory = q->memory;
+    result->invariant = q->invariant;
+    result->precise = q->precise;
+
+    if (q->layout)
+    {
+        result->layout = std::make_unique<LayoutQualifier>();
+        result->layout->loc = q->layout->loc;
+
+        for (const auto& entry : q->layout->entries)
+            result->layout->entries.push_back ({ entry.loc, entry.id, entry.name, copyExprPtr (entry.value) });
+    }
+
+    return result;
+}
+
+inline Initializer copyInitializer (const Initializer& init)
+{
+    Initializer result;
+    result.loc = init.loc;
+    result.expr = copyExprPtr (init.expr);
+
+    for (const auto& child : init.aggregate)
+        result.aggregate.push_back (copyInitializer (child));
+
+    return result;
+}
+
+inline std::unique_ptr<StructSpecifier> copyStructSpecifier (const StructSpecifier* ss)
+{
+    if (ss == nullptr)
+        return nullptr;
+
+    auto result = std::make_unique<StructSpecifier>();
+    result->loc = ss->loc;
+    result->name = ss->name;
+
+    for (const auto& field : ss->fields)
+        result->fields.push_back ({ field.loc, field.type, field.name, copyTypeQualifier (field.qualifier.get()), field.sizeAttribute });
+
+    return result;
+}
+
+inline Declaration copyDeclaration (const Declaration& d)
+{
+    Declaration result;
+    result.loc = d.loc;
+    result.qualifier = copyTypeQualifier (d.qualifier.get());
+    result.structSpecifier = copyStructSpecifier (d.structSpecifier.get());
+    result.qualifiedNames = d.qualifiedNames;
+
+    if (d.initDeclaratorList)
+    {
+        const auto& il = *d.initDeclaratorList;
+        auto list = std::make_unique<InitDeclaratorList>();
+        list->loc = il.loc;
+        list->qualifier = copyTypeQualifier (il.qualifier.get());
+        list->type = il.type;
+
+        for (const auto& single : il.declarations)
+        {
+            SingleDeclaration copy;
+            copy.loc = single.loc;
+            copy.name = single.name;
+            copy.arraySpecifiers = single.arraySpecifiers;
+
+            if (single.initializer)
+                copy.initializer = std::make_unique<Initializer> (copyInitializer (*single.initializer));
+
+            list->declarations.push_back (std::move (copy));
+        }
+
+        result.initDeclaratorList = std::move (list);
+    }
+
+    return result;
+}
+
+inline Statement copyStatement (const Statement& s);
+
+inline std::vector<Statement> copyStatements (const std::vector<Statement>& statements)
+{
+    std::vector<Statement> result;
+    result.reserve (statements.size());
+
+    for (const auto& s : statements)
+        result.push_back (copyStatement (s));
+
+    return result;
+}
+
+inline std::unique_ptr<Statement> copyStatementPtr (const std::unique_ptr<Statement>& s)
+{
+    return s ? std::make_unique<Statement> (copyStatement (*s)) : nullptr;
+}
+
+inline Statement copyStatement (const Statement& s)
+{
+    Statement result;
+    result.loc = s.loc;
+
+    std::visit ([&] (const auto& alt)
+    {
+        using T = std::decay_t<decltype (alt)>;
+
+        if constexpr (std::is_same_v<T, StmtSelection>)
+            result.value = StmtSelection { alt.loc, alt.restriction, copyExprPtr (alt.condition), copyStatementPtr (alt.thenBranch), copyStatementPtr (alt.elseBranch) };
+        else if constexpr (std::is_same_v<T, StmtSwitch>)
+        {
+            StmtSwitch copy;
+            copy.loc = alt.loc;
+            copy.selector = copyExprPtr (alt.selector);
+            copy.body = copyStatements (alt.body);
+
+            for (const auto& clause : alt.clauses)
+            {
+                SwitchClause c;
+                c.loc = clause.loc;
+
+                for (const auto& label : clause.labels)
+                    c.labels.push_back (copyExprPtr (label));
+
+                c.body = copyStatements (clause.body);
+                copy.clauses.push_back (std::move (c));
+            }
+
+            result.value = std::move (copy);
+        }
+        else if constexpr (std::is_same_v<T, StmtCaseLabel>)
+            result.value = StmtCaseLabel { alt.loc, copyExprPtr (alt.label) };
+        else if constexpr (std::is_same_v<T, StmtWhile>)
+            result.value = StmtWhile { alt.loc, copyExprPtr (alt.condition), copyStatementPtr (alt.body) };
+        else if constexpr (std::is_same_v<T, StmtDoWhile>)
+            result.value = StmtDoWhile { alt.loc, copyExprPtr (alt.condition), copyStatementPtr (alt.body) };
+        else if constexpr (std::is_same_v<T, StmtFor>)
+            result.value = StmtFor { alt.loc, copyStatementPtr (alt.init), copyExprPtr (alt.condition), copyExprPtr (alt.update), copyStatementPtr (alt.body) };
+        else if constexpr (std::is_same_v<T, StmtJump>)
+            result.value = StmtJump { alt.loc, alt.kind, copyExprPtr (alt.returnValue) };
+        else if constexpr (std::is_same_v<T, StmtExpr>)
+            result.value = StmtExpr { alt.loc, copyExprPtr (alt.expr) };
+        else if constexpr (std::is_same_v<T, StmtCompound>)
+            result.value = StmtCompound { alt.loc, copyStatements (alt.statements) };
+        else if constexpr (std::is_same_v<T, StmtDeclaration>)
+            result.value = StmtDeclaration { alt.loc, copyDeclaration (alt.declaration) };
+        else if constexpr (std::is_same_v<T, StmtLoop>)
+            result.value = StmtLoop { alt.loc, copyStatements (alt.body), copyStatements (alt.continuing), copyExprPtr (alt.breakIf) };
+    },
+                s.value);
 
     return result;
 }

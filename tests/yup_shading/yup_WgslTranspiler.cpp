@@ -1409,13 +1409,12 @@ TEST_F (WgslLoweringTests, RejectsTessEvalStage)
     EXPECT_TRUE (r.failed());
 }
 
-// Double precision inside function bodies is a known v1 diagnostics gap
 TEST_F (WgslLoweringTests, RejectsDoublePrecision)
 {
     const char* src = "void main() { double d = 1.0; }";
     auto r = lower (src, ShaderStage::fragment);
-    // TODO: diagnostics currently only scan top-level declarations
-    // EXPECT_TRUE (r.failed());
+    ASSERT_TRUE (r.failed());
+    EXPECT_TRUE (r.getErrorMessage().contains ("1:15: Double precision")) << r.getErrorMessage();
 }
 
 TEST_F (WgslLoweringTests, RejectsAtomicCounters)
@@ -1491,6 +1490,16 @@ TEST_F (WgslLoweringTests, BindingAssignmentForSampler)
             EXPECT_NE (res.samplerBinding, ~0u);
         }
     }
+
+    // Companion samplers follow the highest binding and never collide with textures
+    std::set<uint32_t> bindings;
+    for (auto& res : resources)
+    {
+        EXPECT_TRUE (bindings.insert (res.binding).second) << res.name;
+        EXPECT_TRUE (bindings.insert (res.samplerBinding).second) << res.name;
+    }
+
+    EXPECT_EQ (bindings, (std::set<uint32_t> { 0, 1, 2, 3, 4, 5 }));
 }
 
 TEST_F (WgslLoweringTests, FragmentHasStageIO)
@@ -1586,7 +1595,8 @@ layout(binding = 0) uniform subpassInput sp;
 void main() { }
 )glsl";
     auto r = lower (src, ShaderStage::fragment);
-    // subpassInput may be rejected or accepted depending on lowering support
+    ASSERT_TRUE (r.failed());
+    EXPECT_TRUE (r.getErrorMessage().contains ("Subpass inputs are not supported")) << r.getErrorMessage();
 }
 
 TEST_F (WgslLoweringTests, AutoBindingForSamplerWithoutExplicitBinding)
@@ -1606,46 +1616,29 @@ TEST_F (WgslLoweringTests, OutInoutParametersProcessed)
     // Should succeed — out/inout params are lowered to pointer equivalents
 }
 
-TEST_F (WgslLoweringTests, UnnamedUniformBlockHasResources)
+TEST_F (WgslLoweringTests, UnnamedUniformBlockIsOneResource)
 {
     auto r = lower (kUnnamedUniformBlock, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
 
+    // The block gets a synthesized instance: one resource, not one per member
     auto& resources = r.getReference().resources;
-    EXPECT_GE (resources.size(), 1u);
-
-    bool foundValue = false;
-    for (auto& res : resources)
-    {
-        if (res.name == "value")
-        {
-            foundValue = true;
-            EXPECT_EQ (res.group, 0u);
-            EXPECT_EQ (res.binding, 0u);
-        }
-    }
-    EXPECT_TRUE (foundValue);
+    ASSERT_EQ (resources.size(), 1u);
+    EXPECT_NE (resources[0].name, "value");
+    EXPECT_EQ (resources[0].group, 0u);
+    EXPECT_EQ (resources[0].binding, 0u);
 }
 
-TEST_F (WgslLoweringTests, UnnamedBufferBlockHasResources)
+TEST_F (WgslLoweringTests, UnnamedBufferBlockIsOneResource)
 {
     auto r = lower (kUnnamedBufferBlock, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
 
     auto& resources = r.getReference().resources;
-    EXPECT_GE (resources.size(), 1u);
-
-    bool foundValue = false;
-    for (auto& res : resources)
-    {
-        if (res.name == "value")
-        {
-            foundValue = true;
-            EXPECT_EQ (res.group, 0u);
-            EXPECT_EQ (res.binding, 0u);
-        }
-    }
-    EXPECT_TRUE (foundValue);
+    ASSERT_EQ (resources.size(), 1u);
+    EXPECT_NE (resources[0].name, "value");
+    EXPECT_EQ (resources[0].group, 0u);
+    EXPECT_EQ (resources[0].binding, 0u);
 }
 
 TEST_F (WgslLoweringTests, FunctionWithNoReassignedParamsSucceeds)
@@ -1665,7 +1658,6 @@ protected:
     auto transpile (const char* src, ShaderStage stage)
     {
         WgslTranspileOptions opts;
-        opts.entryPoint = "main";
         opts.outputEntryPoint = "main";
         opts.defaultGroup = 0;
         return WgslTranspiler::transpile (src, stage, opts);
@@ -1728,12 +1720,12 @@ TEST_F (WgslEmitterGoldenTests, FloorModExpansion)
 
 TEST_F (WgslEmitterGoldenTests, TernaryToSelect)
 {
-    const char* src = "void main() { float a = b > 0.5 ? 1.0 : 0.0; }";
+    const char* src = "void main() { float b = 0.25; float a = b > 0.5 ? 1.0 : 0.0; }";
     auto r = transpile (src, ShaderStage::fragment);
-    ASSERT_TRUE (r.wasOk());
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    EXPECT_TRUE (wgsl.contains ("select("));
+    EXPECT_TRUE (wgsl.contains ("var a: f32 = select(0.0, 1.0, (b > 0.5));")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, DoWhileToLoop)
@@ -1839,30 +1831,28 @@ TEST_F (WgslEmitterGoldenTests, UBOBecomesUniformVar)
     EXPECT_TRUE (wgsl.contains ("var<uniform>"));
 }
 
-TEST_F (WgslEmitterGoldenTests, UnnamedUniformBlockEmitsFlatVars)
+TEST_F (WgslEmitterGoldenTests, UnnamedUniformBlockEmitsOneStructVariable)
 {
     auto r = transpile (kUnnamedUniformBlock, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    // Unnamed interface block fields are emitted as flat global variables
-    EXPECT_TRUE (wgsl.contains ("var<uniform>")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("value: f32")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("@group(0)")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("@binding(0)")) << wgsl;
-    // Should NOT contain a struct wrapping the fields
-    EXPECT_FALSE (wgsl.contains ("struct {")) << wgsl;
+    // One struct-typed variable at the block binding, with member reads going through it
+    EXPECT_TRUE (wgsl.contains ("struct Block {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("value: f32,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(0) @binding(0) var<uniform> _Block: Block;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("= _Block.value;")) << wgsl;
+    EXPECT_EQ (wgsl.indexOf ("var<uniform>"), wgsl.lastIndexOf ("var<uniform>")) << wgsl;
 }
 
-TEST_F (WgslEmitterGoldenTests, UnnamedBufferBlockEmitsStorageVars)
+TEST_F (WgslEmitterGoldenTests, UnnamedBufferBlockEmitsOneStorageVariable)
 {
     auto r = transpile (kUnnamedBufferBlock, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    EXPECT_TRUE (wgsl.contains ("var<storage")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("read_write")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("value: f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var<storage, read_write> _Block: Block;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("_Block.value = 1.0;")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, UBOKeepsEveryCommaSeparatedMember)
@@ -2479,11 +2469,12 @@ TEST_F (WgslEmitterGoldenTests, SwitchStatement)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    EXPECT_TRUE (wgsl.contains ("switch ("));
-    EXPECT_TRUE (wgsl.contains ("case 0:"));
-    EXPECT_TRUE (wgsl.contains ("case 1:"));
-    EXPECT_TRUE (wgsl.contains ("case 2:"));
-    EXPECT_TRUE (wgsl.contains ("default:"));
+    EXPECT_TRUE (wgsl.contains ("switch (i) {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 0: {\n            r = 0.0;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 1: {\n            r = 0.5;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 2: {\n            r = 1.0;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("default: {\n            r = 0.0;\n        }")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("{}")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, WhileLoop)
@@ -2521,8 +2512,14 @@ TEST_F (WgslEmitterGoldenTests, IsnanIsinfMapping)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    EXPECT_TRUE (wgsl.contains ("isNan("));
-    EXPECT_TRUE (wgsl.contains ("isInf("));
+    // WGSL has no isnan/isinf: bit-test polyfills stay correct even under fast-math assumptions
+    EXPECT_FALSE (wgsl.contains ("isNan(")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("isInf(")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn glsl_isnan_f32(x: f32) -> bool {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(bitcast<u32>(x) & 0x7fffffffu) == 0x7f800000u")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("glsl_isnan_f32(v)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("glsl_isinf_f32(v)")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, AtanSingleArg)
@@ -2531,8 +2528,10 @@ TEST_F (WgslEmitterGoldenTests, AtanSingleArg)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    // atan(x, y) → atan2(x, y), atan(x) → atan2(x) (mapFunctionName always maps atan→atan2)
-    EXPECT_TRUE (wgsl.contains ("atan2("));
+    // atan(y, x) maps to atan2, the single-argument form stays atan; literal-only calls use typed literals
+    EXPECT_TRUE (wgsl.contains ("atan2(1.0f, 2.0f)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("atan(1.0f)")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("atan2(1.0f)")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, RadiansDegreesMapping)
@@ -2778,9 +2777,9 @@ TEST_F (WgslEmitterGoldenTests, UnaryPlusAndBitwiseNot)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
 
-    // Unary plus (+) and bitwise not (~) should be preserved
-    EXPECT_TRUE (wgsl.contains ("+"));
-    EXPECT_TRUE (wgsl.contains ("~"));
+    // WGSL has no unary plus: the operand stands on its own; bitwise not is preserved
+    EXPECT_TRUE (wgsl.contains ("var p: f32 = 1.0;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("~0")) << wgsl;
 }
 
 TEST_F (WgslEmitterGoldenTests, BitwiseOperators)
@@ -2816,8 +2815,11 @@ TEST_F (WgslEmitterGoldenTests, EmitExprComma)
 {
     auto r = transpile (kCommaOperator, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
-    // Comma operator may be lowered or emitted; just verify success
-    EXPECT_NE (r.getValue().length(), 0u);
+    auto wgsl = r.getValue();
+
+    // WGSL has no comma operator: the left side becomes a statement before the declaration
+    EXPECT_TRUE (wgsl.contains ("    x = 1;\n    var y: i32 = ((x + 2));")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("comma")) << wgsl;
 }
 
 //==============================================================================
@@ -2871,10 +2873,10 @@ TEST_F (WgslEmitterGoldenTests, OutInoutParamsLowered)
     auto r = transpile (kOutInoutFunction, ShaderStage::fragment);
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     auto wgsl = r.getValue();
-    // out/inout params become pointer params with & prefix
-    EXPECT_TRUE (wgsl.contains ("&a"));
-    EXPECT_TRUE (wgsl.contains ("&b"));
-    EXPECT_TRUE (wgsl.contains ("scale("));
+    // out/inout params become function pointers, dereferenced in the callee and passed by address
+    EXPECT_TRUE (wgsl.contains ("fn scale(a: ptr<function, f32>, b: ptr<function, f32>)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(*b) = ((*a) * 2.0);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("scale(&x, &y);")) << wgsl;
 }
 
 //==============================================================================
@@ -3005,6 +3007,82 @@ void main() {
     auto reflection = reflResult.getValue();
     for (auto& img : reflection.sampledImages)
         EXPECT_EQ (img.backendSlot, img.binding);
+}
+
+TEST_F (WgslTranspilerIntegrationTests, WGSLBindingsMatchReflection)
+{
+    // Vulkan GLSL requires explicit bindings everywhere, ESSL only on blocks: glslang auto-maps the
+    // unbound samplers it considers live. They are declared around explicit ones, and one of them
+    // is never used, so it gets no binding and the WGSL output leaves it out.
+    const char* src = R"glsl(#version 310 es
+precision highp float;
+layout(location = 0) out vec4 color;
+uniform sampler2D texB;
+layout(std140, binding = 3) uniform Params { vec4 tint; } params;
+layout(binding = 0) uniform sampler2D texA;
+uniform sampler2D unusedTex;
+void main()
+{
+    color = textureLod(texA, vec2(0.5), 0.0) * textureLod(texB, vec2(0.5), 0.0) * params.tint;
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+}
+)glsl";
+
+    auto wgsl = transpiler->transpile (src, ShaderStage::vertex, ShaderLanguage::essl, ShaderLanguage::wgsl);
+    ASSERT_TRUE (wgsl.wasOk()) << wgsl.getErrorMessage();
+
+    std::map<String, std::pair<int, int>> emitted; // variable -> (group, binding)
+    for (const auto& line : StringArray::fromLines (wgsl.getValue()))
+    {
+        if (! line.startsWith ("@group("))
+            continue;
+
+        const auto group = line.fromFirstOccurrenceOf ("@group(", false, false).upToFirstOccurrenceOf (")", false, false).getIntValue();
+        const auto binding = line.fromFirstOccurrenceOf ("@binding(", false, false).upToFirstOccurrenceOf (")", false, false).getIntValue();
+        const auto name = line.fromFirstOccurrenceOf ("var", false, false).fromFirstOccurrenceOf (" ", false, false).upToFirstOccurrenceOf (":", false, false).trim();
+        emitted[name] = { group, binding };
+    }
+
+    ASSERT_EQ (emitted.size(), 5u) << wgsl.getValue();
+    EXPECT_FALSE (wgsl.getValue().contains ("unusedTex")) << wgsl.getValue();
+
+    // Explicit bindings kept, live unbound ones take free slots in declaration order, companion samplers follow the highest binding
+    EXPECT_EQ (emitted["texA"], std::make_pair (0, 0));
+    EXPECT_EQ (emitted["texB"], std::make_pair (0, 1));
+    EXPECT_EQ (emitted["params"], std::make_pair (0, 3));
+    EXPECT_EQ (emitted["texA_sampler"], std::make_pair (0, 4));
+    EXPECT_EQ (emitted["texB_sampler"], std::make_pair (0, 5));
+
+    auto spirv = transpiler->compileToSPIRV (src, ShaderStage::vertex, ShaderLanguage::essl);
+    ASSERT_TRUE (spirv.wasOk()) << spirv.getErrorMessage();
+
+    auto reflection = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::wgsl);
+    ASSERT_TRUE (reflection.wasOk()) << reflection.getErrorMessage();
+
+    std::set<std::pair<int, int>> reflected;
+    for (const auto* resources : { &reflection.getReference().uniformBuffers, &reflection.getReference().sampledImages })
+    {
+        for (const auto& r : *resources)
+        {
+            reflected.insert ({ (int) r.set, (int) r.backendSlot });
+
+            if (r.backendSlotSecondary != ~0u)
+                reflected.insert ({ (int) r.set, (int) r.backendSlotSecondary });
+        }
+    }
+
+    std::set<std::pair<int, int>> fromWgsl;
+    for (const auto& [name, slot] : emitted)
+        fromWgsl.insert (slot);
+
+    EXPECT_EQ (reflected, fromWgsl);
+
+    for (const auto& image : reflection.getReference().sampledImages)
+    {
+        const auto expected = emitted[image.name + "_sampler"];
+        EXPECT_EQ ((int) image.backendSlotSecondary, expected.second) << image.name;
+        EXPECT_EQ ((int) image.backendSlot, emitted[image.name].second) << image.name;
+    }
 }
 
 TEST_F (WgslTranspilerIntegrationTests, TranspileComputeToWGSLWithWorkgroup)
@@ -3220,7 +3298,6 @@ protected:
 TEST_F (WgslTranspilerDirectTests, TranspileEmptyVertex)
 {
     WgslTranspileOptions opts;
-    opts.entryPoint = "main";
     opts.defaultGroup = 0;
 
     auto r = WgslTranspiler::transpile (kEmptyVertex, ShaderStage::vertex, opts);
@@ -3232,7 +3309,6 @@ TEST_F (WgslTranspilerDirectTests, TranspileEmptyVertex)
 TEST_F (WgslTranspilerDirectTests, CustomOutputEntryPoint)
 {
     WgslTranspileOptions opts;
-    opts.entryPoint = "main";
     opts.outputEntryPoint = "vs_main";
     opts.defaultGroup = 0;
 
@@ -3244,7 +3320,6 @@ TEST_F (WgslTranspilerDirectTests, CustomOutputEntryPoint)
 TEST_F (WgslTranspilerDirectTests, DefaultWorkgroupSizeUsed)
 {
     WgslTranspileOptions opts;
-    opts.entryPoint = "main";
     opts.defaultWorkgroupSize = { 16, 8, 1 };
 
     const char* src = R"glsl(
@@ -3289,7 +3364,6 @@ protected:
     auto transpile (const char* src, ShaderStage stage)
     {
         WgslTranspileOptions opts;
-        opts.entryPoint = "main";
         return WgslTranspiler::transpile (src, stage, opts);
     }
 };
@@ -3418,7 +3492,6 @@ protected:
     auto transpile (const char* src, ShaderStage stage)
     {
         WgslTranspileOptions opts;
-        opts.entryPoint = "main";
         opts.outputEntryPoint = "main";
         opts.defaultGroup = 0;
         return WgslTranspiler::transpile (src, stage, opts);
@@ -3576,5 +3649,765 @@ TEST_F (WgslRealWorldShaderTests, CubeFragmentViaShaderTranspiler)
     ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
     EXPECT_TRUE (r.getValue().contains ("@fragment"));
 }
+
+//==============================================================================
+// Hardening tests: every GLSL construct either transpiles to equivalent WGSL
+// or fails with a line:column diagnostic
+//==============================================================================
+
+class WgslHardeningTests : public ::testing::Test
+{
+protected:
+    static ResultValue<String> transpile (const char* src, ShaderStage stage, StringArray* warnings = nullptr)
+    {
+        WgslTranspileOptions opts;
+        opts.warnings = warnings;
+        return WgslTranspiler::transpile (src, stage, opts);
+    }
+
+    static String transpileOk (const char* src, ShaderStage stage = ShaderStage::fragment)
+    {
+        auto r = transpile (src, stage);
+        EXPECT_TRUE (r.wasOk()) << r.getErrorMessage();
+        return r.wasOk() ? r.getValue() : String();
+    }
+
+    static void expectFailure (const char* src, const char* message, ShaderStage stage = ShaderStage::fragment)
+    {
+        auto r = transpile (src, stage);
+        ASSERT_TRUE (r.failed()) << r.getValue();
+        EXPECT_TRUE (r.getErrorMessage().contains (message)) << r.getErrorMessage();
+    }
+};
+
+//==============================================================================
+// Failing loudly
+
+TEST_F (WgslHardeningTests, UnknownLayoutQualifierFails)
+{
+    expectFailure ("layout(foo = 1) uniform U { float x; } u; void main() {}", "1:8: Unknown layout qualifier 'foo'");
+}
+
+TEST_F (WgslHardeningTests, UnknownTypeFails)
+{
+    expectFailure ("void main() { Foo x; }", "1:15: Unknown type 'Foo'");
+}
+
+TEST_F (WgslHardeningTests, OutOfRangeIntegerLiteralsFail)
+{
+    expectFailure ("void main() { int x = 4294967296; }", "does not fit in 32 bits");
+    expectFailure ("void main() { int x = 3000000000; }", "is too large for int");
+}
+
+TEST_F (WgslHardeningTests, InvalidOctalLiteralFails)
+{
+    expectFailure ("void main() { int x = 09; }", "Invalid digit '9' in octal literal");
+}
+
+TEST_F (WgslHardeningTests, ErrorsInsideNestedBodiesAreReported)
+{
+    expectFailure ("void main() { if (true) { float x = ; } }", "1:37: Expected expression, got ';'");
+    expectFailure ("void main() { for (int i = 0; i < ; i++) {} }", "Expected expression");
+    expectFailure ("void main() { switch (1) { case 0: float x = ; } }", "Expected expression");
+}
+
+TEST_F (WgslHardeningTests, BrokenArraySizeAndInitializerFail)
+{
+    expectFailure ("void main() { float a[+]; }", "Expected expression");
+    expectFailure ("void main() { float a[2] = { 1.0, ) }; }", "Expected expression");
+}
+
+TEST_F (WgslHardeningTests, UnresolvedPreprocessorDirectiveFails)
+{
+    expectFailure ("#define X 1\nvoid main() {}", "must be resolved before transpiling");
+}
+
+TEST_F (WgslHardeningTests, DeepNestingFailsCleanly)
+{
+    std::string src = "void main() { float x = ";
+    src += std::string (400, '(') + "1.0" + std::string (400, ')') + "; }";
+    expectFailure (src.c_str(), "Nesting is too deep");
+}
+
+TEST_F (WgslHardeningTests, DoubleLiteralFails)
+{
+    expectFailure ("void main() { float x = float(1.0lf); }", "Double precision literals are not supported");
+}
+
+TEST_F (WgslHardeningTests, UnknownBuiltinFunctionFails)
+{
+    expectFailure ("void main() { float x = noSuchFunction(1.0); }", "Unsupported builtin function 'noSuchFunction'");
+}
+
+TEST_F (WgslHardeningTests, PointSizeOtherThanOneFails)
+{
+    expectFailure ("void main() { gl_PointSize = 2.0; gl_Position = vec4(0.0); }", "only writing 1.0 is supported", ShaderStage::vertex);
+}
+
+TEST_F (WgslHardeningTests, PointSizeOneIsDroppedWithWarning)
+{
+    StringArray warnings;
+    auto r = transpile ("void main() { gl_PointSize = 1.0; gl_Position = vec4(0.0); }", ShaderStage::vertex, &warnings);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    EXPECT_FALSE (r.getValue().contains ("gl_PointSize = ")) << r.getValue();
+    ASSERT_EQ (warnings.size(), 1);
+    EXPECT_TRUE (warnings[0].contains ("gl_PointSize = 1.0 has no WGSL equivalent")) << warnings[0];
+}
+
+TEST_F (WgslHardeningTests, UnsupportedBuiltinVariablesFail)
+{
+    expectFailure ("layout(location = 0) out vec4 c; void main() { c = vec4(gl_PointCoord, 0.0, 1.0); }", "'gl_PointCoord' has no WGSL equivalent");
+    expectFailure ("void main() { gl_ClipDistance[0] = 1.0; }", "'gl_ClipDistance' has no WGSL equivalent", ShaderStage::vertex);
+    expectFailure ("void main() { }", "Geometry and tessellation stages are not supported", ShaderStage::geometry);
+}
+
+TEST_F (WgslHardeningTests, UnsupportedResourcesFail)
+{
+    expectFailure ("layout(push_constant) uniform P { float x; } p; void main() {}", "Push constants are not supported");
+    expectFailure ("layout(binding = 0) uniform samplerBuffer b; void main() {}", "'samplerBuffer' has no WGSL equivalent");
+    expectFailure ("layout(binding = 0) uniform sampler2D t[4]; void main() {}", "Arrays of 'sampler2D' are not supported");
+    expectFailure ("layout(binding = 0) uniform image2D img; void main() {}", "needs a layout format qualifier");
+    expectFailure ("layout(std140, row_major, binding = 0) uniform U { mat4 m; } u; void main() {}", "row_major matrices are not supported");
+    expectFailure ("layout(std430, binding = 0) buffer B { float v[]; } b; void main() { b.v[0] = 1.0; }", "can't write storage buffers", ShaderStage::vertex);
+}
+
+TEST_F (WgslHardeningTests, IntegerTextureSamplingFails)
+{
+    expectFailure ("layout(binding = 0) uniform isampler2D t; void main() { ivec4 v = texture(t, vec2(0.5)); }", "Integer textures can only be read with texelFetch()");
+}
+
+TEST_F (WgslHardeningTests, StructEqualityFails)
+{
+    expectFailure ("struct S { float a; }; void main() { S x = S(1.0); S y = S(2.0); bool e = x == y; }", "Comparing structs, arrays or matrices");
+}
+
+TEST_F (WgslHardeningTests, CaseLabelOutsideSwitchFails)
+{
+    expectFailure ("void main() { case 1: return; }", "'case' label outside of a switch statement");
+}
+
+TEST_F (WgslHardeningTests, LineDirectiveSetsDiagnosticLines)
+{
+    expectFailure ("#line 100\nvoid main() { Foo x; }", "100:15: Unknown type 'Foo'");
+}
+
+//==============================================================================
+// Literals, globals and resources
+
+TEST_F (WgslHardeningTests, FloatLiteralsRoundTrip)
+{
+    const auto wgsl = transpileOk ("void main() { float a = 1e-10; float b = 3.14159265359; float c = 2.3283064365386963e-10; float d = 100.0; float e = .5e-3; float f = 1.f; float g = 2.; }");
+    EXPECT_TRUE (wgsl.contains ("var a: f32 = 1e-10;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var b: f32 = 3.1415927;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var c: f32 = 2.3283064e-10;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var d: f32 = 100.0;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var e: f32 = 0.0005;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var f: f32 = 1.0;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var g: f32 = 2.0;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, IntegerLiteralForms)
+{
+    const auto wgsl = transpileOk ("void main() { int m = -2147483648; int h = 0xFFFFFFFF; int o = 017; uint u = 0x1Fu; float x = 1.0; float n = - -x; }");
+    EXPECT_TRUE (wgsl.contains ("var m: i32 = -2147483648;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var h: i32 = -1;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var o: i32 = 15;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var u: u32 = 31u;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var n: f32 = -(-x);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, PlainGlobalsArePrivateAndInitializedInMain)
+{
+    const auto wgsl = transpileOk ("float g = 2.0; void bump() { g += 1.0; } void main() { bump(); }");
+    EXPECT_TRUE (wgsl.contains ("var<private> g: f32;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn main_inner() {\n    g = 2.0;\n    bump();")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SharedVariablesAreWorkgroup)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 8) in; shared float tile[8]; void main() { tile[gl_LocalInvocationIndex] = 1.0; barrier(); }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("var<workgroup> tile: array<f32, 8>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("workgroupBarrier();")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ArrayLengthIsConstantOrArrayLength)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 1) in; layout(std430, binding = 0) buffer B { float v[]; } b; void main() { float a[5]; int n = a.length(); int m = b.v.length(); b.v[0] = float(n + m); }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("var n: i32 = 5;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var m: i32 = i32(arrayLength(&b.v));")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, EntryPointNameIsHonored)
+{
+    WgslTranspileOptions opts;
+    opts.outputEntryPoint = "fs_main";
+    auto r = WgslTranspiler::transpile ("layout(location = 0) out vec4 c; void fs_main_helper() {} void main() { c = vec4(1.0); }", ShaderStage::fragment, opts);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    EXPECT_TRUE (r.getValue().contains ("@fragment\nfn fs_main(")) << r.getValue();
+    EXPECT_TRUE (r.getValue().contains ("fn main_inner()")) << r.getValue();
+}
+
+TEST_F (WgslHardeningTests, ReservedAndGeneratedNamesDontCollide)
+{
+    const auto wgsl = transpileOk ("float main_inner() { return 1.0; } void main() { float target = main_inner(); float ref = target; float input = ref; }");
+    EXPECT_TRUE (wgsl.contains ("var target_: f32 = main_inner();")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var ref_: f32 = target_;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn main_inner_1()")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("    main_inner_1();\n")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn main(input_1: FSInput)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, OverloadsGetDistinctNames)
+{
+    const auto wgsl = transpileOk ("float f(float a) { return a; } float f(vec2 a) { return a.x; } float f(int a) { return float(a); } void main() { float x = f(1.0) + f(vec2(2.0)) + f(3); }");
+    EXPECT_TRUE (wgsl.contains ("fn f(a: f32) -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn f_1(a: vec2<f32>) -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn f_2(a: i32) -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("((f(1.0f) + f_1(vec2<f32>(2.0))) + f_2(3i))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, BindingsKeepExplicitValuesAndSplitCombinedSamplers)
+{
+    const auto wgsl = transpileOk ("layout(set = 1, binding = 4) uniform sampler2D t; layout(set = 1) layout(binding = 2) uniform U { vec4 c; } u; layout(location = 0) out vec4 o; void main() { o = texture(t, u.c.xy) * u.c; }");
+    EXPECT_TRUE (wgsl.contains ("@group(1) @binding(4) var t: texture_2d<f32>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(1) @binding(5) var t_sampler: sampler;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(1) @binding(2) var<uniform> u: U;")) << wgsl;
+}
+
+//==============================================================================
+// Statements and expressions
+
+TEST_F (WgslHardeningTests, SwitchFallthroughAndMissingDefault)
+{
+    const auto wgsl = transpileOk ("void main() { int i = 1; float r = 0.0; switch (i) { case 0: case 1: r = 1.0; case 2: r += 2.0; break; case 3: r = 3.0; } }");
+    EXPECT_TRUE (wgsl.contains ("case 0, 1: {\n            r = 1.0;\n            r += 2.0;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 2: {\n            r += 2.0;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 3: {\n            r = 3.0;\n        }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("default: {\n        }")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, UnsignedSwitchLabelsMatchSelector)
+{
+    const auto wgsl = transpileOk ("void main() { uint u = 1u; switch (u) { case 1: u = 2u; break; default: break; } }");
+    EXPECT_TRUE (wgsl.contains ("case 1: {")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, DoWhileContinueEvaluatesCondition)
+{
+    const auto wgsl = transpileOk ("void main() { int k = 0; do { k++; if (k == 2) continue; } while (k < 4); }");
+    EXPECT_TRUE (wgsl.contains ("loop {\n        k++;\n        if ((k == 2)) {\n            continue;\n        }\n        continuing {\n            break if !((k < 4));\n        }\n    }")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ForWithCommaUpdateUsesContinuing)
+{
+    const auto wgsl = transpileOk ("void main() { float r = 0.0; for (int x = 0, y = 4; x < y; x++, y--) { r += 1.0; } }");
+    EXPECT_TRUE (wgsl.contains ("var x: i32 = 0;\n        var y: i32 = 4;\n        loop {\n            if (!((x < y))) {\n                break;\n            }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("continuing {\n                x++;\n                y--;\n            }")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SideEffectsInsideExpressionsAreHoisted)
+{
+    const auto wgsl = transpileOk ("void main() { float arr[4]; int i = 0; arr[i++] = 3.0; int j = ++i + i; }");
+    EXPECT_TRUE (wgsl.contains ("let _t: i32 = i;\n    i++;\n    arr[_t] = 3.0;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("i += 1;\n    var j: i32 = (i + i);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SwizzleStoresAreSplitIntoComponents)
+{
+    const auto wgsl = transpileOk ("void main() { vec4 c = vec4(0.0); c.xy *= 2.0; c.zx = vec2(1.0, 2.0); c.w = 1.0; }");
+    EXPECT_TRUE (wgsl.contains ("let _t: vec2<f32> = (c.xy * 2.0);\n    c.x = _t.x;\n    c.y = _t.y;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("c.z = _t_1.x;\n    c.x = _t_1.y;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("c.w = 1.0;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, OutArgumentsThatAreNotLocalsUseCopyInCopyOut)
+{
+    const auto wgsl = transpileOk ("vec3 g; void f(inout float v) { v += 1.0; } void h(out vec3 v) { v = vec3(1.0); } void main() { vec4 c = vec4(0.0); f(c.y); h(g); float x = 0.0; f(x); }");
+    EXPECT_TRUE (wgsl.contains ("var _t: f32 = c.y;\n    f(&_t);\n    c.y = _t;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var _t_1: vec3<f32>;\n    h(&_t_1);\n    g = _t_1;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("f(&x);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, WrittenParametersAreCopied)
+{
+    const auto wgsl = transpileOk ("float f(float x, vec2 p) { x *= 2.0; p.x = x; return p.x; } void main() { float r = f(1.0, vec2(0.0)); }");
+    EXPECT_TRUE (wgsl.contains ("fn f(_x: f32, _p: vec2<f32>) -> f32 {\n    var x: f32 = _x;\n    var p: vec2<f32> = _p;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, TernaryAndShortCircuitWithSideEffects)
+{
+    const auto wgsl = transpileOk ("int n; bool bump() { n++; return n > 1; } void main() { float r = 0.0; float s = r > 0.0 ? (r += 1.0) : 0.0; bool z = r > 0.0 && (n++ > 1); }");
+    EXPECT_TRUE (wgsl.contains ("if ((r > 0.0)) {\n        r += 1.0;\n        _t = (r);\n    }\n    else {\n        _t = 0.0;\n    }\n    var s: f32 = _t;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var _t_1: bool = (r > 0.0);\n    if (_t_1) {")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, VectorEqualityReducesToBool)
+{
+    const auto wgsl = transpileOk ("void main() { vec3 v = vec3(1.0); vec3 w = vec3(2.0); bool e = v == w; bool n = v != w; }");
+    EXPECT_TRUE (wgsl.contains ("var e: bool = all((v == w));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var n: bool = any((v != w));")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ConstructorsWgslLacks)
+{
+    const auto wgsl = transpileOk ("void main() { mat4 m4 = mat4(1.0); mat3 m3 = mat3(m4); mat2 m2 = mat2(vec2(1.0), 2.0, 3.0); vec4 v = vec4(1.0); vec2 t = vec2(v); float f = float(v); }");
+    EXPECT_TRUE (wgsl.contains ("var m4: mat4x4<f32> = mat4x4<f32>(vec4<f32>(1.0, 0.0, 0.0, 0.0), vec4<f32>(0.0, 1.0, 0.0, 0.0),")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var m3: mat3x3<f32> = mat3x3<f32>(m4[0].xyz, m4[1].xyz, m4[2].xyz);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("let _t: vec2<f32> = vec2<f32>(1.0);\n    var m2: mat2x2<f32> = mat2x2<f32>(_t.x, _t.y, 2.0, 3.0);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var t: vec2<f32> = v.xy;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var f: f32 = v.x;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, MathPolyfills)
+{
+    const auto wgsl = transpileOk ("void main() { vec3 v = mod(vec3(5.0), 2.0); mat3 m = inverse(mat3(2.0)); mat3x2 o = outerProduct(vec2(1.0), vec3(1.0)); }");
+    EXPECT_TRUE (wgsl.contains ("fn glsl_mod_vec3f32_f32(x: vec3<f32>, y: f32) -> vec3<f32> {\n    return x - y * floor(x / y);\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn glsl_inverse_mat3x3f32(m: mat3x3<f32>) -> mat3x3<f32>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("return mat3x2<f32>(c * r.x, c * r.y, c * r.z);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, BuiltinFunctionMappings)
+{
+    const auto wgsl = transpileOk ("layout(location = 0) out vec4 o; void main() { float f = 1.0; uint u = floatBitsToUint(f); int c = bitCount(u); int l = findLSB(u); uint r = bitfieldReverse(u); uint p = packHalf2x16(vec2(f)); float dx = dFdxFine(f); bvec2 b = not(bvec2(true)); vec2 s = mix(vec2(0.0), vec2(1.0), b); float e = roundEven(f); int ex; float fr = frexp(f, ex); o = vec4(dx + e + fr); }");
+    EXPECT_TRUE (wgsl.contains ("bitcast<u32>(f)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var c: i32 = i32(countOneBits(u));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var l: i32 = i32(firstTrailingBit(u));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("reverseBits(u)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("pack2x16float(vec2<f32>(f))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("dpdxFine(f)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("!(vec2<bool>(true))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("select(vec2<f32>(0.0), vec2<f32>(1.0), b)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var e: f32 = round(f);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("let _t_1 = frexp(_t);\n    ex = _t_1.exp;")) << wgsl;
+}
+
+//==============================================================================
+// Declarations
+
+TEST_F (WgslHardeningTests, DeclarationFormsParse)
+{
+    const auto wgsl = transpileOk (R"glsl(
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+precision highp float;
+float helper(void);
+struct Pair { float a; float b; } gPair;
+layout(location = 0) out vec4 o;
+float helper(void) { return 1.0; }
+void main(void)
+{
+    precision mediump int;
+    struct Local { vec2 p; } loc;
+    loc.p = vec2(helper());
+    vec4(1.0).x;
+    [[unroll]] for (int i = 0; i < 2; i++) { gPair.a += 1.0; }
+    const in float unused = 0.0;
+    bool x = true ^^ false;
+    o = vec4(loc.p, gPair.a, x ? 1.0 : 0.0);
+}
+)glsl");
+    EXPECT_TRUE (wgsl.contains ("struct Pair {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var<private> gPair: Pair;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("struct Local {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var loc: Local;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn helper() -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(true != false)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, StageIOBlocksAreFlattened)
+{
+    const auto vs = transpileOk ("layout(location = 2) out VertexData { vec2 uv; flat int id; } vd; void main() { vd.uv = vec2(0.0); vd.id = 3; gl_Position = vec4(0.0); }", ShaderStage::vertex);
+    EXPECT_TRUE (vs.contains ("@location(2) vd_uv: vec2<f32>,")) << vs;
+    EXPECT_TRUE (vs.contains ("@location(3) @interpolate(flat) vd_id: i32,")) << vs;
+    EXPECT_TRUE (vs.contains ("vd_uv = vec2<f32>(0.0);")) << vs;
+
+    const auto fs = transpileOk ("layout(location = 2) in VertexData { vec2 uv; flat int id; }; layout(location = 0) out vec4 o; void main() { o = vec4(uv, float(id), 1.0); }");
+    EXPECT_TRUE (fs.contains ("@location(2) uv: vec2<f32>,")) << fs;
+    EXPECT_TRUE (fs.contains ("@location(3) @interpolate(flat) id: i32,")) << fs;
+}
+
+TEST_F (WgslHardeningTests, InvariantPositionAndPerVertexRedeclaration)
+{
+    const auto wgsl = transpileOk ("out gl_PerVertex { vec4 gl_Position; }; invariant gl_Position; void main() { gl_Position = vec4(1.0); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("@builtin(position) @invariant position: vec4<f32>,")) << wgsl;
+}
+
+//==============================================================================
+// Stage IO and builtins
+
+TEST_F (WgslHardeningTests, VaryingsAndInterpolation)
+{
+    const auto wgsl = transpileOk ("layout(location = 0) flat in ivec2 cell; layout(location = 1) noperspective centroid in vec2 uv; layout(location = 2) sample in float s; layout(location = 3) in mat2 m; layout(location = 0) out vec4 o; void main() { o = vec4(vec2(cell) + uv + m[1], s, 1.0); gl_FragDepth = 0.5; }");
+    EXPECT_TRUE (wgsl.contains ("@location(0) @interpolate(flat) cell: vec2<i32>,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(1) @interpolate(linear, centroid) uv: vec2<f32>,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(2) @interpolate(perspective, sample) s: f32,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(3) m_0: vec2<f32>,\n    @location(4) m_1: vec2<f32>,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("m = mat2x2<f32>(input.m_0, input.m_1);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@builtin(frag_depth) frag_depth: f32,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("output.frag_depth = gl_FragDepth;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, IntegerVaryingsAreAlwaysFlat)
+{
+    const auto wgsl = transpileOk ("layout(location = 0) out uint id; void main() { id = 1u; gl_Position = vec4(0.0); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("@location(0) @interpolate(flat) id: u32,")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, MissingLocationsAreAssignedInDeclarationOrder)
+{
+    const auto wgsl = transpileOk ("layout(location = 0) in vec4 a; in vec2 b, c; void main() { gl_Position = a + vec4(b, c); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("@location(0) a: vec4<f32>,\n    @location(1) b: vec2<f32>,\n    @location(2) c: vec2<f32>,")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, GlVertexIdAliasesVertexIndex)
+{
+    const auto wgsl = transpileOk ("void main() { gl_Position = vec4(float(gl_VertexID + gl_InstanceID)); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("gl_VertexID = gl_VertexIndex;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("gl_InstanceID = gl_InstanceIndex;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SpecializationConstantsBecomeOverrides)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x_id = 3, local_size_y = 4) in; layout(constant_id = 7) const float kScale = 2.5; layout(std430, binding = 0) buffer B { float v[]; } b; void main() { b.v[gl_GlobalInvocationID.x] = kScale * float(gl_WorkGroupSize.x); }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("@id(3) override _workgroup_size_x: u32 = 1u;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@id(7) override kScale: f32 = 2.5;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@compute @workgroup_size(_workgroup_size_x, 4, 1)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("gl_WorkGroupSize = vec3<u32>(_workgroup_size_x, 4u, 1u);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, DualSourceBlending)
+{
+    const auto wgsl = transpileOk ("layout(location = 0, index = 0) out vec4 color; layout(location = 0, index = 1) out vec4 blend; void main() { color = vec4(1.0); blend = vec4(0.5); }");
+    EXPECT_TRUE (wgsl.startsWith ("enable dual_source_blending;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(0) @blend_src(0) color: vec4<f32>,\n    @location(0) @blend_src(1) blend: vec4<f32>,")) << wgsl;
+}
+
+//==============================================================================
+// Buffers and textures
+
+TEST_F (WgslHardeningTests, Std140ScalarArraysAndTwoRowMatricesAreWrapped)
+{
+    const auto wgsl = transpileOk ("layout(std140, binding = 0) uniform U { float values[4]; mat2 rot; vec2 pairs[2]; } u; layout(location = 0) flat in int i; layout(location = 0) out vec4 o; void main() { float copy[4] = u.values; mat2 r = u.rot; o = vec4(u.values[i], u.rot[1][0], u.pairs[1].y, copy[0] + r[0][0]); }");
+    EXPECT_TRUE (wgsl.contains ("struct _std140_f32 {\n    @size(16) v: f32,\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("struct _std140_vec2_f32 {\n    @size(16) v: vec2<f32>,\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("struct U {\n    values: array<_std140_f32, 4>,\n    rot: array<_std140_vec2_f32, 2>,\n    pairs: array<_std140_vec2_f32, 2>,\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("u.values[i].v")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("u.rot[1].v[0]")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("u.pairs[1].v.y")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("return mat2x2<f32>(x[0].v, x[1].v);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("r[i] = x[i].v;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, BlockPaddingBoolsAndOffsets)
+{
+    const auto wgsl = transpileOk ("layout(std140, binding = 0) uniform U { float a; bool enabled; layout(offset = 32) vec3 dir; } u; layout(location = 0) out vec4 o; void main() { o = vec4(u.enabled ? u.dir : vec3(u.a), 1.0); }");
+    EXPECT_TRUE (wgsl.contains ("struct U {\n    a: f32,\n    @size(28) enabled: u32,\n    @size(16) dir: vec3<f32>,\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("bool(u.enabled)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, StorageAccessAndAtomics)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 64) in; layout(std430, binding = 0) readonly buffer In { float v[]; } src; layout(std430, binding = 1) buffer Out { uint count; int values[]; } dst; shared uint local; void main() { uint i = gl_GlobalInvocationID.x; atomicAdd(local, 1u); uint old = atomicAdd(dst.count, 1u); int prev = atomicCompSwap(dst.values[i], 0, 1); dst.count = uint(src.v[i]); }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("@group(0) @binding(0) var<storage, read> src: In;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(0) @binding(1) var<storage, read_write> dst: Out;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("count: atomic<u32>,\n    values: array<atomic<i32>>,")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var<workgroup> local: atomic<u32>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("_ = atomicAdd(&local, 1u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var old: u32 = atomicAdd(&dst.count, 1u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("atomicCompareExchangeWeak(&dst.values[i], 0, 1)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("atomicStore(&dst.count, u32(src.v[i]));")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, StorageImages)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 8, local_size_y = 8) in; layout(binding = 0, rgba8) writeonly uniform image2D dst; layout(binding = 1, r32f) readonly uniform image2D src; void main() { ivec2 p = ivec2(gl_GlobalInvocationID.xy); ivec2 size = imageSize(dst); imageStore(dst, p, vec4(imageLoad(src, p).r)); }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("var dst: texture_storage_2d<rgba8unorm, write>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var src: texture_storage_2d<r32float, read>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec2<i32>(textureDimensions(dst))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureStore(dst, p, vec4<f32>(textureLoad(src, p).r));")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, TextureFunctionVariants)
+{
+    const auto wgsl = transpileOk (R"glsl(
+layout(binding = 0) uniform sampler2D tex;
+layout(binding = 1) uniform sampler2DArray layers;
+layout(binding = 2) uniform sampler2DShadow shadow;
+layout(binding = 3) uniform texture2D depthTex;
+layout(binding = 4) uniform samplerShadow cmp;
+layout(location = 0) in vec3 uv;
+layout(location = 0) out vec4 o;
+void main()
+{
+    vec4 a = textureLod(tex, uv.xy, 2.0) + textureGrad(tex, uv.xy, vec2(0.1), vec2(0.1));
+    vec4 b = textureOffset(tex, uv.xy, ivec2(1, 0)) + textureProj(tex, uv) + texture(tex, uv.xy, 0.5);
+    vec4 c = texture(layers, uv) + texelFetch(tex, ivec2(0), 0) + textureGather(tex, uv.xy, 1);
+    float d = texture(shadow, uv) + texture(sampler2DShadow(depthTex, cmp), uv);
+    ivec2 s = textureSize(tex, 0);
+    ivec3 ls = textureSize(layers, 0);
+    o = a + b + c + vec4(d + float(s.x + ls.z) + float(textureQueryLevels(tex)));
+}
+)glsl");
+    EXPECT_TRUE (wgsl.contains ("textureSampleLevel(tex, tex_sampler, uv.xy, 2.0)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleGrad(tex, tex_sampler, uv.xy, vec2<f32>(0.1), vec2<f32>(0.1))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSample(tex, tex_sampler, uv.xy, vec2<i32>(1, 0))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSample(tex, tex_sampler, (uv.xy / uv.z))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleBias(tex, tex_sampler, uv.xy, 0.5)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSample(layers, layers_sampler, uv.xy, i32(floor((uv.z + 0.5))))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureLoad(tex, vec2<i32>(0), 0)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureGather(1, tex, tex_sampler, uv.xy)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var shadow_sampler: sampler_comparison;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleCompare(shadow, shadow_sampler, uv.xy, uv.z)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var depthTex: texture_depth_2d;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleCompare(depthTex, cmp, uv.xy, uv.z)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var s: vec2<i32> = vec2<i32>(textureDimensions(tex, 0));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec3<i32>(vec3<u32>(textureDimensions(layers, 0), textureNumLayers(layers)))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("i32(textureNumLevels(tex))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SamplersPassedToFunctions)
+{
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform sampler2D tex; layout(location = 0) out vec4 o; vec4 fetch(sampler2D s, vec2 uv) { return texture(s, uv); } void main() { o = fetch(tex, vec2(0.5)); }");
+    EXPECT_TRUE (wgsl.contains ("fn fetch(s: texture_2d<f32>, s_sampler: sampler, uv: vec2<f32>) -> vec4<f32>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("return textureSample(s, s_sampler, uv);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fetch(tex, tex_sampler, vec2<f32>(0.5))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, VertexSamplingUsesLevelZero)
+{
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform sampler2D heights; layout(location = 0) in vec2 uv; void main() { gl_Position = vec4(uv, texture(heights, uv).r, 1.0); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("textureSampleLevel(heights, heights_sampler, uv, 0.0)")) << wgsl;
+}
+
+//==============================================================================
+// Shipped shaders
+
+TEST_F (WgslHardeningTests, PbrBrdfKeepsHammersleyPrecision)
+{
+    // Excerpt of examples/graphics/data/shaders/pbr_brdf.frag
+    const auto wgsl = transpileOk (R"glsl(
+#version 450
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 fragColor;
+const uint kSampleCount = 512u;
+float radicalInverse(uint bits) {
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    return float(bits) * 2.3283064365386963e-10;
+}
+void main() {
+    float s = 0.0;
+    for (uint i = 0u; i < kSampleCount; ++i)
+        s += radicalInverse(i);
+    fragColor = vec4(s / float(kSampleCount), v_uv, 1.0);
+}
+)glsl");
+    EXPECT_TRUE (wgsl.contains ("fn radicalInverse(_bits: u32) -> f32 {\n    var bits: u32 = _bits;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("return (f32(bits) * 2.3283064e-10);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("for (var i: u32 = 0u; (i < kSampleCount); i += 1) {")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ParticlesUpdateCompute)
+{
+    // Excerpt of examples/graphics/data/shaders/particles_update.comp
+    const auto wgsl = transpileOk (R"glsl(
+#version 450
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(std140, set = 0, binding = 0) uniform Params { float deltaTime; float gravity; float particleCountF; } params;
+layout(std430, set = 0, binding = 1) buffer ParticleBuffer { float data[]; };
+uint wangHash(uint seed) {
+    seed = (seed ^ 61u) ^ (seed >> 16u);
+    seed *= 9u;
+    return seed;
+}
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uint(params.particleCountF))
+        return;
+    uint base = idx * 12u;
+    vec2 vel = vec2(data[base + 2u], data[base + 3u]);
+    vel.y -= params.gravity * params.deltaTime;
+    data[base + 2u] = vel.x + float(wangHash(idx)) / float(0xFFFFFFFFu);
+    data[base + 3u] = vel.y;
+}
+)glsl", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("struct ParticleBuffer {\n    data: array<f32>,\n}")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@group(0) @binding(1) var<storage, read_write> _ParticleBuffer: ParticleBuffer;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("fn wangHash(_seed: u32) -> u32 {\n    var seed: u32 = _seed;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vel.y -= (params.gravity * params.deltaTime);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("_ParticleBuffer.data[(base + 3u)] = vel.y;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@compute @workgroup_size(256, 1, 1)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SpectrogramShaders)
+{
+    // Excerpt of modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.frag and .vert
+    const auto fs = transpileOk (R"glsl(
+#version 450
+layout(set = 0, binding = 0) uniform texture2D u_prev;
+layout(set = 0, binding = 1) uniform sampler   u_samp;
+layout(set = 0, binding = 2) uniform WaterfallParams { float numRows; float width; float height; float bins; } p;
+layout(set = 0, binding = 3) uniform RowData { vec4 mags[512]; } rows;
+layout(set = 0, binding = 4) uniform LutData { uvec4 lut[64]; } lut;
+layout(location = 0) out vec4 fragColor;
+float fetchMag(int idx) { return rows.mags[idx >> 2][idx & 3]; }
+void main() {
+    vec2 uv = gl_FragCoord.xy / vec2(p.width, p.height);
+    if (uv.y >= p.numRows / p.height) {
+        fragColor = textureLod(sampler2D(u_prev, u_samp), vec2(uv.x, uv.y - p.numRows / p.height), 0.0);
+    } else {
+        int i0 = int(fetchMag(int(gl_FragCoord.x)) * 255.0);
+        uint c0 = lut.lut[i0 >> 2][i0 & 3];
+        fragColor = vec4(float((c0 >> 16) & 255u), float((c0 >> 8) & 255u), float(c0 & 255u), float((c0 >> 24) & 255u)) / 255.0;
+    }
+}
+)glsl");
+    EXPECT_TRUE (fs.contains ("struct RowData {\n    mags: array<vec4<f32>, 512>,\n}")) << fs;
+    EXPECT_TRUE (fs.contains ("struct LutData {\n    lut: array<vec4<u32>, 64>,\n}")) << fs;
+    EXPECT_TRUE (fs.contains ("return rows.mags[(idx >> 2)][(idx & 3)];")) << fs;
+    EXPECT_TRUE (fs.contains ("textureSampleLevel(u_prev, u_samp, vec2<f32>(uv.x, (uv.y - (p.numRows / p.height))), 0.0)")) << fs;
+    EXPECT_TRUE (fs.contains ("f32((((c0 >> 16)) & 255u))")) << fs;
+
+    const auto vs = transpileOk (R"glsl(
+#version 450
+void main() {
+    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
+    float y = float((gl_VertexIndex & 2u) << 1u) - 1.0;
+    gl_Position = vec4(x, y, 0.0, 1.0);
+}
+)glsl", ShaderStage::vertex);
+    EXPECT_TRUE (vs.contains ("var x: f32 = (f32((((u32(gl_VertexIndex) & 1u)) << 2u)) - 1.0);")) << vs;
+}
+
+//==============================================================================
+// Shader corpus: every shader transpiles, and validates with naga when it is installed
+//==============================================================================
+
+#if YUP_MAC || YUP_LINUX || YUP_WINDOWS
+
+class WgslCorpusTests : public ::testing::Test
+{
+protected:
+    static File repositoryRoot()
+    {
+        return File (__FILE__).getParentDirectory().getParentDirectory().getParentDirectory();
+    }
+
+    /** Stress shaders in tests/data/wgsl plus the shaders the repository ships. */
+    static Array<File> corpus()
+    {
+        const auto root = repositoryRoot();
+        Array<File> files;
+
+        for (const auto& directory : { root.getChildFile ("tests/data/wgsl"), root.getChildFile ("examples/graphics/data/shaders") })
+            for (const auto& entry : RangedDirectoryIterator (directory, false, "*.vert;*.frag;*.comp", File::findFiles))
+                files.add (entry.getFile());
+
+        files.add (root.getChildFile ("modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.vert"));
+        files.add (root.getChildFile ("modules/yup_audio_gui/displays/yup_SpectrogramComponentShader.frag"));
+        return files;
+    }
+
+    static ShaderStage stageOf (const File& file)
+    {
+        const auto extension = file.getFileExtension();
+        return extension == ".vert" ? ShaderStage::vertex : extension == ".frag" ? ShaderStage::fragment : ShaderStage::compute;
+    }
+
+    /** Runs a command and returns its exit code and output, or nothing if it didn't finish in time. */
+    static std::optional<std::pair<uint32, String>> run (const StringArray& arguments, int timeoutMs)
+    {
+        ChildProcess process;
+        if (! process.start (arguments))
+            return std::nullopt;
+
+        if (! process.waitForProcessToFinish (timeoutMs))
+        {
+            process.kill();
+            return std::nullopt;
+        }
+
+        const auto output = process.readAllProcessOutput();
+        return std::make_pair (process.getExitCode(), output);
+    }
+
+    /** The naga CLI from wgpu (`cargo install naga-cli`), from YUP_NAGA, ~/.cargo/bin or the PATH. */
+    static std::optional<File> findNaga()
+    {
+        Array<File> candidates;
+
+        if (const auto fromEnvironment = SystemStats::getEnvironmentVariable ("YUP_NAGA", {}); fromEnvironment.isNotEmpty())
+            candidates.add (File (fromEnvironment));
+
+        const auto executable = String ("naga") + (File::getSeparatorChar() == '\\' ? ".exe" : "");
+        candidates.add (File::getSpecialLocation (File::userHomeDirectory).getChildFile (".cargo/bin").getChildFile (executable));
+
+        for (const auto& directory : StringArray::fromTokens (SystemStats::getEnvironmentVariable ("PATH", {}), File::getSeparatorChar() == '\\' ? ";" : ":", {}))
+            candidates.add (File (directory).getChildFile (executable));
+
+        for (const auto& candidate : candidates)
+        {
+            if (! candidate.existsAsFile())
+                continue;
+
+            // Other programs are called naga too: only trust one that answers with a version number
+            const auto result = run ({ candidate.getFullPathName(), "--version" }, 5000);
+            const auto version = result.has_value() ? result->second.trim() : String();
+
+            if (result.has_value() && result->first == 0 && version.containsOnly ("0123456789.") && version.contains ("."))
+                return candidate;
+        }
+
+        return std::nullopt;
+    }
+
+    static ResultValue<String> transpile (ShaderTranspiler& transpiler, const File& file)
+    {
+        TranspileOptions options;
+        options.includePaths.push_back (file.getParentDirectory().getFullPathName());
+        return transpiler.transpile (file.loadFileAsString(), stageOf (file), ShaderLanguage::glsl, ShaderLanguage::wgsl, options);
+    }
+};
+
+TEST_F (WgslCorpusTests, ShadersTranspile)
+{
+    const auto files = corpus();
+    ASSERT_GT (files.size(), 10);
+
+    ShaderTranspiler::Ptr transpiler = new ShaderTranspiler();
+
+    for (const auto& file : files)
+    {
+        auto wgsl = transpile (*transpiler, file);
+        EXPECT_TRUE (wgsl.wasOk()) << file.getFileName() << ": " << wgsl.getErrorMessage();
+    }
+}
+
+TEST_F (WgslCorpusTests, ShadersAreValidWgsl)
+{
+    const auto naga = findNaga();
+    if (! naga.has_value())
+        GTEST_SKIP() << "naga not found: install it with `cargo install naga-cli` or set YUP_NAGA";
+
+    ShaderTranspiler::Ptr transpiler = new ShaderTranspiler();
+    TemporaryFile output (".wgsl");
+
+    for (const auto& file : corpus())
+    {
+        auto wgsl = transpile (*transpiler, file);
+        if (! wgsl.wasOk())
+            continue; // reported by ShadersTranspile
+
+        ASSERT_TRUE (output.getFile().replaceWithText (wgsl.getValue()));
+
+        const auto result = run ({ naga->getFullPathName(), output.getFile().getFullPathName() }, 30000);
+        ASSERT_TRUE (result.has_value()) << "naga timed out on " << file.getFileName();
+        EXPECT_EQ (result->first, 0u) << file.getFileName() << " is not valid WGSL:\n"
+                                      << result->second << "\n"
+                                      << wgsl.getValue();
+    }
+}
+
+#endif
 
 #endif // YUP_ENABLE_SHADER_TRANSPILER

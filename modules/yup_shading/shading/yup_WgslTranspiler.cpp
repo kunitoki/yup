@@ -27,28 +27,27 @@ ResultValue<String> WgslTranspiler::transpile (const String& preprocessedGlsl,
                                                ShaderStage stage,
                                                const WgslTranspileOptions& options)
 {
-    // Step 1: Parse GLSL → AST
     auto parseResult = wgsl::GlslParser::parse (preprocessedGlsl);
 
     if (parseResult.failed())
         return makeResultValueFail ("GLSL parse error: " + parseResult.getErrorMessage());
 
-    // Step 2: Lower AST
     wgsl::WgslLoweringOptions loweringOpts;
     loweringOpts.stage = stage;
     loweringOpts.defaultGroup = options.defaultGroup;
     loweringOpts.defaultWorkgroupSize = options.defaultWorkgroupSize;
+    loweringOpts.entryPointName = options.outputEntryPoint.isNotEmpty() ? options.outputEntryPoint.toStdString() : "main";
 
     auto lowerResult = wgsl::WgslLowering::lower (std::move (parseResult).getValue(), loweringOpts);
 
     if (lowerResult.failed())
         return makeResultValueFail ("WGSL lowering error: " + lowerResult.getErrorMessage());
 
-    // Step 3: Emit WGSL
-    wgsl::WgslEmitOptions emitOpts;
-    emitOpts.outputEntryPoint = options.outputEntryPoint;
+    if (options.warnings != nullptr)
+        for (const auto& warning : lowerResult.getReference().warnings)
+            options.warnings->add (String (warning));
 
-    auto emitResult = wgsl::WgslEmitter::emit (std::move (lowerResult).getValue(), emitOpts);
+    auto emitResult = wgsl::WgslEmitter::emit (lowerResult.getReference());
 
     if (emitResult.failed())
         return makeResultValueFail ("WGSL emission error: " + emitResult.getErrorMessage());
