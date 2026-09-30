@@ -189,5 +189,6 @@ update_emscripten_examples DEMOPATH="../yup-demos/demos":
   @just update_emscripten_example SpectrumAnalyzer spectrum-analyzer {{DEMOPATH}}
   @just update_emscripten_example Svg svg {{DEMOPATH}}
   @just update_emscripten_example TouchTrails touch-trails {{DEMOPATH}}
+  @just update_emscripten_example Themes themes {{DEMOPATH}}
   @just update_emscripten_example Widgets widgets {{DEMOPATH}}
   @just update_emscripten_example YdspSynths ydsp-synths {{DEMOPATH}}
