@@ -515,6 +515,15 @@ private:
             renames[name] = context.names.allocate (base);
         }
 
+        // Only calls to user functions and struct constructors are renamed: GLSL builtins keep their names
+        // even when a variable shares one (float step = ...; step (a, b))
+        std::set<std::string> renamableCallees = userFunctions;
+        forEachTypeSpecifier (ast, [&renamableCallees] (TypeSpecifier& type)
+        {
+            if (type.kind == TypeKind::namedStruct)
+                renamableCallees.insert (type.structName);
+        });
+
         for (const auto& [from, to] : renames)
             if (userFunctions.erase (from) > 0)
                 userFunctions.insert (to);
@@ -576,20 +585,27 @@ private:
             }
         }
 
+        std::set<const Expr*> methodCallees;
+
         forEachExpression (ast, [&] (Expr& e)
         {
             if (e.is<ExprDot>())
             {
-                renamed (e.as<ExprDot>().member);
+                // x.length() is a method, not a member
+                if (methodCallees.count (&e) == 0)
+                    renamed (e.as<ExprDot>().member);
             }
             else if (e.is<ExprFunCall>())
             {
-                // GLSL builtin function names are never renamed, only user functions and struct constructors
                 auto& callee = e.as<ExprFunCall>().callee;
+
+                if (callee != nullptr && callee->is<ExprDot>())
+                    methodCallees.insert (callee.get());
+
                 if (callee != nullptr && callee->is<ExprVariable>())
                 {
                     auto& name = callee->as<ExprVariable>().name;
-                    if (renames.count (name) > 0)
+                    if (renames.count (name) > 0 && renamableCallees.count (name) > 0)
                         name = renames[name];
 
                     // Mark as visited so the variable rename below doesn't apply twice
@@ -1263,17 +1279,30 @@ private:
         const auto live = collectLiveNames (result.ast);
         auto& decls = result.ast.declarations;
 
-        decls.erase (std::remove_if (decls.begin(), decls.end(), [&live] (ExternalDeclaration& external)
+        for (auto& external : decls)
+        {
+            auto* d = std::get_if<Declaration> (&external);
+            if (d == nullptr || d->initDeclaratorList == nullptr || d->structSpecifier != nullptr)
+                continue;
+
+            const auto* q = d->initDeclaratorList->qualifier.get();
+            const bool isResource = q != nullptr && (q->hasStorage (StorageQualifier::uniform) || q->hasStorage (StorageQualifier::buffer));
+
+            if (! isResource || hasLayout (q, LayoutQualifierId::binding))
+                continue;
+
+            auto& singles = d->initDeclaratorList->declarations;
+            singles.erase (std::remove_if (singles.begin(), singles.end(), [&live] (const SingleDeclaration& single)
+                           {
+                               return live.count (single.name) == 0;
+                           }),
+                           singles.end());
+        }
+
+        decls.erase (std::remove_if (decls.begin(), decls.end(), [] (ExternalDeclaration& external)
                      {
                          auto* d = std::get_if<Declaration> (&external);
-                         if (d == nullptr || d->initDeclaratorList == nullptr || d->initDeclaratorList->declarations.size() != 1)
-                             return false;
-
-                         const auto* q = d->initDeclaratorList->qualifier.get();
-                         const bool isResource = q != nullptr && (q->hasStorage (StorageQualifier::uniform) || q->hasStorage (StorageQualifier::buffer));
-
-                         return isResource && ! hasLayout (q, LayoutQualifierId::binding)
-                             && live.count (d->initDeclaratorList->declarations.front().name) == 0;
+                         return d != nullptr && d->initDeclaratorList != nullptr && d->initDeclaratorList->declarations.empty();
                      }),
                      decls.end());
 

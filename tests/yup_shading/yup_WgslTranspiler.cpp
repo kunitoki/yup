@@ -3696,7 +3696,7 @@ TEST_F (WgslHardeningTests, UnknownTypeFails)
 TEST_F (WgslHardeningTests, OutOfRangeIntegerLiteralsFail)
 {
     expectFailure ("void main() { int x = 4294967296; }", "does not fit in 32 bits");
-    expectFailure ("void main() { int x = 3000000000; }", "is too large for int");
+    expectFailure ("void main() { uint x = 4294967296u; }", "does not fit in 32 bits");
 }
 
 TEST_F (WgslHardeningTests, InvalidOctalLiteralFails)
@@ -3895,7 +3895,7 @@ TEST_F (WgslHardeningTests, UnsignedSwitchLabelsMatchSelector)
 TEST_F (WgslHardeningTests, DoWhileContinueEvaluatesCondition)
 {
     const auto wgsl = transpileOk ("void main() { int k = 0; do { k++; if (k == 2) continue; } while (k < 4); }");
-    EXPECT_TRUE (wgsl.contains ("loop {\n        k++;\n        if ((k == 2)) {\n            continue;\n        }\n        continuing {\n            break if !((k < 4));\n        }\n    }")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("loop {\n        {\n            k++;\n            if ((k == 2)) {\n                continue;\n            }\n        }\n        continuing {\n            break if !((k < 4));\n        }\n    }")) << wgsl;
 }
 
 TEST_F (WgslHardeningTests, ForWithCommaUpdateUsesContinuing)
@@ -3938,7 +3938,7 @@ TEST_F (WgslHardeningTests, TernaryAndShortCircuitWithSideEffects)
 {
     const auto wgsl = transpileOk ("int n; bool bump() { n++; return n > 1; } void main() { float r = 0.0; float s = r > 0.0 ? (r += 1.0) : 0.0; bool z = r > 0.0 && (n++ > 1); }");
     EXPECT_TRUE (wgsl.contains ("if ((r > 0.0)) {\n        r += 1.0;\n        _t = (r);\n    }\n    else {\n        _t = 0.0;\n    }\n    var s: f32 = _t;")) << wgsl;
-    EXPECT_TRUE (wgsl.contains ("var _t_1: bool = (r > 0.0);\n    if (_t_1) {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var _t_2: bool = (r > 0.0);\n    if (_t_2) {\n        let _t_1: i32 = n;\n        n++;")) << wgsl;
 }
 
 TEST_F (WgslHardeningTests, VectorEqualityReducesToBool)
@@ -4180,6 +4180,143 @@ TEST_F (WgslHardeningTests, VertexSamplingUsesLevelZero)
 }
 
 //==============================================================================
+// Evaluation order, scoping and typing corner cases
+
+TEST_F (WgslHardeningTests, LoopConditionsWithHoistedStatementsUseLoop)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 1) in; layout(std430, binding = 0) buffer B { uint lock; uint v[]; } b; void main() { while (atomicCompSwap(b.lock, 0u, 1u) != 0u) { } b.v[0] = 1u; }", ShaderStage::compute);
+    EXPECT_FALSE (wgsl.contains ("while (")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("    loop {\n        var _t: u32;\n        loop {\n            let _t_1 = atomicCompareExchangeWeak(&b.lock, 0u, 1u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("        if (!((_t != 0u))) {\n            break;\n        }")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ShortCircuitGuardsHoistedStatements)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 1) in; layout(std430, binding = 0) buffer B { uint lock; uint v[]; } b; void main() { if (b.v[0] > 0u && atomicCompSwap(b.lock, 0u, 1u) == 0u) { b.v[1] = 1u; } }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("    var _t_2: bool = (b.v[0] > 0u);\n    if (_t_2) {\n        var _t: u32;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LoopBodyDeclarationsDontShadowContinuing)
+{
+    const auto wgsl = transpileOk ("void main() { int i = 0; do { int i = 10; } while (++i < 3); }");
+    EXPECT_TRUE (wgsl.contains ("loop {\n        {\n            var i: i32 = 10;\n        }\n        continuing {\n            i += 1;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, OutParameterCallReturningStruct)
+{
+    const auto wgsl = transpileOk ("struct Hit { float t; }; Hit trace(out float d) { d = 1.0; return Hit(2.0); } void main() { float d; Hit h = trace(d); }");
+    EXPECT_TRUE (wgsl.contains ("let _t: Hit = trace(&d);\n    var h: Hit = _t;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, SwizzleStoresThroughPointersMembersAndElements)
+{
+    const auto wgsl = transpileOk ("struct S { vec4 p; }; void f(out vec4 c) { c.rgb = vec3(1.0); c.a = 1.0; } int n; int g() { n++; return 0; } void main() { S s; s.p.xy = vec2(1.0); vec4 arr[2]; int i = 1; arr[i].xy = vec2(2.0); arr[g()].xy++; vec4 c; f(c); }");
+    EXPECT_TRUE (wgsl.contains ("(*c).r = _t.x;\n    (*c).g = _t.y;\n    (*c).b = _t.z;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("s.p.x = _t_1.x;\n    s.p.y = _t_1.y;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("let _t_2: i32 = i;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("arr[_t_2].x = _t_3.x;")) << wgsl;
+
+    // The index of an incremented swizzle is evaluated once
+    EXPECT_TRUE (wgsl.contains ("let _t_4: i32 = g();\n    let _t_5: vec2<f32> = (arr[_t_4].xy + 1.0);\n    arr[_t_4].x = _t_5.x;")) << wgsl;
+    EXPECT_EQ (wgsl.indexOf ("= g()"), wgsl.lastIndexOf ("= g()")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ElementReadWithSideEffectIndexKeepsArrayInPlace)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 1) in; layout(std430, binding = 0) buffer B { float data[]; } b; void main() { int i = 0; float x = b.data[i++]; b.data[0] = x; }", ShaderStage::compute);
+    EXPECT_FALSE (wgsl.contains ("array<f32> = ")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var x: f32 = b.data[_t];")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LocalConstantsStayConstant)
+{
+    const auto wgsl = transpileOk ("void main() { const int N = 4; float w[N]; w[0] = 1.0; const float r = w[0]; int k = 1; switch (k) { case N: k = 2; break; } }");
+    EXPECT_TRUE (wgsl.contains ("const N: i32 = 4;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var w: array<f32, N>;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("let r: f32 = w[0];")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case N: {")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LiteralsTakeTheirConvertedType)
+{
+    const auto wgsl = transpileOk ("uint hash(uint x) { return x; } void main() { uint m = 0xFFFFFFFF; uint h = 1u; h ^= 0x9E3779B9; uint k = hash(42); int big = 3000000000; int bare = 2147483648; int low = -2147483648; }");
+    EXPECT_TRUE (wgsl.contains ("var m: u32 = 4294967295u;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("h ^= 2654435769u;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("hash(42u)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var big: i32 = -1294967296;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var bare: i32 = -2147483648;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var low: i32 = -2147483648;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, VectorScalarBitwiseOperationsAreSplatted)
+{
+    const auto wgsl = transpileOk ("void main() { uvec4 v = uvec4(1u); uvec4 a = v & 0xFFu; uvec4 s = v >> 8u; v <<= 1u; v |= 2u; ivec2 i = ivec2(3); ivec2 j = i ^ 1; }");
+    EXPECT_TRUE (wgsl.contains ("(v & vec4<u32>(255u))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(v >> vec4<u32>(8u))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("v <<= vec4<u32>(1u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("v |= vec4<u32>(2u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(i ^ vec2<i32>(1))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, Std140AtomicArraysFail)
+{
+    expectFailure ("layout(local_size_x = 1) in; layout(std140, binding = 0) buffer B { uint c[4]; } b; void main() { atomicAdd(b.c[1], 1u); }", "std140 arrays can't hold atomics", ShaderStage::compute);
+}
+
+TEST_F (WgslHardeningTests, DefaultBlockLayoutQualifiersApply)
+{
+    const auto wgsl = transpileOk ("layout(local_size_x = 1) in; layout(std140) buffer; layout(binding = 0) buffer B { float a[4]; } b; void main() { b.a[1] = 1.0; }", ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("a: array<_std140_f32, 4>,")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ShadowGatherOffsetArguments)
+{
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform sampler2DShadow s; layout(location = 0) in vec2 uv; layout(location = 0) out vec4 o; void main() { o = textureGatherOffset(s, uv, 0.5, ivec2(1, 0)); }");
+    EXPECT_TRUE (wgsl.contains ("textureGatherCompare(s, s_sampler, uv, 0.5, vec2<i32>(1, 0))")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LocalsNamedLikeBuiltinsKeepBuiltinCalls)
+{
+    const auto wgsl = transpileOk ("float march() { float step = 0.1; float length = 2.0; return step + length; } void main() { float a[3]; float s = step(0.5, march()) + float(a.length()); }");
+    EXPECT_TRUE (wgsl.contains ("var step_: f32 = 0.1;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("step(0.5, march())")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("f32(3)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, OutArgumentCallsAreNeverDropped)
+{
+    const auto wgsl = transpileOk ("void main() { float x = 1.5; int e; frexp(x, e) + 0.0; }");
+    EXPECT_TRUE (wgsl.contains ("e = _t_1.exp;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, InoutArgumentsCopyInBeforeLaterArguments)
+{
+    const auto wgsl = transpileOk ("void f(inout float a, float b) { a += b; } void main() { float x = 1.0; f(x, x++); }");
+    EXPECT_TRUE (wgsl.contains ("var _t: f32 = x;\n    let _t_1: f32 = x;\n    x += 1.0;\n    f(&_t, _t_1);\n    x = _t;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, DeadUnboundResourcesInDeclaratorListsTakeNoBinding)
+{
+    const auto wgsl = transpileOk ("uniform sampler2D unusedA, usedB; layout(location = 0) out vec4 o; void main() { o = texture(usedB, vec2(0.5)); }");
+    EXPECT_TRUE (wgsl.contains ("@group(0) @binding(0) var usedB: texture_2d<f32>;")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("unusedA")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, ScalarSwizzles)
+{
+    const auto wgsl = transpileOk ("void main() { float a = 1.0; vec2 v = a.xx; float b = a.x; }");
+    EXPECT_TRUE (wgsl.contains ("var v: vec2<f32> = vec2<f32>(a);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var b: f32 = a;")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, TextureLevelAndBiasArgumentsAreFloats)
+{
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform sampler2D t; layout(location = 0) in vec2 uv; layout(location = 0) out vec4 o; void main() { int l = 1; o = textureLod(t, uv, l) + texture(t, uv, l); }");
+    EXPECT_TRUE (wgsl.contains ("textureSampleLevel(t, t_sampler, uv, f32(l))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleBias(t, t_sampler, uv, f32(l))")) << wgsl;
+}
+
+//==============================================================================
 // Shipped shaders
 
 TEST_F (WgslHardeningTests, PbrBrdfKeepsHammersleyPrecision)
@@ -4380,6 +4517,36 @@ TEST_F (WgslCorpusTests, ShadersTranspile)
     {
         auto wgsl = transpile (*transpiler, file);
         EXPECT_TRUE (wgsl.wasOk()) << file.getFileName() << ": " << wgsl.getErrorMessage();
+    }
+}
+
+TEST_F (WgslCorpusTests, WgslReflectionKeepsEveryBoundResource)
+{
+    ShaderTranspiler::Ptr transpiler = new ShaderTranspiler();
+
+    for (const auto& file : corpus())
+    {
+        TranspileOptions options;
+        options.includePaths.push_back (file.getParentDirectory().getFullPathName());
+
+        auto spirv = transpiler->compileToSPIRV (file.loadFileAsString(), stageOf (file), ShaderLanguage::glsl, options);
+        ASSERT_TRUE (spirv.wasOk()) << file.getFileName() << ": " << spirv.getErrorMessage();
+
+        auto all = transpiler->reflectFromSPIRV (spirv.getValue());
+        auto wgsl = transpiler->reflectFromSPIRV (spirv.getValue(), ShaderLanguage::wgsl, options);
+        ASSERT_TRUE (all.wasOk() && wgsl.wasOk()) << file.getFileName();
+
+        const auto names = [] (const ShaderReflection& r)
+        {
+            std::set<String> result;
+            for (const auto* resources : { &r.uniformBuffers, &r.storageBuffers, &r.sampledImages, &r.separateImages, &r.separateSamplers, &r.storageImages })
+                for (const auto& resource : *resources)
+                    result.insert (resource.name);
+
+            return result;
+        };
+
+        EXPECT_EQ (names (all.getReference()), names (wgsl.getReference())) << file.getFileName();
     }
 }
 

@@ -113,7 +113,10 @@ public:
         }
 
         if (name == "atan")
-            return makeCall (l, args.size() == 2 ? "atan2" : "atan", std::move (args), resultType);
+        {
+            const auto* wgslName = args.size() == 2 ? "atan2" : "atan"; // read the size before args is moved
+            return makeCall (l, wgslName, std::move (args), resultType);
+        }
 
         if (name == "mix")
         {
@@ -924,7 +927,10 @@ private:
             callArgs.push_back (std::move (tex.texture));
 
             if (name == "texelFetchOffset")
-                coordinates.coords = makeBinary (l, BinaryOp::add, std::move (coordinates.coords), std::move (args[3]), coordinates.coords.type);
+            {
+                auto coordinateType = coordinates.coords.type;
+                coordinates.coords = makeBinary (l, BinaryOp::add, std::move (coordinates.coords), std::move (args[3]), std::move (coordinateType));
+            }
 
             callArgs.push_back (std::move (coordinates.coords));
 
@@ -971,6 +977,9 @@ private:
         if (hasLod)
             lod = std::move (args[next++]);
 
+        if (lod.has_value() && ! shape.shadow)
+            lod = convertTo (TypeKind::floatType, std::move (*lod));
+
         if (hasGrad)
         {
             ddx = std::move (args[next++]);
@@ -983,7 +992,7 @@ private:
 
         std::optional<Expr> bias;
         if (next < args.size())
-            bias = std::move (args[next++]);
+            bias = convertTo (TypeKind::floatType, std::move (args[next++]));
 
         const bool isFragment = host.getStage() == ShaderStage::fragment;
 
@@ -1064,6 +1073,16 @@ private:
         auto coordinates = splitCoordinates (std::move (args[1]), tex.shape, false, false);
         size_t next = 2;
 
+        // GLSL order: (sampler, P, refZ, offset) for shadow samplers, (sampler, P, offset, comp) otherwise
+        std::optional<Expr> reference;
+        if (tex.shape.shadow)
+        {
+            if (next >= args.size())
+                throw LoweringError (l, "Shadow texture gathers need a depth reference");
+
+            reference = std::move (args[next++]);
+        }
+
         std::optional<Expr> offset;
         if (name == "textureGatherOffset")
             offset = std::move (args[next++]);
@@ -1079,10 +1098,7 @@ private:
             if (coordinates.layer.has_value())
                 callArgs.push_back (std::move (*coordinates.layer));
 
-            if (next >= args.size())
-                throw LoweringError (l, "Shadow texture gathers need a depth reference");
-
-            callArgs.push_back (std::move (args[next]));
+            callArgs.push_back (std::move (*reference));
 
             if (offset.has_value())
                 callArgs.push_back (std::move (*offset));

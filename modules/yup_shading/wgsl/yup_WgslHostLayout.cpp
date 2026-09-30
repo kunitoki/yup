@@ -358,6 +358,9 @@ private:
 
         if (isAtomic)
         {
+            if (! glsl.arraySpecifiers.empty() && layout == BlockLayout::std140)
+                throw LoweringError (loc, "std140 arrays can't hold atomics in WGSL: their 16-byte stride has no atomic equivalent, use std430");
+
             if (element.kind == TypeKind::intType)
                 base = makeType (TypeKind::atomicI32);
             else if (element.kind == TypeKind::uintType)
@@ -536,17 +539,40 @@ private:
         return std::nullopt;
     }
 
-    static BlockLayout blockLayoutOf (const TypeQualifier& q, bool isBuffer)
+    /** layout(std140) buffer; and similar statements set the default of later blocks. */
+    void applyDefaultLayout (const TypeQualifier& q)
     {
-        bool std140 = false;
-        bool std430 = false;
+        if (q.layout == nullptr)
+            return;
 
+        for (const auto& entry : q.layout->entries)
+        {
+            if (entry.id != LayoutQualifierId::std140 && entry.id != LayoutQualifierId::std430)
+                continue;
+
+            if (q.hasStorage (StorageQualifier::buffer))
+                defaultBufferLayout = entry.id;
+
+            if (q.hasStorage (StorageQualifier::uniform))
+                defaultUniformLayout = entry.id;
+        }
+    }
+
+    BlockLayout blockLayoutOf (const TypeQualifier& q, bool isBuffer) const
+    {
+        bool std140 = (isBuffer ? defaultBufferLayout : defaultUniformLayout) == LayoutQualifierId::std140;
+        bool std430 = (isBuffer ? defaultBufferLayout : defaultUniformLayout) == LayoutQualifierId::std430;
+
+        // An explicit layout on the block wins over the default
         if (q.layout != nullptr)
         {
             for (const auto& entry : q.layout->entries)
             {
-                std140 = std140 || entry.id == LayoutQualifierId::std140;
-                std430 = std430 || entry.id == LayoutQualifierId::std430;
+                if (entry.id == LayoutQualifierId::std140 || entry.id == LayoutQualifierId::std430)
+                {
+                    std140 = entry.id == LayoutQualifierId::std140;
+                    std430 = entry.id == LayoutQualifierId::std430;
+                }
             }
         }
 
@@ -568,7 +594,13 @@ private:
         for (auto& external : ast.declarations)
         {
             auto* d = std::get_if<Declaration> (&external);
-            if (d == nullptr || d->initDeclaratorList == nullptr)
+            if (d == nullptr)
+                continue;
+
+            if (d->initDeclaratorList == nullptr && d->structSpecifier == nullptr && d->qualifier != nullptr)
+                applyDefaultLayout (*d->qualifier);
+
+            if (d->initDeclaratorList == nullptr)
                 continue;
 
             auto& list = *d->initDeclaratorList;
@@ -1044,6 +1076,8 @@ private:
     std::map<std::string, TypeSpecifier> wrappers;
     std::vector<std::unique_ptr<StructSpecifier>> generated;
     std::vector<std::set<std::string>> scopes;
+    LayoutQualifierId defaultBufferLayout = LayoutQualifierId::std430;
+    LayoutQualifierId defaultUniformLayout = LayoutQualifierId::std140;
 };
 
 } // namespace

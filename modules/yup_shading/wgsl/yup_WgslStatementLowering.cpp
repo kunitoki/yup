@@ -79,7 +79,8 @@ bool isSideEffectBuiltin (const std::string& name)
 {
     static const std::set<std::string> names = {
         "barrier", "memoryBarrier", "memoryBarrierShared", "memoryBarrierBuffer", "memoryBarrierImage", "groupMemoryBarrier",
-        "imageStore", "atomicAdd", "atomicMin", "atomicMax", "atomicAnd", "atomicOr", "atomicXor", "atomicExchange", "atomicCompSwap"
+        "imageStore", "atomicAdd", "atomicMin", "atomicMax", "atomicAnd", "atomicOr", "atomicXor", "atomicExchange", "atomicCompSwap",
+        "atomicStore"
     };
 
     return names.count (name) > 0;
@@ -151,6 +152,7 @@ private:
     struct VarInfo
     {
         VarKind kind = VarKind::local;
+        bool isWgslConst = false; // declared as a WGSL const, usable in constant expressions
         TypeSpecifier type;
         std::string companionSampler; // for combined sampler globals and parameters
     };
@@ -160,10 +162,16 @@ private:
         const auto& list = *d.initDeclaratorList;
         const bool isConst = list.qualifier != nullptr && list.qualifier->hasStorage (StorageQualifier::constQual);
 
+        bool isOverride = false;
+        if (list.qualifier != nullptr && list.qualifier->layout != nullptr)
+            for (const auto& entry : list.qualifier->layout->entries)
+                isOverride = isOverride || entry.id == LayoutQualifierId::constantId;
+
         for (const auto& single : list.declarations)
         {
             VarInfo info;
             info.kind = isConst ? VarKind::constant : VarKind::global;
+            info.isWgslConst = isConst && ! isOverride;
             info.type = declaratorType (list.type, single.arraySpecifiers);
 
             if (auto found = context.samplerCompanions.find (single.name); found != context.samplerCompanions.end())
@@ -419,7 +427,8 @@ private:
             else if (node.is<ExprFunCall>())
             {
                 const auto& call = node.as<ExprFunCall>();
-                if (isUserFunction (call) || (call.callee != nullptr && call.callee->is<ExprVariable>() && isSideEffectBuiltin (call.callee->as<ExprVariable>().name)))
+                if (isUserFunction (call) || ! outArgumentIndices (call).empty()
+                    || (call.callee != nullptr && call.callee->is<ExprVariable>() && isSideEffectBuiltin (call.callee->as<ExprVariable>().name)))
                     effects = true;
             }
         });
@@ -443,8 +452,24 @@ private:
         if (node.is<ExprUnary>() && isIncDec (node.as<ExprUnary>().op))
             return true;
 
-        if (node.is<ExprFunCall>() && ! outArgumentIndices (node.as<ExprFunCall>()).empty())
-            return true;
+        if (node.is<ExprFunCall>())
+        {
+            const auto& call = node.as<ExprFunCall>();
+
+            if (! outArgumentIndices (call).empty())
+                return true;
+
+            // Builtins may evaluate their arguments into temporaries, and atomicCompSwap lowers to a loop
+            if (! isUserFunction (call) && call.callee != nullptr && call.callee->is<ExprVariable>())
+            {
+                if (call.callee->as<ExprVariable>().name == "atomicCompSwap")
+                    return true;
+
+                for (const auto& arg : call.args)
+                    if (hasEffects (arg))
+                        return true;
+            }
+        }
 
         if (node.is<ExprTernary>())
         {
@@ -481,6 +506,39 @@ private:
 
         if (node.is<ExprUnary>() && ! isIncDec (node.as<ExprUnary>().op) && node.as<ExprUnary>().op != UnaryOp::deref)
             return isStable (*node.as<ExprUnary>().operand);
+
+        return false;
+    }
+
+    /** Expressions WGSL evaluates at shader creation: literals, WGSL consts and operators on them. */
+    bool isWgslConstantExpression (const Expr& e) const
+    {
+        const auto& node = unparen (e);
+
+        if (node.is<ExprIntConst>() || node.is<ExprUIntConst>() || node.is<ExprFloatConst>() || node.is<ExprBoolConst>())
+            return true;
+
+        if (node.is<ExprVariable>())
+        {
+            const auto* info = lookup (node.as<ExprVariable>().name);
+            return info != nullptr && info->isWgslConst;
+        }
+
+        if (node.is<ExprUnary>())
+            return node.as<ExprUnary>().op != UnaryOp::deref && node.as<ExprUnary>().op != UnaryOp::addressOf
+                && ! isIncDec (node.as<ExprUnary>().op) && isWgslConstantExpression (*node.as<ExprUnary>().operand);
+
+        if (node.is<ExprBinary>())
+            return isWgslConstantExpression (*node.as<ExprBinary>().left) && isWgslConstantExpression (*node.as<ExprBinary>().right);
+
+        if (node.is<ExprTypeConstructor>())
+        {
+            for (const auto& arg : node.as<ExprTypeConstructor>().args)
+                if (! isWgslConstantExpression (arg))
+                    return false;
+
+            return true;
+        }
 
         return false;
     }
@@ -569,11 +627,10 @@ private:
         if (e.is<ExprUnary>() && isIncDec (e.as<ExprUnary>().op))
             return lowerIncDec (std::move (e), pre, true);
 
-        if (e.is<ExprTernary>() && requiresHoisting (e))
-            return lowerTernaryToIf (std::move (e), pre);
+        if (e.is<ExprTernary>())
+            return lowerTernary (std::move (e), pre);
 
-        if (e.is<ExprBinary>() && (e.as<ExprBinary>().op == BinaryOp::logicalAnd || e.as<ExprBinary>().op == BinaryOp::logicalOr)
-            && requiresHoisting (*e.as<ExprBinary>().right))
+        if (e.is<ExprBinary>() && (e.as<ExprBinary>().op == BinaryOp::logicalAnd || e.as<ExprBinary>().op == BinaryOp::logicalOr))
             return lowerShortCircuit (std::move (e), pre);
 
         if (e.is<ExprFunCall>())
@@ -612,9 +669,32 @@ private:
         {
             *children[i] = lowerValue (std::move (*children[i]), pre);
 
-            if (anyHoisting && i < lastHoisting)
+            // The base of an element or member access names storage: reading it is deferred to the access itself
+            const bool isAccessBase = i == 0 && (e.is<ExprBracket>() || e.is<ExprDot>()) && isLocationPath (*children[i]);
+
+            if (anyHoisting && i < lastHoisting && ! isAccessBase)
                 *children[i] = spill (std::move (*children[i]), pre);
         }
+    }
+
+    /** Variables, pointer dereferences and member or element accesses of them. */
+    static bool isLocationPath (const Expr& e)
+    {
+        const auto& node = unparen (e);
+
+        if (node.is<ExprVariable>())
+            return true;
+
+        if (node.is<ExprUnary>() && node.as<ExprUnary>().op == UnaryOp::deref)
+            return isLocationPath (*node.as<ExprUnary>().operand);
+
+        if (node.is<ExprDot>())
+            return isLocationPath (*node.as<ExprDot>().base);
+
+        if (node.is<ExprBracket>())
+            return isLocationPath (*node.as<ExprBracket>().base);
+
+        return false;
     }
 
     /** Expression-level rewrites applied once the children are lowered. */
@@ -639,7 +719,25 @@ private:
 
         if (e.is<ExprDot>())
         {
-            lowerSwizzle (e.as<ExprDot>());
+            auto& dot = e.as<ExprDot>();
+            const auto& baseType = dot.base->type;
+
+            // GLSL lets scalars be swizzled with x, r or s
+            if (baseType.has_value() && baseType->arraySpecifiers.empty() && componentCount (baseType->kind) == 1)
+            {
+                if (dot.member.find_first_not_of ("xrs") != std::string::npos)
+                    throw LoweringError (e.loc, "Invalid swizzle '" + dot.member + "' of a scalar");
+
+                if (dot.member.size() == 1)
+                    return std::move (*dot.base);
+
+                const auto type = makeType (vectorKind (baseType->kind, static_cast<int> (dot.member.size())));
+                std::vector<Expr> args;
+                args.push_back (std::move (*dot.base));
+                return makeConstruct (e.loc, type, std::move (args));
+            }
+
+            lowerSwizzle (dot);
             return e;
         }
 
@@ -813,6 +911,35 @@ private:
             return std::find (outIndices.begin(), outIndices.end(), i) != outIndices.end();
         };
 
+        // A local can only be passed by address when nothing else in the call reads or writes it
+        std::vector<std::set<std::string>> argumentNames (call.args.size());
+        std::vector<bool> hoists (call.args.size(), false);
+
+        for (size_t i = 0; i < call.args.size(); ++i)
+        {
+            walkExpr (call.args[i], [&argumentNames, i] (Expr& node)
+            {
+                if (node.is<ExprVariable>())
+                    argumentNames[i].insert (node.as<ExprVariable>().name);
+            });
+
+            hoists[i] = requiresHoisting (call.args[i]);
+        }
+
+        const auto canPassByAddress = [&] (size_t index, const std::string& name)
+        {
+            for (size_t j = 0; j < call.args.size(); ++j)
+            {
+                if (j != index && argumentNames[j].count (name) > 0)
+                    return false;
+
+                if (j > index && hoists[j])
+                    return false;
+            }
+
+            return true;
+        };
+
         for (size_t i = 0; i < call.args.size(); ++i)
         {
             auto arg = std::move (call.args[i]);
@@ -832,7 +959,7 @@ private:
             if (node.is<ExprVariable>())
             {
                 const auto* info = lookup (node.as<ExprVariable>().name);
-                if (info != nullptr && info->kind == VarKind::local)
+                if (info != nullptr && info->kind == VarKind::local && canPassByAddress (i, node.as<ExprVariable>().name))
                 {
                     auto type = target.type;
                     call.args[i] = makeUnary (l, UnaryOp::addressOf, takeUnparen (std::move (target)), std::move (type));
@@ -861,7 +988,10 @@ private:
 
         if (returnsValue && valueNeeded)
         {
-            result = makeTemporary (e.loc, *e.type, rewriteNode (std::move (e), pre), pre, true);
+            const auto type = *e.type;
+            const auto l = e.loc;
+            auto callExpr = rewriteNode (std::move (e), pre);
+            result = makeTemporary (l, type, std::move (callExpr), pre, true);
         }
         else
         {
@@ -1015,15 +1145,11 @@ private:
         const auto op = assign.op;
         const bool rhsHoists = requiresHoisting (*assign.rhs);
 
-        auto target = lowerLValue (std::move (*assign.lhs), pre, rhsHoists || valueNeeded);
-        auto value = lowerValue (std::move (*assign.rhs), pre);
+        // Swizzle stores repeat the target once per component: its indices must be evaluated once
+        const bool repeatsTarget = isMultiComponentSwizzle (*assign.lhs);
 
-        if (isMultiComponentSwizzle (target))
-        {
-            const auto& base = *unparen (target).as<ExprDot>().base;
-            if (! isStable (base) && ! unparen (base).is<ExprVariable>())
-                throw LoweringError (e.loc, "Swizzle stores through a complex expression are not supported for WGSL");
-        }
+        auto target = lowerLValue (std::move (*assign.lhs), pre, rhsHoists || valueNeeded || repeatsTarget);
+        auto value = lowerValue (std::move (*assign.rhs), pre);
 
         auto read = copyExpr (target);
         emitStore (std::move (target), op, std::move (value), pre);
@@ -1037,7 +1163,8 @@ private:
         const bool isPost = un.op == UnaryOp::postInc || un.op == UnaryOp::postDec;
         const auto l = e.loc;
 
-        auto target = lowerLValue (std::move (*un.operand), pre, valueNeeded);
+        const bool repeatsTarget = isMultiComponentSwizzle (*un.operand);
+        auto target = lowerLValue (std::move (*un.operand), pre, valueNeeded || repeatsTarget);
         const auto type = typeOf (target);
 
         if (isMatrixType (type.kind) || ! type.arraySpecifiers.empty() || type.kind == TypeKind::namedStruct)
@@ -1067,33 +1194,49 @@ private:
     // Control flow inside expressions
     //==========================================================================
 
-    Expr lowerTernaryToIf (Expr e, Statements& pre)
+    /** select() when both arms are plain values, otherwise an if/else assigning a temporary. */
+    Expr lowerTernary (Expr e, Statements& pre)
     {
         auto& t = e.as<ExprTernary>();
         const auto l = e.loc;
-        const auto type = typeOf (e);
+        const bool selectable = isSelectable (e) && ! hasEffects (*t.trueBranch) && ! hasEffects (*t.falseBranch);
 
         auto condition = lowerValue (std::move (*t.condition), pre);
+
+        Statements thenPre;
+        Statements elsePre;
+        Expr thenValue;
+        Expr elseValue;
+
+        {
+            ScopeGuard scope (*this);
+            thenValue = lowerValue (std::move (*t.trueBranch), thenPre);
+        }
+
+        {
+            ScopeGuard scope (*this);
+            elseValue = lowerValue (std::move (*t.falseBranch), elsePre);
+        }
+
+        if (selectable && thenPre.empty() && elsePre.empty())
+        {
+            *t.condition = std::move (condition);
+            *t.trueBranch = std::move (thenValue);
+            *t.falseBranch = std::move (elseValue);
+            return e;
+        }
+
+        const auto type = typeOf (e);
         auto result = makeTemporary (l, type, std::nullopt, pre, false);
 
-        Statements thenBranch;
-        {
-            ScopeGuard scope (*this);
-            auto value = lowerValue (std::move (*t.trueBranch), thenBranch);
-            thenBranch.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (value))));
-        }
+        thenPre.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (thenValue))));
+        elsePre.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (elseValue))));
 
-        Statements elseBranch;
-        {
-            ScopeGuard scope (*this);
-            auto value = lowerValue (std::move (*t.falseBranch), elseBranch);
-            elseBranch.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (value))));
-        }
-
-        pre.push_back (makeIf (l, std::move (condition), makeBlock (l, std::move (thenBranch)), makeBlock (l, std::move (elseBranch))));
+        pre.push_back (makeIf (l, std::move (condition), makeBlock (l, std::move (thenPre)), makeBlock (l, std::move (elsePre))));
         return result;
     }
 
+    /** a && b and a || b stay inline unless evaluating b needs statements, which must only run when b is evaluated. */
     Expr lowerShortCircuit (Expr e, Statements& pre)
     {
         auto& bin = e.as<ExprBinary>();
@@ -1101,14 +1244,23 @@ private:
         const auto l = e.loc;
 
         auto left = lowerValue (std::move (*bin.left), pre);
-        auto result = makeTemporary (l, makeType (TypeKind::boolType), std::move (left), pre, false);
 
         Statements rhs;
+        Expr right;
         {
             ScopeGuard scope (*this);
-            auto value = lowerValue (std::move (*bin.right), rhs);
-            rhs.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (value))));
+            right = lowerValue (std::move (*bin.right), rhs);
         }
+
+        if (rhs.empty())
+        {
+            *bin.left = std::move (left);
+            *bin.right = std::move (right);
+            return e;
+        }
+
+        auto result = makeTemporary (l, makeType (TypeKind::boolType), std::move (left), pre, false);
+        rhs.push_back (makeExprStatement (l, makeAssign (l, AssignmentOp::assign, copyExpr (result), std::move (right))));
 
         auto condition = isAnd ? copyExpr (result) : makeUnary (l, UnaryOp::logicalNot, copyExpr (result), makeType (TypeKind::boolType));
         pre.push_back (makeIf (l, std::move (condition), makeBlock (l, std::move (rhs))));
@@ -1337,10 +1489,16 @@ private:
             if (single.initializer != nullptr && single.initializer->expr != nullptr)
                 init = lowerValue (std::move (*single.initializer->expr), out);
 
-            out.push_back (makeVarDeclaration (single.loc, single.name, type, std::move (init), isConst));
+            // A constant expression stays a WGSL const, usable as an array size or case label; anything else is a let
+            const bool isConstantExpression = isConst && init.has_value() && isWgslConstantExpression (*init);
+
+            auto declaration = makeVarDeclaration (single.loc, single.name, type, std::move (init), isConst);
+            declaration.as<StmtDeclaration>().declaration.initDeclaratorList->isLet = isConst && ! isConstantExpression;
+            out.push_back (std::move (declaration));
 
             VarInfo info;
             info.kind = isConst ? VarKind::constant : VarKind::local;
+            info.isWgslConst = isConstantExpression;
             info.type = type;
             declare (single.name, info);
         }
@@ -1389,11 +1547,10 @@ private:
         return makeIf (l, std::move (negated), makeBlock (l, std::move (body)));
     }
 
+    /** The body stays a nested block: WGSL's continuing block sees the loop body's declarations, GLSL's condition doesn't. */
     void appendLoweredBody (Statement& body, Statements& out)
     {
-        auto block = lowerToBlock (body);
-        for (auto& s : block.as<StmtCompound>().statements)
-            out.push_back (std::move (s));
+        out.push_back (lowerToBlock (body));
     }
 
     void lowerWhile (Statement& s, Statements& out)
@@ -1401,20 +1558,22 @@ private:
         auto& w = s.as<StmtWhile>();
         const auto l = s.loc;
 
-        if (! requiresHoisting (*w.condition))
+        ScopeGuard scope (*this);
+        Statements conditionPre;
+        auto condition = lowerCondition (std::move (*w.condition), conditionPre);
+
+        if (conditionPre.empty())
         {
-            Statements pre;
-            *w.condition = lowerCondition (std::move (*w.condition), pre);
+            *w.condition = std::move (condition);
             *w.body = lowerToBlock (*w.body);
             out.push_back (std::move (s));
             return;
         }
 
-        ScopeGuard scope (*this);
+        // Statements the condition needs run at the top of every iteration
         StmtLoop loop;
         loop.loc = l;
-
-        auto condition = lowerCondition (std::move (*w.condition), loop.body);
+        loop.body = std::move (conditionPre);
         loop.body.push_back (breakUnless (l, std::move (condition)));
         appendLoweredBody (*w.body, loop.body);
 

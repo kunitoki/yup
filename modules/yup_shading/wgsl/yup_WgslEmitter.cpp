@@ -656,7 +656,7 @@ private:
         const bool isConst = list.qualifier != nullptr && list.qualifier->hasStorage (StorageQualifier::constQual);
         const auto type = declaratorType (list.type, single.arraySpecifiers);
 
-        out += (isConst ? "let " : "var ") + single.name;
+        out += (! isConst ? "var " : list.isLet ? "let " : "const ") + single.name;
 
         // void marks a temporary whose type WGSL can't spell, like the result of frexp
         if (type.kind != TypeKind::voidType || ! type.arraySpecifiers.empty())
@@ -724,7 +724,13 @@ private:
         }
         else if (expr.is<ExprIntConst>())
         {
-            out += std::to_string (expr.as<ExprIntConst>().value);
+            const auto value = expr.as<ExprIntConst>().value;
+
+            // A signed literal used as uint keeps its bit pattern: 0xFFFFFFFF is 4294967295u, not -1
+            if (value < 0 && expr.type.has_value() && expr.type->kind == TypeKind::uintType)
+                out += std::to_string (static_cast<uint32_t> (value)) + "u";
+            else
+                out += std::to_string (value);
         }
         else if (expr.is<ExprUIntConst>())
         {
@@ -817,7 +823,8 @@ private:
     /** Postfix operators bind tighter than unary ones: *p.x must be written (*p).x. */
     void emitPostfixBase (const Expr& base, std::string& out)
     {
-        if (base.is<ExprUnary>())
+        // A dereference already prints its own parentheses
+        if (base.is<ExprUnary>() && base.as<ExprUnary>().op != UnaryOp::deref)
         {
             out += "(";
             emitExpr (base, out);
@@ -837,6 +844,13 @@ private:
                 emitUnaryOperand (*un.operand, out); // WGSL has no unary plus
                 break;
             case UnaryOp::minus:
+                // Negating INT_MIN wraps back to INT_MIN in GLSL; WGSL can spell it directly
+                if (un.operand->is<ExprIntConst>() && un.operand->as<ExprIntConst>().value == std::numeric_limits<int32_t>::min())
+                {
+                    out += "-2147483648";
+                    break;
+                }
+
                 out += "-";
                 emitUnaryOperand (*un.operand, out);
                 break;
@@ -907,6 +921,10 @@ private:
             // GLSL float literals are f32; an f suffix keeps them concrete
             out += e.is<ExprFloatConst>() ? formatFloat (e.as<ExprFloatConst>().value, e.loc) : std::to_string (e.as<ExprIntConst>().value) + ".0";
             out += "f";
+        }
+        else if (e.is<ExprIntConst>() && e.type.has_value() && e.type->kind == TypeKind::uintType)
+        {
+            out += std::to_string (static_cast<uint32_t> (e.as<ExprIntConst>().value)) + "u";
         }
         else if (e.is<ExprIntConst>() && e.as<ExprIntConst>().value >= 0)
         {

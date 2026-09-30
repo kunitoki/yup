@@ -148,6 +148,7 @@ inline Statement makeVarDeclaration (SourceLocation l, const std::string& name, 
     {
         list->qualifier = std::make_unique<TypeQualifier>();
         list->qualifier->storage.push_back (StorageQualifier::constQual);
+        list->isLet = true;
     }
 
     SingleDeclaration single;

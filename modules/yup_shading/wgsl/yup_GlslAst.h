@@ -543,6 +543,7 @@ struct InitDeclaratorList
     std::unique_ptr<TypeQualifier> qualifier;
     TypeSpecifier type;
     std::vector<SingleDeclaration> declarations;
+    bool isLet = false; // set by lowering: an immutable local that is not a WGSL constant expression
 };
 
 //==============================================================================
@@ -1146,6 +1147,7 @@ inline Declaration copyDeclaration (const Declaration& d)
         list->loc = il.loc;
         list->qualifier = copyTypeQualifier (il.qualifier.get());
         list->type = il.type;
+        list->isLet = il.isLet;
 
         for (const auto& single : il.declarations)
         {

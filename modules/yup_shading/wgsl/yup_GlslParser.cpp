@@ -687,17 +687,9 @@ private:
         {
             tok.uintValue = static_cast<unsigned int> (value);
         }
-        else if (radix == 10)
-        {
-            // 2147483648 is only meaningful as the operand of a unary minus
-            if (value > 2147483648ull)
-                throwError (currentLoc, "Integer literal '" + text + "' is too large for int");
-
-            tok.intValue = static_cast<int64_t> (value);
-        }
         else
         {
-            // Hexadecimal and octal signed literals keep their 32-bit pattern
+            // Signed literals keep their 32-bit pattern: 0xFFFFFFFF and 4294967295 are both -1
             tok.intValue = static_cast<int32_t> (static_cast<uint32_t> (value));
         }
 

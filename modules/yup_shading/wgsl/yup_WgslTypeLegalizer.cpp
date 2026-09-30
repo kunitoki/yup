@@ -621,10 +621,36 @@ private:
 
             case BinaryOp::shiftLeft:
             case BinaryOp::shiftRight:
+                // WGSL shifts a vector by a vector of u32
                 if (isNumeric (rightType))
-                    coerce (*binary.right, rightType, vectorKind (TypeKind::uintType, componentCount (rightType->kind)));
+                {
+                    const auto count = isNumeric (leftType) ? std::max (componentCount (leftType->kind), componentCount (rightType->kind))
+                                                            : componentCount (rightType->kind);
+                    coerce (*binary.right, rightType, vectorKind (TypeKind::uintType, count));
+                }
 
                 return leftType;
+
+            case BinaryOp::bitwiseAnd:
+            case BinaryOp::bitwiseOr:
+            case BinaryOp::bitwiseXor:
+            {
+                // WGSL bitwise operands must have the same type: splat a scalar to the vector's size
+                auto result = unify (*binary.left, leftType, *binary.right, rightType);
+                if (! result.has_value())
+                    return result;
+
+                const auto count = componentCount (result->kind);
+                const auto scalar = makeType (scalarKindOf (result->kind));
+
+                if (componentCount (leftType->kind) == 1 && count > 1)
+                    coerce (*binary.left, scalar, result->kind);
+
+                if (componentCount (rightType->kind) == 1 && count > 1)
+                    coerce (*binary.right, scalar, result->kind);
+
+                return result;
+            }
 
             case BinaryOp::lessThan:
             case BinaryOp::greaterThan:
@@ -699,7 +725,13 @@ private:
 
             case AssignmentOp::shiftLeftAssign:
             case AssignmentOp::shiftRightAssign:
-                coerce (*assignment.rhs, valueType, vectorKind (TypeKind::uintType, valueCount));
+                coerce (*assignment.rhs, valueType, vectorKind (TypeKind::uintType, std::max (valueCount, componentCount (targetType->kind))));
+                break;
+
+            case AssignmentOp::bitwiseAndAssign:
+            case AssignmentOp::bitwiseOrAssign:
+            case AssignmentOp::bitwiseXorAssign:
+                coerce (*assignment.rhs, valueType, targetType->kind);
                 break;
 
             default:
