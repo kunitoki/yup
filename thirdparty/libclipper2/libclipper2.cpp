@@ -22,3 +22,4 @@
 #include "libclipper2.h"
 
 #include "src/clipper.engine.cpp"
+#include "src/clipper.offset.cpp"

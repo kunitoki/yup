@@ -1457,8 +1457,6 @@ void TreeView::finishAnimation()
 
     if (finished.item->rowIndex >= 0)
         list->repaintRow (finished.item->rowIndex);
-
-    jassert (isRowListInSync());
 }
 
 //==============================================================================

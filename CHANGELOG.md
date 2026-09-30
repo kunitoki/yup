@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- `Path::createStrokePolygon`: rewritten on Clipper2 offsetting, it now returns simple, non-overlapping outlines (feathered fills of stroke polygons no longer streak on WebGPU), outlines closed paths as a ring, and takes optional `StrokeJoin` and `StrokeCap` parameters (bound in Python).
 - `TabBar`, `TabButton` and `TabComponent`: tabs addressed by stable identifiers, usable as a segmented control or as tabbed pages. Pill and underline looks from the theme palette, a sliding selection indicator, natural or fill layout in both orientations, closable tabs, icon glyph or image tabs, custom tab content, drag reordering with neighbours sliding aside, arrow / Home / End keyboard navigation, and menu, scroll or shrink overflow. `TabComponent` places the bar on any side and keeps hidden pages alive. Bound in Python. The AI, Widgets and Themes demos use them.
 - Fixed `Font::withAxisValue` and `Font::withAxisValues` resetting the font height to the 12 px default.
 - Fixed `TreeView` ignoring the theme palette: Theme1 set its colors explicitly (black text, black hover and guides), which overrode the palette. They now derive from it, and the TreeView demo follows the theme.

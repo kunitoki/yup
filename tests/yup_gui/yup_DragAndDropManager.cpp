@@ -34,7 +34,10 @@ class ManagerTestTarget : public Component
     , public DragAndDropTarget
 {
 public:
-    using Component::Component;
+    ManagerTestTarget()
+    {
+        setOpaque (false);
+    }
 
     bool isInterestedInDragSource (const DragAndDropSourceDetails& details) override
     {
@@ -196,7 +199,10 @@ class ManagerTestSource : public Component
     , public DragAndDropSource
 {
 public:
-    using Component::Component;
+    ManagerTestSource()
+    {
+        setOpaque (false);
+    }
 
     void dragOperationStarted (const DragAndDropData& data) override
     {
@@ -266,7 +272,7 @@ protected:
     ManagerTestSource source;
 
     /** Kept as a fixture member so it outlives TearDown, which ends the drag that reparented it. */
-    Component dragImageHost;
+    CountingComponent dragImageHost;
 };
 
 TEST_F (DragAndDropManagerSessionTests, AnEmptyPayloadDoesNotStartADrag)
@@ -594,7 +600,7 @@ protected:
         return root.localToScreen (target.getBounds().getCenter());
     }
 
-    Component root;
+    CountingComponent root;
     ManagerTestTarget target;
     ManagerTestSource source;
 };
