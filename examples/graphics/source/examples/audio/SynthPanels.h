@@ -102,9 +102,9 @@ public:
         slider.setDefaultValue (defaultValue);
         slider.setValue (defaultValue, yup::dontSendNotification);
         slider.setColor (yup::Slider::Style::backgroundColorId, SynthTheme::displayBackground());
-        slider.setColor (yup::Slider::Style::trackColorId, SynthTheme::accent());
-        slider.setColor (yup::Slider::Style::thumbColorId, SynthTheme::textPrimary());
-        slider.setColor (yup::Slider::Style::thumbOverColorId, SynthTheme::accent());
+        slider.setColor (yup::Slider::Style::trackColorId, SynthTheme::panelBorder());
+        slider.setColor (yup::Slider::Style::thumbColorId, SynthTheme::accent());
+        slider.setColor (yup::Slider::Style::thumbOverColorId, SynthTheme::accent().brighter (0.3f));
         slider.setColor (yup::Slider::Style::thumbDownColorId, SynthTheme::accent());
         slider.onValueChanged = [this] (double value)
         {

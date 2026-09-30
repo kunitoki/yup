@@ -238,6 +238,7 @@ private:
 
     bool hasNativeKeyboardFocus() const;
 
+    void updateDesiredFrameRate();
     void updateEffectiveFrameRate (bool hasFocus);
 
 #if YUP_EMSCRIPTEN
@@ -337,6 +338,7 @@ private:
     double nextAnimationFrameMs = 0.0;
 #endif
 
+    std::optional<float> requestedFrameRate;
     std::atomic<float> desiredFrameRate = 60.0f;
     std::optional<float> unfocusedFrameRate;
     std::atomic<float> effectiveFrameRate = 60.0f;

@@ -42,6 +42,7 @@ SDLComponentNative::SDLComponentNative (Component& component,
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , repaintMode (options.repaintMode)
+    , requestedFrameRate (options.framerateRedraw)
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , unfocusedFrameRate (options.unfocusedFramerateRedraw)
     , effectiveFrameRate (options.framerateRedraw.value_or (60.0f))
@@ -282,6 +283,9 @@ SDLComponentNative::SDLComponentNative (Component& component,
     if (currentGraphicsApi == GpuPlatform::OpenGL || currentGraphicsApi == GpuPlatform::OpenGLES)
         SDL_GL_MakeCurrent (window, nullptr);
 #endif
+
+    // Pick the frame rate before rendering starts, the realtime render thread is set up for it
+    updateDesiredFrameRate();
 
     // Start the rendering
     startRendering();
@@ -847,7 +851,23 @@ void SDLComponentNative::setDesiredFrameRate (float newFrameRate)
 {
     YUP_ASSERT_MESSAGE_THREAD
 
-    desiredFrameRate.store (jmax (1.0f, newFrameRate), std::memory_order_relaxed);
+    requestedFrameRate = newFrameRate;
+
+    updateDesiredFrameRate();
+}
+
+void SDLComponentNative::updateDesiredFrameRate()
+{
+    auto frameRate = requestedFrameRate.value_or (60.0f);
+
+    // Without a requested rate, vsync follows the display so repaints between frames wait for the next refresh
+    if (! requestedFrameRate.has_value() && vsyncEnabled.load (std::memory_order_relaxed) && window != nullptr)
+    {
+        if (const auto* mode = SDL_GetCurrentDisplayMode (SDL_GetDisplayForWindow (window)); mode != nullptr && mode->refresh_rate > 0.0f)
+            frameRate = mode->refresh_rate;
+    }
+
+    desiredFrameRate.store (jmax (1.0f, frameRate), std::memory_order_relaxed);
 
     updateEffectiveFrameRate (hasNativeKeyboardFocus());
 }
@@ -887,6 +907,8 @@ void SDLComponentNative::setVsyncEnabled (bool shouldEnable)
     if (currentGraphicsApi != GpuPlatform::OpenGL && currentGraphicsApi != GpuPlatform::OpenGLES && window != nullptr)
         SDL_SetWindowSurfaceVSync (window, shouldEnable ? SDL_WINDOW_SURFACE_VSYNC_ADAPTIVE : SDL_WINDOW_SURFACE_VSYNC_DISABLED);
 #endif
+
+    updateDesiredFrameRate();
 
     repaint();
 }
@@ -1211,21 +1233,6 @@ bool SDLComponentNative::renderFrame()
         const auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
         const auto currentTimeSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
-        {
-            ++frameRateCounter;
-
-            const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
-            if (timeSinceFpsMeasure >= 1.0)
-            {
-                const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
-                currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-                frameRateStartTimeSeconds = currentTimeSeconds;
-                frameRateCounter = 0;
-            }
-        });
-
         const auto loadAction = (renderContinuous || ! clearColor.isOpaque())
                                 ? rive::gpu::LoadAction::clear
                                 : rive::gpu::LoadAction::preserveRenderTarget;
@@ -1326,6 +1333,22 @@ bool SDLComponentNative::renderFrame()
 
         return true;
     };
+
+    const auto measureFramesPerSecond = ErasedScopeGuard ([&]
+    {
+        const auto nowSeconds = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+
+        if (frameBegun)
+            ++frameRateCounter;
+
+        if (const auto elapsedSeconds = nowSeconds - frameRateStartTimeSeconds; elapsedSeconds >= 1.0)
+        {
+            currentFrameRate.store (static_cast<float> (static_cast<double> (frameRateCounter) / elapsedSeconds), std::memory_order_relaxed);
+
+            frameRateStartTimeSeconds = nowSeconds;
+            frameRateCounter = 0;
+        }
+    });
 
     auto endFrameAtExit = ErasedScopeGuard ([&]
     {
@@ -2474,7 +2497,11 @@ void SDLComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             YUP_MODULE_DBG (GUI_WINDOWING, "SDL_EVENT_WINDOW_DISPLAY_CHANGED");
-            processEvent ([this] { handleContentScaleChanged(); });
+            processEvent ([this]
+            {
+                handleContentScaleChanged();
+                updateDesiredFrameRate();
+            });
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:

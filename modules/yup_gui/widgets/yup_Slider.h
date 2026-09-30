@@ -266,7 +266,7 @@ public:
     struct Style
     {
         static const Identifier backgroundColorId; /**< Background color for slider track/circle */
-        static const Identifier trackColorId;      /**< Color for active track */
+        static const Identifier trackColorId;      /**< Color for the unfilled track behind the value indicator */
         static const Identifier thumbColorId;      /**< Color for slider thumb/knob or value indicator */
         static const Identifier thumbOverColorId;  /**< Color for thumb/knob or value indicator when mouse is over */
         static const Identifier thumbDownColorId;  /**< Color for thumb/knob or value indicator when pressed */
