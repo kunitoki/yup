@@ -51,6 +51,7 @@ SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
 void SpectrumAnalyzerComponent::initializeFFTBuffers()
 {
     fftProcessor = std::make_unique<FFTProcessor<float>> (fftSize);
+
     fftInputBuffer.resize (fftSize, 0.0f);
     fftOutputBuffer.resize (fftSize * 2, 0.0f);
     windowBuffer.resize (fftSize, 0.0f);
@@ -75,6 +76,8 @@ void SpectrumAnalyzerComponent::timerCallback()
 
 void SpectrumAnalyzerComponent::updateSpectrum()
 {
+    constexpr int maxFFTsPerFrame = 4;
+
     if (! isShowing())
         return;
 
@@ -82,17 +85,13 @@ void SpectrumAnalyzerComponent::updateSpectrum()
     const double elapsedSeconds = lastUpdateSeconds > 0.0 ? jmax (0.0, nowSeconds - lastUpdateSeconds) : 0.0;
     lastUpdateSeconds = nowSeconds;
 
-    // Exponentials compose, so releasing towards the held targets by the elapsed time gives the same
-    // falloff at any update rate, whether or not an FFT frame arrived since the previous update.
     const float releaseRate = static_cast<float> (std::exp (-elapsedSeconds / releaseTimeSeconds));
     for (size_t i = 0; i < scopeData.size(); ++i)
         scopeData[i] = targetData[i] + (scopeData[i] - targetData[i]) * releaseRate;
 
-    constexpr int maxFFTsPerFrame = 4;
-
-    // Drop the hops that won't be processed in this update, so the latency never accumulates.
     const int hopSize = analyzerState.getHopSize();
     const int numReady = analyzerState.getNumAvailableSamples();
+
     if (hopSize > 0 && numReady >= fftSize)
     {
         const int numFrames = (numReady - fftSize) / hopSize + 1;
@@ -108,7 +107,6 @@ void SpectrumAnalyzerComponent::updateSpectrum()
         lastFFTSeconds = nowSeconds;
     }
 
-    // Once the audio stops feeding the analyzer, release towards silence.
     const double hopSeconds = sampleRate > 0.0 ? hopSize / sampleRate : 0.0;
     if (nowSeconds - lastFFTSeconds > jmax (2.0 * hopSeconds, 0.1))
         std::fill (targetData.begin(), targetData.end(), 0.0f);
@@ -319,8 +317,10 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
     const auto lineColor = ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xff00ff40));
 
     g.setStrokeColor (lineColor.withAlpha (0.5f));
-    g.setStrokeWidth (2.0f);
+    g.setStrokeWidth (4.0f);
+    g.setFeather (4.0f);
     g.strokePath (spectrumPath);
+    g.setFeather (0.0f);
 
     g.setStrokeColor (lineColor);
     g.setStrokeWidth (1.5f);
@@ -332,20 +332,24 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
     if (scopeSize < 3)
         return;
 
-    // Create filled path that starts and ends properly at baseline
     auto fillPath = createSpectrumPath (bounds, true);
 
     const auto fillColor = ApplicationTheme::findComponentColor (*this, Style::fillColorId).value_or (Color (0xc000ff40));
+    const auto lineColor = ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xff00ff40));
 
     auto gradient = ColorGradient (
         fillColor, bounds.getX(), bounds.getY(), fillColor.withMultipliedAlpha (1.0f / 12.0f), bounds.getX(), bounds.getBottom());
     g.setFillColorGradient (gradient);
     g.fillPath (fillPath);
 
-    // Draw the spectrum outline
     auto spectrumPath = createSpectrumPath (bounds, false);
 
-    g.setStrokeColor (ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xFF00ff40)));
+    g.setStrokeColor (lineColor.withAlpha (0.5f));
+    g.setStrokeWidth (4.0f);
+    g.setFeather (4.0f);
+    g.strokePath (spectrumPath);
+    g.setFeather (0.0f);
+
     g.setStrokeWidth (1.5f);
     g.strokePath (spectrumPath);
 }
@@ -354,33 +358,31 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
     const auto gridColor = ApplicationTheme::findComponentColor (*this, Style::gridColorId).value_or (Color (0x60ffffff));
-    const auto textColor = ApplicationTheme::findComponentColor (*this, Style::textColorId).value_or (Color (0xFFcccccc));
+    const auto textColor = ApplicationTheme::findComponentColor (*this, Style::textColorId).value_or (Color (0xffcccccc));
 
-    // Generate logarithmically spaced grid lines: 1x, 2x, 5x multiples of powers of 10
     const int multipliers[] = { 1, 2, 5 };
     const int powers[] = { 1, 10, 100, 1000, 10000 }; // 10^0 to 10^4
 
-    // Draw grid lines from darkest to brightest
     for (int brightness = 0; brightness < 3; ++brightness)
     {
         Color lineColor;
         float lineWidth;
         bool drawLabels = false;
 
-        if (brightness == 0) // 1x multiples (brightest)
+        if (brightness == 0)
         {
-            lineColor = gridColor;
+            lineColor = gridColor.withMultipliedAlpha (0.8f);
             lineWidth = 1.0f;
             drawLabels = true;
         }
-        else if (brightness == 1) // 2x multiples (medium)
+        else if (brightness == 1)
         {
-            lineColor = gridColor.withMultipliedAlpha (0.5f);
+            lineColor = gridColor.withMultipliedAlpha (0.4f);
             lineWidth = 0.75f;
         }
-        else // 5x multiples (darkest)
+        else
         {
-            lineColor = gridColor.withMultipliedAlpha (0.25f);
+            lineColor = gridColor.withMultipliedAlpha (0.2f);
             lineWidth = 0.5f;
         }
 
@@ -402,7 +404,7 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
 
             String freqText;
             if (freq >= 1000.0f)
-                freqText = String (freq / 1000.0f, freq == 1000.0f ? 0 : 1) + "k";
+                freqText = String (freq / 1000.0f, 0) + "k";
             else
                 freqText = String (static_cast<int> (freq));
 
@@ -413,7 +415,6 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
         }
     }
 
-    // Draw "Hz" label
     g.setFillColor (textColor.withMultipliedAlpha (0.75f));
     g.fillFittedText ("Hz", font, { bounds.getRight() - 25.0f, bounds.getBottom() - 15.0f, 20.0f, 12.0f }, Justification::center);
 }
@@ -424,13 +425,11 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
     const auto gridColor = ApplicationTheme::findComponentColor (*this, Style::gridColorId).value_or (Color (0x60ffffff));
     const auto textColor = ApplicationTheme::findComponentColor (*this, Style::textColorId).value_or (Color (0xFFcccccc));
 
-    // Draw minor dB grid lines (every 10 dB)
     g.setStrokeColor (gridColor.withMultipliedAlpha (1.0f / 3.0f));
     g.setStrokeWidth (0.5f);
 
     for (float db = minDecibels; db <= maxDecibels; db += 10.0f)
     {
-        // Skip major grid lines (every 20 dB)
         if (static_cast<int> (db) % 20 != 0)
         {
             const float y = decibelToY (db, bounds);
@@ -438,7 +437,6 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
         }
     }
 
-    // Draw major dB grid lines with labels (every 20 dB)
     g.setStrokeColor (gridColor.withMultipliedAlpha (2.0f / 3.0f));
     g.setStrokeWidth (1.0f);
 
@@ -450,7 +448,6 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
         const float y = decibelToY (db, bounds);
         g.strokeLine (bounds.getX(), y, bounds.getRight(), y);
 
-        // Add dB labels on the left side
         String dbText = String (static_cast<int> (db));
         g.setFillColor (textColor);
         g.fillFittedText (dbText, font, { bounds.getX() + 5.0f, y - 6.0f, 30.0f, 12.0f }, Justification::left);
@@ -464,7 +461,6 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
 //==============================================================================
 void SpectrumAnalyzerComponent::resized()
 {
-    // Component has been resized - no specific action needed for now
 }
 
 //==============================================================================
@@ -477,12 +473,9 @@ Path SpectrumAnalyzerComponent::createSpectrumPath (const Rectangle<float>& boun
     if (scopeSize < 2 || width <= 0.0f || bounds.getHeight() <= 0.0f)
         return path;
 
-    // A closed path starts and ends on the baseline, so that it can be filled directly.
     path.startNewSubPath (bounds.getX(),
                           closePath ? bounds.getBottom() : levelToY (getDisplayLevelForPosition (0.0f), bounds));
 
-    // Sample one point per pixel column and interpolate between the smoothed display points, so the
-    // outline stays continuous at any component width.
     const int numColumns = jmax (1, roundToInt (width));
 
     for (int column = 0; column <= numColumns; ++column)
