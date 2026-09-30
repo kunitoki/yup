@@ -167,6 +167,7 @@
 #include <emscripten/bind.h>
 
 #include "native/yup_FileChooser_wasm.cpp"
+#include "native/yup_SystemClipboard_emscripten.cpp"
 #endif
 
 //==============================================================================

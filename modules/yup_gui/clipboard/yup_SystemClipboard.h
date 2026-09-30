@@ -59,6 +59,11 @@ struct YUP_API ClipboardData
 
     @note This class is not thread-safe. All methods should only be called from the main thread.
 
+    @note On the web, copied text also goes to the browser clipboard, and the Ctrl / Cmd + V
+          chord loads the browser clipboard text before the key reaches components. This needs
+          a secure context (https or localhost), otherwise the clipboard stays inside the app.
+          Other MIME types and reads outside of the paste chord only see data copied in the app.
+
     @tags{GUI}
 */
 class YUP_API SystemClipboard
