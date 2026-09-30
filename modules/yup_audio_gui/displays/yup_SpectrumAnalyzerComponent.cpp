@@ -292,8 +292,8 @@ void SpectrumAnalyzerComponent::paint (Graphics& g)
 {
     const auto bounds = getLocalBounds();
 
-    const auto backgroundTop = ApplicationTheme::findComponentColor (*this, Style::backgroundTopColorId).value_or (Color (0xFF1a1a1a));
-    const auto backgroundBottom = ApplicationTheme::findComponentColor (*this, Style::backgroundBottomColorId).value_or (Color (0xFF0f0f0f));
+    const auto backgroundTop = ApplicationTheme::findComponentColor (*this, Style::backgroundTopColorId).value_or (Color (0xff1a1a1a));
+    const auto backgroundBottom = ApplicationTheme::findComponentColor (*this, Style::backgroundBottomColorId).value_or (Color (0xff0f0f0f));
 
     auto backgroundGradient = ColorGradient (backgroundTop, bounds.getTopLeft(), backgroundBottom, bounds.getBottomLeft());
     g.setFillColorGradient (backgroundGradient);
@@ -316,30 +316,11 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
         return;
 
     auto spectrumPath = createSpectrumPath (bounds, false);
-    auto filledPath = spectrumPath.createStrokePolygon (4.0f);
-    const auto lineColor = ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xFF00ff40));
+    const auto lineColor = ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xff00ff40));
 
-    /*
-    g.setFillColor (lineColor.brighter (0.2f));
-    g.setFeather (4.0f);
-    g.fillPath (filledPath);
-
-    g.setFillColor (lineColor);
-    g.setFeather (8.0f);
-    g.fillPath (filledPath);
-
-    g.setFillColor (lineColor.brighter (0.2f));
-    g.setFeather (4.0f);
-    g.fillPath (filledPath);
-
-    g.setStrokeColor (lineColor.withAlpha (0.8f));
+    g.setStrokeColor (lineColor.withAlpha (0.5f));
     g.setStrokeWidth (2.0f);
     g.strokePath (spectrumPath);
-
-    g.setStrokeColor (lineColor.brighter (0.3f));
-    g.setStrokeWidth (1.0f);
-    g.strokePath (spectrumPath);
-    */
 
     g.setStrokeColor (lineColor);
     g.setStrokeWidth (1.5f);
