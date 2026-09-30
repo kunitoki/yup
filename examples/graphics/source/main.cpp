@@ -213,6 +213,9 @@ inline yup::ResultValue<yup::GpuPipeline::Ptr> compilePipelineFromBundle (yup::G
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
 #include "examples/TouchTrails.h"
 #endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+#include "examples/TreeView.h"
+#endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
 #include "examples/VariableFonts.h"
 #endif
@@ -270,7 +273,7 @@ public:
     CustomWindow()
         : yup::DocumentWindow (yup::ComponentNative::Options()
                                    .withAllowedHighDensityDisplay (true)
-                                   .withVSync (false),
+                                   .withVSync (true),
                                yup::Color (0xff404040))
     {
         setTitle ("main");
@@ -410,6 +413,9 @@ public:
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_TouchTrails
         addDemo ("Touch Trails", [] { return std::make_unique<TouchTrailsDemo>(); });
+#endif
+#if YUP_EXAMPLE_GRAPHICS_DEMO_TreeView
+        addDemo ("Tree View", [] { return std::make_unique<TreeViewDemo>(); });
 #endif
 #if YUP_EXAMPLE_GRAPHICS_DEMO_VariableFonts
         addDemo ("Variable Fonts", [] { return std::make_unique<VariableFontsExample>(); });

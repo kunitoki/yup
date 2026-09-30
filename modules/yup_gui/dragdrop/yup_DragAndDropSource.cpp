@@ -51,6 +51,12 @@ DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withImageOpacity
     return *this;
 }
 
+DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withImageInTopLevelComponent (bool shouldUseTopLevelComponent)
+{
+    imageInTopLevelComponent = shouldUseTopLevelComponent;
+    return *this;
+}
+
 DragAndDropSource::DragOptions& DragAndDropSource::DragOptions::withAllowedActions (DragAndDropActions newActions)
 {
     allowedActions = newActions;

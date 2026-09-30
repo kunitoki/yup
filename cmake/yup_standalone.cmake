@@ -37,7 +37,7 @@ function (yup_standalone_app)
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 20)
     _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/resources/app-icon.png")
-    _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU OFF)
+    _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_WEBGPU ON)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_GL_DEBUGGING OFF)
     _yup_set_default (YUP_ARG_ENABLE_EMSCRIPTEN_NODERAWFS OFF)
 

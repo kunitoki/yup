@@ -19,8 +19,8 @@ Image makeTestImage (int width, int height)
 
 /** Covers the ghost window: what it shows, how big it is, and who owns what.
 
-    Note that DragImageComponent is a window-backed component - its constructor calls addToDesktop - so
-    unlike the rest of the drag-and-drop tests these need a desktop to run against.
+    Note that without a host component the ghost is a window of its own, created by setHostComponent(),
+    so unlike the rest of the drag-and-drop tests some of these need a desktop to run against.
 
     Nothing here asserts on the drawing itself, which needs a graphics context; what is checked is the
     state the ghost exposes through the ordinary Component API. */
@@ -118,6 +118,86 @@ TEST_F (DragImageComponentTests, SettingAnImageAfterAComponentReplacesIt)
     EXPECT_EQ (nullptr, hosted.getParentComponent());
     EXPECT_EQ (10.0f, ghost.getWidth());
     EXPECT_EQ (10.0f, ghost.getHeight());
+}
+
+TEST_F (DragImageComponentTests, AHostComponentMakesTheGhostAChildInsteadOfAWindow)
+{
+    Component host;
+    host.setBounds (50.0f, 40.0f, 300.0f, 300.0f);
+
+    ghost.setHostComponent (&host);
+
+    EXPECT_EQ (&host, ghost.getParentComponent());
+    EXPECT_FALSE (ghost.isOnDesktop());
+}
+
+TEST_F (DragImageComponentTests, AHostedGhostMovesInItsHostCoordinates)
+{
+    Component host;
+    host.setBounds (50.0f, 40.0f, 300.0f, 300.0f);
+
+    ghost.setHostComponent (&host);
+    ghost.setDragImage (makeTestImage (20, 12), Point<float> (5.0f, 7.0f), 1.0f);
+    ghost.moveToScreenPosition (Point<float> (100.0f, 200.0f));
+
+    // The host sits at (50, 40) on screen, so the pointer lands at (50, 160) inside it.
+    EXPECT_EQ (45.0f, ghost.getX());
+    EXPECT_EQ (153.0f, ghost.getY());
+}
+
+TEST_F (DragImageComponentTests, AHostedGhostSitsOnWholeUnits)
+{
+    Component host;
+    host.setBounds (50.0f, 40.0f, 300.0f, 300.0f);
+
+    ghost.setHostComponent (&host);
+    ghost.setDragImage (makeTestImage (20, 12), Point<float> (5.0f, 7.0f), 1.0f);
+    ghost.moveToScreenPosition (Point<float> (100.4f, 200.6f));
+
+    // A fractional position would blur the image, which a window of its own never does.
+    EXPECT_EQ (45.0f, ghost.getX());
+    EXPECT_EQ (154.0f, ghost.getY());
+}
+
+TEST_F (DragImageComponentTests, AHostedGhostDoesNotHideTheComponentBelowIt)
+{
+    Component host;
+    host.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    host.setVisible (true);
+
+    Component below;
+    below.setBounds (0.0f, 0.0f, 100.0f, 100.0f);
+    host.addAndMakeVisible (below);
+
+    ghost.setHostComponent (&host);
+    ghost.setDragImage (makeTestImage (20, 12), {}, 1.0f);
+    ghost.moveToScreenPosition (Point<float> (10.0f, 10.0f));
+
+    // The ghost sits right under the pointer, so it must never be what a drop resolves to.
+    EXPECT_EQ (&below, host.findComponentAt (Point<float> (15.0f, 15.0f)));
+}
+
+TEST_F (DragImageComponentTests, AHostedGhostFadesItselfRatherThanTheHost)
+{
+    Component host;
+    host.setBounds (0.0f, 0.0f, 300.0f, 300.0f);
+
+    ghost.setHostComponent (&host);
+    ghost.setDragImage (makeTestImage (20, 12), {}, 0.4f);
+
+    EXPECT_NEAR (0.4f, ghost.getOpacity(), 0.01f);
+    EXPECT_EQ (1.0f, host.getOpacity());
+}
+
+TEST_F (DragImageComponentTests, ClearingTheHostTurnsTheGhostBackIntoAWindow)
+{
+    Component host;
+
+    ghost.setHostComponent (&host);
+    ghost.setHostComponent (nullptr);
+
+    EXPECT_EQ (nullptr, ghost.getParentComponent());
+    EXPECT_TRUE (ghost.isOnDesktop());
 }
 
 //==============================================================================

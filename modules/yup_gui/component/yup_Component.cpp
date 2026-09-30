@@ -71,7 +71,7 @@ RectangleList<float> intersectRepaintRegion (const RectangleList<float>& region,
 
     for (const auto& rect : region.getRectangles())
     {
-        const auto clipped = clipBounds.intersection (rect).roundToInt().to<float>();
+        const auto clipped = clipBounds.intersection (rect).smallestIntContainer();
 
         if (! clipped.isEmpty())
             result.add (clipped);

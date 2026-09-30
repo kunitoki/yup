@@ -1117,6 +1117,89 @@ void paintListBoxItem (Graphics& g, const ApplicationTheme& theme, const ListBox
 }
 
 //==============================================================================
+
+void paintTreeViewRow (Graphics& g, const ApplicationTheme& theme, const TreeViewRow& row)
+{
+    const auto* view = row.getOwnerView();
+
+    if (view == nullptr || row.getItem() == nullptr)
+        return;
+
+    const auto indentSize = view->getIndentSize();
+
+    // The selection is painted under the row by the list; the hover only shows on unselected rows.
+    if (row.isItemHovered() && ! row.isItemSelected())
+    {
+        g.setFillColor (theme.findColor (row, TreeView::Style::itemHoveredColorId).value_or (Color (0x14000000)));
+        g.fillRect (row.getLocalBounds());
+    }
+
+    // One guide per ancestor level, under the center of that ancestor's disclosure button.
+    if (view->areIndentGuidesVisible() && indentSize > 0.0f)
+    {
+        g.setStrokeColor (theme.findColor (row, TreeView::Style::indentGuideColorId).value_or (Color (0x33000000)));
+        g.setStrokeWidth (1.0f);
+
+        for (int level = 0; level < row.getDepth(); ++level)
+        {
+            const auto x = std::floor ((static_cast<float> (level) + 0.5f) * indentSize) + 0.5f;
+            g.strokeLine (x, 0.0f, x, row.getHeight());
+        }
+    }
+
+    if (const auto disclosureBounds = row.getDisclosureBounds(); ! disclosureBounds.isEmpty())
+    {
+        // A chevron pointing right, turning to point down as the item opens.
+        const auto size = jmin (disclosureBounds.getWidth(), disclosureBounds.getHeight()) * 0.3f;
+        const auto center = disclosureBounds.getCenter();
+
+        Path chevron;
+        chevron.moveTo (-0.25f, -0.5f);
+        chevron.lineTo (0.25f, 0.0f);
+        chevron.lineTo (-0.25f, 0.5f);
+        chevron.transform (AffineTransform::rotation (row.getOpenFraction() * MathConstants<float>::halfPi)
+                               .scaled (size)
+                               .translated (center.getX(), center.getY()));
+
+        g.setStrokeColor (theme.findColor (row, TreeView::Style::disclosureColorId).value_or (Color (0xff808080)));
+        g.setStrokeWidth (1.5f);
+        g.setStrokeCap (StrokeCap::Round);
+        g.setStrokeJoin (StrokeJoin::Round);
+        g.strokePath (chevron);
+    }
+
+    if (row.hasCustomContent())
+        return;
+
+    if (row.hasItemIcon())
+        row.getItem()->paintItemIcon (g, row.getIconBounds(), row.isItemSelected());
+
+    const auto& text = row.getItemText();
+    const auto textBounds = row.getTextBounds();
+
+    if (text.isEmpty() || textBounds.isEmpty())
+        return;
+
+    const auto textColor = row.isItemSelected()
+                             ? theme.findColor (row, TreeView::Style::itemTextSelectedColorId).value_or (Colors::white)
+                             : theme.findColor (row, TreeView::Style::itemTextColorId).value_or (Colors::black);
+
+    auto styledText = StyledText();
+    {
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (textBounds.getSize());
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::middle);
+        modifier.setOverflow (StyledText::ellipsis);
+        modifier.setWrap (StyledText::noWrap);
+        modifier.appendText (text, theme.getDefaultFont().withHeight (jmin (textBounds.getHeight() * 0.6f, 16.0f)));
+    }
+
+    g.setFillColor (textColor);
+    g.fillFittedText (styledText, textBounds);
+}
+
+//==============================================================================
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
 constexpr float audioGraphNodeBaseHeaderHeight = 32.0f;
 constexpr float audioGraphNodeBaseParameterRowHeight = 25.0f;
@@ -2108,6 +2191,14 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setColor (ListBoxItem::Style::backgroundColorId, Colors::transparentBlack);
     theme->setColor (ListBoxItem::Style::backgroundColorSelectedId, Color (0xff3a7ebf));
     theme->setColor (ListBoxItem::Style::backgroundColorHoveredId, Color (0x14000000));
+
+    theme->setComponentStyle<TreeViewRow> (ComponentStyle::createStyle<TreeViewRow> (paintTreeViewRow));
+    theme->setColor (TreeView::Style::indentGuideColorId, Color (0x33000000));
+    theme->setColor (TreeView::Style::disclosureColorId, Color (0xff808080));
+    theme->setColor (TreeView::Style::itemTextColorId, Colors::black);
+    theme->setColor (TreeView::Style::itemTextSelectedColorId, Colors::white);
+    theme->setColor (TreeView::Style::dropIndicatorColorId, Color (0xff4ebfff));
+    theme->setColor (TreeView::Style::itemHoveredColorId, Color (0x14000000));
 
 #if YUP_MODULE_AVAILABLE_yup_audio_gui
     theme->setComponentStyle<MidiKeyboardComponent> (ComponentStyle::createStyle<MidiKeyboardComponent> (paintMidiKeyboard));

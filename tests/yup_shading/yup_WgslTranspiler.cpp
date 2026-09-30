@@ -2152,6 +2152,274 @@ TEST_F (WgslEmitterGoldenTests, UniformBufferStillUsesVarUniform)
     EXPECT_TRUE (wgsl.contains ("var<uniform>"));
 }
 
+TEST_F (WgslEmitterGoldenTests, GlobalConstEmitsModuleScopeConst)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+const vec3 accent = vec3(0.25, 0.5, 0.75);
+const float focal = 2.8;
+const uint kCount = 4u;
+void main()
+{
+    outColor = vec4(accent * focal * float(kCount), 1.0);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("const accent: vec3<f32> = ")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("const focal: f32 = ")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("const kCount: u32 = ")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("var<uniform>")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, GlobalConstArrayKeepsArrayType)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+const float kDither[4] = float[4](0.0, 2.0, 3.0, 1.0);
+void main()
+{
+    int index = int(gl_FragCoord.x) & 3;
+    outColor = vec4(kDither[index]);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("const kDither: array<f32, 4> = ")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("var<uniform>")) << wgsl;
+}
+
+//==============================================================================
+// Implicit conversions - GLSL converts implicitly where WGSL requires it spelled out
+//==============================================================================
+
+TEST_F (WgslEmitterGoldenTests, InstanceAndVertexIndexAreSignedLikeGlsl)
+{
+    const char* src = R"glsl(
+#version 450
+void main()
+{
+    int instance = gl_InstanceIndex;
+    gl_Position = vec4(float(instance), float(gl_VertexIndex), 0.0, 1.0);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::vertex);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("var<private> gl_VertexIndex: i32;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var<private> gl_InstanceIndex: i32;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("gl_VertexIndex = i32(input.vertex_index);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("gl_InstanceIndex = i32(input.instance_index);")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, SignedIndexMixedWithUnsignedIsConverted)
+{
+    const char* src = R"glsl(
+#version 450
+void main()
+{
+    float x = float((gl_VertexIndex & 1u) << 2u) - 1.0;
+    gl_Position = vec4(x, 0.0, 0.0, 1.0);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::vertex);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("(u32(gl_VertexIndex) & 1u)")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, ScalarArgumentsOfVectorBuiltinsAreSplatted)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) in vec3 vColor;
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    vec3 a = clamp(vColor, 0.0, 1.0);
+    vec3 b = min(vColor, 0.5);
+    vec3 c = max(vColor, 0.25);
+    vec3 d = step(0.5, vColor);
+    vec3 e = smoothstep(0.0, 1.0, vColor);
+    vec3 f = mix(vColor, a, 0.5);
+    outColor = vec4(a + b + c + d + e + f, 1.0);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("clamp(vColor, vec3<f32>(")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("min(vColor, vec3<f32>(")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("max(vColor, vec3<f32>(")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("step(vec3<f32>(")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("smoothstep(vec3<f32>(")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("mix(vColor, a, vec3<f32>(")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, IntegerOperandsAreConvertedToFloat)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+float scale(float x) { return x * 0.5; }
+float toFloat(int n) { return n; }
+void main()
+{
+    int i = 3;
+    float f = i;
+    float g = f * i;
+    bool b = i < 0.5;
+    float h = scale(i);
+    outColor = vec4(f, g, h, toFloat(i));
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("var f: f32 = f32(i);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(f * f32(i))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(f32(i) < ")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("scale(f32(i))")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("return f32(n);")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, ConstructorArgumentsAreConverted)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    int i = 1;
+    vec2 p = vec2(i, 1.0);
+    vec3 q = vec3(i);
+    outColor = vec4(p, q.xy);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("vec2<f32>(f32(i), ")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec3<f32>(f32(i))")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, SignedShiftAmountIsConvertedToUnsigned)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    uint u = 8u;
+    int s = 2;
+    uint r = u << s;
+    outColor = vec4(float(r));
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("(u << u32(s))")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, AbstractLiteralsAreNotWrapped)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) in vec3 vColor;
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    float x = 1;
+    float y = x * 2;
+    vec3 v = vColor * 2.0;
+    outColor = vec4(v, y);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("var x: f32 = 1;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("(x * 2)")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("f32(1)")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("f32(2)")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("vec3<f32>(2")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, IntegerRemainderUsesWgslOperator)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    int a = 7;
+    int b = 3;
+    int c = a % b;
+    outColor = vec4(float(c));
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.contains ("(a % b)")) << wgsl;
+    EXPECT_FALSE (wgsl.contains ("floor(")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, FragmentShaderAllowsSamplingInNonUniformControlFlow)
+{
+    const char* src = R"glsl(
+#version 450
+layout(location = 0) in vec2 vUV;
+layout(binding = 0) uniform sampler2D tex;
+layout(location = 0) out vec4 outColor;
+void main()
+{
+    outColor = vec4(0.0);
+    if (vUV.x > 0.5)
+        outColor = texture(tex, vUV);
+}
+)glsl";
+
+    auto r = transpile (src, ShaderStage::fragment);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+    auto wgsl = r.getValue();
+
+    EXPECT_TRUE (wgsl.startsWith ("diagnostic(off, derivative_uniformity);")) << wgsl;
+}
+
+TEST_F (WgslEmitterGoldenTests, VertexShaderHasNoUniformityDiagnostic)
+{
+    auto r = transpile (kSimpleVertex, ShaderStage::vertex);
+    ASSERT_TRUE (r.wasOk()) << r.getErrorMessage();
+
+    EXPECT_FALSE (r.getValue().contains ("diagnostic(")) << r.getValue();
+}
+
 //==============================================================================
 // Struct type emission — struct types must be emitted before their first use
 //==============================================================================

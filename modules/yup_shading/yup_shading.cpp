@@ -41,9 +41,11 @@
 #include "wgsl/yup_GlslAst.h"
 #include "wgsl/yup_GlslParser.h"
 #include "wgsl/yup_WgslLowering.h"
+#include "wgsl/yup_WgslTypeLegalizer.h"
 #include "wgsl/yup_WgslEmitter.h"
 #include "wgsl/yup_GlslParser.cpp"
 #include "wgsl/yup_WgslLowering.cpp"
+#include "wgsl/yup_WgslTypeLegalizer.cpp"
 #include "wgsl/yup_WgslEmitter.cpp"
 
 #include "shading/yup_WgslTranspiler.cpp"
