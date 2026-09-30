@@ -632,7 +632,8 @@ void TreeView::paintOverChildren (Graphics& g)
     if (! dropTarget.has_value())
         return;
 
-    const auto color = ApplicationTheme::findComponentColor (*this, Style::dropIndicatorColorId).value_or (Color (0xff4ebfff));
+    const auto color = ApplicationTheme::findComponentColor (*this, Style::dropIndicatorColorId)
+                           .value_or (ApplicationTheme::getGlobalTheme()->getPalette().getColor (ThemePalette::Role::accent));
 
     if (dropTarget->into)
     {

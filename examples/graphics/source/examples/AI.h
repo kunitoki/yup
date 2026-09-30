@@ -39,34 +39,17 @@ public:
         addAndMakeVisible (titleLabel);
 
         //======================================================================
-        // Provider selector buttons
-        providerOpenAIChatButton.setButtonText ("OpenAI Chat");
-        providerOpenAIChatButton.onClick = [this]
+        // Provider selector
+        providerTabs.setLayout (yup::TabBar::Layout::fill);
+        providerTabs.addTab ("openAIChat", "OpenAI Chat");
+        providerTabs.addTab ("openAIResponses", "OpenAI Responses");
+        providerTabs.addTab ("anthropic", "Anthropic");
+        providerTabs.addTab ("gemini", "Gemini");
+        providerTabs.onSelectionChanged = [this] (const yup::Identifier& tabId)
         {
-            selectProvider (SelectedProvider::OpenAIChat);
+            selectProvider (static_cast<SelectedProvider> (providerTabs.indexOfTab (tabId)));
         };
-        addAndMakeVisible (providerOpenAIChatButton);
-
-        providerOpenAIResponsesButton.setButtonText ("OpenAI Responses");
-        providerOpenAIResponsesButton.onClick = [this]
-        {
-            selectProvider (SelectedProvider::OpenAIResponses);
-        };
-        addAndMakeVisible (providerOpenAIResponsesButton);
-
-        providerAnthropicButton.setButtonText ("Anthropic");
-        providerAnthropicButton.onClick = [this]
-        {
-            selectProvider (SelectedProvider::Anthropic);
-        };
-        addAndMakeVisible (providerAnthropicButton);
-
-        providerGeminiButton.setButtonText ("Gemini");
-        providerGeminiButton.onClick = [this]
-        {
-            selectProvider (SelectedProvider::Gemini);
-        };
-        addAndMakeVisible (providerGeminiButton);
+        addAndMakeVisible (providerTabs);
 
         //======================================================================
         // Model
@@ -157,16 +140,12 @@ public:
         titleLabel.setBounds (area.removeFromTop (40));
         area.removeFromTop (8);
 
-        // Provider selector — four equal-width buttons.
-        {
-            auto row = area.removeFromTop (30);
-            const int w = row.getWidth() / 4;
-            providerOpenAIChatButton.setBounds (row.removeFromLeft (w));
-            providerOpenAIResponsesButton.setBounds (row.removeFromLeft (w));
-            providerAnthropicButton.setBounds (row.removeFromLeft (w));
-            providerGeminiButton.setBounds (row);
-        }
+        titleSeparatorY = area.getY() - 4.0f;
+
+        // Provider selector - four equal-width tabs.
+        providerTabs.setBounds (area.removeFromTop (34));
         area.removeFromTop (10);
+        providerSeparatorY = area.getY() - 5.0f;
 
         constexpr int columnGap = 12;
         constexpr int labelH = 20;
@@ -237,8 +216,8 @@ public:
 
         g.setStrokeColor (palette.getColor (yup::ThemePalette::Role::outline));
         g.setStrokeWidth (1.0f);
-        g.strokeLine (20.0f, 56.0f, getWidth() - 20.0f, 56.0f); // below title
-        g.strokeLine (20.0f, 96.0f, getWidth() - 20.0f, 96.0f); // below provider row
+        g.strokeLine (20.0f, titleSeparatorY, getWidth() - 20.0f, titleSeparatorY);
+        g.strokeLine (20.0f, providerSeparatorY, getWidth() - 20.0f, providerSeparatorY);
     }
 
 private:
@@ -253,16 +232,13 @@ private:
     SelectedProvider currentProvider = SelectedProvider::OpenAIChat;
 
     //==========================================================================
-    // Provider selection — updates button labels, defaults, and enabled states.
+    // Provider selection - updates the selected tab, defaults, and enabled states.
     void selectProvider (SelectedProvider p)
     {
         currentProvider = p;
 
-        // Use a bullet marker on the active button text.
-        providerOpenAIChatButton.setButtonText (p == SelectedProvider::OpenAIChat ? "• OpenAI Chat" : "OpenAI Chat");
-        providerOpenAIResponsesButton.setButtonText (p == SelectedProvider::OpenAIResponses ? "• OpenAI Responses" : "OpenAI Responses");
-        providerAnthropicButton.setButtonText (p == SelectedProvider::Anthropic ? "• Anthropic" : "Anthropic");
-        providerGeminiButton.setButtonText (p == SelectedProvider::Gemini ? "• Gemini" : "Gemini");
+        // The tabs are in the same order as the providers.
+        providerTabs.setSelectedTab (providerTabs.getTabId (static_cast<int> (p)), yup::dontSendNotification);
 
         // Apply per-provider defaults (model + base URL).
         switch (p)
@@ -523,10 +499,9 @@ private:
     yup::Label titleLabel { "titleLabel" };
 
     // Provider selector
-    yup::TextButton providerOpenAIChatButton { "providerOpenAIChatButton" };
-    yup::TextButton providerOpenAIResponsesButton { "providerOpenAIResponsesButton" };
-    yup::TextButton providerAnthropicButton { "providerAnthropicButton" };
-    yup::TextButton providerGeminiButton { "providerGeminiButton" };
+    yup::TabBar providerTabs { "providerTabs" };
+    float titleSeparatorY = 0.0f;
+    float providerSeparatorY = 0.0f;
 
     // Settings fields
     yup::Label modelLabel { "modelLabel" };

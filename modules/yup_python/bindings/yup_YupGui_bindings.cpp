@@ -2054,6 +2054,152 @@ void registerYupGuiBindings (py::module_& m)
     treeViewStyle.attr ("dropIndicatorColorId") = TreeView::Style::dropIndicatorColorId;
     treeViewStyle.attr ("itemHoveredColorId") = TreeView::Style::itemHoveredColorId;
 
+    // ============================================================================================ yup::TabButton
+
+    // Tabs are created and owned by their bar, so they have no constructor here.
+    py::class_<TabButton, Button, py::smart_holder> classTabButton (m, "TabButton");
+
+    classTabButton
+        .def ("getTabId", &TabButton::getTabId)
+        .def ("getTabBar", &TabButton::getTabBar, py::return_value_policy::reference)
+        .def ("setText", &TabButton::setText, "newText"_a)
+        .def ("getText", &TabButton::getText)
+        .def ("setIconGlyph", py::overload_cast<const String&> (&TabButton::setIconGlyph), "newGlyph"_a)
+        .def ("getIconGlyph", &TabButton::getIconGlyph)
+        .def ("setIconImage", &TabButton::setIconImage, "newImage"_a)
+        .def ("getIconImage", &TabButton::getIconImage)
+        .def ("hasIcon", &TabButton::hasIcon)
+        .def ("setClosable", &TabButton::setClosable, "shouldBeClosable"_a)
+        .def ("isClosable", &TabButton::isClosable)
+
+        // The tab takes the component over; trampoline_self_life_support keeps a Python subclass alive with it.
+        .def ("setCustomComponent", [] (TabButton& self, std::unique_ptr<Component> newComponent)
+        {
+            self.setCustomComponent (std::move (newComponent));
+        }, py::arg ("newComponent").none (true))
+        .def ("getCustomComponent", &TabButton::getCustomComponent, py::return_value_policy::reference)
+
+        .def ("isSelected", &TabButton::isSelected)
+        .def ("isCloseButtonOver", &TabButton::isCloseButtonOver)
+        .def ("isOverflowButton", &TabButton::isOverflowButton)
+        .def ("getPreferredLength", &TabButton::getPreferredLength)
+        .def ("getFont", &TabButton::getFont, "forSelectedTab"_a)
+        .def ("getIconBounds", &TabButton::getIconBounds)
+        .def ("getTextBounds", &TabButton::getTextBounds)
+        .def ("getCloseButtonBounds", &TabButton::getCloseButtonBounds)
+        .def ("getArrowBounds", &TabButton::getArrowBounds);
+
+    py::class_<TabButton::Style> tabButtonStyle (classTabButton, "Style");
+    tabButtonStyle.attr ("textColorId") = TabButton::Style::textColorId;
+    tabButtonStyle.attr ("textSelectedColorId") = TabButton::Style::textSelectedColorId;
+    tabButtonStyle.attr ("hoveredBackgroundColorId") = TabButton::Style::hoveredBackgroundColorId;
+    tabButtonStyle.attr ("closeButtonColorId") = TabButton::Style::closeButtonColorId;
+
+    // ============================================================================================ yup::TabBar
+
+    py::class_<TabBar, Component, PyComponent<TabBar>, py::smart_holder> classTabBar (m, "TabBar");
+
+    py::enum_<TabBar::Orientation> (classTabBar, "Orientation")
+        .value ("horizontal", TabBar::Orientation::horizontal)
+        .value ("vertical", TabBar::Orientation::vertical)
+        .export_values();
+
+    py::enum_<TabBar::Variant> (classTabBar, "Variant")
+        .value ("pill", TabBar::Variant::pill)
+        .value ("underline", TabBar::Variant::underline)
+        .export_values();
+
+    py::enum_<TabBar::Layout> (classTabBar, "Layout")
+        .value ("natural", TabBar::Layout::natural)
+        .value ("fill", TabBar::Layout::fill)
+        .export_values();
+
+    py::enum_<TabBar::Overflow> (classTabBar, "Overflow")
+        .value ("menu", TabBar::Overflow::menu)
+        .value ("scroll", TabBar::Overflow::scroll)
+        .value ("shrink", TabBar::Overflow::shrink)
+        .export_values();
+
+    classTabBar
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        .def ("addTab", &TabBar::addTab, "tabId"_a, "text"_a, "insertIndex"_a = -1, py::return_value_policy::reference_internal)
+        .def ("removeTab", &TabBar::removeTab, "tabId"_a)
+        .def ("clearTabs", &TabBar::clearTabs)
+        .def ("moveTab", &TabBar::moveTab, "tabId"_a, "newIndex"_a, "notification"_a = sendNotification)
+        .def ("getNumTabs", &TabBar::getNumTabs)
+        .def ("getTabId", &TabBar::getTabId, "index"_a)
+        .def ("indexOfTab", &TabBar::indexOfTab, "tabId"_a)
+        .def ("getTabButton", &TabBar::getTabButton, "tabId"_a, py::return_value_policy::reference_internal)
+
+        .def ("setSelectedTab", &TabBar::setSelectedTab, "tabId"_a, "notification"_a = sendNotification)
+        .def ("getSelectedTabId", &TabBar::getSelectedTabId)
+        .def ("getSelectedTabIndex", &TabBar::getSelectedTabIndex)
+
+        .def ("setOrientation", &TabBar::setOrientation, "newOrientation"_a)
+        .def ("getOrientation", &TabBar::getOrientation)
+        .def ("setVariant", &TabBar::setVariant, "newVariant"_a)
+        .def ("getVariant", &TabBar::getVariant)
+        .def ("setLayout", &TabBar::setLayout, "newLayout"_a)
+        .def ("getLayout", &TabBar::getLayout)
+        .def ("setOverflow", &TabBar::setOverflow, "newOverflow"_a)
+        .def ("getOverflow", &TabBar::getOverflow)
+        .def ("setFlipped", &TabBar::setFlipped, "shouldBeFlipped"_a)
+        .def ("isFlipped", &TabBar::isFlipped)
+        .def ("setReorderable", &TabBar::setReorderable, "shouldBeReorderable"_a)
+        .def ("isReorderable", &TabBar::isReorderable)
+        .def ("setOverflowText", &TabBar::setOverflowText, "newText"_a)
+        .def ("getOverflowText", &TabBar::getOverflowText)
+        .def ("setAnimationDuration", &TabBar::setAnimationDuration, "newDurationSeconds"_a)
+        .def ("getAnimationDuration", &TabBar::getAnimationDuration)
+
+        .def ("getOverflowButton", &TabBar::getOverflowButton, py::return_value_policy::reference_internal)
+        .def ("getScrollOffset", &TabBar::getScrollOffset)
+        .def ("getIndicatorBounds", &TabBar::getIndicatorBounds)
+        .def ("getTabArea", &TabBar::getTabArea)
+        .def ("isFocusIndicatorVisible", &TabBar::isFocusIndicatorVisible)
+        .def_readonly_static ("minimumTabLength", &TabBar::minimumTabLength)
+
+        .def_readwrite ("onSelectionChanged", &TabBar::onSelectionChanged,
+                        "Called with the newly selected tab, or a null Identifier when the selection is cleared.")
+        .def_readwrite ("onTabMoved", &TabBar::onTabMoved,
+                        "Called with the tab, its old index and its new index after it moved.")
+        .def_readwrite ("onTabCloseRequested", &TabBar::onTabCloseRequested,
+                        "Called when the close button of a tab is clicked. When not set, the tab is removed.");
+
+    py::class_<TabBar::Style> tabBarStyle (classTabBar, "Style");
+    tabBarStyle.attr ("trackColorId") = TabBar::Style::trackColorId;
+    tabBarStyle.attr ("indicatorColorId") = TabBar::Style::indicatorColorId;
+    tabBarStyle.attr ("underlineColorId") = TabBar::Style::underlineColorId;
+    tabBarStyle.attr ("focusOutlineColorId") = TabBar::Style::focusOutlineColorId;
+
+    // ============================================================================================ yup::TabComponent
+
+    py::class_<TabComponent, Component, PyComponent<TabComponent>, py::smart_holder> classTabComponent (m, "TabComponent");
+
+    py::enum_<TabComponent::Placement> (classTabComponent, "Placement")
+        .value ("top", TabComponent::Placement::top)
+        .value ("bottom", TabComponent::Placement::bottom)
+        .value ("left", TabComponent::Placement::left)
+        .value ("right", TabComponent::Placement::right)
+        .export_values();
+
+    classTabComponent
+        .def (py::init<StringRef>(), "componentID"_a = StringRef())
+
+        // Only the owning overload is bound: a page owned by Python could be collected while still shown.
+        .def ("addTab", [] (TabComponent& self, const Identifier& tabId, const String& text, std::unique_ptr<Component> content, int insertIndex) -> TabButton&
+        {
+            return self.addTab (tabId, text, std::move (content), insertIndex);
+        }, "tabId"_a, "text"_a, "content"_a, "insertIndex"_a = -1, py::return_value_policy::reference_internal)
+        .def ("removeTab", &TabComponent::removeTab, "tabId"_a)
+        .def ("getTabContent", &TabComponent::getTabContent, "tabId"_a, py::return_value_policy::reference_internal)
+        .def ("getTabBar", py::overload_cast<> (&TabComponent::getTabBar), py::return_value_policy::reference_internal)
+        .def ("setTabBarPlacement", &TabComponent::setTabBarPlacement, "newPlacement"_a)
+        .def ("getTabBarPlacement", &TabComponent::getTabBarPlacement)
+        .def ("setTabBarThickness", &TabComponent::setTabBarThickness, "newThickness"_a)
+        .def ("getTabBarThickness", &TabComponent::getTabBarThickness);
+
     // ============================================================================================ yup::ComboBox
 
     py::class_<ComboBox, Component, PyComboBox<>, py::smart_holder> classComboBox (m, "ComboBox");
