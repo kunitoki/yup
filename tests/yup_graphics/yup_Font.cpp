@@ -466,6 +466,18 @@ TEST (FontTests, VariableFont_WithAxisValues)
     EXPECT_FLOAT_EQ (wghtAxis->maximumValue, newFont.getAxisValue ("wght"));
 }
 
+TEST (FontTests, VariableFont_WithAxisValuesKeepTheHeight)
+{
+    auto font = loadTestFont().withHeight (21.0f);
+
+    auto wghtAxis = font.getAxisDescription ("wght");
+    ASSERT_TRUE (wghtAxis.has_value());
+
+    EXPECT_FLOAT_EQ (21.0f, font.withAxisValue ("wght", wghtAxis->maximumValue).getHeight());
+    EXPECT_FLOAT_EQ (21.0f, font.withAxisValue (0, font.getAxisDescription (0)->maximumValue).getHeight());
+    EXPECT_FLOAT_EQ (21.0f, font.withAxisValues ({ { "wght", wghtAxis->maximumValue } }).getHeight());
+}
+
 TEST (FontTests, VariableFont_ChainedAxisOperations)
 {
     auto font = loadTestFont();

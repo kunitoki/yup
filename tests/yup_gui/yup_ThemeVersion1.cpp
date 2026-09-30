@@ -118,6 +118,25 @@ TEST (ThemeVersion1Tests, SetPaletteChangesWidgetColors)
     EXPECT_NE (*before, *after);
 }
 
+TEST (ThemeVersion1Tests, TreeViewColorsFollowThePalette)
+{
+    auto theme = createThemeVersion1();
+    ASSERT_NE (nullptr, theme.get());
+
+    TreeView treeView;
+
+    for (const auto mode : { ThemePalette::Mode::dark, ThemePalette::Mode::light })
+    {
+        theme->setPalette (ThemePalette (std::vector<Color> { Color (0xff100b00), Color (0xff85cb33), Color (0xffefffc8) }, mode));
+        const auto& palette = theme->getPalette();
+
+        EXPECT_EQ (palette.getColor (ThemePalette::Role::text), theme->findColor (treeView, TreeView::Style::itemTextColorId));
+        EXPECT_EQ (palette.getColor (ThemePalette::Role::onAccent), theme->findColor (treeView, TreeView::Style::itemTextSelectedColorId));
+        EXPECT_EQ (palette.getColor (ThemePalette::Role::textMuted), theme->findColor (treeView, TreeView::Style::disclosureColorId));
+        EXPECT_EQ (palette.getColor (ThemePalette::Role::accent), theme->findColor (treeView, TreeView::Style::dropIndicatorColorId));
+    }
+}
+
 TEST (ThemeVersion1Tests, ExplicitThemeColorBeatsPalette)
 {
     auto theme = createThemeVersion1();

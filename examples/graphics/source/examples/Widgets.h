@@ -171,12 +171,92 @@ private:
         indeterminateLabel->setText ("Indeterminate Progress Bar:", yup::dontSendNotification);
         panel.addAndMakeVisible (indeterminateLabel.get());
 
+        setupTabs();
+
         // Update slider to control progress bar
         slider->onValueChanged = [this] (double value)
         {
             updateStatus ("Slider value: " + yup::String (value, 1));
             progressBar->setProgress (value / 100.0, yup::dontSendNotification);
         };
+    }
+
+    void setupTabs()
+    {
+        tabsLabel = std::make_unique<yup::Label> ("tabsLabel");
+        tabsLabel->setText ("Tabs: drag to reorder, narrow the window to see the More menu", yup::dontSendNotification);
+        panel.addAndMakeVisible (tabsLabel.get());
+
+        // A segmented control of views, reorderable, that overflows into a menu
+        viewTabs = std::make_unique<yup::TabBar> ("viewTabs");
+        viewTabs->setReorderable (true);
+
+        const std::pair<const char*, const char*> views[] = {
+            { "Table", YUP_ICON_TABLE },
+            { "Board", YUP_ICON_TABLE_COLUMNS },
+            { "Chart", YUP_ICON_CHART_COLUMN },
+            { "List", YUP_ICON_LIST },
+            { "Timeline", YUP_ICON_TIMELINE },
+            { "Calendar", YUP_ICON_CALENDAR },
+            { "Gallery", YUP_ICON_IMAGE }
+        };
+
+        for (const auto& [name, glyph] : views)
+            viewTabs->addTab (yup::String (name).toLowerCase(), name).setIconGlyph (glyph);
+
+        viewTabs->onSelectionChanged = [this] (const yup::Identifier& tabId)
+        {
+            updateStatus ("View tab selected: " + tabId.toString());
+        };
+
+        viewTabs->onTabMoved = [this] (const yup::Identifier& tabId, int oldIndex, int newIndex)
+        {
+            updateStatus ("View tab " + tabId.toString() + " moved from " + yup::String (oldIndex) + " to " + yup::String (newIndex));
+        };
+
+        panel.addAndMakeVisible (viewTabs.get());
+
+        // Browser-like tabs that can be closed and added
+        documentTabs = std::make_unique<yup::TabBar> ("documentTabs");
+        documentTabs->setVariant (yup::TabBar::Variant::underline);
+        documentTabs->setOverflow (yup::TabBar::Overflow::scroll);
+        documentTabs->setReorderable (true);
+
+        for (int i = 0; i < 3; ++i)
+            addDocumentTab();
+
+        documentTabs->onSelectionChanged = [this] (const yup::Identifier& tabId)
+        {
+            if (tabId.isValid())
+                updateStatus ("Document tab selected: " + tabId.toString());
+        };
+
+        documentTabs->onTabCloseRequested = [this] (const yup::Identifier& tabId)
+        {
+            documentTabs->removeTab (tabId);
+            updateStatus ("Document tab closed: " + tabId.toString());
+        };
+
+        panel.addAndMakeVisible (documentTabs.get());
+
+        addTabButton = std::make_unique<yup::TextButton> ("Add tab");
+        addTabButton->onClick = [this]
+        {
+            documentTabs->setSelectedTab (addDocumentTab());
+        };
+        panel.addAndMakeVisible (addTabButton.get());
+    }
+
+    yup::Identifier addDocumentTab()
+    {
+        ++numDocumentsCreated;
+
+        const auto tabId = yup::Identifier ("document" + yup::String (numDocumentsCreated));
+        auto& tab = documentTabs->addTab (tabId, "Document " + yup::String (numDocumentsCreated));
+        tab.setIconGlyph (YUP_ICON_FILE_LINES);
+        tab.setClosable (true);
+
+        return tabId;
     }
 
     void setupLayout()
@@ -256,6 +336,19 @@ private:
         toggleButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + buttonWidth + spacing), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
         switchButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin + 2 * (buttonWidth + spacing)), static_cast<float> (y), 80.0f, static_cast<float> (componentHeight)));
         y += componentHeight + spacing * 2;
+
+        // Tabs
+        const auto tabsWidth = static_cast<float> (bounds.getWidth() - 2 * margin);
+        const auto addTabButtonWidth = 90.0f;
+        tabsLabel->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth, 20.0f));
+        y += 25;
+
+        viewTabs->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth, 36.0f));
+        y += 36 + spacing;
+
+        documentTabs->setBounds (yup::Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), tabsWidth - addTabButtonWidth - spacing, 36.0f));
+        addTabButton->setBounds (yup::Rectangle<float> (static_cast<float> (margin) + tabsWidth - addTabButtonWidth, static_cast<float> (y + 3), addTabButtonWidth, static_cast<float> (componentHeight)));
+        y += 36 + spacing * 2;
 
         // Input widgets
         auto inputWidth = (bounds.getWidth() - 3 * margin) / 2;
@@ -517,6 +610,11 @@ private:
     std::unique_ptr<yup::Label> progressBarLabel;
     std::unique_ptr<yup::ProgressBar> indeterminateProgressBar;
     std::unique_ptr<yup::Label> indeterminateLabel;
+    std::unique_ptr<yup::Label> tabsLabel;
+    std::unique_ptr<yup::TabBar> viewTabs;
+    std::unique_ptr<yup::TabBar> documentTabs;
+    std::unique_ptr<yup::TextButton> addTabButton;
+    int numDocumentsCreated = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidgetsDemo)
 };

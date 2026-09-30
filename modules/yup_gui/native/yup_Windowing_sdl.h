@@ -46,6 +46,7 @@ class SDLComponentNative final
     struct TouchClickState
     {
         std::optional<yup::Time> lastUpTime;
+        std::optional<Point<float>> lastPosition;
         WeakReference<Component> lastComponent;
     };
 
@@ -233,6 +234,7 @@ private:
     int findTouchFingerIndex (SDL_FingerID fingerId) const;
     int getFreeTouchIndex() const;
     TouchClickState& getTouchClickState (int touchIndex);
+    static bool isNearLastClick (const std::optional<Point<float>>& downPosition, const std::optional<Point<float>>& lastClickPosition);
 
     bool hasNativeKeyboardFocus() const;
 
@@ -287,6 +289,8 @@ private:
     std::optional<Point<float>> lastMouseDownPosition;
     std::optional<yup::Time> lastMouseDownTime;
     std::optional<yup::Time> lastMouseUpTime;
+    std::optional<Point<float>> lastClickPosition;
+    WeakReference<Component> lastClickComponent;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;

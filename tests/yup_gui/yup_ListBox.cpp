@@ -2012,6 +2012,43 @@ TEST_F (ListBoxTests, TheReleaseCompletingADoubleTapDoesNotToggle)
     EXPECT_EQ (1, model->doubleClickCallCount);
 }
 
+TEST_F (ListBoxTests, ADoubleTapOnAnotherRowStillSelectsIt)
+{
+    tapRow (3);
+    ASSERT_EQ (Array<int> ({ 3 }), selection());
+
+    const auto position = listBox->getRowBounds (5).getCenter();
+    listBox->mouseDown (touchAt (position));
+    listBox->mouseDoubleClick (touchAt (position));
+    listBox->mouseUp (touchAt (position));
+
+    EXPECT_EQ (Array<int> ({ 5 }), selection());
+    EXPECT_EQ (0, model->doubleClickCallCount);
+}
+
+TEST_F (ListBoxTests, QuickMouseClicksOnDifferentRowsWithDragScrollingSelectEach)
+{
+    listBox->setMouseDragScrollingEnabled (true);
+
+    const auto mouseAt = [] (Point<float> position)
+    {
+        return MouseEvent (MouseEvent::leftButton, KeyModifiers(), position);
+    };
+
+    const auto first = listBox->getRowBounds (3).getCenter();
+    listBox->mouseDown (mouseAt (first));
+    listBox->mouseUp (mouseAt (first));
+    ASSERT_EQ (Array<int> ({ 3 }), selection());
+
+    const auto second = listBox->getRowBounds (5).getCenter();
+    listBox->mouseDown (mouseAt (second));
+    listBox->mouseDoubleClick (mouseAt (second));
+    listBox->mouseUp (mouseAt (second));
+
+    EXPECT_EQ (Array<int> ({ 5 }), selection());
+    EXPECT_EQ (0, model->doubleClickCallCount);
+}
+
 TEST_F (ListBoxTests, DraggingPastTheStartOverscrollsAndBouncesBack)
 {
     listBox->setRowSize (50.0f);

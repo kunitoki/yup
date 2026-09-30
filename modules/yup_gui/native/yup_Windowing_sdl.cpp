@@ -1058,6 +1058,10 @@ void SDLComponentNative::run()
         {
             nextFrameDeadlineMs += maxFrameTimeMs;
         } while (nextFrameDeadlineMs <= nowMs);
+
+        // Frames paced by the present skip the wait, and on a display faster than the frame rate they
+        // advance the deadline quicker than the clock: keep it within a frame of now.
+        nextFrameDeadlineMs = jmin (nextFrameDeadlineMs, nowMs + maxFrameTimeMs + renderBudgetMs);
     }
 }
 
@@ -1778,6 +1782,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (auto* clickedComponent = touchFinger->clickedComponent.get())
         {
             const auto currentMouseDownTime = yup::Time::getCurrentTime();
+            const auto downPosition = touchFinger->lastDownPosition;
             const WeakReference<Component> clickedComponentReference (clickedComponent);
             auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
@@ -1788,6 +1793,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
                 && clickState.lastUpTime
                 && *clickState.lastUpTime > yup::Time()
                 && clickState.lastComponent.get() == clickedComponent
+                && isNearLastClick (downPosition, clickState.lastPosition)
                 && currentMouseDownTime - *clickState.lastUpTime < doubleClickTime)
             {
                 clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
@@ -1802,6 +1808,7 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             {
                 auto& currentClickState = getTouchClickState (touchIndex);
                 currentClickState.lastUpTime = currentMouseDownTime;
+                currentClickState.lastPosition = downPosition;
                 currentClickState.lastComponent = clickedComponentReference;
             }
         }
@@ -1848,6 +1855,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
     if (auto* clickedComponent = lastComponentClicked.get())
     {
         const auto currentMouseDownTime = yup::Time::getCurrentTime();
+        const auto downPosition = lastMouseDownPosition;
+        const WeakReference<Component> clickedComponentReference (clickedComponent);
         auto clickedComponentBailOut = Component::BailOutChecker (clickedComponent);
 
         event = event.withSourceComponent (clickedComponent);
@@ -1855,6 +1864,8 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
         if (! wasCanceled
             && lastMouseUpTime
             && *lastMouseUpTime > yup::Time()
+            && lastClickComponent.get() == clickedComponent
+            && isNearLastClick (downPosition, lastClickPosition)
             && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
         {
             clickedComponent->internalMouseDoubleClick (event.withRelativePositionTo (clickedComponent));
@@ -1864,7 +1875,11 @@ void SDLComponentNative::handleMouseUp (const Point<float>& position, MouseEvent
             clickedComponent->internalMouseUp (event.withRelativePositionTo (clickedComponent));
 
         if (! wasCanceled)
+        {
             lastMouseUpTime = currentMouseDownTime;
+            lastClickPosition = downPosition;
+            lastClickComponent = clickedComponentReference;
+        }
     }
 
     if (nativeBailOut.shouldBailOut())
@@ -1996,6 +2011,17 @@ SDLComponentNative::TouchClickState& SDLComponentNative::getTouchClickState (int
         touchClickStates.add ({});
 
     return touchClickStates.getReference (touchIndex);
+}
+
+bool SDLComponentNative::isNearLastClick (const std::optional<Point<float>>& downPosition, const std::optional<Point<float>>& lastClickPosition)
+{
+    constexpr float maxDistance = 8.0f;
+
+    if (! downPosition || ! lastClickPosition)
+        return false;
+
+    const auto delta = *downPosition - *lastClickPosition;
+    return std::abs (delta.getX()) <= maxDistance && std::abs (delta.getY()) <= maxDistance;
 }
 
 //==============================================================================
