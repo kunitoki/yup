@@ -168,6 +168,23 @@ SDLComponentNative::SDLComponentNative (Component& component,
         }
     }
 
+#if YUP_EMSCRIPTEN
+    // Keep pointer events flowing to the canvas while a button is held outside of it, like SDL mouse auto capture on desktop
+    // clang-format off
+    EM_ASM ({
+        var canvas = document.querySelector (UTF8ToString ($0));
+        if (! canvas || canvas.yupPointerCaptureInstalled)
+            return;
+
+        canvas.yupPointerCaptureInstalled = true;
+        canvas.addEventListener ("pointerdown", function (event)
+        {
+            try { canvas.setPointerCapture (event.pointerId); } catch (e) {}
+        });
+    }, SDL_GetStringProperty (SDL_GetWindowProperties (window), SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING, "#canvas"));
+    // clang-format on
+#endif
+
     SDL_SetWindowFocusable (window, ! options.flags.test (nonFocusableWindow));
     SDL_PumpEvents();
 
