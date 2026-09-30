@@ -23,18 +23,23 @@ namespace yup
 {
 
 //==============================================================================
+const Identifier SpectrumAnalyzerComponent::Style::backgroundTopColorId { "SpectrumAnalyzer_backgroundTopColorId" };
+const Identifier SpectrumAnalyzerComponent::Style::backgroundBottomColorId { "SpectrumAnalyzer_backgroundBottomColorId" };
+const Identifier SpectrumAnalyzerComponent::Style::outlineColorId { "SpectrumAnalyzer_outlineColorId" };
+const Identifier SpectrumAnalyzerComponent::Style::fillColorId { "SpectrumAnalyzer_fillColorId" };
+const Identifier SpectrumAnalyzerComponent::Style::gridColorId { "SpectrumAnalyzer_gridColorId" };
+const Identifier SpectrumAnalyzerComponent::Style::textColorId { "SpectrumAnalyzer_textColorId" };
+
+//==============================================================================
 SpectrumAnalyzerComponent::SpectrumAnalyzerComponent (SpectrumAnalyzerState& state)
     : analyzerState (state)
     , scopeData (scopeSize, 0.0f)
+    , targetData (scopeSize, 0.0f)
+    , fftSize (analyzerState.getFftSize())
 {
-    // Sync FFT size with the analyzer state
-    fftSize = analyzerState.getFftSize();
-
     initializeFFTBuffers();
     generateWindow();
     updateBinMapping();
-
-    startTimerHz (30); // 30 FPS updates by default
 }
 
 SpectrumAnalyzerComponent::~SpectrumAnalyzerComponent()
@@ -47,10 +52,9 @@ void SpectrumAnalyzerComponent::initializeFFTBuffers()
 {
     fftProcessor = std::make_unique<FFTProcessor<float>> (fftSize);
     fftInputBuffer.resize (fftSize, 0.0f);
-    fftOutputBuffer.resize (fftSize * 2, 0.0f); // Complex output needs 2x space
+    fftOutputBuffer.resize (fftSize * 2, 0.0f);
     windowBuffer.resize (fftSize, 0.0f);
 
-    // Pre-allocate magnitude buffers to avoid allocations during processing
     const int numBins = fftSize / 2 + 1;
     magnitudeBuffer.resize (numBins, 0.0f);
     binLevelBuffer.resize (numBins, 0.0f);
@@ -66,36 +70,57 @@ void SpectrumAnalyzerComponent::updateBinMapping()
 //==============================================================================
 void SpectrumAnalyzerComponent::timerCallback()
 {
+    updateSpectrum();
+}
+
+void SpectrumAnalyzerComponent::updateSpectrum()
+{
     if (! isShowing())
         return;
 
-    bool hasNewData = false;
-    int fftCount = 0;
+    const double nowSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+    const double elapsedSeconds = lastUpdateSeconds > 0.0 ? jmax (0.0, nowSeconds - lastUpdateSeconds) : 0.0;
+    lastUpdateSeconds = nowSeconds;
 
-    constexpr int maxFFTsPerFrame = 4; // Limit to prevent blocking UI thread
+    // Exponentials compose, so releasing towards the held targets by the elapsed time gives the same
+    // falloff at any update rate, whether or not an FFT frame arrived since the previous update.
+    const float releaseRate = static_cast<float> (std::exp (-elapsedSeconds / releaseTimeSeconds));
+    for (size_t i = 0; i < scopeData.size(); ++i)
+        scopeData[i] = targetData[i] + (scopeData[i] - targetData[i]) * releaseRate;
 
-    // Process multiple FFT frames with overlap for better responsiveness
-    while (analyzerState.isFFTDataReady() && fftCount < maxFFTsPerFrame)
+    constexpr int maxFFTsPerFrame = 4;
+
+    // Drop the hops that won't be processed in this update, so the latency never accumulates.
+    const int hopSize = analyzerState.getHopSize();
+    const int numReady = analyzerState.getNumAvailableSamples();
+    if (hopSize > 0 && numReady >= fftSize)
     {
-        processFFT();
-
-        hasNewData = true;
-
-        ++fftCount;
+        const int numFrames = (numReady - fftSize) / hopSize + 1;
+        for (int i = numFrames - maxFFTsPerFrame; i > 0 && analyzerState.isFFTDataReady(); --i)
+            analyzerState.getFFTData (fftInputBuffer.data());
     }
 
-    // Always update display to maintain smooth animation
-    updateDisplay (hasNewData);
+    for (int fftCount = 0; fftCount < maxFFTsPerFrame && analyzerState.isFFTDataReady(); ++fftCount)
+    {
+        processFFT();
+        updateTargets();
+
+        lastFFTSeconds = nowSeconds;
+    }
+
+    // Once the audio stops feeding the analyzer, release towards silence.
+    const double hopSeconds = sampleRate > 0.0 ? hopSize / sampleRate : 0.0;
+    if (nowSeconds - lastFFTSeconds > jmax (2.0 * hopSeconds, 0.1))
+        std::fill (targetData.begin(), targetData.end(), 0.0f);
+
     repaint();
 }
 
 void SpectrumAnalyzerComponent::processFFT()
 {
-    // Get FFT frame from analyzer state
     if (! analyzerState.getFFTData (fftInputBuffer.data()))
         return;
 
-    // Update window if needed
     if (needsWindowUpdate)
     {
         needsWindowUpdate = false;
@@ -103,13 +128,10 @@ void SpectrumAnalyzerComponent::processFFT()
         generateWindow();
     }
 
-    // Apply window function
     FloatVectorOperations::multiply (fftInputBuffer.data(), windowBuffer.data(), fftInputBuffer.data(), fftSize);
 
-    // Perform FFT
     fftProcessor->performRealFFTForward (fftInputBuffer.data(), fftOutputBuffer.data());
 
-    // Pre-compute raw FFT magnitudes. Calibration is applied when bins are mapped to display levels.
     const int numBins = fftSize / 2 + 1;
 
     for (int binIndex = 0; binIndex < numBins; ++binIndex)
@@ -121,29 +143,22 @@ void SpectrumAnalyzerComponent::processFFT()
         magnitudeBuffer[static_cast<size_t> (binIndex)] = magnitude;
     }
 
-    // Pre-compute the calibrated level of every bin for the active level mode, so that display bands
-    // can be evaluated by interpolating between neighbouring bins instead of snapping to one of them.
     for (int binIndex = 0; binIndex < numBins; ++binIndex)
         binLevelBuffer[static_cast<size_t> (binIndex)] = getBinLinearLevel (binIndex);
 }
 
-void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
+void SpectrumAnalyzerComponent::updateTargets()
 {
     const auto aggregation = getBandAggregation();
 
-    // Always apply consistent smoothing to prevent pulsating
-    // Process display bins
     for (int i = 0; i < scopeSize; ++i)
     {
         float targetLevel = 0.0f;
 
-        if (hasNewFFTData && isPositiveAndBelow (i, binMapping.getNumDisplayPoints()))
+        if (isPositiveAndBelow (i, binMapping.getNumDisplayPoints()))
         {
-            // The band covered by this display point is resolved across the fractional FFT bin
-            // domain, so neighbouring display points always produce gradually changing levels.
             const float bandLevel = binMapping.getBandLevel (binLevelBuffer, i, aggregation);
 
-            // Map to display range [0.0, 1.0]
             targetLevel = jmap (jlimit (minDecibels, maxDecibels, linearLevelToDecibels (bandLevel)),
                                 minDecibels,
                                 maxDecibels,
@@ -151,45 +166,9 @@ void SpectrumAnalyzerComponent::updateDisplay (bool hasNewFFTData)
                                 1.0f);
         }
 
-        // Apply peak-hold with time-based release: instant attack, controlled release
-        float& currentValue = scopeData[static_cast<size_t> (i)];
-
-        if (hasNewFFTData && targetLevel > currentValue)
-        {
-            // Immediately use new peak values for zero latency
-            currentValue = targetLevel;
-        }
-        else
-        {
-            // Calculate release rate based on time
-            if (releaseTimeSeconds <= 0.0f)
-            {
-                // Immediate falloff - use target directly or fast decay
-                if (hasNewFFTData)
-                    currentValue = targetLevel; // Use new lower value immediately
-                else
-                    currentValue = 0.0f; // Immediate decay when no data
-            }
-            else
-            {
-                // Calculate release rate for desired time constant
-                // Rate = exp(-1 / (release_time * update_rate))
-                // Use actual timer rate from getUpdateRate()
-                const float updateRate = float (getUpdateRate());
-                const float releaseRate = std::exp (-1.0f / (releaseTimeSeconds * updateRate));
-
-                if (hasNewFFTData)
-                {
-                    // New data available but level is lower - decay toward new level
-                    currentValue = releaseRate * currentValue + (1.0f - releaseRate) * targetLevel;
-                }
-                else
-                {
-                    // No new data - decay toward zero
-                    currentValue *= releaseRate;
-                }
-            }
-        }
+        const auto index = static_cast<size_t> (i);
+        targetData[index] = targetLevel;
+        scopeData[index] = jmax (scopeData[index], targetLevel);
     }
 }
 
@@ -303,21 +282,28 @@ bool SpectrumAnalyzerComponent::isPowerMode() const noexcept
 }
 
 //==============================================================================
+void SpectrumAnalyzerComponent::refreshDisplay ([[maybe_unused]] double lastFrameTimeSeconds)
+{
+    if (! isTimerRunning())
+        updateSpectrum();
+}
+
 void SpectrumAnalyzerComponent::paint (Graphics& g)
 {
     const auto bounds = getLocalBounds();
 
-    // Professional dark background with subtle gradient
-    auto backgroundGradient = ColorGradient (
-        Color (0xFF1a1a1a), bounds.getTopLeft(), Color (0xFF0f0f0f), bounds.getBottomLeft());
+    const auto backgroundTop = ApplicationTheme::findComponentColor (*this, Style::backgroundTopColorId).value_or (Color (0xFF1a1a1a));
+    const auto backgroundBottom = ApplicationTheme::findComponentColor (*this, Style::backgroundBottomColorId).value_or (Color (0xFF0f0f0f));
+
+    auto backgroundGradient = ColorGradient (backgroundTop, bounds.getTopLeft(), backgroundBottom, bounds.getBottomLeft());
     g.setFillColorGradient (backgroundGradient);
     g.fillAll();
 
-    // Draw grid and labels first
     drawFrequencyGrid (g, bounds);
     drawDecibelGrid (g, bounds);
 
-    // Draw spectrum based on display type
+    g.setStrokeJoin (StrokeJoin::Round);
+
     if (displayType == DisplayType::filled)
         drawFilledSpectrum (g, bounds);
     else
@@ -331,9 +317,12 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
 
     auto spectrumPath = createSpectrumPath (bounds, false);
     auto filledPath = spectrumPath.createStrokePolygon (4.0f);
-    auto lineColor = Color (0xFF00a840);
+    const auto lineColor = ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xFF00ff40));
 
-    g.setStrokeJoin (StrokeJoin::Round);
+    /*
+    g.setFillColor (lineColor.brighter (0.2f));
+    g.setFeather (4.0f);
+    g.fillPath (filledPath);
 
     g.setFillColor (lineColor);
     g.setFeather (8.0f);
@@ -350,9 +339,10 @@ void SpectrumAnalyzerComponent::drawLinesSpectrum (Graphics& g, const Rectangle<
     g.setStrokeColor (lineColor.brighter (0.3f));
     g.setStrokeWidth (1.0f);
     g.strokePath (spectrumPath);
+    */
 
-    g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
-    g.setStrokeWidth (0.5f);
+    g.setStrokeColor (lineColor);
+    g.setStrokeWidth (1.5f);
     g.strokePath (spectrumPath);
 }
 
@@ -364,23 +354,26 @@ void SpectrumAnalyzerComponent::drawFilledSpectrum (Graphics& g, const Rectangle
     // Create filled path that starts and ends properly at baseline
     auto fillPath = createSpectrumPath (bounds, true);
 
+    const auto fillColor = ApplicationTheme::findComponentColor (*this, Style::fillColorId).value_or (Color (0xc000ff40));
+
     auto gradient = ColorGradient (
-        Color (0xc000ff40), bounds.getX(), bounds.getY(), Color (0x1000ff40), bounds.getX(), bounds.getBottom());
+        fillColor, bounds.getX(), bounds.getY(), fillColor.withMultipliedAlpha (1.0f / 12.0f), bounds.getX(), bounds.getBottom());
     g.setFillColorGradient (gradient);
     g.fillPath (fillPath);
 
     // Draw the spectrum outline
     auto spectrumPath = createSpectrumPath (bounds, false);
 
-    g.setStrokeColor (Color (0xFF00ff40));
+    g.setStrokeColor (ApplicationTheme::findComponentColor (*this, Style::outlineColorId).value_or (Color (0xFF00ff40)));
     g.setStrokeWidth (1.5f);
-    g.setStrokeJoin (StrokeJoin::Round);
     g.strokePath (spectrumPath);
 }
 
 void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<float>& bounds)
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
+    const auto gridColor = ApplicationTheme::findComponentColor (*this, Style::gridColorId).value_or (Color (0x60ffffff));
+    const auto textColor = ApplicationTheme::findComponentColor (*this, Style::textColorId).value_or (Color (0xFFcccccc));
 
     // Generate logarithmically spaced grid lines: 1x, 2x, 5x multiples of powers of 10
     const int multipliers[] = { 1, 2, 5 };
@@ -395,18 +388,18 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
 
         if (brightness == 0) // 1x multiples (brightest)
         {
-            lineColor = Color (0x60ffffff);
+            lineColor = gridColor;
             lineWidth = 1.0f;
             drawLabels = true;
         }
         else if (brightness == 1) // 2x multiples (medium)
         {
-            lineColor = Color (0x30ffffff);
+            lineColor = gridColor.withMultipliedAlpha (0.5f);
             lineWidth = 0.75f;
         }
         else // 5x multiples (darkest)
         {
-            lineColor = Color (0x18ffffff);
+            lineColor = gridColor.withMultipliedAlpha (0.25f);
             lineWidth = 0.5f;
         }
 
@@ -432,7 +425,7 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
             else
                 freqText = String (static_cast<int> (freq));
 
-            g.setFillColor (Color (0xFFcccccc));
+            g.setFillColor (textColor);
             float labelX = jmax (x - 20.0f, bounds.getX());
             labelX = jmin (labelX, bounds.getRight() - 40.0f);
             g.fillFittedText (freqText, font, { labelX, bounds.getBottom() - 15.0f, 40.0f, 12.0f }, Justification::center);
@@ -440,16 +433,18 @@ void SpectrumAnalyzerComponent::drawFrequencyGrid (Graphics& g, const Rectangle<
     }
 
     // Draw "Hz" label
-    g.setFillColor (Color (0xFF999999));
+    g.setFillColor (textColor.withMultipliedAlpha (0.75f));
     g.fillFittedText ("Hz", font, { bounds.getRight() - 25.0f, bounds.getBottom() - 15.0f, 20.0f, 12.0f }, Justification::center);
 }
 
 void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<float>& bounds)
 {
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont().withHeight (10.0f);
+    const auto gridColor = ApplicationTheme::findComponentColor (*this, Style::gridColorId).value_or (Color (0x60ffffff));
+    const auto textColor = ApplicationTheme::findComponentColor (*this, Style::textColorId).value_or (Color (0xFFcccccc));
 
     // Draw minor dB grid lines (every 10 dB)
-    g.setStrokeColor (Color (0x20ffffff));
+    g.setStrokeColor (gridColor.withMultipliedAlpha (1.0f / 3.0f));
     g.setStrokeWidth (0.5f);
 
     for (float db = minDecibels; db <= maxDecibels; db += 10.0f)
@@ -463,7 +458,7 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
     }
 
     // Draw major dB grid lines with labels (every 20 dB)
-    g.setStrokeColor (Color (0x40ffffff));
+    g.setStrokeColor (gridColor.withMultipliedAlpha (2.0f / 3.0f));
     g.setStrokeWidth (1.0f);
 
     for (float db = minDecibels; db <= maxDecibels; db += 20.0f)
@@ -476,12 +471,12 @@ void SpectrumAnalyzerComponent::drawDecibelGrid (Graphics& g, const Rectangle<fl
 
         // Add dB labels on the left side
         String dbText = String (static_cast<int> (db));
-        g.setFillColor (Color (0xFFcccccc));
+        g.setFillColor (textColor);
         g.fillFittedText (dbText, font, { bounds.getX() + 5.0f, y - 6.0f, 30.0f, 12.0f }, Justification::left);
     }
 
     // Draw "dB" label
-    g.setFillColor (Color (0xFF999999));
+    g.setFillColor (textColor.withMultipliedAlpha (0.75f));
     g.fillFittedText ("dB", font, { bounds.getX() + 5.0f, bounds.getY() + 5.0f, 20.0f, 12.0f }, Justification::centerLeft);
 }
 
@@ -541,7 +536,13 @@ void SpectrumAnalyzerComponent::setWindowType (WindowType type)
 
 void SpectrumAnalyzerComponent::setUpdateRate (int hz)
 {
-    startTimerHz (jmax (1, hz));
+    if (hz <= 0)
+    {
+        stopTimer();
+        return;
+    }
+
+    startTimerHz (hz);
 }
 
 int SpectrumAnalyzerComponent::getUpdateRate() const noexcept
@@ -610,7 +611,6 @@ void SpectrumAnalyzerComponent::setLevelMode (LevelMode mode)
     {
         levelMode = mode;
 
-        // The calibration of the per-bin levels depends on the level mode.
         if (! binLevelBuffer.empty())
             for (int binIndex = 0; binIndex < fftSize / 2 + 1; ++binIndex)
                 binLevelBuffer[static_cast<size_t> (binIndex)] = getBinLinearLevel (binIndex);
@@ -685,7 +685,6 @@ void SpectrumAnalyzerComponent::setFFTSize (int size)
     {
         fftSize = size;
 
-        // Update the state - this reinitializes the FIFO
         analyzerState.setFftSize (size);
 
         initializeFFTBuffers();

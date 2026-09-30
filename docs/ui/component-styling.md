@@ -90,6 +90,7 @@ Every themable widget exposes color IDs:
 | `DocumentWindow::Style` | `backgroundColorId` |
 | `MidiKeyboardComponent::Style` | `whiteKeyColorId`, `whiteKeyPressedColorId`, `whiteKeyShadowColorId`, `blackKeyColorId`, `blackKeyPressedColorId`, `blackKeyShadowColorId`, `keyOutlineColorId`, `scrollButtonBackgroundColorId`, `scrollButtonArrowColorId` |
 | `KMeterComponent::Style` | `backgroundColorId`, `greenZoneColorId`, `amberZoneColorId`, `redZoneColorId`, `averageLevelColorId`, `peakLevelColorId`, `peakLevelClipColorId`, `peakHoldColorId` |
+| `SpectrumAnalyzerComponent::Style` | `backgroundTopColorId`, `backgroundBottomColorId`, `outlineColorId`, `fillColorId`, `gridColorId`, `textColorId` |
 | `PitchWheelComponent::Style` | `bodyTopColorId`, `bodyBottomColorId`, `outlineColorId`, `gripColorId`, `gripOverColorId`, `gripDownColorId` |
 | `ModWheelComponent::Style` | `bodyTopColorId`, `bodyBottomColorId`, `outlineColorId`, `gripColorId`, `gripOverColorId`, `gripDownColorId` |
 | `AudioGraphComponent::Style` | `backgroundColorId`, `gridColorId` |
