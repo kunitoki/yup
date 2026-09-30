@@ -1302,23 +1302,6 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
                                      : theme.findColor (button, TabButton::Style::textColorId).value_or (palette.getColor (PaletteRole::textMuted)))
                                .withMultipliedAlpha (alpha);
 
-    const auto fillText = [&g, textColor] (const String& text, const Font& font, Rectangle<float> area, StyledText::HorizontalAlign align)
-    {
-        auto styledText = StyledText();
-        {
-            auto modifier = styledText.startUpdate();
-            modifier.setMaxSize (area.getSize());
-            modifier.setHorizontalAlign (align);
-            modifier.setVerticalAlign (StyledText::middle);
-            modifier.setOverflow (StyledText::ellipsis);
-            modifier.setWrap (StyledText::noWrap);
-            modifier.appendText (text, font);
-        }
-
-        g.setFillColor (textColor);
-        g.fillFittedText (styledText, area);
-    };
-
     if (const auto iconBounds = button.getIconBounds(); ! iconBounds.isEmpty())
     {
         if (button.getIconImage().isValid())
@@ -1327,12 +1310,28 @@ void paintTabButton (Graphics& g, const ApplicationTheme& theme, const TabButton
         }
         else
         {
-            fillText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (iconBounds.getHeight() * 0.85f), iconBounds, StyledText::center);
+            // Never shortened: a glyph wider than its box would become an ellipsis the icon font doesn't have.
+            g.setFillColor (textColor);
+            g.fillFittedText (button.getIconGlyph(), theme.getDefaultIconFont().withHeight (iconBounds.getHeight() * 0.85f), iconBounds, Justification::center);
         }
     }
 
     if (const auto textBounds = button.getTextBounds(); ! textBounds.isEmpty())
-        fillText (button.getText(), button.getFont (selected), textBounds, StyledText::left);
+    {
+        auto styledText = StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.setMaxSize (textBounds.getSize());
+            modifier.setHorizontalAlign (StyledText::left);
+            modifier.setVerticalAlign (StyledText::middle);
+            modifier.setOverflow (StyledText::ellipsis);
+            modifier.setWrap (StyledText::noWrap);
+            modifier.appendText (button.getText(), button.getFont (selected));
+        }
+
+        g.setFillColor (textColor);
+        g.fillFittedText (styledText, textBounds);
+    }
 
     if (const auto closeBounds = button.getCloseButtonBounds(); ! closeBounds.isEmpty())
     {
