@@ -1246,7 +1246,6 @@ bool SDLComponentNative::renderFrame()
         frameDescriptor.wireframe = renderWireframe.load (std::memory_order_relaxed);
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
-        frameDescriptor.clockwiseFillOverride = true;
 
         RectangleList<float> repaintAreas;
 

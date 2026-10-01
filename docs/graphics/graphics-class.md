@@ -74,6 +74,22 @@ g.setBlendMode (BlendMode::Multiply); // compositing mode
 g.setFeather (2.0f);                  // soft edge falloff
 ```
 
+Fills follow the path's fill rule (non-zero or even-odd), feathered ones included.
+A feathered fill is drawn from the outline of its filled area
+(`Path::createFillPolygon`), so its curves are flattened to line segments; the
+feather hides this. The outline is rebuilt on every draw, unless the path filled
+is itself an unmodified result of `createFillPolygon`: cache that for feathered
+paths drawn every frame.
+
+```cpp
+// Once, or when the shape changes
+shadowOutline = shape.createFillPolygon();
+
+// In paint
+g.setFeather (8.0f);
+g.fillPath (shadowOutline);
+```
+
 ## Transform, drawing area, and clip
 
 - **Transform** - an `AffineTransform` applied to all subsequent geometry.

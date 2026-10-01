@@ -1896,6 +1896,7 @@ void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransf
 void Path::swapWithPath (Path& other) noexcept
 {
     path.swap (other.path);
+    std::swap (fillPolygonMutationID, other.fillPolygonMutationID);
 }
 
 //==============================================================================
@@ -2743,6 +2744,20 @@ Path Path::createStrokePolygon (float strokeWidth, StrokeJoin join, StrokeCap ca
         return fromClipperPaths (openStroke);
 
     return fromClipperPaths (Clipper2Lib::Union (closedStroke, openStroke, Clipper2Lib::FillRule::NonZero, clipperDecimalPrecision));
+}
+
+Path Path::createFillPolygon() const
+{
+    if (fillPolygonMutationID != 0 && fillPolygonMutationID == path->getRawPathMutationID())
+        return *this;
+
+    const auto contours = toClipperPaths (*this);
+    if (contours.empty())
+        return Path();
+
+    auto result = fromClipperPaths (Clipper2Lib::Union (contours, toClipperFillRule (*this), clipperDecimalPrecision));
+    result.fillPolygonMutationID = result.path->getRawPathMutationID();
+    return result;
 }
 
 //==============================================================================

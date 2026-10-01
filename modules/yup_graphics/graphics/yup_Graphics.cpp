@@ -206,6 +206,18 @@ std::unique_ptr<rive::Renderer> makeOffscreenRenderer (GraphicsContext& context,
     return context.makeRenderer (width, height);
 }
 
+//==============================================================================
+// Feathered fills are only rendered with the clockwise fill rule, which matches the
+// path's own fill rule once its filled area is resolved into clockwise outlines. The
+// outline is copied, as it may be a cached polygon whose fill rule must not change.
+rive::rcp<rive::RiveRenderPath> toClockwiseFillPath (const Path& path)
+{
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
+    renderPath->fillRule (rive::FillRule::clockwise);
+    renderPath->addRenderPath (path.createFillPolygon().getRenderPath(), {});
+    return renderPath;
+}
+
 } // namespace
 
 //==============================================================================
@@ -933,10 +945,12 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
+    const auto renderPath = options.feather > 0.0f ? toClockwiseFillPath (path) : rive::ref_rcp (path.getRenderPath());
+
     renderer.save();
     renderer.transform (transform.toMat2D());
     renderer.modulateOpacity (options.opacity);
-    renderer.drawPath (path.getRenderPath(), std::addressof (paint));
+    renderer.drawPath (renderPath.get(), std::addressof (paint));
     renderer.restore();
 }
 
@@ -1066,6 +1080,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     paint.thickness (options.getStrokeWidth());
     paint.join (toStrokeJoin (options.join));
     paint.cap (toStrokeCap (options.cap));
+    paint.feather (options.feather);
 
     if (options.isStrokeColor())
         paint.color ((rive::ColorInt) options.getStrokeColor());
@@ -1116,8 +1131,15 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
     auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 
+    const bool isFeatheredFill = paint != nullptr && paint->getFeather() > 0.0f && ! paint->getIsStroked();
+
     for (auto style : text.getRenderStyles())
-        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
+    {
+        if (isFeatheredFill)
+            renderer.drawPath (toClockwiseFillPath (Path (rive::ref_rcp (static_cast<rive::RiveRenderPath*> (style->path.get())))).get(), paint);
+        else
+            renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
+    }
 
     renderer.restore();
 }

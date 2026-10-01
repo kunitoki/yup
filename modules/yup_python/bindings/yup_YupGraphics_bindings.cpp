@@ -1042,6 +1042,7 @@ void registerYupGraphicsBindings (py::module_& m)
 
         // Path operations
         .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a, "join"_a = StrokeJoin::Round, "cap"_a = StrokeCap::Butt)
+        .def ("createFillPolygon", &Path::createFillPolygon)
         .def ("withRoundedCorners", &Path::withRoundedCorners, "cornerRadius"_a)
         .def ("appendPath", py::overload_cast<const Path&> (&Path::appendPath), "other"_a)
         .def ("appendPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::appendPath), "other"_a, "transform"_a)

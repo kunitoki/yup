@@ -614,6 +614,25 @@ public:
                               StrokeJoin join = StrokeJoin::Round,
                               StrokeCap cap = StrokeCap::Butt) const;
 
+    /** Converts the path to the outline of the area it fills.
+
+        The area covered by this path under its own fill rule (non-zero or even-odd) is
+        returned as simple, non-overlapping contours: self-intersecting contours are split
+        at their crossings and overlapping contours are merged. Outer contours are wound
+        clockwise and holes counter-clockwise, using the non-zero winding rule, so the
+        result fills the same area whatever fill rule is applied to it.
+
+        Curves are flattened to line segments and open contours are implicitly closed, as
+        when filling.
+
+        Calling this on a path it returned, as long as that path hasn't been modified since,
+        returns it as is without recomputing it. A cached result can therefore be filled with
+        a feather, which needs this outline, at no extra cost.
+
+        @return A Path representing the outline of the filled area.
+    */
+    [[nodiscard]] Path createFillPolygon() const;
+
     //==============================================================================
     /** Creates a new path with rounded corners applied to this path.
 
@@ -958,6 +977,7 @@ public:
 
 private:
     rive::rcp<rive::RiveRenderPath> path;
+    uint64 fillPolygonMutationID = 0;
 };
 
 } // namespace yup

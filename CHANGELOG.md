@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- **Behavior change** Fills and clip paths now follow the path's non-zero or even-odd fill rule. Window rendering forced Rive's clockwise rule on every fill, which dropped the parts of self-intersecting or overlapping paths winding against the rest of the path; this can also change the Rive interlock mode a backend uses. Feathered fills, which Rive only draws clockwise, go through the new `Path::createFillPolygon` first.
 - Fixed WebAssembly windows not re-evaluating a stationary pointer when painted content moved under it, so hover and cursor didn't follow widgets displaced by effects such as the Component Effects wave.
 - The graphics Paths demo is now a path editor: layers, vertex and bezier handle editing, a pen tool, fill / stroke / gradient / feather / opacity / blend properties, undo, and SVG export, on a schema-validated `DataTree`.
 - Fixed `FileChooser` on the web returning files before their contents were copied, multi-file picks overwriting each other and the chooser never being freed. Picks are now fully written to the in-memory filesystem when the callback runs.
