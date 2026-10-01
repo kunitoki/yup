@@ -106,8 +106,15 @@ inline yup::String exportSvg (const yup::DataTree& document)
 
         const auto stroke = getStroke (layer);
         const float strokeWidth = getFloat (stroke, Ids::width);
+        const auto blendMode = getString (layer, Ids::blendMode);
+        const bool blended = blendMode != "normal";
 
-        body << "  <path d=\"" << pathData << "\"" << writePaint (getFill (layer), "fill")
+        // Blend the finished (blurred) layer as a group: mix-blend-mode on the filtered element itself
+        // blends the low alpha fringe of the blur pixel by pixel and shows speckles in browsers
+        if (blended)
+            body << "  <g style=\"mix-blend-mode:" << blendMode << "\">\n";
+
+        body << (blended ? "    " : "  ") << "<path d=\"" << pathData << "\"" << writePaint (getFill (layer), "fill")
              << " fill-rule=\"" << getString (layer, Ids::fillRule) << "\"";
 
         if (isPaintVisible (stroke) && strokeWidth > 0.0f)
@@ -121,19 +128,19 @@ inline yup::String exportSvg (const yup::DataTree& document)
         if (const float opacity = getFloat (layer, Ids::opacity); opacity < 1.0f)
             body << " opacity=\"" << toSvgNumber (opacity) << "\"";
 
-        if (const auto blendMode = getString (layer, Ids::blendMode); blendMode != "normal")
-            body << " style=\"mix-blend-mode:" << blendMode << "\"";
-
         if (const float feather = getFloat (layer, Ids::feather); feather > 0.0f)
         {
             const auto id = "feather" + yup::String (++numDefinitions);
-            defs << "    <filter id=\"" << id << "\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\">"
+            defs << "    <filter id=\"" << id << "\" x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\" color-interpolation-filters=\"sRGB\">"
                  << "<feGaussianBlur stdDeviation=\"" << toSvgNumber (feather * 0.5f) << "\"/></filter>\n";
 
             body << " filter=\"url(#" << id << ")\"";
         }
 
         body << "/>\n";
+
+        if (blended)
+            body << "  </g>\n";
     }
 
     yup::String svg;
