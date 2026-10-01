@@ -91,6 +91,8 @@ These constructs have no WGSL equivalent. The transpile fails and says so:
 - storage buffers written from a vertex shader
 - comparing structs, arrays or matrices with `==`
 - `interpolateAt*()`, `imulExtended()`, image atomics, atomic counters
+- expressions more than 64 levels deep: a chain of operators such as
+  `a + b + c` adds one level per operator, so split very long expressions
 
 `layout(early_fragment_tests)` is accepted with a warning: WGSL has no way to
 request it. Pass a `StringArray*` in `WgslTranspileOptions::warnings` to collect

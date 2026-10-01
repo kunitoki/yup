@@ -752,7 +752,6 @@ public:
 private:
     static constexpr int maxStatementDepth = 128;
     static constexpr int maxExpressionDepth = 64;
-    static constexpr int maxChainLength = 1024;
     static constexpr std::uintptr_t maxStackBytes = 256 * 1024;
 
     /** Bounds the recursion of the descent so hostile input fails cleanly instead of overflowing the stack. */
@@ -1504,12 +1503,29 @@ private:
     // Expressions - full GLSL precedence ladder
     //==========================================================================
 
+    /** Every node is built here. The passes after parsing recurse once per level of the tree, so a deeper
+        tree (a long chain of operators is as deep as it is long) would overflow their stack. */
     static Expr makeExpr (SourceLocation l, ExprVariant value)
     {
         Expr e;
         e.loc = l;
         e.value = std::move (value);
+
+        if (depthOf (e) > maxExpressionDepth)
+            throwError (l, "Expression is too complex; split it into smaller expressions");
+
         return e;
+    }
+
+    static int depthOf (Expr& e)
+    {
+        int deepest = 0;
+        forEachChildExpr (e, [&deepest] (Expr& child)
+        {
+            deepest = std::max (deepest, depthOf (child));
+        });
+
+        return deepest + 1;
     }
 
     static Expr makeBinary (SourceLocation l, Expr left, BinaryOp op, Expr right)
@@ -1522,20 +1538,13 @@ private:
         return makeExpr (l, ExprUnary { l, op, std::make_unique<Expr> (std::move (operand)) });
     }
 
-    static void checkChainLength (int& length, SourceLocation l)
-    {
-        if (++length > maxChainLength)
-            throwError (l, "Expression is too long");
-    }
-
     Expr parseExpression()
     {
         const SourceLocation l = loc();
         auto left = parseAssignment();
 
-        for (int length = 0; match (TokenType::comma);)
+        while (match (TokenType::comma))
         {
-            checkChainLength (length, l);
             auto right = parseAssignment();
             left = makeExpr (l, ExprComma { l, std::make_unique<Expr> (std::move (left)), std::make_unique<Expr> (std::move (right)) });
         }
@@ -1621,7 +1630,7 @@ private:
     {
         auto left = parseUnary();
 
-        for (int length = 0;;)
+        for (;;)
         {
             BinaryOp op {};
             const auto precedence = binaryPrecedence (lexer.peek().type, op);
@@ -1630,7 +1639,6 @@ private:
                 return left;
 
             const SourceLocation l = loc();
-            checkChainLength (length, l);
             lexer.advance();
 
             auto right = parseBinary (precedence + 1);
@@ -1667,7 +1675,7 @@ private:
     {
         auto left = parsePrimary();
 
-        for (int length = 0;; checkChainLength (length, loc()))
+        for (;;)
         {
             const SourceLocation l = loc();
 

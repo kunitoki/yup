@@ -4613,11 +4613,23 @@ TEST_F (WgslHardeningTests, MalformedStatementsFail)
     expectFailure ("void main() { do { } until (true); }", "1:22: Expected keyword 'while', got 'until'");
     expectFailure ("void main() { float x = vec2; }", "1:25: Expected '(' after type in constructor, got ';'");
 
-    std::string longSum = "1.0";
-    for (int i = 0; i < 1100; ++i)
-        longSum += " + 1.0";
+}
 
-    expectFailure (("void main() { float x = " + longSum + "; }").c_str(), "Expression is too long");
+TEST_F (WgslHardeningTests, ExpressionsDeeperThanTheLimitFail)
+{
+    const auto sum = [] (int terms)
+    {
+        std::string result = "x";
+        for (int i = 1; i < terms; ++i)
+            result += " + x";
+
+        return result;
+    };
+
+    // A chain of operators is a tree as deep as the chain is long
+    transpileOk (("layout(location = 0) out vec4 c; void main() { float x = 1.0; float y = " + sum (60) + "; c = vec4(y); }").c_str());
+    expectFailure (("void main() { float x = 1.0; float y = " + sum (1100) + "; }").c_str(), "1:294: Expression is too complex; split it into smaller expressions");
+    expectFailure (("void main() { float x = 1.0; float y = (" + sum (40) + ") + " + sum (40) + "; }").c_str(), "Expression is too complex");
 }
 
 TEST_F (WgslHardeningTests, OptionalSyntaxIsAccepted)
