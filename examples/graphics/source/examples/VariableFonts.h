@@ -130,19 +130,13 @@ public:
         g.addTransform (yup::AffineTransform::rotation (
             yup::degreesToRadians (-rotation), getLocalBounds().getCenterX(), 100.0f));
 
-        if (feather > 0.0f)
-        {
-            g.setFillColor (yup::Colors::black);
-            g.setFeather (feather);
-            g.fillFittedText (styledText, textBounds.translated (0, 2));
-        }
-
         if (strokeWidth > 0.0f)
         {
             g.setStrokeColor (yup::Colors::green);
             g.setStrokeWidth (strokeWidth);
             g.setStrokeCap (yup::StrokeCap::Round);
             g.setStrokeJoin (yup::StrokeJoin::Round);
+            g.setFeather (feather);
             g.strokeFittedText (styledText, textBounds);
         }
 

@@ -33,7 +33,7 @@ class TypeLegalizer
 public:
     void run (TranslationUnit& ast)
     {
-        symbols.pushScope();
+        pushScope();
 
         declareBuiltins();
         collectStructsAndFunctions (ast);
@@ -46,184 +46,35 @@ public:
                 visitFunction (*function);
         }
 
-        symbols.popScope();
+        popScope();
     }
 
 private:
     using ExprType = std::optional<TypeSpecifier>;
 
     //==========================================================================
-    static TypeKind scalarKindOf (TypeKind kind)
+    /** GLSL converts int to uint, and both to float. Bool never converts implicitly. */
+    static int conversionRank (TypeKind scalar)
     {
-        switch (kind)
+        switch (scalar)
         {
-            case TypeKind::floatType:
-            case TypeKind::vec2:
-            case TypeKind::vec3:
-            case TypeKind::vec4:
-            case TypeKind::mat2:
-            case TypeKind::mat3:
-            case TypeKind::mat4:
-            case TypeKind::mat2x2:
-            case TypeKind::mat2x3:
-            case TypeKind::mat2x4:
-            case TypeKind::mat3x2:
-            case TypeKind::mat3x3:
-            case TypeKind::mat3x4:
-            case TypeKind::mat4x2:
-            case TypeKind::mat4x3:
-            case TypeKind::mat4x4:
-                return TypeKind::floatType;
-
             case TypeKind::intType:
-            case TypeKind::ivec2:
-            case TypeKind::ivec3:
-            case TypeKind::ivec4:
-                return TypeKind::intType;
-
-            case TypeKind::uintType:
-            case TypeKind::uvec2:
-            case TypeKind::uvec3:
-            case TypeKind::uvec4:
-                return TypeKind::uintType;
-
-            case TypeKind::boolType:
-            case TypeKind::bvec2:
-            case TypeKind::bvec3:
-            case TypeKind::bvec4:
-                return TypeKind::boolType;
-
-            default:
-                return TypeKind::voidType;
-        }
-    }
-
-    /** Returns 1 for scalars, 2 to 4 for vectors and 0 for anything else. */
-    static int componentCount (TypeKind kind)
-    {
-        switch (kind)
-        {
-            case TypeKind::floatType:
-            case TypeKind::intType:
-            case TypeKind::uintType:
-            case TypeKind::boolType:
                 return 1;
-
-            case TypeKind::vec2:
-            case TypeKind::ivec2:
-            case TypeKind::uvec2:
-            case TypeKind::bvec2:
+            case TypeKind::uintType:
                 return 2;
-
-            case TypeKind::vec3:
-            case TypeKind::ivec3:
-            case TypeKind::uvec3:
-            case TypeKind::bvec3:
+            case TypeKind::floatType:
                 return 3;
-
-            case TypeKind::vec4:
-            case TypeKind::ivec4:
-            case TypeKind::uvec4:
-            case TypeKind::bvec4:
-                return 4;
-
             default:
                 return 0;
         }
     }
 
-    static TypeKind vectorKind (TypeKind scalar, int count)
-    {
-        static constexpr TypeKind floats[] = { TypeKind::floatType, TypeKind::vec2, TypeKind::vec3, TypeKind::vec4 };
-        static constexpr TypeKind ints[] = { TypeKind::intType, TypeKind::ivec2, TypeKind::ivec3, TypeKind::ivec4 };
-        static constexpr TypeKind uints[] = { TypeKind::uintType, TypeKind::uvec2, TypeKind::uvec3, TypeKind::uvec4 };
-        static constexpr TypeKind bools[] = { TypeKind::boolType, TypeKind::bvec2, TypeKind::bvec3, TypeKind::bvec4 };
-
-        if (count < 1 || count > 4)
-            return TypeKind::voidType;
-
-        switch (scalar)
-        {
-            case TypeKind::floatType:
-                return floats[count - 1];
-            case TypeKind::intType:
-                return ints[count - 1];
-            case TypeKind::uintType:
-                return uints[count - 1];
-            case TypeKind::boolType:
-                return bools[count - 1];
-            default:
-                return TypeKind::voidType;
-        }
-    }
-
-    /** Returns { columns, rows } of a float matrix (GLSL matCxR), or { 0, 0 }. */
-    static std::pair<int, int> matrixShape (TypeKind kind)
-    {
-        switch (kind)
-        {
-            case TypeKind::mat2:
-            case TypeKind::mat2x2:
-                return { 2, 2 };
-            case TypeKind::mat2x3:
-                return { 2, 3 };
-            case TypeKind::mat2x4:
-                return { 2, 4 };
-            case TypeKind::mat3x2:
-                return { 3, 2 };
-            case TypeKind::mat3:
-            case TypeKind::mat3x3:
-                return { 3, 3 };
-            case TypeKind::mat3x4:
-                return { 3, 4 };
-            case TypeKind::mat4x2:
-                return { 4, 2 };
-            case TypeKind::mat4x3:
-                return { 4, 3 };
-            case TypeKind::mat4:
-            case TypeKind::mat4x4:
-                return { 4, 4 };
-            default:
-                return { 0, 0 };
-        }
-    }
-
-    static TypeKind matrixKind (int columns, int rows)
-    {
-        static constexpr TypeKind kinds[3][3] = {
-            { TypeKind::mat2x2, TypeKind::mat2x3, TypeKind::mat2x4 },
-            { TypeKind::mat3x2, TypeKind::mat3x3, TypeKind::mat3x4 },
-            { TypeKind::mat4x2, TypeKind::mat4x3, TypeKind::mat4x4 }
-        };
-
-        if (columns < 2 || columns > 4 || rows < 2 || rows > 4)
-            return TypeKind::voidType;
-
-        return kinds[columns - 2][rows - 2];
-    }
-
-    /** GLSL converts int to uint, and both to float. Bool never converts implicitly. */
     static TypeKind promote (TypeKind a, TypeKind b)
     {
-        const auto rank = [] (TypeKind scalar)
-        {
-            switch (scalar)
-            {
-                case TypeKind::intType:
-                    return 1;
-                case TypeKind::uintType:
-                    return 2;
-                case TypeKind::floatType:
-                    return 3;
-                default:
-                    return 0;
-            }
-        };
-
-        if (rank (a) == 0 || rank (b) == 0)
+        if (conversionRank (a) == 0 || conversionRank (b) == 0)
             return TypeKind::voidType;
 
-        return rank (a) >= rank (b) ? a : b;
+        return conversionRank (a) >= conversionRank (b) ? a : b;
     }
 
     static ExprType typeOf (const TypeSpecifier& type)
@@ -292,6 +143,17 @@ private:
         return false;
     }
 
+    /** Re-types an abstract literal expression in place after it adapted to @p kind. */
+    static void retypeLiteral (Expr& expr, TypeKind kind)
+    {
+        expr.type = TypeSpecifier::make (expr.loc, kind);
+
+        if (expr.is<ExprParen>() && expr.as<ExprParen>().expr != nullptr)
+            retypeLiteral (*expr.as<ExprParen>().expr, kind);
+        else if (expr.is<ExprUnary>() && expr.as<ExprUnary>().operand != nullptr)
+            retypeLiteral (*expr.as<ExprUnary>().operand, kind);
+    }
+
     static void wrap (Expr& expr, TypeKind kind)
     {
         ExprTypeConstructor constructor;
@@ -302,6 +164,7 @@ private:
         Expr wrapped;
         wrapped.loc = constructor.loc;
         wrapped.value = std::move (constructor);
+        wrapped.type = TypeSpecifier::make (wrapped.loc, kind);
         expr = std::move (wrapped);
     }
 
@@ -326,19 +189,37 @@ private:
         if (! splat && fromCount != toCount)
             return;
 
-        if (fromScalar != toScalar && ! adaptsTo (expr, toScalar))
-            wrap (expr, vectorKind (toScalar, fromCount));
+        if (fromScalar != toScalar)
+        {
+            if (adaptsTo (expr, toScalar))
+                retypeLiteral (expr, vectorKind (toScalar, fromCount));
+            else
+                wrap (expr, vectorKind (toScalar, fromCount));
+        }
 
         if (splat)
             wrap (expr, to);
     }
 
     //==========================================================================
+    void pushScope() { scopes.emplace_back(); }
+
+    void popScope() { scopes.pop_back(); }
+
     void declare (const std::string& name, TypeSpecifier type)
     {
-        SymbolInfo info;
-        info.type = std::move (type);
-        symbols.declare (name, info);
+        scopes.back()[name] = std::move (type);
+    }
+
+    const TypeSpecifier* lookup (const std::string& name) const
+    {
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it)
+        {
+            if (auto found = it->find (name); found != it->end())
+                return &found->second;
+        }
+
+        return nullptr;
     }
 
     void declareBuiltins()
@@ -353,15 +234,26 @@ private:
             { "gl_VertexID", TypeKind::intType },
             { "gl_InstanceIndex", TypeKind::intType },
             { "gl_InstanceID", TypeKind::intType },
+            { "gl_SampleID", TypeKind::intType },
             { "gl_GlobalInvocationID", TypeKind::uvec3 },
             { "gl_LocalInvocationID", TypeKind::uvec3 },
             { "gl_WorkGroupID", TypeKind::uvec3 },
             { "gl_NumWorkGroups", TypeKind::uvec3 },
+            { "gl_WorkGroupSize", TypeKind::uvec3 },
             { "gl_LocalInvocationIndex", TypeKind::uintType }
         };
 
         for (const auto& [name, kind] : builtins)
             declare (name, TypeSpecifier::make ({}, kind));
+
+        // int gl_SampleMask[1] / gl_SampleMaskIn[1]
+        auto maskType = TypeSpecifier::make ({}, TypeKind::intType);
+        ArraySpecifier size;
+        size.sizeExpr = std::make_unique<Expr>();
+        size.sizeExpr->value = ExprIntConst { {}, 1 };
+        maskType.arraySpecifiers.push_back (std::move (size));
+        declare ("gl_SampleMask", maskType);
+        declare ("gl_SampleMaskIn", maskType);
     }
 
     void collectStructsAndFunctions (const TranslationUnit& ast)
@@ -370,7 +262,8 @@ private:
         {
             if (const auto* function = std::get_if<FunctionDefinition> (&decl))
             {
-                functions.emplace (function->prototype.name, &function->prototype);
+                const auto& proto = function->prototype;
+                functions.emplace (proto.originalName.empty() ? proto.name : proto.originalName, &proto);
                 continue;
             }
 
@@ -381,38 +274,71 @@ private:
             const auto& structSpecifier = *declaration->structSpecifier;
             if (! structSpecifier.name.empty())
                 structs[structSpecifier.name] = &structSpecifier;
-
-            // The fields of a block without an instance name are globals
-            const bool isBlock = declaration->qualifier != nullptr
-                              && (declaration->qualifier->hasStorage (StorageQualifier::uniform)
-                                  || declaration->qualifier->hasStorage (StorageQualifier::buffer));
-
-            if (isBlock && declaration->initDeclaratorList == nullptr)
-            {
-                for (const auto& field : structSpecifier.fields)
-                    declare (field.name, field.type);
-            }
         }
     }
 
-    const FunctionPrototype* findFunction (const std::string& name, std::size_t argumentCount) const
+    static int conversionCost (const ExprType& from, const TypeSpecifier& to)
     {
-        const FunctionPrototype* result = nullptr;
+        if (! from.has_value())
+            return -1;
+
+        if (sameType (*from, to))
+            return 0;
+
+        if (! isNumeric (from) || ! to.arraySpecifiers.empty() || componentCount (from->kind) != componentCount (to.kind))
+            return -1;
+
+        const auto fromRank = conversionRank (scalarKindOf (from->kind));
+        const auto toRank = conversionRank (scalarKindOf (to.kind));
+        return fromRank > 0 && toRank > fromRank ? 1 : -1;
+    }
+
+    /** GLSL overload resolution: an exact match wins, otherwise the one candidate reachable by implicit conversions. */
+    const FunctionPrototype* findFunction (const std::string& name, const std::vector<ExprType>& argumentTypes, SourceLocation loc) const
+    {
+        const FunctionPrototype* exact = nullptr;
+        std::vector<const FunctionPrototype*> convertible;
 
         const auto [first, last] = functions.equal_range (name);
         for (auto it = first; it != last; ++it)
         {
-            if (it->second->parameters.size() != argumentCount)
+            const auto& params = it->second->parameters;
+            if (params.size() != argumentTypes.size())
                 continue;
 
-            // Same-arity overloads can't be told apart without full overload resolution
-            if (result != nullptr)
-                return nullptr;
+            int total = 0;
+            for (std::size_t i = 0; i < params.size() && total >= 0; ++i)
+            {
+                const auto paramType = declaratorType (params[i].type, params[i].arraySpecifiers);
 
-            result = it->second;
+                const bool isOut = params[i].qualifier != nullptr
+                                && (params[i].qualifier->hasStorage (StorageQualifier::out) || params[i].qualifier->hasStorage (StorageQualifier::inout));
+
+                // Opaque and unknown argument types match loosely: glslang already checked the call
+                const int cost = argumentTypes[i].has_value() ? conversionCost (argumentTypes[i], paramType) : 0;
+                total = (cost < 0 || (isOut && cost > 0)) ? -1 : total + cost;
+            }
+
+            if (total == 0)
+            {
+                if (exact != nullptr)
+                    throw LoweringError (loc, "Ambiguous call to overloaded function '" + name + "'");
+
+                exact = it->second;
+            }
+            else if (total > 0)
+            {
+                convertible.push_back (it->second);
+            }
         }
 
-        return result;
+        if (exact != nullptr)
+            return exact;
+
+        if (convertible.size() > 1)
+            throw LoweringError (loc, "Ambiguous call to overloaded function '" + name + "'");
+
+        return convertible.empty() ? nullptr : convertible.front();
     }
 
     //==========================================================================
@@ -424,10 +350,7 @@ private:
         auto& list = *declaration.initDeclaratorList;
         for (auto& single : list.declarations)
         {
-            auto type = list.type;
-            type.arraySpecifiers.insert (type.arraySpecifiers.end(),
-                                         single.arraySpecifiers.begin(),
-                                         single.arraySpecifiers.end());
+            auto type = declaratorType (list.type, single.arraySpecifiers);
 
             if (single.initializer != nullptr && single.initializer->expr != nullptr)
             {
@@ -435,6 +358,8 @@ private:
 
                 if (type.arraySpecifiers.empty())
                     coerce (*single.initializer->expr, initializerType, type.kind);
+                else if (type.arraySpecifiers.front().isUnsized && initializerType.has_value() && ! initializerType->arraySpecifiers.empty())
+                    type.arraySpecifiers.front() = initializerType->arraySpecifiers.front();
             }
 
             declare (single.name, std::move (type));
@@ -443,15 +368,11 @@ private:
 
     void visitFunction (FunctionDefinition& function)
     {
-        symbols.pushScope();
+        pushScope();
 
         for (const auto& parameter : function.prototype.parameters)
         {
-            auto type = parameter.type;
-            type.arraySpecifiers.insert (type.arraySpecifiers.end(),
-                                         parameter.arraySpecifiers.begin(),
-                                         parameter.arraySpecifiers.end());
-            declare (parameter.name, std::move (type));
+            declare (parameter.name, declaratorType (parameter.type, parameter.arraySpecifiers));
         }
 
         returnType = function.prototype.returnType;
@@ -459,7 +380,7 @@ private:
         if (function.body != nullptr)
             visitStatement (*function.body);
 
-        symbols.popScope();
+        popScope();
     }
 
     void visitIfPresent (std::unique_ptr<Expr>& expr)
@@ -478,12 +399,12 @@ private:
     {
         if (statement.is<StmtCompound>())
         {
-            symbols.pushScope();
+            pushScope();
 
             for (auto& child : statement.as<StmtCompound>().statements)
                 visitStatement (child);
 
-            symbols.popScope();
+            popScope();
         }
         else if (statement.is<StmtDeclaration>())
         {
@@ -503,14 +424,27 @@ private:
         else if (statement.is<StmtSwitch>())
         {
             auto& switchStatement = statement.as<StmtSwitch>();
-            visitIfPresent (switchStatement.selector);
+            const auto selectorType = switchStatement.selector != nullptr ? visit (*switchStatement.selector) : std::nullopt;
 
-            symbols.pushScope();
+            pushScope();
 
             for (auto& child : switchStatement.body)
-                visitStatement (child);
+            {
+                if (child.is<StmtCaseLabel>() && child.as<StmtCaseLabel>().label != nullptr)
+                {
+                    auto& label = *child.as<StmtCaseLabel>().label;
+                    const auto labelType = visit (label);
 
-            symbols.popScope();
+                    if (isNumeric (selectorType))
+                        coerce (label, labelType, selectorType->kind);
+                }
+                else
+                {
+                    visitStatement (child);
+                }
+            }
+
+            popScope();
         }
         else if (statement.is<StmtWhile>())
         {
@@ -528,14 +462,14 @@ private:
         {
             auto& loop = statement.as<StmtFor>();
 
-            symbols.pushScope();
+            pushScope();
 
             visitIfPresent (loop.init);
             visitIfPresent (loop.condition);
             visitIfPresent (loop.update);
             visitIfPresent (loop.body);
 
-            symbols.popScope();
+            popScope();
         }
         else if (statement.is<StmtJump>())
         {
@@ -553,10 +487,21 @@ private:
     //==========================================================================
     ExprType visit (Expr& expr)
     {
+        auto type = visitExpression (expr);
+
+        // Conversions inserted by the visitor replace expr with a typed constructor
+        if (! expr.type.has_value())
+            expr.type = type;
+
+        return type;
+    }
+
+    ExprType visitExpression (Expr& expr)
+    {
         if (expr.is<ExprVariable>())
         {
-            if (const auto* info = symbols.lookup (expr.as<ExprVariable>().name))
-                return info->type;
+            if (const auto* type = lookup (expr.as<ExprVariable>().name))
+                return *type;
 
             return std::nullopt;
         }
@@ -588,11 +533,7 @@ private:
             if (unary.operand == nullptr)
                 return std::nullopt;
 
-            auto operandType = visit (*unary.operand);
-            if (unary.op == UnaryOp::logicalNot)
-                return makeType (TypeKind::boolType);
-
-            return operandType;
+            return visit (*unary.operand);
         }
 
         if (expr.is<ExprComma>())
@@ -675,14 +616,41 @@ private:
         {
             case BinaryOp::logicalAnd:
             case BinaryOp::logicalOr:
+            case BinaryOp::logicalXor:
                 return makeType (TypeKind::boolType);
 
             case BinaryOp::shiftLeft:
             case BinaryOp::shiftRight:
+                // WGSL shifts a vector by a vector of u32
                 if (isNumeric (rightType))
-                    coerce (*binary.right, rightType, vectorKind (TypeKind::uintType, componentCount (rightType->kind)));
+                {
+                    const auto count = isNumeric (leftType) ? std::max (componentCount (leftType->kind), componentCount (rightType->kind))
+                                                            : componentCount (rightType->kind);
+                    coerce (*binary.right, rightType, vectorKind (TypeKind::uintType, count));
+                }
 
                 return leftType;
+
+            case BinaryOp::bitwiseAnd:
+            case BinaryOp::bitwiseOr:
+            case BinaryOp::bitwiseXor:
+            {
+                // WGSL bitwise operands must have the same type: splat a scalar to the vector's size
+                auto result = unify (*binary.left, leftType, *binary.right, rightType);
+                if (! result.has_value())
+                    return result;
+
+                const auto count = componentCount (result->kind);
+                const auto scalar = makeType (scalarKindOf (result->kind));
+
+                if (componentCount (leftType->kind) == 1 && count > 1)
+                    coerce (*binary.left, scalar, result->kind);
+
+                if (componentCount (rightType->kind) == 1 && count > 1)
+                    coerce (*binary.right, scalar, result->kind);
+
+                return result;
+            }
 
             case BinaryOp::lessThan:
             case BinaryOp::greaterThan:
@@ -690,6 +658,7 @@ private:
             case BinaryOp::greaterEqual:
             case BinaryOp::equal:
             case BinaryOp::notEqual:
+                // GLSL == and != compare whole values to a single bool, even for vectors
                 unify (*binary.left, leftType, *binary.right, rightType);
                 return makeType (TypeKind::boolType);
 
@@ -700,16 +669,23 @@ private:
         if (! leftType.has_value() || ! rightType.has_value())
             return std::nullopt;
 
-        const bool isMatrixOperation = matrixShape (leftType->kind).first > 0
-                                    || matrixShape (rightType->kind).first > 0;
+        const bool leftIsMatrix = isMatrixType (leftType->kind);
+        const bool rightIsMatrix = isMatrixType (rightType->kind);
 
-        if (! isMatrixOperation)
+        if (! leftIsMatrix && ! rightIsMatrix)
             return unify (*binary.left, leftType, *binary.right, rightType);
+
+        // Scalars and vectors combined with float matrices convert to float
+        if (! leftIsMatrix && isNumeric (leftType))
+            coerce (*binary.left, leftType, vectorKind (TypeKind::floatType, componentCount (leftType->kind)));
+
+        if (! rightIsMatrix && isNumeric (rightType))
+            coerce (*binary.right, rightType, vectorKind (TypeKind::floatType, componentCount (rightType->kind)));
 
         if (binary.op == BinaryOp::mul)
             return matrixProduct (*leftType, *rightType);
 
-        return matrixShape (leftType->kind).first > 0 ? leftType : rightType;
+        return leftIsMatrix ? leftType : rightType;
     }
 
     ExprType visitTernary (ExprTernary& ternary)
@@ -725,7 +701,7 @@ private:
         if (auto unified = unify (*ternary.trueBranch, trueType, *ternary.falseBranch, falseType))
             return unified;
 
-        return trueType;
+        return trueType.has_value() ? trueType : falseType;
     }
 
     ExprType visitAssignment (ExprAssignment& assignment)
@@ -749,7 +725,13 @@ private:
 
             case AssignmentOp::shiftLeftAssign:
             case AssignmentOp::shiftRightAssign:
-                coerce (*assignment.rhs, valueType, vectorKind (TypeKind::uintType, valueCount));
+                coerce (*assignment.rhs, valueType, vectorKind (TypeKind::uintType, std::max (valueCount, componentCount (targetType->kind))));
+                break;
+
+            case AssignmentOp::bitwiseAndAssign:
+            case AssignmentOp::bitwiseOrAssign:
+            case AssignmentOp::bitwiseXorAssign:
+                coerce (*assignment.rhs, valueType, targetType->kind);
                 break;
 
             default:
@@ -830,17 +812,51 @@ private:
 
         if (! type.arraySpecifiers.empty())
         {
-            for (std::size_t i = 0; i < constructor.args.size(); ++i)
-                coerce (constructor.args[i], argumentTypes[i], type.kind);
+            auto elementType = type;
+            elementType.arraySpecifiers.erase (elementType.arraySpecifiers.begin());
+
+            if (elementType.arraySpecifiers.empty())
+            {
+                for (std::size_t i = 0; i < constructor.args.size(); ++i)
+                    coerce (constructor.args[i], argumentTypes[i], elementType.kind);
+            }
+
+            // An unsized array constructor takes its size from the argument count
+            auto result = type;
+            if (result.arraySpecifiers.front().isUnsized)
+            {
+                auto& size = result.arraySpecifiers.front();
+                size.isUnsized = false;
+                size.sizeExpr = std::make_unique<Expr>();
+                size.sizeExpr->loc = constructor.loc;
+                size.sizeExpr->value = ExprIntConst { constructor.loc, static_cast<int64_t> (constructor.args.size()) };
+                constructor.type = result;
+            }
+
+            return result;
+        }
+
+        if (type.kind == TypeKind::namedStruct)
+        {
+            if (const auto found = structs.find (type.structName); found != structs.end())
+            {
+                const auto& fields = found->second->fields;
+
+                for (std::size_t i = 0; i < constructor.args.size() && i < fields.size(); ++i)
+                {
+                    if (fields[i].type.arraySpecifiers.empty())
+                        coerce (constructor.args[i], argumentTypes[i], fields[i].type.kind);
+                }
+            }
 
             return type;
         }
 
-        // Samplers and structs keep their arguments untouched
+        // Samplers keep their arguments untouched
         if (scalar == TypeKind::voidType)
             return typeOf (type);
 
-        if (matrixShape (type.kind).first > 0)
+        if (isMatrixType (type.kind))
         {
             for (std::size_t i = 0; i < constructor.args.size(); ++i)
             {
@@ -877,29 +893,31 @@ private:
         for (auto& argument : call.args)
             argumentTypes.push_back (visit (argument));
 
-        if (call.callee == nullptr || ! call.callee->is<ExprVariable>())
+        if (call.callee == nullptr)
             return std::nullopt;
 
-        const auto& name = call.callee->as<ExprVariable>().name;
-
-        if (const auto found = structs.find (name); found != structs.end())
+        // Method call: only array.length() and vector/matrix .length() exist in GLSL
+        if (call.callee->is<ExprDot>())
         {
-            const auto& fields = found->second->fields;
+            auto& dot = call.callee->as<ExprDot>();
+            if (dot.base != nullptr)
+                visit (*dot.base);
 
-            for (std::size_t i = 0; i < call.args.size() && i < fields.size(); ++i)
-            {
-                if (fields[i].type.arraySpecifiers.empty())
-                    coerce (call.args[i], argumentTypes[i], fields[i].type.kind);
-            }
-
-            return TypeSpecifier::makeNamed (call.loc, name);
+            return dot.member == "length" ? makeType (TypeKind::intType) : std::nullopt;
         }
+
+        if (! call.callee->is<ExprVariable>())
+            return std::nullopt;
+
+        auto& name = call.callee->as<ExprVariable>().name;
 
         if (functions.count (name) > 0)
         {
-            const auto* prototype = findFunction (name, call.args.size());
+            const auto* prototype = findFunction (name, argumentTypes, call.loc);
             if (prototype == nullptr)
                 return std::nullopt;
+
+            name = prototype->name;
 
             for (std::size_t i = 0; i < call.args.size(); ++i)
             {
@@ -957,62 +975,86 @@ private:
         if (! samplerType.has_value())
             return std::nullopt;
 
-        switch (samplerType->kind)
+        const auto shape = textureShape (samplerType->kind);
+        if (shape.dim == TextureShape::Dim::none)
+            return std::nullopt;
+
+        if (shape.shadow)
+            return makeType (TypeKind::floatType);
+
+        return makeType (vectorKind (shape.sampledScalar, 4));
+    }
+
+    static ExprType textureSizeResult (const ExprType& samplerType)
+    {
+        if (! samplerType.has_value())
+            return std::nullopt;
+
+        const auto shape = textureShape (samplerType->kind);
+        int count = 0;
+
+        switch (shape.dim)
         {
-            case TypeKind::sampler1DShadow:
-            case TypeKind::sampler2DShadow:
-            case TypeKind::samplerCubeShadow:
-            case TypeKind::sampler1DArrayShadow:
-            case TypeKind::sampler2DArrayShadow:
-            case TypeKind::sampler2DRectShadow:
-                return makeType (TypeKind::floatType);
-
-            case TypeKind::sampler1D:
-            case TypeKind::sampler2D:
-            case TypeKind::sampler3D:
-            case TypeKind::samplerCube:
-            case TypeKind::sampler1DArray:
-            case TypeKind::sampler2DArray:
-            case TypeKind::sampler2DRect:
-            case TypeKind::sampler2DMS:
-            case TypeKind::sampler2DMSArray:
-                return makeType (TypeKind::vec4);
-
-            case TypeKind::isampler1D:
-            case TypeKind::isampler2D:
-            case TypeKind::isampler3D:
-            case TypeKind::isamplerCube:
-            case TypeKind::isampler1DArray:
-            case TypeKind::isampler2DArray:
-            case TypeKind::isampler2DRect:
-            case TypeKind::isampler2DMS:
-            case TypeKind::isampler2DMSArray:
-                return makeType (TypeKind::ivec4);
-
-            case TypeKind::usampler1D:
-            case TypeKind::usampler2D:
-            case TypeKind::usampler3D:
-            case TypeKind::usamplerCube:
-            case TypeKind::usampler1DArray:
-            case TypeKind::usampler2DArray:
-            case TypeKind::usampler2DRect:
-            case TypeKind::usampler2DMS:
-            case TypeKind::usampler2DMSArray:
-                return makeType (TypeKind::uvec4);
-
-            default:
+            case TextureShape::Dim::d1:
+            case TextureShape::Dim::buffer:
+                count = 1;
+                break;
+            case TextureShape::Dim::d2:
+            case TextureShape::Dim::cube:
+            case TextureShape::Dim::rect:
+                count = 2;
+                break;
+            case TextureShape::Dim::d3:
+                count = 3;
+                break;
+            case TextureShape::Dim::none:
                 return std::nullopt;
         }
+
+        if (shape.arrayed)
+            ++count;
+
+        return makeType (vectorKind (TypeKind::intType, count));
+    }
+
+    static ExprType withComponents (const ExprType& type, TypeKind scalar)
+    {
+        if (! isNumeric (type))
+            return std::nullopt;
+
+        return makeType (vectorKind (scalar, componentCount (type->kind)));
     }
 
     static ExprType visitBuiltinCall (const std::string& name, ExprFunCall& call, const std::vector<ExprType>& types)
     {
         const auto count = call.args.size();
+
+        if (isOneOf (name, { "barrier", "memoryBarrier", "memoryBarrierShared", "memoryBarrierBuffer", "memoryBarrierImage",
+                             "groupMemoryBarrier", "imageStore" }))
+            return std::nullopt;
+
         if (count == 0)
             return std::nullopt;
 
-        if (isOneOf (name, { "texture", "textureLod", "textureGrad", "textureOffset", "textureLodOffset", "textureProj", "texelFetch" }))
+        if (isOneOf (name, { "texture", "textureLod", "textureGrad", "textureOffset", "textureLodOffset", "textureGradOffset",
+                             "textureProj", "textureProjLod", "textureProjGrad", "textureProjOffset", "textureProjLodOffset",
+                             "textureProjGradOffset", "texelFetch", "texelFetchOffset", "imageLoad" }))
             return textureResult (types[0]);
+
+        if (isOneOf (name, { "textureGather", "textureGatherOffset" }))
+        {
+            if (! types[0].has_value())
+                return std::nullopt;
+
+            const auto shape = textureShape (types[0]->kind);
+            return makeType (vectorKind (shape.shadow ? TypeKind::floatType : shape.sampledScalar, 4));
+        }
+
+        if (isOneOf (name, { "textureSize", "imageSize" }))
+            return textureSizeResult (types[0]);
+
+        if (isOneOf (name, { "textureQueryLevels", "textureSamples", "imageSamples" }))
+            return makeType (TypeKind::intType);
 
         if (isOneOf (name, { "min", "max", "clamp" }))
             return unifyArguments (call, types, 0, count, false, true);
@@ -1025,6 +1067,10 @@ private:
 
         if (name == "mix" && count == 3)
         {
+            // A bool selector picks components, a float one interpolates
+            if (isNumeric (types[2]) && scalarKindOf (types[2]->kind) == TypeKind::boolType)
+                return unifyArguments (call, types, 0, 2, false, false);
+
             auto result = unifyArguments (call, types, 0, 2, true, false);
 
             if (isNumeric (types[2]))
@@ -1032,6 +1078,9 @@ private:
 
             return result;
         }
+
+        if (name == "fma" && count == 3)
+            return unifyArguments (call, types, 0, 3, true, false);
 
         if (name == "refract" && count == 3)
         {
@@ -1062,12 +1111,7 @@ private:
         }
 
         if (isOneOf (name, { "isnan", "isinf" }))
-        {
-            if (! isNumeric (types[0]))
-                return std::nullopt;
-
-            return makeType (vectorKind (TypeKind::boolType, componentCount (types[0]->kind)));
-        }
+            return withComponents (types[0], TypeKind::boolType);
 
         if (isOneOf (name, { "any", "all" }))
             return makeType (TypeKind::boolType);
@@ -1078,7 +1122,7 @@ private:
         if (name == "determinant")
             return makeType (TypeKind::floatType);
 
-        if (name == "inverse")
+        if (isOneOf (name, { "inverse", "matrixCompMult" }))
             return types[0];
 
         if (name == "transpose")
@@ -1090,17 +1134,62 @@ private:
             return makeType (matrixKind (rows, columns));
         }
 
+        if (name == "outerProduct" && count == 2)
+        {
+            if (! isNumeric (types[0]) || ! isNumeric (types[1]))
+                return std::nullopt;
+
+            return makeType (matrixKind (componentCount (types[1]->kind), componentCount (types[0]->kind)));
+        }
+
+        if (isOneOf (name, { "bitCount", "findLSB", "findMSB" }))
+            return withComponents (types[0], TypeKind::intType);
+
+        if (isOneOf (name, { "bitfieldReverse", "bitfieldExtract", "bitfieldInsert", "uaddCarry", "usubBorrow" }))
+            return types[0];
+
+        if (isOneOf (name, { "umulExtended", "imulExtended" }))
+            return std::nullopt;
+
+        if (name == "floatBitsToInt")
+            return withComponents (types[0], TypeKind::intType);
+
+        if (name == "floatBitsToUint")
+            return withComponents (types[0], TypeKind::uintType);
+
+        if (isOneOf (name, { "intBitsToFloat", "uintBitsToFloat" }))
+            return withComponents (types[0], TypeKind::floatType);
+
+        if (isOneOf (name, { "packUnorm2x16", "packSnorm2x16", "packUnorm4x8", "packSnorm4x8", "packHalf2x16" }))
+            return makeType (TypeKind::uintType);
+
+        if (isOneOf (name, { "unpackUnorm2x16", "unpackSnorm2x16", "unpackHalf2x16" }))
+            return makeType (TypeKind::vec2);
+
+        if (isOneOf (name, { "unpackUnorm4x8", "unpackSnorm4x8" }))
+            return makeType (TypeKind::vec4);
+
+        if (isOneOf (name, { "frexp", "modf", "ldexp" }))
+            return types[0];
+
+        if (isOneOf (name, { "atomicAdd", "atomicMin", "atomicMax", "atomicAnd", "atomicOr", "atomicXor", "atomicExchange", "atomicCompSwap" }))
+            return types[0];
+
+        if (name == "atan" && count == 2)
+            return unifyArguments (call, types, 0, 2, true, false);
+
         if (isOneOf (name, { "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
                              "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", "radians", "degrees", "normalize",
                              "floor", "ceil", "fract", "trunc", "round", "roundEven", "pow", "mod", "reflect",
-                             "faceforward", "dFdx", "dFdy", "fwidth" }))
+                             "faceforward", "dFdx", "dFdy", "fwidth", "dFdxFine", "dFdyFine", "fwidthFine",
+                             "dFdxCoarse", "dFdyCoarse", "fwidthCoarse" }))
             return unifyArguments (call, types, 0, count, true, false);
 
         return std::nullopt;
     }
 
     //==========================================================================
-    SymbolTable symbols;
+    std::vector<std::map<std::string, TypeSpecifier>> scopes;
     std::map<std::string, const StructSpecifier*> structs;
     std::multimap<std::string, const FunctionPrototype*> functions;
     TypeSpecifier returnType;

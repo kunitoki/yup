@@ -23,6 +23,7 @@
 
 #include <yup_graphics/yup_graphics.h>
 
+#include <algorithm>
 #include <cmath>
 #include <vector>
 #include <string>
@@ -1421,6 +1422,170 @@ TEST_F (PathStrokePolygonTests, NonPositiveWidthReturnsEmptyPath)
 {
     EXPECT_TRUE (createLine().createStrokePolygon (0.0f).isEmpty());
     EXPECT_TRUE (createLine().createStrokePolygon (-2.0f).isEmpty());
+}
+
+class PathFillPolygonTests : public PathStrokePolygonTests
+{
+protected:
+    static Path createSquare (float x, float y, float size, bool clockwise)
+    {
+        Path p;
+        p.moveTo (x, y);
+
+        if (clockwise)
+            p.lineTo (x + size, y).lineTo (x + size, y + size).lineTo (x, y + size);
+        else
+            p.lineTo (x, y + size).lineTo (x + size, y + size).lineTo (x + size, y);
+
+        return p.close();
+    }
+
+    static std::vector<double> getSortedAreas (const Path& path)
+    {
+        std::vector<double> areas;
+
+        for (const auto& contour : getContours (path))
+        {
+            EXPECT_TRUE (isSimple (contour));
+            areas.push_back (signedArea (contour));
+        }
+
+        std::sort (areas.begin(), areas.end());
+        return areas;
+    }
+};
+
+TEST_F (PathFillPolygonTests, EmptyPathReturnsEmptyPath)
+{
+    EXPECT_TRUE (Path().createFillPolygon().isEmpty());
+}
+
+TEST_F (PathFillPolygonTests, CounterClockwiseContourBecomesClockwise)
+{
+    const auto areas = getSortedAreas (createSquare (0.0f, 0.0f, 10.0f, false).createFillPolygon());
+
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 100.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, SelfIntersectingLobesAreBothClockwise)
+{
+    // A bow tie: its two lobes wind in opposite directions and both are filled.
+    for (const bool nonZero : { true, false })
+    {
+        Path bowTie;
+        bowTie.setUsingNonZeroWinding (nonZero);
+        bowTie.moveTo (0.0f, 0.0f).lineTo (10.0f, 10.0f).lineTo (10.0f, 0.0f).lineTo (0.0f, 10.0f).close();
+
+        const auto fill = bowTie.createFillPolygon();
+        EXPECT_TRUE (fill.isUsingNonZeroWinding());
+
+        // The lobes touch at a single point, so they may come back as one or two contours.
+        double totalArea = 0.0;
+        for (const auto area : getSortedAreas (fill))
+        {
+            EXPECT_GT (area, 0.0);
+            totalArea += area;
+        }
+
+        EXPECT_NEAR (totalArea, 50.0, 1.0e-2);
+    }
+}
+
+TEST_F (PathFillPolygonTests, EvenOddNestedContourBecomesHole)
+{
+    auto ring = createSquare (0.0f, 0.0f, 10.0f, true);
+    ring.appendPath (createSquare (2.0f, 2.0f, 6.0f, true));
+    ring.setUsingNonZeroWinding (false);
+
+    const auto areas = getSortedAreas (ring.createFillPolygon());
+
+    ASSERT_EQ (areas.size(), 2u);
+    EXPECT_NEAR (areas[0], -36.0, 1.0e-2);
+    EXPECT_NEAR (areas[1], 100.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, NonZeroNestedContourIsFilled)
+{
+    auto ring = createSquare (0.0f, 0.0f, 10.0f, true);
+    ring.appendPath (createSquare (2.0f, 2.0f, 6.0f, true));
+    ring.setUsingNonZeroWinding (true);
+
+    const auto areas = getSortedAreas (ring.createFillPolygon());
+
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 100.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, OverlappingContoursAreMerged)
+{
+    auto squares = createSquare (0.0f, 0.0f, 10.0f, true);
+    squares.appendPath (createSquare (5.0f, 5.0f, 10.0f, true));
+
+    const auto areas = getSortedAreas (squares.createFillPolygon());
+
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 175.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, OpenContourIsClosed)
+{
+    Path p;
+    p.moveTo (0.0f, 0.0f).lineTo (0.0f, 10.0f).lineTo (10.0f, 10.0f);
+
+    const auto areas = getSortedAreas (p.createFillPolygon());
+
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 50.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, FillPolygonIsReturnedAsIs)
+{
+    const auto fill = createSquare (0.0f, 0.0f, 10.0f, false).createFillPolygon();
+
+    EXPECT_EQ (fill.createFillPolygon().getRenderPath(), fill.getRenderPath());
+
+    const Path copy (fill);
+    EXPECT_EQ (copy.createFillPolygon().getRenderPath(), fill.getRenderPath());
+}
+
+TEST_F (PathFillPolygonTests, ModifiedFillPolygonIsRecomputed)
+{
+    auto fill = createSquare (0.0f, 0.0f, 10.0f, true).createFillPolygon();
+    fill.appendPath (createSquare (5.0f, 5.0f, 10.0f, true));
+
+    const auto refill = fill.createFillPolygon();
+    EXPECT_NE (refill.getRenderPath(), fill.getRenderPath());
+
+    const auto areas = getSortedAreas (refill);
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 175.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, TransformedFillPolygonIsRecomputed)
+{
+    const auto fill = createSquare (0.0f, 0.0f, 10.0f, true).createFillPolygon();
+    const auto mirrored = fill.transformed (AffineTransform::scaling (-1.0f, 1.0f));
+
+    const auto areas = getSortedAreas (mirrored.createFillPolygon());
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], 100.0, 1.0e-2);
+}
+
+TEST_F (PathFillPolygonTests, CurvesAreFlattened)
+{
+    Path ellipse;
+    ellipse.addEllipse (0.0f, 0.0f, 20.0f, 20.0f);
+
+    const auto fill = ellipse.createFillPolygon();
+
+    for (const auto& segment : fill)
+        EXPECT_TRUE (segment.verb != Path::Verb::QuadTo && segment.verb != Path::Verb::CubicTo);
+
+    const auto areas = getSortedAreas (fill);
+    ASSERT_EQ (areas.size(), 1u);
+    EXPECT_NEAR (areas[0], MathConstants<double>::pi * 100.0, 3.0);
+    expectRectNear (fill.getBounds(), ellipse.getBounds(), 1.0e-2f);
 }
 
 TEST (PathTests, AddBubbleArrowTop)

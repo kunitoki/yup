@@ -57,6 +57,8 @@ graphics (e.g. audio DSP on the GPU), use `GpuDevice` directly — no
   ahead of time with `yup_add_shader_bundle` and the `yup_shader_bundler` tool.
 - [Shader bundle binary format](shader-bundle-format.md) - the RIFF `YSLB` container
   specification (FourCCs, chunk layout, reflection blob, versioning).
+- [GLSL on the WebGPU target](wgsl-shaders.md) - what the GLSL→WGSL transpiler
+  translates, how it assigns bindings, and what WGSL can't express.
 - [Buffers & textures](buffers-and-textures.md) - `GpuBuffer` and `GpuTexture`.
 - [Offscreen targets & canvases](targets.md) - `GpuTarget`, `GpuCanvas`, and CPU
   readback.
@@ -72,6 +74,7 @@ frames-and-passes
 pipelines
 offline-shaders
 shader-bundle-format
+wgsl-shaders
 buffers-and-textures
 targets
 spinning-cube

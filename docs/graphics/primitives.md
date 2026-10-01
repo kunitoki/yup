@@ -153,6 +153,11 @@ g.setFeather (4.0f);
 g.fillPath (outline);
 ```
 
+`createFillPolygon` returns the area a path fills, under its own fill rule, as
+simple non-overlapping contours: outer contours clockwise, holes counter-clockwise,
+curves flattened. Self-intersecting and overlapping contours are resolved, so the
+result fills the same area under any fill rule.
+
 ## Stroke types
 
 Stroking is configured with three related types:

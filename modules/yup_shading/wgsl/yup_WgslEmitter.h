@@ -28,19 +28,12 @@ namespace wgsl
 {
 
 //==============================================================================
-/** Options controlling WGSL code emission. */
-struct WgslEmitOptions
-{
-    /** Output entry-point name (defaults to "main"). */
-    String outputEntryPoint = "main";
-};
-
-//==============================================================================
 /**
     Emits WGSL 1.0 source code from a lowered AST.
 
-    Handles D3 type mapping, D4 builtin mapping, D5 function/operator mapping,
-    and entry-point generation with IO structs as specified in the plan.
+    The lowered program only contains constructs WGSL can express, so emission is a
+    direct print of the AST plus the entry-point wrapper described by the program's
+    stage IO metadata.
 */
 class WgslEmitter
 {
@@ -53,11 +46,9 @@ public:
         Emit WGSL 1.0 source code from a lowered program.
 
         @param program  The lowered program from WgslLowering.
-        @param options  Emission options (entry-point name).
         @returns        WGSL 1.0 source code or an error.
     */
-    static ResultValue<String> emit (const LoweredProgram& program,
-                                     const WgslEmitOptions& options = {});
+    static ResultValue<String> emit (const LoweredProgram& program);
 
 private:
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WgslEmitter)

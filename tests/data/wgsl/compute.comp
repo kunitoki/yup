@@ -1,0 +1,13 @@
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) buffer Data { uint values[]; } data;
+layout(std430, binding = 1) readonly buffer Input { float inputs[]; };
+shared float tile[64];
+uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; return x; }
+void main() {
+    uint gid = gl_GlobalInvocationID.x;
+    tile[gl_LocalInvocationIndex] = inputs[gid];
+    barrier();
+    if (gid >= uint(data.values.length())) return;
+    data.values[gid] = hash(gid) + uint(tile[(gl_LocalInvocationIndex + 1u) % gl_WorkGroupSize.x]);
+}
