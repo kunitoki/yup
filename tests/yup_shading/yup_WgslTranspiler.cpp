@@ -3727,6 +3727,20 @@ TEST_F (WgslHardeningTests, DeepNestingFailsCleanly)
     std::string src = "void main() { float x = ";
     src += std::string (400, '(') + "1.0" + std::string (400, ')') + "; }";
     expectFailure (src.c_str(), "Nesting is too deep");
+
+    std::string blocks = "void main() { " + std::string (300, '{') + "float x = 1.0;" + std::string (300, '}') + " }";
+    expectFailure (blocks.c_str(), "Nesting is too deep");
+}
+
+TEST_F (WgslHardeningTests, LongElseIfChainsAreAccepted)
+{
+    std::string src = "layout(location = 0) flat in int k; layout(location = 0) out vec4 o; void main() { float x = 0.0; ";
+    for (int i = 0; i < 100; ++i)
+        src += "if (k == " + std::to_string (i) + ") x = " + std::to_string (i) + ".0; else ";
+    src += "x = -1.0; o = vec4(x); }";
+
+    const auto wgsl = transpileOk (src.c_str());
+    EXPECT_TRUE (wgsl.contains ("else if ((k == 99)) {")) << wgsl;
 }
 
 TEST_F (WgslHardeningTests, DoubleLiteralFails)

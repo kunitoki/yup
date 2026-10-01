@@ -823,6 +823,9 @@ public:
 
     TranslationUnit parseTranslationUnit()
     {
+        char probe = 0;
+        stackBase = reinterpret_cast<std::uintptr_t> (&probe);
+
         TranslationUnit unit;
         unit.loc = loc();
 
@@ -844,22 +847,30 @@ public:
     }
 
 private:
-    static constexpr int maxNestingDepth = 256;
+    static constexpr int maxStatementDepth = 128;
+    static constexpr int maxExpressionDepth = 64;
     static constexpr int maxChainLength = 1024;
+    static constexpr std::uintptr_t maxStackBytes = 256 * 1024;
 
     /** Bounds the recursion of the descent so hostile input fails cleanly instead of overflowing the stack. */
     struct DepthGuard
     {
-        DepthGuard (Parser& p, SourceLocation l)
+        DepthGuard (Parser& p, SourceLocation l, bool isStatement = false)
             : parser (p)
+            , counter (isStatement ? p.statementDepth : p.expressionDepth)
         {
-            if (++parser.depth > maxNestingDepth)
+            char probe = 0;
+            const auto address = reinterpret_cast<std::uintptr_t> (&probe);
+            const auto used = parser.stackBase > address ? parser.stackBase - address : address - parser.stackBase;
+
+            if (++counter > (isStatement ? maxStatementDepth : maxExpressionDepth) || used > maxStackBytes)
                 throwError (l, "Nesting is too deep");
         }
 
-        ~DepthGuard() { --parser.depth; }
+        ~DepthGuard() { --counter; }
 
         Parser& parser;
+        int& counter;
     };
 
     //==========================================================================
@@ -1183,7 +1194,7 @@ private:
 
     Statement parseStatement()
     {
-        DepthGuard guard (*this, loc());
+        DepthGuard guard (*this, loc(), true);
 
         skipAttributes();
 
@@ -1644,11 +1655,11 @@ private:
         return makeExpr (l, ExprAssignment { l, op, std::make_unique<Expr> (std::move (left)), std::make_unique<Expr> (std::move (right)) });
     }
 
-    // conditional -> logicalOr ('?' expression ':' assignment)?
+    // conditional -> binary ('?' expression ':' assignment)?
     Expr parseConditional()
     {
         const SourceLocation l = loc();
-        auto cond = parseLogicalOr();
+        auto cond = parseBinary (1);
 
         if (! match (TokenType::question))
             return cond;
@@ -1665,122 +1676,63 @@ private:
                                           std::make_unique<Expr> (std::move (falseBranch)) });
     }
 
-    /** Parses a left-associative binary level whose operators are listed in @p ops. */
-    template <typename SubParser>
-    Expr parseBinaryLevel (std::initializer_list<std::pair<TokenType, BinaryOp>> ops, SubParser&& subParse)
+    /** GLSL binary operator precedence, lowest first; 0 for tokens that aren't binary operators. */
+    static int binaryPrecedence (TokenType type, BinaryOp& op)
     {
-        auto left = subParse();
+        static const std::tuple<TokenType, BinaryOp, int> operators[] = {
+            { TokenType::lor, BinaryOp::logicalOr, 1 },
+            { TokenType::lxor, BinaryOp::logicalXor, 2 },
+            { TokenType::land, BinaryOp::logicalAnd, 3 },
+            { TokenType::pipe, BinaryOp::bitwiseOr, 4 },
+            { TokenType::caret, BinaryOp::bitwiseXor, 5 },
+            { TokenType::amp, BinaryOp::bitwiseAnd, 6 },
+            { TokenType::eq, BinaryOp::equal, 7 },
+            { TokenType::ne, BinaryOp::notEqual, 7 },
+            { TokenType::lt, BinaryOp::lessThan, 8 },
+            { TokenType::gt, BinaryOp::greaterThan, 8 },
+            { TokenType::le, BinaryOp::lessEqual, 8 },
+            { TokenType::ge, BinaryOp::greaterEqual, 8 },
+            { TokenType::lshift, BinaryOp::shiftLeft, 9 },
+            { TokenType::rshift, BinaryOp::shiftRight, 9 },
+            { TokenType::plus, BinaryOp::add, 10 },
+            { TokenType::minus, BinaryOp::sub, 10 },
+            { TokenType::star, BinaryOp::mul, 11 },
+            { TokenType::slash, BinaryOp::div, 11 },
+            { TokenType::percent, BinaryOp::mod, 11 }
+        };
+
+        for (const auto& [token, binaryOp, precedence] : operators)
+        {
+            if (token == type)
+            {
+                op = binaryOp;
+                return precedence;
+            }
+        }
+
+        return 0;
+    }
+
+    /** Precedence climbing over all left-associative binary operators: a single frame per level of nesting. */
+    Expr parseBinary (int minimumPrecedence)
+    {
+        auto left = parseUnary();
 
         for (int length = 0;;)
         {
-            const auto type = lexer.peek().type;
-            const auto* found = std::find_if (ops.begin(), ops.end(), [type] (const auto& entry)
-            {
-                return entry.first == type;
-            });
+            BinaryOp op {};
+            const auto precedence = binaryPrecedence (lexer.peek().type, op);
 
-            if (found == ops.end())
+            if (precedence == 0 || precedence < minimumPrecedence)
                 return left;
 
             const SourceLocation l = loc();
             checkChainLength (length, l);
             lexer.advance();
 
-            auto right = subParse();
-            left = makeBinary (l, std::move (left), found->second, std::move (right));
+            auto right = parseBinary (precedence + 1);
+            left = makeBinary (l, std::move (left), op, std::move (right));
         }
-    }
-
-    Expr parseLogicalOr()
-    {
-        return parseBinaryLevel ({ { TokenType::lor, BinaryOp::logicalOr } }, [this]
-        {
-            return parseLogicalXor();
-        });
-    }
-
-    Expr parseLogicalXor()
-    {
-        return parseBinaryLevel ({ { TokenType::lxor, BinaryOp::logicalXor } }, [this]
-        {
-            return parseLogicalAnd();
-        });
-    }
-
-    Expr parseLogicalAnd()
-    {
-        return parseBinaryLevel ({ { TokenType::land, BinaryOp::logicalAnd } }, [this]
-        {
-            return parseBitwiseOr();
-        });
-    }
-
-    Expr parseBitwiseOr()
-    {
-        return parseBinaryLevel ({ { TokenType::pipe, BinaryOp::bitwiseOr } }, [this]
-        {
-            return parseBitwiseXor();
-        });
-    }
-
-    Expr parseBitwiseXor()
-    {
-        return parseBinaryLevel ({ { TokenType::caret, BinaryOp::bitwiseXor } }, [this]
-        {
-            return parseBitwiseAnd();
-        });
-    }
-
-    Expr parseBitwiseAnd()
-    {
-        return parseBinaryLevel ({ { TokenType::amp, BinaryOp::bitwiseAnd } }, [this]
-        {
-            return parseEquality();
-        });
-    }
-
-    Expr parseEquality()
-    {
-        return parseBinaryLevel ({ { TokenType::eq, BinaryOp::equal }, { TokenType::ne, BinaryOp::notEqual } }, [this]
-        {
-            return parseRelational();
-        });
-    }
-
-    Expr parseRelational()
-    {
-        return parseBinaryLevel ({ { TokenType::lt, BinaryOp::lessThan },
-                                   { TokenType::gt, BinaryOp::greaterThan },
-                                   { TokenType::le, BinaryOp::lessEqual },
-                                   { TokenType::ge, BinaryOp::greaterEqual } },
-                                 [this]
-        {
-            return parseShift();
-        });
-    }
-
-    Expr parseShift()
-    {
-        return parseBinaryLevel ({ { TokenType::lshift, BinaryOp::shiftLeft }, { TokenType::rshift, BinaryOp::shiftRight } }, [this]
-        {
-            return parseAdditive();
-        });
-    }
-
-    Expr parseAdditive()
-    {
-        return parseBinaryLevel ({ { TokenType::plus, BinaryOp::add }, { TokenType::minus, BinaryOp::sub } }, [this]
-        {
-            return parseMultiplicative();
-        });
-    }
-
-    Expr parseMultiplicative()
-    {
-        return parseBinaryLevel ({ { TokenType::star, BinaryOp::mul }, { TokenType::slash, BinaryOp::div }, { TokenType::percent, BinaryOp::mod } }, [this]
-        {
-            return parseUnary();
-        });
     }
 
     // unary -> ('+'|'-'|'!'|'~'|'++'|'--') unary | postfix
@@ -2128,7 +2080,9 @@ private:
 
     Lexer& lexer;
     std::unordered_set<std::string> userStructNames;
-    int depth = 0;
+    int statementDepth = 0;
+    int expressionDepth = 0;
+    std::uintptr_t stackBase = 0;
     int anonymousStructCount = 0;
 };
 
