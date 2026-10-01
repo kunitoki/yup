@@ -726,8 +726,7 @@ public:
 
     TranslationUnit parseTranslationUnit()
     {
-        char probe = 0;
-        stackBase = reinterpret_cast<std::uintptr_t> (&probe);
+        stackBase = currentStackAddress();
 
         TranslationUnit unit;
         unit.loc = loc();
@@ -754,6 +753,17 @@ private:
     static constexpr int maxExpressionDepth = 64;
     static constexpr std::uintptr_t maxStackBytes = 256 * 1024;
 
+    /** The real machine stack position. The address of a local is not usable here: AddressSanitizer
+        may place locals on heap-allocated fake stacks to detect use-after-return. */
+    static std::uintptr_t currentStackAddress() noexcept
+    {
+#if YUP_MSVC
+        return reinterpret_cast<std::uintptr_t> (_AddressOfReturnAddress());
+#else
+        return reinterpret_cast<std::uintptr_t> (__builtin_frame_address (0));
+#endif
+    }
+
     /** Bounds the recursion of the descent so hostile input fails cleanly instead of overflowing the stack. */
     struct DepthGuard
     {
@@ -761,8 +771,7 @@ private:
             : parser (p)
             , counter (isStatement ? p.statementDepth : p.expressionDepth)
         {
-            char probe = 0;
-            const auto address = reinterpret_cast<std::uintptr_t> (&probe);
+            const auto address = currentStackAddress();
             const auto used = parser.stackBase > address ? parser.stackBase - address : address - parser.stackBase;
 
             if (++counter > (isStatement ? maxStatementDepth : maxExpressionDepth) || used > maxStackBytes)

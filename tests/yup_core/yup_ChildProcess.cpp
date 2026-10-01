@@ -116,10 +116,8 @@ TEST (ChildProcessTests, Kill)
     // Kill the process
     EXPECT_TRUE (p.kill());
 
-    // Give it a moment to terminate
-    Thread::sleep (100);
-
-    // Should not be running after kill
+    // Should stop running after kill
+    EXPECT_TRUE (p.waitForProcessToFinish (10000));
     EXPECT_FALSE (p.isRunning());
 #endif
 }
