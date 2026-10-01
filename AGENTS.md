@@ -90,5 +90,6 @@ Mirror the structure of an existing test, e.g. `tests/yup_dsp/yup_KMeterState.cp
 
 - American English: `center` not `centred`, `Color` not `Colour`.
 - Check the YUP `Graphics` API - do not assume JUCE's.
+- Components are opaque by default, if they are opaque the need to be fully painted.
 - Graphics primitives convert with the template `.to<float>()`, not `toFloat()`.
 - Fonts come from `ApplicationTheme`, never instantiated inline.
