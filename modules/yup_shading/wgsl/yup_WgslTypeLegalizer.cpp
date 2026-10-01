@@ -911,19 +911,6 @@ private:
 
         auto& name = call.callee->as<ExprVariable>().name;
 
-        if (const auto found = structs.find (name); found != structs.end())
-        {
-            const auto& fields = found->second->fields;
-
-            for (std::size_t i = 0; i < call.args.size() && i < fields.size(); ++i)
-            {
-                if (fields[i].type.arraySpecifiers.empty())
-                    coerce (call.args[i], argumentTypes[i], fields[i].type.kind);
-            }
-
-            return TypeSpecifier::makeNamed (call.loc, name);
-        }
-
         if (functions.count (name) > 0)
         {
             const auto* prototype = findFunction (name, argumentTypes, call.loc);

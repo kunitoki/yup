@@ -1463,12 +1463,9 @@ private:
         {
             lowerSwitch (s, out);
         }
-        else if (s.is<StmtCaseLabel>())
+        else
         {
-            throw LoweringError (l, "Case label outside of a switch statement");
-        }
-        else if (s.is<StmtLoop>())
-        {
+            // The parser only accepts case labels inside a switch: anything left is rejected by the emitter
             out.push_back (std::move (s));
         }
     }

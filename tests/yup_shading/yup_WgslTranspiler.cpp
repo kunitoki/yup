@@ -1021,6 +1021,31 @@ TEST_F (WgslParserTests, HandlesSemicolonsAtTopLevel)
 
 class WgslAstUnitTests : public ::testing::Test
 {
+protected:
+    /** The body of main() in a parsed shader. */
+    static wgsl::Statement parseMainBody (const char* src)
+    {
+        auto unit = wgsl::GlslParser::parse (src);
+        EXPECT_TRUE (unit.wasOk()) << unit.getErrorMessage();
+
+        for (auto& external : unit.getReference().declarations)
+            if (auto* function = std::get_if<wgsl::FunctionDefinition> (&external); function != nullptr && function->prototype.name == "main")
+                return std::move (*function->body);
+
+        return wgsl::Statement::makeEmpty ({});
+    }
+
+    static std::unique_ptr<wgsl::Expr> makeLiteral (int value)
+    {
+        auto e = std::make_unique<wgsl::Expr>();
+        e->value = wgsl::ExprIntConst { {}, value };
+        return e;
+    }
+
+    static wgsl::Statement makeExprStatement (int value)
+    {
+        return wgsl::Statement::makeExpr ({}, std::move (*makeLiteral (value)));
+    }
 };
 
 TEST_F (WgslAstUnitTests, MakeCompoundStatement)
@@ -1369,6 +1394,122 @@ TEST_F (WgslAstUnitTests, CopyExprParen)
     auto& p = copy.as<ExprParen>();
     ASSERT_NE (p.expr, nullptr);
     EXPECT_TRUE (p.expr->is<ExprIntConst>());
+}
+
+TEST_F (WgslAstUnitTests, CopyStatementCopiesEveryParsedStatement)
+{
+    using namespace yup::wgsl;
+
+    auto body = parseMainBody (R"glsl(
+void main() {
+    int i = 0;
+    float a[2] = { 1.0, 2.0 };
+    if (i > 0) i = 1; else { i = 2; }
+    switch (i) { case 0: i++; break; default: i--; }
+    while (i < 4) i++;
+    do { i--; } while (i > 0);
+    for (int j = 0; j < 2; j++) { continue; }
+    return;
+}
+)glsl");
+
+    const auto copy = copyStatement (body);
+    const auto& statements = copy.as<StmtCompound>().statements;
+    ASSERT_EQ (statements.size(), 8u);
+
+    const auto& array = statements[1].as<StmtDeclaration>().declaration.initDeclaratorList->declarations.front();
+    ASSERT_NE (array.initializer, nullptr);
+    EXPECT_EQ (array.initializer->aggregate.size(), 2u);
+
+    const auto& selection = statements[2].as<StmtSelection>();
+    ASSERT_NE (selection.elseBranch, nullptr);
+    EXPECT_TRUE (selection.elseBranch->is<StmtCompound>());
+    EXPECT_NE (selection.condition.get(), body.as<StmtCompound>().statements[2].as<StmtSelection>().condition.get());
+
+    const auto& sw = statements[3].as<StmtSwitch>().body;
+    ASSERT_EQ (sw.size(), 5u);
+    EXPECT_NE (sw[0].as<StmtCaseLabel>().label, nullptr);
+    EXPECT_EQ (sw[3].as<StmtCaseLabel>().label, nullptr);
+
+    EXPECT_NE (statements[4].as<StmtWhile>().body, nullptr);
+    EXPECT_NE (statements[5].as<StmtDoWhile>().condition, nullptr);
+
+    const auto& loop = statements[6].as<StmtFor>();
+    EXPECT_NE (loop.init, nullptr);
+    EXPECT_NE (loop.condition, nullptr);
+    EXPECT_NE (loop.update, nullptr);
+    EXPECT_TRUE (loop.body->as<StmtCompound>().statements.front().is<StmtJump>());
+
+    EXPECT_EQ (statements[7].as<StmtJump>().kind, JumpKind::returnJump);
+}
+
+TEST_F (WgslAstUnitTests, CopyStatementCopiesLoweredStatements)
+{
+    using namespace yup::wgsl;
+
+    StmtLoop loop;
+    loop.body.push_back (makeExprStatement (1));
+    loop.continuing.push_back (makeExprStatement (2));
+    loop.breakIf = makeLiteral (3);
+
+    Statement loopStatement;
+    loopStatement.value = std::move (loop);
+
+    const auto loopCopy = copyStatement (loopStatement);
+    EXPECT_EQ (loopCopy.as<StmtLoop>().body.size(), 1u);
+    EXPECT_EQ (loopCopy.as<StmtLoop>().continuing.size(), 1u);
+    ASSERT_NE (loopCopy.as<StmtLoop>().breakIf, nullptr);
+    EXPECT_EQ (loopCopy.as<StmtLoop>().breakIf->as<ExprIntConst>().value, 3);
+
+    SwitchClause clause;
+    clause.labels.push_back (makeLiteral (1));
+    clause.labels.push_back (nullptr);
+    clause.body.push_back (makeExprStatement (4));
+
+    StmtSwitch sw;
+    sw.selector = makeLiteral (0);
+    sw.clauses.push_back (std::move (clause));
+
+    Statement switchStatement;
+    switchStatement.value = std::move (sw);
+
+    const auto switchCopy = copyStatement (switchStatement);
+    ASSERT_EQ (switchCopy.as<StmtSwitch>().clauses.size(), 1u);
+
+    const auto& copiedClause = switchCopy.as<StmtSwitch>().clauses.front();
+    ASSERT_EQ (copiedClause.labels.size(), 2u);
+    EXPECT_EQ (copiedClause.labels[0]->as<ExprIntConst>().value, 1);
+    EXPECT_EQ (copiedClause.labels[1], nullptr);
+    EXPECT_EQ (copiedClause.body.size(), 1u);
+}
+
+TEST_F (WgslAstUnitTests, CopyDeclarationCopiesBlocksAndQualifiers)
+{
+    using namespace yup::wgsl;
+
+    auto unit = GlslParser::parse ("layout(std140, binding = 2) uniform U { layout(offset = 0) float x; vec2 y[2]; } u;");
+    ASSERT_TRUE (unit.wasOk()) << unit.getErrorMessage();
+
+    const auto& declaration = std::get<Declaration> (unit.getReference().declarations.front());
+    const auto copy = copyDeclaration (declaration);
+
+    ASSERT_NE (copy.structSpecifier, nullptr);
+    EXPECT_EQ (copy.structSpecifier->name, "U");
+    ASSERT_EQ (copy.structSpecifier->fields.size(), 2u);
+    ASSERT_NE (copy.structSpecifier->fields[0].qualifier, nullptr);
+    EXPECT_EQ (copy.structSpecifier->fields[0].qualifier->layout->entries.size(), 1u);
+    EXPECT_EQ (copy.structSpecifier->fields[1].name, "y");
+
+    ASSERT_NE (copy.qualifier, nullptr);
+    ASSERT_EQ (copy.qualifier->layout->entries.size(), 2u);
+
+    const auto& binding = copy.qualifier->layout->entries[1];
+    EXPECT_EQ (binding.name, "binding");
+    EXPECT_EQ (binding.value->as<ExprIntConst>().value, 2);
+    EXPECT_NE (binding.value.get(), declaration.qualifier->layout->entries[1].value.get());
+
+    ASSERT_NE (copy.initDeclaratorList, nullptr);
+    EXPECT_EQ (copy.initDeclaratorList->declarations.front().name, "u");
 }
 
 //==============================================================================
@@ -4428,6 +4569,415 @@ void main() {
 }
 )glsl", ShaderStage::vertex);
     EXPECT_TRUE (vs.contains ("var x: f32 = (f32((((u32(gl_VertexIndex) & 1u)) << 2u)) - 1.0);")) << vs;
+}
+
+//==============================================================================
+// Parser diagnostics
+
+TEST_F (WgslHardeningTests, LexerErrorsFail)
+{
+    expectFailure ("void main() { /* unterminated", "1:15: Unterminated block comment");
+    expectFailure ("#line x\nvoid main() { }", "1:1: Malformed #line directive");
+    expectFailure ("void main() { int x = 0x; }", "1:23: Hexadecimal literal has no digits");
+    expectFailure ("void main() { float x = 1.0q; }", "1:25: Invalid suffix 'q' on numeric literal");
+    expectFailure ("void main() { float x = 1e999; }", "1:25: Floating point literal '1e999' is out of range");
+    expectFailure ("void main() { } $", "1:17: Unexpected character '$' (0x24)");
+}
+
+TEST_F (WgslHardeningTests, CommentsByteOrderMarkAndCarriageReturnsAreAccepted)
+{
+    transpileOk ("// line comment\nvoid main() { /* block\ncomment */ float x = 1.0; }");
+    EXPECT_TRUE (WgslTranspiler::transpile (String::fromUTF8 ("\xef\xbb\xbfvoid main() { }"), ShaderStage::fragment, {}).wasOk());
+    expectFailure ("void main() {\r\r float x = ; }", "3:12: Expected expression");
+}
+
+TEST_F (WgslHardeningTests, MalformedDeclarationsFail)
+{
+    expectFailure ("precision float; void main() { }", "1:11: Expected precision qualifier, got 'float'");
+    expectFailure ("void main() x", "1:13: Expected '{' or ';' after function declaration, got 'x'");
+    expectFailure ("void f(uniform float x) { } void main() { }", "1:8: Invalid qualifier on function parameter");
+    expectFailure ("void f(flat float x) { } void main() { }", "1:8: Invalid qualifier on function parameter");
+    expectFailure ("void f(struct S s) { } void main() { }", "1:8: Embedded struct definitions are not supported");
+    expectFailure ("struct S { }; void main() { }", "1:1: Empty structs and blocks are not allowed");
+    expectFailure ("struct S { struct T { float x; } t; }; void main() { }", "1:12: Embedded struct definitions are not supported");
+    expectFailure ("struct S { float x;", "1:20: Expected '}' before end of file");
+    expectFailure ("void main() { float a[2] = { }; }", "1:28: Empty initializer list");
+}
+
+TEST_F (WgslHardeningTests, MalformedStatementsFail)
+{
+    expectFailure ("void main() { float x = 1.0;", "1:29: Expected '}' before end of file");
+    expectFailure ("void main() { switch (1) { case 0: ", "1:36: Expected '}' before end of file");
+    expectFailure ("void main() { [[unroll for (;;) {} }", "1:37: Unterminated attribute list");
+    expectFailure ("void main() { while (bool b = true) { } }", "1:22: Declarations in loop conditions are not supported");
+    expectFailure ("void main() { do { } until (true); }", "1:22: Expected keyword 'while', got 'until'");
+    expectFailure ("void main() { float x = vec2; }", "1:25: Expected '(' after type in constructor, got ';'");
+
+    std::string longSum = "1.0";
+    for (int i = 0; i < 1100; ++i)
+        longSum += " + 1.0";
+
+    expectFailure (("void main() { float x = " + longSum + "; }").c_str(), "Expression is too long");
+}
+
+TEST_F (WgslHardeningTests, OptionalSyntaxIsAccepted)
+{
+    const auto wgsl = transpileOk (R"glsl(
+struct { float x; } anonymous;
+void f(float x[2]) { }
+void g(float) { }
+layout(location = 0) out vec4 c;
+void main() {
+    precision highp float;
+    float a[2] = { 1.0, 2.0, };
+    [[unroll]] for (int i = 0; i < 2; i++) { }
+    if (true) ; else ;
+    f(a);
+    g(1.0);
+    c = vec4(a[0] + anonymous.x);
+}
+)glsl");
+
+    EXPECT_TRUE (wgsl.contains ("array<f32, 2>(1.0, 2.0)")) << wgsl;
+}
+
+//==============================================================================
+// Lowering diagnostics
+
+TEST_F (WgslHardeningTests, InvalidLayoutValuesFail)
+{
+    expectFailure ("layout(location) out vec4 c; void main() { c = vec4(1.0); }", "1:8: layout(location) requires a value");
+    expectFailure ("layout(location = -1) out vec4 c; void main() { c = vec4(1.0); }", "1:8: layout(location) must be a non-negative integer constant");
+    expectFailure ("layout(location = 0, component = 1) out float c; void main() { }", "1:22: layout(component) is not supported for WGSL");
+    expectFailure ("layout(pixel_center_integer) in vec4 gl_FragCoord; void main() { }", "1:8: layout(pixel_center_integer) is not supported for WGSL");
+    expectFailure ("layout(shared, binding = 0) uniform U { float x; }; void main() { }", "1:8: layout(shared) is not supported for WGSL; use std140 or std430");
+    expectFailure ("layout(packed, binding = 0) uniform U { float x; }; void main() { }", "1:8: layout(packed) is not supported for WGSL");
+    expectFailure ("layout(scalar, binding = 0) buffer B { float x; }; void main() { }", "1:8: layout(scalar) is not supported for WGSL");
+    expectFailure ("layout(input_attachment_index = 0, binding = 0) uniform subpassInput s; void main() { }", "1:8: Subpass inputs are not supported in WGSL");
+    expectFailure ("layout(xfb_buffer = 0, xfb_offset = 0) out vec4 v; void main() { }", "1:8: Transform feedback is not supported in WGSL", ShaderStage::vertex);
+    expectFailure ("layout(triangles) in; void main() { }", "1:8: layout(triangles) is only valid in geometry or tessellation shaders");
+}
+
+TEST_F (WgslHardeningTests, IgnoredQualifiersWarn)
+{
+    StringArray warnings;
+    ASSERT_TRUE (transpile ("layout(early_fragment_tests) in; layout(depth_greater) out float gl_FragDepth; void main() { gl_FragDepth = 0.5; }", ShaderStage::fragment, &warnings).wasOk());
+    EXPECT_EQ (warnings, StringArray ("1:8: layout(early_fragment_tests) has no WGSL equivalent and is ignored"));
+
+    warnings.clear();
+    ASSERT_TRUE (transpile ("invariant gl_Position; layout(location = 0) out vec4 v; invariant v; layout(location = 1) invariant out vec4 w; "
+                            "void main() { gl_Position = vec4(1.0); v = vec4(0.0); w = v; }",
+                            ShaderStage::vertex,
+                            &warnings)
+                     .wasOk());
+    EXPECT_EQ (warnings, StringArray ("1:57: invariant has no effect on 'v' in WGSL", "1:70: invariant only applies to gl_Position in WGSL and is ignored here"));
+
+    warnings.clear();
+    ASSERT_TRUE (transpile ("precise float p; void main() { precise float q = 1.0; }", ShaderStage::fragment, &warnings).wasOk());
+    EXPECT_EQ (warnings, StringArray ("1:1: precise has no WGSL equivalent and is ignored", "1:32: precise has no WGSL equivalent and is ignored"));
+}
+
+TEST_F (WgslHardeningTests, InvalidProgramStructureFails)
+{
+    expectFailure ("void notMain() { }", "0:0: Missing main() function");
+    expectFailure ("void main(int x) { }", "1:1: main() must take no parameters and return void");
+    expectFailure ("void main(int x) {} void main() {}", "1:21: main() cannot be overloaded");
+    expectFailure ("void main() { discard; }", "1:15: discard is only allowed in fragment shaders", ShaderStage::vertex);
+    expectFailure ("shared float x; void main() { }", "1:1: shared variables are only allowed in compute shaders");
+    expectFailure ("in vec4 x; void main() { }", "1:1: Compute shaders have no user stage inputs or outputs", ShaderStage::compute);
+    expectFailure ("layout(local_size_x = 0) in; void main() { }", "0:0: Workgroup size must be at least 1 in every dimension", ShaderStage::compute);
+    expectFailure ("layout(constant_id = 0) float x; void main() { }", "1:1: layout(constant_id) needs a global scalar constant");
+    expectFailure ("void main() { layout(constant_id = 0) const float x = 1.0; }", "1:15: layout(constant_id) needs a global scalar constant");
+}
+
+TEST_F (WgslHardeningTests, UnsupportedDeclarationsFail)
+{
+    expectFailure ("uniform U { float x; } u[2]; void main() {}", "1:1: Arrays of interface blocks are not supported");
+    expectFailure ("void main() { sampler2D s; }", "1:15: Variables of opaque type 'sampler2D' must be uniforms or function parameters");
+    expectFailure ("layout(rgba8, binding = 0) uniform image2DMS img; void main() { }", "1:36: Storage image type 'image2DMS' has no WGSL equivalent");
+    expectFailure ("layout(binding = 0) uniform U { float x[]; }; void main() { }", "1:33: Unsized arrays are only supported as the last member of a buffer block");
+    expectFailure ("void main() { float a[]; }", "1:15: Unsized arrays are only supported as the last member of a buffer block");
+    expectFailure ("void main() { float a[] = 1.0; }", "1:21: Cannot determine the size of array 'a'");
+    expectFailure ("layout(rgba8, binding = 0) uniform image2D img; void f(image2D i) { } void main() { }", "1:56: Storage images can't be passed to functions in WGSL");
+    expectFailure ("void main() { struct S { float x; }; } void f() { struct S { float y; }; }", "1:51: Struct 'S' is declared more than once; WGSL needs unique struct names");
+    expectFailure ("layout(binding = 0) uniform U { float x; } u; layout(binding = 0) uniform V { float y; } v; layout(location = 0) out vec4 c; void main() { c = vec4(u.x + v.y); }",
+                   "1:90: 'v' and 'u' share @group(0) @binding(0)");
+}
+
+TEST_F (WgslHardeningTests, InvalidStageIOFails)
+{
+    expectFailure ("layout(location = 0) out vec4 c[0]; void main() { }", "1:31: Stage IO arrays need a constant size", ShaderStage::vertex);
+    expectFailure ("layout(location = 0) out mat2 m[2]; void main() { }", "1:31: Stage IO arrays of matrices or arrays are not supported", ShaderStage::vertex);
+    expectFailure ("layout(location = 0) out bool b; void main() { b = true; }", "1:31: Stage IO variable 'b' must be a numeric scalar, vector or matrix");
+    expectFailure ("layout(location = 0) out vec4 a; layout(location = 0) out vec4 b; void main() { a = vec4(1.0); b = a; }", "1:64: Stage IO location 0 is used more than once");
+    expectFailure ("layout(location = 0, index = 2) out vec4 c; void main() { c = vec4(1.0); }", "1:42: layout(index) is only valid as 0 or 1 on fragment outputs");
+    expectFailure ("layout(location = 0, index = 1) out vec4 c; void main() { c = vec4(1.0); }", "1:42: Dual-source blending in WGSL needs exactly two outputs at location 0 with index 0 and 1");
+    expectFailure ("out V { vec2 uv; } vout; void main() { vout; }", "1:40: Stage IO block 'vout' can only be accessed member by member", ShaderStage::vertex);
+    expectFailure ("out V { vec2 uv; } vout; void main() { vout.nope = vec2(0.0); }", "1:44: Unknown member 'nope' of block 'vout'", ShaderStage::vertex);
+}
+
+TEST_F (WgslHardeningTests, StageIOBlockQualifiersApplyToMembers)
+{
+    const auto wgsl = transpileOk (R"glsl(
+layout(location = 0) centroid in V { vec2 uv; } vin;
+layout(location = 1) in W { sample vec2 st; layout(location = 3) flat int k; } win;
+layout(location = 0) out vec4 c;
+void main() { c = vec4(vin.uv, win.st) + vec4(float(win.k)); }
+)glsl");
+
+    EXPECT_TRUE (wgsl.contains ("@location(0) @interpolate(perspective, centroid) vin_uv: vec2<f32>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(1) @interpolate(perspective, sample) win_st: vec2<f32>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(3) @interpolate(flat) win_k: i32")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, RedeclaredBuiltinOutputsAreAccepted)
+{
+    const auto wgsl = transpileOk ("out vec4 gl_Position; void main() { gl_Position = vec4(1.0); }", ShaderStage::vertex);
+    EXPECT_TRUE (wgsl.contains ("@builtin(position)")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, AggregateInitializersBecomeConstructors)
+{
+    const auto wgsl = transpileOk (R"glsl(
+struct S { float a; vec2 b; };
+layout(location = 0) out vec4 c;
+void main() {
+    S s = { 1.0, { 2.0, 3.0 } };
+    mat2 m = { { 1.0, 0.0 }, vec2(0.0, 1.0) };
+    int a[] = { 1, 2 };
+    float[] f = float[](1.0, 2.0);
+    c = vec4(s.a, s.b, m[0][0] + float(a[1]) + f[1]);
+}
+)glsl");
+
+    EXPECT_TRUE (wgsl.contains ("var s: S = S(1.0, vec2<f32>(2.0, 3.0));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var m: mat2x2<f32> = mat2x2<f32>(vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var a: array<i32, 2> = array<i32, 2>(1, 2);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var f: array<f32, 2> = array<f32, 2>(1.0, 2.0);")) << wgsl;
+
+    expectFailure ("void main() { float x = { 1.0 }; }", "1:25: Initializer list used for a scalar");
+    expectFailure ("struct S { float a; vec2 b; }; void main() { S s = { 1.0 }; }", "1:52: Initializer list does not match struct 'S'");
+}
+
+TEST_F (WgslHardeningTests, ReservedFunctionAndStructNamesAreRenamed)
+{
+    const auto wgsl = transpileOk ("float filter(float x) { return x; } struct ref { float x; }; layout(location = 0) out vec4 c; void main() { ref r = ref(filter(1.0)); c = vec4(r.x); }");
+    EXPECT_TRUE (wgsl.contains ("fn filter_(x: f32) -> f32")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var r: ref_ = ref_(filter_(1.0f));")) << wgsl;
+}
+
+//==============================================================================
+// Expression and statement diagnostics
+
+TEST_F (WgslHardeningTests, InvalidExpressionsFail)
+{
+    expectFailure ("float f(float x) { return x; } void main() { float y = (f)(1.0); }", "1:59: Unsupported call expression");
+    expectFailure ("void f(out float x) { x = 1.0; } void main() { f(1.0); }", "1:50: Expression can't be assigned to");
+    expectFailure ("float g() { return 1.0; } void main() { g() = 1.0; }", "1:42: Expression can't be assigned to");
+    expectFailure ("void main() { float p = gl_PointSize; }", "1:25: gl_PointSize has no WGSL equivalent", ShaderStage::vertex);
+    expectFailure ("void main() { float f = 1.0; vec2 v = f.xy; }", "1:40: Invalid swizzle 'xy' of a scalar");
+    expectFailure ("void main() { mat2 m = mat2(1.0); m++; }", "1:36: ++ and -- on matrices, arrays or structs are not supported for WGSL");
+    expectFailure ("float f(float a) { return a; } float f(float b) { return b; } void main() { float y = f(1.0); }", "1:88: Ambiguous call to overloaded function 'f'");
+    expectFailure ("float f(float a) { return a; } float f(uint a) { return 2.0; } void main() { float y = f(1); }", "1:89: Ambiguous call to overloaded function 'f'");
+    expectFailure ("layout(location = 0) out vec4 c; void main() { c = vec4(1.0); c.x = 1e39; }", "1:69: Floating point literal is out of range for a 32-bit float");
+}
+
+TEST_F (WgslHardeningTests, LengthMethod)
+{
+    const auto wgsl = transpileOk ("const int N = 4; layout(location = 0) out vec4 c; void main() { vec3 v = vec3(1.0); mat3 m = mat3(1.0); float a[N]; c = vec4(float(v.length()), float(m.length()), float(a.length()), 1.0); }");
+    EXPECT_TRUE (wgsl.contains ("vec4<f32>(f32(3), f32(3), f32(i32(N)), 1.0)")) << wgsl;
+
+    expectFailure ("void main() { float f = 1.0; int a = f.length(); }", "1:46: .length() needs an array, vector or matrix operand");
+    expectFailure ("void main() { float a[2]; int b = a.foo(); }", "1:40: Unsupported method call '.foo()'");
+    expectFailure ("void main() { float a[2]; int b = a.length(1); }", "1:43: Unsupported method call '.length()'");
+}
+
+TEST_F (WgslHardeningTests, ConstructorsNeedEnoughComponents)
+{
+    expectFailure ("void main() { vec4 v = vec4(vec2(1.0), 1.0); }", "1:24: Not enough components to construct vec4");
+    expectFailure ("void main() { mat2 m = mat2(vec3(1.0)); }", "1:24: Not enough components to construct mat2");
+
+    const auto wgsl = transpileOk ("struct S { mat2 m; }; layout(location = 0) out vec4 c; void main() { S s; mat3 a = mat3(1.0); mat3 b = mat3(a); "
+                                   "vec4 v = vec4(s.m); vec3 w = vec3(vec2(1.0), vec2(2.0)); c = v + vec4(w, float(b)); }");
+    EXPECT_TRUE (wgsl.contains ("var b: mat3x3<f32> = a;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("vec4<f32>(s.m[0].x, s.m[0].y, s.m[1].x, s.m[1].y)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("b[0].x")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LocalConstantsStayConstWhenWgslCanEvaluateThem)
+{
+    const auto wgsl = transpileOk ("const int a = 2; layout(location = 0) out vec4 c; void main() { const int b = a * 2 + 1; const vec2 v = vec2(-1.0, float(b)); "
+                                   "const float d = sin(1.0); float e[b]; c = vec4(v, d, float(e.length())); }");
+    EXPECT_TRUE (wgsl.contains ("const b: i32 = ((a * 2) + 1);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("const v: vec2<f32> = vec2<f32>(-1.0, f32(b));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("let d: f32 = sin(1.0f);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, MatrixArithmeticConvertsScalarOperands)
+{
+    const auto wgsl = transpileOk ("layout(location = 0) out vec4 c; void main() { mat2 m = mat2(1.0); mat2x3 n = mat2x3(1.0); mat3x2 p = mat3x2(1.0); int k = 2; "
+                                   "mat2 q = m * k; mat2 t = k * m; mat3 r = n * p; vec2 v = vec2(1.0) * m; mat2 s = m + m; c = vec4(q[0] + t[1], v) + vec4(r[0], s[1][1]); }");
+    EXPECT_TRUE (wgsl.contains ("var q: mat2x2<f32> = (m * f32(k));")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var t: mat2x2<f32> = (f32(k) * m);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var r: mat3x3<f32> = (n * p);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var v: vec2<f32> = (vec2<f32>(1.0) * m);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("var s: mat2x2<f32> = (m + m);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, StructConstructorsConvertArguments)
+{
+    const auto wgsl = transpileOk ("struct S { float a; uint b; }; layout(location = 0) out vec4 c; void main() { int i = 1; S s = S(i, i); c = vec4(s.a, float(s.b), 0.0, 1.0); }");
+    EXPECT_TRUE (wgsl.contains ("var s: S = S(f32(i), u32(i));")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, LayoutValuesAreIntegerConstantExpressions)
+{
+    const auto wgsl = transpileOk ("layout(location = (1 + 1) * 2 - 1) out vec4 a; layout(location = +(-(-2)) / 2u) out vec4 b; void main() { a = vec4(1.0); b = a; }");
+    EXPECT_TRUE (wgsl.contains ("@location(3) a: vec4<f32>")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("@location(1) b: vec4<f32>")) << wgsl;
+
+    expectFailure ("layout(location = 7 / 0) out vec4 c; void main() { c = vec4(1.0); }", "1:8: layout(location) must be a non-negative integer constant");
+    expectFailure ("layout(location = 1 << 1) out vec4 c; void main() { c = vec4(1.0); }", "1:8: layout(location) must be a non-negative integer constant");
+}
+
+TEST_F (WgslHardeningTests, EmitterSpellsStatementForms)
+{
+    const auto wgsl = transpileOk (R"glsl(
+layout(location = 0) flat in int mode;
+layout(location = 0) out vec4 c;
+void main() {
+    vec2 v = vec2(1.0, 2.0);
+    int i;
+    float r = (-v).x;
+    for (i = 0; i < 2; (i++)) { r += 1.0; }
+    switch (mode) { case 1: default: r = 2.0; }
+    c = vec4(r, mix(0.0, 1.0, true), 0.0, 1.0);
+}
+)glsl");
+
+    EXPECT_TRUE (wgsl.contains ("var r: f32 = (-v).x;")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("for (i = 0; (i < 2); i++) {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("case 1, default: {")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("select(0.0f, 1.0f, true)")) << wgsl;
+
+    expectFailure ("const float x; void main() { }", "1:13: Constant 'x' needs an initializer");
+}
+
+TEST_F (WgslHardeningTests, TextureTypesWithoutWgslEquivalentFail)
+{
+    const auto declare = [] (const char* type)
+    {
+        return std::string ("layout(binding = 0) uniform ") + type + " t; void main() { }";
+    };
+
+    expectFailure (declare ("sampler1DArray").c_str(), "'sampler1DArray' has no WGSL equivalent");
+    expectFailure (declare ("sampler2DRect").c_str(), "'sampler2DRect' has no WGSL equivalent");
+    expectFailure (declare ("sampler2DMSArray").c_str(), "'sampler2DMSArray' has no WGSL equivalent");
+    expectFailure (declare ("sampler1DShadow").c_str(), "'sampler1DShadow' has no WGSL equivalent");
+    expectFailure (declare ("isamplerBuffer").c_str(), "'isamplerBuffer' has no WGSL equivalent");
+    expectFailure ("layout(binding = 0) uniform texture3D t; layout(binding = 1) uniform samplerShadow s; layout(location = 0) out vec4 c; "
+                   "void main() { c = vec4(texture(sampler2DShadow(t, s), vec3(0.0))); }",
+                   "'texture3D' has no WGSL depth texture equivalent");
+
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform samplerCubeShadow s; layout(location = 0) out vec4 c; void main() { c = vec4(texture(s, vec4(1.0))); }");
+    EXPECT_TRUE (wgsl.contains ("var s: texture_depth_cube;")) << wgsl;
+}
+
+//==============================================================================
+// Buffer and atomic diagnostics
+
+TEST_F (WgslHardeningTests, InvalidAtomicUsesFail)
+{
+    expectFailure ("void main() { uint x = 0u; atomicAdd(x, 1u); }", "1:37: Atomic functions need a buffer block member or a shared variable in WGSL", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) buffer B { float f; } b; void main() { atomicAdd(b.f, 1.0); }", "1:40: Atomic functions need int or uint storage", ShaderStage::compute);
+    expectFailure ("shared uint c; void main() { atomicAdd(c, 1u); c += 1u; }", "1:48: Compound assignment to atomic storage is not supported; use the atomic functions", ShaderStage::compute);
+    expectFailure ("shared uint c; void main() { atomicAdd(c, 1u); c++; }", "1:49: ++ and -- on atomic or converted buffer storage are not supported", ShaderStage::compute);
+    expectFailure ("shared uint a, b; void main() { atomicAdd(a, 1u); }", "1:13: Declare 'a' on its own: its storage type differs in WGSL", ShaderStage::compute);
+    expectFailure ("shared uint counters[2]; void main() { atomicAdd(counters[0], 1u); uint c[2] = counters; }", "1:80: Atomic storage can only be read and written as a whole value", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) buffer B { uint v; } b; void main() { atomicAdd(); }", "1:76: atomicAdd() needs arguments", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) buffer B { uint v; } b; void main() { atomicFoo(b.v, 1u); }", "1:76: Unsupported atomic function 'atomicFoo'", ShaderStage::compute);
+}
+
+TEST_F (WgslHardeningTests, AtomicAccessesThroughParenthesesAndPlainReads)
+{
+    const auto wgsl = transpileOk ("shared uint c; layout(std430, binding = 0) buffer B { uint count; uint v; } b; "
+                                   "void main() { atomicAdd((b.count), 1u); atomicAdd(c, 1u); b.v = c; c = 0u; }",
+                                   ShaderStage::compute);
+    EXPECT_TRUE (wgsl.contains ("_ = atomicAdd(&(b.count), 1u);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("b.v = atomicLoad(&c);")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("atomicStore(&c, 0u);")) << wgsl;
+}
+
+TEST_F (WgslHardeningTests, InvalidBufferLayoutsFail)
+{
+    expectFailure ("int n = 2; layout(std430, binding = 0) buffer B { float v[n]; } b; void main() { b.v[0] = 1.0; }", "1:51: Array sizes in buffers must be integer constants", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) buffer B { float a; layout(offset = 2) float x; } b; void main() { b.a = b.x; }", "1:49: layout(offset = 2) of 'x' is not valid for its type", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) buffer B { layout(offset = 16) float x; } b; void main() { b.x = 1.0; }", "1:40: WGSL can't place the first member of 'B' at a non-zero offset", ShaderStage::compute);
+    expectFailure ("int k = 4; layout(std430, binding = 0) buffer B { float a; layout(offset = k) float x; } b; void main() { b.a = b.x; }", "1:67: layout(offset) must be a non-negative integer constant", ShaderStage::compute);
+    expectFailure ("layout(std430, binding = 0) uniform U { float x; } u; void main() { }", "1:1: std430 uniform blocks are not supported for WGSL");
+    expectFailure ("layout(std140, binding = 0) buffer B { mat2 m; } b; void main() { b.m *= 2.0; }", "1:67: Compound assignment to converted buffer storage is not supported", ShaderStage::compute);
+}
+
+TEST_F (WgslHardeningTests, BufferLayoutsHonorConstantsAlignmentAndDefaults)
+{
+    const auto buffer = transpileOk ("const int N = 4; layout(std430, binding = 0) buffer B { float a; layout(align = 16) float x; layout(offset = 32) vec4 y; float v[N]; float w[2][3]; } b; "
+                                     "void main() { b.a = b.x + b.y.x + b.v[1] + b.w[1][2]; }",
+                                     ShaderStage::compute);
+    EXPECT_TRUE (buffer.contains ("@size(16) a: f32,")) << buffer;
+    EXPECT_TRUE (buffer.contains ("@size(16) x: f32,")) << buffer;
+    EXPECT_TRUE (buffer.contains ("v: array<f32, N>,")) << buffer;
+    EXPECT_TRUE (buffer.contains ("@size(32) w: array<array<f32, 3>, 2>,")) << buffer;
+
+    // layout(std140) uniform; sets the default, both reads of the array share one converter and a local shadows the block
+    const auto uniform = transpileOk ("layout(std140) uniform; layout(binding = 0) uniform U { float w[4]; mat2 m; } u; layout(location = 0) out vec4 c; "
+                                      "void g() { vec2 u = vec2(1.0); c.xy = u; } "
+                                      "void main() { float a[4] = u.w; float b[4] = u.w; vec2 column = u.m[1]; g(); c = vec4(a[0] + b[1], column, 1.0); }");
+    EXPECT_EQ (uniform.indexOf ("fn _load_"), uniform.lastIndexOf ("fn _load_")) << uniform;
+    EXPECT_TRUE (uniform.contains ("var b: array<f32, 4> = _load_array_std140_f32_4_as_array_f32_4(u.w);")) << uniform;
+    EXPECT_TRUE (uniform.contains ("var column: vec2<f32> = u.m[1].v;")) << uniform;
+    EXPECT_TRUE (uniform.contains ("let _t: vec2<f32> = u;")) << uniform;
+}
+
+//==============================================================================
+// Builtin and texture diagnostics
+
+TEST_F (WgslHardeningTests, UnsupportedBuiltinsFail)
+{
+    expectFailure ("void main() { gl_Position = vec4(dFdx(1.0)); }", "1:38: dFdx() is only available in fragment shaders", ShaderStage::vertex);
+    expectFailure ("layout(location = 0) out vec4 c; void main() { c = vec4(interpolateAtCentroid(c.x)); }", "1:78: interpolateAtCentroid() has no WGSL equivalent");
+    expectFailure ("layout(location = 0) out vec4 c; void main() { float e; c = vec4(frexp(1.0, e, 1)); }", "1:71: frexp() takes two arguments");
+    expectFailure ("layout(location = 0) out vec4 c; void main() { mat2x3 m = mat2x3(1.0); c = vec4(inverse(m)[0], 1.0); }", "1:88: inverse() needs a square matrix");
+    expectFailure ("layout(location = 0) out vec4 c; void main() { barrier(); }", "1:55: barrier() is only available in compute shaders for WGSL");
+    expectFailure ("layout(std430, binding = 0) buffer B { int v; } b; void main() { int hi, lo; imulExtended(b.v, b.v, hi, lo); }", "1:90: Unsupported builtin function 'imulExtended'", ShaderStage::compute);
+}
+
+TEST_F (WgslHardeningTests, UnsupportedTextureCallsFail)
+{
+    const auto fragment = [] (const char* declarations, const char* expression)
+    {
+        return std::string (declarations) + " layout(location = 0) out vec4 c; void main() { c = vec4(" + expression + "); }";
+    };
+
+    expectFailure (fragment ("", "texture(1.0, vec2(0.0))").c_str(), "Texture functions need a sampler2D(texture, sampler) pair or a combined image sampler");
+    expectFailure (fragment ("", "texture(vec2(1.0, 2.0), vec2(0.0))").c_str(), "texture() needs a texture argument");
+    expectFailure (fragment ("layout(binding = 0) uniform texture2D t;", "texture(t, vec2(0.0))").c_str(), "texture() needs a sampler");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DShadow s;", "texture(s, vec2(0.0))").c_str(), "Missing depth reference in shadow texture coordinate");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DShadow s;", "textureGrad(s, vec3(0.0), vec2(0.0), vec2(0.0))").c_str(), "textureGrad() on a shadow sampler has no WGSL equivalent");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DShadow s;", "texture(s, vec3(0.0), 1.0)").c_str(), "Biased shadow texture lookups have no WGSL equivalent");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DShadow s;", "textureLod(s, vec3(0.0), 1.0)").c_str(), "WGSL only compares shadow textures at level 0");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DShadow s;", "textureGather(s, vec2(0.0))").c_str(), "Shadow texture gathers need a depth reference");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2DArray s;", "textureProj(s, vec4(0.0))").c_str(), "textureProj() is not available for array and cube textures");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2D s;", "textureQueryLod(s, vec2(0.0)), 0.0, 0.0").c_str(), "textureQueryLod() has no WGSL equivalent");
+    expectFailure (fragment ("layout(binding = 0) uniform sampler2D s;", "textureGatherOffsets(s, vec2(0.0), ivec2[4](ivec2(0), ivec2(0), ivec2(0), ivec2(0)))").c_str(), "textureGatherOffsets() has no WGSL equivalent");
+}
+
+TEST_F (WgslHardeningTests, TextureQueriesOnSeparateTextures)
+{
+    const auto wgsl = transpileOk ("layout(binding = 0) uniform texture2D t; layout(binding = 1) uniform sampler2DShadow s; layout(location = 0) out vec4 c; "
+                                   "void main() { c = vec4(textureSize(t, 0), textureLod(s, vec3(0.0), 0.0), textureLod(s, vec3(0.0), (0))) + texelFetch(t, ivec2(0), 0); }");
+    EXPECT_TRUE (wgsl.contains ("textureDimensions(t, 0)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureLoad(t, vec2<i32>(0), 0)")) << wgsl;
+    EXPECT_TRUE (wgsl.contains ("textureSampleCompareLevel(s, s_sampler, _t.xy, _t.z), textureSampleCompareLevel(s, s_sampler, _t_1.xy, _t_1.z)")) << wgsl;
 }
 
 //==============================================================================

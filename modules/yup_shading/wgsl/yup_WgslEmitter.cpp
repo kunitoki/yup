@@ -333,12 +333,7 @@ private:
                 out += " -> " + typeName (fd->prototype.returnType, fd->prototype.loc);
 
             out += " ";
-
-            if (fd->body != nullptr)
-                emitStatement (*fd->body, out, 0);
-            else
-                out += "{}\n";
-
+            emitStatement (*fd->body, out, 0);
             out += "\n";
         }
     }
@@ -496,10 +491,6 @@ private:
         {
             emitSwitch (stmt.as<StmtSwitch>(), out, indent);
         }
-        else if (stmt.is<StmtCaseLabel>())
-        {
-            throw LoweringError (stmt.loc, "Case label outside of a lowered switch");
-        }
         else if (stmt.is<StmtWhile>())
         {
             const auto& w = stmt.as<StmtWhile>();
@@ -507,19 +498,6 @@ private:
             emitExpr (*w.condition, out);
             out += ") {\n";
             emitBody (*w.body, out, indent + 1);
-            out += ind + "}\n";
-        }
-        else if (stmt.is<StmtDoWhile>())
-        {
-            // do body while (cond) -> loop { body continuing { break if !(cond); } }
-            const auto& dw = stmt.as<StmtDoWhile>();
-            out += ind + "loop {\n";
-            emitBody (*dw.body, out, indent + 1);
-            out += ind + "    continuing {\n";
-            out += ind + "        break if !(";
-            emitExpr (*dw.condition, out);
-            out += ");\n";
-            out += ind + "    }\n";
             out += ind + "}\n";
         }
         else if (stmt.is<StmtLoop>())
@@ -616,6 +594,10 @@ private:
                 emitLocalDeclaration (*decl.initDeclaratorList, single, out);
                 out += ";\n";
             }
+        }
+        else
+        {
+            throw LoweringError (stmt.loc, "Statement must be lowered before emission");
         }
     }
 
@@ -862,18 +844,13 @@ private:
                 out += "~";
                 emitUnaryOperand (*un.operand, out);
                 break;
+            // WGSL increments are statements, where prefix and postfix forms are the same
             case UnaryOp::preInc:
-                emitExpr (*un.operand, out);
-                out += " += 1";
-                break;
-            case UnaryOp::preDec:
-                emitExpr (*un.operand, out);
-                out += " -= 1";
-                break;
             case UnaryOp::postInc:
                 emitExpr (*un.operand, out);
                 out += "++";
                 break;
+            case UnaryOp::preDec:
             case UnaryOp::postDec:
                 emitExpr (*un.operand, out);
                 out += "--";

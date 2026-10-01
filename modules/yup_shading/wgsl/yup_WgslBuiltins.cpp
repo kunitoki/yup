@@ -130,7 +130,7 @@ public:
         if (name == "not")
             return makeUnary (l, UnaryOp::logicalNot, makeParen (l, std::move (args[0])), resultType);
 
-        static const std::map<std::string, BinaryOp> relational = {
+        static constexpr std::pair<std::string_view, BinaryOp> relational[] = {
             { "lessThan", BinaryOp::lessThan },
             { "lessThanEqual", BinaryOp::lessEqual },
             { "greaterThan", BinaryOp::greaterThan },
@@ -139,8 +139,11 @@ public:
             { "notEqual", BinaryOp::notEqual }
         };
 
-        if (auto found = relational.find (name); found != relational.end())
-            return makeBinary (l, found->second, std::move (args[0]), std::move (args[1]), resultType);
+        for (const auto& [glslName, op] : relational)
+        {
+            if (name == glslName)
+                return makeBinary (l, op, std::move (args[0]), std::move (args[1]), resultType);
+        }
 
         if (name == "mod")
             return lowerMod (std::move (args), resultType);

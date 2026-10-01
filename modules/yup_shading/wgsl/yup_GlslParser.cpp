@@ -98,114 +98,12 @@ enum class TokenType
 
 const char* toString (TokenType tt)
 {
-    switch (tt)
-    {
-        case TokenType::identifier:
-            return "identifier";
-        case TokenType::intConst:
-            return "intConst";
-        case TokenType::uintConst:
-            return "uintConst";
-        case TokenType::floatConst:
-            return "floatConst";
-        case TokenType::boolConst:
-            return "boolConst";
-        case TokenType::semicolon:
-            return ";";
-        case TokenType::comma:
-            return ",";
-        case TokenType::lParen:
-            return "(";
-        case TokenType::rParen:
-            return ")";
-        case TokenType::lBrace:
-            return "{";
-        case TokenType::rBrace:
-            return "}";
-        case TokenType::lBracket:
-            return "[";
-        case TokenType::rBracket:
-            return "]";
-        case TokenType::dot:
-            return ".";
-        case TokenType::question:
-            return "?";
-        case TokenType::colon:
-            return ":";
-        case TokenType::hash:
-            return "#";
-        case TokenType::plus:
-            return "+";
-        case TokenType::minus:
-            return "-";
-        case TokenType::star:
-            return "*";
-        case TokenType::slash:
-            return "/";
-        case TokenType::percent:
-            return "%";
-        case TokenType::lt:
-            return "<";
-        case TokenType::gt:
-            return ">";
-        case TokenType::le:
-            return "<=";
-        case TokenType::ge:
-            return ">=";
-        case TokenType::eq:
-            return "==";
-        case TokenType::ne:
-            return "!=";
-        case TokenType::amp:
-            return "&";
-        case TokenType::caret:
-            return "^";
-        case TokenType::pipe:
-            return "|";
-        case TokenType::land:
-            return "&&";
-        case TokenType::lor:
-            return "||";
-        case TokenType::lxor:
-            return "^^";
-        case TokenType::lnot:
-            return "!";
-        case TokenType::bnot:
-            return "~";
-        case TokenType::lshift:
-            return "<<";
-        case TokenType::rshift:
-            return ">>";
-        case TokenType::inc:
-            return "++";
-        case TokenType::dec:
-            return "--";
-        case TokenType::assign:
-            return "=";
-        case TokenType::addAssign:
-            return "+=";
-        case TokenType::subAssign:
-            return "-=";
-        case TokenType::mulAssign:
-            return "*=";
-        case TokenType::divAssign:
-            return "/=";
-        case TokenType::modAssign:
-            return "%=";
-        case TokenType::lshiftAssign:
-            return "<<=";
-        case TokenType::rshiftAssign:
-            return ">>=";
-        case TokenType::andAssign:
-            return "&=";
-        case TokenType::xorAssign:
-            return "^=";
-        case TokenType::orAssign:
-            return "|=";
-        case TokenType::endOfFile:
-            return "EOF";
-    }
-    return "?";
+    static constexpr const char* names[] = {
+        "identifier", "intConst", "uintConst", "floatConst", "boolConst", ";", ",", "(", ")", "{", "}", "[", "]", ".", "?", ":", "#", "+", "-", "*", "/", "%", "<", ">", "<=", ">=", "==", "!=", "&", "^", "|", "&&", "||", "^^", "!", "~", "<<", ">>", "++", "--", "=", "+=", "-=", "*=", "/=", "%=", "<<=", ">>=", "&=", "^=", "|=", "EOF"
+    };
+
+    static_assert (std::size (names) == static_cast<std::size_t> (TokenType::endOfFile) + 1);
+    return names[static_cast<std::size_t> (tt)];
 }
 
 bool isAssignmentOp (TokenType tt)
@@ -290,8 +188,7 @@ public:
 
     Token advance()
     {
-        if (lookahead.empty())
-            return lexToken();
+        peek();
 
         Token t = std::move (lookahead.front());
         lookahead.pop_front();
@@ -637,7 +534,7 @@ private:
         stream >> value;
 
         if (stream.fail())
-            throwError (currentLoc, "Malformed floating point literal '" + number + "'");
+            throwError (currentLoc, "Floating point literal '" + number + "' is out of range");
 
         Token tok = makeToken (TokenType::floatConst);
         tok.text = src.substr (begin, pos - begin);
@@ -732,9 +629,9 @@ bool isKeyword (const Token& tok, const char* kw)
     return tok.type == TokenType::identifier && tok.text == kw;
 }
 
-const std::unordered_map<std::string, LayoutQualifierId>& layoutQualifierNames()
+std::optional<LayoutQualifierId> findLayoutQualifier (const std::string& name)
 {
-    static const std::unordered_map<std::string, LayoutQualifierId> names = {
+    static constexpr std::pair<std::string_view, LayoutQualifierId> names[] = {
         { "location", LayoutQualifierId::location },
         { "binding", LayoutQualifierId::binding },
         { "set", LayoutQualifierId::descriptorSet },
@@ -793,7 +690,13 @@ const std::unordered_map<std::string, LayoutQualifierId>& layoutQualifierNames()
         { "buffer_reference", LayoutQualifierId::bufferReference }
     };
 
-    return names;
+    for (const auto& [candidate, id] : names)
+    {
+        if (candidate == name)
+            return id;
+    }
+
+    return std::nullopt;
 }
 
 bool isImageFormatName (const std::string& name)
@@ -2035,8 +1938,8 @@ private:
         const auto idTok = expectIdentifier ("layout qualifier");
         entry.name = idTok.text;
 
-        if (auto found = layoutQualifierNames().find (idTok.text); found != layoutQualifierNames().end())
-            entry.id = found->second;
+        if (const auto id = findLayoutQualifier (idTok.text))
+            entry.id = *id;
         else if (isImageFormatName (idTok.text))
             entry.id = LayoutQualifierId::imageFormat;
         else

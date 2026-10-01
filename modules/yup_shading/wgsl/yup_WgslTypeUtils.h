@@ -28,171 +28,180 @@ namespace wgsl
 {
 
 //==============================================================================
-/** GLSL built-in type names and the TypeKind each one denotes. */
+/** GLSL built-in type names and the TypeKind each one denotes, the first name of each kind being its spelling. */
+inline constexpr std::pair<std::string_view, TypeKind> glslTypeNameTable[] = {
+    { "void", TypeKind::voidType },
+    { "float", TypeKind::floatType },
+    { "int", TypeKind::intType },
+    { "uint", TypeKind::uintType },
+    { "bool", TypeKind::boolType },
+    { "double", TypeKind::doubleType },
+    { "vec2", TypeKind::vec2 },
+    { "vec3", TypeKind::vec3 },
+    { "vec4", TypeKind::vec4 },
+    { "ivec2", TypeKind::ivec2 },
+    { "ivec3", TypeKind::ivec3 },
+    { "ivec4", TypeKind::ivec4 },
+    { "uvec2", TypeKind::uvec2 },
+    { "uvec3", TypeKind::uvec3 },
+    { "uvec4", TypeKind::uvec4 },
+    { "bvec2", TypeKind::bvec2 },
+    { "bvec3", TypeKind::bvec3 },
+    { "bvec4", TypeKind::bvec4 },
+    { "dvec2", TypeKind::dvec2 },
+    { "dvec3", TypeKind::dvec3 },
+    { "dvec4", TypeKind::dvec4 },
+    { "mat2", TypeKind::mat2 },
+    { "mat3", TypeKind::mat3 },
+    { "mat4", TypeKind::mat4 },
+    { "mat2x2", TypeKind::mat2x2 },
+    { "mat2x3", TypeKind::mat2x3 },
+    { "mat2x4", TypeKind::mat2x4 },
+    { "mat3x2", TypeKind::mat3x2 },
+    { "mat3x3", TypeKind::mat3x3 },
+    { "mat3x4", TypeKind::mat3x4 },
+    { "mat4x2", TypeKind::mat4x2 },
+    { "mat4x3", TypeKind::mat4x3 },
+    { "mat4x4", TypeKind::mat4x4 },
+    { "dmat2", TypeKind::dmat2 },
+    { "dmat3", TypeKind::dmat3 },
+    { "dmat4", TypeKind::dmat4 },
+    { "dmat2x2", TypeKind::dmat2x2 },
+    { "dmat2x3", TypeKind::dmat2x3 },
+    { "dmat2x4", TypeKind::dmat2x4 },
+    { "dmat3x2", TypeKind::dmat3x2 },
+    { "dmat3x3", TypeKind::dmat3x3 },
+    { "dmat3x4", TypeKind::dmat3x4 },
+    { "dmat4x2", TypeKind::dmat4x2 },
+    { "dmat4x3", TypeKind::dmat4x3 },
+    { "dmat4x4", TypeKind::dmat4x4 },
+    { "sampler1D", TypeKind::sampler1D },
+    { "sampler2D", TypeKind::sampler2D },
+    { "sampler3D", TypeKind::sampler3D },
+    { "samplerCube", TypeKind::samplerCube },
+    { "sampler1DShadow", TypeKind::sampler1DShadow },
+    { "sampler2DShadow", TypeKind::sampler2DShadow },
+    { "samplerCubeShadow", TypeKind::samplerCubeShadow },
+    { "samplerCubeArray", TypeKind::samplerCubeArray },
+    { "samplerCubeArrayShadow", TypeKind::samplerCubeArrayShadow },
+    { "sampler1DArray", TypeKind::sampler1DArray },
+    { "sampler2DArray", TypeKind::sampler2DArray },
+    { "sampler1DArrayShadow", TypeKind::sampler1DArrayShadow },
+    { "sampler2DArrayShadow", TypeKind::sampler2DArrayShadow },
+    { "sampler2DRect", TypeKind::sampler2DRect },
+    { "sampler2DRectShadow", TypeKind::sampler2DRectShadow },
+    { "samplerBuffer", TypeKind::samplerBuffer },
+    { "sampler2DMS", TypeKind::sampler2DMS },
+    { "sampler2DMSArray", TypeKind::sampler2DMSArray },
+    { "isampler1D", TypeKind::isampler1D },
+    { "isampler2D", TypeKind::isampler2D },
+    { "isampler3D", TypeKind::isampler3D },
+    { "isamplerCube", TypeKind::isamplerCube },
+    { "isamplerCubeArray", TypeKind::isamplerCubeArray },
+    { "isampler1DArray", TypeKind::isampler1DArray },
+    { "isampler2DArray", TypeKind::isampler2DArray },
+    { "isampler2DRect", TypeKind::isampler2DRect },
+    { "isamplerBuffer", TypeKind::isamplerBuffer },
+    { "isampler2DMS", TypeKind::isampler2DMS },
+    { "isampler2DMSArray", TypeKind::isampler2DMSArray },
+    { "usampler1D", TypeKind::usampler1D },
+    { "usampler2D", TypeKind::usampler2D },
+    { "usampler3D", TypeKind::usampler3D },
+    { "usamplerCube", TypeKind::usamplerCube },
+    { "usamplerCubeArray", TypeKind::usamplerCubeArray },
+    { "usampler1DArray", TypeKind::usampler1DArray },
+    { "usampler2DArray", TypeKind::usampler2DArray },
+    { "usampler2DRect", TypeKind::usampler2DRect },
+    { "usamplerBuffer", TypeKind::usamplerBuffer },
+    { "usampler2DMS", TypeKind::usampler2DMS },
+    { "usampler2DMSArray", TypeKind::usampler2DMSArray },
+    { "image1D", TypeKind::image1D },
+    { "image2D", TypeKind::image2D },
+    { "image3D", TypeKind::image3D },
+    { "imageCube", TypeKind::imageCube },
+    { "imageCubeArray", TypeKind::imageCubeArray },
+    { "image1DArray", TypeKind::image1DArray },
+    { "image2DArray", TypeKind::image2DArray },
+    { "image2DRect", TypeKind::image2DRect },
+    { "imageBuffer", TypeKind::imageBuffer },
+    { "image2DMS", TypeKind::image2DMS },
+    { "image2DMSArray", TypeKind::image2DMSArray },
+    { "iimage1D", TypeKind::iimage1D },
+    { "iimage2D", TypeKind::iimage2D },
+    { "iimage3D", TypeKind::iimage3D },
+    { "iimageCube", TypeKind::iimageCube },
+    { "iimageCubeArray", TypeKind::iimageCubeArray },
+    { "iimage1DArray", TypeKind::iimage1DArray },
+    { "iimage2DArray", TypeKind::iimage2DArray },
+    { "iimage2DRect", TypeKind::iimage2DRect },
+    { "iimageBuffer", TypeKind::iimageBuffer },
+    { "iimage2DMS", TypeKind::iimage2DMS },
+    { "iimage2DMSArray", TypeKind::iimage2DMSArray },
+    { "uimage1D", TypeKind::uimage1D },
+    { "uimage2D", TypeKind::uimage2D },
+    { "uimage3D", TypeKind::uimage3D },
+    { "uimageCube", TypeKind::uimageCube },
+    { "uimageCubeArray", TypeKind::uimageCubeArray },
+    { "uimage1DArray", TypeKind::uimage1DArray },
+    { "uimage2DArray", TypeKind::uimage2DArray },
+    { "uimage2DRect", TypeKind::uimage2DRect },
+    { "uimageBuffer", TypeKind::uimageBuffer },
+    { "uimage2DMS", TypeKind::uimage2DMS },
+    { "uimage2DMSArray", TypeKind::uimage2DMSArray },
+    { "atomic_uint", TypeKind::atomicUint },
+    { "texture1D", TypeKind::texture1D },
+    { "texture2D", TypeKind::texture2D },
+    { "texture3D", TypeKind::texture3D },
+    { "textureCube", TypeKind::textureCube },
+    { "textureCubeArray", TypeKind::textureCubeArray },
+    { "texture1DArray", TypeKind::texture1DArray },
+    { "texture2DArray", TypeKind::texture2DArray },
+    { "texture2DRect", TypeKind::texture2DRect },
+    { "textureBuffer", TypeKind::textureBuffer },
+    { "texture2DMS", TypeKind::texture2DMS },
+    { "texture2DMSArray", TypeKind::texture2DMSArray },
+    { "itexture1D", TypeKind::itexture1D },
+    { "itexture2D", TypeKind::itexture2D },
+    { "itexture3D", TypeKind::itexture3D },
+    { "itextureCube", TypeKind::itextureCube },
+    { "itextureCubeArray", TypeKind::itextureCubeArray },
+    { "itexture1DArray", TypeKind::itexture1DArray },
+    { "itexture2DArray", TypeKind::itexture2DArray },
+    { "itexture2DRect", TypeKind::itexture2DRect },
+    { "itextureBuffer", TypeKind::itextureBuffer },
+    { "itexture2DMS", TypeKind::itexture2DMS },
+    { "itexture2DMSArray", TypeKind::itexture2DMSArray },
+    { "utexture1D", TypeKind::utexture1D },
+    { "utexture2D", TypeKind::utexture2D },
+    { "utexture3D", TypeKind::utexture3D },
+    { "utextureCube", TypeKind::utextureCube },
+    { "utextureCubeArray", TypeKind::utextureCubeArray },
+    { "utexture1DArray", TypeKind::utexture1DArray },
+    { "utexture2DArray", TypeKind::utexture2DArray },
+    { "utexture2DRect", TypeKind::utexture2DRect },
+    { "utextureBuffer", TypeKind::utextureBuffer },
+    { "utexture2DMS", TypeKind::utexture2DMS },
+    { "utexture2DMSArray", TypeKind::utexture2DMSArray },
+    { "sampler", TypeKind::samplerType },
+    { "samplerShadow", TypeKind::samplerShadow },
+    { "subpassInput", TypeKind::subpassInput },
+    { "isubpassInput", TypeKind::subpassInput },
+    { "usubpassInput", TypeKind::subpassInput },
+    { "subpassInputMS", TypeKind::subpassInputMS },
+    { "isubpassInputMS", TypeKind::subpassInputMS },
+    { "usubpassInputMS", TypeKind::subpassInputMS }
+};
+
 inline const std::unordered_map<std::string, TypeKind>& glslTypeNames()
 {
-    static const std::unordered_map<std::string, TypeKind> names = {
-        { "void", TypeKind::voidType },
-        { "float", TypeKind::floatType },
-        { "int", TypeKind::intType },
-        { "uint", TypeKind::uintType },
-        { "bool", TypeKind::boolType },
-        { "double", TypeKind::doubleType },
-        { "vec2", TypeKind::vec2 },
-        { "vec3", TypeKind::vec3 },
-        { "vec4", TypeKind::vec4 },
-        { "ivec2", TypeKind::ivec2 },
-        { "ivec3", TypeKind::ivec3 },
-        { "ivec4", TypeKind::ivec4 },
-        { "uvec2", TypeKind::uvec2 },
-        { "uvec3", TypeKind::uvec3 },
-        { "uvec4", TypeKind::uvec4 },
-        { "bvec2", TypeKind::bvec2 },
-        { "bvec3", TypeKind::bvec3 },
-        { "bvec4", TypeKind::bvec4 },
-        { "dvec2", TypeKind::dvec2 },
-        { "dvec3", TypeKind::dvec3 },
-        { "dvec4", TypeKind::dvec4 },
-        { "mat2", TypeKind::mat2 },
-        { "mat3", TypeKind::mat3 },
-        { "mat4", TypeKind::mat4 },
-        { "mat2x2", TypeKind::mat2x2 },
-        { "mat2x3", TypeKind::mat2x3 },
-        { "mat2x4", TypeKind::mat2x4 },
-        { "mat3x2", TypeKind::mat3x2 },
-        { "mat3x3", TypeKind::mat3x3 },
-        { "mat3x4", TypeKind::mat3x4 },
-        { "mat4x2", TypeKind::mat4x2 },
-        { "mat4x3", TypeKind::mat4x3 },
-        { "mat4x4", TypeKind::mat4x4 },
-        { "dmat2", TypeKind::dmat2 },
-        { "dmat3", TypeKind::dmat3 },
-        { "dmat4", TypeKind::dmat4 },
-        { "dmat2x2", TypeKind::dmat2x2 },
-        { "dmat2x3", TypeKind::dmat2x3 },
-        { "dmat2x4", TypeKind::dmat2x4 },
-        { "dmat3x2", TypeKind::dmat3x2 },
-        { "dmat3x3", TypeKind::dmat3x3 },
-        { "dmat3x4", TypeKind::dmat3x4 },
-        { "dmat4x2", TypeKind::dmat4x2 },
-        { "dmat4x3", TypeKind::dmat4x3 },
-        { "dmat4x4", TypeKind::dmat4x4 },
-        { "sampler1D", TypeKind::sampler1D },
-        { "sampler2D", TypeKind::sampler2D },
-        { "sampler3D", TypeKind::sampler3D },
-        { "samplerCube", TypeKind::samplerCube },
-        { "sampler1DShadow", TypeKind::sampler1DShadow },
-        { "sampler2DShadow", TypeKind::sampler2DShadow },
-        { "samplerCubeShadow", TypeKind::samplerCubeShadow },
-        { "samplerCubeArray", TypeKind::samplerCubeArray },
-        { "samplerCubeArrayShadow", TypeKind::samplerCubeArrayShadow },
-        { "sampler1DArray", TypeKind::sampler1DArray },
-        { "sampler2DArray", TypeKind::sampler2DArray },
-        { "sampler1DArrayShadow", TypeKind::sampler1DArrayShadow },
-        { "sampler2DArrayShadow", TypeKind::sampler2DArrayShadow },
-        { "sampler2DRect", TypeKind::sampler2DRect },
-        { "sampler2DRectShadow", TypeKind::sampler2DRectShadow },
-        { "samplerBuffer", TypeKind::samplerBuffer },
-        { "sampler2DMS", TypeKind::sampler2DMS },
-        { "sampler2DMSArray", TypeKind::sampler2DMSArray },
-        { "isampler1D", TypeKind::isampler1D },
-        { "isampler2D", TypeKind::isampler2D },
-        { "isampler3D", TypeKind::isampler3D },
-        { "isamplerCube", TypeKind::isamplerCube },
-        { "isamplerCubeArray", TypeKind::isamplerCubeArray },
-        { "isampler1DArray", TypeKind::isampler1DArray },
-        { "isampler2DArray", TypeKind::isampler2DArray },
-        { "isampler2DRect", TypeKind::isampler2DRect },
-        { "isamplerBuffer", TypeKind::isamplerBuffer },
-        { "isampler2DMS", TypeKind::isampler2DMS },
-        { "isampler2DMSArray", TypeKind::isampler2DMSArray },
-        { "usampler1D", TypeKind::usampler1D },
-        { "usampler2D", TypeKind::usampler2D },
-        { "usampler3D", TypeKind::usampler3D },
-        { "usamplerCube", TypeKind::usamplerCube },
-        { "usamplerCubeArray", TypeKind::usamplerCubeArray },
-        { "usampler1DArray", TypeKind::usampler1DArray },
-        { "usampler2DArray", TypeKind::usampler2DArray },
-        { "usampler2DRect", TypeKind::usampler2DRect },
-        { "usamplerBuffer", TypeKind::usamplerBuffer },
-        { "usampler2DMS", TypeKind::usampler2DMS },
-        { "usampler2DMSArray", TypeKind::usampler2DMSArray },
-        { "image1D", TypeKind::image1D },
-        { "image2D", TypeKind::image2D },
-        { "image3D", TypeKind::image3D },
-        { "imageCube", TypeKind::imageCube },
-        { "imageCubeArray", TypeKind::imageCubeArray },
-        { "image1DArray", TypeKind::image1DArray },
-        { "image2DArray", TypeKind::image2DArray },
-        { "image2DRect", TypeKind::image2DRect },
-        { "imageBuffer", TypeKind::imageBuffer },
-        { "image2DMS", TypeKind::image2DMS },
-        { "image2DMSArray", TypeKind::image2DMSArray },
-        { "iimage1D", TypeKind::iimage1D },
-        { "iimage2D", TypeKind::iimage2D },
-        { "iimage3D", TypeKind::iimage3D },
-        { "iimageCube", TypeKind::iimageCube },
-        { "iimageCubeArray", TypeKind::iimageCubeArray },
-        { "iimage1DArray", TypeKind::iimage1DArray },
-        { "iimage2DArray", TypeKind::iimage2DArray },
-        { "iimage2DRect", TypeKind::iimage2DRect },
-        { "iimageBuffer", TypeKind::iimageBuffer },
-        { "iimage2DMS", TypeKind::iimage2DMS },
-        { "iimage2DMSArray", TypeKind::iimage2DMSArray },
-        { "uimage1D", TypeKind::uimage1D },
-        { "uimage2D", TypeKind::uimage2D },
-        { "uimage3D", TypeKind::uimage3D },
-        { "uimageCube", TypeKind::uimageCube },
-        { "uimageCubeArray", TypeKind::uimageCubeArray },
-        { "uimage1DArray", TypeKind::uimage1DArray },
-        { "uimage2DArray", TypeKind::uimage2DArray },
-        { "uimage2DRect", TypeKind::uimage2DRect },
-        { "uimageBuffer", TypeKind::uimageBuffer },
-        { "uimage2DMS", TypeKind::uimage2DMS },
-        { "uimage2DMSArray", TypeKind::uimage2DMSArray },
-        { "atomic_uint", TypeKind::atomicUint },
-        { "texture1D", TypeKind::texture1D },
-        { "texture2D", TypeKind::texture2D },
-        { "texture3D", TypeKind::texture3D },
-        { "textureCube", TypeKind::textureCube },
-        { "textureCubeArray", TypeKind::textureCubeArray },
-        { "texture1DArray", TypeKind::texture1DArray },
-        { "texture2DArray", TypeKind::texture2DArray },
-        { "texture2DRect", TypeKind::texture2DRect },
-        { "textureBuffer", TypeKind::textureBuffer },
-        { "texture2DMS", TypeKind::texture2DMS },
-        { "texture2DMSArray", TypeKind::texture2DMSArray },
-        { "itexture1D", TypeKind::itexture1D },
-        { "itexture2D", TypeKind::itexture2D },
-        { "itexture3D", TypeKind::itexture3D },
-        { "itextureCube", TypeKind::itextureCube },
-        { "itextureCubeArray", TypeKind::itextureCubeArray },
-        { "itexture1DArray", TypeKind::itexture1DArray },
-        { "itexture2DArray", TypeKind::itexture2DArray },
-        { "itexture2DRect", TypeKind::itexture2DRect },
-        { "itextureBuffer", TypeKind::itextureBuffer },
-        { "itexture2DMS", TypeKind::itexture2DMS },
-        { "itexture2DMSArray", TypeKind::itexture2DMSArray },
-        { "utexture1D", TypeKind::utexture1D },
-        { "utexture2D", TypeKind::utexture2D },
-        { "utexture3D", TypeKind::utexture3D },
-        { "utextureCube", TypeKind::utextureCube },
-        { "utextureCubeArray", TypeKind::utextureCubeArray },
-        { "utexture1DArray", TypeKind::utexture1DArray },
-        { "utexture2DArray", TypeKind::utexture2DArray },
-        { "utexture2DRect", TypeKind::utexture2DRect },
-        { "utextureBuffer", TypeKind::utextureBuffer },
-        { "utexture2DMS", TypeKind::utexture2DMS },
-        { "utexture2DMSArray", TypeKind::utexture2DMSArray },
-        { "sampler", TypeKind::samplerType },
-        { "samplerShadow", TypeKind::samplerShadow },
-        { "subpassInput", TypeKind::subpassInput },
-        { "isubpassInput", TypeKind::subpassInput },
-        { "usubpassInput", TypeKind::subpassInput },
-        { "subpassInputMS", TypeKind::subpassInputMS },
-        { "isubpassInputMS", TypeKind::subpassInputMS },
-        { "usubpassInputMS", TypeKind::subpassInputMS }
-    };
+    static const auto names = []
+    {
+        std::unordered_map<std::string, TypeKind> result;
+        for (const auto& [name, kind] : glslTypeNameTable)
+            result.emplace (name, kind);
+
+        return result;
+    }();
 
     return names;
 }
@@ -200,10 +209,10 @@ inline const std::unordered_map<std::string, TypeKind>& glslTypeNames()
 /** GLSL spelling of a built-in type, for diagnostics. */
 inline std::string glslTypeName (TypeKind kind)
 {
-    for (const auto& [name, value] : glslTypeNames())
+    for (const auto& [name, value] : glslTypeNameTable)
     {
-        if (value == kind && name.rfind ("isubpass", 0) != 0 && name.rfind ("usubpass", 0) != 0)
-            return name;
+        if (value == kind)
+            return std::string (name);
     }
 
     return "type";
@@ -417,176 +426,126 @@ struct TextureShape
 inline TextureShape textureShape (TypeKind kind)
 {
     using D = TextureShape::Dim;
-    const auto f = TypeKind::floatType;
-    const auto i = TypeKind::intType;
-    const auto u = TypeKind::uintType;
+    constexpr auto f = TypeKind::floatType;
+    constexpr auto i = TypeKind::intType;
+    constexpr auto u = TypeKind::uintType;
 
-    const auto shape = [] (D d, bool arrayed, bool ms, bool shadow, TypeKind scalar)
-    {
-        TextureShape s;
-        s.dim = d;
-        s.arrayed = arrayed;
-        s.multisampled = ms;
-        s.shadow = shadow;
-        s.sampledScalar = scalar;
-        return s;
+    static constexpr std::pair<TypeKind, TextureShape> shapes[] = {
+        { TypeKind::sampler1D, { D::d1, false, false, false, f } },
+        { TypeKind::texture1D, { D::d1, false, false, false, f } },
+        { TypeKind::image1D, { D::d1, false, false, false, f } },
+        { TypeKind::sampler2D, { D::d2, false, false, false, f } },
+        { TypeKind::texture2D, { D::d2, false, false, false, f } },
+        { TypeKind::image2D, { D::d2, false, false, false, f } },
+        { TypeKind::sampler3D, { D::d3, false, false, false, f } },
+        { TypeKind::texture3D, { D::d3, false, false, false, f } },
+        { TypeKind::image3D, { D::d3, false, false, false, f } },
+        { TypeKind::samplerCube, { D::cube, false, false, false, f } },
+        { TypeKind::textureCube, { D::cube, false, false, false, f } },
+        { TypeKind::imageCube, { D::cube, false, false, false, f } },
+        { TypeKind::samplerCubeArray, { D::cube, true, false, false, f } },
+        { TypeKind::textureCubeArray, { D::cube, true, false, false, f } },
+        { TypeKind::imageCubeArray, { D::cube, true, false, false, f } },
+        { TypeKind::sampler1DArray, { D::d1, true, false, false, f } },
+        { TypeKind::texture1DArray, { D::d1, true, false, false, f } },
+        { TypeKind::image1DArray, { D::d1, true, false, false, f } },
+        { TypeKind::sampler2DArray, { D::d2, true, false, false, f } },
+        { TypeKind::texture2DArray, { D::d2, true, false, false, f } },
+        { TypeKind::image2DArray, { D::d2, true, false, false, f } },
+        { TypeKind::sampler2DRect, { D::rect, false, false, false, f } },
+        { TypeKind::texture2DRect, { D::rect, false, false, false, f } },
+        { TypeKind::image2DRect, { D::rect, false, false, false, f } },
+        { TypeKind::samplerBuffer, { D::buffer, false, false, false, f } },
+        { TypeKind::textureBuffer, { D::buffer, false, false, false, f } },
+        { TypeKind::imageBuffer, { D::buffer, false, false, false, f } },
+        { TypeKind::sampler2DMS, { D::d2, false, true, false, f } },
+        { TypeKind::texture2DMS, { D::d2, false, true, false, f } },
+        { TypeKind::image2DMS, { D::d2, false, true, false, f } },
+        { TypeKind::sampler2DMSArray, { D::d2, true, true, false, f } },
+        { TypeKind::texture2DMSArray, { D::d2, true, true, false, f } },
+        { TypeKind::image2DMSArray, { D::d2, true, true, false, f } },
+        { TypeKind::sampler1DShadow, { D::d1, false, false, true, f } },
+        { TypeKind::sampler2DShadow, { D::d2, false, false, true, f } },
+        { TypeKind::samplerCubeShadow, { D::cube, false, false, true, f } },
+        { TypeKind::samplerCubeArrayShadow, { D::cube, true, false, true, f } },
+        { TypeKind::sampler1DArrayShadow, { D::d1, true, false, true, f } },
+        { TypeKind::sampler2DArrayShadow, { D::d2, true, false, true, f } },
+        { TypeKind::sampler2DRectShadow, { D::rect, false, false, true, f } },
+        { TypeKind::isampler1D, { D::d1, false, false, false, i } },
+        { TypeKind::itexture1D, { D::d1, false, false, false, i } },
+        { TypeKind::iimage1D, { D::d1, false, false, false, i } },
+        { TypeKind::isampler2D, { D::d2, false, false, false, i } },
+        { TypeKind::itexture2D, { D::d2, false, false, false, i } },
+        { TypeKind::iimage2D, { D::d2, false, false, false, i } },
+        { TypeKind::isampler3D, { D::d3, false, false, false, i } },
+        { TypeKind::itexture3D, { D::d3, false, false, false, i } },
+        { TypeKind::iimage3D, { D::d3, false, false, false, i } },
+        { TypeKind::isamplerCube, { D::cube, false, false, false, i } },
+        { TypeKind::itextureCube, { D::cube, false, false, false, i } },
+        { TypeKind::iimageCube, { D::cube, false, false, false, i } },
+        { TypeKind::isamplerCubeArray, { D::cube, true, false, false, i } },
+        { TypeKind::itextureCubeArray, { D::cube, true, false, false, i } },
+        { TypeKind::iimageCubeArray, { D::cube, true, false, false, i } },
+        { TypeKind::isampler1DArray, { D::d1, true, false, false, i } },
+        { TypeKind::itexture1DArray, { D::d1, true, false, false, i } },
+        { TypeKind::iimage1DArray, { D::d1, true, false, false, i } },
+        { TypeKind::isampler2DArray, { D::d2, true, false, false, i } },
+        { TypeKind::itexture2DArray, { D::d2, true, false, false, i } },
+        { TypeKind::iimage2DArray, { D::d2, true, false, false, i } },
+        { TypeKind::isampler2DRect, { D::rect, false, false, false, i } },
+        { TypeKind::itexture2DRect, { D::rect, false, false, false, i } },
+        { TypeKind::iimage2DRect, { D::rect, false, false, false, i } },
+        { TypeKind::isamplerBuffer, { D::buffer, false, false, false, i } },
+        { TypeKind::itextureBuffer, { D::buffer, false, false, false, i } },
+        { TypeKind::iimageBuffer, { D::buffer, false, false, false, i } },
+        { TypeKind::isampler2DMS, { D::d2, false, true, false, i } },
+        { TypeKind::itexture2DMS, { D::d2, false, true, false, i } },
+        { TypeKind::iimage2DMS, { D::d2, false, true, false, i } },
+        { TypeKind::isampler2DMSArray, { D::d2, true, true, false, i } },
+        { TypeKind::itexture2DMSArray, { D::d2, true, true, false, i } },
+        { TypeKind::iimage2DMSArray, { D::d2, true, true, false, i } },
+        { TypeKind::usampler1D, { D::d1, false, false, false, u } },
+        { TypeKind::utexture1D, { D::d1, false, false, false, u } },
+        { TypeKind::uimage1D, { D::d1, false, false, false, u } },
+        { TypeKind::usampler2D, { D::d2, false, false, false, u } },
+        { TypeKind::utexture2D, { D::d2, false, false, false, u } },
+        { TypeKind::uimage2D, { D::d2, false, false, false, u } },
+        { TypeKind::usampler3D, { D::d3, false, false, false, u } },
+        { TypeKind::utexture3D, { D::d3, false, false, false, u } },
+        { TypeKind::uimage3D, { D::d3, false, false, false, u } },
+        { TypeKind::usamplerCube, { D::cube, false, false, false, u } },
+        { TypeKind::utextureCube, { D::cube, false, false, false, u } },
+        { TypeKind::uimageCube, { D::cube, false, false, false, u } },
+        { TypeKind::usamplerCubeArray, { D::cube, true, false, false, u } },
+        { TypeKind::utextureCubeArray, { D::cube, true, false, false, u } },
+        { TypeKind::uimageCubeArray, { D::cube, true, false, false, u } },
+        { TypeKind::usampler1DArray, { D::d1, true, false, false, u } },
+        { TypeKind::utexture1DArray, { D::d1, true, false, false, u } },
+        { TypeKind::uimage1DArray, { D::d1, true, false, false, u } },
+        { TypeKind::usampler2DArray, { D::d2, true, false, false, u } },
+        { TypeKind::utexture2DArray, { D::d2, true, false, false, u } },
+        { TypeKind::uimage2DArray, { D::d2, true, false, false, u } },
+        { TypeKind::usampler2DRect, { D::rect, false, false, false, u } },
+        { TypeKind::utexture2DRect, { D::rect, false, false, false, u } },
+        { TypeKind::uimage2DRect, { D::rect, false, false, false, u } },
+        { TypeKind::usamplerBuffer, { D::buffer, false, false, false, u } },
+        { TypeKind::utextureBuffer, { D::buffer, false, false, false, u } },
+        { TypeKind::uimageBuffer, { D::buffer, false, false, false, u } },
+        { TypeKind::usampler2DMS, { D::d2, false, true, false, u } },
+        { TypeKind::utexture2DMS, { D::d2, false, true, false, u } },
+        { TypeKind::uimage2DMS, { D::d2, false, true, false, u } },
+        { TypeKind::usampler2DMSArray, { D::d2, true, true, false, u } },
+        { TypeKind::utexture2DMSArray, { D::d2, true, true, false, u } },
+        { TypeKind::uimage2DMSArray, { D::d2, true, true, false, u } }
     };
 
-    switch (kind)
+    for (const auto& [candidate, shape] : shapes)
     {
-        case TypeKind::sampler1D:
-        case TypeKind::texture1D:
-        case TypeKind::image1D:
-            return shape (D::d1, false, false, false, f);
-        case TypeKind::sampler2D:
-        case TypeKind::texture2D:
-        case TypeKind::image2D:
-            return shape (D::d2, false, false, false, f);
-        case TypeKind::sampler3D:
-        case TypeKind::texture3D:
-        case TypeKind::image3D:
-            return shape (D::d3, false, false, false, f);
-        case TypeKind::samplerCube:
-        case TypeKind::textureCube:
-        case TypeKind::imageCube:
-            return shape (D::cube, false, false, false, f);
-        case TypeKind::samplerCubeArray:
-        case TypeKind::textureCubeArray:
-        case TypeKind::imageCubeArray:
-            return shape (D::cube, true, false, false, f);
-        case TypeKind::sampler1DArray:
-        case TypeKind::texture1DArray:
-        case TypeKind::image1DArray:
-            return shape (D::d1, true, false, false, f);
-        case TypeKind::sampler2DArray:
-        case TypeKind::texture2DArray:
-        case TypeKind::image2DArray:
-            return shape (D::d2, true, false, false, f);
-        case TypeKind::sampler2DRect:
-        case TypeKind::texture2DRect:
-        case TypeKind::image2DRect:
-            return shape (D::rect, false, false, false, f);
-        case TypeKind::samplerBuffer:
-        case TypeKind::textureBuffer:
-        case TypeKind::imageBuffer:
-            return shape (D::buffer, false, false, false, f);
-        case TypeKind::sampler2DMS:
-        case TypeKind::texture2DMS:
-        case TypeKind::image2DMS:
-            return shape (D::d2, false, true, false, f);
-        case TypeKind::sampler2DMSArray:
-        case TypeKind::texture2DMSArray:
-        case TypeKind::image2DMSArray:
-            return shape (D::d2, true, true, false, f);
-
-        case TypeKind::sampler1DShadow:
-            return shape (D::d1, false, false, true, f);
-        case TypeKind::sampler2DShadow:
-            return shape (D::d2, false, false, true, f);
-        case TypeKind::samplerCubeShadow:
-            return shape (D::cube, false, false, true, f);
-        case TypeKind::samplerCubeArrayShadow:
-            return shape (D::cube, true, false, true, f);
-        case TypeKind::sampler1DArrayShadow:
-            return shape (D::d1, true, false, true, f);
-        case TypeKind::sampler2DArrayShadow:
-            return shape (D::d2, true, false, true, f);
-        case TypeKind::sampler2DRectShadow:
-            return shape (D::rect, false, false, true, f);
-
-        case TypeKind::isampler1D:
-        case TypeKind::itexture1D:
-        case TypeKind::iimage1D:
-            return shape (D::d1, false, false, false, i);
-        case TypeKind::isampler2D:
-        case TypeKind::itexture2D:
-        case TypeKind::iimage2D:
-            return shape (D::d2, false, false, false, i);
-        case TypeKind::isampler3D:
-        case TypeKind::itexture3D:
-        case TypeKind::iimage3D:
-            return shape (D::d3, false, false, false, i);
-        case TypeKind::isamplerCube:
-        case TypeKind::itextureCube:
-        case TypeKind::iimageCube:
-            return shape (D::cube, false, false, false, i);
-        case TypeKind::isamplerCubeArray:
-        case TypeKind::itextureCubeArray:
-        case TypeKind::iimageCubeArray:
-            return shape (D::cube, true, false, false, i);
-        case TypeKind::isampler1DArray:
-        case TypeKind::itexture1DArray:
-        case TypeKind::iimage1DArray:
-            return shape (D::d1, true, false, false, i);
-        case TypeKind::isampler2DArray:
-        case TypeKind::itexture2DArray:
-        case TypeKind::iimage2DArray:
-            return shape (D::d2, true, false, false, i);
-        case TypeKind::isampler2DRect:
-        case TypeKind::itexture2DRect:
-        case TypeKind::iimage2DRect:
-            return shape (D::rect, false, false, false, i);
-        case TypeKind::isamplerBuffer:
-        case TypeKind::itextureBuffer:
-        case TypeKind::iimageBuffer:
-            return shape (D::buffer, false, false, false, i);
-        case TypeKind::isampler2DMS:
-        case TypeKind::itexture2DMS:
-        case TypeKind::iimage2DMS:
-            return shape (D::d2, false, true, false, i);
-        case TypeKind::isampler2DMSArray:
-        case TypeKind::itexture2DMSArray:
-        case TypeKind::iimage2DMSArray:
-            return shape (D::d2, true, true, false, i);
-
-        case TypeKind::usampler1D:
-        case TypeKind::utexture1D:
-        case TypeKind::uimage1D:
-            return shape (D::d1, false, false, false, u);
-        case TypeKind::usampler2D:
-        case TypeKind::utexture2D:
-        case TypeKind::uimage2D:
-            return shape (D::d2, false, false, false, u);
-        case TypeKind::usampler3D:
-        case TypeKind::utexture3D:
-        case TypeKind::uimage3D:
-            return shape (D::d3, false, false, false, u);
-        case TypeKind::usamplerCube:
-        case TypeKind::utextureCube:
-        case TypeKind::uimageCube:
-            return shape (D::cube, false, false, false, u);
-        case TypeKind::usamplerCubeArray:
-        case TypeKind::utextureCubeArray:
-        case TypeKind::uimageCubeArray:
-            return shape (D::cube, true, false, false, u);
-        case TypeKind::usampler1DArray:
-        case TypeKind::utexture1DArray:
-        case TypeKind::uimage1DArray:
-            return shape (D::d1, true, false, false, u);
-        case TypeKind::usampler2DArray:
-        case TypeKind::utexture2DArray:
-        case TypeKind::uimage2DArray:
-            return shape (D::d2, true, false, false, u);
-        case TypeKind::usampler2DRect:
-        case TypeKind::utexture2DRect:
-        case TypeKind::uimage2DRect:
-            return shape (D::rect, false, false, false, u);
-        case TypeKind::usamplerBuffer:
-        case TypeKind::utextureBuffer:
-        case TypeKind::uimageBuffer:
-            return shape (D::buffer, false, false, false, u);
-        case TypeKind::usampler2DMS:
-        case TypeKind::utexture2DMS:
-        case TypeKind::uimage2DMS:
-            return shape (D::d2, false, true, false, u);
-        case TypeKind::usampler2DMSArray:
-        case TypeKind::utexture2DMSArray:
-        case TypeKind::uimage2DMSArray:
-            return shape (D::d2, true, true, false, u);
-
-        default:
-            return {};
+        if (candidate == kind)
+            return shape;
     }
+
+    return {};
 }
 
 /** Combined image samplers: sampler2D, isampler3D, sampler2DShadow, ... */
