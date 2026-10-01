@@ -661,6 +661,13 @@ void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& point
 using ClipperPathD = Clipper2Lib::PathD;
 using ClipperPathsD = Clipper2Lib::PathsD;
 
+struct ClipperContours
+{
+    ClipperPathsD closed, open;
+};
+
+constexpr int clipperDecimalPrecision = 3;
+
 [[nodiscard]] bool isFinitePoint (const Point<float>& point) noexcept
 {
     return std::isfinite (point.getX()) && std::isfinite (point.getY());
@@ -687,7 +694,7 @@ void appendClipperPoint (ClipperPathD& path, const Point<float>& point)
                        static_cast<double> (point.getY()));
 }
 
-void finishClipperContour (ClipperPathsD& paths, ClipperPathD& contour)
+void appendClosedContour (ClipperPathsD& paths, ClipperPathD& contour)
 {
     if (contour.size() >= 2
         && std::abs (contour.front().x - contour.back().x) <= 1.0e-6
@@ -697,6 +704,14 @@ void finishClipperContour (ClipperPathsD& paths, ClipperPathD& contour)
     }
 
     if (contour.size() >= 3)
+        paths.push_back (std::move (contour));
+
+    contour.clear();
+}
+
+void appendOpenContour (ClipperPathsD& paths, ClipperPathD& contour)
+{
+    if (contour.size() >= 2)
         paths.push_back (std::move (contour));
 
     contour.clear();
@@ -761,9 +776,9 @@ void appendCubicAsLines (ClipperPathD& path,
         appendClipperPoint (path, evaluateClipperCubic (start, control1, control2, end, static_cast<float> (i) / static_cast<float> (numSegments)));
 }
 
-[[nodiscard]] ClipperPathsD toClipperPaths (const Path& source)
+[[nodiscard]] ClipperContours toClipperContours (const Path& source)
 {
-    ClipperPathsD paths;
+    ClipperContours contours;
     ClipperPathD contour;
     Point<float> current;
     Point<float> contourStart;
@@ -774,7 +789,7 @@ void appendCubicAsLines (ClipperPathD& path,
         switch (segment.verb)
         {
             case Path::Verb::MoveTo:
-                finishClipperContour (paths, contour);
+                appendOpenContour (contours.open, contour);
                 current = segment.point;
                 contourStart = current;
                 hasCurrent = true;
@@ -811,16 +826,26 @@ void appendCubicAsLines (ClipperPathD& path,
                     if (! pointsNearlyEqual (current, contourStart))
                         appendClipperPoint (contour, contourStart);
 
-                    finishClipperContour (paths, contour);
+                    appendClosedContour (contours.closed, contour);
                     hasCurrent = false;
                 }
                 break;
         }
     }
 
-    finishClipperContour (paths, contour);
+    appendOpenContour (contours.open, contour);
 
-    return paths;
+    return contours;
+}
+
+[[nodiscard]] ClipperPathsD toClipperPaths (const Path& source)
+{
+    auto contours = toClipperContours (source);
+
+    for (auto& contour : contours.open)
+        appendClosedContour (contours.closed, contour);
+
+    return std::move (contours.closed);
 }
 
 [[nodiscard]] Clipper2Lib::FillRule toClipperFillRule (const Path& path) noexcept
@@ -844,6 +869,36 @@ void appendCubicAsLines (ClipperPathD& path,
     }
 
     return Clipper2Lib::ClipType::Union;
+}
+
+[[nodiscard]] Clipper2Lib::JoinType toClipperJoinType (StrokeJoin join) noexcept
+{
+    switch (join)
+    {
+        case StrokeJoin::Miter:
+            return Clipper2Lib::JoinType::Miter;
+        case StrokeJoin::Round:
+            return Clipper2Lib::JoinType::Round;
+        case StrokeJoin::Bevel:
+            return Clipper2Lib::JoinType::Bevel;
+    }
+
+    return Clipper2Lib::JoinType::Round;
+}
+
+[[nodiscard]] Clipper2Lib::EndType toClipperEndType (StrokeCap cap) noexcept
+{
+    switch (cap)
+    {
+        case StrokeCap::Butt:
+            return Clipper2Lib::EndType::Butt;
+        case StrokeCap::Round:
+            return Clipper2Lib::EndType::Round;
+        case StrokeCap::Square:
+            return Clipper2Lib::EndType::Square;
+    }
+
+    return Clipper2Lib::EndType::Butt;
 }
 
 [[nodiscard]] Path fromClipperPaths (const ClipperPathsD& paths)
@@ -1787,8 +1842,6 @@ bool Path::isUsingNonZeroWinding() const
 
 Path Path::combinedWith (const Path& other, BooleanOperation operation) const
 {
-    static constexpr int clipperDecimalPrecision = 3;
-
     const auto subjectPaths = toClipperPaths (*this);
     if (subjectPaths.empty())
         return (operation == BooleanOperation::Union || operation == BooleanOperation::Xor) ? other : Path();
@@ -2668,178 +2721,28 @@ Path& Path::trim (float start, float end, float offset, float tolerance)
 
 //==============================================================================
 
-Path Path::createStrokePolygon (float strokeWidth) const
+Path Path::createStrokePolygon (float strokeWidth, StrokeJoin join, StrokeCap cap) const
 {
-    // For now, create a simple approximation by offsetting the path
-    // This is a basic implementation - a more sophisticated version would
-    // properly handle joins, caps, and curves
-
-    const auto& rawPath = path->getRawPath();
-    const auto& points = rawPath.points();
-    const auto& verbs = rawPath.verbs();
-
-    if (points.empty() || verbs.empty())
+    if (! (strokeWidth > 0.0f))
         return Path();
 
-    Path strokePath;
-    float halfWidth = strokeWidth * 0.5f;
+    constexpr double miterLimit = 4.0;
+    const double halfWidth = static_cast<double> (strokeWidth) * 0.5;
+    const auto joinType = toClipperJoinType (join);
+    const auto contours = toClipperContours (*this);
 
-    // Simple approach: for each line segment, create perpendicular offsets
-    Point<float> currentPoint (0.0f, 0.0f);
-    Point<float> lastMovePoint (0.0f, 0.0f);
+    const auto closedStroke = Clipper2Lib::InflatePaths (contours.closed, halfWidth, joinType, Clipper2Lib::EndType::Joined, miterLimit, clipperDecimalPrecision);
+    const auto openStroke = Clipper2Lib::InflatePaths (contours.open, halfWidth, joinType, toClipperEndType (cap), miterLimit, clipperDecimalPrecision);
 
-    std::vector<Point<float>> leftSide;
-    leftSide.reserve (points.size());
-    std::vector<Point<float>> rightSide;
-    rightSide.reserve (points.size());
+    // Each offset already merges its own outlines into clockwise polygons, only a mix of
+    // closed and open contours needs the extra union.
+    if (openStroke.empty())
+        return fromClipperPaths (closedStroke);
 
-    for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
-    {
-        auto verb = verbs[i];
+    if (closedStroke.empty())
+        return fromClipperPaths (openStroke);
 
-        switch (verb)
-        {
-            case rive::PathVerb::move:
-                if (pointIndex < points.size())
-                {
-                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                    lastMovePoint = currentPoint;
-                    leftSide.clear();
-                    rightSide.clear();
-                    pointIndex++;
-                }
-                break;
-
-            case rive::PathVerb::line:
-                if (pointIndex < points.size())
-                {
-                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
-
-                    // Calculate perpendicular direction
-                    Point<float> direction = nextPoint - currentPoint;
-                    float length = direction.magnitude();
-                    if (length > 0.0f)
-                    {
-                        direction.normalize();
-                        Point<float> perpendicular (-direction.getY(), direction.getX());
-
-                        Point<float> leftOffset = perpendicular * halfWidth;
-                        Point<float> rightOffset = perpendicular * (-halfWidth);
-
-                        if (leftSide.empty())
-                        {
-                            leftSide.push_back (currentPoint + leftOffset);
-                            rightSide.push_back (currentPoint + rightOffset);
-                        }
-
-                        leftSide.push_back (nextPoint + leftOffset);
-                        rightSide.push_back (nextPoint + rightOffset);
-                    }
-
-                    currentPoint = nextPoint;
-                    pointIndex++;
-                }
-                break;
-
-            case rive::PathVerb::quad:
-            case rive::PathVerb::cubic:
-                // For curves, approximate with line segments
-                if (verb == rive::PathVerb::quad && pointIndex + 1 < points.size())
-                {
-                    Point<float> endPoint (points[pointIndex + 1].x, points[pointIndex + 1].y);
-
-                    Point<float> direction = endPoint - currentPoint;
-                    float length = direction.magnitude();
-                    if (length > 0.0f)
-                    {
-                        direction.normalize();
-                        Point<float> perpendicular (-direction.getY(), direction.getX());
-
-                        Point<float> leftOffset = perpendicular * halfWidth;
-                        Point<float> rightOffset = perpendicular * (-halfWidth);
-
-                        if (leftSide.empty())
-                        {
-                            leftSide.push_back (currentPoint + leftOffset);
-                            rightSide.push_back (currentPoint + rightOffset);
-                        }
-
-                        leftSide.push_back (endPoint + leftOffset);
-                        rightSide.push_back (endPoint + rightOffset);
-                    }
-
-                    currentPoint = endPoint;
-                    pointIndex += 2;
-                }
-                else if (verb == rive::PathVerb::cubic && pointIndex + 2 < points.size())
-                {
-                    Point<float> endPoint (points[pointIndex + 2].x, points[pointIndex + 2].y);
-
-                    Point<float> direction = endPoint - currentPoint;
-                    float length = direction.magnitude();
-                    if (length > 0.0f)
-                    {
-                        direction.normalize();
-                        Point<float> perpendicular (-direction.getY(), direction.getX());
-
-                        Point<float> leftOffset = perpendicular * halfWidth;
-                        Point<float> rightOffset = perpendicular * (-halfWidth);
-
-                        if (leftSide.empty())
-                        {
-                            leftSide.push_back (currentPoint + leftOffset);
-                            rightSide.push_back (currentPoint + rightOffset);
-                        }
-
-                        leftSide.push_back (endPoint + leftOffset);
-                        rightSide.push_back (endPoint + rightOffset);
-                    }
-
-                    currentPoint = endPoint;
-                    pointIndex += 3;
-                }
-                break;
-
-            case rive::PathVerb::close:
-                // Connect back to start and create the stroke polygon
-                if (! leftSide.empty() && ! rightSide.empty())
-                {
-                    // Create the stroke polygon by combining left and right sides
-                    strokePath.moveTo (leftSide[0]);
-
-                    // Add all left side points
-                    for (size_t j = 1; j < leftSide.size(); ++j)
-                        strokePath.lineTo (leftSide[j]);
-
-                    // Add all right side points in reverse order
-                    for (int j = static_cast<int> (rightSide.size()) - 1; j >= 0; --j)
-                        strokePath.lineTo (rightSide[j]);
-
-                    strokePath.close();
-                }
-
-                currentPoint = lastMovePoint;
-                leftSide.clear();
-                rightSide.clear();
-                break;
-        }
-    }
-
-    // If path wasn't closed, still create stroke polygon
-    if (! leftSide.empty() && ! rightSide.empty())
-    {
-        strokePath.moveTo (leftSide[0]);
-
-        for (size_t j = 1; j < leftSide.size(); ++j)
-            strokePath.lineTo (leftSide[j]);
-
-        for (int j = static_cast<int> (rightSide.size()) - 1; j >= 0; --j)
-            strokePath.lineTo (rightSide[j]);
-
-        strokePath.close();
-    }
-
-    return strokePath;
+    return fromClipperPaths (Clipper2Lib::Union (closedStroke, openStroke, Clipper2Lib::FillRule::NonZero, clipperDecimalPrecision));
 }
 
 //==============================================================================

@@ -912,6 +912,20 @@ void registerYupGraphicsBindings (py::module_& m)
     registerRectangleList<RectangleList, int, float> (m);
 
 
+    // ============================================================================================ yup::StrokeCap
+
+    py::enum_<StrokeCap> (m, "StrokeCap")
+        .value ("Butt", StrokeCap::Butt)
+        .value ("Round", StrokeCap::Round)
+        .value ("Square", StrokeCap::Square);
+
+    // ============================================================================================ yup::StrokeJoin
+
+    py::enum_<StrokeJoin> (m, "StrokeJoin")
+        .value ("Miter", StrokeJoin::Miter)
+        .value ("Round", StrokeJoin::Round)
+        .value ("Bevel", StrokeJoin::Bevel);
+
     // ============================================================================================ yup::Path
 
     py::class_<Path> classPath (m, "Path");
@@ -1027,7 +1041,7 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("addBubble", &Path::addBubble, "bodyArea"_a, "maximumArea"_a, "arrowTipPosition"_a, "cornerSize"_a, "arrowBaseWidth"_a)
 
         // Path operations
-        .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a)
+        .def ("createStrokePolygon", &Path::createStrokePolygon, "strokeWidth"_a, "join"_a = StrokeJoin::Round, "cap"_a = StrokeCap::Butt)
         .def ("withRoundedCorners", &Path::withRoundedCorners, "cornerRadius"_a)
         .def ("appendPath", py::overload_cast<const Path&> (&Path::appendPath), "other"_a)
         .def ("appendPath", py::overload_cast<const Path&, const AffineTransform&> (&Path::appendPath), "other"_a, "transform"_a)
@@ -1908,20 +1922,6 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("Saturation", BlendMode::Saturation)
         .value ("Color", BlendMode::Color)
         .value ("Luminosity", BlendMode::Luminosity);
-
-    // ============================================================================================ yup::StrokeCap
-
-    py::enum_<StrokeCap> (m, "StrokeCap")
-        .value ("Butt", StrokeCap::Butt)
-        .value ("Round", StrokeCap::Round)
-        .value ("Square", StrokeCap::Square);
-
-    // ============================================================================================ yup::StrokeJoin
-
-    py::enum_<StrokeJoin> (m, "StrokeJoin")
-        .value ("Miter", StrokeJoin::Miter)
-        .value ("Round", StrokeJoin::Round)
-        .value ("Bevel", StrokeJoin::Bevel);
 
     // ============================================================================================ yup::Graphics
 

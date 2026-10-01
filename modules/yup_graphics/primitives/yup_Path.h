@@ -593,16 +593,26 @@ public:
     Path& addBubble (const Rectangle<float>& bodyArea, const Rectangle<float>& maximumArea, const Point<float>& arrowTipPosition, float cornerSize, float arrowBaseWidth);
 
     //==============================================================================
-    /** Converts the path to a stroke polygon with specified width.
+    /** Converts the path to the outline of its stroke.
 
-        This method generates a closed polygon that represents the stroke of this path
-        with the given stroke width. The resulting path can be filled to achieve the
-        appearance of a stroked path.
+        Filling the returned path gives the appearance of stroking this path, and makes it
+        possible to apply fill-only effects (such as a feather) to a stroke.
 
-        @param strokeWidth The width of the stroke.
-        @return A new Path representing the stroke as a closed polygon.
+        Curves are flattened to line segments. Closed contours are outlined on both sides,
+        giving a ring with a hole; open contours end with the given cap. Overlapping parts
+        of the stroke are merged, so the result is made of simple (non self-intersecting)
+        contours using the non-zero winding rule, with outer contours wound clockwise.
+
+        @param strokeWidth The width of the stroke. A width of zero or less returns an empty path.
+        @param join        How segments meet. Miter joins use a miter limit of 4, beyond which
+                           the corner is squared off.
+        @param cap         How the ends of open contours are drawn.
+
+        @return A new Path representing the outline of the stroke.
     */
-    Path createStrokePolygon (float strokeWidth) const;
+    Path createStrokePolygon (float strokeWidth,
+                              StrokeJoin join = StrokeJoin::Round,
+                              StrokeCap cap = StrokeCap::Butt) const;
 
     //==============================================================================
     /** Creates a new path with rounded corners applied to this path.
