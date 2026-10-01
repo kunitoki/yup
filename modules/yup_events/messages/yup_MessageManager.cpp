@@ -435,15 +435,17 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
 
     for (;;)
     {
+        const auto wasAcquired = [&]
         {
             std::unique_lock lock { mutex };
             condvar.wait (lock, [&]
             {
                 return std::exchange (abortWait, false);
             });
-        }
+            return acquired;
+        }();
 
-        if (acquired)
+        if (wasAcquired)
         {
             mm->threadWithLock = Thread::getCurrentThreadId();
             return true;
@@ -487,6 +489,8 @@ void MessageManager::Lock::exit() const noexcept
 
     blockingMessage->stopWaiting();
     blockingMessage = nullptr;
+
+    const std::scoped_lock lock { mutex };
     acquired = false;
 }
 
