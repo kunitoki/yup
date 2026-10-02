@@ -82,6 +82,7 @@ graphics_demo (Pbr SHADERS
     pbr_background:pbr_scene pbr_brdf:pbr_fullscreen pbr_irradiance:pbr_fullscreen
     pbr_prefilter:pbr_fullscreen pbr_scene pbr_sky:pbr_fullscreen)
 graphics_demo (PopupMenu)
+graphics_demo (Scene3D MODULES yup::yup_3d tinygltf libjpeg libwebp RESOURCES gltf)
 graphics_demo (ScrollBar)
 graphics_demo (Sliders)
 graphics_demo (SpectrumAnalyzer MODULES ${audio_modules} dr_libs RESOURCES audio)

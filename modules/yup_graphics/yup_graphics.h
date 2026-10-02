@@ -190,6 +190,7 @@ class Context;
 #include "primitives/yup_AffineTransform.h"
 #include "primitives/yup_Vector3.h"
 #include "primitives/yup_Matrix4.h"
+#include "primitives/yup_Quaternion.h"
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"
 #include "primitives/yup_Line.h"

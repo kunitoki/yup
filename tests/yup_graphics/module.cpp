@@ -48,6 +48,7 @@
 #include "yup_MeshSurfaceMapper.cpp"
 #include "yup_Path.cpp"
 #include "yup_Point.cpp"
+#include "yup_Quaternion.cpp"
 #include "yup_Rectangle.cpp"
 #include "yup_Ray.cpp"
 #include "yup_RectangleList.cpp"

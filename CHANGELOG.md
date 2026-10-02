@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] - Unreleased
 
+- `yup_3d`: 3D scenes of `EntityNode`s with attached parts, glTF 2.0 / GLB loading through the new `tinygltf` module, and PBR rendering in a `SceneComponent`. Adds `Quaternion` to `yup_graphics` and a Scene 3D demo.
 - Fixed a crash on macOS and iOS when a window closed while its last frame was still rendering on the GPU: the Metal render context could be freed before its completion handlers ran.
 - Fixed a data race in `MessageManagerLock` when a thread waiting for the lock is told to exit, reported by ThreadSanitizer while windows stop their render thread.
 - **Behavior change** Fills and clip paths now follow the path's non-zero or even-odd fill rule. Window rendering forced Rive's clockwise rule on every fill, which dropped the parts of self-intersecting or overlapping paths winding against the rest of the path; this can also change the Rive interlock mode a backend uses. Feathered fills, which Rive only draws clockwise, go through the new `Path::createFillPolygon` first.

@@ -219,6 +219,24 @@ auto clip = mvp.transformPoint4 (1.0f, 1.0f, 0.0f, 1.0f);   // w <= 0 means behi
 `inverted()` returns the identity for a singular matrix, like
 `AffineTransform::inverted()`. `fromAffineTransform()` embeds a 2D transform.
 
+## Quaternion
+
+`Quaternion` is a single precision rotation, stored as (x, y, z, w) like glTF.
+`a * b` rotates by `b` first and then by `a`, so `(a * b).toMatrix4()` equals
+`b.toMatrix4().followedBy (a.toMatrix4())`.
+
+```cpp
+auto yaw = Quaternion::fromAxisAngle ({ 0.0f, 1.0f, 0.0f }, 0.5f);
+auto pitch = Quaternion::fromAxisAngle ({ 1.0f, 0.0f, 0.0f }, 0.2f);
+
+auto rotation = pitch * yaw;                  // yaw first, then pitch
+auto turned = rotation.rotate ({ 0.0f, 0.0f, 1.0f });
+auto matrix = rotation.toMatrix4();
+auto back = Quaternion::fromRotationMatrix (matrix);
+```
+
+`fromRotationMatrix()` reads the upper 3x3 part, which must hold a pure rotation.
+
 ## Ray
 
 `Ray` is a half line used for picking. `Ray::fromViewportPoint()` unprojects a
