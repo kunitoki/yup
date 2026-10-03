@@ -19,13 +19,21 @@
   ==============================================================================
 */
 
-#include "yup_BoundingBox.cpp"
-#include "yup_EntityNode.cpp"
-#include "yup_EnvironmentMap.cpp"
-#include "yup_GltfModel.cpp"
-#include "yup_Mesh.cpp"
-#include "yup_Scene.cpp"
-#include "yup_SceneComponent.cpp"
-#include "yup_SceneDrawList.cpp"
-#include "yup_SceneRenderer.cpp"
-#include "yup_Texture.cpp"
+#version 450
+
+// Packs the depth into the four 8-bit channels of an rgba8unorm target, which every backend can
+// render to and sample with plain filtering.
+
+layout(location = 0) in float v_depth;
+
+layout(location = 0) out vec4 fragColor;
+
+void main()
+{
+    float depth = clamp(v_depth, 0.0, 0.99999);
+
+    vec4 packed = fract(vec4(1.0, 255.0, 65025.0, 16581375.0) * depth);
+    packed -= packed.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);
+
+    fragColor = packed;
+}

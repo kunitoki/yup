@@ -28,38 +28,39 @@ namespace
 //==============================================================================
 /*
 
-// The scene shader is precompiled into a .ysl bundle embedded in
-// yup_SceneRendererShader.inc (do not edit by hand). Regenerate it after
-// changing yup_SceneRendererShader.vert / .frag with (absolute paths, the
-// recipe runs in the shader bundler folder):
+// The scene, shadow and background shaders are precompiled into .ysl bundles embedded in
+// yup_SceneRendererShader.inc, yup_SceneShadowShader.inc and yup_SceneBackgroundShader.inc
+// (do not edit by hand). Regenerate them after changing their .vert / .frag with (absolute
+// paths, the recipe runs in the shader bundler folder):
 
-    just shader_bundler \
-       --vert   "$PWD/modules/yup_3d/rendering/yup_SceneRendererShader.vert" \
-       --frag   "$PWD/modules/yup_3d/rendering/yup_SceneRendererShader.frag" \
-       --output /tmp/yup_SceneRendererShader.ysl \
-       --target-langs glsl,essl,hlsl,msl,wgsl
+   for name in SceneRendererShader SceneShadowShader SceneBackgroundShader; do
+     just shader_bundler \
+        --vert   "$PWD/modules/yup_3d/shaders/yup_$name.vert" \
+        --frag   "$PWD/modules/yup_3d/shaders/yup_$name.frag" \
+        --output /tmp/yup_$name.ysl \
+        --target-langs glsl,essl,hlsl,msl,wgsl
 
-// then embed the bundle bytes into the .inc (keep the two-line comment header):
-
-   xxd -i /tmp/yup_SceneRendererShader.ysl \
-       | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' \
-       > /tmp/yup_SceneRendererShader.inc.body
-   { echo '// Generated shader bundle (yup_SceneRendererShader.ysl) - do not edit by hand.'; \
-     echo '// Regenerate with the command at the top of yup_SceneRenderer.cpp.'; \
-     cat /tmp/yup_SceneRendererShader.inc.body; } \
-       > modules/yup_3d/rendering/yup_SceneRendererShader.inc
+     # then embed the bundle bytes into the .inc (keep the two-line comment header)
+     xxd -i /tmp/yup_$name.ysl \
+        | sed -e '1d' -e '/^};/d' -e '/_len =/d' -e '/^[[:space:]]*$/d' \
+        > /tmp/yup_$name.inc.body
+     { echo "// Generated shader bundle (yup_$name.ysl) - do not edit by hand."; \
+       echo '// Regenerate with the command at the top of yup_SceneRenderer.cpp.'; \
+       cat /tmp/yup_$name.inc.body; } \
+        > modules/yup_3d/shaders/yup_$name.inc
+   done
 
 */
 
-#if __has_include("yup_SceneRendererShader.inc")
-// Embedded precompiled shader bundle (.ysl), consumed by ShaderBundle::loadFromData().
 constexpr uint8_t sceneRendererShaderBundle[] = {
-#include "yup_SceneRendererShader.inc"
+#include "../shaders/yup_SceneRendererShader.inc"
 };
-#define YUP_3D_SCENE_SHADER_AVAILABLE 1
-#else
-#define YUP_3D_SCENE_SHADER_AVAILABLE 0
-#endif
+constexpr uint8_t sceneShadowShaderBundle[] = {
+#include "../shaders/yup_SceneShadowShader.inc"
+};
+constexpr uint8_t sceneBackgroundShaderBundle[] = {
+#include "../shaders/yup_SceneBackgroundShader.inc"
+};
 
 //==============================================================================
 // std140 mirrors of the uniform blocks in yup_SceneRendererShader.vert / .frag
@@ -75,6 +76,21 @@ struct SceneFrameData
     float lightDirections[SceneRenderer::maxLights][4];
     float lightColors[SceneRenderer::maxLights][4];
     float lightSpots[SceneRenderer::maxLights][4];
+    float shadowMatrix[16];
+    float shadowInfo[4];
+    float environmentInfo[4];
+    float irradiance[9][4];
+};
+
+struct SceneShadowData
+{
+    float shadowMatrix[16];
+};
+
+struct SceneBackgroundData
+{
+    float inverseViewProjection[16];
+    float info[4];
 };
 
 struct SceneDrawData
@@ -91,7 +107,9 @@ struct SceneMaterialData
     float flags[4];
 };
 
-static_assert (sizeof (SceneFrameData) == 688 && sizeof (SceneFrameData) % 16 == 0);
+static_assert (sizeof (SceneFrameData) == 928 && sizeof (SceneFrameData) % 16 == 0);
+static_assert (sizeof (SceneShadowData) == 64);
+static_assert (sizeof (SceneBackgroundData) == 80);
 static_assert (sizeof (SceneDrawData) == 128);
 static_assert (sizeof (SceneMaterialData) == 64);
 
@@ -131,8 +149,13 @@ struct SceneRenderer::Impl
     GpuTarget::Ptr multisampledTarget;
     GpuTexture::Ptr depthTexture;
     GpuTexture::Ptr whiteTexture;
+    GpuTexture::Ptr blackTexture;
     GpuTexture::Ptr flatNormalTexture;
     GpuSampler::Ptr defaultSampler;
+    GpuPipeline::Ptr shadowPipeline;
+    GpuPipeline::Ptr backgroundPipeline;
+    GpuTarget::Ptr shadowTarget;
+    GpuTexture::Ptr shadowDepthTexture;
     SceneDrawList drawList;
     std::optional<Result> preparation;
 
@@ -155,13 +178,13 @@ struct SceneRenderer::Impl
     Result createResources()
     {
         whiteTexture = createSolidSceneTexture (device, 0xffffffff);
+        blackTexture = createSolidSceneTexture (device, 0x000000ff);
         flatNormalTexture = createSolidSceneTexture (device, 0x8080ffff);
         defaultSampler = GpuSampler::create (device, GpuSamplerDesc (GpuFilter::linear, GpuWrapMode::repeat));
 
-        if (whiteTexture == nullptr || flatNormalTexture == nullptr || defaultSampler == nullptr)
+        if (whiteTexture == nullptr || blackTexture == nullptr || flatNormalTexture == nullptr || defaultSampler == nullptr)
             return Result::fail ("Unable to create the default scene textures");
 
-#if YUP_3D_SCENE_SHADER_AVAILABLE
         auto bundle = ShaderBundle::loadFromData (sceneRendererShaderBundle, sizeof (sceneRendererShaderBundle));
         if (bundle.failed())
             return Result::fail ("Unable to load the scene shader bundle: " + bundle.getErrorMessage());
@@ -206,10 +229,58 @@ struct SceneRenderer::Impl
             pipelines[index] = result.getValue();
         }
 
+        // Depth seen from the shadow casting light, packed into rgba8unorm; the body of a model
+        // can mix windings, so nothing is culled
+        auto shadowBundle = ShaderBundle::loadFromData (sceneShadowShaderBundle, sizeof (sceneShadowShaderBundle));
+        if (shadowBundle.failed())
+            return Result::fail ("Unable to load the shadow shader bundle: " + shadowBundle.getErrorMessage());
+
+        GpuPipelineOptions shadowOptions;
+        shadowOptions.vertexBuffers.emplace_back (
+            static_cast<uint32_t> (sizeof (Mesh::Vertex)),
+            GpuVertexStepMode::vertex,
+            std::vector<GpuVertexAttribute> { { GpuVertexFormat::float3, static_cast<uint32_t> (offsetof (Mesh::Vertex, position)), 0 } });
+        shadowOptions.topology = GpuPrimitiveTopology::triangleList;
+        shadowOptions.indexFormat = GpuIndexFormat::uint32;
+        shadowOptions.cullMode = GpuCullMode::none;
+        auto& shadowTarget = shadowOptions.colorTargets.emplace_back();
+        shadowTarget.format = GpuTextureFormat::rgba8unorm;
+        shadowTarget.blendEnabled = false; // The packed depth uses all four channels, alpha included
+        shadowOptions.depthStencil.enabled = true;
+        shadowOptions.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
+        shadowOptions.depthStencil.depthCompare = GpuCompareFunction::lessEqual;
+        shadowOptions.depthStencil.depthWriteEnabled = true;
+
+        auto shadowResult = GpuPipeline::compileFromBundle (device, shadowBundle.getReference(), shadowOptions);
+        if (shadowResult.failed())
+            return Result::fail ("Unable to compile the shadow pipeline: " + shadowResult.getErrorMessage());
+
+        shadowPipeline = shadowResult.getValue();
+
+        // The environment behind everything: drawn first, without testing or writing depth
+        auto backgroundBundle = ShaderBundle::loadFromData (sceneBackgroundShaderBundle, sizeof (sceneBackgroundShaderBundle));
+        if (backgroundBundle.failed())
+            return Result::fail ("Unable to load the background shader bundle: " + backgroundBundle.getErrorMessage());
+
+        GpuPipelineOptions backgroundOptions;
+        backgroundOptions.topology = GpuPrimitiveTopology::triangleList;
+        backgroundOptions.cullMode = GpuCullMode::none;
+        auto& backgroundTarget = backgroundOptions.colorTargets.emplace_back();
+        backgroundTarget.format = GpuTextureFormat::rgba8unorm;
+        backgroundTarget.blendEnabled = false;
+        backgroundOptions.depthStencil.enabled = true;
+        backgroundOptions.depthStencil.format = GpuTextureFormat::depth24plusStencil8;
+        backgroundOptions.depthStencil.depthCompare = GpuCompareFunction::always;
+        backgroundOptions.depthStencil.depthWriteEnabled = false;
+        backgroundOptions.sampleCount = sampleCount;
+
+        auto backgroundResult = GpuPipeline::compileFromBundle (device, backgroundBundle.getReference(), backgroundOptions);
+        if (backgroundResult.failed())
+            return Result::fail ("Unable to compile the background pipeline: " + backgroundResult.getErrorMessage());
+
+        backgroundPipeline = backgroundResult.getValue();
+
         return Result::ok();
-#else
-        return Result::fail ("The yup_3d scene shader has not been cooked: see the top of yup_SceneRenderer.cpp");
-#endif
     }
 
     bool prepareTargets (int width, int height)
@@ -241,6 +312,25 @@ struct SceneRenderer::Impl
         }
 
         return colorTarget != nullptr && depthTexture != nullptr;
+    }
+
+    bool prepareShadowTarget()
+    {
+        if (shadowTarget != nullptr && shadowDepthTexture != nullptr)
+            return true;
+
+        const auto size = static_cast<uint32_t> (shadowMapSize);
+
+        GpuTextureDesc colorDesc (size, size, GpuTextureFormat::rgba8unorm, true);
+        colorDesc.label = "SceneRenderer shadow map";
+
+        GpuTextureDesc depthDesc (size, size, GpuTextureFormat::depth24plusStencil8, true);
+        depthDesc.label = "SceneRenderer shadow depth";
+
+        shadowTarget = GpuTarget::create (device, colorDesc);
+        shadowDepthTexture = GpuTexture::create (device, depthDesc);
+
+        return shadowTarget != nullptr && shadowDepthTexture != nullptr;
     }
 
     void bindTexture (GpuRenderPass& pass, int textureBinding, const Texture::Ptr& texture, const GpuTexture::Ptr& fallback)
@@ -412,11 +502,128 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
     auto& drawList = impl->drawList;
     drawList.build (*scene.getRoot(), view);
 
-    const auto frameData = Impl::makeFrameData (scene, drawList.getLights(), view, projection, cameraPosition);
+    auto frameData = Impl::makeFrameData (scene, drawList.getLights(), view, projection, cameraPosition);
+
+    // The environment, uploaded the first time a device draws it
+    GpuTexture::Ptr environmentTexture;
+    GpuSampler::Ptr environmentSampler;
+    const auto& environment = scene.getEnvironment();
+
+    if (environment != nullptr && scene.getEnvironmentIntensity() > 0.0f)
+    {
+        environmentTexture = environment->getGpuTexture (device);
+        environmentSampler = environment->getGpuSampler (device);
+    }
+
+    const auto hasEnvironment = environmentTexture != nullptr && environmentSampler != nullptr;
+    const auto lastLevel = hasEnvironment ? static_cast<float> (environment->getNumLevels() - 1) : 0.0f;
+    const auto aces = scene.getToneMapping() == Scene::ToneMapping::aces;
+
+    frameData.environmentInfo[0] = hasEnvironment ? scene.getEnvironmentIntensity() : 0.0f;
+    frameData.environmentInfo[1] = lastLevel;
+    frameData.environmentInfo[2] = aces ? 1.0f : 0.0f;
+
+    if (hasEnvironment)
+    {
+        const auto& coefficients = environment->getIrradianceCoefficients();
+
+        for (size_t i = 0; i < coefficients.size(); ++i)
+        {
+            frameData.irradiance[i][0] = coefficients[i].getX();
+            frameData.irradiance[i][1] = coefficients[i].getY();
+            frameData.irradiance[i][2] = coefficients[i].getZ();
+        }
+    }
+
+    // The first shadow casting directional light shading the frame, fitted to the opaque items
+    int shadowLight = -1;
+    Matrix4 shadowMatrix;
+
+    {
+        const auto lights = drawList.getLights();
+        const auto numLights = jmin (static_cast<int> (lights.size()), maxLights);
+
+        for (int i = 0; i < numLights && shadowLight < 0; ++i)
+        {
+            const auto& node = *lights[static_cast<size_t> (i)].node;
+            if (node.castsShadows && node.type == LightNode::Type::directional)
+                shadowLight = i;
+        }
+
+        BoundingBox bounds;
+        for (const auto& item : drawList.getOpaqueItems())
+            bounds.expand (item.primitive->bounds.transformedBy (item.world));
+
+        if (shadowLight >= 0 && ! bounds.isEmpty() && impl->prepareShadowTarget())
+        {
+            const auto center = bounds.getCenter();
+            const auto radius = jmax (0.001f, bounds.getRadius());
+            const auto direction = lights[static_cast<size_t> (shadowLight)].direction.normalized();
+            const auto up = std::abs (direction.getY()) < 0.99f ? Vector3<float> (0.0f, 1.0f, 0.0f) : Vector3<float> (1.0f, 0.0f, 0.0f);
+
+            // Orthographic around the bounding sphere: the depth from 0 to 1 is linear
+            const auto lightView = Matrix4::lookAt (center - direction * (radius * 2.0f), center, up);
+            const auto lightProjection = Matrix4::orthographic (-radius, radius, -radius, radius, radius, radius * 3.0f);
+            shadowMatrix = lightView.followedBy (lightProjection);
+
+            // A texel covers 2 * radius / size in the world, and 1 / size of the depth range
+            const auto texel = 1.0f / static_cast<float> (shadowMapSize);
+            copySceneMatrix (shadowMatrix, frameData.shadowMatrix);
+            frameData.shadowInfo[1] = texel;
+            frameData.shadowInfo[2] = 1.5f * 2.0f * radius * texel;
+            frameData.shadowInfo[3] = 1.5f * texel;
+        }
+        else
+        {
+            shadowLight = -1;
+        }
+
+        frameData.shadowInfo[0] = static_cast<float> (shadowLight);
+    }
 
     auto frame = GpuFrame::begin (device);
     if (! frame.isValid())
         return fail ("Unable to begin a GPU frame");
+
+    const auto bindGeometry = [&] (GpuRenderPass& pass, const SceneDrawList::DrawItem& item)
+    {
+        auto vertexBuffer = item.mesh->getVertexBuffer (device, item.primitiveIndex);
+        auto indexBuffer = item.mesh->getIndexBuffer (device, item.primitiveIndex);
+        if (vertexBuffer == nullptr || indexBuffer == nullptr)
+            return false;
+
+        pass.setVertexBuffer (0, vertexBuffer);
+        pass.setIndexBuffer (GpuIndexFormat::uint32, indexBuffer);
+        return true;
+    };
+
+    if (shadowLight >= 0)
+    {
+        // Cleared to the far depth, so nothing outside the drawn items shadows
+        auto pass = impl->shadowTarget->beginRenderPass (frame, { true, Colors::white });
+        if (! pass.isValid())
+            return fail ("Unable to begin the shadow pass");
+
+        pass.setDepthStencilAttachment (impl->shadowDepthTexture);
+        pass.setPipeline (impl->shadowPipeline);
+
+        SceneShadowData shadowData {};
+        copySceneMatrix (shadowMatrix, shadowData.shadowMatrix);
+
+        for (const auto& item : drawList.getOpaqueItems())
+        {
+            SceneDrawData drawData {};
+            copySceneMatrix (item.world, drawData.model);
+
+            pass.setUniformBuffer (0, 0, &shadowData, sizeof (shadowData));
+            pass.setUniformBuffer (0, 1, &drawData, sizeof (drawData));
+
+            if (bindGeometry (pass, item))
+                pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
+        }
+
+        pass.finish();
+    }
 
     {
         auto& surface = impl->multisampledTarget != nullptr ? impl->multisampledTarget : impl->colorTarget;
@@ -432,15 +639,30 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
 
         GpuPipeline* currentPipeline = nullptr;
 
+        if (hasEnvironment && scene.isEnvironmentVisible())
+        {
+            SceneBackgroundData backgroundData {};
+            copySceneMatrix (view.followedBy (projection).inverted(), backgroundData.inverseViewProjection);
+            backgroundData.info[0] = scene.getEnvironmentIntensity();
+            backgroundData.info[1] = scene.getEnvironmentBlur() * lastLevel;
+            backgroundData.info[2] = aces ? 1.0f : 0.0f;
+            backgroundData.info[3] = scene.getExposure();
+
+            pass.setPipeline (impl->backgroundPipeline);
+            currentPipeline = impl->backgroundPipeline.get();
+
+            pass.setUniformBuffer (0, 0, &backgroundData, sizeof (backgroundData));
+            pass.setTexture (0, 1, environmentTexture);
+            pass.setSampler (0, 2, environmentSampler);
+            pass.draw (3);
+        }
+
+        const auto shadowTexture = shadowLight >= 0 ? impl->shadowTarget->asTexture() : impl->whiteTexture;
+
         const auto drawItems = [&] (Span<const SceneDrawList::DrawItem> items)
         {
             for (const auto& item : items)
             {
-                auto vertexBuffer = item.mesh->getVertexBuffer (device, item.primitiveIndex);
-                auto indexBuffer = item.mesh->getIndexBuffer (device, item.primitiveIndex);
-                if (vertexBuffer == nullptr || indexBuffer == nullptr)
-                    continue;
-
                 const auto& material = *item.material;
                 const auto& pipeline = impl->pipelines[Impl::getPipelineIndex (item)];
 
@@ -467,9 +689,14 @@ GpuTexture::Ptr SceneRenderer::render (const GpuDevice::Ptr& device, Scene& scen
                 impl->bindTexture (pass, 6, material.occlusionTexture, impl->whiteTexture);
                 impl->bindTexture (pass, 7, material.emissiveTexture, impl->whiteTexture);
 
-                pass.setVertexBuffer (0, vertexBuffer);
-                pass.setIndexBuffer (GpuIndexFormat::uint32, indexBuffer);
-                pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
+                // Bound even when unused: every declared resource must be. The shadow map is
+                // read with texelFetch, so it needs no sampler of its own
+                pass.setTexture (0, 13, hasEnvironment ? environmentTexture : impl->blackTexture);
+                pass.setTexture (0, 14, shadowTexture);
+                pass.setSampler (0, 15, hasEnvironment ? environmentSampler : impl->defaultSampler);
+
+                if (bindGeometry (pass, item))
+                    pass.drawIndexed (static_cast<uint32_t> (item.primitive->indices.size()));
             }
         };
 

@@ -23,20 +23,28 @@
 
 #include <yup_3d/yup_3d.h>
 
+#include "scene3d/MpcFaceplate.h"
+#include "scene3d/NpcLogo.h"
+#include "scene3d/StudioEnvironment.h"
+
 #include <array>
 #include <cmath>
+#include <functional>
 
 //==============================================================================
 
 /**
     Loads a glTF model into a yup::Scene and shows it with a yup::SceneComponent.
 
-    The device is seen from the top. Its screen shows a live Component: it is rendered to a
-    texture used as the emissive texture of the screen material. Clicking the screen animates
-    the camera onto it, with a custom Node part ticked by Scene::update(); from there clicks are
-    mapped onto the LCD through a MeshSurfaceMapper, and clicking outside it zooms back out.
+    The device is seen from the top. The model has no images: its faceplate, with the labels,
+    the knob scales and the caps, is painted with yup::Graphics into a texture once. Its screen
+    shows a live Component: it is rendered to a texture used as the emissive texture of the
+    screen material. Clicking the screen animates the camera onto it, with a custom Node part
+    ticked by Scene::update(); from there clicks are mapped onto the LCD through a
+    MeshSurfaceMapper, and clicking outside it zooms back out.
     The scene is only redrawn continuously while the camera moves. The "Scene tree" button
-    shows the entity tree of the scene.
+    shows the entity tree of the scene, and "Free movement" lets the mouse orbit, pan and zoom
+    the camera.
 */
 class Scene3DDemo : public yup::Component
 {
@@ -50,6 +58,23 @@ public:
             setSceneTreeVisible (treeToggle.getToggleState());
         };
         addAndMakeVisible (treeToggle);
+
+        // The switch notifies on toggling and on release, so apply its state rather than flipping
+        freeMovementSwitch.onClick = [this]
+        {
+            view.setFreeMovement (freeMovementSwitch.getToggleState());
+        };
+        addAndMakeVisible (freeMovementSwitch);
+
+        freeMovementLabel.setText ("Free movement", yup::dontSendNotification);
+        addAndMakeVisible (freeMovementLabel);
+
+        // The camera can't move freely while it frames the screen
+        view.onScreenZoomChanged = [this] (bool isZoomedOnScreen)
+        {
+            freeMovementSwitch.setEnabled (! isZoomedOnScreen);
+            freeMovementLabel.setEnabled (! isZoomedOnScreen);
+        };
 
         sceneTree.setRootItemVisible (true);
         addChildComponent (sceneTree);
@@ -67,7 +92,13 @@ public:
     {
         auto bounds = getLocalBounds().reduced (10.0f);
 
-        treeToggle.setBounds (bounds.removeFromTop (30.0f).removeFromLeft (140.0f));
+        auto toolbar = bounds.removeFromTop (30.0f);
+        treeToggle.setBounds (toolbar.removeFromLeft (140.0f));
+        toolbar.removeFromLeft (16.0f);
+        freeMovementSwitch.setBounds (toolbar.removeFromLeft (44.0f).reduced (0.0f, 5.0f));
+        toolbar.removeFromLeft (8.0f);
+        freeMovementLabel.setBounds (toolbar.removeFromLeft (140.0f));
+
         bounds.removeFromTop (6.0f);
 
         if (sceneTree.isVisible())
@@ -163,8 +194,17 @@ private:
         static yup::Rectangle<float> getFieldArea() { return { 132.0f, 6.0f, 124.0f, 18.0f }; }
         static yup::Rectangle<float> getFrameArea() { return { 14.0f, 28.0f, 452.0f, 70.0f }; }
         static yup::Rectangle<float> getRowArea (int row) { return { 16.0f, 31.0f + static_cast<float> (row) * 16.0f, 448.0f, 16.0f }; }
-        static yup::Rectangle<float> getTabArea (int index) { return { 4.0f + static_cast<float> (index) * 80.0f, 100.0f, 76.0f, 22.0f }; }
-        static yup::Rectangle<float> getModeArea (int index) { return { 246.0f + static_cast<float> (index) * 78.0f, 101.0f, 72.0f, 22.0f }; }
+        static yup::Rectangle<float> getTabArea (int index) { return getSoftKeyArea (index); }
+        static yup::Rectangle<float> getModeArea (int index) { return getSoftKeyArea (index + 3); }
+
+        /** Six soft keys of the same size, spanning the frame. */
+        static yup::Rectangle<float> getSoftKeyArea (int index)
+        {
+            const auto frame = getFrameArea();
+            constexpr float gap = 4.0f;
+            const auto width = (frame.getWidth() - gap * 5.0f) / 6.0f;
+            return { frame.getX() + static_cast<float> (index) * (width + gap), 100.0f, width, 22.0f };
+        }
 
         yup::Font getLcdFont() const
         {
@@ -203,53 +243,11 @@ private:
         //==============================================================================
         void paintLogo (yup::Graphics& g)
         {
-            constexpr float letterWidth = 76.0f;
-            constexpr float letterHeight = 70.0f;
-            constexpr float gap = 18.0f;
+            const auto logo = createNpcLogoPath (yup::Rectangle<float> (264.0f, 70.0f).withCenter (getLocalBounds().getCenter()));
 
-            const auto top = (screenHeight - letterHeight) * 0.5f;
-            const auto bottom = top + letterHeight;
-            const auto left = (screenWidth - (letterWidth * 3.0f + gap * 2.0f)) * 0.5f;
-
-            yup::Path logo;
-
-            // M
-            auto x = left;
-            logo.moveTo (x, bottom)
-                .lineTo (x, top)
-                .lineTo (x + letterWidth * 0.5f, top + letterHeight * 0.55f)
-                .lineTo (x + letterWidth, top)
-                .lineTo (x + letterWidth, bottom);
-
-            // P
-            x += letterWidth + gap;
-            const auto bowl = top + letterHeight * 0.55f;
-            logo.moveTo (x, bottom)
-                .lineTo (x, top)
-                .lineTo (x + letterWidth * 0.6f, top)
-                .cubicTo (x + letterWidth, top, x + letterWidth, bowl, x + letterWidth * 0.6f, bowl)
-                .lineTo (x, bowl);
-
-            // C
-            x += letterWidth + gap;
-            const auto corner = letterHeight * 0.4f;
-            logo.moveTo (x + letterWidth, top)
-                .lineTo (x + corner, top)
-                .cubicTo (x, top, x, top, x, top + corner)
-                .lineTo (x, bottom - corner)
-                .cubicTo (x, bottom, x, bottom, x + corner, bottom)
-                .lineTo (x + letterWidth, bottom);
-
-            // A wide stroke hollowed by a narrower one leaves the double outline of the logo
             g.setStrokeJoin (yup::StrokeJoin::Miter);
-            g.setStrokeCap (yup::StrokeCap::Square);
-
             g.setStrokeColor (inkColor);
-            g.setStrokeWidth (12.0f);
-            g.strokePath (logo);
-
-            g.setStrokeColor (backgroundColor);
-            g.setStrokeWidth (7.0f);
+            g.setStrokeWidth (3.0f);
             g.strokePath (logo);
         }
 
@@ -460,7 +458,10 @@ private:
 
                 auto* device = gltfRoot->findChild ("Cube");
                 if (device != nullptr)
+                {
                     attachScreen (*device);
+                    faceplate.setDevice (*device);
+                }
 
                 // Center the device on the origin
                 auto* framed = device != nullptr ? device : gltfRoot.get();
@@ -482,9 +483,59 @@ private:
 
             scene->getRoot()->addChild (cameraEntity);
             scene->setActiveCamera (cameraEntity.get());
+
+            // Lit like a product shot: the studio gives the reflections and the soft light, a key
+            // light along its main soft box, front left above the device, gives the shadows
+            auto keyLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("keyLight"));
+            auto& keyLight = keyLightEntity->attach<yup::LightNode>();
+            keyLight.castsShadows = true;
+            keyLight.intensity = 3.5f;
+            keyLight.color = { 1.0f, 0.98f, 0.95f };
+            CameraPose::lookingAt (directionFromDegrees (35.0f, 50.0f) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
+            scene->getRoot()->addChild (keyLightEntity);
+
+            scene->setEnvironment (createStudioEnvironment());
+            scene->setEnvironmentIntensity (0.55f);
+            scene->setAmbientColor (yup::Colors::black);
+            scene->setExposure (0.9f);
+            scene->setToneMapping (yup::Scene::ToneMapping::aces);
+            scene->setEnvironmentVisible (true);
+            scene->setEnvironmentBlur (0.5f);
+
             setScene (scene);
 
             updateStatus();
+        }
+
+        //==============================================================================
+        /** Called when the camera zooms onto the screen or back out. */
+        std::function<void (bool isZoomedOnScreen)> onScreenZoomChanged;
+
+        /** Lets the mouse orbit, pan and zoom the camera, or brings it back to the top view.
+
+            Ignored while zoomed onto the screen.
+        */
+        void setFreeMovement (bool shouldMoveFreely)
+        {
+            if (freeMovement == shouldMoveFreely || zoomedOnScreen)
+                return;
+
+            freeMovement = shouldMoveFreely;
+
+            // Orbit from where the top view is, tilted just enough for a stable up direction
+            if (freeMovement)
+            {
+                const auto top = getTopPose();
+                orbitTarget = deviceBounds.getCenter();
+                orbitDistance = (top.position - orbitTarget).length();
+                orbitYaw = 0.0f;
+                orbitPitch = maxOrbitPitch;
+            }
+
+            animator->animateTo (getTargetPose(), zoomSeconds);
+            setContinuousUpdates (true);
+            updateStatus();
+            repaint();
         }
 
         //==============================================================================
@@ -498,8 +549,13 @@ private:
         void paint (yup::Graphics& g) override
         {
             auto& context = g.getGraphicsContext();
-            if (lcdTexture != nullptr && context.isGpuAvailable())
-                lcdTexture->setGpuTexture (lcd.renderToTexture (context, lcdTextureScale));
+            if (context.isGpuAvailable())
+            {
+                faceplate.updateTexture (context);
+
+                if (lcdTexture != nullptr)
+                    lcdTexture->setGpuTexture (lcd.renderToTexture (context, lcdTextureScale));
+            }
 
             yup::SceneComponent::paint (g);
 
@@ -528,7 +584,7 @@ private:
         //==============================================================================
         void mouseDown (const yup::MouseEvent& event) override
         {
-            if (animator->isAnimating() || screenEntity == nullptr)
+            if (animator->isAnimating())
                 return;
 
             // Clicks on the LCD while zoomed in reach the LCD itself, so any click here is outside it
@@ -538,12 +594,73 @@ private:
                 return;
             }
 
-            // hitTest() and not viewportToUV(), which extrapolates beyond the screen for drags
-            const yup::SpinLock::ScopedLockType sl (mapperLock);
-            const auto hitScreen = screenMapper.hitTest (event.getPosition()).has_value();
+            if (! freeMovement)
+            {
+                if (hitsScreen (event.getPosition()))
+                    zoomTo (true);
 
-            if (hitScreen)
+                return;
+            }
+
+            lastDragPosition = event.getPosition();
+            dragDistance = 0.0f;
+            dragMode = event.isMiddleButtonDown() ? DragMode::pan
+                     : event.isRightButtonDown()  ? DragMode::zoom
+                                                  : DragMode::rotate;
+        }
+
+        void mouseDrag (const yup::MouseEvent& event) override
+        {
+            if (dragMode == DragMode::none)
+                return;
+
+            const auto delta = event.getPosition() - lastDragPosition;
+            lastDragPosition = event.getPosition();
+            dragDistance += std::abs (delta.getX()) + std::abs (delta.getY());
+
+            if (dragMode == DragMode::rotate)
+            {
+                orbitYaw -= delta.getX() * 0.008f;
+                orbitPitch = yup::jlimit (minOrbitPitch, maxOrbitPitch, orbitPitch + delta.getY() * 0.008f);
+            }
+            else if (dragMode == DragMode::pan)
+            {
+                // Move the orbit center in the view plane, at the speed of the surface under it
+                const auto pose = getOrbitPose();
+                const auto forward = (orbitTarget - pose.position).normalized();
+                const auto right = forward.crossProduct ({ 0.0f, 1.0f, 0.0f }).normalized();
+                const auto up = right.crossProduct (forward);
+                const auto unitsPerPixel = 2.0f * orbitDistance * std::tan (cameraNode->yFov * 0.5f) / yup::jmax (1.0f, getHeight());
+
+                orbitTarget = orbitTarget - right * (delta.getX() * unitsPerPixel) + up * (delta.getY() * unitsPerPixel);
+            }
+            else
+            {
+                zoomOrbit (delta.getY() * 0.01f);
+            }
+
+            getOrbitPose().applyTo (*cameraEntity);
+            repaint();
+        }
+
+        void mouseUp (const yup::MouseEvent& event) override
+        {
+            // A left click that didn't drag still zooms onto the screen
+            const auto wasClick = dragMode == DragMode::rotate && dragDistance < 4.0f;
+            dragMode = DragMode::none;
+
+            if (wasClick && hitsScreen (event.getPosition()))
                 zoomTo (true);
+        }
+
+        void mouseWheel (const yup::MouseEvent&, const yup::MouseWheelData& wheelData) override
+        {
+            if (! freeMovement || zoomedOnScreen || animator->isAnimating())
+                return;
+
+            zoomOrbit (-wheelData.getDeltaY() * 0.15f);
+            getOrbitPose().applyTo (*cameraEntity);
+            repaint();
         }
 
         //==============================================================================
@@ -589,8 +706,9 @@ private:
             auto lcdMaterial = yup::Material::Ptr (new yup::Material());
             lcdMaterial->name = "LCD";
             lcdMaterial->baseColorFactor = { 0.02f, 0.02f, 0.02f, 1.0f };
+            // Glossy glass over the display: it reflects the environment, strongly at grazing angles
             lcdMaterial->metallicFactor = 0.0f;
-            lcdMaterial->roughnessFactor = 0.2f;
+            lcdMaterial->roughnessFactor = 0.05f;
             lcdMaterial->emissiveTexture = lcdTexture;
             lcdMaterial->emissiveFactor = { 1.6f, 1.6f, 1.6f };
 
@@ -678,16 +796,53 @@ private:
             return yup::jmax (halfHeight / tanHalfFov, halfWidth / (tanHalfFov * getAspectRatio()));
         }
 
-        /** Looking straight down on the device, its front (+X) at the bottom of the view. */
+        /** Looking straight down on the device, its front (+X) at the bottom of the view.
+
+            The body is fitted at the height of its center, where the panel is: only the screen
+            rises above it, well inside the outline.
+        */
         CameraPose getTopPose() const
         {
             const auto center = deviceBounds.getCenter();
             const auto size = deviceBounds.getSize();
-            const auto distance = getFittingDistance (size.getZ() * 0.5f, size.getX() * 0.5f) * 1.1f;
+            const auto distance = getFittingDistance (size.getZ() * 0.5f, size.getX() * 0.5f) * 1.03f;
 
-            return CameraPose::lookingAt ({ center.getX(), deviceBounds.getMax().getY() + distance, center.getZ() },
-                                          { center.getX(), deviceBounds.getMax().getY(), center.getZ() },
+            return CameraPose::lookingAt ({ center.getX(), center.getY() + distance, center.getZ() },
+                                          center,
                                           { -1.0f, 0.0f, 0.0f });
+        }
+
+        /** Orbiting the free movement center, from the yaw, pitch and distance. */
+        CameraPose getOrbitPose() const
+        {
+            const auto horizontal = std::cos (orbitPitch);
+            const yup::Vector3<float> offset (std::cos (orbitYaw) * horizontal, std::sin (orbitPitch), -std::sin (orbitYaw) * horizontal);
+
+            return CameraPose::lookingAt (orbitTarget + offset * orbitDistance, orbitTarget, { 0.0f, 1.0f, 0.0f });
+        }
+
+        /** A unit direction from its azimuth, from +X towards +Z, and its elevation above the horizon. */
+        static yup::Vector3<float> directionFromDegrees (float azimuth, float elevation)
+        {
+            const auto a = yup::degreesToRadians (azimuth);
+            const auto e = yup::degreesToRadians (elevation);
+            return { std::cos (e) * std::cos (a), std::sin (e), std::cos (e) * std::sin (a) };
+        }
+
+        void zoomOrbit (float amount)
+        {
+            const auto radius = deviceBounds.getRadius();
+            orbitDistance = yup::jlimit (radius * 0.3f, radius * 10.0f, orbitDistance * std::exp (amount));
+        }
+
+        bool hitsScreen (yup::Point<float> position) const
+        {
+            if (screenEntity == nullptr)
+                return false;
+
+            // hitTest() and not viewportToUV(), which extrapolates beyond the screen for drags
+            const yup::SpinLock::ScopedLockType sl (mapperLock);
+            return screenMapper.hitTest (position).has_value();
         }
 
         /** Facing the screen along its normal, close enough for it to fill the view. */
@@ -706,7 +861,10 @@ private:
 
         CameraPose getTargetPose() const
         {
-            return zoomedOnScreen && screenEntity != nullptr ? getScreenPose() : getTopPose();
+            if (zoomedOnScreen && screenEntity != nullptr)
+                return getScreenPose();
+
+            return freeMovement ? getOrbitPose() : getTopPose();
         }
 
         void zoomTo (bool shouldZoomOnScreen)
@@ -716,12 +874,22 @@ private:
             setContinuousUpdates (true);
             updateStatus();
             repaint();
+
+            if (onScreenZoomChanged)
+                onScreenZoomChanged (zoomedOnScreen);
         }
 
         void updateStatus()
         {
-            if (screenEntity != nullptr)
-                status = zoomedOnScreen ? "Click outside the screen to zoom out" : "Click the screen to zoom in";
+            if (screenEntity == nullptr)
+                return;
+
+            if (zoomedOnScreen)
+                status = "Click outside the screen to zoom out";
+            else if (freeMovement)
+                status = "Drag to rotate, middle drag to pan, right drag or wheel to zoom, click the screen to zoom in";
+            else
+                status = "Click the screen to zoom in";
         }
 
         void updateScreenMapping()
@@ -742,7 +910,20 @@ private:
 
         //==============================================================================
         static constexpr float lcdTextureScale = 2.0f;
+        static constexpr float faceplatePixelWidth = 4096.0f;
         static constexpr double zoomSeconds = 0.7;
+        static constexpr float minOrbitPitch = 0.05f;
+        static constexpr float maxOrbitPitch = 1.56f;
+
+        enum class DragMode
+        {
+            none,
+            rotate,
+            pan,
+            zoom
+        };
+
+        MpcFaceplate faceplate { faceplatePixelWidth };
 
         MpcLcdScreen lcd;
         yup::Texture::Ptr lcdTexture;
@@ -763,6 +944,16 @@ private:
 
         bool zoomedOnScreen = false;
         yup::String status;
+
+        bool freeMovement = false;
+        yup::Vector3<float> orbitTarget;
+        float orbitYaw = 0.0f;
+        float orbitPitch = maxOrbitPitch;
+        float orbitDistance = 1.0f;
+
+        DragMode dragMode = DragMode::none;
+        yup::Point<float> lastDragPosition;
+        float dragDistance = 0.0f;
     };
 
     //==============================================================================
@@ -827,6 +1018,8 @@ private:
 
     //==============================================================================
     yup::ToggleButton treeToggle { "treeToggle" };
+    yup::SwitchButton freeMovementSwitch { "freeMovementSwitch" };
+    yup::Label freeMovementLabel { "freeMovementLabel" };
     yup::TreeView sceneTree { "sceneTree" };
     MpcView view;
 

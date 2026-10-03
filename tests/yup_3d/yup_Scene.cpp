@@ -71,6 +71,46 @@ TEST_F (SceneTests, SettingsAreKept)
     EXPECT_FALSE (scene->isUsingDefaultLight());
 }
 
+TEST_F (SceneTests, NewSceneHasNoEnvironmentAndReinhardToneMapping)
+{
+    EXPECT_EQ (scene->getEnvironment(), nullptr);
+    EXPECT_FLOAT_EQ (scene->getEnvironmentIntensity(), 1.0f);
+    EXPECT_FALSE (scene->isEnvironmentVisible());
+    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 0.0f);
+    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::reinhard);
+}
+
+TEST_F (SceneTests, EnvironmentSettingsAreKeptAndLimited)
+{
+    EnvironmentMap::Ptr environment (new EnvironmentMap ([] (const Vector3<float>&) { return Vector3<float> (1.0f, 1.0f, 1.0f); }, 16, 2));
+
+    scene->setEnvironment (environment);
+    scene->setEnvironmentVisible (true);
+    scene->setToneMapping (Scene::ToneMapping::aces);
+
+    EXPECT_EQ (scene->getEnvironment(), environment);
+    EXPECT_TRUE (scene->isEnvironmentVisible());
+    EXPECT_EQ (scene->getToneMapping(), Scene::ToneMapping::aces);
+
+    scene->setEnvironmentIntensity (-1.0f);
+    EXPECT_FLOAT_EQ (scene->getEnvironmentIntensity(), 0.0f);
+
+    scene->setEnvironmentBlur (2.0f);
+    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 1.0f);
+
+    scene->setEnvironmentBlur (-1.0f);
+    EXPECT_FLOAT_EQ (scene->getEnvironmentBlur(), 0.0f);
+
+    scene->setEnvironment (nullptr);
+    EXPECT_EQ (scene->getEnvironment(), nullptr);
+}
+
+TEST_F (SceneTests, LightsDoNotCastShadowsByDefault)
+{
+    const LightNode light;
+    EXPECT_FALSE (light.castsShadows);
+}
+
 TEST_F (SceneTests, UpdateTicksPartsOfVisibleEntities)
 {
     auto parent = makeEntity();

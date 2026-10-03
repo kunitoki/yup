@@ -57,6 +57,7 @@ public:
     float range = 0.0f;                                             ///< Distance where point and spot lights reach zero, 0 for infinite.
     float innerConeAngle = 0.0f;                                    ///< Spot angle from the axis where the falloff starts.
     float outerConeAngle = MathConstants<float>::pi * 0.25f;        ///< Spot angle from the axis where the light ends.
+    bool castsShadows = false;                                      ///< True for a directional light to cast shadows, see SceneRenderer.
 };
 
 } // namespace yup

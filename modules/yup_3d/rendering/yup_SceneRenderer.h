@@ -28,7 +28,13 @@ namespace yup
     Shading follows the glTF metallic-roughness model (GGX distribution, Smith visibility,
     Schlick Fresnel) with KHR_lights_punctual lights, a flat ambient term, normal mapping,
     alpha masking and blending, and double-sided materials. The result is exposed, tone mapped
-    with Reinhard and sRGB encoded into an rgba8unorm texture.
+    with Reinhard or ACES (see Scene::setToneMapping) and sRGB encoded into an rgba8unorm texture.
+
+    With a Scene::setEnvironment(), surfaces reflect the environment, blurred by their roughness,
+    and receive its diffuse light; Scene::setEnvironmentVisible() also draws it behind the scene.
+
+    The first directional LightNode with LightNode::castsShadows set casts shadows of the opaque
+    items, from a shadowMapSize square map fitted around them and filtered softly.
 
     Geometry edges are antialiased with MSAA, 4 samples by default, resolved into the returned
     texture. Highlights of very smooth surfaces are widened where normals change quickly across
@@ -45,6 +51,9 @@ public:
     //==============================================================================
     /** The maximum number of lights shading a frame. Extra lights are ignored. */
     static constexpr int maxLights = 8;
+
+    /** The width and height, in texels, of the shadow map. */
+    static constexpr int shadowMapSize = 2048;
 
     //==============================================================================
     /** Creates a renderer. GPU objects are created on the first render. */

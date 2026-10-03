@@ -40,6 +40,7 @@
 //==============================================================================
 
 #include "resources/yup_Texture.cpp"
+#include "resources/yup_EnvironmentMap.cpp"
 #include "resources/yup_Mesh.cpp"
 #include "scene/yup_EntityNode.cpp"
 #include "nodes/yup_CameraNode.cpp"

@@ -33,6 +33,10 @@ layout(set = 0, binding = 0) uniform FrameData
     vec4 lightDirections[8];  // xyz unit direction the light shines towards, w range (0 infinite)
     vec4 lightColors[8];      // rgb linear color, w intensity
     vec4 lightSpots[8];       // x cone scale, y cone offset
+    mat4 shadowMatrix;        // world to shadow map clip space, depth from 0 to 1
+    vec4 shadowInfo;          // x shadowed light index (-1 for none), y texel size, z normal offset, w depth bias
+    vec4 environmentInfo;     // x intensity (0 for none), y last level, z tone mapping (0 Reinhard, 1 ACES)
+    vec4 irradiance[9];       // rgb coefficients of the environment diffuse light
 } frame;
 
 layout(set = 0, binding = 1) uniform DrawData

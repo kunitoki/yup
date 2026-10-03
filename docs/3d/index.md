@@ -235,8 +235,9 @@ and repaints on every display frame.
 
 `SceneRenderer` renders a scene into a texture and can be used without a
 component. Shading follows the glTF BRDF (GGX, Smith, Schlick) with punctual
-lights, a flat ambient term, normal mapping, alpha masking and blending, and
-double-sided materials; the result is exposed, tone mapped and sRGB encoded.
+lights, a flat ambient term, environment lighting, shadows, normal mapping, alpha
+masking and blending, and double-sided materials; the result is exposed, tone
+mapped and sRGB encoded.
 
 Image quality:
 
@@ -248,4 +249,53 @@ Image quality:
 - **Anisotropic filtering** keeps glTF textures sharp at grazing angles on
   devices that support it.
 
-Image-based lighting, shadows, skinning and animation are not available yet.
+### Environment lighting and reflections
+
+An `EnvironmentMap` is the light surrounding the scene. Set one with
+`Scene::setEnvironment()` and every surface reflects it, sharply when smooth and
+blurred when rough, and receives its soft diffuse light. Metals and glossy
+plastics, which only had highlights from the punctual lights, look like the real
+material.
+
+The environment is baked once on the CPU from any function returning the
+radiance along a direction, for example an analytic sky or a studio of soft
+boxes:
+
+```cpp
+auto sky = [] (const yup::Vector3<float>& direction)
+{
+    return direction.getY() > 0.0f ? yup::Vector3<float> (0.4f, 0.6f, 1.0f)
+                                    : yup::Vector3<float> (0.05f, 0.05f, 0.05f);
+};
+
+scene->setEnvironment (new yup::EnvironmentMap (sky));
+scene->setEnvironmentIntensity (1.0f);
+scene->setAmbientColor (yup::Colors::black); // the environment replaces the flat ambient
+```
+
+Small bright lights such as a sun keep their energy at every roughness, so they
+show as sharp glints on smooth surfaces and as broad highlights on rough ones.
+
+- `setEnvironmentVisible (true)` draws the environment behind the scene instead
+  of the background color, and `setEnvironmentBlur()` softens it, from 0 (sharp)
+  to 1, like a shallow depth of field.
+- `setToneMapping (Scene::ToneMapping::aces)` maps the light with the ACES
+  filmic curve, which suits bright environments better than the default Reinhard.
+
+### Shadows
+
+Set `castsShadows` on a directional `LightNode` to make it cast shadows. The
+first such light shading the frame renders the opaque items into a shadow map of
+`SceneRenderer::shadowMapSize` texels, fitted around them, and their shadows are
+softened by a small filter.
+
+```cpp
+auto sun = yup::EntityNode::Ptr (new yup::EntityNode ("sun"));
+auto& light = sun->attach<yup::LightNode>();
+light.castsShadows = true;
+light.intensity = 3.0f;
+scene->getRoot()->addChild (sun);
+```
+
+Point and spot lights don't cast shadows. Skinning and animation are not
+available yet.

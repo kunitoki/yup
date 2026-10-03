@@ -65,6 +65,7 @@
 #include "scene/yup_Node.h"
 #include "resources/yup_BoundingBox.h"
 #include "resources/yup_Texture.h"
+#include "resources/yup_EnvironmentMap.h"
 #include "resources/yup_Material.h"
 #include "resources/yup_Mesh.h"
 #include "scene/yup_EntityNode.h"

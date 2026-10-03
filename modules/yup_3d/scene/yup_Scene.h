@@ -105,6 +105,54 @@ public:
     void setUsingDefaultLight (bool shouldUseDefaultLight) noexcept { useDefaultLight = shouldUseDefaultLight; }
 
     //==============================================================================
+    /** How the lit colors are mapped into the displayable range. */
+    enum class ToneMapping
+    {
+        reinhard, ///< Soft roll-off of the highlights, keeps the colors flat.
+        aces      ///< The ACES filmic curve: more contrast and saturation, photographic highlights.
+    };
+
+    /** Returns how the lit colors are mapped into the displayable range. */
+    ToneMapping getToneMapping() const noexcept { return toneMapping; }
+
+    /** Changes how the lit colors are mapped into the displayable range. */
+    void setToneMapping (ToneMapping newToneMapping) noexcept { toneMapping = newToneMapping; }
+
+    //==============================================================================
+    /** Returns the environment lighting the scene, or nullptr when there is none. */
+    const EnvironmentMap::Ptr& getEnvironment() const noexcept { return environment; }
+
+    /** Changes the environment lighting the scene.
+
+        Surfaces reflect it, sharply or blurred by their roughness, and receive its diffuse
+        light. It adds to the lights and to the ambient color: lower the ambient color when an
+        environment lights the scene.
+
+        @param newEnvironment The environment, or nullptr for none.
+    */
+    void setEnvironment (EnvironmentMap::Ptr newEnvironment) noexcept { environment = std::move (newEnvironment); }
+
+    /** Returns the multiplier applied to the light of the environment. */
+    float getEnvironmentIntensity() const noexcept { return environmentIntensity; }
+
+    /** Changes the multiplier applied to the light of the environment. */
+    void setEnvironmentIntensity (float newIntensity) noexcept { environmentIntensity = jmax (0.0f, newIntensity); }
+
+    /** Returns true if the environment is drawn behind the scene instead of the background color. */
+    bool isEnvironmentVisible() const noexcept { return environmentVisible; }
+
+    /** Chooses whether the environment is drawn behind the scene instead of the background color. */
+    void setEnvironmentVisible (bool shouldBeVisible) noexcept { environmentVisible = shouldBeVisible; }
+
+    /** Returns how blurred the environment is behind the scene, from 0 (sharp) to 1. */
+    float getEnvironmentBlur() const noexcept { return environmentBlur; }
+
+    /** Changes how blurred the environment is behind the scene, from 0 (sharp) to 1 (as blurred
+        as the reflections of a fully rough surface).
+    */
+    void setEnvironmentBlur (float newBlur) noexcept { environmentBlur = jlimit (0.0f, 1.0f, newBlur); }
+
+    //==============================================================================
     /** Calls Node::update() on every part of every visible entity, depth-first.
 
         Parts must not attach or detach parts of their own entity from update().
@@ -122,6 +170,11 @@ private:
     Color ambientColor { 0xff595959 };
     float exposure = 1.0f;
     bool useDefaultLight = true;
+    ToneMapping toneMapping = ToneMapping::reinhard;
+    EnvironmentMap::Ptr environment;
+    float environmentIntensity = 1.0f;
+    bool environmentVisible = false;
+    float environmentBlur = 0.0f;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scene)
 };

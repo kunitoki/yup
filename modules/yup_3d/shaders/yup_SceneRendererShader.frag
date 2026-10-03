@@ -24,8 +24,11 @@
 // glTF metallic-roughness shading with KHR_lights_punctual lights and a flat ambient term.
 // Normal mapping builds the tangent frame from screen-space derivatives, so meshes need no
 // tangent attribute, and the same derivatives filter the highlights of smooth surfaces.
-// Color textures are decoded from sRGB here, and the result is exposed, Reinhard tone mapped
-// and sRGB encoded for an rgba8unorm target.
+// An optional environment adds reflections from a latitude-longitude image whose mip levels are
+// blurred per roughness, and diffuse light from nine spherical harmonics coefficients. One
+// directional light can be shadowed from a packed depth map, filtered with a 4x4 tent.
+// Color textures are decoded from sRGB here, and the result is exposed, tone mapped (Reinhard
+// or ACES) and sRGB encoded for an rgba8unorm target.
 
 // Must match FrameData in yup_SceneRenderer.cpp and yup_SceneRendererShader.vert
 layout(set = 0, binding = 0) uniform FrameData
@@ -39,6 +42,10 @@ layout(set = 0, binding = 0) uniform FrameData
     vec4 lightDirections[8];
     vec4 lightColors[8];
     vec4 lightSpots[8];
+    mat4 shadowMatrix;
+    vec4 shadowInfo;          // shadowed light index (-1 for none), texel size, normal offset, depth bias
+    vec4 environmentInfo;     // intensity (0 for none), last level, tone mapping (0 Reinhard, 1 ACES)
+    vec4 irradiance[9];
 } frame;
 
 // Must match MaterialData in yup_SceneRenderer.cpp
@@ -60,6 +67,11 @@ layout(set = 0, binding = 9) uniform sampler s_metallicRoughness;
 layout(set = 0, binding = 10) uniform sampler s_normal;
 layout(set = 0, binding = 11) uniform sampler s_occlusion;
 layout(set = 0, binding = 12) uniform sampler s_emissive;
+// Metal allows sampler slots up to 15: the shadow map is read with texelFetch, which ignores
+// the sampler it is paired with
+layout(set = 0, binding = 13) uniform texture2D u_environment;
+layout(set = 0, binding = 14) uniform texture2D u_shadow;
+layout(set = 0, binding = 15) uniform sampler s_environment;
 
 layout(location = 0) in vec3 v_worldPosition;
 layout(location = 1) in vec3 v_normal;
@@ -78,6 +90,88 @@ vec3 srgbToLinear(vec3 c)
 vec3 linearToSrgb(vec3 c)
 {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+}
+
+vec3 environmentIrradiance(vec3 n)
+{
+    vec3 result = frame.irradiance[0].rgb
+                + frame.irradiance[1].rgb * n.y
+                + frame.irradiance[2].rgb * n.z
+                + frame.irradiance[3].rgb * n.x
+                + frame.irradiance[4].rgb * (n.x * n.y)
+                + frame.irradiance[5].rgb * (n.y * n.z)
+                + frame.irradiance[6].rgb * (3.0 * n.z * n.z - 1.0)
+                + frame.irradiance[7].rgb * (n.x * n.z)
+                + frame.irradiance[8].rgb * (n.x * n.x - n.y * n.y);
+
+    return max(result, vec3(0.0));
+}
+
+vec3 environmentRadiance(vec3 d, float roughness)
+{
+    // Around the vertical axis from +Z, and from the zenith down; the level follows the roughness
+    // atan is undefined at the poles, where both arguments are zero
+    vec2 uv = vec2(atan(d.x, d.z + 1.0e-6) / (2.0 * PI), acos(clamp(d.y, -1.0, 1.0)) / PI);
+    return textureLod(sampler2D(u_environment, s_environment), uv, roughness * frame.environmentInfo.y).rgb;
+}
+
+// Split-sum scale and bias of the specular reflectance, fitted analytically (Karis, mobile)
+vec2 environmentBrdf(float roughness, float nDotV)
+{
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * nDotV)) * r.x + r.y;
+    return vec2(-1.04, 1.04) * a004 + r.zw;
+}
+
+float unpackDepth(vec4 rgba)
+{
+    return dot(rgba, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0));
+}
+
+float shadowVisibility(vec3 worldPosition, vec3 geometricNormal, vec3 l)
+{
+    // Offset along the normal, more where the light grazes the surface
+    float nDotL = clamp(dot(geometricNormal, l), 0.0, 1.0);
+    vec3 position = worldPosition + geometricNormal * (frame.shadowInfo.z * (1.0 - nDotL));
+
+    vec4 clip = frame.shadowMatrix * vec4(position, 1.0);
+    vec2 coords = vec2(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+    if (coords.x <= 0.0 || coords.y <= 0.0 || coords.x >= 1.0 || coords.y >= 1.0 || clip.z >= 1.0)
+        return 1.0;
+
+    float texel = frame.shadowInfo.y;
+    float depth = clip.z - frame.shadowInfo.w;
+
+    // Bilinear comparisons over a 3x3 texel footprint: a 4x4 tent
+    vec2 grid = coords / texel - 0.5;
+    vec2 base = floor(grid);
+    vec2 f = grid - base;
+
+    int size = int(1.0 / texel + 0.5);
+    ivec2 origin = ivec2(base) - ivec2(1);
+
+    float lit = 0.0;
+    for (int j = 0; j < 4; ++j)
+    {
+        float wy = j == 0 ? 1.0 - f.y : (j == 3 ? f.y : 1.0);
+
+        for (int i = 0; i < 4; ++i)
+        {
+            float wx = i == 0 ? 1.0 - f.x : (i == 3 ? f.x : 1.0);
+            ivec2 position = clamp(origin + ivec2(i, j), ivec2(0), ivec2(size - 1));
+            float stored = unpackDepth(texelFetch(sampler2D(u_shadow, s_environment), position, 0));
+            lit += wx * wy * (depth <= stored ? 1.0 : 0.0);
+        }
+    }
+
+    return lit / 9.0;
+}
+
+vec3 acesFilmic(vec3 x)
+{
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 
 vec3 perturbNormal(vec3 n, vec3 tangentNormal, float side)
@@ -116,6 +210,7 @@ void main()
     // The normal uses screen-space derivatives: compute it before any fragment is discarded
     float side = gl_FrontFacing ? 1.0 : -1.0;
     vec3 n = normalize(v_normal);
+    vec3 geometricNormal = n * side;
 
     if (material.flags.w > 0.5)
     {
@@ -207,6 +302,13 @@ void main()
         if (nDotL <= 0.0 || attenuation <= 0.0)
             continue;
 
+        if (float(i) == frame.shadowInfo.x)
+        {
+            attenuation = attenuation * shadowVisibility(v_worldPosition, geometricNormal, l);
+            if (attenuation <= 0.0)
+                continue;
+        }
+
         vec3 h = normalize(v + l);
         float nDotH = max(dot(n, h), 0.0);
         float vDotH = max(dot(v, h), 0.0);
@@ -228,10 +330,29 @@ void main()
     }
 
     color += frame.ambient.rgb * (diffuseColor + f0) * occlusion;
+
+    if (frame.environmentInfo.x > 0.0)
+    {
+        // The filtered roughness, so the reflections blur where the highlights do
+        float environmentRoughness = sqrt(sqrt(alpha2));
+        vec3 r = reflect(-v, n);
+
+        vec2 brdf = environmentBrdf(environmentRoughness, nDotV);
+        vec3 specularWeight = f0 * brdf.x + brdf.y;
+
+        // Reflections pointing into the surface are hidden by it
+        float horizon = clamp(1.0 + dot(r, geometricNormal), 0.0, 1.0);
+
+        vec3 diffuse = diffuseColor * environmentIrradiance(n) * (vec3(1.0) - specularWeight);
+        vec3 specular = environmentRadiance(r, environmentRoughness) * specularWeight * (horizon * horizon);
+
+        color += (diffuse + specular) * (occlusion * frame.environmentInfo.x);
+    }
+
     color += emissive;
 
     color = color * frame.ambient.w;
-    color = color / (vec3(1.0) + color);
+    color = frame.environmentInfo.z > 0.5 ? acesFilmic(color) : color / (vec3(1.0) + color);
 
     fragColor = vec4(linearToSrgb(color), baseColor.a);
 }

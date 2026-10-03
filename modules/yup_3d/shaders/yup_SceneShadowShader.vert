@@ -19,13 +19,30 @@
   ==============================================================================
 */
 
-#include "yup_BoundingBox.cpp"
-#include "yup_EntityNode.cpp"
-#include "yup_EnvironmentMap.cpp"
-#include "yup_GltfModel.cpp"
-#include "yup_Mesh.cpp"
-#include "yup_Scene.cpp"
-#include "yup_SceneComponent.cpp"
-#include "yup_SceneDrawList.cpp"
-#include "yup_SceneRenderer.cpp"
-#include "yup_Texture.cpp"
+#version 450
+
+// Renders the depth of the scene seen from a directional light into a shadow map.
+
+layout(set = 0, binding = 0) uniform ShadowData
+{
+    mat4 shadowMatrix;        // world to shadow map clip space, depth from 0 to 1
+} shadow;
+
+layout(set = 0, binding = 1) uniform DrawData
+{
+    mat4 model;
+    mat4 normalMatrix;
+} draw;
+
+layout(location = 0) in vec3 a_position;
+
+layout(location = 0) out float v_depth;
+
+void main()
+{
+    vec4 clip = shadow.shadowMatrix * (draw.model * vec4(a_position, 1.0));
+
+    // The depth is passed on rather than read from gl_FragCoord, whose range depends on the backend
+    v_depth = clip.z;
+    gl_Position = clip;
+}

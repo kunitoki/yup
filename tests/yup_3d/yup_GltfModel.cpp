@@ -243,7 +243,15 @@ TEST_F (GltfModelTests, LoadsGlbWithImageInBufferView)
 
     const auto& model = result.getReference();
     ASSERT_EQ (model.getMeshes().size(), 1u);
-    EXPECT_EQ (model.getMeshes()[0]->getPrimitive (0).indices, (std::vector<uint32> { 2, 1, 0 }));
+
+    // Without normals the triangle gets flat normals and its own vertices, in the order of the
+    // 16-bit indices read from the buffer view: 2, 1, 0
+    const auto& primitive = model.getMeshes()[0]->getPrimitive (0);
+    EXPECT_EQ (primitive.indices, (std::vector<uint32> { 0, 1, 2 }));
+    ASSERT_EQ (primitive.vertices.size(), 3u);
+    EXPECT_EQ (primitive.vertices[0].position, Vector3<float> (0.0f, 1.0f, 0.0f));
+    EXPECT_EQ (primitive.vertices[1].position, Vector3<float> (1.0f, 0.0f, 0.0f));
+    EXPECT_EQ (primitive.vertices[2].position, Vector3<float> (0.0f, 0.0f, 0.0f));
 
     // A scene without a default scene index: the first scene is built
     EXPECT_NE (model.createEntity(), nullptr);

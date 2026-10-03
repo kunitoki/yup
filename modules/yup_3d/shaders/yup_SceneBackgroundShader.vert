@@ -19,13 +19,16 @@
   ==============================================================================
 */
 
-#include "yup_BoundingBox.cpp"
-#include "yup_EntityNode.cpp"
-#include "yup_EnvironmentMap.cpp"
-#include "yup_GltfModel.cpp"
-#include "yup_Mesh.cpp"
-#include "yup_Scene.cpp"
-#include "yup_SceneComponent.cpp"
-#include "yup_SceneDrawList.cpp"
-#include "yup_SceneRenderer.cpp"
-#include "yup_Texture.cpp"
+#version 450
+
+// A triangle covering the viewport, drawn behind the scene.
+
+layout(location = 0) out vec2 v_clip;
+
+void main()
+{
+    vec2 position = vec2(float((gl_VertexIndex & 1) << 2) - 1.0, float((gl_VertexIndex & 2) << 1) - 1.0);
+
+    v_clip = position;
+    gl_Position = vec4(position, 0.5, 1.0);
+}
