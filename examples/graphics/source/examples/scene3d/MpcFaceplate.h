@@ -35,7 +35,7 @@
 
     The model carries no images: the faces seen from the top use the "Faceplate" and "Knob Cap"
     materials, whose texture coordinates map the whole device straight from above. This
-    component paints that texture once, then hands it to those materials.
+    component is rendered into a GPU texture, handed to those materials.
 
     Buttons and knobs are found from the texture coordinates of their painted faces, so the
     labels, scales and caps follow the model. Drawing happens in design units, 1000 across the
@@ -107,25 +107,30 @@ public:
         repaint();
     }
 
-    /** Paints the faceplate the first time it is called, and shows it on the device.
+    /** Renders the faceplate into a GPU texture and shows it on the device.
 
-        Call it from paint(), where the context is ready to render offscreen.
+        Call it from paint(), where the context is ready to render offscreen: the faceplate is
+        rendered again only when it repainted.
     */
     void updateTexture (yup::GraphicsContext& context)
     {
-        if (texture != nullptr || materials.empty())
+        if (materials.empty())
             return;
 
-        auto image = snapshotToImage (context);
-        if (! image.isValid())
+        auto gpuTexture = renderToTexture (context);
+        if (gpuTexture == nullptr)
             return;
 
-        // Mipmapped from the CPU image, so the small print doesn't shimmer when zoomed out
+        if (texture != nullptr)
+        {
+            texture->setGpuTexture (std::move (gpuTexture));
+            return;
+        }
+
         yup::GpuSamplerDesc sampler (yup::GpuFilter::linear, yup::GpuWrapMode::clampToEdge);
-        sampler.mipmapFilter = yup::GpuFilter::linear;
         sampler.maxAnisotropy = 16;
 
-        texture = new yup::Texture (std::move (image), sampler, true);
+        texture = new yup::Texture (std::move (gpuTexture), sampler, true);
 
         for (auto& material : materials)
             material->baseColorTexture = texture;

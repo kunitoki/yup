@@ -37,7 +37,7 @@
     Loads a glTF model into a yup::Scene and shows it with a yup::SceneComponent.
 
     The device is seen from the top. The model has no images: its faceplate, with the labels,
-    the knob scales and the caps, is painted with yup::Graphics into a texture once. Its screen
+    the knob scales and the caps, is painted with yup::Graphics into a GPU texture. Its screen
     shows a live Component: it is rendered to a texture used as the emissive texture of the
     screen material. Clicking the screen animates the camera onto it, with a custom Node part
     ticked by Scene::update(); from there clicks are mapped onto the LCD through a
@@ -489,15 +489,15 @@ private:
             auto keyLightEntity = yup::EntityNode::Ptr (new yup::EntityNode ("keyLight"));
             auto& keyLight = keyLightEntity->attach<yup::LightNode>();
             keyLight.castsShadows = true;
-            keyLight.intensity = 3.5f;
+            keyLight.intensity = 2.4f;
             keyLight.color = { 1.0f, 0.98f, 0.95f };
             CameraPose::lookingAt (directionFromDegrees (35.0f, 50.0f) * 10.0f, {}, { 0.0f, 1.0f, 0.0f }).applyTo (*keyLightEntity);
             scene->getRoot()->addChild (keyLightEntity);
 
             scene->setEnvironment (createStudioEnvironment());
-            scene->setEnvironmentIntensity (0.55f);
+            scene->setEnvironmentIntensity (0.7f);
             scene->setAmbientColor (yup::Colors::black);
-            scene->setExposure (0.9f);
+            scene->setExposure (0.6f);
             scene->setToneMapping (yup::Scene::ToneMapping::aces);
             scene->setEnvironmentVisible (true);
             scene->setEnvironmentBlur (0.5f);
@@ -910,7 +910,7 @@ private:
 
         //==============================================================================
         static constexpr float lcdTextureScale = 2.0f;
-        static constexpr float faceplatePixelWidth = 4096.0f;
+        static constexpr float faceplatePixelWidth = 2048.0f; // Without mip levels: larger shimmers when zoomed out
         static constexpr double zoomSeconds = 0.7;
         static constexpr float minOrbitPitch = 0.05f;
         static constexpr float maxOrbitPitch = 1.56f;
