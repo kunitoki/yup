@@ -40,9 +40,13 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 
 ## Screenshots
 
+<div>
+  <a href="./examples/graphics/source/examples/Audio.h"><img src="./docs/_static/images/yup_prism_synth.png" style="width:99.8%;" /></a>
+</div>
+
+<div>
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_graph.png" style="width:57.5%;" /></a>
   <a href="./examples/audiograph/"><img src="./docs/_static/images/yup_audio_host.png" style="width:39.5%;" /></a>
-<div>
 </div>
 
 <div>
