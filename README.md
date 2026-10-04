@@ -49,9 +49,9 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
-  <a href="./examples/graphics/source/examples/FilterDemo.h"><img src="./docs/_static/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
-  <a href="./examples/graphics/source/examples/CrossoverDemo.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.2%;" /></a>
+  <a href="./examples/graphics/source/examples/Filter.h"><img src="./docs/_static/images/yup_dsp_filter_rbj.png" style="width:26.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Filter.h"><img src="./docs/_static/images/yup_dsp_filter_butter.png" style="width:26.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Crossover.h"><img src="./docs/_static/images/yup_dsp_crossover.png" style="width:43.2%;" /></a>
 </div>
 
 <div>
@@ -60,8 +60,8 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_waveform_onsets.jpg" style="width:31.2%;" /></a>
-  <a href="./examples/graphics/source/examples/AudioFileDemo.h"><img src="./docs/_static/images/yup_audio_scope.png" style="width:66%;" /></a>
+  <a href="./examples/graphics/source/examples/AudioFile.h"><img src="./docs/_static/images/yup_waveform_onsets.jpg" style="width:31.2%;" /></a>
+  <a href="./examples/graphics/source/examples/AudioFile.h"><img src="./docs/_static/images/yup_audio_scope.png" style="width:66%;" /></a>
 </div>
 
 <div>
@@ -77,17 +77,15 @@ Start with browsing the [documentation](https://yup.readthedocs.io/).
 </div>
 
 <div>
-  <a href="./examples/graphics/source/examples/LottieDemo.h"><img src="./docs/_static/images/yup_lottie.png" style="width:43.4%;" /></a>
-  <a href="./examples/graphics/source/examples/SpinningCubeDemo.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.4%;" /></a>
+  <a href="./examples/graphics/source/examples/Lottie.h"><img src="./docs/_static/images/yup_lottie.png" style="width:43.4%;" /></a>
+  <a href="./examples/graphics/source/examples/SpinningCube.h"><img src="./docs/_static/images/yup_rhi_cube.jpg" style="width:54.4%;" /></a>
 </div>
 
 <div>
   <a href="./examples/graphics/source/examples/TouchTrails.h"><img src="./docs/_static/images/yup_multitouch.jpg" style="width:19.4%;" /></a>
-  <a href="./examples/graphics/source/examples/PbrDemo.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:38.5%;" /></a>
-  <a href="./examples/graphics/source/examples/FluidSimulationDemo.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:38.5%;" /></a>
+  <a href="./examples/graphics/source/examples/Pbr.h"><img src="./docs/_static/images/yup_rhi_pbr.jpg" style="width:38.5%;" /></a>
+  <a href="./examples/graphics/source/examples/FluidSimulation.h"><img src="./docs/_static/images/yup_rhi_fluid.jpg" style="width:38.5%;" /></a>
 </div>
-
-Example Rive animation display: [source code](./examples/graphics/source/main.cpp), [renderer video](https://youtube.com/shorts/3XC4hyDlrVs).
 
 <details>
 <summary>Coverage drilldown</summary>
