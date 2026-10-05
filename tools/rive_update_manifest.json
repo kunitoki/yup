@@ -675,6 +675,42 @@
           }
         },
         {
+          "path": "upstream/yoga/Yoga.h",
+          "note": "move YOGA_EXPORT after YG_DEPRECATED: older clang (Android NDK) rejects a [[deprecated]] attribute list following __attribute__((visibility)) with 'an attribute list cannot appear here'",
+          "already_contains": "\\\"YGConfigGetErrata()\\\"\") YOGA_EXPORT bool",
+          "replace": {
+            "from": [
+              "YOGA_EXPORT YG_DEPRECATED(",
+              "    \"Please use \"",
+              "    \"\\\"YGConfigGetErrata()\\\"\") bool YGConfigGetUseLegacyStretchBehaviour(YGConfigRef",
+              "                                                                             config);",
+              "YOGA_EXPORT",
+              "YG_DEPRECATED(",
+              "    \"\\\"YGConfigSetUseLegacyStretchBehaviour\\\" will be removed in the next \"",
+              "    \"release. Usage should be replaced with \\\"YGConfigSetErrata(YGErrataAll)\\\" \"",
+              "    \"to opt out of all future breaking conformance fixes, or \"",
+              "    \"\\\"YGConfigSetErrata(YGErrataStretchFlexBasis)\\\" to opt out of the \"",
+              "    \"specific conformance fix previously disabled by \"",
+              "    \"\\\"UseLegacyStretchBehaviour\\\".\")",
+              "void YGConfigSetUseLegacyStretchBehaviour("
+            ],
+            "to": [
+              "YG_DEPRECATED(",
+              "    \"Please use \"",
+              "    \"\\\"YGConfigGetErrata()\\\"\") YOGA_EXPORT bool YGConfigGetUseLegacyStretchBehaviour(YGConfigRef",
+              "                                                                             config);",
+              "YG_DEPRECATED(",
+              "    \"\\\"YGConfigSetUseLegacyStretchBehaviour\\\" will be removed in the next \"",
+              "    \"release. Usage should be replaced with \\\"YGConfigSetErrata(YGErrataAll)\\\" \"",
+              "    \"to opt out of all future breaking conformance fixes, or \"",
+              "    \"\\\"YGConfigSetErrata(YGErrataStretchFlexBasis)\\\" to opt out of the \"",
+              "    \"specific conformance fix previously disabled by \"",
+              "    \"\\\"UseLegacyStretchBehaviour\\\".\")",
+              "YOGA_EXPORT void YGConfigSetUseLegacyStretchBehaviour("
+            ]
+          }
+        },
+        {
           "path": "upstream/yoga/Yoga.cpp",
           "note": "patched YGConfigGetDefault to use a proper RAII wrapper with cleanup",
           "already_contains": "struct YogaWrapperWithCleanup",
