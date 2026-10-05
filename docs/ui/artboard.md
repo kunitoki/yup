@@ -192,7 +192,9 @@ without host code.
 
 - **Text fields.** A focused Rive text field receives typed text, including
   input method commits, and asks for the on-screen keyboard on mobile.
-  Cmd/Ctrl+C, X and V copy, cut and paste through the system clipboard. Select
+  Cmd/Ctrl+C, X and V copy, cut and paste through the system clipboard. Rive
+  only routes keys and text to a field with a keyboard and text listener on it,
+  which the editor's TextInput component includes. Select
   all, undo and redo are handled by Rive, which expects Ctrl on Windows and
   Cmd (the Super key on Linux) elsewhere.
 - **Focus loss.** When the artboard loses keyboard focus, for example when

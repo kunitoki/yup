@@ -2886,6 +2886,18 @@ TEST_F (ArtboardInputTests, TabMovesFocusForwardAndShiftTabBackward)
     EXPECT_EQ ("second", focused());
 }
 
+TEST_F (ArtboardInputTests, PressFocusesFocusableNodes)
+{
+    click ({ 60.0f, 110.0f });
+    EXPECT_EQ ("first", focused());
+
+    click ({ 180.0f, 110.0f });
+    EXPECT_EQ ("second", focused());
+
+    click (field);
+    EXPECT_EQ ("field", focused());
+}
+
 TEST_F (ArtboardInputTests, TextInputReachesFocusedField)
 {
     click (field);
