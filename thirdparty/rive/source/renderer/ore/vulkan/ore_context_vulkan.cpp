@@ -20,6 +20,7 @@
 // VMA_IMPLEMENTATION is defined in src/vulkan/vulkan_memory_allocator.cpp,
 // which is compiled when --with_vulkan is passed (required for this backend).
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -251,6 +252,12 @@ ContextVulkan::~ContextVulkan()
 
     if (m_vkCommandPool != VK_NULL_HANDLE)
         m_vk->DestroyCommandPool(m_vk->device, m_vkCommandPool, nullptr);
+
+    if (m_vkProfilePool != VK_NULL_HANDLE)
+        m_vk->DestroyQueryPool(m_vk->device, m_vkProfilePool, nullptr);
+
+    for (TextureVulkan* tex : m_vkRiveWrapped)
+        tex->m_vkOreContext = nullptr;
 }
 
 // ============================================================================
@@ -334,31 +341,36 @@ std::unique_ptr<ContextVulkan> ContextVulkan::Make(
     // Populate features from physical device properties.
     VkPhysicalDeviceProperties props{};
     ctx->m_vk->GetPhysicalDeviceProperties(ctx->m_vk->physicalDevice, &props);
-    VkPhysicalDeviceFeatures feat{};
-    ctx->m_vk->GetPhysicalDeviceFeatures(ctx->m_vk->physicalDevice, &feat);
+    // Only features the host enabled on the device, not what it supports.
+    const gpu::VulkanFeatures& enabled = ctx->m_vk->features;
 
     Features& f = ctx->m_features;
     f.colorBufferFloat = true; // All Vulkan 1.1+ support rgba16f attachments.
-    f.perTargetBlend = feat.independentBlend == VK_TRUE;
-    f.perTargetWriteMask = feat.independentBlend == VK_TRUE;
+    f.colorBufferHalfFloat = true;
+    f.perTargetBlend = enabled.independentBlend;
+    f.perTargetWriteMask = enabled.independentBlend;
     f.textureViewSampling = true;
     f.drawBaseInstance = true;
-    f.depthBiasClamp = feat.depthBiasClamp == VK_TRUE;
-    f.anisotropicFiltering = feat.samplerAnisotropy == VK_TRUE;
+    f.depthBiasClamp = enabled.depthBiasClamp;
+    f.anisotropicFiltering = enabled.samplerAnisotropy;
     f.texture3D = true;
     f.textureArrays = true;
     f.computeShaders = true;
     f.storageBuffers = true;
     // Compressed format support via format properties.
-    f.bc = feat.textureCompressionBC == VK_TRUE;
-    f.etc2 = feat.textureCompressionETC2 == VK_TRUE;
-    f.astc = feat.textureCompressionASTC_LDR == VK_TRUE;
+    f.bc = enabled.textureCompressionBC;
+    f.etc2 = enabled.textureCompressionETC2;
+    f.astc = enabled.textureCompressionASTC_LDR;
     f.maxColorAttachments = props.limits.maxColorAttachments;
     f.maxTextureSize2D = props.limits.maxImageDimension2D;
     f.maxTextureSizeCube = props.limits.maxImageDimensionCube;
     f.maxTextureSize3D = props.limits.maxImageDimension3D;
     f.maxUniformBufferSize =
         static_cast<uint32_t>(props.limits.maxUniformBufferRange);
+    // Never below the default so scripts stay portable to D3D11.
+    f.minUniformBufferOffsetAlignment = std::max(
+        f.minUniformBufferOffsetAlignment,
+        static_cast<uint32_t>(props.limits.minUniformBufferOffsetAlignment));
     f.maxVertexAttributes = props.limits.maxVertexInputAttributes;
     f.maxSamplers = props.limits.maxPerStageDescriptorSamplers;
 
@@ -386,9 +398,25 @@ VkDescriptorSetLayout ContextVulkan::vkGetOrCreateEmptyDSL()
     return m_vkEmptyDSL;
 }
 
-void ContextVulkan::vkQueueTransitionToLayout(Texture* texture,
-                                              VkImageAspectFlags aspectMask,
-                                              VkImageLayout newLayout)
+LoadOp ContextVulkan::firstUseLoadOp(TextureView* view, LoadOp loadOp)
+{
+    auto tex = lite_rtti_cast<TextureVulkan*>(view->texture());
+    // The framebuffer renders one layer, so only the base layer gets contents.
+    bool written = tex->vkMarkWritten(view->baseMipLevel(), view->baseLayer());
+    return loadOp == LoadOp::load && !written ? LoadOp::clear : loadOp;
+}
+
+static bool sameRange(const VkImageSubresourceRange& a,
+                      const VkImageSubresourceRange& b)
+{
+    return a.baseMipLevel == b.baseMipLevel && a.levelCount == b.levelCount &&
+           a.baseArrayLayer == b.baseArrayLayer && a.layerCount == b.layerCount;
+}
+
+void ContextVulkan::vkQueueTransitionToLayout(
+    Texture* texture,
+    const VkImageSubresourceRange& range,
+    VkImageLayout newLayout)
 {
     if (texture == nullptr)
         return;
@@ -397,22 +425,19 @@ void ContextVulkan::vkQueueTransitionToLayout(Texture* texture,
         return;
     if (vkTex->m_vkLayout == newLayout)
         return;
-    // De-dup against an existing pending entry for the same texture.
+    // De-dup against an existing pending entry for the same subresources.
     for (auto& existing : m_vkPendingInitialTransitions)
     {
-        if (existing.texture.get() == texture)
+        if (existing.texture.get() == texture &&
+            sameRange(existing.range, range))
         {
-            existing.aspectMask |= aspectMask;
+            existing.range.aspectMask |= range.aspectMask;
             existing.newLayout = newLayout;
             return;
         }
     }
-    m_vkPendingInitialTransitions.push_back({
-        ref_rcp(texture),
-        aspectMask,
-        vkTex->m_vkLayout,
-        newLayout,
-    });
+    m_vkPendingInitialTransitions.push_back(
+        {ref_rcp(texture), range, newLayout});
 }
 
 // Stage flags + access masks compatible with `layout`. Mirrors Dawn's
@@ -469,13 +494,15 @@ void ContextVulkan::vkFlushPendingInitialTransitions()
     barriers.reserve(m_vkPendingInitialTransitions.size());
     VkPipelineStageFlags srcStageAcc = 0;
     VkPipelineStageFlags dstStageAcc = 0;
+    // Every entry in a batch leaves the layout the texture had before it, so
+    // the tracker only moves after the loop.
     for (const auto& pt : m_vkPendingInitialTransitions)
     {
         auto* vkTex = lite_rtti_cast<TextureVulkan*>(pt.texture.get());
         if (vkTex == nullptr)
             continue;
-        // Re-check current layout; an earlier batch entry or same-frame
-        // upload may have moved the texture since this was queued.
+        // Re-check current layout; a same-frame upload may have moved the
+        // texture since this was queued.
         if (vkTex->m_vkLayout == pt.newLayout)
             continue;
 
@@ -497,13 +524,13 @@ void ContextVulkan::vkFlushPendingInitialTransitions()
         b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         b.image = vkTex->m_vkImage;
-        b.subresourceRange.aspectMask = pt.aspectMask;
-        b.subresourceRange.baseMipLevel = 0;
-        b.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
-        b.subresourceRange.baseArrayLayer = 0;
-        b.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+        b.subresourceRange = pt.range;
         barriers.push_back(b);
-        vkTex->m_vkLayout = pt.newLayout;
+    }
+    for (const auto& pt : m_vkPendingInitialTransitions)
+    {
+        if (auto* vkTex = lite_rtti_cast<TextureVulkan*>(pt.texture.get()))
+            vkTex->m_vkLayout = pt.newLayout;
     }
     if (!barriers.empty())
     {
@@ -680,9 +707,175 @@ void ContextVulkan::beginFrame(const FrameDescriptor& desc)
         static_cast<VkCommandBuffer>(desc.externalCommandBuffer);
     m_vkCmdBufRecording = true;
 
+    m_vkProfileSlot = kVkProfileSlots;
+    if (gpuProfiling())
+    {
+        vkBeginProfileFrame(desc);
+    }
+    else
+    {
+        // Frames left pending or totals left unreported when profiling stops
+        // would publish stale rows once it resumes.
+        for (VkProfileSlot& slot : m_vkProfileSlots)
+        {
+            slot.pending = false;
+        }
+        m_gpuProfileTotals.clear();
+        m_gpuProfileFrames = 0;
+    }
+
     // Drain pre-frame deferred work onto the host's CB.
     vkFlushPendingTextureUploads();
     vkFlushPendingInitialTransitions();
+    vkSyncRiveTextures();
+}
+
+bool ContextVulkan::vkCreateProfilePool()
+{
+    if (!m_vk->physicalDeviceProperties.limits.timestampComputeAndGraphics)
+    {
+        return false;
+    }
+    uint32_t familyCount = 0;
+    m_vk->GetPhysicalDeviceQueueFamilyProperties(m_vk->physicalDevice,
+                                                 &familyCount,
+                                                 nullptr);
+    std::vector<VkQueueFamilyProperties> families(familyCount);
+    m_vk->GetPhysicalDeviceQueueFamilyProperties(m_vk->physicalDevice,
+                                                 &familyCount,
+                                                 families.data());
+    if (m_vkQueueFamily >= familyCount)
+    {
+        return false;
+    }
+    const uint32_t validBits = families[m_vkQueueFamily].timestampValidBits;
+    if (validBits == 0)
+    {
+        return false;
+    }
+    m_vkTimestampMask =
+        validBits >= 64 ? UINT64_MAX : (uint64_t(1) << validBits) - 1;
+    VkQueryPoolCreateInfo info{};
+    info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    info.queryCount = kVkProfileSlots * kVkProfilePassesPerSlot * 2;
+    if (m_vk->CreateQueryPool(m_vk->device, &info, nullptr, &m_vkProfilePool) !=
+        VK_SUCCESS)
+    {
+        m_vkProfilePool = VK_NULL_HANDLE;
+        return false;
+    }
+    return true;
+}
+
+void ContextVulkan::vkBeginProfileFrame(const FrameDescriptor& desc)
+{
+    if (m_vkProfilePool == VK_NULL_HANDLE)
+    {
+        if (m_vkProfileUnavailable)
+        {
+            return;
+        }
+        if (!vkCreateProfilePool())
+        {
+            m_vkProfileUnavailable = true;
+            fprintf(stderr,
+                    "[ore gpu] this device cannot time passes, so no profile "
+                    "will print\n");
+            return;
+        }
+    }
+    for (uint32_t i = 0; i < kVkProfileSlots; ++i)
+    {
+        if (m_vkProfileSlots[i].pending &&
+            m_vkProfileSlots[i].frameNumber <= desc.safeFrameNumber)
+        {
+            vkResolveProfileSlot(i);
+        }
+    }
+    const uint32_t index =
+        static_cast<uint32_t>(desc.currentFrameNumber % kVkProfileSlots);
+    VkProfileSlot& slot = m_vkProfileSlots[index];
+    if (slot.pending)
+    {
+        return;
+    }
+    slot.frameNumber = desc.currentFrameNumber;
+    slot.pending = true;
+    slot.labels.clear();
+    m_vkProfileSlot = index;
+    m_vk->CmdResetQueryPool(m_vkCommandBuffer,
+                            m_vkProfilePool,
+                            index * kVkProfilePassesPerSlot * 2,
+                            kVkProfilePassesPerSlot * 2);
+}
+
+void ContextVulkan::vkResolveProfileSlot(uint32_t index)
+{
+    VkProfileSlot& slot = m_vkProfileSlots[index];
+    slot.pending = false;
+    const double period =
+        m_vk->physicalDeviceProperties.limits.timestampPeriod * 1e-6;
+    std::vector<GpuPassTiming> rows;
+    rows.reserve(slot.labels.size());
+    for (uint32_t i = 0; i < slot.labels.size(); ++i)
+    {
+        uint64_t stamps[2] = {};
+        if (m_vk->GetQueryPoolResults(m_vk->device,
+                                      m_vkProfilePool,
+                                      (index * kVkProfilePassesPerSlot + i) * 2,
+                                      2,
+                                      sizeof(stamps),
+                                      stamps,
+                                      sizeof(stamps[0]),
+                                      VK_QUERY_RESULT_64_BIT) != VK_SUCCESS)
+        {
+            continue;
+        }
+        // Masked so a counter that wrapped between the stamps stays small.
+        const uint64_t ticks = (stamps[1] - stamps[0]) & m_vkTimestampMask;
+        rows.push_back(
+            {std::move(slot.labels[i]), static_cast<double>(ticks) * period});
+    }
+    publishGpuPassTimings(rows);
+}
+
+uint32_t ContextVulkan::vkBeginProfilePass(const RenderPassDesc& desc)
+{
+    if (m_vkProfileSlot == kVkProfileSlots)
+    {
+        return UINT32_MAX;
+    }
+    VkProfileSlot& slot = m_vkProfileSlots[m_vkProfileSlot];
+    if (slot.labels.size() >= kVkProfilePassesPerSlot)
+    {
+        if (!m_vkProfileOverflowWarned)
+        {
+            m_vkProfileOverflowWarned = true;
+            fprintf(stderr,
+                    "[ore gpu] passes past %u in a frame go unmeasured\n",
+                    kVkProfilePassesPerSlot);
+        }
+        return UINT32_MAX;
+    }
+    const uint32_t query = (m_vkProfileSlot * kVkProfilePassesPerSlot +
+                            static_cast<uint32_t>(slot.labels.size())) *
+                           2;
+    slot.labels.push_back(gpuPassLabel(desc));
+    m_vk->CmdWriteTimestamp(m_vkCommandBuffer,
+                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                            m_vkProfilePool,
+                            query);
+    return query;
+}
+
+// Rive's own barrier helper no-ops once its tracker already says shader read.
+void ContextVulkan::vkSyncRiveTextures()
+{
+    for (TextureVulkan* tex : m_vkRiveWrapped)
+    {
+        tex->m_vkRiveTexture->prepareForFragmentShaderRead(m_vkCommandBuffer);
+    }
 }
 
 void ContextVulkan::waitForGPU() {}
@@ -804,10 +997,17 @@ VkRenderPass ContextVulkan::getOrCreateRenderPass(const VKRenderPassKey& key)
     VkSubpassDependency deps[2]{};
     deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     deps[0].dstSubpass = 0;
+    // A prior frame may still be sampling or copying these attachments when
+    // this pass clears them.
     deps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                           VK_PIPELINE_STAGE_TRANSFER_BIT;
     deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     deps[0].srcAccessMask = 0;
     deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -815,7 +1015,8 @@ VkRenderPass ContextVulkan::getOrCreateRenderPass(const VKRenderPassKey& key)
     deps[1].srcSubpass = 0;
     deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
     deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     // Include VERTEX_SHADER so a subsequent pass that samples this
     // attachment from a vertex shader (legal in WGSL) sees the writes
     // with proper visibility. Fragment is the common case; vertex is
@@ -985,12 +1186,11 @@ rcp<Texture> ContextVulkan::makeTexture(const TextureDesc& desc)
 // makeTextureView
 // ============================================================================
 
-rcp<TextureView> ContextVulkan::makeTextureView(const TextureViewDesc& desc)
+rcp<TextureView> ContextVulkan::makeTextureViewImpl(const TextureViewDesc& desc)
 {
     TextureVulkan* tex = lite_rtti_cast<TextureVulkan*>(desc.texture);
     if (!tex)
         return nullptr;
-
     auto view = rcp<TextureViewVulkan>(
         new TextureViewVulkan(m_manager, ref_rcp(tex), desc));
     view->m_vkDevice = m_vk->device;
@@ -1041,13 +1241,18 @@ rcp<TextureView> ContextVulkan::makeTextureView(const TextureViewDesc& desc)
     viewCI.format = vkFormatFor(tex->format());
     viewCI.subresourceRange.aspectMask = aspectMask;
     viewCI.subresourceRange.baseMipLevel = desc.baseMipLevel;
-    viewCI.subresourceRange.levelCount =
-        desc.mipCount > 0 ? desc.mipCount : VK_REMAINING_MIP_LEVELS;
+    viewCI.subresourceRange.levelCount = desc.mipCount;
     viewCI.subresourceRange.baseArrayLayer = desc.baseLayer;
-    viewCI.subresourceRange.layerCount =
-        desc.layerCount > 0 ? desc.layerCount : VK_REMAINING_ARRAY_LAYERS;
+    viewCI.subresourceRange.layerCount = desc.layerCount;
 
-    m_vk->CreateImageView(m_vk->device, &viewCI, nullptr, &view->m_vkImageView);
+    if (m_vk->CreateImageView(m_vk->device,
+                              &viewCI,
+                              nullptr,
+                              &view->m_vkImageView) != VK_SUCCESS)
+    {
+        setLastError("makeTextureView: vkCreateImageView failed");
+        return nullptr;
+    }
     view->m_vkDestroyImageView = m_vk->DestroyImageView;
 
     return view;
@@ -1209,6 +1414,11 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
         setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return nullptr;
     }
+    if (std::string err; !validateBindGroupDesc(desc, &err))
+    {
+        setLastError("makeBindGroup: %s", err.c_str());
+        return nullptr;
+    }
     BindGroupLayoutVulkan* layout =
         lite_rtti_cast<BindGroupLayoutVulkan*>(desc.layout);
     assert(layout != nullptr);
@@ -1225,6 +1435,7 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
     auto bg = rcp<BindGroupVulkan>(new BindGroupVulkan(m_manager));
     bg->m_context = this;
     bg->m_layoutRef = ref_rcp(layout);
+    bg->recordDynamicRanges(desc);
 
     // Count dynamic-offset UBOs declared by the layout — authoritative.
     uint32_t dynamicCount = 0;
@@ -1294,7 +1505,7 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
         w.buffer = buffer;
         w.dstBinding = dstBinding;
         w.offset = ubo.offset;
-        w.range = (ubo.size > 0) ? ubo.size : buffer->size();
+        w.range = (ubo.size > 0) ? ubo.size : buffer->size() - ubo.offset;
         w.type = layout->hasDynamicOffset(ubo.slot)
                      ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
                      : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1322,9 +1533,10 @@ rcp<BindGroup> ContextVulkan::makeBindGroup(const BindGroupDesc& desc)
                                                 ? VK_IMAGE_ASPECT_STENCIL_BIT
                                                 : 0))
                                         : VK_IMAGE_ASPECT_COLOR_BIT;
-        vkQueueTransitionToLayout(baseTex,
-                                  aspect,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkQueueTransitionToLayout(
+            baseTex,
+            {aspect, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
         auto view = lite_rtti_cast<TextureViewVulkan*>(tex.view);
         assert(view != nullptr);
@@ -1375,8 +1587,6 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
     const RenderPassDesc& desc,
     std::string* outError)
 {
-    finishActiveRenderPass();
-
     std::unique_ptr<RenderPassVulkan> pass =
         std::make_unique<RenderPassVulkan>();
     pass->m_context = this;
@@ -1406,7 +1616,7 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
         assert(ca.view != nullptr);
         auto tex = lite_rtti_cast<TextureVulkan*>(ca.view->texture());
         key.colorFormats[i] = tex->format();
-        key.colorLoadOps[i] = ca.loadOp;
+        key.colorLoadOps[i] = firstUseLoadOp(ca.view, ca.loadOp);
         key.colorStoreOps[i] = ca.storeOp;
         key.colorHasResolve[i] = (ca.resolveTarget != nullptr);
         if (key.colorHasResolve[i])
@@ -1424,31 +1634,35 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
             {
                 resolve.image = resolveTex->m_vkImage;
                 resolve.texture = ref_rcp(resolveTex);
+                resolveTex->vkMarkWritten(resolveView->baseMipLevel(),
+                                          resolveView->baseLayer());
             }
-            resolve.baseMip = resolveView->baseMipLevel();
-            resolve.baseLayer = resolveView->baseLayer();
-            resolve.layerCount = resolveView->layerCount();
+            resolve.range =
+                resolveView->vkAttachmentRange(VK_IMAGE_ASPECT_COLOR_BIT);
             resolve.renderTarget = resolveView->m_vkRenderTarget;
         }
         if (key.sampleCount == 1)
             key.sampleCount = tex->sampleCount();
-        passWidth = tex->width();
-        passHeight = tex->height();
         auto view = lite_rtti_cast<TextureViewVulkan*>(ca.view);
+        if (i == 0)
+        {
+            passWidth = view->width();
+            passHeight = view->height();
+        }
         attachViews[attachCount++] = view->m_vkImageView;
         // Store image handle, layer range, and render target back-ref for
         // finish().
         pass->m_vkColorImages[i] = tex->m_vkImage;
-        pass->m_vkColorBaseLayer[i] = view->baseLayer();
-        pass->m_vkColorLayerCount[i] = view->layerCount();
+        pass->m_vkColorRanges[i] =
+            view->vkAttachmentRange(VK_IMAGE_ASPECT_COLOR_BIT);
         pass->m_vkColorRenderTargets[i] = view->m_vkRenderTarget;
         pass->m_vkColorTextures[i] = ref_rcp(tex);
         // loadOp=load requires COLOR_ATTACHMENT_OPTIMAL before the pass;
         // other loadOps accept UNDEFINED so no pre-transition needed.
-        if (ca.loadOp == LoadOp::load)
+        if (key.colorLoadOps[i] == LoadOp::load)
         {
             vkQueueTransitionToLayout(tex,
-                                      VK_IMAGE_ASPECT_COLOR_BIT,
+                                      pass->m_vkColorRanges[i],
                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
         }
     }
@@ -1472,32 +1686,32 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
             lite_rtti_cast<TextureVulkan*>(desc.depthStencil.view->texture());
         key.hasDepth = true;
         key.depthFormat = dsTex->format();
-        key.depthLoadOp = desc.depthStencil.depthLoadOp;
+        key.depthLoadOp = firstUseLoadOp(desc.depthStencil.view,
+                                         desc.depthStencil.depthLoadOp);
         key.depthStoreOp = desc.depthStencil.depthStoreOp;
         auto view = lite_rtti_cast<TextureViewVulkan*>(desc.depthStencil.view);
         attachViews[attachCount++] = view->m_vkImageView;
         // Store depth image handle and layer range for finish() barrier.
         pass->m_vkDepthImage = dsTex->m_vkImage;
-        pass->m_vkDepthBaseLayer = view->baseLayer();
-        pass->m_vkDepthLayerCount = view->layerCount();
+        // Strict drivers fault on a barrier that omits a present stencil.
+        pass->m_vkDepthRange = view->vkAttachmentRange(
+            VK_IMAGE_ASPECT_DEPTH_BIT |
+            (hasStencilLocal(dsTex->format()) ? VK_IMAGE_ASPECT_STENCIL_BIT
+                                              : 0));
         pass->m_vkDepthTexture = ref_rcp(dsTex);
         // Same loadOp=load pre-transition as colors.
-        if (desc.depthStencil.depthLoadOp == LoadOp::load)
+        if (key.depthLoadOp == LoadOp::load)
         {
-            VkImageAspectFlags aspect =
-                VK_IMAGE_ASPECT_DEPTH_BIT |
-                (hasStencilLocal(dsTex->format()) ? VK_IMAGE_ASPECT_STENCIL_BIT
-                                                  : 0);
             vkQueueTransitionToLayout(
                 dsTex,
-                aspect,
+                pass->m_vkDepthRange,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
         }
         // Depth-only pass: no color attachments contributed dimensions.
         if (passWidth == 0)
         {
-            passWidth = dsTex->width();
-            passHeight = dsTex->height();
+            passWidth = view->width();
+            passHeight = view->height();
         }
     }
 
@@ -1553,6 +1767,10 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
     vkFlushPendingTextureUploads();
     vkFlushPendingInitialTransitions();
 
+    if (gpuProfiling())
+    {
+        pass->m_vkProfileQuery = vkBeginProfilePass(desc);
+    }
     m_vk->CmdBeginRenderPass(m_vkCommandBuffer,
                              &rpBI,
                              VK_SUBPASS_CONTENTS_INLINE);
@@ -1601,12 +1819,57 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
 // wrapCanvasTexture
 // ============================================================================
 
+static TextureFormat oreFormatFor(VkFormat vkFmt)
+{
+    switch (vkFmt)
+    {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            return TextureFormat::bgra8unorm;
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+            return TextureFormat::rgba16float;
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            return TextureFormat::rgb10a2unorm;
+        default:
+            return TextureFormat::rgba8unorm;
+    }
+}
+
 rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
 {
     assert(canvas != nullptr);
+    return wrapTargetImage(canvas->renderTarget(),
+                           canvas->width(),
+                           canvas->height(),
+                           VK_IMAGE_LAYOUT_UNDEFINED);
+}
 
-    auto* vkTarget =
-        static_cast<gpu::RenderTargetVulkan*>(canvas->renderTarget());
+// A host target may change image every frame, so its view starts in the
+// layout Rive's tracker left it in and a load keeps what is there.
+rcp<TextureView> ContextVulkan::wrapRenderTarget(gpu::RenderTarget* target)
+{
+    auto* vkTarget = static_cast<gpu::RenderTargetVulkan*>(target);
+    if (vkTarget == nullptr)
+    {
+        return nullptr;
+    }
+    rcp<TextureView> view =
+        wrapTargetImage(target,
+                        target->width(),
+                        target->height(),
+                        vkTarget->targetLastAccess().layout);
+    if (view != nullptr)
+    {
+        static_cast<TextureVulkan*>(view->texture())->m_vkSampleable = false;
+    }
+    return view;
+}
+
+rcp<TextureView> ContextVulkan::wrapTargetImage(gpu::RenderTarget* target,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                VkImageLayout layout)
+{
+    auto* vkTarget = static_cast<gpu::RenderTargetVulkan*>(target);
 
     VkImage image = vkTarget->targetImage();
     VkImageView imageView = vkTarget->targetImageView();
@@ -1616,28 +1879,10 @@ rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     // Derive the ore format from the actual Vulkan surface format so any MSAA
     // texture created from this descriptor matches the resolve target exactly
     // (Vulkan requires identical formats for MSAA resolve).
-    auto vkFmt = vkTarget->framebufferFormat();
-    TextureFormat oreFormat;
-    switch (vkFmt)
-    {
-        case VK_FORMAT_B8G8R8A8_UNORM:
-            oreFormat = TextureFormat::bgra8unorm;
-            break;
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            oreFormat = TextureFormat::rgba16float;
-            break;
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            oreFormat = TextureFormat::rgb10a2unorm;
-            break;
-        default:
-            oreFormat = TextureFormat::rgba8unorm;
-            break;
-    }
-
     TextureDesc texDesc{};
-    texDesc.width = canvas->width();
-    texDesc.height = canvas->height();
-    texDesc.format = oreFormat;
+    texDesc.width = width;
+    texDesc.height = height;
+    texDesc.format = oreFormatFor(vkTarget->framebufferFormat());
     texDesc.type = TextureType::texture2D;
     texDesc.renderTarget = true;
     texDesc.numMipmaps = 1;
@@ -1649,7 +1894,12 @@ rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     texture->m_vk = m_vk;
     // Mark as not VMA-owned so the destructor skips the VMA free.
     texture->m_vmaAllocation = VK_NULL_HANDLE;
-    texture->m_vkLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    texture->m_vkLayout = layout;
+    // Rive's tracker still says undefined until something draws the canvas
+    if (vkTarget->targetLastAccess().layout != VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+        texture->vkMarkWritten(0, 0);
+    }
     // No destroy pointers needed — caller (canvas) owns the image lifetime.
 
     TextureViewDesc viewDesc{};
@@ -1709,6 +1959,10 @@ rcp<TextureView> ContextVulkan::wrapRiveTexture(gpu::Texture* gpuTex,
     texture->m_vk = m_vk;
     texture->m_vmaAllocation = VK_NULL_HANDLE; // Borrowed, not VMA-owned.
     texture->m_vkLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    texture->vkMarkWritten(0, 0);
+    texture->m_vkOreContext = this;
+    texture->m_vkRiveTexture = ref_rcp(vkTex);
+    m_vkRiveWrapped.push_back(texture.get());
 
     TextureViewDesc viewDesc{};
     viewDesc.texture = texture.get();

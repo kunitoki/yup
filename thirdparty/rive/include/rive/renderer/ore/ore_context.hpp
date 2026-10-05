@@ -4,12 +4,17 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "rive/refcnt.hpp"
+#include "rive/renderer/render_canvas.hpp"
+#include "rive/renderer/rive_render_image.hpp"
 #include "rive/renderer/ore/ore_types.hpp"
 #include "rive/renderer/ore/ore_buffer.hpp"
 #include "rive/renderer/ore/ore_texture.hpp"
@@ -18,10 +23,17 @@
 #include "rive/renderer/ore/ore_pipeline.hpp"
 #include "rive/renderer/ore/ore_bind_group.hpp"
 #include "rive/renderer/ore/ore_render_pass.hpp"
+#include "rive/renderer/ore/cmd/ore_command_buffer.hpp"
+
+namespace rive
+{
+class RenderImage;
+}
 
 namespace rive::gpu
 {
 class RenderCanvas;
+class RenderTarget;
 class Texture;
 } // namespace rive::gpu
 
@@ -68,12 +80,74 @@ enum class ShaderTarget : uint8_t
 class Context
 {
 public:
-    virtual ~Context() = default;
+    // A pass still open has nothing left to record into, so it reads as
+    // finished and its finish and destructor stay quiet.
+    virtual ~Context()
+    {
+        for (const OpenRenderPass& open : m_openRenderPasses)
+        {
+            open.pass->m_finished = true;
+            open.pass->m_context = nullptr;
+        }
+    }
 
     // Resource factories.
     virtual rcp<Buffer> makeBuffer(const BufferDesc& desc) = 0;
     virtual rcp<Texture> makeTexture(const TextureDesc& desc) = 0;
-    virtual rcp<TextureView> makeTextureView(const TextureViewDesc& desc) = 0;
+    // Zero counts span the rest of the texture. Ranges past the texture are
+    // rejected here so scripts get the error at record time on every backend.
+    rcp<TextureView> makeTextureView(TextureViewDesc desc)
+    {
+        Texture* tex = desc.texture;
+        if (tex == nullptr)
+        {
+            setLastError("makeTextureView: texture is null");
+            return nullptr;
+        }
+        uint32_t mips = tex->numMipmaps();
+        uint32_t layers = tex->arrayLayers();
+        if (desc.baseMipLevel >= mips)
+        {
+            setLastError("makeTextureView: baseMipLevel %u exceeds %u levels",
+                         desc.baseMipLevel,
+                         mips);
+            return nullptr;
+        }
+        if (desc.baseLayer >= layers)
+        {
+            setLastError("makeTextureView: baseLayer %u exceeds %u layers",
+                         desc.baseLayer,
+                         layers);
+            return nullptr;
+        }
+        if (desc.mipCount == 0)
+        {
+            desc.mipCount = mips - desc.baseMipLevel;
+        }
+        if (desc.layerCount == 0)
+        {
+            desc.layerCount = layers - desc.baseLayer;
+        }
+        if (desc.mipCount > mips - desc.baseMipLevel)
+        {
+            setLastError(
+                "makeTextureView: mip range [%u, %u) exceeds %u levels",
+                desc.baseMipLevel,
+                desc.baseMipLevel + desc.mipCount,
+                mips);
+            return nullptr;
+        }
+        if (desc.layerCount > layers - desc.baseLayer)
+        {
+            setLastError(
+                "makeTextureView: layer range [%u, %u) exceeds %u layers",
+                desc.baseLayer,
+                desc.baseLayer + desc.layerCount,
+                layers);
+            return nullptr;
+        }
+        return makeTextureViewImpl(desc);
+    }
     virtual rcp<Sampler> makeSampler(const SamplerDesc& desc) = 0;
     virtual rcp<ShaderModule> makeShaderModule(
         const ShaderModuleDesc& desc) = 0;
@@ -86,6 +160,10 @@ public:
     virtual std::unique_ptr<RenderPass> beginRenderPass(
         const RenderPassDesc& desc,
         std::string* outError = nullptr) = 0;
+
+    // Receives a desc whose ranges are already checked and non-zero.
+    virtual rcp<TextureView> makeTextureViewImpl(
+        const TextureViewDesc& desc) = 0;
 
     struct FrameDescriptor
     {
@@ -107,6 +185,105 @@ public:
     virtual void waitForGPU() = 0;
 
     virtual rcp<TextureView> wrapCanvasTexture(gpu::RenderCanvas* canvas) = 0;
+
+    // What a script sees of the host's render target; it builds its
+    // pipelines against these. Zero width means no target is exposed.
+    struct TargetDesc
+    {
+        uint32_t width = 0;
+        uint32_t height = 0;
+        TextureFormat format = TextureFormat::rgba8unorm;
+        uint32_t sampleCount = 1;
+
+        bool operator==(const TargetDesc& o) const
+        {
+            return width == o.width && height == o.height &&
+                   format == o.format && sampleCount == o.sampleCount;
+        }
+        bool operator!=(const TargetDesc& o) const { return !(*this == o); }
+
+        // The single sampled 8 bit target a window host exposes.
+        static TargetDesc color8(uint32_t width, uint32_t height, bool bgra)
+        {
+            return {width,
+                    height,
+                    bgra ? TextureFormat::bgra8unorm
+                         : TextureFormat::rgba8unorm,
+                    1};
+        }
+    };
+
+    // Backends that cannot render into a host's own render target return
+    // null, which drops the passes into it.
+    virtual rcp<TextureView> wrapRenderTarget(gpu::RenderTarget*)
+    {
+        return nullptr;
+    }
+
+    // The host render target scripts draw into under Rive's content. Only the
+    // recording context hands one out, wrapped again each frame at replay.
+    virtual rcp<TextureView> targetView() { return nullptr; }
+
+    // Set by the host around each Ore frame it replays.
+    void setRenderTarget(gpu::RenderTarget* target) { m_renderTarget = target; }
+    gpu::RenderTarget* renderTarget() const { return m_renderTarget; }
+
+    // Color format makeRenderCanvas allocates. A backend that allocates
+    // anything other than rgba8 must override or canvas draws fail the
+    // pipeline compat check at replay.
+    //
+    // An override also has to reach the recorder before any pass records
+    // against a canvas, which a host that binds its real context late cannot
+    // do. DeferredOreContext tripwires on a late bind whose override
+    // disagrees with the default it already recorded.
+    virtual TextureFormat canvasTargetFormat() const
+    {
+        return TextureFormat::rgba8unorm;
+    }
+
+    // True only for the deferred recording context. Callers that would touch
+    // the driver immediately take a recording path instead.
+    virtual bool isRecording() const { return false; }
+
+    // Recording form of Image:view on a canvas backed image. Only the
+    // deferred context implements this, gated by isRecording.
+    virtual rcp<TextureView> recordWrapCanvasImage(
+        gpu::RenderCanvas* /*canvas*/,
+        uint32_t /*width*/,
+        uint32_t /*height*/)
+    {
+        return nullptr;
+    }
+
+    // Recording form of Image:view on a decoded image. Only the deferred
+    // context implements this.
+    virtual rcp<TextureView> recordWrapImageView(uint32_t /*imageId*/,
+                                                 uint32_t /*width*/,
+                                                 uint32_t /*height*/)
+    {
+        return nullptr;
+    }
+
+    // Recording form of Image:view on a foreign image — one this recorder did
+    // not create, such as a file asset decoded through the immediate factory.
+    // It has no mint id, so the registry assigns one and the consumer resolves
+    // it there at replay. Only the deferred context implements this.
+    virtual rcp<TextureView> recordWrapForeignImageView(RenderImage* /*image*/,
+                                                        uint32_t /*width*/,
+                                                        uint32_t /*height*/)
+    {
+        return nullptr;
+    }
+
+    // Sampling wrap of a 2D canvas for Image:view.
+    virtual rcp<TextureView> wrapCanvasSampleView(gpu::RenderCanvas* canvas)
+    {
+        auto* image = canvas->renderImage();
+        return wrapRiveTexture(image->getTexture(),
+                               canvas->width(),
+                               canvas->height());
+    }
+
     virtual rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                              uint32_t width,
                                              uint32_t height) = 0;
@@ -114,30 +291,112 @@ public:
     // Which RSTB shader variant this backend consumes.
     virtual ShaderTarget shaderTarget() const = 0;
 
+    // Whether features() describes a device that will actually run the work.
+    // Only a recording context with no replay device bound yet answers false:
+    // its m_features still holds Features' own initializers, which read as a
+    // real low end device and are indistinguishable from one. A caller that
+    // would branch on a capability must ask this first, because a recorded
+    // branch replays on the device it guessed wrong about.
+    virtual bool featuresKnown() const { return true; }
+
     // ------------------------------------------------------------------------
     // Cross-cutting state and accessors. Non-virtual; live on this base
     // because they are uniform across backends.
     // ------------------------------------------------------------------------
 
+    // Only meaningful when featuresKnown().
     const Features& features() const { return m_features; }
 
-    // Active render pass tracking — used by Lua bindings to auto-finish
-    // stale passes and by backends that enforce one-encoder-at-a-time.
-    RenderPass* activeRenderPass() const { return m_activeRenderPass; }
-    void setActiveRenderPass(RenderPass* pass) { m_activeRenderPass = pass; }
+    // When on, the render pass entry point records and replays instead of
+    // issuing immediately. Seeded from the RIVE_ORE_DEFER env var.
+    bool deferredRecording() const { return m_deferredRecording; }
+    void setDeferredRecording(bool deferred) { m_deferredRecording = deferred; }
 
-    // Called at the top of every backend's beginRenderPass(). If a prior pass
-    // is still open, finish it — matches the Lua binding's auto-finish
-    // contract and means backends that enforce one-encoder-at-a-time (Metal,
-    // D3D12) won't assert when a second beginRenderPass happens within the
-    // same command buffer. Does not clear m_activeRenderPass, because the
-    // pointer identity is owned by the Lua wrapper that called setActive…().
-    inline void finishActiveRenderPass()
+    // Per pass GPU timing, off by default and free while off. Seeded from the
+    // RIVE_ORE_GPU_PROFILE env var. Only Vulkan measures so far; the other
+    // backends never publish rows.
+    bool gpuProfiling() const
     {
-        if (m_activeRenderPass && !m_activeRenderPass->isFinished())
+        return m_gpuProfiling.load(std::memory_order_relaxed);
+    }
+    void setGpuProfiling(bool on)
+    {
+        m_gpuProfiling.store(on, std::memory_order_relaxed);
+    }
+
+    // True when the backend replays the accumulated pendingFrame at endFrame.
+    // False falls back to per pass inline replay, which is byte identical.
+    virtual bool usesDeferredFrameReplay() const { return false; }
+
+    // Per frame stream deferred passes record into; the backend drains it at
+    // endFrame.
+    cmd::OreCommandBuffer& pendingFrame() { return m_pendingFrame; }
+
+    // Recorded passes begun and not finished, outermost first. A nested pass
+    // finishes on its own and moves ahead of the pass it was begun inside.
+    struct OpenRenderPass
+    {
+        uint64_t token; // lets a script call reclaim only what it began
+        RenderPass* pass;
+        cmd::OreCommandBuffer* stream;
+        size_t beginOffset;
+    };
+    // Tokens start at 1, so 0 reclaims every pass.
+    uint64_t nextRenderPassToken() const { return m_nextRenderPassToken; }
+    bool hasOpenRenderPasses() const { return !m_openRenderPasses.empty(); }
+
+    // Call before the pass appends its begin.
+    void beginOpenRenderPass(RenderPass* pass, cmd::OreCommandBuffer& stream)
+    {
+        m_openRenderPasses.push_back({m_nextRenderPassToken++,
+                                      pass,
+                                      &stream,
+                                      stream.commandBytes().size()});
+    }
+
+    // Innermost first, before the caller records its own finish.
+    void finishNestedRenderPasses(RenderPass* pass)
+    {
+        while (!m_openRenderPasses.empty() &&
+               m_openRenderPasses.back().pass != pass)
         {
-            m_activeRenderPass->finish();
+            finishInnermostRenderPass();
         }
+    }
+
+    // Call after the pass appended its finish.
+    void finishOpenRenderPass(RenderPass* pass)
+    {
+        for (size_t i = m_openRenderPasses.size(); i-- > 0;)
+        {
+            if (m_openRenderPasses[i].pass != pass)
+            {
+                continue;
+            }
+            OpenRenderPass entry = m_openRenderPasses[i];
+            m_openRenderPasses.erase(m_openRenderPasses.begin() + i);
+            if (i > 0 && m_openRenderPasses[i - 1].stream == entry.stream)
+            {
+                OpenRenderPass& outer = m_openRenderPasses[i - 1];
+                outer.beginOffset =
+                    entry.stream->hoistNestedRenderPass(outer.beginOffset,
+                                                        entry.beginOffset);
+            }
+            return;
+        }
+    }
+
+    // Innermost first. Returns how many were finished.
+    size_t finishOpenRenderPassesFrom(uint64_t token)
+    {
+        size_t count = 0;
+        while (!m_openRenderPasses.empty() &&
+               m_openRenderPasses.back().token >= token)
+        {
+            finishInnermostRenderPass();
+            count++;
+        }
+        return count;
     }
 
     // Last validation error — set by setPipeline() / setBindGroup() when
@@ -155,12 +414,37 @@ public:
         __attribute__((format(printf, 2, 3)))
 #endif
     {
+        // Sized to the message: shader compiler logs overflow any fixed
+        // buffer, and a truncated error is what the author reads.
         va_list args;
         va_start(args, fmt);
-        char buf[1024];
-        vsnprintf(buf, sizeof(buf), fmt, args);
+        va_list sizing;
+        va_copy(sizing, args);
+        int size = vsnprintf(nullptr, 0, fmt, sizing);
+        va_end(sizing);
+        if (size < 0)
+        {
+            va_end(args);
+            m_lastError = fmt;
+            return;
+        }
+        std::vector<char> buf(static_cast<size_t>(size) + 1);
+        vsnprintf(buf.data(), buf.size(), fmt, args);
         va_end(args);
-        m_lastError = buf;
+        m_lastError.assign(buf.data(), static_cast<size_t>(size));
+    }
+
+    // Shared by baked id, so one bind group does not cost two descriptor
+    // sets on Vulkan and D3D12. Strong refs, released with the context.
+    rcp<BindGroupLayout> findInternedBindGroupLayout(uint64_t layoutId) const
+    {
+        auto it = m_internedLayouts.find(layoutId);
+        return it == m_internedLayouts.end() ? nullptr : it->second;
+    }
+
+    void internBindGroupLayout(uint64_t layoutId, rcp<BindGroupLayout> layout)
+    {
+        m_internedLayouts[layoutId] = std::move(layout);
     }
 
     Context(const Context&) = delete;
@@ -171,23 +455,97 @@ public:
 protected:
     Context(rcp<rive::gpu::GPUResourceManager> manager) :
         m_manager(std::move(manager))
-    {}
+    {
+#ifndef NO_GETENV
+        m_deferredRecording = getenv("RIVE_ORE_DEFER") != nullptr;
+        m_gpuProfiling.store(getenv("RIVE_ORE_GPU_PROFILE") != nullptr,
+                             std::memory_order_relaxed);
+#endif
+    }
 
     Features m_features;
 
-    // Non-null while a RenderPass created by this context is still open.
-    // beginRenderPass() auto-finishes any previous open pass so backends
-    // that enforce one-encoder-at-a-time (Metal, D3D12) don't assert.
-    RenderPass* m_activeRenderPass = nullptr;
+    struct GpuPassTiming
+    {
+        std::string label;
+        double milliseconds;
+    };
+
+    // The pass's label, or its attachment shape when the script gave none.
+    static std::string gpuPassLabel(const RenderPassDesc& desc);
+
+    // Backends hand in each resolved frame's passes here, in any order and
+    // with repeated labels. Prints the per label average once every
+    // kGpuProfileReportFrames frames.
+    static constexpr uint32_t kGpuProfileReportFrames = 120;
+    void publishGpuPassTimings(const std::vector<GpuPassTiming>& rows);
+
+    // A finish that fails to unregister would loop forever, so pop it.
+    void finishInnermostRenderPass()
+    {
+        RenderPass* pass = m_openRenderPasses.back().pass;
+        pass->finish();
+        if (!m_openRenderPasses.empty() &&
+            m_openRenderPasses.back().pass == pass)
+        {
+            m_openRenderPasses.pop_back();
+        }
+    }
+
+    std::vector<OpenRenderPass> m_openRenderPasses;
+    uint64_t m_nextRenderPassToken = 1;
 
     // Last validation error from setPipeline() / setBindGroup().
     std::string m_lastError;
+
+    bool m_deferredRecording = false;
+
+    gpu::RenderTarget* m_renderTarget = nullptr;
+    // Replay reads it on a worker while the host may toggle it.
+    std::atomic<bool> m_gpuProfiling{false};
+    std::unordered_map<std::string, double> m_gpuProfileTotals;
+    uint32_t m_gpuProfileFrames = 0;
+
+    std::unordered_map<uint64_t, rcp<BindGroupLayout>> m_internedLayouts;
+
+    cmd::OreCommandBuffer m_pendingFrame;
 
     // Back-pointer to the GPUResourceManager for GPUResource lifecycle
     // this is actually owned by the render context impl that created the given
     // ore context but its held here for convenience of ore resources that need
     // to defer cleanup until a safe frame is reached.
     rcp<rive::gpu::GPUResourceManager> m_manager;
+};
+
+// The replay device's capabilities carried as data, so a recording thread can
+// answer scripts truthfully without holding the device. A host with the real
+// context in hand captures it with from(); a host whose device lives on
+// another thread or process ships these values across once instead.
+struct ReplayCaps
+{
+    Features features{};
+    bool featuresKnown = false;
+    ShaderTarget shaderTarget = ShaderTarget::glsl;
+    TextureFormat canvasTargetFormat = TextureFormat::rgba8unorm;
+
+    static ReplayCaps from(const Context& real)
+    {
+        ReplayCaps caps;
+        caps.features = real.features();
+        caps.featuresKnown = real.featuresKnown();
+        caps.shaderTarget = real.shaderTarget();
+        caps.canvasTargetFormat = real.canvasTargetFormat();
+        return caps;
+    }
+
+    // Whether the device about to replay is the one this recording was
+    // declared for. A stream recorded against other caps replays the wrong
+    // shader variant and canvas format, wrong in ways replay cannot detect.
+    bool matchesReplayDevice(const Context& real) const
+    {
+        return shaderTarget == real.shaderTarget() &&
+               canvasTargetFormat == real.canvasTargetFormat();
+    }
 };
 
 // ============================================================================

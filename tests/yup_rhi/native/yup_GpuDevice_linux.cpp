@@ -822,7 +822,7 @@ TEST_F (GpuDeviceOpenGLTests, ImageFromTargetReadsPixels)
     EXPECT_EQ (img.getWidth(), 64);
     EXPECT_EQ (img.getHeight(), 64);
 
-    // The backing GPU texture is resolved internally (sampledTexture on GL).
+    // The backing GPU texture is resolved internally.
     EXPECT_TRUE (img.createTextureIfNotPresent (*graphicsContext));
 }
 

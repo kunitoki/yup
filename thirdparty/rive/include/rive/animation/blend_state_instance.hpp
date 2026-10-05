@@ -10,6 +10,7 @@
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/animation/animation_reset.hpp"
 #include "rive/animation/animation_reset_factory.hpp"
+#include "rive/animation/blend_accumulator.hpp"
 
 namespace rive
 {
@@ -46,6 +47,7 @@ template <class K, class T> class BlendStateInstance : public StateInstance
 protected:
     std::vector<BlendStateAnimationInstance<T>> m_AnimationInstances;
     bool m_KeepGoing = true;
+    BlendAccumulator m_accumulator;
 
 public:
     BlendStateInstance(const K* blendState, ArtboardInstance* instance) :
@@ -59,14 +61,9 @@ public:
                 BlendStateAnimationInstance<T>(static_cast<T*>(blendAnimation),
                                                instance));
         }
-        if ((static_cast<LayerStateFlags>(blendState->flags()) &
-             LayerStateFlags::Reset) == LayerStateFlags::Reset)
+        for (auto& animation : m_AnimationInstances)
         {
-            auto animations = std::vector<const LinearAnimation*>();
-            for (auto blendAnimation : blendState->animations())
-            {
-                animations.push_back(blendAnimation->animation());
-            }
+            animation.m_AnimationInstance.blendAccumulator(&m_accumulator);
         }
     }
 
@@ -103,6 +100,7 @@ public:
             }
             animation.m_AnimationInstance.apply(m);
         }
+        m_accumulator.flush();
     }
 
     // Find the animationInstance that corresponds to the blendAnimation.

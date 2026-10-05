@@ -254,6 +254,12 @@ void RawPath::addPoints(std::vector<Vec2D>::const_reverse_iterator& ptIter,
 
 RawPath::Iter RawPath::addPath(const RawPath& src, const Mat2D* mat)
 {
+    if (&src == this)
+    {
+        // The vectors grow while src is read, so a self append copies first.
+        RawPath copy(src);
+        return addPath(copy, mat);
+    }
     size_t initialVerbCount = m_Verbs.size();
     size_t initialPointCount = m_Points.size();
 
@@ -655,8 +661,10 @@ static void expandCubicBoundsForAxis(AABB& bounds,
     }
 }
 
-AABB RawPath::preciseBounds() const
+AABB RawPath::preciseBounds(const Mat2D& xform) const
 {
+    // Affine maps send a curve's control points to the transformed curve's, so
+    // mapping them here is exact and saves transforming a copy of the path.
     AABB bounds = AABB::forExpansion();
     for (auto iter : *this)
     {
@@ -665,52 +673,43 @@ AABB RawPath::preciseBounds() const
         switch (verb)
         {
             case PathVerb::move:
-                bounds.expandTo(bounds, pts[0]);
+                bounds.expandTo(bounds, xform * pts[0]);
                 break;
             case PathVerb::line:
-                bounds.expandTo(bounds, pts[1]);
+                bounds.expandTo(bounds, xform * pts[1]);
                 break;
             case PathVerb::cubic:
-                expandCubicBoundsForAxis(bounds,
-                                         0,
-                                         pts[0].x,
-                                         pts[1].x,
-                                         pts[2].x,
-                                         pts[3].x);
-                expandCubicBoundsForAxis(bounds,
-                                         1,
-                                         pts[0].y,
-                                         pts[1].y,
-                                         pts[2].y,
-                                         pts[3].y);
+            {
+                Vec2D p0 = xform * pts[0];
+                Vec2D p1 = xform * pts[1];
+                Vec2D p2 = xform * pts[2];
+                Vec2D p3 = xform * pts[3];
+                expandCubicBoundsForAxis(bounds, 0, p0.x, p1.x, p2.x, p3.x);
+                expandCubicBoundsForAxis(bounds, 1, p0.y, p1.y, p2.y, p3.y);
                 break;
+            }
             case PathVerb::close:
                 break;
             case PathVerb::quad:
+            {
                 // Rive very rarely computes precise bounds for quadratics so we
                 // don't implement this specific case. We do use it in the
                 // editor for some cases so we still solve it as a cubic.
-                Vec2D pt1 = Vec2D::lerp(pts[0], pts[1], 2 / 3.f);
-                Vec2D pt2 = Vec2D::lerp(pts[2], pts[1], 2 / 3.f);
-                expandCubicBoundsForAxis(bounds,
-                                         0,
-                                         pts[0].x,
-                                         pt1.x,
-                                         pt2.x,
-                                         pts[2].x);
-                expandCubicBoundsForAxis(bounds,
-                                         1,
-                                         pts[0].y,
-                                         pt1.y,
-                                         pt2.y,
-                                         pts[2].y);
+                Vec2D p0 = xform * pts[0];
+                Vec2D p1 = xform * pts[1];
+                Vec2D p2 = xform * pts[2];
+                Vec2D pt1 = Vec2D::lerp(p0, p1, 2 / 3.f);
+                Vec2D pt2 = Vec2D::lerp(p2, p1, 2 / 3.f);
+                expandCubicBoundsForAxis(bounds, 0, p0.x, pt1.x, pt2.x, p2.x);
+                expandCubicBoundsForAxis(bounds, 1, p0.y, pt1.y, pt2.y, p2.y);
                 break;
+            }
         }
     }
     return bounds;
 }
 
-float RawPath::computeCoarseArea() const
+float RawPath::computeCoarseArea(Vec2D origin) const
 {
     float a = 0;
     Vec2D contourP0 = {0, 0}, lastPt = {0, 0};
@@ -722,13 +721,13 @@ float RawPath::computeCoarseArea() const
         {
             case PathVerb::move:
                 a += Vec2D::cross(lastPt, contourP0);
-                contourP0 = lastPt = pts[0];
+                contourP0 = lastPt = pts[0] - origin;
                 break;
             case PathVerb::close:
                 break;
             case PathVerb::line:
-                a += Vec2D::cross(lastPt, pts[1]);
-                lastPt = pts[1];
+                a += Vec2D::cross(lastPt, pts[1] - origin);
+                lastPt = pts[1] - origin;
                 break;
             case PathVerb::quad:
                 RIVE_UNREACHABLE();
@@ -747,19 +746,19 @@ float RawPath::computeCoarseArea() const
                     for (; t.x < 1; t += dt)
                     {
                         float4 p = evalCubic(t);
-                        Vec2D lo = {p.x, p.y};
+                        Vec2D lo = Vec2D(p.x, p.y) - origin;
                         a += Vec2D::cross(lastPt, lo);
                         lastPt = lo;
                         if (t.y < 1)
                         {
-                            Vec2D hi = {p.z, p.w};
+                            Vec2D hi = Vec2D(p.z, p.w) - origin;
                             a += Vec2D::cross(lastPt, hi);
                             lastPt = hi;
                         }
                     }
                 }
-                a += Vec2D::cross(lastPt, pts[3]);
-                lastPt = pts[3];
+                a += Vec2D::cross(lastPt, pts[3] - origin);
+                lastPt = pts[3] - origin;
                 break;
             }
         }

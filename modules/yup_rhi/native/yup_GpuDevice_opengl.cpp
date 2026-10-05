@@ -306,8 +306,6 @@ public:
         int height = 0;
         rive::rcp<rive::gpu::RenderCanvas> renderCanvas;
         rive::gpu::RenderContext* renderContext = nullptr;
-        rive::gpu::RenderContext* mirrorContext = nullptr;
-        mutable rive::rcp<rive::gpu::Texture> sampledMirrorTex;
         OffscreenContextSlot* contextSlot = nullptr;
 
         int getWidth() const noexcept override { return width; }
@@ -336,38 +334,6 @@ public:
 
             return renderCanvas->renderImage()->refTexture();
         }
-
-        rive::rcp<rive::gpu::Texture> getOrCreateSampledTexture() override
-        {
-#if defined(ORE_BACKEND_GL) && defined(RIVE_CANVAS)
-            if (sampledMirrorTex != nullptr)
-                return sampledMirrorTex;
-
-            if (mirrorContext == nullptr || renderCanvas == nullptr)
-                return nullptr;
-
-            auto renderImage = renderCanvas->renderImage();
-            if (renderImage == nullptr)
-                return nullptr;
-
-            if (auto sourceTex = renderImage->refTexture())
-            {
-                auto mirrorImage = rive::getCanvasImportMirrorGL (
-                    mirrorContext, sourceTex.get(), (uint32_t) width, (uint32_t) height);
-                if (mirrorImage != nullptr)
-                    sampledMirrorTex = mirrorImage->refTexture();
-            }
-
-            return sampledMirrorTex;
-#else
-            return nullptr;
-#endif
-        }
-
-        rive::rcp<rive::gpu::Texture> getSampledTexture() const override
-        {
-            return sampledMirrorTex;
-        }
     };
 
     std::unique_ptr<OffscreenTarget> createOffscreenTarget (int width, int height) override
@@ -385,7 +351,6 @@ public:
             target->width = width;
             target->height = height;
             target->renderContext = nullptr;
-            target->mirrorContext = renderContext.get();
             target->contextSlot = nullptr;
             target->renderCanvas = std::move (renderCanvas);
             return target;
@@ -407,7 +372,6 @@ public:
             target->width = width;
             target->height = height;
             target->renderContext = contextSlot->renderContext.get();
-            target->mirrorContext = contextSlot->renderContext.get();
             target->contextSlot = contextSlot;
 
             target->renderCanvas = target->renderContext->makeRenderCanvas (static_cast<uint32_t> (width), static_cast<uint32_t> (height));
@@ -502,7 +466,10 @@ public:
             glReadPixels (0, 0, target.width, target.height, GL_RGBA, GL_UNSIGNED_BYTE, dst);
             glBindFramebuffer (GL_READ_FRAMEBUFFER, 0);
 
-            // Flip vertically: OpenGL framebuffer origin is bottom-left.
+            // Rive renders canvases top-down, other GL targets keep the bottom-left origin.
+            if (! renderTarget->bottomUp())
+                return true;
+
             offscreenPixelsRow.resize (bytesPerRow);
             auto* bytes = static_cast<uint8_t*> (dst);
             const int halfHeight = target.height / 2;

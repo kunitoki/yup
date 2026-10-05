@@ -5,11 +5,11 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char stencil_draw[] = R"===(#ifdef CB
-A1(a0)p0(0,L3,KB);B1 R3 S3 A4 B4 C1(OF,a0,G,v,T){q0(v,G,KB,L3);g N=K3(KB.xy);uint Z6=floatBitsToUint(KB.z)&0xffffu;N.z=ca(Z6);D1(N);}
+const char stencil_draw[] = R"===(#ifdef BB
+c1(d0) K(0,c4,MB);d1 j4 k4 P4 Q4 v1(FG,d0,D,G,r){L(G,D,MB,c4);e I=H3(MB.xy);uint zi=floatBitsToUint(MB.z)&0xffffu;I.z=I8(zi,0xffu);w1(I);}
 #endif
 #ifdef FB
-B3 C3 Y2(i,DE){G2(B0(.0));}
+N3 O3 j3(i,PE){P2(I0(.0));}
 #endif
 )===";
 } // namespace glsl

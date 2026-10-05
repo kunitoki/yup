@@ -115,13 +115,6 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
-#if YUP_RIVE_USE_DAWN
-#include "native/yup_GraphicsContext_dawn.cpp"
-#include "native/yup_GraphicsContext_dawn_helper.cpp"
-#endif
-
-//==============================================================================
-
 #ifndef YUP_DRAWABLE_LOGGING
 #define YUP_DRAWABLE_LOGGING 0
 #endif

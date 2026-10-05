@@ -29,10 +29,13 @@ void resetCounters();
 #endif
 
 // Helper for constructing and destructing arrays of objects.
-template <typename T, bool IsTrivial = std::is_trivially_copyable<T>()> class SimpleArrayHelper
+template <typename T,
+          bool IsPOD = std::is_trivial<T>() && std::is_standard_layout<T>()>
+class SimpleArrayHelper
 {
 public:
-    static_assert(!std::is_trivially_copyable<T>(), "This helper is for non-trivial types.");
+    static_assert(!std::is_trivial<T>() || !std::is_standard_layout<T>(),
+                  "This helper is for non-POD types.");
     static void DefaultConstructArray(T* ptr, T* end)
     {
         for (; ptr < end; ++ptr)
@@ -50,11 +53,12 @@ public:
     }
 };
 
-// Specialized helper for constructing and destructing arrays of trivial objects.
+// Specialized helper for constructing and destructing arrays of POD objects.
 template <typename T> class SimpleArrayHelper<T, true>
 {
 public:
-    static_assert(std::is_trivially_copyable<T>(), "This helper is only for trivial types.");
+    static_assert(std::is_trivial<T>() && std::is_standard_layout<T>(),
+                  "This helper is only for trivial types.");
     static void DefaultConstructArray(T* ptr, T* end) {}
     static void CopyConstructArray(const T* first, const T* end, T* ptr)
     {
@@ -240,15 +244,12 @@ private:
         SimpleArrayTesting::reallocCount++;
 #endif
         // Call destructor for elements when sizing down.
-        if (this->m_ptr && size < this->m_size)
-            SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
-                                                this->m_ptr + this->m_size);
+        SimpleArrayHelper<T>::DestructArray(this->m_ptr + size,
+                                            this->m_ptr + this->m_size);
         this->m_ptr = static_cast<T*>(realloc(this->m_ptr, size * sizeof(T)));
-        // Call constructor for elements when sizing up. realloc(ptr, 0) may
-        // legally return nullptr, and offsetting a null pointer is UB.
-        if (this->m_ptr && size > this->m_size)
-            SimpleArrayHelper<T>::DefaultConstructArray(this->m_ptr + this->m_size,
-                                                        this->m_ptr + size);
+        // Call constructor for elements when sizing up.
+        SimpleArrayHelper<T>::DefaultConstructArray(this->m_ptr + this->m_size,
+                                                    this->m_ptr + size);
         this->m_size = size;
     }
 

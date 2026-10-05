@@ -1,28 +1,28 @@
 {
   "dependencies": [
     {
-      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
+      "checkout": "7c9291ae1e49d6adc2c3e38074ba27051fe677ac",
       "name": "rive",
-      "ref": "runtime-v0.1.155",
-      "version": "0.1.155"
+      "ref": "runtime-v0.1.512",
+      "version": "0.1.512"
     },
     {
-      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
+      "checkout": "7c9291ae1e49d6adc2c3e38074ba27051fe677ac",
       "name": "glad",
-      "ref": "runtime-v0.1.155",
-      "version": "0.1.155"
+      "ref": "runtime-v0.1.512",
+      "version": "0.1.512"
     },
     {
-      "checkout": "244aa55bd623d03608576a0874b15f1c5bdc4a35",
+      "checkout": "7c9291ae1e49d6adc2c3e38074ba27051fe677ac",
       "name": "rive_decoders",
-      "ref": "runtime-v0.1.155",
-      "version": "0.1.155"
+      "ref": "runtime-v0.1.512",
+      "version": "0.1.512"
     },
     {
-      "checkout": "c99c73a96b046723c188dc4f54b02b9d50791325",
+      "checkout": "c1c57894ff8f4fdacf171179eddd04c27cc5f7da",
       "name": "luau",
-      "ref": "rive_0_728_vec3",
-      "version": "0.728"
+      "ref": "rive_0_734_ice",
+      "version": "0.734"
     },
     {
       "checkout": "4c298c5e3012d891b8b375c6dd215f580a36ed60",
@@ -43,13 +43,13 @@
       "version": "2.6"
     },
     {
-      "checkout": "b827168e5e66c56b3117660a12607fe4f54ea33c",
+      "checkout": "dd288d29db01ba9da03d0c3684c00e6ae74e6e61",
       "name": "yoga_library",
-      "ref": "rive_changes_v2_0_1_2",
-      "version": "2.0.1.2"
+      "ref": "rive_changes_v2_0_1_4_grid",
+      "version": "2.0.1.4"
     },
     {
-      "checkout": "cae474558968f015124d7369556a4b1016276e3a",
+      "checkout": "d76d5106f041b97b3462d15bce738f2a4412de47",
       "name": "libpng",
       "ref": "libpng16",
       "version": "1.6"
@@ -67,5 +67,5 @@
       "version": "1.3.1"
     }
   ],
-  "generatedAt": "2026-07-06T15:27:46.306808+00:00"
+  "generatedAt": "2026-10-04T19:55:41.771415+00:00"
 }

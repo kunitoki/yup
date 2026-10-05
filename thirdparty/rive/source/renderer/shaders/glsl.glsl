@@ -81,13 +81,13 @@
 #endif
 
 // clang-format off
-#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_CLIP_RECT) && defined(GL_ES) && !defined(@DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS)
+#if defined(@RENDER_MODE_DEPTH_STENCIL) && defined(@ENABLE_CLIP_RECT) && defined(GL_ES) && !defined(@DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS)
 #ifdef GL_EXT_clip_cull_distance
 #extension GL_EXT_clip_cull_distance : require
 #elif defined(GL_ANGLE_clip_cull_distance)
 #extension GL_ANGLE_clip_cull_distance : require
 #endif
-#endif // RENDER_MODE_MSAA && ENABLE_CLIP_RECT && GL_ES && !DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
+#endif // RENDER_MODE_DEPTH_STENCIL && ENABLE_CLIP_RECT && GL_ES && !DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
 // clang-format on
 
 #if @GLSL_VERSION >= 310
@@ -168,8 +168,8 @@
     layout(binding = IDX) uniform highp itexture2D NAME
 #define TEXTURE_R32UI(SET, IDX, NAME)                                          \
     layout(binding = IDX) uniform highp utexture2D NAME
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA)
-#endif // @FRAGMENT && @RENDER_MODE_MSAA
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL)
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL
 #elif @GLSL_VERSION >= 310
 #define TEXTURE_RGBA32UI(SET, IDX, NAME)                                       \
     layout(binding = IDX) uniform highp usampler2D NAME
@@ -218,9 +218,11 @@
     texture(sampler2D(NAME, SAMPLER_NAME), COORD, LODBIAS)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(sampler2D(NAME, SAMPLER_NAME), COORD, DDX, DDY)
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA)
+// Only the multisampled dst read uses gl_SampleMaskIn.
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL) &&               \
+    defined(@MSAA_DST_COLOR)
 #extension GL_OES_sample_variables : require
-#endif // @FRAGMENT && @RENDER_MODE_MSAA
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL && @MSAA_DST_COLOR
 
 #else // @TARGET_SPIRV -> !@TARGET_SPIRV
 
@@ -245,10 +247,10 @@
 #define TEXTURE_SAMPLE_DYNAMIC_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)  \
     TEXTURE_SAMPLE_LODBIAS(TEXTURE, SAMPLER_NAME, COORD, LODBIAS)
 
-// Polyfill the feather texture as a sampler2D since ES doesn't support
-// sampler1DArray. This is why the macro needs "ARRAY_INDEX_NORMALIZED": when
-// polyfilled as a 2D texture, the "array index" needs to be a 0..1 normalized
-// y coordinate instead of the literal array index.
+// Polyfill the gaussian integral texture as a sampler2D since ES doesn't
+// support sampler1DArray. This is why the macro needs "ARRAY_INDEX_NORMALIZED":
+// when polyfilled as a 2D texture, the "array index" needs to be a 0..1
+// normalized y coordinate instead of the literal array index.
 #define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME) TEXTURE_R16F(SET, IDX, NAME)
 // clang-format off
 // Clang formatting on this line trips up the Qualcomm compiler.
@@ -351,7 +353,7 @@
 #define PLS_CONTEXT_UNPACK , _plsIdx
 
 #ifdef @TARGET_WGSL
-// WGSL has no `coherent` qualifier — naga would propagate it as an invalid
+// WGSL has no `coherent` qualifier - naga would propagate it as an invalid
 // `@coherent` attribute that Tint rejects. WGSL's storage memory model
 // already guarantees the visibility we need across the atomic ops below.
 #define PLS_DECLUI_UAV(IDX, NAME)                                              \
@@ -502,10 +504,6 @@
 #define PLS_FRAG_COLOR_MAIN(NAME)                                              \
     layout(location = 0, rgba8) out half4 _fragColor;                          \
     PLS_MAIN(NAME)
-
-#define PLS_FRAG_COLOR_MAIN_WITH_IMAGE_UNIFORMS(NAME)                          \
-    layout(location = 0, rgba8) out half4 _fragColor;                          \
-    PLS_MAIN(NAME)
 #endif
 #endif
 
@@ -599,26 +597,35 @@
 #define PLS_DECL4F_READONLY PLS_DECL4F
 #endif
 
-#ifdef @TARGET_SPIRV
-#define gl_VertexID gl_VertexIndex
-#endif
-
 // clang-format off
-#ifdef @ENABLE_INSTANCE_INDEX
-#  ifdef @TARGET_SPIRV
+#ifdef @TARGET_SPIRV
+#  define VERTEX_INDEX gl_VertexIndex
+#  ifdef @ENABLE_INSTANCE_INDEX
 #    define INSTANCE_INDEX gl_InstanceIndex
 #  else
+#    define INSTANCE_INDEX 0
+#  endif
+#else
+#  ifdef @ENABLE_BASE_VERTEX
+     // GL has no base vertex for indexed draws. The rendering backend sets
+     // this uniform for us instead.
+     uniform highp int @BASE_VERTEX_UNIFORM_NAME;
+#    define VERTEX_INDEX (gl_VertexID + @BASE_VERTEX_UNIFORM_NAME)
+#  else
+#    define VERTEX_INDEX gl_VertexID
+#  endif
+#  ifdef @ENABLE_INSTANCE_INDEX
 #    ifdef @BASE_INSTANCE_UNIFORM_NAME
        // gl_BaseInstance isn't supported on this platform. The rendering
        // backend will set this uniform for us instead.
        uniform highp int @BASE_INSTANCE_UNIFORM_NAME;
 #      define INSTANCE_INDEX (gl_InstanceID + @BASE_INSTANCE_UNIFORM_NAME)
 #    else
-#        define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
+#      define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
 #    endif
+#  else
+#    define INSTANCE_INDEX 0
 #  endif
-#else
-#  define INSTANCE_INDEX 0
 #endif
 // clang-format on
 
@@ -628,17 +635,17 @@
 #define CLIP_CONTEXT_FORWARD
 #define CLIP_CONTEXT_UNPACK
 
-#define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
+#define VERTEX_MAIN(NAME, Attrs, attrs, _vertexIdx, _instanceIdx)              \
     void main()                                                                \
     {                                                                          \
-        int _vertexID = gl_VertexID;                                           \
-        int _instanceID = INSTANCE_INDEX;
-
-#define IMAGE_RECT_VERTEX_MAIN VERTEX_MAIN
+        int _vertexIdx = VERTEX_INDEX;                                         \
+        int _instanceIdx = INSTANCE_INDEX;
 
 // clang-format off
-#define IMAGE_MESH_VERTEX_MAIN(NAME, PositionAttr, position, UVAttr, uv, _vertexID) \
-    VERTEX_MAIN(NAME, PositionAttr, position, _vertexID, _instanceID)
+#define IMAGE_RECT_VERTEX_MAIN(NAME, Attrs, attrs, ImageDrawAttrs, imageDrawAttrs, _vertexIdx, _instanceIdx)                                    \
+    VERTEX_MAIN(NAME, Attrs, attrs, _vertexIdx, _instanceIdx)
+#define IMAGE_MESH_VERTEX_MAIN(NAME, PositionAttr, position, UVAttr, uv, ImageDrawAttrs,  imageDrawAttrs, _vertexIdx)                                      \
+    VERTEX_MAIN(NAME, PositionAttr, position, _vertexIdx, _instanceIdx)
 // clang-format on
 
 #define VARYING_INIT(NAME, TYPE)
@@ -653,7 +660,8 @@
     layout(location = 0) out DATA_TYPE _fd;                                    \
     void main()
 
-#define FRAG_DATA_MAIN_WITH_CLOCKWISE FRAG_DATA_MAIN
+#define FRAG_DATA_MAIN_WITH_CLOCKWISE(DATA_TYPE, NAME)                         \
+    FRAG_DATA_MAIN(DATA_TYPE, NAME)
 
 #define _clockwise gl_FrontFacing
 
@@ -686,16 +694,8 @@
     PLS_STOREUI(PLANE, VALUE);
 #endif
 
-#define PLS_MAIN_WITH_IMAGE_UNIFORMS(NAME) PLS_MAIN(NAME)
-
 #ifndef PLS_FRAG_COLOR_MAIN
 #define PLS_FRAG_COLOR_MAIN(NAME)                                              \
-    layout(location = 0) out half4 _fragColor;                                 \
-    PLS_MAIN(NAME)
-#endif
-
-#ifndef PLS_FRAG_COLOR_MAIN_WITH_IMAGE_UNIFORMS
-#define PLS_FRAG_COLOR_MAIN_WITH_IMAGE_UNIFORMS(NAME)                          \
     layout(location = 0) out half4 _fragColor;                                 \
     PLS_MAIN(NAME)
 #endif
@@ -703,6 +703,9 @@
 #define EMIT_PLS_AND_FRAG_COLOR EMIT_PLS
 
 #if defined(@TARGET_SPIRV) && !defined(@TARGET_WGSL)
+#ifdef @MSAA_DST_COLOR
+// The color attachment is multisampled, so the read has to average the samples
+// this fragment actually covers.
 #define DST_COLOR_TEXTURE(NAME)                                                \
     layout(input_attachment_index = 0,                                         \
            binding = COLOR_PLANE_IDX,                                          \
@@ -713,6 +716,14 @@
                          subpassLoad(NAME, 2),                                 \
                          subpassLoad(NAME, 3)),                                \
                     gl_SampleMaskIn[0])
+#else
+// The color attachment is single-sampled, so fetch it directly.
+#define DST_COLOR_TEXTURE(NAME)                                                \
+    layout(input_attachment_index = 0,                                         \
+           binding = COLOR_PLANE_IDX,                                          \
+           set = PLS_TEXTURE_BINDINGS_SET) uniform mediump subpassInput NAME
+#define DST_COLOR_FETCH(NAME) subpassLoad(NAME)
+#endif // @MSAA_DST_COLOR
 #else
 #define DST_COLOR_TEXTURE(NAME)                                                \
     TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, NAME)
@@ -735,4 +746,5 @@ INLINE half4 polyfill_unpackUnorm4x8(uint u)
 // incorrectly declare this builtin on ES 3.0, leading to compiler errors if we
 // just declare it as a normal function.
 #define unpackUnorm4x8 polyfill_unpackUnorm4x8
+
 #endif

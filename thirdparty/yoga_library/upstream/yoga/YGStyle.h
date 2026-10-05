@@ -10,14 +10,52 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <type_traits>
 
 #include <yoga/Yoga.h>
 
 #include "CompactValue.h"
 #include "YGFloatOptional.h"
+#include "YGGridTrack.h"
 #include "Yoga-internal.h"
 #include "BitUtils.h"
+
+namespace facebook::yoga {
+
+// rive: grid style is boxed out of YGStyle so non-grid nodes (the common case)
+// don't carry ~128B of grid track/line fields. Only allocated when a grid or
+// stack property is actually set; a null box means all-default.
+struct GridStyle {
+  GridTrackList gridTemplateColumns = {};
+  GridTrackList gridTemplateRows = {};
+  GridTrackList gridAutoColumns = {};
+  GridTrackList gridAutoRows = {};
+  GridLine gridColumnStart = {};
+  GridLine gridColumnEnd = {};
+  GridLine gridRowStart = {};
+  GridLine gridRowEnd = {};
+};
+
+namespace detail {
+// A unique_ptr that deep-copies its pointee, so the owning struct stays
+// value-copyable (YGStyle is cloned by value) without a hand-written copy ctor.
+template <typename T>
+struct CopyableBox {
+  std::unique_ptr<T> ptr;
+  CopyableBox() = default;
+  CopyableBox(const CopyableBox& other)
+      : ptr(other.ptr ? std::make_unique<T>(*other.ptr) : nullptr) {}
+  CopyableBox& operator=(const CopyableBox& other) {
+    ptr = other.ptr ? std::make_unique<T>(*other.ptr) : nullptr;
+    return *this;
+  }
+  CopyableBox(CopyableBox&&) = default;
+  CopyableBox& operator=(CopyableBox&&) = default;
+};
+} // namespace detail
+
+} // namespace facebook::yoga
 
 class YOGA_EXPORT YGStyle {
   template <typename Enum>
@@ -119,6 +157,21 @@ private:
   Dimensions maxDimensions_ = {};
   // Yoga specific properties, not compatible with flexbox specification
   YGFloatOptional aspectRatio_ = {};
+
+  // rive: grid style backport (facebook/yoga PR #1893). justifyItems/Self are
+  // small (used by grid + stack) so stay inline; the heavy track/line fields
+  // are boxed (see GridStyle) so non-grid nodes don't pay for them.
+  YGJustify justifyItems_ = YGJustifyStretch;
+  YGJustify justifySelf_ = YGJustifyAuto;
+  facebook::yoga::detail::CopyableBox<facebook::yoga::GridStyle> gridStyle_;
+
+  // Allocate the grid box on first write; non-grid nodes never call this.
+  facebook::yoga::GridStyle& ensureGridStyle() {
+    if (!gridStyle_.ptr) {
+      gridStyle_.ptr = std::make_unique<facebook::yoga::GridStyle>();
+    }
+    return *gridStyle_.ptr;
+  }
 
 public:
   // for library users needing a type
@@ -230,6 +283,143 @@ public:
   // Yoga specific properties, not compatible with flexbox specification
   YGFloatOptional aspectRatio() const { return aspectRatio_; }
   Ref<YGFloatOptional, &YGStyle::aspectRatio_> aspectRatio() { return {*this}; }
+
+  // rive: grid style backport (facebook/yoga PR #1893)
+  YGJustify justifyItems() const { return justifyItems_; }
+  void setJustifyItems(YGJustify value) { justifyItems_ = value; }
+
+  YGJustify justifySelf() const { return justifySelf_; }
+  void setJustifySelf(YGJustify value) { justifySelf_ = value; }
+
+  // Grid Container Properties. Getters return a shared default when the box is
+  // unallocated (non-grid node), which reads identically to the old all-default
+  // inline fields; setters allocate the box on first write.
+  const facebook::yoga::GridTrackList& gridTemplateColumns() const {
+    static const facebook::yoga::GridTrackList kEmpty{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridTemplateColumns : kEmpty;
+  }
+  void setGridTemplateColumns(facebook::yoga::GridTrackList value) {
+    ensureGridStyle().gridTemplateColumns = std::move(value);
+  }
+  void resizeGridTemplateColumns(size_t count) {
+    ensureGridStyle().gridTemplateColumns.resize(count);
+  }
+  void setGridTemplateColumnAt(
+      size_t index,
+      facebook::yoga::GridTrackSize value) {
+    ensureGridStyle().gridTemplateColumns[index] = value;
+  }
+
+  const facebook::yoga::GridTrackList& gridTemplateRows() const {
+    static const facebook::yoga::GridTrackList kEmpty{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridTemplateRows : kEmpty;
+  }
+  void setGridTemplateRows(facebook::yoga::GridTrackList value) {
+    ensureGridStyle().gridTemplateRows = std::move(value);
+  }
+  void resizeGridTemplateRows(size_t count) {
+    ensureGridStyle().gridTemplateRows.resize(count);
+  }
+  void setGridTemplateRowAt(size_t index, facebook::yoga::GridTrackSize value) {
+    ensureGridStyle().gridTemplateRows[index] = value;
+  }
+
+  const facebook::yoga::GridTrackList& gridAutoColumns() const {
+    static const facebook::yoga::GridTrackList kEmpty{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridAutoColumns : kEmpty;
+  }
+  void setGridAutoColumns(facebook::yoga::GridTrackList value) {
+    ensureGridStyle().gridAutoColumns = std::move(value);
+  }
+  void resizeGridAutoColumns(size_t count) {
+    ensureGridStyle().gridAutoColumns.resize(count);
+  }
+  void setGridAutoColumnAt(size_t index, facebook::yoga::GridTrackSize value) {
+    ensureGridStyle().gridAutoColumns[index] = value;
+  }
+
+  const facebook::yoga::GridTrackList& gridAutoRows() const {
+    static const facebook::yoga::GridTrackList kEmpty{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridAutoRows : kEmpty;
+  }
+  void setGridAutoRows(facebook::yoga::GridTrackList value) {
+    ensureGridStyle().gridAutoRows = std::move(value);
+  }
+  void resizeGridAutoRows(size_t count) {
+    ensureGridStyle().gridAutoRows.resize(count);
+  }
+  void setGridAutoRowAt(size_t index, facebook::yoga::GridTrackSize value) {
+    ensureGridStyle().gridAutoRows[index] = value;
+  }
+
+  // Grid Item Properties
+  const facebook::yoga::GridLine& gridColumnStart() const {
+    static const facebook::yoga::GridLine kDefault{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridColumnStart : kDefault;
+  }
+  void setGridColumnStart(facebook::yoga::GridLine value) {
+    ensureGridStyle().gridColumnStart = value;
+  }
+
+  const facebook::yoga::GridLine& gridColumnEnd() const {
+    static const facebook::yoga::GridLine kDefault{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridColumnEnd : kDefault;
+  }
+  void setGridColumnEnd(facebook::yoga::GridLine value) {
+    ensureGridStyle().gridColumnEnd = value;
+  }
+
+  const facebook::yoga::GridLine& gridRowStart() const {
+    static const facebook::yoga::GridLine kDefault{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridRowStart : kDefault;
+  }
+  void setGridRowStart(facebook::yoga::GridLine value) {
+    ensureGridStyle().gridRowStart = value;
+  }
+
+  const facebook::yoga::GridLine& gridRowEnd() const {
+    static const facebook::yoga::GridLine kDefault{};
+    return gridStyle_.ptr ? gridStyle_.ptr->gridRowEnd : kDefault;
+  }
+  void setGridRowEnd(facebook::yoga::GridLine value) {
+    ensureGridStyle().gridRowEnd = value;
+  }
+
+  // rive: yoga 3.x-style computed accessors used by the grid backport (#1894)
+  float computeMarginForAxis(YGFlexDirection axis, float widthSize) const;
+  float computeInlineStartMargin(
+      YGFlexDirection axis,
+      YGDirection direction,
+      float widthSize) const;
+  float computeInlineEndMargin(
+      YGFlexDirection axis,
+      YGDirection direction,
+      float widthSize) const;
+  float computeInlineStartPadding(
+      YGFlexDirection axis,
+      YGDirection direction,
+      float widthSize) const;
+  float computeInlineStartBorder(YGFlexDirection axis, YGDirection direction)
+      const;
+  bool inlineStartMarginIsAuto(YGFlexDirection axis, YGDirection direction)
+      const;
+  bool inlineEndMarginIsAuto(YGFlexDirection axis, YGDirection direction)
+      const;
+  float computeGapForDimension(YGDimension dimension, float availableSize)
+      const;
+  YGFloatOptional resolvedMinDimension(
+      YGDirection direction,
+      YGDimension dimension,
+      float referenceLength,
+      float ownerWidth) const;
+  YGFloatOptional resolvedMaxDimension(
+      YGDirection direction,
+      YGDimension dimension,
+      float referenceLength,
+      float ownerWidth) const;
+  facebook::yoga::StyleSizeLength dimension(YGDimension dimension) const;
+  facebook::yoga::StyleSizeLength minDimension(YGDimension dimension) const;
+  facebook::yoga::StyleSizeLength maxDimension(YGDimension dimension) const;
 };
 
 YOGA_EXPORT bool operator==(const YGStyle& lhs, const YGStyle& rhs);

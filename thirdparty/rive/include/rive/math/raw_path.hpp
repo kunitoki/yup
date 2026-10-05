@@ -25,6 +25,15 @@ class CommandPath;
 class RawPath
 {
 public:
+    RawPath() = default;
+
+    // Bulk copy for deserialization, arrays trusted self-consistent. Contour
+    // bookkeeping stays default since the path is consumed, not built.
+    RawPath(Span<const PathVerb> verbs, Span<const Vec2D> points) :
+        m_Points(points.data(), points.data() + points.size()),
+        m_Verbs(verbs.data(), verbs.data() + verbs.size())
+    {}
+
     bool operator==(const RawPath& o) const;
     bool operator!=(const RawPath& o) const { return !(*this == o); }
 
@@ -33,7 +42,9 @@ public:
 #ifdef DEBUG
     void printCode() const;
 #endif
-    AABB preciseBounds() const;
+    AABB preciseBounds() const { return preciseBounds(Mat2D()); }
+    // Tight bounds of the path as it would be after xform, without copying it.
+    AABB preciseBounds(const Mat2D& xform) const;
     size_t countMoveTos() const;
 
     void move(Vec2D);
@@ -269,7 +280,9 @@ public:
     // Approximates the area of the path by linearizing it with a coarse
     // tolerance of 8px in artboard space.
     constexpr static float kCoarseAreaTolerance = 8;
-    float computeCoarseArea() const;
+    // Far from the artboard origin the products cancel into rounding noise,
+    // pass an origin near the path to keep them small.
+    float computeCoarseArea(Vec2D origin = {0, 0}) const;
 
 private:
     std::vector<Vec2D> m_Points;

@@ -15,7 +15,6 @@ on:
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_curl.*"
-      - "!**/native/*_dawn*.*"
       - "!**/native/*_d3d.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_ios*.*"
@@ -41,7 +40,6 @@ on:
       - "!**/native/*_android.*"
       - "!**/native/*_apple.*"
       - "!**/native/*_curl.*"
-      - "!**/native/*_dawn*.*"
       - "!**/native/*_d3d.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_ios*.*"
@@ -121,7 +119,6 @@ jobs:
           "*/native/*_wasm.*" \
           "*/native/*_windows.*" \
           "*/native/*_sdl.*" \
-          "*/native/*_dawn*.*" \
           "*/native/*_webgpu.*" \
           "*/native/*_opengl.*" \
           --output-file coverage/coverage_final.info --ignore-errors ${IGNORE_ERRORS}

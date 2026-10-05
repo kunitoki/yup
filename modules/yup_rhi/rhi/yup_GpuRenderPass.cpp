@@ -147,11 +147,14 @@ bool GpuRenderPass::Impl::ensurePassOpen()
     if (! buildRenderPassDesc (rpDesc))
         return false;
 
+    if (framePools->openPass != nullptr)
+        framePools->openPass->finish();
+
     orePass = oreCtx->beginRenderPass (rpDesc);
     if (orePass == nullptr)
         return false;
 
-    oreCtx->setActiveRenderPass (orePass.get());
+    framePools->openPass = orePass.get();
     return true;
 }
 
@@ -162,8 +165,8 @@ void GpuRenderPass::Impl::closePass()
 
     orePass->finish();
 
-    if (oreCtx != nullptr && oreCtx->activeRenderPass() == orePass.get())
-        oreCtx->setActiveRenderPass (nullptr);
+    if (framePools != nullptr && framePools->openPass == orePass.get())
+        framePools->openPass = nullptr;
 
     orePass = nullptr;
 }

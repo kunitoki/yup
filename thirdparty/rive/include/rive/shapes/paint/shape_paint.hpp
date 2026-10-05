@@ -24,17 +24,30 @@ class ShapePaint : public ShapePaintBase,
 protected:
     rcp<RenderPaint> m_RenderPaint;
     ShapePaintMutator* m_PaintMutator = nullptr;
+    // update() skipped measuring the effects because this paint was fully
+    // transparent. Showing the paint again owes them a run.
+    bool m_effectsDeferred = false;
 
 public:
     StatusCode onAddedClean(CoreContext* context) override;
+
     void invalidateEffects(StrokeEffect* effect) override;
     void invalidateEffects() override;
     virtual void invalidateRendering();
 
     float renderOpacity() const { return m_PaintMutator->renderOpacity(); }
-    void renderOpacity(float value) { m_PaintMutator->renderOpacity(value); }
+    void renderOpacity(float value);
 
-    void blendMode(BlendMode value);
+    /// Syncs this paint's blend mode onto its RenderPaint. A ShapePaint whose
+    /// blendModeValue is 127 inherits both the mode and the additive amount
+    /// from its parent drawable, hence both parameters.
+    void blendMode(BlendMode parentValue, uint8_t parentAdditiveAmount);
+
+    /// 127 in the mode byte means "take the parent drawable's blend mode".
+    bool inheritsBlendMode() const { return blendModeValue() == 127; }
+    BlendMode blendMode() const { return (BlendMode)blendModeValue(); }
+
+    void additiveAmountChanged() override;
 
     void addStrokeEffect(StrokeEffect* effect) override;
 
@@ -79,6 +92,26 @@ public:
 
     void feather(Feather* feather);
     Feather* feather() const;
+#ifdef WITH_RIVE_EDITOR
+    /// Set the feather pointer in editor mode (idempotent).
+    void setFeatherForEditor(Feather* f) { m_feather = f; }
+    /// Clear m_feather only if it currently points at `expected`.
+    void clearFeatherIfForEditor(Feather* expected)
+    {
+        if (m_feather == expected)
+        {
+            m_feather = nullptr;
+        }
+    }
+    // Edit-time reparent/remove dispatch — registers this paint into
+    // the new parent's `m_ShapePaints` and removes from the old
+    // parent's. Without this, removing a Fill/Stroke leaves a stale
+    // pointer in the host Shape's m_ShapePaints, which `buildDeps`
+    // and `pathChanged` iterate and crash on. Body in
+    // `component_parent_editor.cpp`.
+    void editorParentChanged(ContainerComponent* from,
+                             ContainerComponent* to) override;
+#endif
 
     virtual ShapePaintPath* pickPath(ShapePaintContainer* shape) const = 0;
     void update(ComponentDirt value) override;
@@ -87,7 +120,24 @@ public:
     TransformComponent* parentTransformComponent() const;
 
 private:
+    /// Install (or clear) the modulating image contributed by the optional
+    /// PaintImage child onto m_RenderPaint, fit to [path]'s bounds. The bounds
+    /// walk every point, so they are only measured when that child exists.
+    void applyModulatedImage(const ShapePaintPath* path);
+
     Feather* m_feather = nullptr;
+    /// Whether this paint has a PaintImage child, and whether it is a Fill,
+    /// both found once all children are known (onAddedClean): draw() needs
+    /// them on every call, and at runtime neither changes after import. They
+    /// sit in padding, so they cost no memory, and only a paint that has the
+    /// child looks it up. The editor can add or remove the child, so it checks
+    /// both on every draw instead.
+    bool m_hasPaintImage = false;
+    bool m_isFill = false;
+    /// Whether the last draw installed a modulating image on m_RenderPaint. The
+    /// paint persists across draws, so we track this to clear it once the
+    /// PaintImage child (or its asset) goes away.
+    bool m_hasModulatedImage = false;
 };
 } // namespace rive
 

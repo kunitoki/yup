@@ -175,6 +175,7 @@ struct GLCapabilities
     bool isAdreno : 1;
     bool isMali : 1;
     bool isPowerVR : 1;
+    bool isIntel : 1;
 
     // GL version.
     uint32_t contextVersionMajor;
@@ -187,12 +188,6 @@ struct GLCapabilities
     // Many devices crash on draw commands with a large instancecount, or when
     // drawing many instances without a glFlush to break them up.
     uint32_t maxSupportedInstancesPerFlush;
-    // Chrome 136 crashes when trying to run Rive because it attempts to enable
-    // blending on the tessellation texture, which is invalid for an integer
-    // render target. The workaround is to use a floating-point tessellation
-    // texture.
-    // https://issues.chromium.org/issues/416294709
-    bool needsFloatingPointTessellationTexture;
     // PowerVR Rogue GE8300, OpenGL ES 3.2 build 1.10@5187610 has severe pixel
     // local storage corruption issues with our renderer. Using some of the
     // EXT_shader_pixel_local_storage2 API is an apparent workaround that comes
@@ -201,6 +196,9 @@ struct GLCapabilities
     // ANGLE_shader_pixel_local_storage is currently broken with
     // GL_TEXTURE_2D_ARRAY on ANGLE's d3d11 renderer.
     bool avoidTexture2DArrayWithWebGLPLS;
+    // Android ANGLE backed by SwiftShader can corrupt memory when resolving
+    // partial framebuffer regions. Resolve the full target as a workaround.
+    bool avoidPartialFramebufferBlits;
 
     // Extensions
     bool ANGLE_base_vertex_base_instance_shader_builtin : 1;

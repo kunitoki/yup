@@ -33,6 +33,11 @@ public:
 
     Core* clone() const override;
     void addVariation(TextStyleAxis* axis);
+#ifdef WITH_RIVE_EDITOR
+    /// Idempotent — TextStyleAxis::editorParentChanged calls this.
+    void addVariationForEditor(TextStyleAxis* axis);
+    void removeVariationForEditor(TextStyleAxis* axis);
+#endif
     void addFeature(TextStyleFeature* feature);
     void updateVariableFont() const;
     StatusCode onAddedClean(CoreContext* context) override;
@@ -47,6 +52,17 @@ protected:
 
 private:
     std::unique_ptr<TextVariationHelper> m_variationHelper;
+
+public:
+    /// The lazily-created variation helper, or null if this style never needed
+    /// one. Exposed so Artboard can map it back to its owning style when
+    /// replaying a source artboard's dependency order onto an instance.
+    TextVariationHelper* variationHelper() const
+    {
+        return m_variationHelper.get();
+    }
+
+private:
     mutable rcp<Font> m_variableFont;
 
     mutable std::vector<Font::Coord> m_coords;

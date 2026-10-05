@@ -73,10 +73,17 @@ protected:
         ctx = new OreInjectedGpuDevice (mockOreCtx.get());
     }
 
-    /** Makes makeTexture() succeed, recording the descriptor it was handed. */
+    /** Makes makeTexture() succeed, recording the descriptor it was handed. The mock exists
+        before that descriptor does, so it is sized for every upload these tests make. */
     rive::rcp<NiceMock<MockOreTexture>> expectTextureCreation (rive::ore::TextureDesc* captured)
     {
-        auto oreTexture = rive::make_rcp<NiceMock<MockOreTexture>>();
+        rive::ore::TextureDesc uploadable;
+        uploadable.width = uploadable.height = 16;
+        uploadable.depthOrArrayLayers = 6;
+        uploadable.type = rive::ore::TextureType::cube;
+        uploadable.numMipmaps = 3;
+
+        auto oreTexture = rive::make_rcp<NiceMock<MockOreTexture>> (uploadable);
 
         EXPECT_CALL (*mockOreCtx, makeTexture (_))
             .WillOnce (DoAll (SaveArg<0> (captured), Return (oreTexture)));
@@ -88,9 +95,9 @@ protected:
     GpuTexture::Ptr createTexture (const GpuTextureDesc& desc)
     {
         ON_CALL (*mockOreCtx, makeTexture (_))
-            .WillByDefault (Invoke ([] (const rive::ore::TextureDesc&)
+            .WillByDefault (Invoke ([] (const rive::ore::TextureDesc& desc)
         {
-            return rive::rcp<rive::ore::Texture> (rive::make_rcp<NiceMock<MockOreTexture>>());
+            return rive::rcp<rive::ore::Texture> (rive::make_rcp<NiceMock<MockOreTexture>> (desc));
         }));
 
         return GpuTexture::create (ctx, desc);
@@ -241,7 +248,7 @@ TEST_F (GpuTextureMockTests, UploadDefaultsCoverTheWholeMipLevel)
     auto oreTexture = expectTextureCreation (&ignored);
 
     rive::ore::TextureDataDesc captured {};
-    EXPECT_CALL (*oreTexture, upload (_)).WillOnce (SaveArg<0> (&captured));
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (SaveArg<0> (&captured));
 
     auto desc = makeRenderTargetDesc (16, 8);
     auto texture = GpuTexture::create (ctx, desc);
@@ -267,7 +274,7 @@ TEST_F (GpuTextureMockTests, UploadDefaultsToTheSizeOfTheRequestedMipLevel)
     auto oreTexture = expectTextureCreation (&ignored);
 
     rive::ore::TextureDataDesc captured {};
-    EXPECT_CALL (*oreTexture, upload (_)).WillOnce (SaveArg<0> (&captured));
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (SaveArg<0> (&captured));
 
     auto desc = makeRenderTargetDesc (16, 16);
     desc.mipLevels = 3;
@@ -292,7 +299,7 @@ TEST_F (GpuTextureMockTests, UploadTargetsTheRequestedCubeFace)
     auto oreTexture = expectTextureCreation (&ignored);
 
     rive::ore::TextureDataDesc captured {};
-    EXPECT_CALL (*oreTexture, upload (_)).WillOnce (SaveArg<0> (&captured));
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (SaveArg<0> (&captured));
 
     auto texture = GpuTexture::create (ctx, makeCubeDesc (8));
     ASSERT_NE (texture, nullptr);
@@ -311,7 +318,7 @@ TEST_F (GpuTextureMockTests, UploadRejectsOutOfRangeMipLevelAndLayer)
 {
     rive::ore::TextureDesc ignored {};
     auto oreTexture = expectTextureCreation (&ignored);
-    EXPECT_CALL (*oreTexture, upload (_)).Times (0);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).Times (0);
 
     auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
     ASSERT_NE (texture, nullptr);
@@ -333,7 +340,7 @@ TEST_F (GpuTextureMockTests, UploadRejectsRegionsRunningPastTheEdge)
 {
     rive::ore::TextureDesc ignored {};
     auto oreTexture = expectTextureCreation (&ignored);
-    EXPECT_CALL (*oreTexture, upload (_)).Times (0);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).Times (0);
 
     auto texture = GpuTexture::create (ctx, makeRenderTargetDesc (16, 16));
     ASSERT_NE (texture, nullptr);
@@ -352,7 +359,7 @@ TEST_F (GpuTextureMockTests, UploadRejectsNullData)
 {
     rive::ore::TextureDesc ignored {};
     auto oreTexture = expectTextureCreation (&ignored);
-    EXPECT_CALL (*oreTexture, upload (_)).Times (0);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).Times (0);
 
     auto texture = GpuTexture::create (ctx, makeRenderTargetDesc());
     ASSERT_NE (texture, nullptr);
@@ -367,7 +374,7 @@ TEST_F (GpuTextureMockTests, UploadOfCompressedDataWithoutARowStrideIsRefused)
 {
     rive::ore::TextureDesc ignored {};
     auto oreTexture = expectTextureCreation (&ignored);
-    EXPECT_CALL (*oreTexture, upload (_)).Times (0);
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).Times (0);
 
     auto desc = makeRenderTargetDesc (16, 16);
     desc.format = GpuTextureFormat::bc7unorm;
@@ -389,7 +396,7 @@ TEST_F (GpuTextureMockTests, UploadOfCompressedDataWithARowStrideSucceeds)
     auto oreTexture = expectTextureCreation (&ignored);
 
     rive::ore::TextureDataDesc captured {};
-    EXPECT_CALL (*oreTexture, upload (_)).WillOnce (SaveArg<0> (&captured));
+    EXPECT_CALL (*oreTexture, uploadImpl (_)).WillOnce (SaveArg<0> (&captured));
 
     auto desc = makeRenderTargetDesc (16, 16);
     desc.format = GpuTextureFormat::bc7unorm;
@@ -557,7 +564,7 @@ protected:
     /** Records every TextureViewDesc created, RenderPassDesc begun, and draw encoded. */
     void expectAttachmentCapture()
     {
-        ON_CALL (*mockOreCtx, makeTextureView (_))
+        ON_CALL (*mockOreCtx, makeTextureViewImpl (_))
             .WillByDefault (Invoke ([this] (const rive::ore::TextureViewDesc& desc)
         {
             viewDescs.push_back (desc);

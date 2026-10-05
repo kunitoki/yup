@@ -152,7 +152,7 @@ fetch_coverage PR:
   uv run python tools/print_uncovered_lines.py --pr {{PR}}
 
 [doc("update rive runtime")]
-rive_update REF="runtime-v0.1.62":
+rive_update REF="runtime-v0.1.512":
   uv run python tools/rive_update.py --rive-ref {{REF}} --allow-dirty --keep-work-dir
 
 [doc("update rive shaders")]
@@ -164,6 +164,15 @@ rive_shaders_update:
   cp -R thirdparty/rive/source/renderer/shaders/out/generated/* thirdparty/rive/source/renderer/generated/shaders/
   rm -Rf thirdparty/rive/source/renderer/shaders/out
   .venv/bin/deactivate
+
+[doc("regenerate rive d3d shaders (needs make, python3 and the Windows SDK fxc on PATH)")]
+[windows]
+rive_shaders_d3d:
+  @command -v fxc >/dev/null || { echo "fxc not found: run from a Developer Command Prompt or add the Windows SDK bin folder to PATH"; exit 1; }
+  python3 -m pip install --quiet --target build/rive-shaders-ply ply
+  make -C thirdparty/rive/source/renderer/shaders d3d FLAGS=--ply-path=../../../../../build/rive-shaders-ply
+  cp thirdparty/rive/source/renderer/shaders/out/generated/d3d/*.h thirdparty/rive/source/renderer/generated/shaders/d3d/
+  rm -Rf thirdparty/rive/source/renderer/shaders/out build/rive-shaders-ply
 
 [doc("develop website")]
 [working-directory: 'website']

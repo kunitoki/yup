@@ -170,6 +170,9 @@ Possible values:
 - linuxPackages
   - (Optional) A list (space or comma-separated) pkg-config packages that should be used to pass compiler (CFLAGS) and linker (LDFLAGS) flags.
 
+- vsToolOverrides
+  - (Optional) A list (space or comma-separated) of `extension=Tool` pairs that set the Visual Studio build tool of the module's non-source files with that extension, e.g. `hlsl=None` keeps MSBuild from compiling shader sources shipped only for reference or offline generation.
+
 ## Optional dependencies
 
 The `dependencies:` field declares **hard** dependencies that are always linked.

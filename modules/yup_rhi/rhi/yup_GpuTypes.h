@@ -31,7 +31,7 @@ enum class GpuPlatform
     OpenGLES, ///< Specifies the use of OpenGL ES (GLES 3.0+) for rendering (Android, WASM).
     Direct3D, ///< Specifies the use of Direct3D for rendering.
     Metal,    ///< Specifies the use of Metal for rendering.
-    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten, Dawn elsewhere).
+    WebGPU    ///< Specifies the use of WebGPU (native browser WebGPU on Emscripten).
 };
 
 //==============================================================================
@@ -738,8 +738,8 @@ struct GpuFrameDescriptor
     GpuLoadOp loadOp = GpuLoadOp::clear; ///< Attachment load behaviour at the start of the frame.
     GpuColor clearColor = GpuColor::transparentBlack(); ///< Clear color used when loadOp is clear.
 
-    uint32_t msaaSampleCount = 0; ///< If nonzero, the number of MSAA samples to use; forces msaa mode.
-    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or msaa instead of rasterOrdering.
+    uint32_t msaaSampleCount = 0; ///< 0 lets Rive choose its mode, 1 forces depthStencil mode without MSAA, more than 1 forces depthStencil mode with that many MSAA samples.
+    bool disableRasterOrdering = false; ///< Use atomic mode (preferred) or depthStencil instead of rasterOrdering.
     GpuDitherMode ditherMode = GpuDitherMode::interleavedGradientNoise; ///< Dithering applied to gradients.
 
     // Vulkan-only virtual tiling; inert on every current YUP backend.

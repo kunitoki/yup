@@ -13,17 +13,22 @@
 #include "rive/math/aabb.hpp"
 #include "rive/math/mat2d.hpp"
 #include "rive/shapes/paint/blend_mode.hpp"
+#include "rive/shapes/paint/layer_mask_mode.hpp"
 #include "rive/shapes/paint/image_sampler.hpp"
 #include "rive/shapes/paint/stroke_cap.hpp"
 #include "rive/shapes/paint/stroke_join.hpp"
+#include "rive/shapes/paint/stroke_position.hpp"
 #include "utils/lite_rtti.hpp"
 #include "rive/math/raw_path.hpp"
+#include "rive/span.hpp"
 #include <stdio.h>
 #include <cstdint>
+#include <vector>
 
 namespace rive
 {
 class Vec2D;
+class RenderImage;
 
 // Helper that computes a matrix to "align" content (source) to fit inside frame
 // (destination).
@@ -32,6 +37,25 @@ Mat2D computeAlignment(Fit,
                        const AABB& frame,
                        const AABB& content,
                        const float scaleFactor = 1.0f);
+
+// Common parameters to describe a path's stroke.
+struct StrokeParams
+{
+    float thickness = 1.0f;
+    StrokeJoin join = StrokeJoin::miter;
+    StrokeCap cap = StrokeCap::butt;
+    StrokePosition position = StrokePosition::center;
+
+    bool operator==(const StrokeParams& other) const
+    {
+        return memcmp(this, &other, sizeof(StrokeParams)) == 0;
+    }
+
+    bool operator!=(const StrokeParams& other) const
+    {
+        return !(*this == other);
+    }
+};
 
 enum class RenderBufferType
 {
@@ -86,6 +110,54 @@ private:
     RIVE_DEBUG_CODE(size_t m_unmapCount = 0;)
 };
 
+struct ImageMeshInstanceData
+{
+    Mat2D transform;
+    Vec2D uvTranslate = {0.0f, 0.0f};
+    Vec2D uvScale = {1.0f, 1.0f};
+    float opacity = 1.0f;
+    float additiveness = 0.0f;
+};
+
+class ImageMeshInstances : public RefCnt<ImageMeshInstances>,
+                           public ENABLE_LITE_RTTI(ImageMeshInstances)
+{
+public:
+    ImageMeshInstances(size_t count);
+    virtual ~ImageMeshInstances();
+
+    size_t count() const { return m_instanceData.size(); }
+
+    Span<const ImageMeshInstanceData> instanceData() const
+    {
+        return m_instanceData;
+    }
+
+    // These functions are used to begin/end editing of the instance data.
+    // Instance data is retained across edits so the entire array doesn't need
+    // to be rewritten each edit.
+    Span<ImageMeshInstanceData> edit();
+
+    // Sets the number of instances to `count`. Existing elements retain their
+    // previous data.
+    Span<ImageMeshInstanceData> edit(size_t count);
+
+    void endEdit();
+
+#ifdef DEBUG
+    bool isEditing() const { return m_editCount != m_endEditCount; }
+    size_t editCount() const { return m_editCount; }
+#endif
+
+protected:
+    virtual void onEndEdit() {}
+
+private:
+    std::vector<ImageMeshInstanceData> m_instanceData;
+    RIVE_DEBUG_CODE(size_t m_editCount = 0;)
+    RIVE_DEBUG_CODE(size_t m_endEditCount = 0;)
+};
+
 enum class RenderPaintStyle
 {
     stroke,
@@ -121,10 +193,26 @@ public:
     virtual void thickness(float value) = 0;
     virtual void join(StrokeJoin value) = 0;
     virtual void cap(StrokeCap value) = 0;
-    virtual void feather(float value) {} // Not supported on all renderers.
+    // TODO: implement on other backends besides Rive Renderer
+    virtual void strokePosition(StrokePosition value) {}
+    virtual void feather(float value) {}      // Not supported on all renderers.
+    virtual void additiveness(float value) {} // Only used for srcOver
     virtual void blendMode(BlendMode value) = 0;
     virtual void shader(rcp<RenderShader>) = 0;
     virtual void invalidateStroke() = 0;
+    virtual void modulatedImage(const RenderImage*, ImageSampler, const Mat2D&)
+    {} // TODO: Implement on other backends besides Rive Renderer
+
+    // Set the style to stroke and update all of the stroke parameters with a
+    // single update.
+    void stroke(const StrokeParams& params)
+    {
+        style(RenderPaintStyle::stroke);
+        thickness(params.thickness);
+        join(params.join);
+        cap(params.cap);
+        strokePosition(params.position);
+    }
 };
 
 #if defined(__EMSCRIPTEN__)
@@ -194,7 +282,13 @@ public:
         // No-op on non rive renderer.
     }
 
+    // The caller is expected to provide a valid path with no zero length
+    // segments.
     virtual void addRawPath(const RawPath& path) = 0;
+
+    // Same, but prunes zero length segments first, for paths we did not build
+    // like scripted ones.
+    void addUntrustedRawPath(const RawPath& path);
 };
 
 class Renderer
@@ -206,6 +300,10 @@ public:
     virtual void transform(const Mat2D& transform) = 0;
     virtual void drawPath(RenderPath* path, RenderPaint* paint) = 0;
     virtual void clipPath(RenderPath* path) = 0;
+
+    // Not implementable on some backends so default to nothing
+    virtual void clipStroke(RenderPath*, const StrokeParams&) {}
+
     virtual void drawImage(const RenderImage*,
                            ImageSampler,
                            BlendMode,
@@ -220,11 +318,97 @@ public:
                                BlendMode,
                                float opacity) = 0;
 
+    // Variants with additiveness (0 = normal srcOver, 1 = fully additive).
+    // Renderers that don't support it fall back on the plain overloads and
+    // render normal srcOver.
+    virtual void drawImage(const RenderImage* image,
+                           ImageSampler sampler,
+                           BlendMode blendMode,
+                           float opacity,
+                           float additiveness)
+    {
+        drawImage(image, sampler, blendMode, opacity);
+    }
+    virtual void drawImageMesh(const RenderImage* image,
+                               ImageSampler sampler,
+                               rcp<RenderBuffer> vertices_f32,
+                               rcp<RenderBuffer> uvCoords_f32,
+                               rcp<RenderBuffer> indices_u16,
+                               uint32_t vertexCount,
+                               uint32_t indexCount,
+                               BlendMode blendMode,
+                               float opacity,
+                               float additiveness)
+    {
+        drawImageMesh(image,
+                      sampler,
+                      std::move(vertices_f32),
+                      std::move(uvCoords_f32),
+                      std::move(indices_u16),
+                      vertexCount,
+                      indexCount,
+                      blendMode,
+                      opacity);
+    }
+
+    // Draws the same mesh once per entry in `instances`. This is more efficient
+    // than making N drawImageMesh calls, but blend modes are not supported.
+    //
+    // TODO(ben) the default implementation issues one drawImageMesh per
+    // instance, and drawImageMesh does not support UV transforms, so non-Rive
+    // renderers don't yet support UV transforms.
+    virtual void drawImageMeshInstanced(const RenderImage*,
+                                        ImageSampler,
+                                        rcp<RenderBuffer> vertices_f32,
+                                        rcp<RenderBuffer> uvCoords_f32,
+                                        rcp<RenderBuffer> indices_u16,
+                                        uint32_t vertexCount,
+                                        uint32_t indexCount,
+                                        rcp<ImageMeshInstances>);
+
+    // Multiplies everything already drawn into the current render target by a
+    // factor derived from `mask`, over the rect [0,0,1,1] under the current
+    // transform. Premultiplied-correct: all four channels scale, so this is
+    // exactly "scale the layer's opacity, per pixel".
+    //
+    // Must be the last draw issued into the target before it is composited, and
+    // `mask` must be the same pixel size as that target -- layer masking
+    // rasterizes content and coverage with one shared raster plan precisely so
+    // the two correspond texel for texel with no resampling.
+    //
+    // Luminance is computed on the *premultiplied* mask, which is not an
+    // approximation: luma(rgb/a) * a == dot(rgb, coeffs) identically for a > 0,
+    // and it stays correct at a == 0 where unmultiplying would be 0/0.
+    //
+    // Default no-op, so a renderer that cannot express it leaves the layer
+    // unmasked -- visible, but not destructive.
+    virtual void applyLayerMask(const RenderImage*, ImageSampler, LayerMaskMode)
+    {}
+
     // Modulate the opacity of subsequent draw calls. The opacity is stacked
     // multiplicatively (e.g., modulateOpacity(0.5) followed by
     // modulateOpacity(0.2) = 0.1 effective opacity). The modulated opacity is
     // captured by save() and restored by restore().
     virtual void modulateOpacity(float opacity) = 0;
+
+    // Multiply a color into subsequent draw calls, scoped by save() and
+    // restore() like modulateOpacity. With replace the color is set rather
+    // than multiplied, so an inner scope can undo an outer one.
+    virtual void modulateColor(ColorInt color, bool replace = false) {}
+
+    // Reports the renderer's current transform (CTM) into *out, if the
+    // renderer tracks one. Returns false and leaves *out untouched otherwise.
+    // Needed when a draw has to be re-issued through a different renderer that
+    // does not share this one's state.
+    virtual bool currentTransform(Mat2D* out) const { return false; }
+
+    // Reports the opacity accumulated by modulateOpacity() into *out, if the
+    // renderer tracks it. Returns false and leaves *out untouched otherwise.
+    // The companion to currentTransform(): a draw re-issued through a fresh
+    // renderer starts at opacity 1, so an enclosing modulateOpacity() scope
+    // (a ScriptedDrawable fading its children, say) has to be carried across
+    // by hand or the re-issued draw comes out too opaque.
+    virtual bool currentModulatedOpacity(float* out) const { return false; }
 
     // helpers
 

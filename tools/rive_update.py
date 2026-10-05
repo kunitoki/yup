@@ -219,10 +219,6 @@ def ref_to_version(ref: str) -> str:
     if libpng_match:
         return f"{libpng_match.group(1)}.{int(libpng_match.group(2))}"
 
-    if value.startswith("rive_changes_v"):
-        value = value.removeprefix("rive_changes_v").replace("_", ".")
-        return value
-
     value = re.sub(r"^(rive_changes_|rive_|release[-_/])", "", value)
     if value.startswith("v") and len(value) > 1 and value[1].isdigit():
         value = value[1:]
@@ -417,7 +413,7 @@ def apply_dependency_patches(destination_root: Path, dep: dict[str, Any]) -> lis
         if old not in text:
             raise SystemExit(f"Could not apply patch '{patch.get('note', patch['path'])}' to {path}")
 
-        if write_text_if_changed(path, text.replace(old, new, 1)):
+        if write_text_if_changed(path, text.replace(old, new, -1 if patch.get("replace_all") else 1)):
             notes.append(patch.get("note", f"patched {patch['path']}"))
 
     return notes
@@ -618,12 +614,30 @@ def validate_include_targets(path: Path, block: dict[str, Any] | None = None) ->
     if block:
         search_roots.extend(REPO_ROOT / root for root in block.get("search_roots", []))
 
-    missing = [target for target in included_targets(path, search_roots) if not target.exists()]
+    targets = included_targets(path, search_roots)
+    missing = [target for target in targets if not target.exists()]
     if missing:
         print(f"Missing include targets in {path.relative_to(REPO_ROOT)}:")
         for target in missing:
             print(f"  {target.relative_to(REPO_ROOT)}")
         raise SystemExit("Generated include target validation failed.")
+
+    if not block or "root" not in block:
+        return
+
+    root = REPO_ROOT / block["root"]
+    included = {target.resolve() for target in targets}
+    unlisted = [
+        source
+        for source in iter_source_files(root)
+        if should_copy(posix(source.relative_to(root)), block.get("include_globs", []), block.get("exclude_globs", []))
+        and source.resolve() not in included
+    ]
+    if unlisted:
+        print(f"Upstream sources not included by {path.relative_to(REPO_ROOT)}:")
+        for source in unlisted:
+            print(f"  {source.relative_to(REPO_ROOT)}")
+        raise SystemExit("Add the new sources to the hand-maintained amalgamation, or exclude them in the manifest.")
 
 
 def process_include_blocks(manifest: dict[str, Any]) -> int:
@@ -749,9 +763,14 @@ def run_shader_generation(dep: dict[str, Any], checkout_dir: Path, skipped_targe
             shutil.copy2(source, target)
         count += 1
 
-    if not skipped_targets and not auto_skipped_targets:
+    # Stale outputs are only safe to remove when every skipped target declares which outputs it owns.
+    skipped_outputs = shader_config.get("skipped_target_outputs", {})
+    all_skipped = skipped_targets | auto_skipped_targets
+    if all(target in skipped_outputs for target in all_skipped):
+        preserve_globs = [glob for target in all_skipped for glob in skipped_outputs[target]]
         for existing in sorted(path for path in destination.rglob("*") if path.is_file()):
-            if existing.resolve() not in copied_paths:
+            rel = posix(existing.relative_to(destination))
+            if existing.resolve() not in copied_paths and not matches_any(rel, preserve_globs):
                 existing.unlink()
         remove_empty_dirs(destination)
     return count
@@ -873,7 +892,10 @@ def update_dependencies(
         if dep.get("shader_generation"):
             auto_skipped_targets = auto_skipped_shader_targets(dep["shader_generation"], skipped_shader_targets)
             if auto_skipped_targets:
-                result.notes.append(f"auto-skipped unavailable optional shader targets: {', '.join(sorted(auto_skipped_targets))}")
+                result.notes.append(
+                    f"auto-skipped unavailable optional shader targets: {', '.join(sorted(auto_skipped_targets))} "
+                    "(previous outputs kept, regenerate them on a host providing the tools)"
+                )
 
         results.append(result)
 

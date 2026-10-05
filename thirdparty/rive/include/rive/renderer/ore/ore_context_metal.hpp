@@ -28,7 +28,7 @@ public:
 
     rcp<Buffer> makeBuffer(const BufferDesc& desc) override;
     rcp<Texture> makeTexture(const TextureDesc& desc) override;
-    rcp<TextureView> makeTextureView(const TextureViewDesc& desc) override;
+    rcp<TextureView> makeTextureViewImpl(const TextureViewDesc& desc) override;
     rcp<Sampler> makeSampler(const SamplerDesc& desc) override;
     rcp<ShaderModule> makeShaderModule(const ShaderModuleDesc& desc) override;
     rcp<BindGroupLayout> makeBindGroupLayout(
@@ -45,7 +45,11 @@ public:
     void endFrame() override;
     void waitForGPU() override;
 
+    // Metal drains the recorded frame in endFrame before commit.
+    bool usesDeferredFrameReplay() const override { return true; }
+
     rcp<TextureView> wrapCanvasTexture(gpu::RenderCanvas* canvas) override;
+    rcp<TextureView> wrapRenderTarget(gpu::RenderTarget* target) override;
     rcp<TextureView> wrapRiveTexture(gpu::Texture* gpuTex,
                                      uint32_t width,
                                      uint32_t height) override;
@@ -85,7 +89,7 @@ private:
     rcp<BindGroup> mtlMakeBindGroup(const BindGroupDesc& desc);
     std::unique_ptr<RenderPass> mtlBeginRenderPass(const RenderPassDesc& desc,
                                                    std::string* outError);
-    rcp<TextureView> mtlWrapCanvasTexture(gpu::RenderCanvas* canvas);
+    rcp<TextureView> mtlWrapTarget(gpu::RenderTarget* target);
 
     id<MTLDevice> m_mtlDevice = nil;
     id<MTLCommandQueue> m_mtlQueue = nil;
