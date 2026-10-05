@@ -695,8 +695,10 @@ TEST_F (ResponsiveSlidersBindingTests, ForeignFileInstanceIsRejected)
     auto foreignInstance = otherFile.getValue()->createArtboardViewModelInstance ("Main", "Main");
     ASSERT_NE (nullptr, foreignInstance.get());
 
+    // The rejected instance leaves the auto-bound default in place.
+    const auto autoBound = artboard->getBoundViewModelInstance();
     EXPECT_FALSE (artboard->bindViewModelInstance (foreignInstance));
-    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (autoBound.get(), artboard->getBoundViewModelInstance().get());
 }
 
 //==============================================================================
@@ -1700,4 +1702,157 @@ TEST_F (ViewModelLabBindingTests, DISABLED_UnbindingAndAdvancingKeepsTheArtboard
 
     for (int frame = 0; frame < 5; ++frame)
         EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+}
+
+//==============================================================================
+// Asset values, against tests/data/rive/viewmodel-assets.riv
+//
+// The "Assets" artboard is bound to the "Assets" ViewModel, which declares an
+// image, a font and a blob asset property.
+//==============================================================================
+
+class ViewModelAssetValueTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = findRiveDirectory().getChildFile ("viewmodel-assets.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-assets.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+        instance = artboardFile->createArtboardViewModelInstance ("Assets");
+        ASSERT_NE (nullptr, instance.get());
+    }
+
+    static File findRiveDirectory()
+    {
+        auto dir = File (__FILE__)
+                       .getParentDirectory()
+                       .getParentDirectory()
+                       .getChildFile ("data")
+                       .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir;
+
+        dir = File::getCurrentWorkingDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getParentDirectory()
+                  .getChildFile ("tests")
+                  .getChildFile ("data")
+                  .getChildFile ("rive");
+
+        if (dir.exists())
+            return dir;
+
+        return File ("/data/rive");
+    }
+
+    MemoryBlock loadFontBytes() const
+    {
+        MemoryBlock bytes;
+        findRiveDirectory().getChildFile ("viewmodel-lab/assets/karla.ttf").loadFileAsData (bytes);
+        return bytes;
+    }
+
+    static Span<const uint8> spanOf (const MemoryBlock& block)
+    {
+        return { static_cast<const uint8*> (block.getData()), block.getSize() };
+    }
+
+    const uint8 someBytes[4] = { 1, 2, 3, 4 };
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    ArtboardViewModelInstance::Ptr instance;
+};
+
+TEST_F (ViewModelAssetValueTests, ImageBytesAreDecodedWithTheFileFactory)
+{
+    EXPECT_CALL (factory, decodeImage (::testing::_))
+        .WillOnce (::testing::Return (rive::make_rcp<rive::RenderImage>()));
+
+    EXPECT_TRUE (instance->setImageProperty ("image", Span<const uint8> (someBytes, 4)));
+}
+
+TEST_F (ViewModelAssetValueTests, ImageBytesThatFailToDecodeAreRejected)
+{
+    // The mock decodes nothing by default.
+    EXPECT_FALSE (instance->setImageProperty ("image", Span<const uint8> (someBytes, 4)));
+}
+
+TEST_F (ViewModelAssetValueTests, ImageNeedsAGpuFactory)
+{
+    // The mock factory is not a rive::gpu::RenderContext, so no texture can be made.
+    EXPECT_FALSE (instance->setImageProperty ("image", Image (4, 4)));
+}
+
+TEST_F (ViewModelAssetValueTests, FontBytesAreDecoded)
+{
+    const auto bytes = loadFontBytes();
+    ASSERT_GT (bytes.getSize(), 0u);
+
+    EXPECT_TRUE (instance->setFontProperty ("font", spanOf (bytes)));
+}
+
+TEST_F (ViewModelAssetValueTests, FontObjectIsApplied)
+{
+    auto font = Font::loadFontFromData (loadFontBytes());
+    ASSERT_TRUE (font.wasOk());
+
+    EXPECT_TRUE (instance->setFontProperty ("font", font.getValue()));
+    EXPECT_FALSE (instance->setFontProperty ("font", Font()));
+}
+
+TEST_F (ViewModelAssetValueTests, BlobBytesAreApplied)
+{
+    EXPECT_TRUE (instance->setBlobProperty ("blob", Span<const uint8> (someBytes, 4)));
+}
+
+TEST_F (ViewModelAssetValueTests, WrongTypesAndUnknownPathsAreRejected)
+{
+    const auto fontBytes = loadFontBytes();
+
+    EXPECT_FALSE (instance->setImageProperty ("font", Span<const uint8> (someBytes, 4)));
+    EXPECT_FALSE (instance->setFontProperty ("blob", spanOf (fontBytes)));
+    EXPECT_FALSE (instance->setBlobProperty ("image", Span<const uint8> (someBytes, 4)));
+    EXPECT_FALSE (instance->setBlobProperty ("missing", Span<const uint8> (someBytes, 4)));
+}
+
+TEST_F (ViewModelAssetValueTests, AssetWritesNotifyTheChangeCallback)
+{
+    StringArray changed;
+    instance->setPropertyChangedCallback ([&] (ArtboardViewModelInstance&, const String& name, const var&)
+    {
+        changed.add (name);
+    });
+
+    ASSERT_TRUE (instance->setBlobProperty ("blob", Span<const uint8> (someBytes, 4)));
+
+    EXPECT_TRUE (changed.contains ("blob"));
+}
+
+TEST_F (ViewModelAssetValueTests, AssetWritesSurviveAdvancingABoundArtboard)
+{
+    Artboard artboard ("assets", artboardFile);
+    artboard.setBounds (0.0f, 0.0f, 64.0f, 64.0f);
+    ASSERT_TRUE (artboard.bindViewModelInstance (instance));
+
+    ASSERT_TRUE (instance->setBlobProperty ("blob", Span<const uint8> (someBytes, 4)));
+    ASSERT_TRUE (instance->setFontProperty ("font", spanOf (loadFontBytes())));
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard.advanceAndApply (0.016f));
 }

@@ -47,6 +47,10 @@ class ArtboardViewModel;
     Rive editor. Value writes are applied to the artboard data bindings on the
     next Artboard::advanceAndApply().
 
+    Image, font and blob properties are written with setImageProperty(),
+    setFontProperty() and setBlobProperty(); they have no value accessors, and
+    PropertyChangedCallback reports them with an empty var.
+
     A path segment made only of decimal digits is always read as a list index,
     so a property literally named "2" cannot be addressed through a path.
 
@@ -178,6 +182,45 @@ public:
         @return True if the path existed and the option was found.
     */
     bool setEnumProperty (StringRef nameOrPath, StringRef valueName);
+
+    //==============================================================================
+    /** Writes an image property from encoded image bytes (PNG, JPEG, WebP).
+
+        The bytes are decoded with the factory the ArtboardFile was loaded with. On
+        OpenGL that creates a GPU texture, so the GL context must be current, as when
+        loading a .riv file that embeds images.
+
+        @return True if the path is an image property and the bytes decoded.
+    */
+    bool setImageProperty (StringRef nameOrPath, Span<const uint8> encodedBytes);
+
+    /** Writes an image property from an Image.
+
+        The image's GPU texture is used when it has one, otherwise its pixels are
+        uploaded into a new texture. This needs the ArtboardFile to have been loaded
+        with a GPU factory, and on OpenGL a current GL context.
+
+        @return True if the path is an image property and a texture was available.
+    */
+    bool setImageProperty (StringRef nameOrPath, const Image& image);
+
+    /** Writes a font property from encoded font bytes (TTF, OTF).
+
+        @return True if the path is a font property and the bytes decoded.
+    */
+    bool setFontProperty (StringRef nameOrPath, Span<const uint8> encodedBytes);
+
+    /** Writes a font property from a Font.
+
+        @return True if the path is a font property and the font is valid.
+    */
+    bool setFontProperty (StringRef nameOrPath, const Font& font);
+
+    /** Writes a blob property, handing the bytes to the artboard unchanged.
+
+        @return True if the path is a blob property.
+    */
+    bool setBlobProperty (StringRef nameOrPath, Span<const uint8> bytes);
 
     //==============================================================================
     /** Returns a handle to the nested viewmodel instance behind a viewModel-typed

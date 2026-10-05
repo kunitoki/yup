@@ -174,7 +174,6 @@ protected:
             addAndMakeVisible (art);
 
             art->setFile (loadedArtboardFile);
-            bindDefaultViewModelInstance (*art);
             art->setFitting (getSelectedFitting());
             art->setJustification (getSelectedJustification (alignmentCombo));
 
@@ -304,24 +303,6 @@ private:
             artboard->setFitting (newFitting);
             artboard->setJustification (newJustification);
         }
-    }
-
-    // Binds a copy of the file's default instance, as Rive's own players do, so
-    // data bindings and listeners writing the view model work.
-    void bindDefaultViewModelInstance (yup::Artboard& art)
-    {
-        const auto viewModelName = art.getViewModelName();
-        if (viewModelName.isEmpty())
-            return;
-
-        auto viewModel = loadedArtboardFile->getArtboardViewModel (viewModelName);
-        if (viewModel == nullptr)
-            return;
-
-        const auto instanceNames = viewModel->getInstanceNames();
-        art.bindViewModelInstance (instanceNames.isEmpty()
-                                       ? loadedArtboardFile->createArtboardViewModelInstance (viewModelName)
-                                       : loadedArtboardFile->createArtboardViewModelInstance (viewModelName, instanceNames[0]));
     }
 
     // Attaches a tracked component to the tracked node of the given artboard.

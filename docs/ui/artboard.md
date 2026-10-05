@@ -291,26 +291,47 @@ simply overwritten.
 
 ## Data binding with ViewModels
 
-A Rive artboard can be designed against a *ViewModel* — a named set of typed
-properties. Ask the artboard which schema it wants, create an instance, and bind
-it:
+A Rive artboard can be designed against a *ViewModel* - a named set of typed
+properties. Like Rive's own players, `setFile()` binds a copy of the artboard's
+default instance, so the authored values show up without any code. Read it back
+to change it:
 
 ```cpp
-const auto schemaName = artboard->getViewModelName();
+auto instance = artboard->getBoundViewModelInstance();
+instance->setNumberProperty ("score", 120.0);
+```
 
-auto instance = file->createArtboardViewModelInstance (schemaName);
+To start from somewhere else, create an instance and bind it. Binding replaces
+the default:
+
+```cpp
+auto instance = file->createArtboardViewModelInstance ("Main", "Main"); // clone an authored instance
 artboard->bindViewModelInstance (instance);
 ```
 
-`.riv` files may also ship pre-authored instances; clone one by name to start
-from the authored values rather than from zero:
+The instance must come from the same `ArtboardFile` as the artboard; binding one
+from another file fails. `unbindViewModelInstance()` unbinds everything.
+
+### Global ViewModels
+
+A file can declare *global* ViewModels, which no single artboard owns. The file
+keeps one shared instance of each, and every artboard showing the file binds it,
+so a write reaches all of them:
 
 ```cpp
-auto instance = file->createArtboardViewModelInstance ("Main", "Main");
+for (const auto& name : file->getGlobalViewModelNames())
+    YUP_DBG ("global: " << name);
+
+file->getGlobalViewModelInstance ("Theme")->setStringProperty ("title", "Hello");
 ```
 
-The instance must come from the same `ArtboardFile` as the artboard; binding one
-from another file fails.
+To give one artboard its own copy, override it there. Passing `nullptr` goes back
+to the shared instance:
+
+```cpp
+auto custom = file->createArtboardViewModelInstance ("Theme");
+artboard->setGlobalViewModelInstance ("Theme", custom);
+```
 
 ### Reading and writing properties
 
@@ -338,6 +359,23 @@ Writes are applied to the artboard's data bindings on the next
 
 Unknown paths and type mismatches both yield `nullopt` (or an empty `var`). Use
 `hasProperty` when you need to tell them apart.
+
+Image, font and blob properties are write-only, set from encoded bytes or from
+YUP objects:
+
+```cpp
+instance->setImageProperty ("avatar", pngBytes);          // Span<const uint8>
+instance->setImageProperty ("avatar", image);             // yup::Image
+instance->setFontProperty ("headline", ttfBytes);
+instance->setFontProperty ("headline", font);             // yup::Font
+instance->setBlobProperty ("payload", bytes);
+```
+
+Each returns `false` if the path is not a property of that kind or the data does
+not decode. Image writes create a GPU texture through the factory the file was
+loaded with. A `yup::Image` therefore needs a GPU-backed factory, and on OpenGL
+both forms need the GL context current, as when loading a `.riv` that embeds
+images.
 
 ### Lists
 

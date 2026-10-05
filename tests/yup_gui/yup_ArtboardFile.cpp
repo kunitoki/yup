@@ -327,3 +327,94 @@ TEST_F (LoadedArtboardFileTests, BothRiveFileAccessorsAgree)
 
     EXPECT_EQ (constFile, artboardFile->getRiveFile());
 }
+
+//==============================================================================
+// Global view models, against tests/data/rive/viewmodel-globals.riv
+//
+// The file declares the "Main" view model (count = 7) and the global "Theme"
+// view model (title = "Hello").
+//==============================================================================
+
+class ArtboardFileGlobalsTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const auto file = getArtboardFileTestDataDirectory().getChildFile ("viewmodel-globals.riv");
+        if (! file.existsAsFile())
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-globals.riv";
+            return;
+        }
+
+        auto result = ArtboardFile::load (file, factory);
+        if (result.failed())
+        {
+            GTEST_SKIP() << "Failed to load test asset: " << result.getErrorMessage();
+            return;
+        }
+
+        artboardFile = result.getValue();
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+};
+
+TEST_F (ArtboardFileGlobalsTests, ListsOnlyGlobalViewModels)
+{
+    EXPECT_EQ (StringArray ("Theme"), artboardFile->getGlobalViewModelNames());
+}
+
+TEST_F (ArtboardFileGlobalsTests, GlobalInstanceStartsFromTheAuthoredDefault)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, theme.get());
+
+    EXPECT_EQ (std::optional<String> ("Hello"), theme->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, EveryHandleSharesOneInstance)
+{
+    auto first = artboardFile->getGlobalViewModelInstance ("Theme");
+    auto second = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, first.get());
+    ASSERT_NE (nullptr, second.get());
+
+    EXPECT_EQ (first->internalRiveInstance(), second->internalRiveInstance());
+
+    ASSERT_TRUE (first->setStringProperty ("title", "World"));
+    EXPECT_EQ (std::optional<String> ("World"), second->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, UnknownAndNonGlobalNamesHaveNoGlobalInstance)
+{
+    EXPECT_EQ (nullptr, artboardFile->getGlobalViewModelInstance ("Main").get());
+    EXPECT_EQ (nullptr, artboardFile->getGlobalViewModelInstance ("Missing").get());
+}
+
+TEST_F (ArtboardFileGlobalsTests, GlobalHandleKeepsTheFileAlive)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, theme.get());
+
+    {
+        Artboard artboard ("globals", artboardFile);
+        artboard.setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+        artboard.advanceAndApply (0.016f);
+    }
+
+    artboardFile.reset();
+
+    EXPECT_NE (nullptr, theme->getArtboardFile());
+    EXPECT_EQ (std::optional<String> ("Hello"), theme->getStringProperty ("title"));
+}
+
+TEST_F (ArtboardFileGlobalsTests, FileWithoutGlobalsListsNone)
+{
+    const auto file = getArtboardFileTestDataDirectory().getChildFile ("viewmodel-assets.riv");
+    auto result = ArtboardFile::load (file, factory);
+    ASSERT_TRUE (result.wasOk());
+
+    EXPECT_TRUE (result.getValue()->getGlobalViewModelNames().isEmpty());
+}

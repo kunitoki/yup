@@ -174,11 +174,34 @@ public:
     ArtboardViewModelInstance::Ptr createArtboardViewModelInstance (StringRef viewModelName, StringRef instanceName);
 
     //==============================================================================
+    /** Returns the names of the file's global ViewModel schemas, in file order.
+
+        A global ViewModel is not tied to one artboard: every Artboard showing this
+        file binds the same shared instance of it, see getGlobalViewModelInstance().
+    */
+    StringArray getGlobalViewModelNames() const;
+
+    /** Returns the file's shared instance of a global ViewModel.
+
+        The instance is created from the schema's authored default the first time it
+        is asked for, and every Artboard showing this file binds it, so writing a value
+        through it updates all of them. Each call returns a new handle onto the same
+        instance. Artboard::setGlobalViewModelInstance() replaces it for one artboard.
+
+        @param name The name of a global ViewModel schema.
+        @return The shared instance, or null if the name is not a global ViewModel of this file.
+    */
+    ArtboardViewModelInstance::Ptr getGlobalViewModelInstance (StringRef name);
+
+    //==============================================================================
     /** Returns the underlying Rive file. */
     const rive::File* getRiveFile() const;
 
     /** Returns the underlying Rive file. */
     rive::File* getRiveFile();
+
+    /** @internal Returns the factory the file was loaded with. */
+    rive::Factory* getFactory() const noexcept;
 
 private:
     friend class ArtboardViewModelInstance;
@@ -195,9 +218,11 @@ private:
     bool isObserverDispatchInProgress() const noexcept { return observerDispatchDepth != 0; }
 
     ArtboardFile() = default;
-    ArtboardFile (rive::rcp<rive::File> rivFile);
+    ArtboardFile (rive::rcp<rive::File> rivFile, rive::Factory& factory);
 
     rive::rcp<rive::File> rivFile;
+    rive::Factory* factory = nullptr;
+    HashMap<String, rive::rcp<rive::ViewModelInstance>> globalViewModelInstances;
     int observerDispatchDepth = 0;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ArtboardFile)

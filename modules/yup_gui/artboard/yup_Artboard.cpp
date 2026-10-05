@@ -218,6 +218,7 @@ void Artboard::clear()
 
     stateMachine = nullptr;
     boundViewModelInstance = nullptr;
+    globalViewModelOverrides.clear();
 
     eventProperties.clear();
     pressedMouseButtons = 0;
@@ -691,17 +692,16 @@ bool Artboard::bindViewModelInstance (const ArtboardViewModelInstance::Ptr& mode
     if (riveInstance == nullptr)
         return false;
 
-    riveInstance->ref();
+    if (stateMachine == nullptr)
+        artboard->unbind();
+
+    // Binding fills an empty global slot with a private copy, so the shared ones go in first.
+    placeGlobalViewModelInstances();
 
     if (stateMachine != nullptr)
-    {
-        stateMachine->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
-    }
+        stateMachine->bindViewModelInstance (rive::ref_rcp (riveInstance));
     else
-    {
-        artboard->unbind();
-        artboard->bindViewModelInstance (rive::rcp<rive::ViewModelInstance> (riveInstance));
-    }
+        artboard->bindViewModelInstance (rive::ref_rcp (riveInstance));
 
     boundViewModelInstance = model;
 
@@ -727,6 +727,85 @@ void Artboard::unbindViewModelInstance()
 ArtboardViewModelInstance::Ptr Artboard::getBoundViewModelInstance() const noexcept
 {
     return boundViewModelInstance;
+}
+
+bool Artboard::setGlobalViewModelInstance (StringRef name, const ArtboardViewModelInstance::Ptr& instance)
+{
+    if (artboard == nullptr || artboardFile == nullptr)
+        return false;
+
+    const String key (name);
+    if (! artboardFile->getGlobalViewModelNames().contains (key))
+        return false;
+
+    if (instance != nullptr && (instance->getArtboardFile() != artboardFile.get() || instance->internalRiveInstance() == nullptr))
+        return false;
+
+    if (instance != nullptr)
+        globalViewModelOverrides.set (key, instance);
+    else
+        globalViewModelOverrides.remove (key);
+
+    // With nothing bound, Rive would bind a default main instance of its own along
+    // with the globals, so the override waits for the next bind instead.
+    if (getGlobalViewModelInstance (key) == nullptr)
+        return true;
+
+    applyGlobalViewModelInstances();
+
+    advanceScene (0.0f);
+    repaint();
+
+    return true;
+}
+
+ArtboardViewModelInstance::Ptr Artboard::getGlobalViewModelInstance (StringRef name) const
+{
+    if (artboard == nullptr || artboardFile == nullptr)
+        return nullptr;
+
+    const auto key = String (name).toStdString();
+    auto instance = stateMachine != nullptr ? stateMachine->globalViewModelInstance (key)
+                                            : artboard->globalViewModelInstance (key);
+
+    return ArtboardViewModelInstance::createFromRive (artboardFile, instance.get());
+}
+
+void Artboard::bindDefaultViewModelInstances()
+{
+    if (auto instance = artboardFile->getRiveFile()->createDefaultViewModelInstance (artboard.get()))
+    {
+        bindViewModelInstance (ArtboardViewModelInstance::createFromRive (artboardFile, instance.get()));
+        return;
+    }
+
+    if (! artboardFile->getGlobalViewModelNames().isEmpty())
+        applyGlobalViewModelInstances();
+}
+
+void Artboard::placeGlobalViewModelInstances()
+{
+    for (const auto& name : artboardFile->getGlobalViewModelNames())
+    {
+        auto* overridden = globalViewModelOverrides.getPointer (name);
+        auto instance = overridden != nullptr ? *overridden : artboardFile->getGlobalViewModelInstance (name);
+        auto riveInstance = rive::ref_rcp (instance != nullptr ? instance->internalRiveInstance() : nullptr);
+
+        if (stateMachine != nullptr)
+            stateMachine->setGlobalViewModelInstance (name.toStdString(), std::move (riveInstance));
+        else
+            artboard->setGlobalViewModelInstance (name.toStdString(), std::move (riveInstance));
+    }
+}
+
+void Artboard::applyGlobalViewModelInstances()
+{
+    placeGlobalViewModelInstances();
+
+    if (stateMachine != nullptr)
+        stateMachine->bind();
+    else
+        artboard->bind();
 }
 
 //==============================================================================
@@ -1052,6 +1131,8 @@ void Artboard::updateSceneFromFile()
     scene = std::move (currentScene);
 
     stateMachine = currentStateMachine;
+
+    bindDefaultViewModelInstances();
 
     setWantsKeyboardFocus (stateMachine != nullptr && stateMachine->hasFocusNodes());
 

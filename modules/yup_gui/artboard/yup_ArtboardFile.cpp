@@ -57,8 +57,9 @@ private:
 
 //==============================================================================
 
-ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile)
+ArtboardFile::ArtboardFile (rive::rcp<rive::File> rivFile, rive::Factory& factory)
     : rivFile (std::move (rivFile))
+    , factory (std::addressof (factory))
 {
 }
 
@@ -72,6 +73,11 @@ const rive::File* ArtboardFile::getRiveFile() const
 rive::File* ArtboardFile::getRiveFile()
 {
     return rivFile.get();
+}
+
+rive::Factory* ArtboardFile::getFactory() const noexcept
+{
+    return factory;
 }
 
 //==============================================================================
@@ -111,6 +117,42 @@ ArtboardViewModelInstance::Ptr ArtboardFile::createArtboardViewModelInstance (St
 ArtboardViewModelInstance::Ptr ArtboardFile::createArtboardViewModelInstance (StringRef viewModelName, StringRef instanceName)
 {
     return ArtboardViewModelInstance::createFromFile (shared_from_this(), viewModelName, instanceName);
+}
+
+//==============================================================================
+
+StringArray ArtboardFile::getGlobalViewModelNames() const
+{
+    StringArray names;
+
+    if (rivFile != nullptr)
+        for (const auto& name : rivFile->globalViewModelNames())
+            names.add (String (name));
+
+    return names;
+}
+
+ArtboardViewModelInstance::Ptr ArtboardFile::getGlobalViewModelInstance (StringRef name)
+{
+    if (rivFile == nullptr)
+        return nullptr;
+
+    const String key (name);
+
+    if (! globalViewModelInstances.contains (key))
+    {
+        auto* viewModel = rivFile->viewModel (key.toStdString());
+        if (viewModel == nullptr || static_cast<rive::ViewModelType> (viewModel->viewModelType()) != rive::ViewModelType::global)
+            return nullptr;
+
+        auto instance = rivFile->createDefaultViewModelInstance (viewModel);
+        if (instance == nullptr)
+            return nullptr;
+
+        globalViewModelInstances.set (key, std::move (instance));
+    }
+
+    return ArtboardViewModelInstance::createFromRive (shared_from_this(), globalViewModelInstances[key].get());
 }
 
 //==============================================================================
@@ -176,7 +218,7 @@ ResultValue<ArtboardFile::Ptr> ArtboardFile::load (InputStream& is, rive::Factor
     if (rivFile == nullptr)
         return makeResultValueFail ("Failed to import artboard file");
 
-    return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (rivFile) }));
+    return makeResultValueOk (ArtboardFile::Ptr (new ArtboardFile { std::move (rivFile), factory }));
 }
 
 } // namespace yup

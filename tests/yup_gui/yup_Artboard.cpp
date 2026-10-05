@@ -2621,9 +2621,10 @@ TEST_F (ArtboardLayoutTests, LoadedArtboardReportsDurationAndViewModelState)
     if (artboardFile->getNumViewModels() == 0)
         EXPECT_TRUE (artboard->getViewModelName().isEmpty());
 
-    // A null instance is rejected without touching the scene.
+    // A null instance is rejected and leaves the current binding alone.
+    const auto bound = artboard->getBoundViewModelInstance();
     EXPECT_FALSE (artboard->bindViewModelInstance (nullptr));
-    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (bound.get(), artboard->getBoundViewModelInstance().get());
 }
 
 TEST_F (ArtboardLayoutTests, RefreshDisplayAdvancesUnlessPausingWhileHidden)
@@ -2975,4 +2976,170 @@ TEST_F (ArtboardInputTests, KeyboardAndWheelHandlersDoNotCrashWithoutFile)
     EXPECT_NO_THROW (artboard->textInput ("x"));
     EXPECT_NO_THROW (artboard->focusGained());
     EXPECT_NO_THROW (artboard->focusLost());
+}
+
+//==============================================================================
+// Auto-binding and global view models (require tests/data/rive/viewmodel-globals.riv)
+//
+// The "Globals" artboard is designed against "Main" (count = 7), and the file
+// declares the global "Theme" view model (title = "Hello").
+//==============================================================================
+
+class ArtboardViewModelAutoBindTests : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        artboardFile = loadGlobalsFile();
+        if (artboardFile == nullptr)
+        {
+            GTEST_SKIP() << "Missing test asset: tests/data/rive/viewmodel-globals.riv";
+            return;
+        }
+
+        artboard = std::make_unique<Artboard> ("globals", artboardFile);
+        artboard->setBounds (0.0f, 0.0f, 200.0f, 100.0f);
+    }
+
+    std::shared_ptr<ArtboardFile> loadGlobalsFile()
+    {
+        auto result = ArtboardFile::load (getTestDataRiveDirectory().getChildFile ("viewmodel-globals.riv"), factory);
+        return result.wasOk() ? result.getValue() : nullptr;
+    }
+
+    rive::ViewModelInstance* sharedTheme() const
+    {
+        auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+        return theme != nullptr ? theme->internalRiveInstance() : nullptr;
+    }
+
+    static rive::ViewModelInstance* riveInstanceOf (const ArtboardViewModelInstance::Ptr& instance)
+    {
+        return instance != nullptr ? instance->internalRiveInstance() : nullptr;
+    }
+
+    ::testing::NiceMock<MockRiveFactory> factory;
+    std::shared_ptr<ArtboardFile> artboardFile;
+    std::unique_ptr<Artboard> artboard;
+};
+
+TEST_F (ArtboardViewModelAutoBindTests, SetFileBindsTheAuthoredDefaultInstance)
+{
+    auto bound = artboard->getBoundViewModelInstance();
+    ASSERT_NE (nullptr, bound.get());
+
+    EXPECT_EQ (String ("Main"), bound->getName());
+    EXPECT_EQ (std::optional<double> (7.0), bound->getNumberProperty ("count"));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, ArtboardsShareTheFileGlobals)
+{
+    Artboard other ("other", artboardFile);
+
+    ASSERT_NE (nullptr, sharedTheme());
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (other.getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, OverrideAppliesToOneArtboardAndNullRestoresTheShared)
+{
+    Artboard other ("other", artboardFile);
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_NE (nullptr, custom.get());
+
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (other.getGlobalViewModelInstance ("Theme")));
+
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", nullptr));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, SetGlobalRejectsUnknownNamesAndForeignInstances)
+{
+    auto foreignFile = loadGlobalsFile();
+    ASSERT_NE (nullptr, foreignFile);
+    auto foreign = foreignFile->createArtboardViewModelInstance ("Theme");
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Main", custom));
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Missing", custom));
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Theme", foreign));
+
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, RebindingTheMainInstanceKeepsTheGlobals)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+
+    auto main = artboardFile->createArtboardViewModelInstance ("Main");
+    ASSERT_TRUE (artboard->bindViewModelInstance (main));
+
+    EXPECT_EQ (main.get(), artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, OverrideAfterUnbindWaitsForTheNextBind)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    artboard->unbindViewModelInstance();
+
+    // Binding only the globals here would make Rive bind a default main instance of its own.
+    EXPECT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (artboardFile->createArtboardViewModelInstance ("Main")));
+    EXPECT_EQ (custom->internalRiveInstance(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, RebindingAfterUnbindRestoresTheSharedGlobals)
+{
+    artboard->unbindViewModelInstance();
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+
+    ASSERT_TRUE (artboard->bindViewModelInstance (artboardFile->createArtboardViewModelInstance ("Main")));
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, NullInstanceLeavesTheAutoBoundInstance)
+{
+    const auto bound = artboard->getBoundViewModelInstance();
+    ASSERT_NE (nullptr, bound.get());
+
+    EXPECT_FALSE (artboard->bindViewModelInstance (nullptr));
+    EXPECT_EQ (bound.get(), artboard->getBoundViewModelInstance().get());
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, SetFileDropsGlobalOverrides)
+{
+    auto custom = artboardFile->createArtboardViewModelInstance ("Theme");
+    ASSERT_TRUE (artboard->setGlobalViewModelInstance ("Theme", custom));
+
+    artboard->setFile (artboardFile);
+
+    EXPECT_EQ (sharedTheme(), riveInstanceOf (artboard->getGlobalViewModelInstance ("Theme")));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, ClearUnbindsEverything)
+{
+    artboard->clear();
+
+    EXPECT_EQ (nullptr, artboard->getBoundViewModelInstance().get());
+    EXPECT_EQ (nullptr, artboard->getGlobalViewModelInstance ("Theme").get());
+    EXPECT_FALSE (artboard->setGlobalViewModelInstance ("Theme", nullptr));
+}
+
+TEST_F (ArtboardViewModelAutoBindTests, GlobalWritesSurviveAdvancing)
+{
+    auto theme = artboardFile->getGlobalViewModelInstance ("Theme");
+    ASSERT_TRUE (theme->setStringProperty ("title", "World"));
+
+    for (int frame = 0; frame < 5; ++frame)
+        EXPECT_NO_THROW (artboard->advanceAndApply (0.016f));
+
+    EXPECT_EQ (std::optional<String> ("World"),
+               artboard->getGlobalViewModelInstance ("Theme")->getStringProperty ("title"));
 }

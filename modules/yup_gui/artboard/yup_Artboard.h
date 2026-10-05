@@ -78,6 +78,11 @@ public:
 
         Passing a null file unloads the current one, leaving the artboard empty.
 
+        Like Rive's own players, loading binds the file's authored data: a copy of
+        the artboard's default ViewModel instance (see getBoundViewModelInstance())
+        and the file's shared global ViewModel instances (see
+        ArtboardFile::getGlobalViewModelInstance()).
+
         @param artboardFile The Rive artboard file to display.
         @param artboardName The name of the artboard to load from the file. When
                             empty (the default), the file's default artboard is
@@ -431,7 +436,9 @@ public:
         Once bound, the values of the instance drive the artboard's data-bound
         properties and state machine transitions; writes through the instance
         are applied on the next advanceAndApply(). Only one instance can be
-        bound at a time; binding again replaces the previous binding.
+        bound at a time; binding again replaces the previous binding, including
+        the default instance bound by setFile(). Global ViewModel instances are
+        kept.
 
         @param instance The instance to bind; it must have been created from
                         the same ArtboardFile this artboard was loaded from.
@@ -439,14 +446,40 @@ public:
     */
     bool bindViewModelInstance (const ArtboardViewModelInstance::Ptr& instance);
 
-    /** Unbinds the currently bound ViewModel instance, if any.
+    /** Unbinds the currently bound ViewModel instance, if any, and the global ones.
 
-        Data bindings stop reacting to the instance until a new one is bound.
+        Data bindings stop reacting until a new instance is bound with
+        bindViewModelInstance(), which also binds the globals again.
     */
     void unbindViewModelInstance();
 
     /** Returns the currently bound ViewModel instance, or null if none is bound. */
     ArtboardViewModelInstance::Ptr getBoundViewModelInstance() const noexcept;
+
+    /** Replaces one global ViewModel instance for this artboard only.
+
+        Other artboards showing the same file keep the file's shared instance. The
+        override lasts until the next setFile() or clear(). After
+        unbindViewModelInstance() it is applied by the next bindViewModelInstance().
+
+        @param name     The name of a global ViewModel of the loaded file, see
+                        ArtboardFile::getGlobalViewModelNames().
+        @param instance The instance to use, created from the same ArtboardFile, or
+                        null to go back to the file's shared instance.
+        @return True if the name is a global ViewModel of the loaded file and the
+                instance belongs to that file.
+    */
+    bool setGlobalViewModelInstance (StringRef name, const ArtboardViewModelInstance::Ptr& instance);
+
+    /** Returns the instance this artboard binds for a global ViewModel.
+
+        This is the override set with setGlobalViewModelInstance(), or else the
+        file's shared instance. Nothing is bound after unbindViewModelInstance().
+
+        @param name The name of a global ViewModel of the loaded file.
+        @return The bound instance, or null if nothing is bound under that name.
+    */
+    ArtboardViewModelInstance::Ptr getGlobalViewModelInstance (StringRef name) const;
 
     //==============================================================================
     /** A callback that is called when a custom property of a reported state machine
@@ -536,6 +569,9 @@ private:
     void componentResized (Component& component) override;
 
     void updateSceneFromFile();
+    void bindDefaultViewModelInstances();
+    void placeGlobalViewModelInstances();
+    void applyGlobalViewModelInstances();
     void advanceScene (float elapsedSeconds);
     void pullEventsFromStateMachines();
     void updateViewTransform();
@@ -574,6 +610,7 @@ private:
     uint64_t nodeEpoch = 0;
 
     ArtboardViewModelInstance::Ptr boundViewModelInstance;
+    HashMap<String, ArtboardViewModelInstance::Ptr> globalViewModelOverrides;
 
     int pressedMouseButtons = 0;
     Array<int> pressedKeys;
