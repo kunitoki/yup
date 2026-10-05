@@ -745,3 +745,236 @@ TEST_F (GraphicsOffscreenTests, StrokeFittedTextWithGradientDoesNotCrash)
         g.strokeFittedText (styled, Rectangle<float> (10.0f, 10.0f, 180.0f, 80.0f));
     });
 }
+
+TEST_F (TransparencyLayerTests, InvalidLayerTakesNoMask)
+{
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 0.0f, 10.0f), 1.0f);
+
+    EXPECT_EQ (nullptr, layer.addMask());
+}
+
+TEST_F (TransparencyLayerTests, EachAddMaskCreatesAnotherMask)
+{
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
+    if (! layer.isValid())
+        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsMetalPixelTests";
+
+    auto* first = layer.addMask (LayerMaskMode::Luminance);
+    auto* second = layer.addMask (LayerMaskMode::InvertedAlpha);
+
+    ASSERT_NE (nullptr, first);
+    ASSERT_NE (nullptr, second);
+    EXPECT_NE (first, second);
+}
+
+TEST_F (TransparencyLayerTests, MaskedLayerCommitDoesNotCrash)
+{
+    auto layer = graphics->beginTransparencyLayer (Rectangle<float> (0.0f, 0.0f, 100.0f, 100.0f), 1.0f);
+    if (! layer.isValid())
+        GTEST_SKIP() << "Transparency layers need offscreen targets, see GraphicsMetalPixelTests";
+
+    if (auto* mask = layer.addMask (LayerMaskMode::Alpha))
+    {
+        mask->setFillColor (Colors::white);
+        mask->fillEllipse (10.0f, 10.0f, 80.0f, 80.0f);
+    }
+
+    EXPECT_NO_THROW (layer.commit());
+    EXPECT_EQ (nullptr, layer.addMask());
+}
+
+//==============================================================================
+// Pixel tests on a real GPU (Metal), reading back what was drawn
+//==============================================================================
+
+#if YUP_MAC
+
+class GraphicsMetalPixelTests : public ::testing::Test
+{
+protected:
+    static void SetUpTestSuite()
+    {
+        gpuContext = GraphicsContext::createContext (GpuPlatform::Metal, {});
+        if (gpuContext == nullptr)
+            return;
+
+        if (GpuCanvas::create (*gpuContext, size, size) == nullptr)
+            gpuContext.reset();
+    }
+
+    static void TearDownTestSuite()
+    {
+        gpuContext.reset();
+    }
+
+    void SetUp() override
+    {
+        if (gpuContext == nullptr)
+            GTEST_SKIP() << "No Metal GPU context available";
+    }
+
+    /** Draws into a transparent size x size canvas and returns its RGBA pixels, or nothing on failure. */
+    static std::vector<uint8> render (const std::function<void (Graphics&)>& draw)
+    {
+        auto canvas = GpuCanvas::create (*gpuContext, size, size);
+        if (canvas == nullptr)
+            return {};
+
+        draw (canvas->beginDraw());
+
+        std::vector<uint8> pixels (static_cast<std::size_t> (size * size * 4));
+        if (! canvas->commit() || ! canvas->readPixels (pixels.data(), pixels.size()))
+            return {};
+
+        return pixels;
+    }
+
+    static int alphaAt (const std::vector<uint8>& pixels, int x, int y)
+    {
+        return pixels[static_cast<std::size_t> ((y * size + x) * 4 + 3)];
+    }
+
+    /** A layer filled red, masked by white drawn over the left half in the given mode. */
+    static void drawLeftHalfMaskedLayer (Graphics& g, LayerMaskMode mode, bool leaveClipOnLayer)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        ASSERT_TRUE (layer.isValid());
+
+        auto& layerGraphics = layer.getGraphics();
+        layerGraphics.setFillColor (Colors::red);
+        layerGraphics.fillAll();
+
+        if (leaveClipOnLayer)
+            layerGraphics.setClipPath (Rectangle<float> (0.0f, 0.0f, 16.0f, 16.0f));
+
+        auto* mask = layer.addMask (mode);
+        ASSERT_NE (nullptr, mask);
+        mask->setFillColor (Colors::white);
+        mask->fillRect (0.0f, 0.0f, static_cast<float> (size) * 0.5f, static_cast<float> (size));
+
+        EXPECT_TRUE (layer.commit());
+    }
+
+    static constexpr int size = 64;
+    static std::unique_ptr<GraphicsContext> gpuContext;
+};
+
+std::unique_ptr<GraphicsContext> GraphicsMetalPixelTests::gpuContext;
+
+TEST_F (GraphicsMetalPixelTests, AlphaMaskShowsTheLayerWhereTheMaskIsOpaque)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        drawLeftHalfMaskedLayer (g, LayerMaskMode::Alpha, false);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 48, 32), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, InvertedAlphaMaskShowsTheOtherSide)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        drawLeftHalfMaskedLayer (g, LayerMaskMode::InvertedAlpha, false);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_LT (alphaAt (pixels, 16, 32), 50);
+    EXPECT_GT (alphaAt (pixels, 48, 32), 200);
+}
+
+TEST_F (GraphicsMetalPixelTests, ClipLeftOnTheLayerDoesNotLimitTheMask)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        drawLeftHalfMaskedLayer (g, LayerMaskMode::Alpha, true);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    // The fill was drawn before the clip, so it covers the layer: the mask, not the leftover clip,
+    // decides what shows, keeping the whole left half and hiding the right half
+    EXPECT_GT (alphaAt (pixels, 24, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 48, 32), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, StackedMasksMultiply)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        auto layer = g.beginTransparencyLayer ({ 0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) });
+        ASSERT_TRUE (layer.isValid());
+
+        layer.getGraphics().setFillColor (Colors::red);
+        layer.getGraphics().fillAll();
+
+        auto* leftHalf = layer.addMask (LayerMaskMode::Alpha);
+        auto* topHalf = layer.addMask (LayerMaskMode::Luminance);
+        ASSERT_NE (nullptr, leftHalf);
+        ASSERT_NE (nullptr, topHalf);
+
+        leftHalf->setFillColor (Colors::white);
+        leftHalf->fillRect (0.0f, 0.0f, static_cast<float> (size) * 0.5f, static_cast<float> (size));
+
+        topHalf->setFillColor (Colors::white);
+        topHalf->fillRect (0.0f, 0.0f, static_cast<float> (size), static_cast<float> (size) * 0.5f);
+
+        EXPECT_TRUE (layer.commit());
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 16), 200);
+    EXPECT_LT (alphaAt (pixels, 48, 16), 50);
+    EXPECT_LT (alphaAt (pixels, 16, 48), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, CenteredClipStrokeKeepsOnlyTheBand)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setClipStroke (Path().addRectangle (16.0f, 16.0f, 32.0f, 32.0f), StrokeType (8.0f));
+        g.setFillColor (Colors::red);
+        g.fillAll();
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 16, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+    EXPECT_LT (alphaAt (pixels, 4, 32), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, InsideClipStrokeKeepsOnlyTheInnerBand)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        g.setClipStroke (Path().addRectangle (16.0f, 16.0f, 32.0f, 32.0f), StrokeType (8.0f).withPosition (StrokePosition::Inside));
+        g.setFillColor (Colors::red);
+        g.fillAll();
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 20, 32), 200);
+    EXPECT_LT (alphaAt (pixels, 12, 32), 50);
+    EXPECT_LT (alphaAt (pixels, 32, 32), 50);
+}
+
+TEST_F (GraphicsMetalPixelTests, DrawingAfterClipStrokeIsNotShifted)
+{
+    const auto pixels = render ([] (Graphics& g)
+    {
+        // A transformed stroke clip wide enough to keep everything, then a plain fill
+        g.addTransform (AffineTransform::translation (3.0f, 5.0f).scaled (1.5f));
+        g.setClipStroke (Path().addRectangle (0.0f, 0.0f, 10.0f, 10.0f), StrokeType (200.0f));
+        g.setTransform (AffineTransform());
+        g.setFillColor (Colors::red);
+        g.fillRect (40.0f, 40.0f, 8.0f, 8.0f);
+    });
+    ASSERT_EQ (pixels.size(), static_cast<std::size_t> (size * size * 4));
+
+    EXPECT_GT (alphaAt (pixels, 44, 44), 200);
+    EXPECT_LT (alphaAt (pixels, 36, 44), 50);
+    EXPECT_LT (alphaAt (pixels, 50, 44), 50);
+}
+
+#endif // YUP_MAC

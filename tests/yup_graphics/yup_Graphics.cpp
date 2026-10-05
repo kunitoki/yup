@@ -1231,3 +1231,174 @@ TEST_F (GraphicsTest, StrokeFittedTextWithEmptyStyledTextReturnsEarly)
 
     EXPECT_NO_THROW (graphics->strokeFittedText (emptyText, Rectangle<float> (0.0f, 0.0f, 100.0f, 30.0f)));
 }
+
+TEST_F (GraphicsTest, Additive_Blend_And_Amount)
+{
+    EXPECT_FLOAT_EQ (graphics->getAdditiveAmount(), 1.0f);
+
+    graphics->setBlendMode (BlendMode::Additive);
+    EXPECT_EQ (graphics->getBlendMode(), BlendMode::Additive);
+
+    graphics->setAdditiveAmount (0.25f);
+    EXPECT_FLOAT_EQ (graphics->getAdditiveAmount(), 0.25f);
+
+    graphics->setAdditiveAmount (2.0f);
+    EXPECT_FLOAT_EQ (graphics->getAdditiveAmount(), 1.0f);
+
+    graphics->setAdditiveAmount (-1.0f);
+    EXPECT_FLOAT_EQ (graphics->getAdditiveAmount(), 0.0f);
+}
+
+TEST_F (GraphicsTest, Stroke_Position)
+{
+    EXPECT_EQ (graphics->getStrokePosition(), StrokePosition::Center);
+
+    graphics->setStrokePosition (StrokePosition::Inside);
+    EXPECT_EQ (graphics->getStrokePosition(), StrokePosition::Inside);
+    EXPECT_EQ (graphics->getStrokeType().getPosition(), StrokePosition::Inside);
+
+    graphics->setStrokeType (StrokeType (2.0f).withPosition (StrokePosition::Outside));
+    EXPECT_EQ (graphics->getStrokePosition(), StrokePosition::Outside);
+}
+
+TEST_F (GraphicsTest, Tint)
+{
+    EXPECT_EQ (graphics->getTint(), Color (0xffffffff));
+
+    graphics->setTint (Color (0xff3366cc));
+    EXPECT_EQ (graphics->getTint(), Color (0xff3366cc));
+}
+
+TEST_F (GraphicsTest, New_State_Is_Scoped_By_Save_State)
+{
+    {
+        const auto state = graphics->saveState();
+
+        graphics->setAdditiveAmount (0.5f);
+        graphics->setStrokePosition (StrokePosition::Outside);
+        graphics->setTint (Color (0xff00ff00));
+        graphics->setFillImage (Image (4, 4));
+    }
+
+    EXPECT_FLOAT_EQ (graphics->getAdditiveAmount(), 1.0f);
+    EXPECT_EQ (graphics->getStrokePosition(), StrokePosition::Center);
+    EXPECT_EQ (graphics->getTint(), Color (0xffffffff));
+}
+
+TEST_F (GraphicsTest, Drawing_With_New_Paint_Features_Does_Not_Crash)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    const Image image (8, 8);
+    const ImageSampling sampling { ImageWrap::Repeat, ImageWrap::Mirror, ImageFilter::Nearest };
+
+    graphics->setBlendMode (BlendMode::Additive);
+    graphics->setAdditiveAmount (0.5f);
+    graphics->setTint (Color (0xffff8800));
+    graphics->setStrokePosition (StrokePosition::Inside);
+
+    graphics->setFillImage (image, AffineTransform::scaling (2.0f), sampling);
+    graphics->setStrokeImage (image);
+    graphics->setStrokeWidth (4.0f);
+
+    EXPECT_NO_THROW (graphics->fillPath (path));
+    EXPECT_NO_THROW (graphics->strokePath (path));
+    EXPECT_NO_THROW (graphics->fillRect (0.0f, 0.0f, 20.0f, 20.0f));
+    EXPECT_NO_THROW (graphics->drawImage (image, { 0.0f, 0.0f, 16.0f, 16.0f }));
+
+    graphics->setFillColor (Color (0xff112233));
+    graphics->setStrokeColor (Color (0xff445566));
+
+    EXPECT_NO_THROW (graphics->fillPath (path));
+    EXPECT_NO_THROW (graphics->strokePath (path));
+}
+
+TEST (ImageSamplingTests, Defaults_To_Clamped_Linear)
+{
+    const ImageSampling sampling;
+
+    EXPECT_EQ (sampling.wrapX, ImageWrap::Clamp);
+    EXPECT_EQ (sampling.wrapY, ImageWrap::Clamp);
+    EXPECT_EQ (sampling.filter, ImageFilter::Linear);
+}
+
+TEST_F (GraphicsTest, Clip_Stroke_Reports_The_Stroke_Outline)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    graphics->setClipStroke (path, StrokeType (4.0f));
+
+    expectBoundsNear (graphics->getClipPath(), { 8.0f, 8.0f, 54.0f, 44.0f });
+}
+
+TEST_F (GraphicsTest, Clip_Stroke_Is_Scoped_By_Save_State)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    {
+        const auto state = graphics->saveState();
+        graphics->setClipStroke (path, StrokeType (4.0f).withPosition (StrokePosition::Inside));
+        EXPECT_FALSE (graphics->getClipPath().isEmpty());
+    }
+
+    EXPECT_TRUE (graphics->getClipPath().isEmpty());
+}
+
+TEST_F (GraphicsTest, Clip_Stroke_Handles_Every_Position_And_Empty_Paths)
+{
+    Path path;
+    path.addEllipse (20.0f, 20.0f, 60.0f, 60.0f);
+
+    for (auto position : { StrokePosition::Inside, StrokePosition::Center, StrokePosition::Outside })
+    {
+        const auto state = graphics->saveState();
+        EXPECT_NO_THROW (graphics->setClipStroke (path, StrokeType (6.0f, StrokeJoin::Round).withPosition (position)));
+        EXPECT_NO_THROW (graphics->fillRect (0.0f, 0.0f, 100.0f, 100.0f));
+    }
+
+    EXPECT_NO_THROW (graphics->setClipStroke (Path(), StrokeType (2.0f)));
+}
+
+TEST_F (GraphicsTest, Clip_Stroke_Outline_Follows_The_Position)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    {
+        const auto state = graphics->saveState();
+        graphics->setClipStroke (path, StrokeType (4.0f).withPosition (StrokePosition::Inside));
+        expectBoundsNear (graphics->getClipPath(), { 10.0f, 10.0f, 50.0f, 40.0f });
+    }
+
+    {
+        const auto state = graphics->saveState();
+        graphics->setClipStroke (path, StrokeType (4.0f).withPosition (StrokePosition::Outside));
+        expectBoundsNear (graphics->getClipPath(), { 6.0f, 6.0f, 58.0f, 48.0f });
+    }
+}
+
+TEST_F (GraphicsTest, Clip_Stroke_Uses_The_Current_Stroke_By_Default)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    graphics->setStrokeWidth (4.0f);
+    graphics->setStrokePosition (StrokePosition::Outside);
+    graphics->setClipStroke (path);
+
+    expectBoundsNear (graphics->getClipPath(), { 6.0f, 6.0f, 58.0f, 48.0f });
+}
+
+TEST_F (GraphicsTest, Clip_Path_Replaces_A_Stroke_Clip_In_Get_Clip_Path)
+{
+    Path path;
+    path.addRectangle (10.0f, 10.0f, 50.0f, 40.0f);
+
+    graphics->setClipStroke (path, StrokeType (4.0f));
+    graphics->setClipPath (Rectangle<float> (20.0f, 20.0f, 10.0f, 10.0f));
+
+    expectBoundsNear (graphics->getClipPath(), { 20.0f, 20.0f, 10.0f, 10.0f });
+}

@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,30 +19,23 @@
   ==============================================================================
 */
 
+#pragma once
+
 namespace yup
 {
 
 //==============================================================================
-/** Defines the blend mode for graphical operations. */
-enum class BlendMode : uint8
+/** Defines where a stroke is drawn relative to the edge of its path.
+
+    A centered stroke straddles the edge, half inside and half outside. Inside
+    and outside strokes keep the whole width on one side, so for example a
+    border drawn inside never grows past the shape's bounds.
+*/
+enum class StrokePosition : unsigned int
 {
-    SrcOver,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Multiply,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-    Additive
+    Inside = 0, ///< The stroke is drawn entirely inside the path.
+    Center = 1, ///< The stroke is centered on the path's edge.
+    Outside = 2 ///< The stroke is drawn entirely outside the path.
 };
 
 } // namespace yup

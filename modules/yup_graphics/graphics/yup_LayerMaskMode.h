@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2026 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,30 +19,22 @@
   ==============================================================================
 */
 
+#pragma once
+
 namespace yup
 {
 
 //==============================================================================
-/** Defines the blend mode for graphical operations. */
-enum class BlendMode : uint8
+/** Defines how a transparency layer's mask turns into the layer's visibility.
+
+    @see Graphics::TransparencyLayer::addMask
+*/
+enum class LayerMaskMode : uint8
 {
-    SrcOver,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-    Multiply,
-    Hue,
-    Saturation,
-    Color,
-    Luminosity,
-    Additive
+    Alpha,            ///< The layer shows where the mask is opaque.
+    InvertedAlpha,    ///< The layer shows where the mask is transparent.
+    Luminance,        ///< The layer shows where the mask is bright.
+    InvertedLuminance ///< The layer shows where the mask is dark.
 };
 
 } // namespace yup

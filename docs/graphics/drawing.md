@@ -185,6 +185,18 @@ g.fillAll();
 // state restored
 ```
 
+For a glow, add light instead of covering what is below:
+
+```cpp
+auto saved = g.saveState();
+
+g.setBlendMode (BlendMode::Additive);
+g.setAdditiveAmount (0.6f);
+g.setFeather (12.0f);
+g.setFillColor (Colors::cyan);
+g.fillEllipse (glowArea);
+```
+
 ## Render offscreen into an Image
 
 ```cpp

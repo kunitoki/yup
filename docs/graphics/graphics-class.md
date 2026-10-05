@@ -48,8 +48,8 @@ temporary transform, clip, or color.
 
 ## Colors, gradients, and strokes
 
-Fills and strokes each have an independent color *or* gradient. Setting a color
-switches that channel to solid; setting a gradient switches it to the gradient.
+Fills and strokes each have an independent color, gradient *or* image. Setting
+one switches that channel to it.
 
 ```cpp
 g.setFillColor (Colors::orange);              // solid fill
@@ -61,7 +61,23 @@ g.setStrokeType ({ 3.0f, StrokeJoin::Round, StrokeCap::Round });
 g.setStrokeJoin (StrokeJoin::Bevel);
 g.setStrokeCap (StrokeCap::Square);
 g.setStrokeMiterLimit (4.0f);
+g.setStrokePosition (StrokePosition::Inside); // inside, centered on, or outside the edge
 ```
+
+An image paint fills or strokes any shape or text with an image. The transform
+maps image pixels to drawing coordinates, and `ImageSampling` chooses how the
+image repeats (`Clamp`, `Repeat`, `Mirror` on each axis) and how it is filtered
+(`Linear` or `Nearest` for pixel art):
+
+```cpp
+g.setFillImage (pattern,
+                AffineTransform::scaling (0.5f),
+                { ImageWrap::Repeat, ImageWrap::Repeat, ImageFilter::Linear });
+g.fillRoundedRect (area, 8.0f);
+```
+
+The image's GPU texture is made when the paint is set and kept by the image, so
+reuse the same `Image` from frame to frame instead of a fresh copy.
 
 See [Primitives](primitives.md#stroke-types) for the stroke types and
 [gradients](primitives.md#colorgradient).
@@ -70,9 +86,15 @@ See [Primitives](primitives.md#stroke-types) for the stroke types and
 
 ```cpp
 g.setOpacity (0.5f);                  // 0..1, applies to subsequent drawing
+g.setTint (Colors::orange);           // multiplied into everything drawn after
 g.setBlendMode (BlendMode::Multiply); // compositing mode
 g.setFeather (2.0f);                  // soft edge falloff
 ```
+
+`BlendMode::Additive` adds the source to what is already drawn, for glows and
+light effects. `setAdditiveAmount` scales it from 0 (like `SrcOver`) to 1 (fully
+additive, the default). Opacity, tint, blend mode and additive amount apply to
+fills, strokes, text and images alike, and are all scoped by `saveState()`.
 
 Fills follow the path's fill rule (non-zero or even-odd), feathered ones included.
 A feathered fill is drawn from the outline of its filled area
@@ -105,6 +127,17 @@ g.fillPath (shadowOutline);
 ```cpp
 g.addTransform (AffineTransform::translation (10.0f, 10.0f));
 g.setClipPath (contentBounds);
+```
+
+`setClipStroke` clips to the outline of a stroked path instead, for example to
+reveal content along a line. The stroke's width scales with the transform, and
+its position chooses the band: an inside stroke keeps only the part within the
+path. Without a `StrokeType`, the current stroke settings are used, and
+`getClipPath` returns the band that is kept.
+
+```cpp
+g.setClipStroke (outline, StrokeType (12.0f, StrokeJoin::Round).withPosition (StrokePosition::Inside));
+g.drawImage (photo, bounds);
 ```
 
 ## Drawing operations
@@ -183,6 +216,29 @@ if (layer.isValid())
 
 Inside the layer, coordinates are layer-local: the target area's top-left is
 `(0, 0)`.
+
+A layer can also be masked. Draw the mask into the Graphics `addMask()` returns,
+which has the layer's size and coordinates; on commit, the mask's alpha or
+luminance (optionally inverted) decides how much of the layer shows. Add several
+masks and they multiply: the layer shows only where all of them let it through.
+
+```cpp
+auto layer = g.beginTransparencyLayer (targetArea);
+if (layer.isValid())
+{
+    layer.getGraphics().drawImage (photo, { 0.0f, 0.0f, targetArea.getWidth(), targetArea.getHeight() });
+
+    if (auto* mask = layer.addMask (LayerMaskMode::Luminance))
+    {
+        mask->setFillColorGradient (fadeOut); // white shows, black hides
+        mask->fillAll();
+    }
+
+    layer.commit();
+}
+```
+
+Where the GPU cannot apply masks, the layer is composited unmasked.
 
 ## Offscreen rendering into an Image
 

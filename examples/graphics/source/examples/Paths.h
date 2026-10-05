@@ -31,6 +31,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 //==============================================================================
@@ -97,6 +98,12 @@ public:
 
         documentChanged();
         keepKeyboardFocusOnEditor (*this);
+    }
+
+    ~PathsExample() override
+    {
+        // The cached paint images hold GPU textures, which must go before the graphics context does
+        PathEditor::clearPaintImageCache();
     }
 
     void resized() override

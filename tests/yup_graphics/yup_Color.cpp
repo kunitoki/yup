@@ -1190,3 +1190,19 @@ TEST (ColorTests, MixWith_RgbUsesSrcOver)
     const auto expected = base.blendedWith (other.withMultipliedAlpha (amount), BlendMode::SrcOver);
     EXPECT_EQ (rgbMix.getARGB(), expected.getARGB());
 }
+
+TEST (ColorTests, Additive_Blend_Adds_And_Clamps)
+{
+    EXPECT_EQ (Color (0xff404040).blendedWith (Color (0xff302010), BlendMode::Additive), Color (0xff706050));
+    EXPECT_EQ (Color (0xffc0c0c0).blendedWith (Color (0xff808080), BlendMode::Additive), Color (0xffffffff));
+}
+
+TEST (ColorTests, Additive_Blend_Adds_Premultiplied_Like_The_Renderer)
+{
+    // Half transparent white adds half of its color: 0.5 + 0.5 grey saturates to white.
+    EXPECT_EQ (Color (0xff808080).blendedWith (Color (0x80ffffff), BlendMode::Additive), Color (0xffffffff));
+
+    // Two half transparent colors add their alphas too.
+    const auto result = Color (0x80000000).blendedWith (Color (0x80000000), BlendMode::Additive);
+    EXPECT_EQ (result.getAlpha(), 0xff);
+}

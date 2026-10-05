@@ -842,6 +842,23 @@ Color& Color::blendWith (Color src, BlendMode mode, float opacity) noexcept
     if (srcAlpha <= 0.0)
         return *this;
 
+    if (mode == BlendMode::Additive)
+    {
+        // Premultiplied source plus destination, as the renderers add
+        const double outAlpha = jmin (1.0, srcAlpha + destAlpha);
+
+        auto addChannel = [srcAlpha, destAlpha, outAlpha] (double cb, double cs)
+        {
+            return static_cast<float> (jlimit (0.0, 1.0, (cs * srcAlpha + cb * destAlpha) / outAlpha));
+        };
+
+        r = normalizedToComponent (addChannel (getRedFloat(), src.getRedFloat()));
+        g = normalizedToComponent (addChannel (getGreenFloat(), src.getGreenFloat()));
+        b = normalizedToComponent (addChannel (getBlueFloat(), src.getBlueFloat()));
+        a = normalizedToComponent (static_cast<float> (outAlpha));
+        return *this;
+    }
+
     const DoubleRgb dest = { getRedFloat(), getGreenFloat(), getBlueFloat() };
     const DoubleRgb source = { src.getRedFloat(), src.getGreenFloat(), src.getBlueFloat() };
     const DoubleRgb blended = blendRgb (mode, dest, source);

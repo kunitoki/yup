@@ -2093,6 +2093,8 @@ std::optional<BlendMode> SVGParser::parseBlendMode (StringRef value)
         return BlendMode::Color;
     if (value == StringRef ("luminosity"))
         return BlendMode::Luminosity;
+    if (value == StringRef ("plus-lighter"))
+        return BlendMode::Additive;
     if (value == StringRef ("normal"))
         return BlendMode::SrcOver;
     return std::nullopt;

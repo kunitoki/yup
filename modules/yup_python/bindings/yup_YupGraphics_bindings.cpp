@@ -926,6 +926,37 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("Round", StrokeJoin::Round)
         .value ("Bevel", StrokeJoin::Bevel);
 
+    // ============================================================================================ yup::StrokePosition
+
+    py::enum_<StrokePosition> (m, "StrokePosition")
+        .value ("Inside", StrokePosition::Inside)
+        .value ("Center", StrokePosition::Center)
+        .value ("Outside", StrokePosition::Outside);
+
+    // ============================================================================================ yup::ImageSampling
+
+    py::enum_<ImageWrap> (m, "ImageWrap")
+        .value ("Clamp", ImageWrap::Clamp)
+        .value ("Repeat", ImageWrap::Repeat)
+        .value ("Mirror", ImageWrap::Mirror);
+
+    py::enum_<ImageFilter> (m, "ImageFilter")
+        .value ("Linear", ImageFilter::Linear)
+        .value ("Nearest", ImageFilter::Nearest);
+
+    py::class_<ImageSampling> (m, "ImageSampling")
+        .def (py::init<>())
+        .def (py::init ([] (ImageWrap wrapX, ImageWrap wrapY, ImageFilter filter)
+        {
+            return ImageSampling { wrapX, wrapY, filter };
+        }),
+              "wrapX"_a = ImageWrap::Clamp,
+              "wrapY"_a = ImageWrap::Clamp,
+              "filter"_a = ImageFilter::Linear)
+        .def_readwrite ("wrapX", &ImageSampling::wrapX)
+        .def_readwrite ("wrapY", &ImageSampling::wrapY)
+        .def_readwrite ("filter", &ImageSampling::filter);
+
     // ============================================================================================ yup::Path
 
     py::class_<Path> classPath (m, "Path");
@@ -1922,7 +1953,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .value ("Hue", BlendMode::Hue)
         .value ("Saturation", BlendMode::Saturation)
         .value ("Color", BlendMode::Color)
-        .value ("Luminosity", BlendMode::Luminosity);
+        .value ("Luminosity", BlendMode::Luminosity)
+        .value ("Additive", BlendMode::Additive);
 
     // ============================================================================================ yup::Graphics
 
@@ -1940,6 +1972,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("withCap", &StrokeType::withCap)
         .def ("getJoin", &StrokeType::getJoin)
         .def ("withJoin", &StrokeType::withJoin)
+        .def ("getPosition", &StrokeType::getPosition)
+        .def ("withPosition", &StrokeType::withPosition)
         .def (py::self == py::self)
         .def (py::self != py::self)
     ;
@@ -1984,6 +2018,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("setStrokeColor", &Graphics::setStrokeColor)
         .def ("getStrokeColor", &Graphics::getStrokeColor)
         .def ("setFillColorGradient", &Graphics::setFillColorGradient)
+        .def ("setFillImage", &Graphics::setFillImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
+        .def ("setStrokeImage", &Graphics::setStrokeImage, "image"_a, "imageTransform"_a = AffineTransform(), "sampling"_a = ImageSampling())
         .def ("getFillColorGradient", &Graphics::getFillColorGradient)
         .def ("setStrokeColorGradient", &Graphics::setStrokeColorGradient)
         .def ("getStrokeColorGradient", &Graphics::getStrokeColorGradient)
@@ -1997,6 +2033,8 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getStrokeJoin", &Graphics::getStrokeJoin)
         .def ("setStrokeCap", &Graphics::setStrokeCap)
         .def ("getStrokeCap", &Graphics::getStrokeCap)
+        .def ("setStrokePosition", &Graphics::setStrokePosition)
+        .def ("getStrokePosition", &Graphics::getStrokePosition)
 
         // Rendering properties
         .def ("setFeather", &Graphics::setFeather)
@@ -2005,6 +2043,10 @@ void registerYupGraphicsBindings (py::module_& m)
         .def ("getOpacity", &Graphics::getOpacity)
         .def ("setBlendMode", &Graphics::setBlendMode)
         .def ("getBlendMode", &Graphics::getBlendMode)
+        .def ("setAdditiveAmount", &Graphics::setAdditiveAmount)
+        .def ("getAdditiveAmount", &Graphics::getAdditiveAmount)
+        .def ("setTint", &Graphics::setTint)
+        .def ("getTint", &Graphics::getTint)
 
         // Drawing area and transformations
         .def ("setDrawingArea", &Graphics::setDrawingArea)
@@ -2015,6 +2057,8 @@ void registerYupGraphicsBindings (py::module_& m)
         // Clipping
         .def ("setClipPath", py::overload_cast<const Rectangle<float>&> (&Graphics::setClipPath))
         .def ("setClipPath", py::overload_cast<const Path&> (&Graphics::setClipPath))
+        .def ("setClipStroke", py::overload_cast<const Path&, const StrokeType&> (&Graphics::setClipStroke), "path"_a, "stroke"_a)
+        .def ("setClipStroke", py::overload_cast<const Path&> (&Graphics::setClipStroke), "path"_a)
         .def ("getClipPath", &Graphics::getClipPath)
 
         // Line drawing

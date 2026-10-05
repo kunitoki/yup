@@ -36,6 +36,50 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
     return static_cast<rive::StrokeCap> (cap);
 }
 
+static_assert (static_cast<int> (StrokePosition::Inside) == static_cast<int> (rive::StrokePosition::inside));
+static_assert (static_cast<int> (StrokePosition::Center) == static_cast<int> (rive::StrokePosition::center));
+static_assert (static_cast<int> (StrokePosition::Outside) == static_cast<int> (rive::StrokePosition::outside));
+
+rive::StrokePosition toStrokePosition (StrokePosition position) noexcept
+{
+    return static_cast<rive::StrokePosition> (position);
+}
+
+static_assert (static_cast<int> (ImageWrap::Clamp) == static_cast<int> (rive::ImageWrap::clamp));
+static_assert (static_cast<int> (ImageWrap::Repeat) == static_cast<int> (rive::ImageWrap::repeat));
+static_assert (static_cast<int> (ImageWrap::Mirror) == static_cast<int> (rive::ImageWrap::mirror));
+static_assert (static_cast<int> (ImageFilter::Linear) == static_cast<int> (rive::ImageFilter::bilinear));
+static_assert (static_cast<int> (ImageFilter::Nearest) == static_cast<int> (rive::ImageFilter::nearest));
+
+rive::StrokeParams toStrokeParams (const StrokeType& stroke) noexcept
+{
+    rive::StrokeParams params;
+    params.thickness = stroke.getWidth();
+    params.join = toStrokeJoin (stroke.getJoin());
+    params.cap = toStrokeCap (stroke.getCap());
+    params.position = toStrokePosition (stroke.getPosition());
+    return params;
+}
+
+static_assert (static_cast<int> (LayerMaskMode::Alpha) == static_cast<int> (rive::LayerMaskMode::alpha));
+static_assert (static_cast<int> (LayerMaskMode::InvertedAlpha) == static_cast<int> (rive::LayerMaskMode::invertedAlpha));
+static_assert (static_cast<int> (LayerMaskMode::Luminance) == static_cast<int> (rive::LayerMaskMode::luminance));
+static_assert (static_cast<int> (LayerMaskMode::InvertedLuminance) == static_cast<int> (rive::LayerMaskMode::invertedLuminance));
+
+rive::LayerMaskMode toLayerMaskMode (LayerMaskMode mode) noexcept
+{
+    return static_cast<rive::LayerMaskMode> (mode);
+}
+
+rive::ImageSampler toImageSampler (const ImageSampling& sampling) noexcept
+{
+    rive::ImageSampler sampler;
+    sampler.wrapX = static_cast<rive::ImageWrap> (sampling.wrapX);
+    sampler.wrapY = static_cast<rive::ImageWrap> (sampling.wrapY);
+    sampler.filter = static_cast<rive::ImageFilter> (sampling.filter);
+    return sampler;
+}
+
 //==============================================================================
 rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 {
@@ -88,6 +132,9 @@ rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
 
         case BlendMode::Luminosity:
             return rive::BlendMode::luminosity;
+
+        case BlendMode::Additive:
+            return rive::BlendMode::additive;
 
         default:
             return rive::BlendMode::srcOver;
@@ -187,6 +234,12 @@ StyledText::VerticalAlign toVerticalAlign (Justification justification)
         return StyledText::middle;
 }
 
+// Text paths are drawn relative to the top-left of their shaped lines, not the drawing's origin.
+Point<float> textOrigin (const StyledText& text, const Rectangle<float>& rect)
+{
+    return { rect.getX(), rect.getY() + text.getOffset (rect).getY() };
+}
+
 //==============================================================================
 rive::Factory* getOffscreenFactory (GraphicsContext& context, RenderableTarget* target) noexcept
 {
@@ -216,6 +269,43 @@ rive::rcp<rive::RiveRenderPath> toClockwiseFillPath (const Path& path)
     renderPath->fillRule (rive::FillRule::clockwise);
     renderPath->addRenderPath (path.createFillPolygon().getRenderPath(), {});
     return renderPath;
+}
+
+// The area a stroke clip keeps. Inside and outside bands are made like the renderer makes them:
+// a stroke twice as wide, kept inside the path or cut out of it.
+Path createStrokeClipOutline (const Path& path, const StrokeType& stroke)
+{
+    if (stroke.getPosition() == StrokePosition::Center)
+        return path.createStrokePolygon (stroke.getWidth(), stroke.getJoin(), stroke.getCap());
+
+    const auto band = path.createStrokePolygon (stroke.getWidth() * 2.0f, stroke.getJoin(), stroke.getCap());
+    return band.combinedWith (path, stroke.getPosition() == StrokePosition::Inside ? Path::BooleanOperation::Intersect
+                                                                                   : Path::BooleanOperation::Subtract);
+}
+
+// An offscreen Graphics covering a transparency layer's area, in layer-local coordinates.
+std::unique_ptr<Graphics> createLayerGraphics (Graphics& parent, Rectangle<float> targetArea)
+{
+    const int width = static_cast<int> (std::ceil (targetArea.getWidth()));
+    const int height = static_cast<int> (std::ceil (targetArea.getHeight()));
+
+    if (width <= 0 || height <= 0)
+        return nullptr;
+
+    auto target = parent.getGraphicsContext().getGpuDevice()->createRenderableTarget (width, height);
+    if (target == nullptr)
+        return nullptr;
+
+    auto graphics = std::make_unique<Graphics> (parent.getGraphicsContext(), std::move (target), 0x00000000);
+
+    if (! graphics->isOffscreen())
+        return nullptr;
+
+    graphics->setDrawingArea ({ 0.0f, 0.0f, targetArea.getWidth(), targetArea.getHeight() });
+
+    // A base state the layer returns to before its mask is applied
+    graphics->getRenderer()->save();
+    return graphics;
 }
 
 } // namespace
@@ -443,6 +533,7 @@ Graphics::TransparencyLayer::TransparencyLayer (TransparencyLayer&& other) noexc
     , targetArea (other.targetArea)
     , opacity (other.opacity)
     , graphics (std::move (other.graphics))
+    , masks (std::move (other.masks))
     , committed (std::exchange (other.committed, true))
 {
 }
@@ -455,6 +546,7 @@ Graphics::TransparencyLayer& Graphics::TransparencyLayer::operator= (Transparenc
         targetArea = other.targetArea;
         opacity = other.opacity;
         graphics = std::move (other.graphics);
+        masks = std::move (other.masks);
         committed = std::exchange (other.committed, true);
     }
 
@@ -467,23 +559,8 @@ Graphics::TransparencyLayer::TransparencyLayer (Graphics& parent, Rectangle<floa
     : parent (std::addressof (parent))
     , targetArea (targetArea)
     , opacity (jlimit (0.0f, 1.0f, opacity))
+    , graphics (createLayerGraphics (parent, targetArea))
 {
-    const int width = static_cast<int> (std::ceil (targetArea.getWidth()));
-    const int height = static_cast<int> (std::ceil (targetArea.getHeight()));
-
-    if (width <= 0 || height <= 0)
-        return;
-
-    auto target = parent.getGraphicsContext().getGpuDevice()->createRenderableTarget (width, height);
-    if (target == nullptr)
-        return;
-
-    graphics = std::make_unique<Graphics> (parent.getGraphicsContext(), std::move (target), 0x00000000);
-
-    if (! graphics->isOffscreen())
-        graphics.reset();
-    else
-        graphics->setDrawingArea ({ 0.0f, 0.0f, targetArea.getWidth(), targetArea.getHeight() });
 }
 
 bool Graphics::TransparencyLayer::isValid() const noexcept
@@ -497,10 +574,56 @@ Graphics& Graphics::TransparencyLayer::getGraphics() const noexcept
     return *graphics;
 }
 
+Graphics* Graphics::TransparencyLayer::addMask (LayerMaskMode mode)
+{
+    if (! isValid())
+        return nullptr;
+
+    // Same size as the layer, as a mask has to cover it pixel for pixel
+    auto maskGraphics = createLayerGraphics (*parent, targetArea);
+    if (maskGraphics == nullptr)
+        return nullptr;
+
+    return masks.emplace_back (Mask { std::move (maskGraphics), mode }).graphics.get();
+}
+
 bool Graphics::TransparencyLayer::commit()
 {
     if (! isValid())
         return false;
+
+    auto textureOf = [] (Graphics& offscreen) -> rive::rcp<rive::gpu::Texture>
+    {
+        if (auto canvas = offscreen.offscreenTarget->getRenderCanvas())
+            return canvas->renderImage()->refTexture();
+
+        return offscreen.offscreenTarget->adoptAsTexture();
+    };
+
+    // The masks must be the last things drawn into the layer before it is finished, from the layer's
+    // base state: a clip left on the layer Graphics would otherwise limit where they apply
+    bool atBaseState = false;
+
+    for (auto& mask : masks)
+    {
+        if (! mask.graphics->commitOffscreenTarget())
+            continue;
+
+        auto maskTexture = textureOf (*mask.graphics);
+        if (maskTexture == nullptr)
+            continue;
+
+        if (! std::exchange (atBaseState, true))
+        {
+            for (std::size_t i = 1; i < graphics->renderOptions.size(); ++i)
+                graphics->renderer.restore();
+
+            graphics->renderer.restore();
+        }
+
+        const auto maskImage = rive::make_rcp<rive::RiveRenderImage> (std::move (maskTexture));
+        graphics->renderer.applyLayerMask (maskImage.get(), rive::ImageSampler::LinearClamp(), toLayerMaskMode (mask.mode));
+    }
 
     if (! graphics->commitOffscreenTarget())
         return false;
@@ -509,16 +632,11 @@ bool Graphics::TransparencyLayer::commit()
     {
         committed = true;
         graphics.reset();
+        masks.clear();
         parent = nullptr;
     };
 
-    auto texture = [&]() -> rive::rcp<rive::gpu::Texture>
-    {
-        if (auto canvas = graphics->offscreenTarget->getRenderCanvas())
-            return canvas->renderImage()->refTexture();
-
-        return graphics->offscreenTarget->adoptAsTexture();
-    }();
+    auto texture = textureOf (*graphics);
 
     if (texture == nullptr)
     {
@@ -545,6 +663,7 @@ void Graphics::setFillColor (Color color)
 {
     currentRenderOptions().fillColor = color;
     currentRenderOptions().isCurrentFillColor = true;
+    currentRenderOptions().fillImage.reset();
 }
 
 Color Graphics::getFillColor() const
@@ -557,6 +676,7 @@ void Graphics::setStrokeColor (Color color)
 {
     currentRenderOptions().strokeColor = color;
     currentRenderOptions().isCurrentStrokeColor = true;
+    currentRenderOptions().strokeImage.reset();
 }
 
 Color Graphics::getStrokeColor() const
@@ -569,6 +689,7 @@ void Graphics::setFillColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().fillGradient = std::move (gradient);
     currentRenderOptions().isCurrentFillColor = false;
+    currentRenderOptions().fillImage.reset();
 }
 
 ColorGradient Graphics::getFillColorGradient() const
@@ -576,16 +697,35 @@ ColorGradient Graphics::getFillColorGradient() const
     return currentRenderOptions().fillGradient;
 }
 
+void Graphics::setFillImage (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling)
+{
+    currentRenderOptions().fillImage = makeImagePaint (image, imageTransform, sampling);
+}
+
 //==============================================================================
 void Graphics::setStrokeColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().strokeGradient = std::move (gradient);
     currentRenderOptions().isCurrentStrokeColor = false;
+    currentRenderOptions().strokeImage.reset();
 }
 
 ColorGradient Graphics::getStrokeColorGradient() const
 {
     return currentRenderOptions().strokeGradient;
+}
+
+void Graphics::setStrokeImage (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling)
+{
+    currentRenderOptions().strokeImage = makeImagePaint (image, imageTransform, sampling);
+}
+
+Graphics::ImagePaint Graphics::makeImagePaint (const Image& image, const AffineTransform& imageTransform, ImageSampling sampling)
+{
+    // Made on the caller's Image, so its texture is kept and reused by later frames.
+    image.createTextureIfNotPresent (context);
+
+    return { image.getTexture(), image.getWidth(), image.getHeight(), imageTransform, sampling };
 }
 
 //==============================================================================
@@ -615,6 +755,16 @@ Graphics::TransparencyLayer Graphics::beginTransparencyLayer (Rectangle<float> t
     return { *this, targetArea, opacity };
 }
 
+void Graphics::setTint (Color tint)
+{
+    currentRenderOptions().tint = tint;
+}
+
+Color Graphics::getTint() const
+{
+    return currentRenderOptions().tint;
+}
+
 //==============================================================================
 void Graphics::setStrokeType (StrokeType strokeType)
 {
@@ -623,13 +773,14 @@ void Graphics::setStrokeType (StrokeType strokeType)
     options.strokeWidth = jmax (0.0f, strokeType.getWidth());
     options.join = strokeType.getJoin();
     options.cap = strokeType.getCap();
+    options.strokePosition = strokeType.getPosition();
 }
 
 StrokeType Graphics::getStrokeType() const
 {
     auto& options = currentRenderOptions();
 
-    return StrokeType (options.strokeWidth, options.join, options.cap);
+    return StrokeType (options.strokeWidth, options.join, options.cap).withPosition (options.strokePosition);
 }
 
 void Graphics::setStrokeWidth (float strokeWidth)
@@ -662,6 +813,16 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+void Graphics::setStrokePosition (StrokePosition position)
+{
+    currentRenderOptions().strokePosition = position;
+}
+
+StrokePosition Graphics::getStrokePosition() const
+{
+    return currentRenderOptions().strokePosition;
+}
+
 void Graphics::setStrokeMiterLimit ([[maybe_unused]] float limit)
 {
     // Rive has a hardcoded miter limit of 4.0, so we don't need to set it here.
@@ -676,6 +837,16 @@ void Graphics::setBlendMode (BlendMode blendMode)
 BlendMode Graphics::getBlendMode() const
 {
     return currentRenderOptions().blendMode;
+}
+
+void Graphics::setAdditiveAmount (float amount)
+{
+    currentRenderOptions().additiveAmount = jlimit (0.0f, 1.0f, amount);
+}
+
+float Graphics::getAdditiveAmount() const
+{
+    return currentRenderOptions().additiveAmount;
 }
 
 //==============================================================================
@@ -719,6 +890,7 @@ void Graphics::setClipPath (const Path& clipPath)
     auto& options = currentRenderOptions();
 
     options.clipPath = clipPath;
+    options.clipStroke.reset();
     options.clipTransform = options.getTransform();
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
@@ -728,6 +900,38 @@ void Graphics::setClipPath (const Path& clipPath)
     renderer.clipPath (renderPath.get());
 }
 
+void Graphics::setClipStroke (const Path& path, const StrokeType& stroke)
+{
+    auto& options = currentRenderOptions();
+    const auto transform = options.getTransform();
+    const auto clipStroke = stroke.withWidth (jmax (0.0f, stroke.getWidth()));
+
+    // The outline is only built when getClipPath() asks for it
+    options.clipPath = path;
+    options.clipStroke = clipStroke;
+    options.clipTransform = transform;
+
+    // Nothing drawn under a degenerate transform is visible, so clip everything away. Tiny
+    // determinants count too, as their inverse would overflow.
+    if (std::abs (transform.getDeterminant()) < std::numeric_limits<float>::min())
+    {
+        auto emptyPath = rive::make_rcp<rive::RiveRenderPath>();
+        renderer.clipPath (emptyPath.get());
+        return;
+    }
+
+    // Clipped under the transform rather than baked into the path, so the stroke width scales
+    // with it. Restoring would drop the clip too, so the transform is undone by its inverse.
+    renderer.transform (transform.toMat2D());
+    renderer.clipStroke (path.getRenderPath(), toStrokeParams (clipStroke));
+    renderer.transform (transform.inverted().toMat2D());
+}
+
+void Graphics::setClipStroke (const Path& path)
+{
+    setClipStroke (path, getStrokeType());
+}
+
 Path Graphics::getClipPath() const
 {
     const auto& options = currentRenderOptions();
@@ -735,15 +939,18 @@ Path Graphics::getClipPath() const
     if (options.clipPath.isEmpty())
         return {};
 
+    const auto clipPath = options.clipStroke.has_value() ? createStrokeClipOutline (options.clipPath, *options.clipStroke)
+                                                         : options.clipPath;
+
     const auto transform = options.getTransform();
 
     if (transform == options.clipTransform)
-        return options.clipPath;
+        return clipPath;
 
     if (transform.getDeterminant() == 0.0f)
         return {};
 
-    return options.clipPath.transformed (options.clipTransform.followedBy (transform.inverted()));
+    return clipPath.transformed (options.clipTransform.followedBy (transform.inverted()));
 }
 
 //==============================================================================
@@ -914,21 +1121,12 @@ void Graphics::fillPath (const Path& path)
 void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
-    paint.style (rive::RenderPaintStyle::stroke);
-    paint.blendMode (toBlendMode (options.blendMode));
-    paint.thickness (options.getStrokeWidth());
-    paint.join (toStrokeJoin (options.join));
-    paint.cap (toStrokeCap (options.cap));
-    paint.feather (options.feather);
-
-    if (options.isStrokeColor())
-        paint.color ((rive::ColorInt) options.getStrokeColor());
-    else
-        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
+    if (! setupStrokePaint (paint, options, transform))
+        return;
 
     renderer.save();
     renderer.transform (transform.toMat2D());
-    renderer.modulateOpacity (options.opacity);
+    applyModulation (options);
     renderer.drawPath (path.getRenderPath(), std::addressof (paint));
     renderer.restore();
 }
@@ -936,22 +1134,84 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     rive::RiveRenderPaint paint;
+    if (! setupFillPaint (paint, options, transform))
+        return;
+
+    const auto renderPath = options.feather > 0.0f ? toClockwiseFillPath (path) : rive::ref_rcp (path.getRenderPath());
+
+    renderer.save();
+    renderer.transform (transform.toMat2D());
+    applyModulation (options);
+    renderer.drawPath (renderPath.get(), std::addressof (paint));
+    renderer.restore();
+}
+
+//==============================================================================
+bool Graphics::setupFillPaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+{
     paint.style (rive::RenderPaintStyle::fill);
-    paint.blendMode (toBlendMode (options.blendMode));
-    paint.feather (options.feather);
+    setupPaintBlend (paint, options);
+
+    if (options.fillImage.has_value())
+        return setupImagePaint (paint, *options.fillImage, imageOffset);
 
     if (options.isFillColor())
         paint.color ((rive::ColorInt) options.getFillColor());
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
-    const auto renderPath = options.feather > 0.0f ? toClockwiseFillPath (path) : rive::ref_rcp (path.getRenderPath());
+    return true;
+}
 
-    renderer.save();
-    renderer.transform (transform.toMat2D());
+bool Graphics::setupStrokePaint (rive::RiveRenderPaint& paint, const RenderOptions& options, const AffineTransform& transform, Point<float> imageOffset)
+{
+    paint.style (rive::RenderPaintStyle::stroke);
+    setupPaintBlend (paint, options);
+    paint.thickness (options.getStrokeWidth());
+    paint.join (toStrokeJoin (options.join));
+    paint.cap (toStrokeCap (options.cap));
+    paint.strokePosition (toStrokePosition (options.strokePosition));
+
+    if (options.strokeImage.has_value())
+        return setupImagePaint (paint, *options.strokeImage, imageOffset);
+
+    if (options.isStrokeColor())
+        paint.color ((rive::ColorInt) options.getStrokeColor());
+    else
+        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
+
+    return true;
+}
+
+void Graphics::setupPaintBlend (rive::RiveRenderPaint& paint, const RenderOptions& options)
+{
+    paint.blendMode (toBlendMode (options.blendMode));
+    paint.additiveness (options.blendMode == BlendMode::Additive ? options.additiveAmount : 0.0f);
+    paint.feather (options.feather);
+}
+
+bool Graphics::setupImagePaint (rive::RiveRenderPaint& paint, const ImagePaint& imagePaint, Point<float> imageOffset)
+{
+    if (imagePaint.texture == nullptr)
+        return false;
+
+    // The image modulates the paint color, so white shows it unchanged.
+    paint.color (0xffffffff);
+
+    // Rive maps the unit square onto the path, so scale it to the image's pixels first.
+    const auto imageTransform = AffineTransform::scaling (static_cast<float> (imagePaint.width), static_cast<float> (imagePaint.height))
+                                    .followedBy (imagePaint.transform)
+                                    .translated (-imageOffset.getX(), -imageOffset.getY());
+
+    const auto renderImage = rive::make_rcp<rive::RiveRenderImage> (imagePaint.texture);
+    paint.modulatedImage (renderImage.get(), toImageSampler (imagePaint.sampling), imageTransform.toMat2D());
+    return true;
+}
+
+void Graphics::applyModulation (const RenderOptions& options)
+{
     renderer.modulateOpacity (options.opacity);
-    renderer.drawPath (renderPath.get(), std::addressof (paint));
-    renderer.restore();
+    renderer.modulateColor ((rive::ColorInt) options.tint);
 }
 
 //==============================================================================
@@ -1007,7 +1267,12 @@ bool Graphics::renderTexture (rive::rcp<rive::gpu::Texture> texture, const Recta
 
     renderer.save();
     renderer.transform (imageTransform.toMat2D());
-    renderer.drawImage (renderImage.get(), rive::ImageSampler::LinearClamp(), toBlendMode (options.blendMode), options.opacity);
+    renderer.modulateColor ((rive::ColorInt) options.tint);
+    renderer.drawImage (renderImage.get(),
+                        rive::ImageSampler::LinearClamp(),
+                        toBlendMode (options.blendMode),
+                        options.opacity,
+                        options.blendMode == BlendMode::Additive ? options.additiveAmount : 0.0f);
     renderer.restore();
 
     return true;
@@ -1019,18 +1284,6 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     jassert (! text.needsUpdate());
     if (text.needsUpdate() || text.isEmpty())
         return;
-
-    const auto& options = currentRenderOptions();
-
-    rive::RiveRenderPaint paint;
-    paint.style (rive::RenderPaintStyle::fill);
-    paint.blendMode (toBlendMode (options.blendMode));
-    paint.feather (options.feather);
-
-    if (options.isFillColor())
-        paint.color ((rive::ColorInt) options.getFillColor());
-    else
-        paint.shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
     bool hasStylePaints = false;
     for (auto style : text.getRenderStyles())
@@ -1046,7 +1299,17 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
         }
     }
 
-    renderFittedText (text, rect, hasStylePaints ? nullptr : std::addressof (paint));
+    if (hasStylePaints)
+    {
+        renderFittedText (text, rect, nullptr);
+        return;
+    }
+
+    const auto& options = currentRenderOptions();
+
+    rive::RiveRenderPaint paint;
+    if (setupFillPaint (paint, options, options.getTransform(), textOrigin (text, rect)))
+        renderFittedText (text, rect, std::addressof (paint));
 }
 
 void Graphics::fillFittedText (const String& text, const Font& font, const Rectangle<float>& rect, Justification justification)
@@ -1075,17 +1338,8 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     rive::RiveRenderPaint paint;
-    paint.style (rive::RenderPaintStyle::stroke);
-    paint.blendMode (toBlendMode (options.blendMode));
-    paint.thickness (options.getStrokeWidth());
-    paint.join (toStrokeJoin (options.join));
-    paint.cap (toStrokeCap (options.cap));
-    paint.feather (options.feather);
-
-    if (options.isStrokeColor())
-        paint.color ((rive::ColorInt) options.getStrokeColor());
-    else
-        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
+    if (! setupStrokePaint (paint, options, options.getTransform(), textOrigin (text, rect)))
+        return;
 
     renderFittedText (text, rect, std::addressof (paint));
 }
@@ -1116,7 +1370,7 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     renderer.save();
-    renderer.modulateOpacity (options.opacity);
+    applyModulation (options);
 
     if (text.getOverflow() != StyledText::visible)
     {
@@ -1127,8 +1381,8 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
         renderer.clipPath (renderPath.get());
     }
 
-    auto offset = text.getOffset (rect); // Horizontal alignment is already baked into the shaped glyph paths.
-    auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
+    const auto origin = textOrigin (text, rect); // Horizontal alignment is already baked into the shaped glyph paths.
+    auto transform = options.getTransform (origin.getX(), origin.getY());
     renderer.transform (transform.toMat2D());
 
     const bool isFeatheredFill = paint != nullptr && paint->getFeather() > 0.0f && ! paint->getIsStroked();
