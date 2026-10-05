@@ -35,6 +35,7 @@
     dependencies:       rive_decoders harfbuzz sheenbidi_library yoga_library libhydrogen luau glad
     defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1 WITH_RIVE_SCRIPTING=1 WITH_RIVE_SCRIPTING_LUAU=1 RIVE_DECODERS=1 RIVE_CANVAS=1 RIVE_LUAU=1 RIVE_ORE=1 RIVE_ORE_BINDING_MAP_TOOLS=1
     searchpaths:        include source source/renderer source/renderer/generated/shaders
+    vsToolOverrides:    hlsl=None
     appleFrameworks:    CoreText Metal QuartzCore
     appleDefines:       ORE_BACKEND_METAL=1 RIVE_OBJC_EXCEPTIONS=1
     iosDefines:         RIVE_IOS=1
